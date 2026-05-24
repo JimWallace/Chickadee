@@ -155,6 +155,54 @@ import XCTVapor
         }
     }
 
+    @Test func pageListsAccountAndHidesEmptyState() async throws {
+        let (app, _) = try await makeAdminApp(mcpEnabled: false)
+        try await withApp(app) { app in
+            var cookie = try await loginUser(
+                username: "mcp_admin", password: "testpassword", role: "admin", on: app)
+            _ = try await adminCSRFPost(
+                app, to: "/admin/mcp/accounts", cookie: &cookie, fields: ["username": "shown-bot"])
+            let boundCookie = cookie
+            try await app.asyncTest(
+                .GET, "/admin/mcp",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: boundCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("shown-bot"))
+                    // Regression: the empty-state must not show once an account exists.
+                    #expect(body.contains("No MCP accounts yet.") == false)
+                })
+        }
+    }
+
+    @Test func pageListsConnectedAgentGrants() async throws {
+        let (app, _) = try await makeAdminApp(mcpEnabled: false)
+        try await withApp(app) { app in
+            let cookie = try await loginUser(
+                username: "mcp_admin", password: "testpassword", role: "admin", on: app)
+            let human = try await makeTestUser(on: app, username: "prof-x", role: "instructor")
+            try await MCPOAuthClient(
+                clientID: "agent-1", name: "Claude Bot", redirectURIs: ["https://x.example/cb"]
+            ).save(on: app.db)
+            try await MCPGrant(
+                userID: human.requireID(), clientID: "agent-1", scope: "content:read content:write",
+                refreshTokenHash: "h", expiresAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+            try await app.asyncTest(
+                .GET, "/admin/mcp",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("Connected agents"))
+                    #expect(body.contains("Claude Bot"))
+                    #expect(body.contains("prof-x"))
+                    #expect(body.contains("No connected agents.") == false)
+                })
+        }
+    }
+
     @Test func pageRendersWithIssuerWhenEnabled() async throws {
         let (app, _) = try await makeAdminApp(mcpEnabled: true)
         try await withApp(app) { app in

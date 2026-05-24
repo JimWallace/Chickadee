@@ -153,6 +153,10 @@ extension AdminRoutes {
             return AdminMCPCourseRef(id: id.uuidString, code: course.code, name: course.name)
         }
 
+        // Browser-flow OAuth grants (admin sees all), reusing the /agents loader.
+        let allGrants = try await MCPGrant.query(on: req.db).sort(\.$createdAt, .descending).all()
+        let grantRows = try await MCPAgentsRoutes.grantRows(allGrants, includeOwner: true, on: req.db)
+
         let ctx = AdminMCPContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "mcp",
@@ -162,6 +166,7 @@ extension AdminRoutes {
             tokenTTLSeconds: mcp.tokenTTLSeconds,
             accounts: accounts,
             allCourses: allCourses,
+            grants: grantRows,
             mintedToken: mintedToken,
             mintedFor: mintedFor,
             mintedScopes: mintedScopes,

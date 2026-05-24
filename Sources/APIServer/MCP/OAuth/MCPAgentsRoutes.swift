@@ -26,42 +26,44 @@ struct MCPAgentsRoutes: RouteCollection {
             builder = builder.filter(\.$userID == userID)
         }
         let grants = try await builder.all()
-        guard !grants.isEmpty else {
-            return try await req.view.render(
-                "connected-agents",
-                ConnectedAgentsContext(currentUser: req.currentUserContext, isAdmin: isAdmin, rows: []))
-        }
+        let rows = try await Self.grantRows(grants, includeOwner: isAdmin, on: req.db)
+        let context = ConnectedAgentsContext(
+            currentUser: req.currentUserContext, isAdmin: isAdmin, rows: rows)
+        return try await req.view.render("connected-agents", context)
+    }
 
-        // Resolve client display names (and, for admins, owner usernames) in batch.
-        let clients = try await MCPOAuthClient.query(on: req.db)
+    /// Builds display rows for the given grants — resolving client (agent)
+    /// display names, and owner usernames when `includeOwner`. Shared by the
+    /// instructor `/agents` page and the admin MCP panel so the two can't drift.
+    static func grantRows(
+        _ grants: [MCPGrant], includeOwner: Bool, on db: Database
+    ) async throws -> [AgentGrantRow] {
+        guard !grants.isEmpty else { return [] }
+        let clients = try await MCPOAuthClient.query(on: db)
             .filter(\.$clientID ~~ Array(Set(grants.map(\.clientID)))).all()
-        let clientNames = Dictionary(clients.map { ($0.clientID, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let clientNames = Dictionary(
+            clients.map { ($0.clientID, $0.name) }, uniquingKeysWith: { first, _ in first })
         var ownerNames: [UUID: String] = [:]
-        if isAdmin {
-            let owners = try await APIUser.query(on: req.db)
+        if includeOwner {
+            let owners = try await APIUser.query(on: db)
                 .filter(\.$id ~~ Array(Set(grants.map(\.userID)))).all()
             ownerNames = Dictionary(
                 owners.compactMap { owner in owner.id.map { ($0, owner.username) } },
                 uniquingKeysWith: { first, _ in first })
         }
-
         let formatter = ISO8601DateFormatter()
-        let rows = grants.compactMap { grant -> AgentGrantRow? in
+        return grants.compactMap { grant -> AgentGrantRow? in
             guard let id = grant.id else { return nil }
             return AgentGrantRow(
                 id: id.uuidString,
                 agentName: clientNames[grant.clientID] ?? grant.clientID,
                 scope: grant.scope,
-                owner: isAdmin ? (ownerNames[grant.userID] ?? "—") : nil,
+                owner: includeOwner ? (ownerNames[grant.userID] ?? "—") : nil,
                 createdAt: grant.createdAt.map { formatter.string(from: $0) } ?? "—",
                 lastUsedAt: grant.lastUsedAt.map { formatter.string(from: $0) },
                 expiresAt: formatter.string(from: grant.expiresAt),
                 revoked: grant.revoked)
         }
-
-        let context = ConnectedAgentsContext(
-            currentUser: req.currentUserContext, isAdmin: isAdmin, rows: rows)
-        return try await req.view.render("connected-agents", context)
     }
 
     @Sendable
