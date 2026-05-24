@@ -457,19 +457,24 @@ same bytes without a build-time network fetch.
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.170**
-(`VERSION` file + `ChickadeeVersion.current` in Core).
+Follows Semantic Versioning in the `0.y.z` phase. The version lives in the
+`VERSION` file + `ChickadeeVersion.current` in Core.
 
-Release checklist:
+**Versions are assigned at merge time — do NOT bump them in a PR.** A PR must
+not touch `VERSION`, `Sources/Core/ChickadeeVersion.swift`, or `CHANGELOG.md`
+(hand-editing those three to a hardcoded next number is what used to make every
+concurrent PR conflict). Instead:
 
-```bash
-# 1) Update VERSION, CHANGELOG.md
-scripts/check-version.sh
-swift test
-# 2) Tag
-git tag -a vX.Y.Z -m "Chickadee vX.Y.Z"
-git push origin vX.Y.Z
-```
+1. Add **one fragment** under `changelog.d/` describing the change
+   (see `changelog.d/README.md`). Preview with
+   `scripts/assemble-release.sh --dry-run`.
+2. On merge to `main`, `.github/workflows/auto-release.yml` computes the next
+   version, folds the fragments into `CHANGELOG.md`, bumps `VERSION` +
+   `ChickadeeVersion`, commits `chore(release): vX.Y.Z`, and pushes the tag —
+   which triggers `release.yml` + the tag build in `docker-build.yml`.
+
+Full details, plus how to enable the optional merge queue, are in
+[docs/release-process.md](docs/release-process.md).
 
 ---
 

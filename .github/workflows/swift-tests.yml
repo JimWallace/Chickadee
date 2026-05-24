@@ -4,6 +4,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Run in the merge queue too, so a PR is re-tested against the actual
+  # pre-merge main (catches semantic conflicts a green-against-stale-main PR
+  # would miss). Enable the queue in branch protection — see
+  # docs/release-process.md.
+  merge_group:
 
 jobs:
   format-lint:

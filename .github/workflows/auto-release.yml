@@ -1,0 +1,90 @@
+name: Auto Release
+
+# Assigns the version at MERGE time so PRs never touch VERSION /
+# ChickadeeVersion / CHANGELOG — those three files were the #1 source of
+# merge-conflict thrash between concurrent PRs. PRs only add a changelog.d/
+# fragment (see changelog.d/README.md); this workflow folds the fragments into
+# a new CHANGELOG section, bumps the version, commits "chore(release)", and
+# pushes a tag.
+#
+# Downstream triggering — important GitHub quirk: a tag pushed with the default
+# GITHUB_TOKEN does NOT trigger other workflows (release.yml, docker-build),
+# GitHub's loop-prevention rule. So:
+#   - If a RELEASE_TOKEN secret (a fine-grained PAT, contents:write) is set, we
+#     push with it and the tag triggers release.yml + docker-build naturally.
+#   - Otherwise we fall back to GITHUB_TOKEN and explicitly dispatch release.yml
+#     (workflow_dispatch DOES fire under GITHUB_TOKEN). The docker-build *tag*
+#     build still won't fire in this mode — set RELEASE_TOKEN for full
+#     automation (see docs/release-process.md).
+#
+# NOTE: pushes a commit + tag directly to main, which works while main is
+# unprotected. If branch protection is enabled later, the pushing identity must
+# be a bypass actor.
+
+on:
+  push:
+    branches: [main]
+
+# Serialise releases so two quick successive merges can't race on the bump.
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+    # Never re-trigger on our own release commit.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # Prefer a PAT so the tag triggers release.yml + docker-build; fall
+          # back to GITHUB_TOKEN (tag won't auto-trigger — handled below).
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Assemble release from changelog fragments
+        id: assemble
+        run: |
+          set +e
+          version="$(scripts/assemble-release.sh)"
+          code=$?
+          set -e
+          if [ "$code" -eq 3 ]; then
+            echo "No changelog fragments — nothing to release."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$code" -ne 0 ]; then
+            echo "assemble-release.sh failed (exit $code)" >&2
+            exit "$code"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "released=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag, and push
+        if: steps.assemble.outputs.released == 'true'
+        run: |
+          version="${{ steps.assemble.outputs.version }}"
+          git config user.name "chickadee-release[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): v${version}"
+          git tag -a "v${version}" -m "Chickadee v${version}"
+          git push origin HEAD:main
+          git push origin "v${version}"
+
+      - name: Dispatch GitHub Release (only when no RELEASE_TOKEN)
+        # With a PAT the tag already triggered release.yml; only dispatch in the
+        # GITHUB_TOKEN fallback to avoid a duplicate release.
+        if: ${{ steps.assemble.outputs.released == 'true' && env.RELEASE_TOKEN == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release.yml -f tag="v${{ steps.assemble.outputs.version }}"
