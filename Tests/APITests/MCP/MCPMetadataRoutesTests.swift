@@ -1,6 +1,7 @@
 // Tests for the unauthenticated MCP discovery endpoints: RFC 9728 protected-
 // resource metadata and the JWKS export of the ES256 signing key.
 
+import Foundation
 import JWT
 import Testing
 import XCTVapor
@@ -41,12 +42,14 @@ import XCTVapor
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/.well-known/oauth-authorization-server") { res async in
                 #expect(res.status == .ok)
-                let body = String(buffer: res.body)
-                #expect(body.contains("\"authorization_endpoint\""))
-                #expect(body.contains("/oauth/authorize"))
-                #expect(body.contains("/oauth/token"))
-                #expect(body.contains("\"code_challenge_methods_supported\""))
-                #expect(body.contains("S256"))
+                // Decode rather than substring-match: Linux's JSONEncoder escapes
+                // "/" as "\/", so a raw `contains("/oauth/authorize")` would miss.
+                let object =
+                    (try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)))
+                    as? [String: Any]
+                #expect((object?["authorization_endpoint"] as? String)?.hasSuffix("/oauth/authorize") == true)
+                #expect((object?["token_endpoint"] as? String)?.hasSuffix("/oauth/token") == true)
+                #expect((object?["code_challenge_methods_supported"] as? [String])?.contains("S256") == true)
             }
         }
     }
