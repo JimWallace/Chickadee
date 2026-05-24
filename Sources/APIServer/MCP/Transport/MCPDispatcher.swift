@@ -108,9 +108,11 @@ struct MCPDispatcher: Sendable {
         }
     }
 
-    /// Records an `mcp.tool_called` audit entry: actor = the token subject (the
-    /// human in the browser flow, or the service account otherwise), with the
-    /// acting agent in `via_agent` when present.  Never logs tool arguments.
+    /// Records an `mcp.tool_called` audit entry. The actor is the token subject
+    /// suffixed with `-MCP` (e.g. `jsmith-MCP`) so agent-made changes are
+    /// tracked separately from the human's own web actions in the admin audit
+    /// log; the acting agent is in `via_agent` when present. Never logs tool
+    /// arguments.
     private func auditToolCall(name: String, context: ToolContext) async {
         var metadata = ["tool": name]
         if let agent = context.actingClientName {
@@ -119,7 +121,7 @@ struct MCPDispatcher: Sendable {
         await AuditLogger.record(
             action: .mcpToolCalled,
             metadata: metadata,
-            actorUsernameOverride: context.subject,
+            actorUsernameOverride: "\(context.subject)-MCP",
             on: context.request)
     }
 

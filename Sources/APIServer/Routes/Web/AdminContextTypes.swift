@@ -163,6 +163,10 @@ struct AdminMCPContext: Encodable {
     let issuer: String?
     let resource: String?
     let tokenTTLSeconds: Int
+    /// True only in local-auth mode: manual `mcp` service accounts are the
+    /// mechanism there. With SSO active, instructors authorize agents via the
+    /// browser flow instead, so the service-account UI is hidden.
+    let showServiceAccounts: Bool
     let accounts: [AdminMCPAccountRow]
     /// All courses, for the per-account enrollment picker.
     let allCourses: [AdminMCPCourseRef]
