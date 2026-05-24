@@ -19,7 +19,6 @@ enum MCPToolCatalog {
             ListCoursesTool().erased(),
             ListAssignmentsTool().erased(),
             GetAssignmentTool().erased(),
-            UpdateAssignmentTitleTool().erased(),
             UpdateAssignmentTool().erased(),
         ])
     }

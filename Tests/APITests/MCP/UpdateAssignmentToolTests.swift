@@ -87,6 +87,95 @@ import Vapor
         }
     }
 
+    @Test func updatesTitle() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            let output = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, title: "  Renamed  "),
+                context(app))
+            #expect(output.title == "Renamed")
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.title == "Renamed")
+        }
+    }
+
+    @Test func setsFutureDueDateWithoutOverride() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            _ = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, dueAt: "2030-04-22T23:59:00Z"),
+                context(app))
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.dueAt != nil)
+            #expect(reloaded?.deadlineOverrideActive == false)
+        }
+    }
+
+    @Test func clearsDueDateWithEmptyString() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app, dueAt: Date().addingTimeInterval(3600))
+            _ = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, dueAt: ""),
+                context(app))
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.dueAt == nil)
+        }
+    }
+
+    @Test func appliesTitleDueAndOpenTogether() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app, isOpen: false)
+            let output = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, title: "Combined",
+                    dueAt: "2030-01-01T00:00:00Z", isOpen: true),
+                context(app))
+            #expect(output.title == "Combined")
+            #expect(output.isOpen)
+            #expect(output.dueAt != nil)
+        }
+    }
+
+    @Test func rejectsEmptyTitle() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateAssignmentTool().execute(
+                    UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, title: "   "),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func rejectsInvalidDueDate() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateAssignmentTool().execute(
+                    UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, dueAt: "next tuesday"),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func requiresAtLeastOneField() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateAssignmentTool().execute(
+                    UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+            }
+        }
+    }
+
     @Test func deniesWhenSubjectNotEnrolled() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
