@@ -166,6 +166,8 @@ struct AdminMCPContext: Encodable {
     let accounts: [AdminMCPAccountRow]
     /// All courses, for the per-account enrollment picker.
     let allCourses: [AdminMCPCourseRef]
+    /// Browser-flow OAuth grants (all of them — admin view), with revoke.
+    let grants: [AgentGrantRow]
     /// Set immediately after a mint so the page can show the token exactly once.
     let mintedToken: String?
     let mintedFor: String?

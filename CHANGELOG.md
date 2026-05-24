@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.255] - 2026-05-24
+
+### Changed
+
+- **Admin MCP panel UI cleanup (#709).**
+  - Removed the descriptive blurb / "View connected agents" link above the
+    service-accounts table.
+  - **Connected agents (browser-flow OAuth grants) now appear on the admin MCP
+    panel** as a second table (admin sees all grants, with revoke). The
+    standalone `/agents` page is unchanged for instructor self-service; the
+    grant-row builder is now shared (`MCPAgentsRoutes.grantRows`) so the two
+    views can't drift. (Instructor-facing UI consolidation is a follow-up.)
+  - Both tables are now column-sortable via the shared `sortable-table.js`,
+    matching the runner/storage tables.
+
+### Fixed
+
+- **"No MCP accounts yet." persisted after creating an account (#709).** The
+  empty-state used `#if(!accounts.count)`, but `.count` doesn't resolve in this
+  LeafKit; switched to `.isEmpty` (the idiom the other tables use). Fixed the
+  same latent bug in the per-account "no courses" check and on the
+  `/agents` page.
+- **Safari mis-identified the "Create account" username field as a password
+  field (#709).** Added `autocomplete="new-password"` (the project's existing
+  Safari-autofill bypass).
+
 ## [0.4.254] - 2026-05-24
 
 ### Changed

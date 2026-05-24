@@ -14,15 +14,6 @@ MCP
 </nav>
 <section class="admin-section">
     <h2 style="margin-top:0">MCP service accounts</h2>
-    <p style="color:var(--gray-600);font-size:.85rem;max-width:60ch">
-        Service identities for AI agents that author course content over the Model Context
-        Protocol endpoint (<code>/mcp</code>). Each account is non-loginable and carries the
-        <code>mcp</code> role only — it grants no access to student data, grades, or enrolment.
-        An account can only read or edit the courses it is <strong>enrolled in</strong> (below);
-        enroll it in at least one course, or its tokens can do nothing.
-    </p>
-    <p style="font-size:.85rem"><a href="/agents">View connected agents &rarr;</a>
-        — browser-authorized OAuth grants (Phase 2), with revoke.</p>
 
     #if(!enabled):
     <div class="form-error" style="margin-bottom:1rem">
@@ -66,14 +57,20 @@ MCP
     <form method="post" action="/admin/mcp/accounts" style="display:flex;gap:.5rem;align-items:center;margin:1rem 0">
         #csrfFormField()
         <input class="form-input" type="text" name="username" required
+               autocomplete="new-password"
                placeholder="agent name, e.g. course-bot" style="width:260px"
                aria-label="New MCP account username">
         <button class="btn" type="submit">Create account</button>
     </form>
 
-    <table class="results-table">
+    <table class="results-table sortable-table">
         <thead>
-            <tr><th>Username</th><th class="time">Created</th><th>Courses</th><th>Actions</th></tr>
+            <tr>
+                <th data-sort-type="text"><button class="sort-header" type="button">Username</button></th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Created</button></th>
+                <th>Courses</th>
+                <th>Actions</th>
+            </tr>
         </thead>
         <tbody>
         #for(account in accounts):
@@ -93,7 +90,7 @@ MCP
                             </form>
                         </span>
                         #endfor
-                        #if(!account.enrolledCourses.count):
+                        #if(account.enrolledCourses.isEmpty):
                         <span style="color:var(--gray-600);font-size:.78rem">none — no access</span>
                         #endif
                         <form method="post" action="/admin/mcp/accounts/#(account.id)/enroll" style="display:inline-flex;gap:.2rem">
@@ -132,11 +129,57 @@ MCP
                 </td>
             </tr>
         #endfor
-        #if(!accounts.count):
+        #if(accounts.isEmpty):
             <tr><td colspan="4" style="color:var(--gray-600)">No MCP accounts yet.</td></tr>
         #endif
         </tbody>
     </table>
+
+    <h2 style="margin-top:2rem">Connected agents</h2>
+    <p style="color:var(--gray-600);font-size:.85rem;max-width:70ch">
+        Browser-authorized OAuth grants — an instructor approved an agent to act on their behalf.
+        Revoking stops the agent immediately; any access token it holds lapses within minutes.
+    </p>
+    <table class="results-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sort-type="text"><button class="sort-header" type="button">Agent</button></th>
+                <th data-sort-type="text"><button class="sort-header" type="button">Authorized by</button></th>
+                <th data-sort-type="text"><button class="sort-header" type="button">Scopes</button></th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Authorized</button></th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Last used</button></th>
+                <th class="time" data-sort-type="date"><button class="sort-header" type="button">Expires</button></th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(grant in grants):
+            <tr>
+                <td>#(grant.agentName)</td>
+                <td><code>#(grant.owner)</code></td>
+                <td><code>#(grant.scope)</code></td>
+                <td class="time">#(grant.createdAt)</td>
+                <td class="time">#if(grant.lastUsedAt):#(grant.lastUsedAt)#else:—#endif</td>
+                <td class="time">#(grant.expiresAt)</td>
+                <td>
+                    #if(grant.revoked):
+                    <span style="color:var(--gray-600)">Revoked</span>
+                    #else:
+                    <form method="post" action="/agents/#(grant.id)/revoke" style="display:inline">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                onclick="return confirm('Revoke this agent? It will lose access immediately.')">Revoke</button>
+                    </form>
+                    #endif
+                </td>
+            </tr>
+        #endfor
+        #if(grants.isEmpty):
+            <tr><td colspan="7" style="color:var(--gray-600)">No connected agents.</td></tr>
+        #endif
+        </tbody>
+    </table>
 </section>
+<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend
