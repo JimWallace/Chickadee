@@ -220,11 +220,13 @@ struct MCPOAuthRoutes: Sendable {
     func revoke(req: Request) async throws -> Response {
         if let token = (try? req.content.decode(RevokeForm.self))?.token, !token.isEmpty {
             let hash = sha256HexDigest(token)
-            // Match the current or just-rotated refresh-token hash.
-            if let grant = try await MCPGrant.query(on: req.db).group(.or) { group in
+            // Match the current or just-rotated refresh-token hash.  Bound to a
+            // `let` first so the trailing closure isn't read as the `if` body.
+            let grant = try await MCPGrant.query(on: req.db).group(.or) { group in
                 group.filter(\.$refreshTokenHash == hash)
                     .filter(\.$previousRefreshTokenHash == hash)
-            }.first() {
+            }.first()
+            if let grant {
                 grant.revoked = true
                 try await grant.save(on: req.db)
             }
