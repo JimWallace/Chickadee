@@ -151,6 +151,35 @@ enum AssignmentAuthoringService {
         }
     }
 
+    /// Replaces a test setup's flat starter notebook with `notebookData`,
+    /// applying the same JupyterLite kernel normalization + flat-file write the
+    /// web editor's no-upload Save path uses (`persistAssignmentNotebook`). The
+    /// setup's `notebookPath` is set (creating `<setupID>.ipynb` when absent)
+    /// and the setup is saved.
+    ///
+    /// The setup zip is intentionally *not* rebuilt — reads prefer the flat
+    /// file (`notebookData(for:)`), the zip stays archival, and existing student
+    /// working copies are left untouched so in-progress work isn't clobbered.
+    /// Callers that want the validation loop closed call
+    /// `scheduleValidationAfterSuiteEdit` afterwards, matching the web Save.
+    static func writeAssignmentNotebook(
+        setup: APITestSetup,
+        notebookData: Data,
+        setupsDirectory: String,
+        on db: Database
+    ) async throws {
+        let normalized = normalizeNotebookForJupyterLite(notebookData)
+        let path =
+            setup.notebookPath ?? (setupsDirectory + "\((setup.id ?? "unknown")).ipynb")
+        do {
+            try normalized.write(to: URL(fileURLWithPath: path))
+        } catch {
+            throw AssignmentAuthoringError.setupCopyFailed(reason: "\(error)")
+        }
+        setup.notebookPath = path
+        try await setup.save(on: db)
+    }
+
     /// Mutates open-state in memory (no save). Opening requires validation to
     /// have passed and sets the deadline override when the due date is past.
     private static func applyOpenState(_ assignment: APIAssignment, open: Bool, now: Date) throws {
