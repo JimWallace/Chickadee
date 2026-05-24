@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.253] - 2026-05-24
+
+### Added
+
+- **MCP authoring — Phase 0 + 1, plus open/close (#706).** First slice of the
+  assignment-authoring buildout (see `docs/mcp-authoring-roadmap.md`).
+  - **`AssignmentAuthoringService`** — the seed of the shared authoring service
+    layer (`Sources/APIServer/Services/`). `setOpenState(_:open:on:)` holds the
+    canonical open/close semantics (validation-passed guard; sets
+    `deadlineOverrideActive` when past due so the auto-close sweep won't
+    immediately re-close); the instructor dashboard handlers
+    (`openAssignment` / `updateStatus` / `closeAssignment`) now call it instead
+    of duplicating the logic. No behaviour change.
+  - **`get_assignment`** (`content:read`) — assignment detail by public ID
+    (title, course code, slug, open/closed, due date, validation status).
+  - **`list_courses`** (`content:read`) — the courses an agent may act on
+    (its enrolled courses; all for an admin account).
+  - **`update_assignment`** (`content:write`) — **open or close an assignment
+    for submissions** by public ID. Metadata-only (no manifest change → no
+    regrade); routes through `AssignmentAuthoringService` so it matches the
+    dashboard exactly, including refusing to open until validation passes.
+  - All new tools are course-scoped via `authorizeCourseAccess`.
+
 ## [0.4.252] - 2026-05-23
 
 ### Added

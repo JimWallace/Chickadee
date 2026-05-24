@@ -16,8 +16,11 @@ import Vapor
 enum MCPToolCatalog {
     static var live: ToolRegistry {
         ToolRegistry([
+            ListCoursesTool().erased(),
             ListAssignmentsTool().erased(),
+            GetAssignmentTool().erased(),
             UpdateAssignmentTitleTool().erased(),
+            UpdateAssignmentTool().erased(),
         ])
     }
 }

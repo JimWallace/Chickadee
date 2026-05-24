@@ -209,14 +209,13 @@ struct InstructorDashboardRoutes: RouteCollection {
         else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
-        guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
+        do {
+            try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
+        } catch AssignmentAuthoringError.validationNotPassed {
             throw WebAssignmentError.validationRequired(
                 reason: "Assignment cannot be opened until runner validation passes."
             )
         }
-        assignment.isOpen = true
-        assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
-        try await assignment.save(on: req.db)
         return req.redirect(to: "/instructor")
     }
 
@@ -274,22 +273,21 @@ struct InstructorDashboardRoutes: RouteCollection {
         let body = try req.content.decode(StatusBody.self)
         switch body.status {
         case "open":
-            guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
+            do {
+                try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
+            } catch AssignmentAuthoringError.validationNotPassed {
                 throw WebAssignmentError.validationRequired(
                     reason: "Assignment cannot be opened until runner validation passes."
                 )
             }
-            assignment.isOpen = true
-            assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(dueAt: assignment.dueAt)
         case "closed":
-            assignment.isOpen = false
+            try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         default:
             throw WebAssignmentError.invalidParameter(
                 name: "status",
                 reason: "unsupported status '\(body.status)'"
             )
         }
-        try await assignment.save(on: req.db)
         return req.redirect(to: "/instructor")
     }
 
@@ -303,8 +301,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
-        assignment.isOpen = false
-        try await assignment.save(on: req.db)
+        try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         return req.redirect(to: "/instructor")
     }
 
