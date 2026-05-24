@@ -32,13 +32,9 @@ struct ListCoursesTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard
-            let user = try await APIUser.query(on: context.db)
-                .filter(\.$username == context.subject)
-                .first()
-        else {
-            return Output(courses: [])
-        }
+        // Students may not use the MCP interface; only instructors/admins/mcp
+        // service accounts get past this.
+        let user = try await context.requireEligibleSubject(tool: Self.name)
 
         let courses: [APICourse]
         if user.isAdmin {

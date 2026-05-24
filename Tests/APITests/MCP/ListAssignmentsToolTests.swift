@@ -22,7 +22,7 @@ import Vapor
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
-            let tester = try await makeTestUser(on: app, username: "tester")
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_bit", courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_app", courseID: courseID)
@@ -42,7 +42,7 @@ import Vapor
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
             // "tester" exists but is NOT enrolled in CS136.
-            _ = try await makeTestUser(on: app, username: "tester")
+            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestSetup(on: app, id: "setup_x", courseID: courseID)
             try await makeTestAssignment(on: app, testSetupID: "setup_x", courseID: courseID, title: "X")
 
@@ -69,6 +69,24 @@ import Vapor
         }
     }
 
+    @Test func enrolledStudentSubjectIsDenied() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
+            let courseID = try course.requireID()
+            // A student enrolled in the course still may not use MCP.
+            let student = try await makeTestUser(on: app, username: "tester")
+            try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_s", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_s", courseID: courseID, title: "X")
+
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListAssignmentsTool().execute(
+                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            }
+        }
+    }
+
     @Test func unknownCourseThrowsToolError() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
@@ -92,7 +110,7 @@ import Vapor
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
-            let tester = try await makeTestUser(on: app, username: "tester")
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_tasks", courseID: courseID)
             try await makeTestAssignment(on: app, testSetupID: "setup_tasks", courseID: courseID, title: "Tasks")
