@@ -35,6 +35,11 @@ enum MCPToolError: Error, Sendable, Equatable {
     /// The authenticated subject is not permitted to act on the targeted
     /// resource — e.g. the MCP account is not enrolled in the target course.
     case notAuthorized(tool: String, detail: String)
+    /// The tool's arguments were valid and authorized, but the operation
+    /// failed while executing (e.g. a file copy or a downstream save). Surfaced
+    /// to the model so it can retry or report rather than seeing an opaque
+    /// protocol-level internal error.
+    case executionFailed(tool: String, detail: String)
 }
 
 // MARK: - Type erasure

@@ -583,7 +583,7 @@ extension DraftAssignmentRoutes {
         shouldQueueValidation: Bool
     ) async throws -> APIAssignment {
         let assignment = try await createAssignmentWithUniquePublicID(
-            req: req,
+            on: req.db,
             testSetupID: setupID,
             title: validated.title,
             dueAt: validated.dueAt,
@@ -747,7 +747,7 @@ extension DraftAssignmentRoutes {
         }
 
         let assignment = try await createAssignmentWithUniquePublicID(
-            req: req,
+            on: req.db,
             testSetupID: body.testSetupID,
             title: body.title.isEmpty ? body.testSetupID : body.title,
             dueAt: due,
