@@ -201,11 +201,67 @@ manifest-changing tools, swift-format + SwiftLint `--strict` clean, tests green.
 
 ## 7. Open questions
 
-- **Validation feedback shape** — return a validation-submission handle the
-  agent can poll, or block until validation completes (with a timeout)?
+- **Validation feedback shape** — leaning toward the **bounded-wait hybrid**
+  (§8): write tools return fast with a validation handle + status, optionally
+  blocking a short capped window (~20s, likely on by default) to return the
+  result inline for the common fast case; the agent polls `get_assignment`'s
+  `validationStatus` otherwise. Open: default wait window + whether it's on by
+  default. SSE (§8) later upgrades this to live progress without changing the
+  tool contract.
 - **Destructive-edit confirmation** — do we want a `dryRun` flag on
   suite/family/metadata edits that would trigger a regrade?
 - **Notebook input format for Phase 5** — `.ipynb` JSON vs. a simpler source
   representation.
 - **Tool granularity** — one `update_suite` taking the whole authored list vs.
   fine-grained add/remove/reorder tools (the former matches `PUT /suite`).
+
+---
+
+## 8. Transport track: SSE / streaming progress (parallel, not a prerequisite)
+
+**Target client:** the **Claude connector**, which speaks Streamable HTTP with
+SSE — so the streaming UX pays off, and resumability is not required.
+
+Today the `/mcp` POST returns a single JSON response; GET/DELETE 405
+(`streamingUnsupported`). Streamable HTTP also allows the POST response to be an
+**SSE stream** (`text/event-stream`), letting the server emit
+`notifications/progress` during a long tool call and then the final result.
+
+**What it buys us:** a tight, live agent loop on validation —
+`queued → assigned → running → 3/4 passed → done` — with progress events acting
+as keepalives that reset the client's tool-call timeout, so multi-minute
+validations don't trip the ceiling. This is the proper upgrade to the §7 hybrid.
+
+**Why it's a parallel track, not a blocker:**
+
+- The bounded-wait hybrid works **without** SSE and the tool contract is
+  **forward-compatible** — the same tools can later stream progress instead of
+  briefly blocking, with no change to inputs/outputs. Deferring SSE costs
+  nothing architecturally.
+- It's a transport-level change to the security-sensitive `MCPRoutes` surface,
+  so it deserves its own focused PR rather than riding inside authoring work.
+
+**The real costs (in rough order of effort):**
+
+1. **Worker → stream bridge (the hard part).** Validation runs on the separate
+   runner daemon and reports by updating the submission row. To stream progress
+   the server must observe those `pending → assigned → running → done`
+   transitions — either DB-poll the submission while the stream is open, or add
+   a lightweight in-process status-change signal.
+2. **Reverse-proxy buffering.** SSE breaks under nginx/squid default buffering.
+   Need `proxy_buffering off` + `X-Accel-Buffering: no` on `/mcp`. Verify
+   against the dev box's *actual* (hand-customized) compose/proxy config, not
+   just the repo's — this is the kind of thing that works locally and fails
+   deployed.
+3. **Vapor streamed response** — detect `Accept: text/event-stream`, switch the
+   POST response to SSE, write JSON-RPC framed as SSE events, handle client
+   disconnect / `notifications/cancelled`, close cleanly.
+4. **Stay stateless** — a basic non-resumable SSE-per-call is enough; do **not**
+   adopt `Mcp-Session-Id` / `Last-Event-ID` replay (keeps the single-process
+   model). The standalone GET SSE stream stays unimplemented (405) — not needed
+   for the validation use case.
+
+**Sequencing:** slot around Phase 2–3, once there's a long-running tool worth
+streaming. First PR ≈ streamed POST response + the worker→stream bridge + the
+proxy-config fix + tests. Bearer auth is unaffected (the SSE response is just a
+streamed reply to the already-authenticated POST).
