@@ -20,7 +20,7 @@ import Vapor
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
-            let tester = try await makeTestUser(on: app, username: "tester")
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_g", courseID: courseID)
             let assignment = try await makeTestAssignment(
@@ -40,7 +40,7 @@ import Vapor
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester")
+            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestSetup(on: app, id: "setup_g", courseID: courseID)
             let assignment = try await makeTestAssignment(
                 on: app, testSetupID: "setup_g", courseID: courseID, title: "Tasks")

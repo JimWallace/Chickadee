@@ -117,6 +117,7 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
     app.leaf.tags["csrfToken"] = CSRFTokenTag()
     app.leaf.tags["appVersion"] = AppVersionTag()
+    app.leaf.tags["mcpEnabled"] = MCPEnabledTag()
     app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
     app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
     app.leaf.tags["rawJSON"] = RawJSONTag()

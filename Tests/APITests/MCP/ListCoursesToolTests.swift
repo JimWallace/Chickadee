@@ -15,17 +15,31 @@ import Vapor
         )
     }
 
-    @Test func nonAdminSeesOnlyEnrolledCourses() async throws {
+    @Test func instructorSeesOnlyEnrolledCourses() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             _ = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let tester = try await makeTestUser(on: app, username: "tester")
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: try cs136.requireID())
 
             let output = try await ListCoursesTool().execute(
                 ListCoursesTool.Input(), context(app, subject: "tester"))
             #expect(output.courses.map(\.code) == ["CS136"])
+        }
+    }
+
+    @Test func studentSubjectIsDenied() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
+            let student = try await makeTestUser(on: app, username: "stud")
+            try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: try cs136.requireID())
+            // Even enrolled, a student-role subject may not use MCP.
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListCoursesTool().execute(
+                    ListCoursesTool.Input(), context(app, subject: "stud"))
+            }
         }
     }
 
@@ -42,13 +56,14 @@ import Vapor
         }
     }
 
-    @Test func unknownSubjectSeesNoCourses() async throws {
+    @Test func unknownSubjectIsDenied() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             _ = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
-            let output = try await ListCoursesTool().execute(
-                ListCoursesTool.Input(), context(app, subject: "ghost"))
-            #expect(output.courses.isEmpty)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListCoursesTool().execute(
+                    ListCoursesTool.Input(), context(app, subject: "ghost"))
+            }
         }
     }
 }
