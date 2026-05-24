@@ -39,6 +39,28 @@ docs-only or trivial PR can either skip a fragment (no release) or include one
 (rolls into the next version). Version assignment is the single, serialized
 step (`concurrency: auto-release`), so two quick merges can't race.
 
+### Downstream triggering — set `RELEASE_TOKEN` for full automation
+
+GitHub deliberately does **not** let a tag pushed with the default
+`GITHUB_TOKEN` trigger other workflows (loop prevention). So out of the box the
+bot's tag will **not** fire `release.yml` (GitHub Release) or the tag build in
+`docker-build.yml` (the versioned + `:latest` image your deploy pulls).
+
+`auto-release.yml` handles this in two modes:
+
+- **Recommended — add a `RELEASE_TOKEN` secret.** Create a fine-grained PAT with
+  **Contents: read & write** on this repo and save it as the repo secret
+  `RELEASE_TOKEN`. The bot pushes the tag with it, so `release.yml` **and**
+  `docker-build` fire naturally — fully automated, including the `:latest`
+  Docker image.
+- **Fallback (no secret).** The bot uses `GITHUB_TOKEN` and explicitly
+  dispatches `release.yml` (so GitHub Releases still happen), **but the
+  `docker-build` tag build does not run** — `:latest` won't update on release
+  until you either add `RELEASE_TOKEN` or build/push the image another way.
+
+Until `RELEASE_TOKEN` is set, treat the per-release Docker image as a manual /
+follow-up step.
+
 `scripts/check-version.sh` still enforces `VERSION == ChickadeeVersion.current`;
 the release script writes both together, so they never drift.
 
