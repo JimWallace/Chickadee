@@ -56,7 +56,7 @@ func assignmentPublicIDParameter(from req: Request) throws -> String {
 // call sites use labelled args so the long list reads cleanly.
 // swiftlint:disable:next function_parameter_count
 func createAssignmentWithUniquePublicID(
-    req: Request,
+    on db: Database,
     testSetupID: String,
     title: String,
     dueAt: Date?,
@@ -70,7 +70,7 @@ func createAssignmentWithUniquePublicID(
     for _ in 0..<32 {
         let candidate = APIAssignment.generatePublicID()
         let exists =
-            try await APIAssignment.query(on: req.db)
+            try await APIAssignment.query(on: db)
             .filter(\.$publicID == candidate)
             .count() > 0
         if exists { continue }
@@ -79,7 +79,7 @@ func createAssignmentWithUniquePublicID(
             publicID: candidate,
             testSetupID: testSetupID,
             title: title,
-            slug: try await uniqueAssignmentSlug(title: title, courseID: courseID, db: req.db),
+            slug: try await uniqueAssignmentSlug(title: title, courseID: courseID, db: db),
             dueAt: dueAt,
             isOpen: isOpen,
             sortOrder: sortOrder,
@@ -89,10 +89,10 @@ func createAssignmentWithUniquePublicID(
             courseID: courseID
         )
         do {
-            try await assignment.save(on: req.db)
+            try await assignment.save(on: db)
         } catch {
             let conflict =
-                try await APIAssignment.query(on: req.db)
+                try await APIAssignment.query(on: db)
                 .filter(\.$publicID == candidate)
                 .count() > 0
             if conflict { continue }

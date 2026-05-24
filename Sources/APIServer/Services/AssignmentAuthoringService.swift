@@ -7,6 +7,7 @@
 // described in docs/mcp-authoring-roadmap.md (Phase 0).
 
 import Fluent
+import Foundation
 import Vapor
 
 /// Domain errors from assignment-authoring operations, mapped to transport
@@ -14,6 +15,14 @@ import Vapor
 enum AssignmentAuthoringError: Error, Sendable, Equatable {
     /// Opening was refused because runner validation has not passed.
     case validationNotPassed
+    /// The source assignment's test setup files (zip) could not be copied.
+    case setupCopyFailed(reason: String)
+}
+
+/// The freshly created assignment + its new test setup, returned by `cloneAssignment`.
+struct ClonedAssignment: Sendable {
+    let assignment: APIAssignment
+    let setup: APITestSetup
 }
 
 /// How a metadata update should treat the due date (absent / clear / set).
@@ -75,6 +84,71 @@ enum AssignmentAuthoringService {
             try applyOpenState(assignment, open: open, now: now)
         }
         try await assignment.save(on: db)
+    }
+
+    /// Duplicates an assignment into `targetCourseID` under `newTitle`: the
+    /// source test setup's zip (+ optional notebook) is copied to a fresh setup
+    /// id, the manifest is carried over verbatim, and a new assignment is
+    /// allocated with its own public id + course-unique slug.
+    ///
+    /// The clone always starts **closed and unvalidated** (no `isOpen`, no
+    /// `validationStatus`, no due date) — the instructor (or a follow-up tool
+    /// call) re-validates and opens it. Because it's a brand-new setup with no
+    /// submissions, nothing is re-graded. Mirrors the per-assignment slice of
+    /// the admin `copyCourse` flow so the two clone paths can't drift.
+    static func cloneAssignment(
+        source: APIAssignment,
+        sourceSetup: APITestSetup,
+        newTitle: String,
+        targetCourseID: UUID,
+        setupsDirectory: String,
+        on db: Database
+    ) async throws -> ClonedAssignment {
+        let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let fm = FileManager.default
+
+        let dstZip = setupsDirectory + "\(newSetupID).zip"
+        do {
+            try fm.copyItem(atPath: sourceSetup.zipPath, toPath: dstZip)
+        } catch {
+            throw AssignmentAuthoringError.setupCopyFailed(reason: "\(error)")
+        }
+
+        var newNotebookPath: String?
+        if let srcNotebook = sourceSetup.notebookPath, fm.fileExists(atPath: srcNotebook) {
+            let dstNotebook = setupsDirectory + "\(newSetupID).ipynb"
+            do {
+                try fm.copyItem(atPath: srcNotebook, toPath: dstNotebook)
+                newNotebookPath = dstNotebook
+            } catch {
+                try? fm.removeItem(atPath: dstZip)
+                throw AssignmentAuthoringError.setupCopyFailed(reason: "\(error)")
+            }
+        }
+
+        let newSetup = APITestSetup(
+            id: newSetupID, manifest: sourceSetup.manifest, zipPath: dstZip,
+            notebookPath: newNotebookPath, courseID: targetCourseID)
+
+        do {
+            try await newSetup.save(on: db)
+            let assignment = try await createAssignmentWithUniquePublicID(
+                on: db,
+                testSetupID: newSetupID,
+                title: newTitle,
+                dueAt: nil,
+                isOpen: false,
+                sortOrder: nil,
+                validationStatus: nil,
+                validationSubmissionID: nil,
+                courseID: targetCourseID)
+            return ClonedAssignment(assignment: assignment, setup: newSetup)
+        } catch {
+            // Roll back the copied files so a failed clone leaves no orphans.
+            try? fm.removeItem(atPath: dstZip)
+            if let newNotebookPath { try? fm.removeItem(atPath: newNotebookPath) }
+            throw error
+        }
     }
 
     /// Mutates open-state in memory (no save). Opening requires validation to
