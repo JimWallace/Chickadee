@@ -231,6 +231,15 @@ struct AuthRoutes: RouteCollection {
         req.auth.logout(APIUser.self)
         req.session.destroy()
 
+        // Mark the next sign-in for forced IdP re-authentication. Duo keeps its
+        // own SSO session alive, so without this an explicit logout is silently
+        // undone the moment the user hits any protected page (it re-auths with
+        // no prompt). `/auth/sso/start` consumes this marker and adds
+        // `prompt=login`. Set on whichever redirect we return below.
+        let reauthCookie = chickadeeReauthMarkerCookie(
+            isSecure: req.application.securityConfiguration.sessionCookieSecure
+        )
+
         let oidcConfig = req.application.oidcConfig
 
         // Revoke any issued OAuth tokens at the IdP. Runs concurrently and is
@@ -278,11 +287,15 @@ struct AuthRoutes: RouteCollection {
                 components?.queryItems = items
             }
             if let url = components?.url?.absoluteString {
-                return req.redirect(to: url)
+                let response = req.redirect(to: url)
+                response.cookies[reauthMarkerCookieName] = reauthCookie
+                return response
             }
         }
 
-        return req.redirect(to: returnPath)
+        let response = req.redirect(to: returnPath)
+        response.cookies[reauthMarkerCookieName] = reauthCookie
+        return response
     }
 }
 

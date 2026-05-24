@@ -70,6 +70,13 @@ struct SessionIdleTimeoutMiddleware: AsyncMiddleware {
         if request.url.path.hasPrefix("/api/") {
             throw Abort(.unauthorized, reason: "Session timed out")
         }
-        return request.redirect(to: "/login?error=timeout")
+        // Force IdP re-authentication on the next sign-in, same as an explicit
+        // logout — otherwise the timed-out session is silently restored by Duo's
+        // still-live SSO session on the next protected request.
+        let response = request.redirect(to: "/login?error=timeout")
+        response.cookies[reauthMarkerCookieName] = chickadeeReauthMarkerCookie(
+            isSecure: request.application.securityConfiguration.sessionCookieSecure
+        )
+        return response
     }
 }

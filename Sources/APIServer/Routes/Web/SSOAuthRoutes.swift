@@ -51,9 +51,16 @@ struct SSOAuthRoutes: RouteCollection {
         req.session.data["oidc_state"] = state
         req.session.data["oidc_verifier"] = codeVerifier
 
+        // If a logout/idle-timeout set the re-auth marker, force the IdP to
+        // re-authenticate (`prompt=login`) instead of silently honouring its
+        // own still-live SSO session — otherwise an explicit logout is undone
+        // the moment the user hits a protected page. Consumed once (cleared
+        // below) so normal day-to-day sign-ins stay one-click.
+        let forceReauth = req.cookies[reauthMarkerCookieName] != nil
+
         // Build the IdP authorization URL
         var components = URLComponents(string: config.discovery.authorizationEndpoint)
-        components?.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "client_id", value: config.clientID),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "scope", value: "openid profile email groups"),
@@ -62,13 +69,22 @@ struct SSOAuthRoutes: RouteCollection {
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
         ]
+        if forceReauth {
+            queryItems.append(URLQueryItem(name: "prompt", value: "login"))
+        }
+        components?.queryItems = queryItems
 
         guard let authURL = components?.url?.absoluteString else {
             req.logger.error("Failed to build authorization URL from: \(config.discovery.authorizationEndpoint)")
             return req.redirect(to: "/login?error=sso_failed")
         }
 
-        return req.redirect(to: authURL)
+        let response = req.redirect(to: authURL)
+        if forceReauth {
+            // Clear the marker so it only forces re-auth for this first sign-in.
+            response.cookies[reauthMarkerCookieName] = .expired
+        }
+        return response
     }
 
     // MARK: - GET /auth/sso/callback
