@@ -97,7 +97,7 @@ import XCTVapor
                 subject: "agent", scopes: [.read],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
             let body = #"""
-                {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"update_assignment_title","arguments":{"assignmentPublicID":"ABC123","title":"New"}}}
+                {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"update_assignment","arguments":{"assignmentPublicID":"ABC123","isOpen":true}}}
                 """#
             let res = try await post(app, body: body, token: token)
             #expect(res.status == .forbidden)
@@ -127,7 +127,7 @@ import XCTVapor
             #expect(res.status == .ok)
             let text = String(buffer: res.body)
             #expect(text.contains("list_assignments"))
-            #expect(text.contains("update_assignment_title"))
+            #expect(text.contains("update_assignment"))
         }
     }
 

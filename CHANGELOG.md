@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.254] - 2026-05-24
+
+### Changed
+
+- **MCP authoring Phase 2 — `update_assignment` now edits title + due date (#707).**
+  The `update_assignment` tool gains optional `title` and `dueAt` fields
+  alongside `isOpen` (provide only what you want to change; at least one
+  required). A due-date change re-normalises `deadlineOverrideActive` and an
+  empty `dueAt` string clears the due date — matching the instructor editor via
+  the shared `AssignmentAuthoringService.updateMetadata`. Still metadata-only
+  (no manifest change → no regrade) and course-scoped.
+- **Removed the `update_assignment_title` MCP tool**, now fully subsumed by
+  `update_assignment` (title editing). One assignment-metadata editor instead of
+  two overlapping write tools.
+
 ## [0.4.253] - 2026-05-24
 
 ### Added

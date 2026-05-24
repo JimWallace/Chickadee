@@ -80,11 +80,11 @@ import Vapor
     }
 
     @Test func dispatcherToolsListAdvertisesRegisteredTools() async throws {
-        let registry = ToolRegistry([ListAssignmentsTool().erased(), UpdateAssignmentTitleTool().erased()])
+        let registry = ToolRegistry([ListAssignmentsTool().erased(), UpdateAssignmentTool().erased()])
         let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
         let request = JSONRPCRequest(jsonrpc: "2.0", id: .number(1), method: "tools/list", params: nil)
         let response = try #require(await dispatcher.dispatch(request))
-        #expect(toolNames(in: response.result) == ["list_assignments", "update_assignment_title"])
+        #expect(toolNames(in: response.result) == ["list_assignments", "update_assignment"])
     }
 
     @Test func dispatcherToolsCallReturnsContentAndStructured() async throws {
@@ -128,7 +128,7 @@ import Vapor
     @Test func dispatcherRejectsWriteToolWithoutWriteScope() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            let registry = ToolRegistry([UpdateAssignmentTitleTool().erased()])
+            let registry = ToolRegistry([UpdateAssignmentTool().erased()])
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
             // A read-only caller invoking the content:write tool is rejected
             // before the tool runs (no database mutation occurs).
@@ -138,9 +138,9 @@ import Vapor
             let request = JSONRPCRequest(
                 jsonrpc: "2.0", id: .number(4), method: "tools/call",
                 params: .object([
-                    "name": .string("update_assignment_title"),
+                    "name": .string("update_assignment"),
                     "arguments": .object([
-                        "assignmentPublicID": .string("ABC123"), "title": .string("New"),
+                        "assignmentPublicID": .string("ABC123"), "isOpen": .bool(true),
                     ]),
                 ]))
             let response = try #require(await dispatcher.dispatch(request, context: readOnly))

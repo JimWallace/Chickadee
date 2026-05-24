@@ -78,6 +78,39 @@ import Vapor
         }
     }
 
+    @Test func updateMetadataSetsTitleAndFutureDue() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app)
+            let due = Date().addingTimeInterval(86_400)
+            try await AssignmentAuthoringService.updateMetadata(
+                assignment, title: "New", dueAt: .set(due), on: app.db)
+            #expect(assignment.title == "New")
+            #expect(assignment.dueAt == due)
+            #expect(assignment.deadlineOverrideActive == false)
+        }
+    }
+
+    @Test func updateMetadataClearsDueDate() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app, dueAt: Date().addingTimeInterval(86_400))
+            try await AssignmentAuthoringService.updateMetadata(assignment, dueAt: .clear, on: app.db)
+            #expect(assignment.dueAt == nil)
+        }
+    }
+
+    @Test func updateMetadataOpenPastDueSetsOverrideInOneCall() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app)
+            try await AssignmentAuthoringService.updateMetadata(
+                assignment, dueAt: .set(Date().addingTimeInterval(-3600)), open: true, on: app.db)
+            #expect(assignment.isOpen)
+            #expect(assignment.deadlineOverrideActive == true)
+        }
+    }
+
     @Test func closeClearsIsOpen() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

@@ -16,6 +16,13 @@ enum AssignmentAuthoringError: Error, Sendable, Equatable {
     case validationNotPassed
 }
 
+/// How a metadata update should treat the due date (absent / clear / set).
+enum DueDateUpdate: Sendable, Equatable {
+    case unchanged
+    case clear
+    case set(Date)
+}
+
 enum AssignmentAuthoringService {
     /// Opens or closes an assignment for student submissions.
     ///
@@ -31,6 +38,48 @@ enum AssignmentAuthoringService {
         on db: Database,
         now: Date = Date()
     ) async throws {
+        try applyOpenState(assignment, open: open, now: now)
+        try await assignment.save(on: db)
+    }
+
+    /// Applies any combination of title / due-date / open-state changes in a
+    /// single save, with the same side effects as the instructor editor: a
+    /// due-date change re-normalises `deadlineOverrideActive`, and opening
+    /// re-derives it from the (possibly just-changed) due date. Metadata-only —
+    /// never touches the manifest, so it does not trigger a regrade. Throws
+    /// `validationNotPassed` if `open` is true before validation has passed.
+    static func updateMetadata(
+        _ assignment: APIAssignment,
+        title: String? = nil,
+        dueAt: DueDateUpdate = .unchanged,
+        open: Bool? = nil,
+        on db: Database,
+        now: Date = Date()
+    ) async throws {
+        if let title {
+            assignment.title = title
+        }
+        switch dueAt {
+        case .unchanged:
+            break
+        case .clear:
+            assignment.dueAt = nil
+            assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
+                dueAt: nil, existingOverride: assignment.deadlineOverrideActive ?? false)
+        case .set(let date):
+            assignment.dueAt = date
+            assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
+                dueAt: date, existingOverride: assignment.deadlineOverrideActive ?? false)
+        }
+        if let open {
+            try applyOpenState(assignment, open: open, now: now)
+        }
+        try await assignment.save(on: db)
+    }
+
+    /// Mutates open-state in memory (no save). Opening requires validation to
+    /// have passed and sets the deadline override when the due date is past.
+    private static func applyOpenState(_ assignment: APIAssignment, open: Bool, now: Date) throws {
         if open {
             guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
                 throw AssignmentAuthoringError.validationNotPassed
@@ -41,6 +90,5 @@ enum AssignmentAuthoringService {
         } else {
             assignment.isOpen = false
         }
-        try await assignment.save(on: db)
     }
 }
