@@ -21,6 +21,7 @@ enum MCPToolCatalog {
             GetAssignmentTool().erased(),
             GetSuiteTool().erased(),
             UpdateAssignmentTool().erased(),
+            UpdateSuiteTool().erased(),
         ])
     }
 }
