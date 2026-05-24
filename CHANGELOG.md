@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.255] - 2026-05-24
+
+### Security
+
+- **Logout now forces IdP re-authentication on the next sign-in (SSO
+  single-logout).** Surfaced by the IRA-PIA review as a follow-on to v0.4.240:
+  after logging out, clicking any protected link (e.g. the "Chickadee" brand)
+  silently logged the user straight back in. Cause: logout destroys the
+  Chickadee session and (when published) hits the IdP `end_session_endpoint`,
+  but Duo keeps its own SSO session alive and the authorization request carried
+  no `prompt`, so the IdP re-authenticated with no credential check.
+
+  Logout (and the idle timeout) now set a short-lived, session-scoped marker
+  cookie (`chickadee_reauth`); `/auth/sso/start` consumes it and appends
+  `prompt=login` to the authorization request, forcing Duo to actually
+  re-authenticate. The marker is cleared on that first sign-in, so normal
+  day-to-day SSO stays one-click — only an explicit logout / timeout forces a
+  re-prompt. (`AuthRoutes.logout`, `SessionIdleTimeoutMiddleware`,
+  `SSOAuthRoutes.ssoStart`, `SessionCookieFactory`.)
+
+  New tests: `logoutSetsReauthMarkerCookie`,
+  `sSOStart_withReauthMarker_forcesPromptLoginAndClearsMarker`,
+  `sSOStart_withoutReauthMarker_doesNotForcePrompt`.
+
 ## [0.4.254] - 2026-05-24
 
 ### Changed

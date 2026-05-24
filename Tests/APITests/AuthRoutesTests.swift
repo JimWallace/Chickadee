@@ -235,6 +235,25 @@ import XCTVapor
         }
     }
 
+    @Test func logoutSetsReauthMarkerCookie() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    // Logout arms the next sign-in for forced IdP re-auth so a
+                    // logout can't be silently undone by a live SSO session.
+                    let setCookies = res.headers[.setCookie]
+                    let armed = setCookies.contains { $0.contains("chickadee_reauth=1") }
+                    #expect(armed, "expected logout to set the re-auth marker, got: \(setCookies)")
+                })
+        }
+    }
+
     @Test func logoutWithTimeoutReasonRedirectsToTimeoutMessage() async throws {
         try await withApp(try await makeApp()) { app in
             let (token, cookie) = try await csrfFields(for: "/login", on: app)

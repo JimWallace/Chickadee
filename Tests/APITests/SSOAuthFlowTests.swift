@@ -317,6 +317,35 @@ import XCTVapor
         }
     }
 
+    @Test func sSOStart_withoutReauthMarker_doesNotForcePrompt() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/auth/sso/start",
+                afterResponse: { res in
+                    let location = res.headers.first(name: .location) ?? ""
+                    #expect(!location.contains("prompt=login"))
+                })
+        }
+    }
+
+    @Test func sSOStart_withReauthMarker_forcesPromptLoginAndClearsMarker() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/auth/sso/start",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: "\(reauthMarkerCookieName)=1")
+                },
+                afterResponse: { res in
+                    let location = res.headers.first(name: .location) ?? ""
+                    #expect(location.contains("prompt=login"))
+                    // The marker is consumed: a Set-Cookie clears it (empty value).
+                    let setCookies = res.headers[.setCookie]
+                    let cleared = setCookies.contains { $0.contains("\(reauthMarkerCookieName)=;") }
+                    #expect(cleared, "expected the re-auth marker to be cleared, got: \(setCookies)")
+                })
+        }
+    }
+
     // MARK: - Post-logout login page: SSO entry is a navigation link
 
     @Test func loginPageAfterLogout_rendersSSOLinkNotForm() async throws {
