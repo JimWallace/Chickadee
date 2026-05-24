@@ -366,6 +366,15 @@ private func revokeToken(
 /// - If the user still has no enrollments and open-enrollment courses exist, redirect to /enroll.
 /// - Otherwise redirect to /.
 func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response {
+    // Honor a pending OAuth authorize request the user was bounced to /login
+    // from (MCP browser flow).  Only same-origin paths are accepted, so this
+    // can't be abused as an open redirect.
+    if let returnTo = req.session.data[MCPOAuthRoutes.returnToSessionKey] {
+        req.session.data[MCPOAuthRoutes.returnToSessionKey] = nil
+        if returnTo.hasPrefix("/"), !returnTo.hasPrefix("//") {
+            return req.redirect(to: returnTo)
+        }
+    }
     guard let userID = user.id else { return req.redirect(to: "/") }
 
     let allCourses = try await APICourse.query(on: req.db)

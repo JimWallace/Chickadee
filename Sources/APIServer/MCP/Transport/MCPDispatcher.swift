@@ -93,6 +93,9 @@ struct MCPDispatcher: Sendable {
             let required = tool.requiredScopes.map(\.rawValue).sorted().joined(separator: " ")
             return .failure(id: id, error: .insufficientScope(required))
         }
+        // Audit every authorized tool call as the human subject, attributed to
+        // the acting agent (when the token carries one).
+        await auditToolCall(name: call.name, context: context)
         do {
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
             return .success(id: id, result: successToolResult(output))
@@ -103,6 +106,21 @@ struct MCPDispatcher: Sendable {
         } catch {
             return .failure(id: id, error: .internalError("Tool \(call.name) failed."))
         }
+    }
+
+    /// Records an `mcp.tool_called` audit entry: actor = the token subject (the
+    /// human in the browser flow, or the service account otherwise), with the
+    /// acting agent in `via_agent` when present.  Never logs tool arguments.
+    private func auditToolCall(name: String, context: ToolContext) async {
+        var metadata = ["tool": name]
+        if let agent = context.actingClientName {
+            metadata["via_agent"] = agent
+        }
+        await AuditLogger.record(
+            action: .mcpToolCalled,
+            metadata: metadata,
+            actorUsernameOverride: context.subject,
+            on: context.request)
     }
 
     private func successToolResult(_ structured: JSONValue) -> JSONValue {

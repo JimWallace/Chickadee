@@ -16,7 +16,9 @@ import XCTVapor
         let authority = try await MCPTokenAuthority.make(
             privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "mcp-1")
         app.mcpTokenAuthority = authority
-        try app.register(collection: MCPMetadataRoutes(issuer: issuer, resource: resource))
+        try app.register(
+            collection: MCPMetadataRoutes(
+                endpoints: MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: issuer)))
         return app
     }
 
@@ -31,6 +33,20 @@ import XCTVapor
                 #expect(body.contains("chickadee.example"))
                 #expect(body.contains("content:read"))
                 #expect(body.contains("content:write"))
+            }
+        }
+    }
+
+    @Test func authorizationServerMetadataAdvertisesEndpoints() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.GET, "/.well-known/oauth-authorization-server") { res async in
+                #expect(res.status == .ok)
+                let body = String(buffer: res.body)
+                #expect(body.contains("\"authorization_endpoint\""))
+                #expect(body.contains("/oauth/authorize"))
+                #expect(body.contains("/oauth/token"))
+                #expect(body.contains("\"code_challenge_methods_supported\""))
+                #expect(body.contains("S256"))
             }
         }
     }
@@ -51,7 +67,9 @@ import XCTVapor
 
     @Test func jwksWithoutAuthorityReturnsEmptyKeySet() async throws {
         let app = try await Application.make(.testing)
-        try app.register(collection: MCPMetadataRoutes(issuer: issuer, resource: resource))
+        try app.register(
+            collection: MCPMetadataRoutes(
+                endpoints: MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: issuer)))
         try await withApp(app) { app in
             try await app.testable().test(.GET, "/.well-known/jwks.json") { res async in
                 #expect(res.status == .ok)

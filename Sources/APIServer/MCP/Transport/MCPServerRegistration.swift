@@ -1,11 +1,13 @@
 // APIServer/MCP/Transport/MCPServerRegistration.swift
 //
 // Wires the content-authoring MCP server into the live application when
-// `appConfig.mcp.enabled`.  Mounts the bearer-gated /mcp transport plus the
-// unauthenticated OAuth discovery endpoints, resolving the issuer/resource
-// identifiers from MCPConfig (falling back to PUBLIC_BASE_URL).  The signing
-// key authority itself is loaded asynchronously at startup (see runAPIServer).
+// `appConfig.mcp.enabled`.  Mounts the bearer-gated /mcp transport, the
+// unauthenticated OAuth discovery endpoints, and (Phase 2) the browser OAuth
+// flow (/oauth/authorize + /oauth/token).  Issuer/resource are resolved from
+// MCPConfig, falling back to PUBLIC_BASE_URL.  The signing-key authority itself
+// is loaded asynchronously at startup (see runAPIServer).
 
+import CSRF
 import Core
 import Vapor
 
@@ -20,11 +22,22 @@ enum MCPToolCatalog {
     }
 }
 
-/// Resolved OAuth identifiers for the MCP resource server.
+/// Resolved OAuth identifiers + endpoint URLs for the MCP server.  All
+/// discovery/flow endpoints live on the resource-server origin
+/// (`metadataOrigin`), which equals the issuer in the common single-origin
+/// deployment.
 struct MCPEndpoints {
     let issuer: String
     let resource: String
-    let resourceMetadataURL: String
+    /// Origin (scheme://host[:port], no trailing slash) the well-known +
+    /// /oauth/* endpoints are served from.
+    let metadataOrigin: String
+
+    var resourceMetadataURL: String { metadataOrigin + "/.well-known/oauth-protected-resource" }
+    var authorizationServerMetadataURL: String { metadataOrigin + "/.well-known/oauth-authorization-server" }
+    var jwksURL: String { metadataOrigin + "/.well-known/jwks.json" }
+    var authorizationEndpoint: String { metadataOrigin + "/oauth/authorize" }
+    var tokenEndpoint: String { metadataOrigin + "/oauth/token" }
 
     /// Resolves the identifiers from explicit config, falling back to
     /// `PUBLIC_BASE_URL`.  Returns nil when neither issuer nor resource can be
@@ -33,13 +46,7 @@ struct MCPEndpoints {
         let base = security.publicBaseURL?.absoluteString.trimmedTrailingSlash
         guard let issuer = mcp.issuer?.trimmedTrailingSlash ?? base else { return nil }
         guard let resource = mcp.resource ?? base.map({ $0 + "/mcp" }) else { return nil }
-        // Protected-resource metadata lives on the resource-server origin.
-        let metadataOrigin = base ?? issuer
-        return MCPEndpoints(
-            issuer: issuer,
-            resource: resource,
-            resourceMetadataURL: metadataOrigin + "/.well-known/oauth-protected-resource"
-        )
+        return MCPEndpoints(issuer: issuer, resource: resource, metadataOrigin: base ?? issuer)
     }
 }
 
@@ -72,11 +79,35 @@ func registerMCPRoutes(_ app: Application) throws {
 
     try app.grouped(bearer).register(
         collection: MCPRoutes(dispatcher: dispatcher, configuration: routeConfiguration))
-    try app.register(
-        collection: MCPMetadataRoutes(issuer: endpoints.issuer, resource: endpoints.resource))
+    try app.register(collection: MCPMetadataRoutes(endpoints: endpoints))
 
     app.logger.info(
         "MCP endpoint mounted at /mcp — issuer=\(endpoints.issuer), resource=\(endpoints.resource)")
+}
+
+/// Registers the Phase-2 browser OAuth flow when MCP is enabled: the consent
+/// `/oauth/authorize` (session + CSRF guarded) and the machine `/oauth/token`
+/// (no session/CSRF — a back-channel call from the agent).  A no-op otherwise.
+func registerMCPOAuthRoutes(
+    _ app: Application, sessionAuth: UserSessionAuthenticator, csrf: CSRF
+) throws {
+    let mcp = app.appConfig.mcp
+    guard mcp.enabled, let endpoints = MCPEndpoints.resolve(mcp: mcp, security: app.appConfig.security)
+    else { return }
+
+    let oauth = MCPOAuthRoutes(
+        endpoints: endpoints,
+        accessTokenTTLSeconds: mcp.accessTokenTTLSeconds,
+        grantTTLDays: mcp.grantTTLDays
+    )
+    // Consent UI: needs a logged-in human + a CSRF-protected form.
+    let userFacing = app.grouped(sessionAuth, csrf)
+    userFacing.get("oauth", "authorize", use: oauth.authorizeForm)
+    userFacing.post("oauth", "authorize", use: oauth.authorizeSubmit)
+    // Token endpoint: a back-channel POST from the agent — no session, no CSRF.
+    app.post("oauth", "token", use: oauth.token)
+
+    app.logger.info("MCP browser OAuth flow mounted at /oauth/authorize + /oauth/token")
 }
 
 private extension String {

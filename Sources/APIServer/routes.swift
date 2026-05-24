@@ -71,4 +71,7 @@ func routes(_ app: Application) throws {
     // Bearer-gated /mcp transport + unauthenticated OAuth discovery metadata.
     // Mounted only when MCP_ENABLED; a no-op otherwise.
     try registerMCPRoutes(app)
+    // Browser OAuth flow (/oauth/authorize consent + /oauth/token); the consent
+    // page reuses the shared session-auth + CSRF middleware.
+    try registerMCPOAuthRoutes(app, sessionAuth: sessionAuth, csrf: csrf)
 }
