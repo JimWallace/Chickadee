@@ -118,17 +118,40 @@ extension AdminRoutes {
         let endpoints = MCPEndpoints.resolve(mcp: mcp, security: req.application.appConfig.security)
         let enabled = mcp.enabled && req.application.mcpTokenAuthority != nil && endpoints != nil
 
-        let accounts = try await APIUser.query(on: req.db)
+        let mcpUsers = try await APIUser.query(on: req.db)
             .filter(\.$role == "mcp")
             .sort(\.$username)
             .all()
-            .compactMap { user -> AdminMCPAccountRow? in
-                guard let id = user.id else { return nil }
-                return AdminMCPAccountRow(
-                    id: id.uuidString,
-                    username: user.username,
-                    createdAt: user.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—")
-            }
+        let courses = try await APICourse.query(on: req.db).sort(\.$code).all()
+        let courseByID: [UUID: APICourse] = Dictionary(
+            courses.compactMap { course in course.id.map { ($0, course) } },
+            uniquingKeysWith: { first, _ in first })
+
+        // Enrollments for the mcp accounts (batch), grouped per user.
+        let mcpUserIDs = mcpUsers.compactMap(\.id)
+        let enrollments =
+            mcpUserIDs.isEmpty
+            ? []
+            : try await APICourseEnrollment.query(on: req.db).filter(\.$userID ~~ mcpUserIDs).all()
+        var enrolledByUser: [UUID: [AdminMCPCourseRef]] = [:]
+        for enrollment in enrollments {
+            guard let course = courseByID[enrollment.$course.id], let courseID = course.id else { continue }
+            enrolledByUser[enrollment.userID, default: []].append(
+                AdminMCPCourseRef(id: courseID.uuidString, code: course.code, name: course.name))
+        }
+
+        let accounts = mcpUsers.compactMap { user -> AdminMCPAccountRow? in
+            guard let id = user.id else { return nil }
+            return AdminMCPAccountRow(
+                id: id.uuidString,
+                username: user.username,
+                createdAt: user.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+                enrolledCourses: (enrolledByUser[id] ?? []).sorted { $0.code < $1.code })
+        }
+        let allCourses = courses.compactMap { course -> AdminMCPCourseRef? in
+            guard let id = course.id else { return nil }
+            return AdminMCPCourseRef(id: id.uuidString, code: course.code, name: course.name)
+        }
 
         let ctx = AdminMCPContext(
             currentUser: req.currentUserContext,
@@ -138,10 +161,63 @@ extension AdminRoutes {
             resource: endpoints?.resource,
             tokenTTLSeconds: mcp.tokenTTLSeconds,
             accounts: accounts,
+            allCourses: allCourses,
             mintedToken: mintedToken,
             mintedFor: mintedFor,
             mintedScopes: mintedScopes,
             error: error)
         return try await req.view.render("admin-mcp", ctx)
+    }
+
+    // MARK: - POST /admin/mcp/accounts/:userID/enroll
+
+    @Sendable
+    func enrollMCPAccount(req: Request) async throws -> Response {
+        struct Body: Content { var courseID: String }
+        let user = try await findMCPAccount(req)
+        guard
+            let raw = (try? req.content.decode(Body.self))?.courseID,
+            let courseUUID = UUID(uuidString: raw),
+            let course = try await APICourse.find(courseUUID, on: req.db),
+            let userID = user.id,
+            let courseID = course.id
+        else {
+            return req.redirect(to: "/admin/mcp?error=enroll_failed")
+        }
+        let already =
+            try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$course.$id == courseID)
+            .count() > 0
+        if !already {
+            try await APICourseEnrollment(userID: userID, courseID: courseID).save(on: req.db)
+            await AuditLogger.record(
+                action: .mcpAccountEnrolled, targetType: .user, targetID: user.id?.uuidString,
+                metadata: ["username": user.username, "course": course.code], on: req)
+        }
+        return req.redirect(to: "/admin/mcp")
+    }
+
+    // MARK: - POST /admin/mcp/accounts/:userID/unenroll
+
+    @Sendable
+    func unenrollMCPAccount(req: Request) async throws -> Response {
+        struct Body: Content { var courseID: String }
+        let user = try await findMCPAccount(req)
+        guard
+            let raw = (try? req.content.decode(Body.self))?.courseID,
+            let courseUUID = UUID(uuidString: raw),
+            let userID = user.id
+        else {
+            return req.redirect(to: "/admin/mcp?error=enroll_failed")
+        }
+        try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$course.$id == courseUUID)
+            .delete()
+        await AuditLogger.record(
+            action: .mcpAccountUnenrolled, targetType: .user, targetID: user.id?.uuidString,
+            metadata: ["username": user.username, "course_id": courseUUID.uuidString], on: req)
+        return req.redirect(to: "/admin/mcp")
     }
 }

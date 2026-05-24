@@ -30,6 +30,11 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     )
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
+    // MCP OAuth table cleanup (only when the MCP endpoint is enabled).
+    if appConfig.mcp.enabled {
+        app.lifecycle.use(MCPOAuthReaperLifecycleHandler())
+    }
+
     // BrightSpace grade sync (only registered when env vars are present).
     if let bsConfig = appConfig.brightspace {
         app.brightSpaceSyncConfig = bsConfig

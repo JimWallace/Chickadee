@@ -108,6 +108,10 @@ struct MCPRoutes: RouteCollection {
     }
 
     private func validateOrigin(_ req: Request) throws {
+        // Empty allowlist disables the check (development default) — matches
+        // validateHost, so a present Origin isn't rejected out of the box.
+        guard !configuration.allowedOrigins.isEmpty else { return }
+        // An absent Origin is allowed (non-browser clients: Inspector, curl).
         guard let origin = req.headers.first(name: "Origin") else { return }
         guard configuration.allowedOrigins.contains(origin) else {
             throw Abort(.forbidden, reason: "Origin is not in the allowlist.")

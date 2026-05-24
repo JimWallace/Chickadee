@@ -32,6 +32,9 @@ protocol ContentTool: Sendable {
 enum MCPToolError: Error, Sendable, Equatable {
     case unknownTool(String)
     case invalidArguments(tool: String, detail: String)
+    /// The authenticated subject is not permitted to act on the targeted
+    /// resource — e.g. the MCP account is not enrolled in the target course.
+    case notAuthorized(tool: String, detail: String)
 }
 
 // MARK: - Type erasure

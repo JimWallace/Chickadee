@@ -101,6 +101,8 @@ enum AuditAction: String, Sendable {
     case mcpTokenMinted = "mcp.token_minted"
     case mcpToolCalled = "mcp.tool_called"
     case mcpGrantRevoked = "mcp.grant_revoked"
+    case mcpAccountEnrolled = "mcp.account_enrolled"
+    case mcpAccountUnenrolled = "mcp.account_unenrolled"
 }
 
 enum AuditTargetType: String, Sendable {

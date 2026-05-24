@@ -154,6 +154,9 @@ extension InstructorDashboardRoutes {
         guard !enrolledUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
             .filter(\.$id ~~ enrolledUserIDs)
+            // Exclude `mcp` service accounts: they may be enrolled to scope an
+            // agent's access (admin MCP tab) but are not roster members.
+            .filter(\.$role != "mcp")
             .all()
             .sorted { lhs, rhs in
                 switch (lhs.lastSeenAt, rhs.lastSeenAt) {

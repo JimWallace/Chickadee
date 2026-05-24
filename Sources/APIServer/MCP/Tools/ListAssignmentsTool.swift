@@ -50,8 +50,10 @@ struct ListAssignmentsTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "No course found with code \"\(input.courseCode)\".")
         }
+        let courseID = try course.requireID()
+        try await context.authorizeCourseAccess(courseID, tool: Self.name)
         let assignments = try await APIAssignment.query(on: context.db)
-            .filter(\.$courseID == course.requireID())
+            .filter(\.$courseID == courseID)
             .sort(\.$title)
             .all()
         let formatter = ISO8601DateFormatter()

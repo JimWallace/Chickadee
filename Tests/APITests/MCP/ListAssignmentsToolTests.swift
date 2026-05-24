@@ -22,6 +22,8 @@ import Vapor
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_bit", courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_app", courseID: courseID)
             try await makeTestAssignment(on: app, testSetupID: "setup_bit", courseID: courseID, title: "Bit Counting")
@@ -31,6 +33,39 @@ import Vapor
                 ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
             #expect(output.courseCode == "CS136")
             #expect(output.assignments.map(\.title) == ["Apportionment", "Bit Counting"])
+        }
+    }
+
+    @Test func deniesWhenSubjectNotEnrolledInCourse() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
+            let courseID = try course.requireID()
+            // "tester" exists but is NOT enrolled in CS136.
+            _ = try await makeTestUser(on: app, username: "tester")
+            try await makeTestSetup(on: app, id: "setup_x", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_x", courseID: courseID, title: "X")
+
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListAssignmentsTool().execute(
+                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            }
+        }
+    }
+
+    @Test func allowsAdminSubjectWithoutEnrollment() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
+            let courseID = try course.requireID()
+            // An admin subject is global — no enrollment needed.
+            _ = try await makeTestUser(on: app, username: "tester", role: "admin")
+            try await makeTestSetup(on: app, id: "setup_x", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_x", courseID: courseID, title: "X")
+
+            let output = try await ListAssignmentsTool().execute(
+                ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            #expect(output.assignments.map(\.title) == ["X"])
         }
     }
 
@@ -57,6 +92,8 @@ import Vapor
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
             let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
             try await makeTestSetup(on: app, id: "setup_tasks", courseID: courseID)
             try await makeTestAssignment(on: app, testSetupID: "setup_tasks", courseID: courseID, title: "Tasks")
 

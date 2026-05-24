@@ -139,6 +139,8 @@ struct MCPDispatcher: Sendable {
             message = "Unknown tool: \(name)"
         case .invalidArguments(let tool, let detail):
             message = "Invalid arguments for \(tool): \(detail)"
+        case .notAuthorized(let tool, let detail):
+            message = "Not authorized for \(tool): \(detail)"
         }
         return .object([
             "content": .array([.object(["type": .string("text"), "text": .string(message)])]),

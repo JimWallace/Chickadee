@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.252] - 2026-05-23
+
+### Added
+
+- **MCP course-scoping — agents are confined to enrolled courses (#704).**
+  An access token's subject (the consenting instructor, or an admin-minted
+  service account) may now only read or edit courses it is **enrolled in**;
+  admins remain global. Enforced in `ToolContext.authorizeCourseAccess` and
+  applied to both content tools (`list_assignments`, `update_assignment_title`),
+  which now return a `not authorized … not enrolled` tool result for any
+  course outside the subject's enrollment.
+  - **Admin MCP tab course picker** — each service account row shows its
+    enrolled-course chips (with remove) plus a dropdown to enroll; new
+    `enroll`/`unenroll` endpoints, audited (`mcp.account_enrolled` /
+    `mcp.account_unenrolled`). An account with no enrollments can do nothing.
+  - `mcp`-role service accounts are excluded from the instructor and admin
+    **course roster views** (they're enrolled to scope an agent, not as roster
+    members), so existing rosters/counts are unaffected.
+
+### Changed / Hardened
+
+- **OAuth back-channel rate limiting + DCR caps (#704).** `MCPOAuthRateLimitMiddleware`
+  applies a per-IP sliding-window limit to `/oauth/{token,revoke,register}`;
+  `/oauth/register` additionally caps redirect-URIs per client and total
+  registered clients. Tunable via `MCP_OAUTH_RATE_LIMIT_PER_MIN` (30),
+  `MCP_MAX_REGISTERED_CLIENTS` (1000), `MCP_MAX_REDIRECT_URIS` (5).
+- **Consent-screen anti-phishing (#704).** `/oauth/authorize` now shows the
+  redirect destination host and a "you have not approved this app before"
+  warning on first approval, since DCR client names are self-asserted.
+- **Refresh-time re-authorization (#704).** `/oauth/token` refresh now re-checks
+  that the grant's subject is still an instructor/admin; a downgraded account's
+  grant is revoked, closing the long-lived-grant gap.
+- **Origin guard fix (#704).** An empty `MCP_ALLOWED_ORIGINS` allowlist now
+  means "allow any" (matching the Host guard and the documented default),
+  instead of rejecting every request that carries an `Origin` header.
+- **OAuth-table reaper (#704).** A periodic sweep (`MCPOAuthReaperService`,
+  registered only when MCP is enabled) deletes expired authorization codes and
+  revoked/expired grants so those tables don't grow without bound.
+
 ## [0.4.251] - 2026-05-23
 
 ### Added

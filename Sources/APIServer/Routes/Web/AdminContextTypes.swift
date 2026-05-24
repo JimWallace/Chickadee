@@ -139,10 +139,19 @@ struct AdminUsersContext: Encodable {
     let users: [AdminUserRow]
 }
 
+struct AdminMCPCourseRef: Encodable {
+    let id: String
+    let code: String
+    let name: String
+}
+
 struct AdminMCPAccountRow: Encodable {
     let id: String
     let username: String
     let createdAt: String
+    /// Courses this account is enrolled in — the only courses its tokens may
+    /// touch (admins excepted). Empty means the account can do nothing.
+    let enrolledCourses: [AdminMCPCourseRef]
 }
 
 struct AdminMCPContext: Encodable {
@@ -155,6 +164,8 @@ struct AdminMCPContext: Encodable {
     let resource: String?
     let tokenTTLSeconds: Int
     let accounts: [AdminMCPAccountRow]
+    /// All courses, for the per-account enrollment picker.
+    let allCourses: [AdminMCPCourseRef]
     /// Set immediately after a mint so the page can show the token exactly once.
     let mintedToken: String?
     let mintedFor: String?

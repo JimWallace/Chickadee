@@ -18,6 +18,8 @@ MCP
         Service identities for AI agents that author course content over the Model Context
         Protocol endpoint (<code>/mcp</code>). Each account is non-loginable and carries the
         <code>mcp</code> role only — it grants no access to student data, grades, or enrolment.
+        An account can only read or edit the courses it is <strong>enrolled in</strong> (below);
+        enroll it in at least one course, or its tokens can do nothing.
     </p>
     <p style="font-size:.85rem"><a href="/agents">View connected agents &rarr;</a>
         — browser-authorized OAuth grants (Phase 2), with revoke.</p>
@@ -37,6 +39,9 @@ MCP
     #endif
     #if(error == "mcp_disabled"):
     <div class="form-error" style="margin-bottom:1rem">Cannot mint a token while the MCP endpoint is inactive.</div>
+    #endif
+    #if(error == "enroll_failed"):
+    <div class="form-error" style="margin-bottom:1rem">Could not update the account's course enrollment.</div>
     #endif
 
     #if(mintedToken):
@@ -68,13 +73,41 @@ MCP
 
     <table class="results-table">
         <thead>
-            <tr><th>Username</th><th class="time">Created</th><th>Actions</th></tr>
+            <tr><th>Username</th><th class="time">Created</th><th>Courses</th><th>Actions</th></tr>
         </thead>
         <tbody>
         #for(account in accounts):
             <tr>
                 <td><code>#(account.username)</code></td>
                 <td class="time">#(account.createdAt)</td>
+                <td>
+                    <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
+                        #for(c in account.enrolledCourses):
+                        <span style="display:inline-flex;align-items:center;gap:.2rem;border:1px solid var(--gray-400);border-radius:4px;padding:.05rem .35rem;font-size:.78rem">
+                            <code>#(c.code)</code>
+                            <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll" style="display:inline">
+                                #csrfFormField()
+                                <input type="hidden" name="courseID" value="#(c.id)">
+                                <button type="submit" title="Remove from #(c.code)"
+                                        style="background:none;border:0;cursor:pointer;color:var(--gray-600);padding:0;font-size:.95rem;line-height:1">&times;</button>
+                            </form>
+                        </span>
+                        #endfor
+                        #if(!account.enrolledCourses.count):
+                        <span style="color:var(--gray-600);font-size:.78rem">none — no access</span>
+                        #endif
+                        <form method="post" action="/admin/mcp/accounts/#(account.id)/enroll" style="display:inline-flex;gap:.2rem">
+                            #csrfFormField()
+                            <label class="visually-hidden" for="enroll-#(account.id)">Enroll #(account.username) in a course</label>
+                            <select id="enroll-#(account.id)" name="courseID" class="form-input" style="padding:.2rem .4rem;font-size:.78rem">
+                                #for(c in allCourses):
+                                <option value="#(c.id)">#(c.code)</option>
+                                #endfor
+                            </select>
+                            <button class="btn action-btn" type="submit">Enroll</button>
+                        </form>
+                    </div>
+                </td>
                 <td>
                     <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
                         #if(enabled):
@@ -100,7 +133,7 @@ MCP
             </tr>
         #endfor
         #if(!accounts.count):
-            <tr><td colspan="3" style="color:var(--gray-600)">No MCP accounts yet.</td></tr>
+            <tr><td colspan="4" style="color:var(--gray-600)">No MCP accounts yet.</td></tr>
         #endif
         </tbody>
     </table>

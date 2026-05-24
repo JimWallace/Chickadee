@@ -32,6 +32,14 @@ struct MCPConfig: Sendable {
     /// Lifetime of a browser-flow authorization grant (refresh-token validity),
     /// in days — "authorize once, works for a term".  Default 120 days.
     var grantTTLDays: Int
+    /// Max POSTs to the back-channel OAuth endpoints (/oauth/token,/revoke,
+    /// /register) per IP per minute.  Default 30.
+    var oauthRateLimitPerMin: Int
+    /// Cap on the total number of dynamically-registered OAuth clients, a
+    /// backstop against `/oauth/register` flooding.  Default 1000.
+    var maxRegisteredClients: Int
+    /// Cap on `redirect_uris` accepted in a single registration.  Default 5.
+    var maxRedirectURIsPerClient: Int
 
     init(
         enabled: Bool,
@@ -42,7 +50,10 @@ struct MCPConfig: Sendable {
         issuer: String?,
         resource: String?,
         accessTokenTTLSeconds: Int = 600,
-        grantTTLDays: Int = 120
+        grantTTLDays: Int = 120,
+        oauthRateLimitPerMin: Int = 30,
+        maxRegisteredClients: Int = 1000,
+        maxRedirectURIsPerClient: Int = 5
     ) {
         self.enabled = enabled
         self.allowedHosts = allowedHosts
@@ -53,6 +64,9 @@ struct MCPConfig: Sendable {
         self.resource = resource
         self.accessTokenTTLSeconds = accessTokenTTLSeconds
         self.grantTTLDays = grantTTLDays
+        self.oauthRateLimitPerMin = oauthRateLimitPerMin
+        self.maxRegisteredClients = maxRegisteredClients
+        self.maxRedirectURIsPerClient = maxRedirectURIsPerClient
     }
 
     static func fromEnvironment(workDir: String) -> MCPConfig {
@@ -65,7 +79,10 @@ struct MCPConfig: Sendable {
             issuer: trimmedEnv("MCP_ISSUER"),
             resource: trimmedEnv("MCP_RESOURCE"),
             accessTokenTTLSeconds: environmentInt("MCP_ACCESS_TOKEN_TTL_SECONDS") ?? 600,
-            grantTTLDays: environmentInt("MCP_GRANT_TTL_DAYS") ?? 120
+            grantTTLDays: environmentInt("MCP_GRANT_TTL_DAYS") ?? 120,
+            oauthRateLimitPerMin: max(1, environmentInt("MCP_OAUTH_RATE_LIMIT_PER_MIN") ?? 30),
+            maxRegisteredClients: max(1, environmentInt("MCP_MAX_REGISTERED_CLIENTS") ?? 1000),
+            maxRedirectURIsPerClient: max(1, environmentInt("MCP_MAX_REDIRECT_URIS") ?? 5)
         )
     }
 

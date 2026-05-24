@@ -50,6 +50,7 @@ struct UpdateAssignmentTitleTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
         }
+        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
         assignment.title = trimmed
         try await assignment.save(on: context.db)
         return Output(publicID: assignment.publicID, title: assignment.title, slug: assignment.slug)
