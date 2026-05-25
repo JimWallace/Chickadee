@@ -26,9 +26,12 @@ extension AdminRoutes {
         let flash = (try? req.query.decode(FlashQuery.self)) ?? FlashQuery()
         let retentionDays = req.application.appConfig.diagnostics.submissionRetentionDays
 
+        // Load all courses and filter archived in Swift — matches the admin
+        // dashboard's approach (course count is admin-scale) and keeps the
+        // listing backend-agnostic.
         let archivedCourses = try await APICourse.query(on: req.db)
-            .filter(\.$isArchived == true)
             .all()
+            .filter { $0.isArchived }
         let courseIDs = archivedCourses.compactMap { $0.id }
         let counts = try await SubmissionRetentionService.submissionCountsByCourse(
             courseIDs: courseIDs, on: req.db)

@@ -36,11 +36,11 @@ Retention
         <strong>Purging cannot be undone.</strong>
     </p>
 
-    #if(!rows.count):
+    #if(rows.isEmpty):
     <p style="color:var(--muted)">No archived courses. The retention clock starts when a course is archived.</p>
     #else:
     <p style="color:var(--muted)">
-        #if(purgeableCount):#(purgeableCount) course(s) past retention and eligible to purge.#else:No courses are past their retention window yet.#endif
+        #if(purgeableCount > 0):#(purgeableCount) course(s) past retention and eligible to purge.#else:No courses are past their retention window yet.#endif
     </p>
     <table class="results-table">
         <thead>
