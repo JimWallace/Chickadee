@@ -145,17 +145,26 @@ import XCTVapor
                 body: ByteBuffer(string: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#))
             #expect(mcp.status == .notFound)
 
+            // These discovery paths are two-segment, so with the MCP routes
+            // unmounted they fall through to the generic web app's vanity route
+            // (`/:courseCode/:assignmentSlug`), which 303-redirects an
+            // unauthenticated request to /login. The guarantee is that no MCP
+            // metadata is served — never a 200 carrying the discovery payload.
             for path in [
                 "/.well-known/oauth-protected-resource",
                 "/.well-known/oauth-authorization-server",
                 "/.well-known/jwks.json",
             ] {
                 let res = try await app.asyncSendRequest(.GET, path)
-                #expect(res.status == .notFound, "\(path) must be absent when MCP is disabled")
+                #expect(
+                    res.status == .seeOther || res.status == .notFound,
+                    "\(path) must not serve MCP metadata when disabled (got \(res.status))")
             }
 
+            // /oauth/authorize is likewise two-segment → vanity fallthrough, so
+            // the consent screen is never rendered.
             let authorize = try await app.asyncSendRequest(.GET, "/oauth/authorize")
-            #expect(authorize.status == .notFound)
+            #expect(authorize.status == .seeOther || authorize.status == .notFound)
             let token = try await app.asyncSendRequest(
                 .POST, "/oauth/token",
                 beforeRequest: { req in
