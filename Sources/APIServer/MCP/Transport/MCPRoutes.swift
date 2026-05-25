@@ -17,6 +17,7 @@
 // not do this by default — the `Host` header is pinned to an allowlist too.
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
 
+import Core
 import Foundation
 import NIOCore
 import Vapor
@@ -85,6 +86,21 @@ struct MCPRoutes: RouteCollection {
             actingClientID: principal.actingClientID,
             actingClientName: principal.actingClientName
         )
+
+        // Live-progress streaming: a `validate_assignment` tools/call over an SSE
+        // connection that carries a progressToken streams `notifications/progress`
+        // (queued → running → done) while it waits, then the final result. This is
+        // the one tool wired for live progress; every other call falls through to
+        // the generic dispatch below (which still streams its single result as SSE
+        // when the client accepts it). Generalizing live progress to all tools
+        // needs a Sendable ToolContext — it currently wraps the non-Sendable
+        // Request — so the watch runs on the request-independent `application.db`
+        // and this stays a contained special case rather than threading a progress
+        // sink through the dispatcher.
+        if let streaming = try await validationProgressStream(req: req, context: context, rpc: rpcRequest) {
+            return streaming
+        }
+
         guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context) else {
             // A notification was accepted; the spec mandates 202 with no body.
             return Response(status: .accepted)
@@ -167,27 +183,14 @@ struct MCPRoutes: RouteCollection {
     }
 
     /// Frames a single JSON-RPC response as a one-shot SSE stream: one
-    /// `event: message` carrying the compact JSON, then the stream ends. This is
-    /// the Streamable HTTP "POST returns an SSE stream" form; we emit exactly one
-    /// event (no progress notifications yet), but the shape is forward-compatible
-    /// — additional `notifications/progress` events could precede the response.
-    ///
-    /// `X-Accel-Buffering: no` + `Cache-Control: no-cache` defeat reverse-proxy
-    /// buffering (nginx/squid) that would otherwise hold the event until the
-    /// connection closes, which is fatal for incremental streaming.
+    /// `event: message` carrying the compact JSON, then the stream ends. The
+    /// generic happy path uses this — every tool except the live-progress
+    /// `validate_assignment` stream emits exactly one event. The shape is
+    /// forward-compatible: progress notifications can precede the response (which
+    /// is exactly what the validation stream does).
     private func eventStreamResponse(_ payload: JSONRPCResponse) throws -> Response {
-        let json = String(bytes: try JSONEncoder().encode(payload), encoding: .utf8) ?? ""
-        // SSE framing: `event:` line, one `data:` line (compact JSON has no
-        // newlines, so a single data line is valid), terminated by a blank line.
-        let frame = "event: message\ndata: \(json)\n\n"
-
-        var headers = HTTPHeaders()
-        headers.replaceOrAdd(name: .contentType, value: "text/event-stream")
-        headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
-        headers.replaceOrAdd(name: .connection, value: "keep-alive")
-        headers.replaceOrAdd(name: "X-Accel-Buffering", value: "no")
-
-        let response = Response(status: .ok, headers: headers)
+        let frame = try MCPRoutes.sseMessageFrame(encoding: payload)
+        let response = Response(status: .ok, headers: MCPRoutes.sseHeaders())
         response.body = .init(stream: { writer in
             var buffer = ByteBufferAllocator().buffer(capacity: frame.utf8.count)
             buffer.writeString(frame)
@@ -196,6 +199,117 @@ struct MCPRoutes: RouteCollection {
             }
         })
         return response
+    }
+
+    /// SSE response headers. `X-Accel-Buffering: no` + `Cache-Control: no-cache`
+    /// defeat reverse-proxy buffering (nginx/squid) that would otherwise hold
+    /// events until the connection closes — fatal for incremental streaming.
+    static func sseHeaders() -> HTTPHeaders {
+        var headers = HTTPHeaders()
+        headers.replaceOrAdd(name: .contentType, value: "text/event-stream")
+        headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
+        headers.replaceOrAdd(name: .connection, value: "keep-alive")
+        headers.replaceOrAdd(name: "X-Accel-Buffering", value: "no")
+        return headers
+    }
+
+    /// One SSE `message` frame: `event:` line, a single `data:` line (compact
+    /// JSON has no newlines), terminated by a blank line.
+    static func sseMessageFrame(jsonString: String) -> String {
+        "event: message\ndata: \(jsonString)\n\n"
+    }
+
+    static func sseMessageFrame(encoding value: some Encodable) throws -> String {
+        let json = String(bytes: try JSONEncoder().encode(value), encoding: .utf8) ?? ""
+        return sseMessageFrame(jsonString: json)
+    }
+
+    // MARK: - validate_assignment live progress stream
+
+    /// If `rpc` is a `validate_assignment` tools/call over an SSE connection that
+    /// carries a `progressToken`, and the caller is scope-authorized and enrolled
+    /// in the assignment's course, returns an SSE response that streams progress
+    /// then the result. Returns nil to let the generic dispatch handle every
+    /// other case (including the authorization/error responses, so this path
+    /// never has to reformat them).
+    private func validationProgressStream(
+        req: Request, context: ToolContext, rpc: JSONRPCRequest
+    ) async throws -> Response? {
+        guard clientAcceptsEventStream(req),
+            let input = Self.validateAssignmentCall(rpc),
+            let token = MCPProgressReporter.token(fromParams: rpc.params),
+            context.grantedScopes.isSuperset(of: ValidateAssignmentTool.requiredScopes),
+            let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db)
+        else { return nil }
+        // Authorize against the assignment's course; on failure fall back to the
+        // generic dispatch, which produces the proper not-authorized result.
+        do {
+            try await context.authorizeCourseAccess(
+                assignment.courseID, tool: ValidateAssignmentTool.name)
+        } catch {
+            return nil
+        }
+
+        // Audit the call here, since the generic dispatcher (which normally does)
+        // is bypassed for the streaming path.
+        await dispatcher.auditToolCall(name: ValidateAssignmentTool.name, context: context)
+
+        let application = req.application
+        let id = rpc.id ?? .null
+        let publicID = assignment.publicID
+        let timeout = ValidateAssignmentTool.clampTimeout(input.timeoutSeconds)
+
+        let response = Response(status: .ok, headers: Self.sseHeaders())
+        response.body = .init(asyncStream: { writer in
+            let reporter = MCPProgressReporter(
+                token: token,
+                sink: { notification in
+                    if let frame = try? Self.sseMessageFrame(encoding: notification) {
+                        try? await writer.writeBuffer(ByteBuffer(string: frame))
+                    }
+                })
+
+            let finalResponse: JSONRPCResponse
+            do {
+                let outcome = try await watchValidation(
+                    on: application.db,
+                    assignmentPublicID: publicID,
+                    pollInterval: .milliseconds(500),
+                    deadline: ContinuousClock().now.advanced(by: .seconds(timeout)),
+                    emit: { progress, message in await reporter.report(progress, message: message) })
+                let output = ValidateAssignmentTool.Output(
+                    assignmentPublicID: outcome.assignmentPublicID,
+                    validationStatus: outcome.validationStatus,
+                    timedOut: outcome.timedOut)
+                let structured = (try? JSONValue(encoding: output)) ?? .object([:])
+                finalResponse = .success(id: id, result: mcpToolSuccessResult(structured))
+            } catch {
+                finalResponse = .failure(
+                    id: id, error: .internalError("validate_assignment failed while watching validation."))
+            }
+
+            if let frame = try? Self.sseMessageFrame(encoding: finalResponse) {
+                try? await writer.writeBuffer(ByteBuffer(string: frame))
+            }
+            try? await writer.write(.end)
+        })
+        return response
+    }
+
+    /// Decodes `rpc` into a `validate_assignment` tool input, or nil if `rpc`
+    /// isn't a tools/call for that tool.
+    private static func validateAssignmentCall(_ rpc: JSONRPCRequest) -> ValidateAssignmentTool.Input? {
+        guard rpc.method == "tools/call", let params = rpc.params else { return nil }
+        struct Call: Decodable {
+            let name: String
+            let arguments: JSONValue?
+        }
+        guard let call = try? params.decoded(as: Call.self),
+            call.name == ValidateAssignmentTool.name,
+            let input = try? (call.arguments ?? .object([:])).decoded(
+                as: ValidateAssignmentTool.Input.self)
+        else { return nil }
+        return input
     }
 
     /// Builds the `WWW-Authenticate: Bearer …, error="insufficient_scope", scope="…"`

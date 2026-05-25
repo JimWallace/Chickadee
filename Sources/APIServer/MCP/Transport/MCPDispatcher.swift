@@ -120,7 +120,7 @@ struct MCPDispatcher: Sendable {
     /// tracked separately from the human's own web actions in the admin audit
     /// log; the acting agent is in `via_agent` when present. Never logs tool
     /// arguments.
-    private func auditToolCall(name: String, context: ToolContext) async {
+    func auditToolCall(name: String, context: ToolContext) async {
         var metadata = ["tool": name]
         if let agent = context.actingClientName {
             metadata["via_agent"] = agent
@@ -133,12 +133,7 @@ struct MCPDispatcher: Sendable {
     }
 
     private func successToolResult(_ structured: JSONValue) -> JSONValue {
-        let text = (try? structured.encodedString()) ?? ""
-        return .object([
-            "content": .array([.object(["type": .string("text"), "text": .string(text)])]),
-            "structuredContent": structured,
-            "isError": .bool(false),
-        ])
+        mcpToolSuccessResult(structured)
     }
 
     private func errorToolResult(_ error: MCPToolError) -> JSONValue {
@@ -172,4 +167,17 @@ struct MCPDispatcher: Sendable {
             return .failure(id: id, error: .internalError("Failed to encode initialize result."))
         }
     }
+}
+
+/// Wraps a tool's structured output in the MCP `tools/call` result envelope
+/// (`content` text block + `structuredContent` + `isError:false`). Shared by the
+/// dispatcher's normal path and the transport's SSE progress-streaming path so
+/// the two produce identical result shapes.
+func mcpToolSuccessResult(_ structured: JSONValue) -> JSONValue {
+    let text = (try? structured.encodedString()) ?? ""
+    return .object([
+        "content": .array([.object(["type": .string("text"), "text": .string(text)])]),
+        "structuredContent": structured,
+        "isError": .bool(false),
+    ])
 }
