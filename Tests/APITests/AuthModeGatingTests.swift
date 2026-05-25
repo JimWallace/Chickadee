@@ -102,13 +102,16 @@ import XCTVapor
         }
     }
 
-    @Test func ssoMode_loginAutoRedirectsToSSOStart() async throws {
+    @Test func ssoMode_loginRendersButtonNotAutoSSO() async throws {
+        // /login must NOT auto-redirect into SSO — it renders the login page
+        // with the "Login with UWaterloo" button. Auto-initiating SSO made
+        // logout look broken: the IdP's live session silently re-authenticated
+        // instead of showing a logged-out page (IRA-PIA finding).
         try await withApp(try await makeApp(authMode: .sso)) { app in
             try await app.asyncTest(
                 .GET, "/login",
                 afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/auth/sso/start")
+                    #expect(res.headers.first(name: .location) != "/auth/sso/start")
                 })
         }
     }
