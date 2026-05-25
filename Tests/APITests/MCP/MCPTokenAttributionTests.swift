@@ -19,6 +19,12 @@ import XCTVapor
         let authority = try await MCPTokenAuthority.make(
             privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "k")
         app.mcpTokenAuthority = authority
+        // The middleware clamps token scopes to the mode's ceiling; mounting it
+        // at all implies a mounted, write-capable mode in production.
+        app.appConfig = .testDefaults(
+            mcp: MCPConfig(
+                mode: .readWrite, allowedHosts: [], allowedOrigins: [],
+                tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource))
         let middleware = MCPBearerAuthMiddleware(
             expectedIssuer: issuer, expectedAudience: resource, resourceMetadataURL: metadataURL)
         app.grouped(middleware).get("whoami") { req -> String in

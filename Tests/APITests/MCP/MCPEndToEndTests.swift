@@ -19,7 +19,7 @@ import XCTVapor
     /// authority (matching issuer/resource) the minted tokens validate against.
     private func makeMCPApp() async throws -> (Application, MCPTokenAuthority) {
         let mcp = MCPConfig(
-            enabled: true, allowedHosts: [], allowedOrigins: [],
+            mode: .readWrite, allowedHosts: [], allowedOrigins: [],
             tokenTTLSeconds: 3600, signingKeyPath: "unused",
             issuer: issuer, resource: resource)
         let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp))
@@ -116,9 +116,28 @@ import XCTVapor
         }
     }
 
-    @Test func toolsListWithValidTokenListsTools() async throws {
+    @Test func toolsListWithFullScopeListsReadAndWriteTools() async throws {
         let (app, authority) = try await makeMCPApp()
         try await withApp(app) { app in
+            // tools/list advertises only the tools the caller's scopes cover; a
+            // full read+write token therefore sees both read and write tools.
+            let token = try await authority.mint(
+                subject: "agent", scopes: [.read, .write],
+                issuer: issuer, audience: resource, ttlSeconds: 3600)
+            let res = try await post(
+                app, body: #"{"jsonrpc":"2.0","id":4,"method":"tools/list"}"#, token: token)
+            #expect(res.status == .ok)
+            let text = String(buffer: res.body)
+            #expect(text.contains("list_assignments"))
+            #expect(text.contains("update_assignment"))
+        }
+    }
+
+    @Test func toolsListWithReadScopeHidesWriteTools() async throws {
+        let (app, authority) = try await makeMCPApp()
+        try await withApp(app) { app in
+            // A read-only token sees only read tools — write tools are filtered
+            // out of the listing rather than advertised only to 403 on call.
             let token = try await authority.mint(
                 subject: "agent", scopes: [.read],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
@@ -127,7 +146,8 @@ import XCTVapor
             #expect(res.status == .ok)
             let text = String(buffer: res.body)
             #expect(text.contains("list_assignments"))
-            #expect(text.contains("update_assignment"))
+            #expect(!text.contains("update_assignment"))
+            #expect(!text.contains("create_assignment"))
         }
     }
 

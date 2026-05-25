@@ -17,7 +17,7 @@ import XCTVapor
 
     private func makeApp() async throws -> Application {
         let mcp = MCPConfig(
-            enabled: true, allowedHosts: [], allowedOrigins: [],
+            mode: .readWrite, allowedHosts: [], allowedOrigins: [],
             tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource)
         let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp))
         app.mcpTokenAuthority = try await MCPTokenAuthority.make(

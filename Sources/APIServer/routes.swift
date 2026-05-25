@@ -73,7 +73,7 @@ func routes(_ app: Application) throws {
     // MARK: - MCP (content authoring)
 
     // Bearer-gated /mcp transport + unauthenticated OAuth discovery metadata.
-    // Mounted only when MCP_ENABLED; a no-op otherwise.
+    // Mounted when MCP_MODE is read_only or read_write; a no-op when off.
     try registerMCPRoutes(app)
     // Browser OAuth flow (/oauth/authorize consent + /oauth/token); the consent
     // page reuses the shared session-auth + CSRF middleware.

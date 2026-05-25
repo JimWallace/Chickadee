@@ -17,20 +17,24 @@ import XCTVapor
 
     private func makeAdminApp(
         mcpEnabled: Bool, authMode: AuthMode = .local
-    ) async throws -> (
-        Application, MCPTokenAuthority?
-    ) {
+    ) async throws -> (Application, MCPTokenAuthority?) {
+        try await makeAdminApp(mode: mcpEnabled ? .readWrite : .off, authMode: authMode)
+    }
+
+    private func makeAdminApp(
+        mode: MCPMode, authMode: AuthMode = .local
+    ) async throws -> (Application, MCPTokenAuthority?) {
         let mcp: MCPConfig =
-            mcpEnabled
+            mode.isMounted
             ? MCPConfig(
-                enabled: true, allowedHosts: [], allowedOrigins: [],
+                mode: mode, allowedHosts: [], allowedOrigins: [],
                 tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource)
             : .default
         // app.authMode stays .local so the test's session login works; the
         // service-account UI reads appConfig.auth.mode, which we set here.
         let app = try await makeTestApp(appConfig: .testDefaults(authMode: authMode, mcp: mcp))
         var authority: MCPTokenAuthority?
-        if mcpEnabled {
+        if mode.isMounted {
             let made = try await MCPTokenAuthority.make(
                 privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "mcp-1")
             app.mcpTokenAuthority = made
@@ -123,6 +127,30 @@ import XCTVapor
             #expect(claims.sub.value == "minted-bot")
             #expect(claims.scopes.contains("content:read"))
             #expect(claims.scopes.contains("content:write"))
+        }
+    }
+
+    @Test func mintTokenInReadOnlyModeCapsScopeToRead() async throws {
+        let (app, authority) = try await makeAdminApp(mode: .readOnly)
+        try await withApp(app) { app in
+            var cookie = try await loginUser(
+                username: "mcp_admin", password: "testpassword", role: "admin", on: app)
+            _ = try await adminCSRFPost(
+                app, to: "/admin/mcp/accounts", cookie: &cookie, fields: ["username": "ro-bot"])
+            let userID = try #require(try await mcpAccount(named: "ro-bot", on: app)).requireID()
+
+            // Even though the form requests read+write, read_only clamps the
+            // minted token down to content:read.
+            let res = try await adminCSRFPost(
+                app, to: "/admin/mcp/accounts/\(userID.uuidString)/token",
+                cookie: &cookie, fields: ["scope": "readwrite"])
+            #expect(res.status == .ok)
+
+            let token = try #require(extractJWT(from: res.body.string))
+            let unwrappedAuthority = try #require(authority)
+            let claims = try await unwrappedAuthority.verify(token)
+            #expect(claims.scopes.contains("content:read"))
+            #expect(!claims.scopes.contains("content:write"))
         }
     }
 

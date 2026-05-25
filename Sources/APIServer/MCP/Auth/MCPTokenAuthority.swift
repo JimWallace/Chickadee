@@ -120,7 +120,8 @@ private struct MCPTokenAuthorityKey: StorageKey {
 }
 
 extension Application {
-    /// The MCP token authority, loaded at startup when `appConfig.mcp.enabled`.
+    /// The MCP token authority, loaded at startup when `appConfig.mcp.mode` is
+    /// mounted (read_only or read_write).
     var mcpTokenAuthority: MCPTokenAuthority? {
         get { storage[MCPTokenAuthorityKey.self] }
         set { storage[MCPTokenAuthorityKey.self] = newValue }

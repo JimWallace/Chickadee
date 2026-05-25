@@ -157,9 +157,12 @@ struct AdminMCPAccountRow: Encodable {
 struct AdminMCPContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
-    /// True only when MCP is enabled, the signing authority is loaded, and the
+    /// True only when MCP is mounted, the signing authority is loaded, and the
     /// issuer/resource resolve — i.e. tokens can actually be minted.
     let enabled: Bool
+    /// False in read_only mode: the page hides the read+write mint option and
+    /// shows a read-only banner.
+    let writeAllowed: Bool
     let issuer: String?
     let resource: String?
     let tokenTTLSeconds: Int

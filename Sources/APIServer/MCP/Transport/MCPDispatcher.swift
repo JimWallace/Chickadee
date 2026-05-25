@@ -40,7 +40,7 @@ struct MCPDispatcher: Sendable {
             // with an id, ack with an empty result rather than erroring.
             return .success(id: id, result: .object([:]))
         case .toolsList:
-            return .success(id: id, result: toolsListResult())
+            return .success(id: id, result: toolsListResult(context: context))
         case .toolsCall:
             return await toolsCallResult(id: id, params: request.params, context: context)
         case .resourcesList:
@@ -110,8 +110,18 @@ struct MCPDispatcher: Sendable {
 
     // MARK: - tools/list
 
-    private func toolsListResult() -> JSONValue {
-        let entries = tools.all.map { tool -> JSONValue in
+    /// Advertises only the tools the caller can actually invoke: a tool is
+    /// listed when the caller's granted scopes cover its `requiredScopes`.  In
+    /// read_only mode the bearer middleware has already clamped granted scopes
+    /// to {read}, so write tools drop out of the listing here rather than being
+    /// advertised only to fail with 403 on call.  When no context is available
+    /// (non-transport callers / tests), all tools are listed.
+    private func toolsListResult(context: ToolContext?) -> JSONValue {
+        let visible =
+            context.map { ctx in
+                tools.all.filter { ctx.grantedScopes.isSuperset(of: $0.requiredScopes) }
+            } ?? tools.all
+        let entries = visible.map { tool -> JSONValue in
             var fields: [String: JSONValue] = [
                 "name": .string(tool.name),
                 "description": .string(tool.description),

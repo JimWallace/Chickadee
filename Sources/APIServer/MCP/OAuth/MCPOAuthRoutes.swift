@@ -61,7 +61,7 @@ struct MCPOAuthRoutes: Sendable {
         guard !query.codeChallenge.isEmpty, query.codeChallengeMethod == "S256" else {
             return redirect(query.redirectURI, error: "invalid_request", state: query.state)
         }
-        let scopes = resolveScopes(query.scope)
+        let scopes = resolveScopes(query.scope, ceiling: req.application.appConfig.mcp.mode.scopeCeiling)
         guard !scopes.isEmpty else {
             return redirect(query.redirectURI, error: "invalid_scope", state: query.state)
         }
@@ -113,7 +113,7 @@ struct MCPOAuthRoutes: Sendable {
         guard form.decision == "authorize" else {
             return redirect(form.redirectURI, error: "access_denied", state: state)
         }
-        let scopes = resolveScopes(form.scope)
+        let scopes = resolveScopes(form.scope, ceiling: req.application.appConfig.mcp.mode.scopeCeiling)
         guard !scopes.isEmpty, !form.codeChallenge.isEmpty, form.codeChallengeMethod == "S256" else {
             return redirect(form.redirectURI, error: "invalid_request", state: state)
         }
@@ -297,7 +297,8 @@ struct MCPOAuthRoutes: Sendable {
             grantTypes: ["authorization_code", "refresh_token"],
             responseTypes: ["code"],
             tokenEndpointAuthMethod: "none",
-            scope: ContentScope.allCases.map(\.rawValue).joined(separator: " "))
+            scope: req.application.appConfig.mcp.mode.scopeCeiling
+                .map(\.rawValue).sorted().joined(separator: " "))
         let result = Response(status: .created)
         try result.content.encode(response, as: .json)
         result.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
@@ -380,13 +381,16 @@ struct MCPOAuthRoutes: Sendable {
         return try await view.encodeResponse(for: req)
     }
 
-    /// Keeps only valid content scopes; an empty/absent request defaults to the
-    /// full content scope set.
-    private func resolveScopes(_ scope: String?) -> Set<ContentScope> {
+    /// Keeps only valid content scopes, then clamps to the server-wide ceiling
+    /// for the current MCP_MODE so a consent request can't grant more than the
+    /// mode honors (read_only → {read}).  An empty/absent request defaults to
+    /// the full ceiling.
+    private func resolveScopes(_ scope: String?, ceiling: Set<ContentScope>) -> Set<ContentScope> {
         guard let scope, !scope.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return Set(ContentScope.allCases)
+            return ceiling
         }
-        return Set(scope.split(separator: " ").compactMap { ContentScope(rawValue: String($0)) })
+        let requested = Set(scope.split(separator: " ").compactMap { ContentScope(rawValue: String($0)) })
+        return requested.intersection(ceiling)
     }
 
     private func parseScopes(_ scope: String) -> Set<ContentScope> {
