@@ -227,6 +227,11 @@ import XCTVapor
 
             _ = try await makeTestCourse(on: app, code: "RETPAGEACTIVE", name: "Active Course")
 
+            // Resolve IDs up front: a `try` inside the #expect string
+            // interpolation isn't handled by the macro expansion.
+            let eligiblePurgeURL = "/admin/courses/\(try eligible.requireID().uuidString)/purge-submissions"
+            let pendingPurgeURL = "/admin/courses/\(try pending.requireID().uuidString)/purge-submissions"
+
             try await app.asyncTest(
                 .GET, "/admin/retention",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
@@ -239,11 +244,9 @@ import XCTVapor
                     // Active (non-archived) course is not subject to retention yet.
                     #expect(body.contains(">RETPAGEACTIVE<") == false)
                     // Eligible course offers the purge action.
-                    #expect(body.contains("/admin/courses/\(try eligible.requireID().uuidString)/purge-submissions"))
+                    #expect(body.contains(eligiblePurgeURL))
                     // Pending course does not.
-                    #expect(
-                        body.contains("/admin/courses/\(try pending.requireID().uuidString)/purge-submissions")
-                            == false)
+                    #expect(body.contains(pendingPurgeURL) == false)
                     // Retention tab is active.
                     #expect(body.contains("href=\"/admin/retention\" aria-current=\"page\""))
                 })
