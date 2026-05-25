@@ -1,7 +1,8 @@
 // APIServer/MCP/Transport/MCPServerRegistration.swift
 //
 // Wires the content-authoring MCP server into the live application when
-// `appConfig.mcp.enabled`.  Mounts the bearer-gated /mcp transport, the
+// `appConfig.mcp.mode` is mounted (read_only or read_write).  Mounts the
+// bearer-gated /mcp transport, the
 // unauthenticated OAuth discovery endpoints, and (Phase 2) the browser OAuth
 // flow (/oauth/authorize + /oauth/token).  Issuer/resource are resolved from
 // MCPConfig, falling back to PUBLIC_BASE_URL.  The signing-key authority itself
@@ -65,10 +66,10 @@ struct MCPEndpoints {
 /// otherwise.  Called from `routes(_:)`.
 func registerMCPRoutes(_ app: Application) throws {
     let mcp = app.appConfig.mcp
-    guard mcp.enabled else { return }
+    guard mcp.mode.isMounted else { return }
     guard let endpoints = MCPEndpoints.resolve(mcp: mcp, security: app.appConfig.security) else {
         app.logger.warning(
-            "MCP_ENABLED=true but no issuer/resource could be resolved (set MCP_ISSUER/MCP_RESOURCE or PUBLIC_BASE_URL); /mcp not mounted."
+            "MCP_MODE=\(mcp.mode.rawValue) but no issuer/resource could be resolved (set MCP_ISSUER/MCP_RESOURCE or PUBLIC_BASE_URL); /mcp not mounted."
         )
         return
     }
@@ -105,7 +106,8 @@ func registerMCPOAuthRoutes(
     _ app: Application, sessionAuth: UserSessionAuthenticator, csrf: CSRF
 ) throws {
     let mcp = app.appConfig.mcp
-    guard mcp.enabled, let endpoints = MCPEndpoints.resolve(mcp: mcp, security: app.appConfig.security)
+    guard mcp.mode.isMounted,
+        let endpoints = MCPEndpoints.resolve(mcp: mcp, security: app.appConfig.security)
     else { return }
 
     let oauth = MCPOAuthRoutes(

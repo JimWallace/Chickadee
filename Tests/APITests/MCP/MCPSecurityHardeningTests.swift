@@ -37,17 +37,17 @@ import XCTVapor
 
     // MARK: - App builders
 
-    /// Builds a test app; when `enabled`, mounts the real MCP wiring and attaches
-    /// a token authority (issuer/resource matched to the minted tokens).
+    /// Builds a test app; when `mode` is mounted, mounts the real MCP wiring and
+    /// attaches a token authority (issuer/resource matched to the minted tokens).
     private func makeApp(
-        enabled: Bool = true, allowedHosts: Set<String> = [], maxRegisteredClients: Int = 1000
+        mode: MCPMode = .readWrite, allowedHosts: Set<String> = [], maxRegisteredClients: Int = 1000
     ) async throws -> (Application, MCPTokenAuthority?) {
         let mcp = MCPConfig(
-            enabled: enabled, allowedHosts: allowedHosts, allowedOrigins: [],
+            mode: mode, allowedHosts: allowedHosts, allowedOrigins: [],
             tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource,
             maxRegisteredClients: maxRegisteredClients)
         let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp))
-        guard enabled else { return (app, nil) }
+        guard mode.isMounted else { return (app, nil) }
         let authority = try await MCPTokenAuthority.make(
             privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "mcp-1")
         app.mcpTokenAuthority = authority
@@ -137,7 +137,7 @@ import XCTVapor
     // MARK: - Routes are not mounted when MCP is disabled at boot
 
     @Test func disabledMCPMountsNoEndpoints() async throws {
-        let (app, _) = try await makeApp(enabled: false)
+        let (app, _) = try await makeApp(mode: .off)
         try await withApp(app) { app in
             let mcp = try await app.asyncSendRequest(
                 .POST, "/mcp",

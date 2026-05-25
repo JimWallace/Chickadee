@@ -2,12 +2,15 @@
 //
 // Environment-variable knobs for the content-authoring MCP server (the /mcp
 // endpoint and its OAuth 2.1 bearer auth).  Part of the AppConfig tree; read
-// once at startup.  The endpoint is disabled by default — an operator opts in
-// with MCP_ENABLED=true once auth is configured.
+// once at startup.  The endpoint is off by default — an operator opts in with
+// MCP_MODE=read_only (inspection without write) or MCP_MODE=read_write (full
+// content authoring) once auth is configured.
 
 struct MCPConfig: Sendable {
-    /// Whether the `/mcp` endpoint is mounted on the live app.  Default false.
-    var enabled: Bool
+    /// Operating mode for the `/mcp` endpoint: `off` (not mounted),
+    /// `read_only` (mounted, `content:write` never honored), or `read_write`
+    /// (full).  Default `off`.
+    var mode: MCPMode
     /// Permitted `Host` header values for `/mcp` (DNS-rebinding mitigation).
     /// Empty means "allow any" — development only.
     var allowedHosts: Set<String>
@@ -42,7 +45,7 @@ struct MCPConfig: Sendable {
     var maxRedirectURIsPerClient: Int
 
     init(
-        enabled: Bool,
+        mode: MCPMode,
         allowedHosts: Set<String>,
         allowedOrigins: Set<String>,
         tokenTTLSeconds: Int,
@@ -55,7 +58,7 @@ struct MCPConfig: Sendable {
         maxRegisteredClients: Int = 1000,
         maxRedirectURIsPerClient: Int = 5
     ) {
-        self.enabled = enabled
+        self.mode = mode
         self.allowedHosts = allowedHosts
         self.allowedOrigins = allowedOrigins
         self.tokenTTLSeconds = tokenTTLSeconds
@@ -71,7 +74,7 @@ struct MCPConfig: Sendable {
 
     static func fromEnvironment(workDir: String) -> MCPConfig {
         MCPConfig(
-            enabled: environmentBool("MCP_ENABLED") ?? false,
+            mode: MCPMode.parse(trimmedEnv("MCP_MODE")),
             allowedHosts: parseSSOIdentityAllowlist(trimmedEnv("MCP_ALLOWED_HOSTS")),
             allowedOrigins: parseSSOIdentityAllowlist(trimmedEnv("MCP_ALLOWED_ORIGINS")),
             tokenTTLSeconds: environmentInt("MCP_TOKEN_TTL_SECONDS") ?? 86_400,
@@ -86,10 +89,10 @@ struct MCPConfig: Sendable {
         )
     }
 
-    /// All-defaults config (disabled, allow-any guards) for tests and the lazy
+    /// All-defaults config (off, allow-any guards) for tests and the lazy
     /// `Application.appConfig` fallback.
     static let `default` = MCPConfig(
-        enabled: false,
+        mode: .off,
         allowedHosts: [],
         allowedOrigins: [],
         tokenTTLSeconds: 86_400,

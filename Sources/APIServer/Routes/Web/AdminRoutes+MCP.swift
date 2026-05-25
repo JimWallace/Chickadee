@@ -2,8 +2,9 @@
 //
 // Admin "MCP" tab: provision non-loginable `mcp` service accounts and mint
 // short-lived access tokens for them (shown exactly once).  Token minting is
-// only possible when the MCP endpoint is active (MCP_ENABLED + a resolvable
-// issuer/resource + the signing authority loaded at startup).
+// only possible when the MCP endpoint is mounted (MCP_MODE read_only or
+// read_write + a resolvable issuer/resource + the signing authority loaded at
+// startup).  In read_only mode the minted scope is capped to content:read.
 //
 // Revocation note: access tokens are stateless JWTs with no server-side
 // denylist, so deleting an account stops *new* tokens being minted but cannot
@@ -57,7 +58,7 @@ extension AdminRoutes {
         let user = try await findMCPAccount(req)
         let mcp = req.application.appConfig.mcp
         guard
-            mcp.enabled,
+            mcp.mode.isMounted,
             let authority = req.application.mcpTokenAuthority,
             let endpoints = MCPEndpoints.resolve(mcp: mcp, security: req.application.appConfig.security)
         else {
@@ -65,7 +66,10 @@ extension AdminRoutes {
                 req: req, mintedToken: nil, mintedFor: nil, mintedScopes: nil, error: "mcp_disabled")
         }
         let scopeChoice = (try? req.content.decode(Body.self))?.scope
-        let scopes: Set<ContentScope> = scopeChoice == "read" ? [.read] : [.read, .write]
+        let requested: Set<ContentScope> = scopeChoice == "read" ? [.read] : [.read, .write]
+        // Never mint a token claiming a scope the current mode won't honor:
+        // under read_only the ceiling clamps a read+write request down to read.
+        let scopes = requested.intersection(mcp.mode.scopeCeiling)
         let token = try await authority.mint(
             subject: user.username, scopes: scopes,
             issuer: endpoints.issuer, audience: endpoints.resource, ttlSeconds: mcp.tokenTTLSeconds)
@@ -116,7 +120,7 @@ extension AdminRoutes {
     ) async throws -> View {
         let mcp = req.application.appConfig.mcp
         let endpoints = MCPEndpoints.resolve(mcp: mcp, security: req.application.appConfig.security)
-        let enabled = mcp.enabled && req.application.mcpTokenAuthority != nil && endpoints != nil
+        let enabled = mcp.mode.isMounted && req.application.mcpTokenAuthority != nil && endpoints != nil
 
         let mcpUsers = try await APIUser.query(on: req.db)
             .filter(\.$role == "mcp")
@@ -161,6 +165,7 @@ extension AdminRoutes {
             currentUser: req.currentUserContext,
             activeAdminTab: "mcp",
             enabled: enabled,
+            writeAllowed: mcp.mode.scopeCeiling.contains(.write),
             issuer: endpoints?.issuer,
             resource: endpoints?.resource,
             tokenTTLSeconds: mcp.tokenTTLSeconds,

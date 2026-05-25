@@ -30,8 +30,9 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     )
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
-    // MCP OAuth table cleanup (only when the MCP endpoint is enabled).
-    if appConfig.mcp.enabled {
+    // MCP OAuth table cleanup (only when the MCP endpoint is mounted — grants
+    // and codes exist in read_only mode too).
+    if appConfig.mcp.mode.isMounted {
         app.lifecycle.use(MCPOAuthReaperLifecycleHandler())
     }
 

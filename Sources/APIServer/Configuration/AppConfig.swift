@@ -111,9 +111,9 @@ struct AppConfig: Sendable {
         if let proxy = outboundProxy {
             logger.info("outboundProxy: \(proxy.host):\(proxy.port)")
         }
-        if mcp.enabled {
+        if mcp.mode.isMounted {
             logger.info(
-                "mcp: enabled, tokenTTL=\(mcp.tokenTTLSeconds)s, accessTokenTTL=\(mcp.accessTokenTTLSeconds)s, grantTTL=\(mcp.grantTTLDays)d, allowedHosts=\(mcp.allowedHosts.count), allowedOrigins=\(mcp.allowedOrigins.count), signingKeyPath=\(mcp.signingKeyPath)"
+                "mcp: mode=\(mcp.mode.rawValue), tokenTTL=\(mcp.tokenTTLSeconds)s, accessTokenTTL=\(mcp.accessTokenTTLSeconds)s, grantTTL=\(mcp.grantTTLDays)d, allowedHosts=\(mcp.allowedHosts.count), allowedOrigins=\(mcp.allowedOrigins.count), signingKeyPath=\(mcp.signingKeyPath)"
             )
         }
     }

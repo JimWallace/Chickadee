@@ -19,10 +19,20 @@ MCP
 
     #if(!enabled):
     <div class="form-error" style="margin-bottom:1rem">
-        The MCP endpoint is not active, so tokens cannot be minted. Set <code>MCP_ENABLED=true</code>
+        The MCP endpoint is not active, so tokens cannot be minted. Set
+        <code>MCP_MODE=read_only</code> or <code>MCP_MODE=read_write</code>
         and <code>PUBLIC_BASE_URL</code> (or <code>MCP_ISSUER</code>/<code>MCP_RESOURCE</code>),
         then restart the server.
     </div>
+    #endif
+    #if(enabled):
+    #if(!writeAllowed):
+    <div style="margin-bottom:1rem;padding:.75rem;border:1px solid var(--gray-500);border-radius:6px;background:rgba(234,179,8,.10)">
+        MCP is in <strong>read-only</strong> mode (<code>MCP_MODE=read_only</code>): agents can read
+        course content but cannot create or edit it. Minted tokens carry <code>content:read</code> only.
+        Set <code>MCP_MODE=read_write</code> and restart to allow writes.
+    </div>
+    #endif
     #endif
     #if(error == "username_required"):
     <div class="form-error" style="margin-bottom:1rem">A username is required.</div>
@@ -116,7 +126,9 @@ MCP
                             <label class="visually-hidden" for="scope-#(account.id)">Token scope for #(account.username)</label>
                             <select id="scope-#(account.id)" name="scope" class="form-input"
                                     style="padding:.25rem .5rem;font-size:.8rem">
+                                #if(writeAllowed):
                                 <option value="readwrite">read + write</option>
+                                #endif
                                 <option value="read">read only</option>
                             </select>
                             <button class="btn action-btn" type="submit">Mint token</button>

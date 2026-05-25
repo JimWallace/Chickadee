@@ -115,7 +115,7 @@ scripts/build-jupyterlite.sh
 
 ## MCP content-authoring server
 
-Chickadee ships an optional [Model Context Protocol](https://modelcontextprotocol.io/specification/2025-11-25) server at `POST /mcp` (Streamable HTTP, JSON-RPC 2.0) so AI agents can author course content. It is **disabled by default** and **scoped to authoring only** — the tools touch no student data, grades, enrolment, submissions, or administration, and the bearer gate rejects any token lacking a `content:*` scope.
+Chickadee ships an optional [Model Context Protocol](https://modelcontextprotocol.io/specification/2025-11-25) server at `POST /mcp` (Streamable HTTP, JSON-RPC 2.0) so AI agents can author course content. It is **off by default** and **scoped to authoring only** — the tools touch no student data, grades, enrolment, submissions, or administration, and the bearer gate rejects any token lacking a `content:*` scope. It has three modes: `off` (not mounted), `read_only` (agents can read content but never write — `content:write` is stripped from every request), and `read_write` (full authoring).
 
 For Phase 1, Chickadee acts as its own OAuth 2.1 authorization server: an admin provisions a service account and mints a short-lived bearer token. (Browser-based OAuth is a future phase.)
 
@@ -124,7 +124,7 @@ For Phase 1, Chickadee acts as its own OAuth 2.1 authorization server: an admin 
 Set these and restart the server:
 
 ```bash
-MCP_ENABLED=true
+MCP_MODE=read_write                      # off | read_only | read_write (default off)
 PUBLIC_BASE_URL=https://your-host        # issuer + resource are derived from this
 # Optional overrides / hardening:
 # MCP_ISSUER=https://your-host           # defaults to PUBLIC_BASE_URL
