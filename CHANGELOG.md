@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.267] - 2026-05-25
+
+### Added
+
+- **MCP authoring (write): `create_assignment` tool.** Lets an authorized agent
+  create a brand-new browser-graded, notebook-based assignment from scratch in a
+  course, by course code + title + starter notebook (.ipynb JSON). Assembles a
+  minimal empty-suite manifest + an empty runner zip + the notebook through the
+  shared authoring service (the same per-setup work the web new-assignment
+  publish does, minus the draft scaffolding), then a fresh assignment row that
+  lands closed, unvalidated, and with no due date. The agent fills in tests with
+  `update_suite` / `update_pattern_family` and refines the notebook with
+  `update_notebook`, then opens it. Completes the assignment-authoring tool set
+  alongside `clone_assignment`. `content:write`, course-scoped.
+
+### Security
+
+- **Send `max_age=0` alongside `prompt=login` when forcing re-authentication
+  after logout.** Some IdPs (and federating IdPs like Duo→ADFS) honour
+  `max_age` even when they ignore `prompt`, so sending both gives the post-logout
+  re-auth the best chance of propagating to the upstream IdP as a real
+  re-authentication. (`SSOAuthRoutes.ssoStart`.)
+
+
 ## [0.4.266] - 2026-05-25
 
 ### Added
