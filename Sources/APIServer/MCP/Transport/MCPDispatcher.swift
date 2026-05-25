@@ -44,11 +44,67 @@ struct MCPDispatcher: Sendable {
         case .toolsCall:
             return await toolsCallResult(id: id, params: request.params, context: context)
         case .resourcesList:
-            return .success(id: id, result: .object(["resources": .array([])]))
+            return await resourcesListResult(id: id, context: context)
         case .resourcesRead:
-            // TODO(PR B): expose authoring content (e.g. suite manifests) as resources.
-            // https://modelcontextprotocol.io/specification/2025-11-25/server/resources
-            return .failure(id: id, error: .invalidParams("No resources are registered yet."))
+            return await resourcesReadResult(id: id, params: request.params, context: context)
+        }
+    }
+
+    // MARK: - resources/list, resources/read
+
+    private let resources = MCPResourceProvider()
+
+    private func resourcesListResult(id: JSONRPCID, context: ToolContext?) async -> JSONRPCResponse {
+        guard let context else {
+            return .failure(id: id, error: .internalError("Resource execution context is unavailable."))
+        }
+        guard context.grantedScopes.contains(.read) else {
+            return .failure(id: id, error: .insufficientScope(ContentScope.read.rawValue))
+        }
+        do {
+            return .success(id: id, result: try await resources.list(context: context))
+        } catch {
+            return .failure(id: id, error: .internalError("Failed to list resources."))
+        }
+    }
+
+    private struct ResourceReadParams: Decodable {
+        let uri: String
+    }
+
+    private func resourcesReadResult(
+        id: JSONRPCID, params: JSONValue?, context: ToolContext?
+    ) async -> JSONRPCResponse {
+        guard let context else {
+            return .failure(id: id, error: .internalError("Resource execution context is unavailable."))
+        }
+        guard context.grantedScopes.contains(.read) else {
+            return .failure(id: id, error: .insufficientScope(ContentScope.read.rawValue))
+        }
+        let read: ResourceReadParams
+        do {
+            read = try (params ?? .object([:])).decoded(as: ResourceReadParams.self)
+        } catch {
+            return .failure(id: id, error: .invalidParams("resources/read requires a \"uri\"."))
+        }
+        do {
+            return .success(id: id, result: try await resources.read(uri: read.uri, context: context))
+        } catch let error as MCPToolError {
+            // Unknown/inaccessible resource → invalidParams; a genuine lookup
+            // failure → internalError. Mirrors the tool path's error mapping.
+            if case .executionFailed(_, let detail) = error {
+                return .failure(id: id, error: .internalError(detail))
+            }
+            let detail: String
+            switch error {
+            case .invalidArguments(_, let message), .notAuthorized(_, let message):
+                detail = message
+            default:
+                detail = "Unknown resource."
+            }
+            return .failure(id: id, error: .invalidParams(detail))
+        } catch {
+            return .failure(id: id, error: .internalError("Failed to read resource."))
         }
     }
 

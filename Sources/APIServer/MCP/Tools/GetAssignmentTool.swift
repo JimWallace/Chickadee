@@ -2,7 +2,7 @@
 //
 // Read tool: returns one assignment's details by public ID. content:read.
 // Course-scoped — the subject must be enrolled in the assignment's course
-// (admins excepted). Full test-suite detail comes later via get_suite (Phase 3).
+// (admins excepted). Full test-suite structure is available via get_suite.
 
 import Core
 import Fluent
