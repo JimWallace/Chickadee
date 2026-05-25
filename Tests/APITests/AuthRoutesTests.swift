@@ -358,6 +358,19 @@ import XCTVapor
         }
     }
 
+    @Test func loginPageShowsChickadeeLogo() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/login",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("class=\"auth-logo\""))
+                    #expect(body.contains("/images/chickadee-icon-alt.png"))
+                })
+        }
+    }
+
     // MARK: - Access control
 
     @Test func unauthenticatedHomeRedirectsToLogin() async throws {
