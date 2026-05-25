@@ -107,6 +107,40 @@ struct WebRoutes: RouteCollection {
             }
         }
 
+        // Closed assignments the current student has previously engaged with
+        // stay visible (read-only review) and keep their Edit link.  Engagement
+        // = a durable participation row, or a student submission (the latter
+        // also bridges students who submitted before the participation table
+        // existed).  Empty for instructors/admins — they already see every
+        // setup in the course.
+        var previouslyOpenedSetupIDs = Set<String>()
+        if !user.isInstructor, let userID = user.id, !allAssignments.isEmpty {
+            let allSetupIDs = Set(allAssignments.map(\.testSetupID))
+            let submittedSetupIDs = try await APISubmission.query(on: req.db)
+                .filter(\.$userID == userID)
+                .filter(\.$testSetupID ~~ allSetupIDs)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .all()
+                .map(\.testSetupID)
+            previouslyOpenedSetupIDs.formUnion(submittedSetupIDs)
+
+            let setupIDByParticipationAssignment = Dictionary(
+                uniqueKeysWithValues: allAssignments.compactMap { a -> (UUID, String)? in
+                    guard let id = a.id else { return nil }
+                    return (id, a.testSetupID)
+                }
+            )
+            let participations = try await APIAssignmentParticipation.query(on: req.db)
+                .filter(\.$userID == userID)
+                .filter(\.$assignmentID ~~ Set(setupIDByParticipationAssignment.keys))
+                .all()
+            for row in participations {
+                if let setupID = setupIDByParticipationAssignment[row.assignmentID] {
+                    previouslyOpenedSetupIDs.insert(setupID)
+                }
+            }
+        }
+
         let setups: [APITestSetup]
         if user.isInstructor {
             // Instructors and admins see test setups for the active course.
@@ -132,6 +166,8 @@ struct WebRoutes: RouteCollection {
                 if let baseline, extendedDueAt <= baseline { continue }
                 visibleSetupIDs.insert(setupID)
             }
+            // Closed assignments the student already opened remain on the list.
+            visibleSetupIDs.formUnion(previouslyOpenedSetupIDs)
             guard !visibleSetupIDs.isEmpty else {
                 return try await req.view.render(
                     "index",
@@ -331,6 +367,7 @@ struct WebRoutes: RouteCollection {
                     effectiveDueAt: effectiveDueAt
                 )
             }()
+            let canEdit = isOpenForThisUser || previouslyOpenedSetupIDs.contains(setupID)
             return TestSetupRow(
                 id: setupID,
                 title: assignment?.title,
@@ -342,6 +379,7 @@ struct WebRoutes: RouteCollection {
                 dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
                 status: status,
                 isOpen: isOpenForThisUser,
+                canEdit: canEdit,
                 gradingMode: props?.gradingMode.rawValue ?? GradingMode.worker.rawValue,
                 hasNotebook: hasNotebook,
                 submissionCount: submissionCount,

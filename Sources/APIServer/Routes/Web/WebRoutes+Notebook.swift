@@ -18,7 +18,7 @@ extension WebRoutes {
     // MARK: - GET /testsetups/:id/notebook
 
     @Sendable
-    func notebookPage(req: Request) async throws -> View {
+    func notebookPage(req: Request) async throws -> Response {
         struct NotebookQuery: Content {
             var title: String?
             var submissionID: String?
@@ -53,6 +53,17 @@ extension WebRoutes {
         } else {
             isClosed = false
         }
+
+        // Closed-assignment access gate: a closed assignment is only reachable
+        // by a student who has previously engaged with it (and that access is
+        // recorded durably so it stays reachable once it closes).  Posting
+        // links in advance no longer spoils not-yet-opened labs.
+        if let redirect = try await closedAssignmentGate(
+            req: req, user: user, userID: userID, assignment: assignment, isClosed: isClosed)
+        {
+            return redirect
+        }
+
         let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignmentTitle = {
             if !queryTitle.isEmpty { return queryTitle }
@@ -81,14 +92,14 @@ extension WebRoutes {
                 req: req,
                 args: args,
                 submissionID: requestedSubmissionID
-            )
+            ).encodeResponse(for: req)
         }
 
         return try await renderAssignmentNotebookView(
             req: req,
             args: args,
             fileKind: fileKind
-        )
+        ).encodeResponse(for: req)
     }
 
     /// Renders the submission-view branch of `notebookPage` (read-only,
@@ -254,6 +265,21 @@ extension WebRoutes {
 
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
 
+        // Same closed-assignment gate as the notebook page, applied to the raw
+        // content endpoint so a student can't fetch a not-yet-opened lab's
+        // starter notebook by hitting `/notebook/source` directly.  A
+        // legitimately reachable closed assignment already has a participation
+        // row (or a submission), so this never fires on normal page loads.
+        if !user.isInstructor,
+            let assignment = try await APIAssignment.query(on: req.db)
+                .filter(\.$testSetupID == setupID)
+                .first(),
+            !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db)),
+            !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
+        {
+            throw Abort(.forbidden)
+        }
+
         let query = try req.query.decode(NotebookSourceQuery.self)
 
         // When serving a submission view, read from the submission-specific
@@ -324,10 +350,57 @@ func userNotebookWorkingCopyRelativePath(
     "users/\(userID.uuidString.lowercased())/\(setupID)/\(userNotebookFilename(fileKind: fileKind))"
 }
 
-func userNotebookWorkingCopyAbsolutePath(req: Request, setupID: String, userID: UUID) -> String {
-    req.application.directory.publicDirectory
-        + "jupyterlite/files/"
-        + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
+/// Whether `userID` has previously engaged with `assignment`: a durable
+/// participation row exists (written the first time they were given the
+/// assignment's materials) or they have at least one student submission.
+/// Drives the closed-assignment access gate so a student can return to a
+/// closed assignment to review past work, while a not-yet-opened lab they
+/// have never touched stays out of reach.
+///
+/// The submission check is a permanent safety net that also bridges
+/// students who submitted before the participation table existed; a closed
+/// assignment they review then lazily backfills its own participation row.
+func studentHasOpenedAssignment(
+    assignment: APIAssignment,
+    userID: UUID,
+    on db: Database
+) async throws -> Bool {
+    if let assignmentID = assignment.id,
+        try await AssignmentParticipationStore.hasParticipation(
+            userID: userID, assignmentID: assignmentID, on: db)
+    {
+        return true
+    }
+    return try await APISubmission.query(on: db)
+        .filter(\.$testSetupID == assignment.testSetupID)
+        .filter(\.$userID == userID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .count() > 0
+}
+
+/// Closed-assignment access gate for the student-facing notebook page and
+/// upload form.  Returns a redirect `Response` to the dashboard when a student
+/// must be bounced from a closed assignment they have never engaged with;
+/// otherwise records their first access durably and returns nil.  Instructors
+/// and admins always pass through (no redirect, no record).
+func closedAssignmentGate(
+    req: Request,
+    user: APIUser,
+    userID: UUID,
+    assignment: APIAssignment?,
+    isClosed: Bool
+) async throws -> Response? {
+    guard !user.isInstructor else { return nil }
+    if isClosed, let assignment,
+        !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
+    {
+        return req.redirect(to: "/")
+    }
+    if let assignmentID = assignment?.id {
+        try await AssignmentParticipationStore.recordFirstAccess(
+            userID: userID, assignmentID: assignmentID, on: req.db)
+    }
+    return nil
 }
 
 /// Reads the mtime (Unix epoch seconds) of the working-copy notebook

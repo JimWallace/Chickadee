@@ -288,22 +288,30 @@ import XCTVapor
 
     @Test func notebookPageClosedAssignmentRendersReadOnlyAndHidesSubmit() async throws {
         try await withApp(app) { _ in
-            // Closed assignment (deadline past, no override): the iframe must
-            // carry data-read-only="true", the Submit button must disappear,
-            // and the closed-view notice must appear.  This is the core
-            // contract for the closed-assignment read-only view.
+            // Closed assignment (deadline past, no override) the student has
+            // previously opened: the iframe must carry data-read-only="true",
+            // the Submit button must disappear, and the closed-view notice must
+            // appear.  This is the core contract for the closed-assignment
+            // read-only review view.
             let cookie = try await loginAsStudent()
             let user = try await studentUser()
             try await enroll(user)
 
             let setupID = "setup_nb_closed"
             _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Closed"))
-            _ = try await insertAssignment(
+            let assignment = try await insertAssignment(
                 testSetupID: setupID,
                 title: "Closed Lab",
                 dueAt: Date(timeIntervalSinceNow: -3600),  // due 1h ago
                 isOpen: true  // not explicitly closed; deadline carries it
             )
+
+            // Mark the assignment as previously opened by recording a
+            // participation row — otherwise the closed-assignment gate would
+            // redirect them to the dashboard (covered by the next test).
+            try await APIAssignmentParticipation(
+                userID: try user.requireID(), assignmentID: try assignment.requireID()
+            ).save(on: app.db)
 
             try await app.asyncTest(
                 .GET, "/testsetups/\(setupID)/notebook",
@@ -324,6 +332,118 @@ import XCTVapor
                         "Closed assignment must render the view-only notice")
                 })
 
+        }
+    }
+
+    @Test func notebookPageClosedAssignmentNeverOpenedRedirectsToDashboard() async throws {
+        try await withApp(app) { _ in
+            // A student who has never opened a closed assignment (no working
+            // copy, no submission) is redirected to their dashboard instead of
+            // seeing the notebook — this keeps pre-posted links from spoiling
+            // not-yet-opened labs.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_closed_unopened"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Hidden"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Unopened Closed Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),
+                isOpen: true
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                })
+        }
+    }
+
+    @Test func notebookPageClosedAssignmentWithSubmissionStaysReachable() async throws {
+        try await withApp(app) { _ in
+            // Having submitted at least once also counts as "previously opened",
+            // so a closed assignment with a prior submission renders the
+            // read-only review view rather than redirecting.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_closed_submitted"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Submitted"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Submitted Closed Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),
+                isOpen: true
+            )
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_closed_submitted",
+                testSetupID: setupID,
+                userID: try user.requireID(),
+                notebookJSON: notebookJSON(markdown: "My answer")
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("This assignment is closed"))
+                })
+        }
+    }
+
+    @Test func openAccessRecordsParticipationSoClosedReviewStaysReachable() async throws {
+        try await withApp(app) { _ in
+            // The durable mechanism: opening an assignment while it is open
+            // records a participation row, which keeps it reachable once it
+            // later closes — without depending on the on-disk working copy.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_participation"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Lifecycle"))
+            let assignment = try await insertAssignment(
+                testSetupID: setupID, title: "Lifecycle Lab", dueAt: nil, isOpen: true)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+            let recorded = try await AssignmentParticipationStore.hasParticipation(
+                userID: try user.requireID(), assignmentID: try assignment.requireID(), on: app.db)
+            #expect(recorded, "Opening an assignment must record a durable participation row")
+
+            // Close it (deadline now in the past) — the student must still reach it.
+            assignment.dueAt = Date(timeIntervalSinceNow: -3600)
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .ok,
+                        "A closed assignment stays reachable for a student who opened it while open")
+                    #expect(res.body.string.contains("This assignment is closed"))
+                })
         }
     }
 

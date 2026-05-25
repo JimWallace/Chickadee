@@ -90,6 +90,17 @@ extension WebRoutes {
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
+        // Mirror the notebook page's closed-assignment gate: a student who has
+        // never opened this (now-closed) upload-mode assignment is sent to
+        // their dashboard rather than shown an upload form they cannot submit.
+        if let userID = user.id, let assignment {
+            let isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+            if let redirect = try await closedAssignmentGate(
+                req: req, user: user, userID: userID, assignment: assignment, isClosed: isClosed)
+            {
+                return redirect
+            }
+        }
         return try await req.view.render(
             "submit",
             SubmitContext(
