@@ -63,6 +63,23 @@ struct CreateAssignmentTool: ContentTool {
         "required": .array([.string("courseCode"), .string("title"), .string("notebook")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "publicID": .object(["type": .string("string")]),
+            "title": .object(["type": .string("string")]),
+            "slug": .object(["type": .string("string")]),
+            "courseCode": .object(["type": .string("string")]),
+            "cellCount": .object(["type": .string("integer")]),
+            "isOpen": .object(["type": .string("boolean")]),
+        ]),
+        "required": .array([
+            .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
+            .string("cellCount"), .string("isOpen"),
+        ]),
+    ])
+    static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
+        readOnlyHint: false, destructiveHint: false, idempotentHint: false)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
