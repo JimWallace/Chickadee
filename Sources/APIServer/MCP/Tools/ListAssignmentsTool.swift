@@ -39,7 +39,7 @@ struct ListAssignmentsTool: ContentTool {
         "required": .array([.string("courseCode")]),
         "additionalProperties": .bool(false),
     ])
-    static let outputSchema: JSONValue = .object([
+    static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
             "courseCode": .object(["type": .string("string")]),

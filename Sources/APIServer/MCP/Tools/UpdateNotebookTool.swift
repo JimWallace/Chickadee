@@ -55,7 +55,7 @@ struct UpdateNotebookTool: ContentTool {
         "required": .array([.string("assignmentPublicID"), .string("notebook")]),
         "additionalProperties": .bool(false),
     ])
-    static let outputSchema: JSONValue = .object([
+    static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
             "assignmentPublicID": .object(["type": .string("string")]),
@@ -64,7 +64,7 @@ struct UpdateNotebookTool: ContentTool {
         ]),
         "required": .array([.string("assignmentPublicID"), .string("cellCount")]),
     ])
-    static let annotations = MCPToolAnnotations(
+    static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: true, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 

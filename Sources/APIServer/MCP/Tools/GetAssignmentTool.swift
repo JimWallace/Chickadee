@@ -39,7 +39,7 @@ struct GetAssignmentTool: ContentTool {
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
     ])
-    static let outputSchema: JSONValue = .object([
+    static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
             "publicID": .object(["type": .string("string")]),

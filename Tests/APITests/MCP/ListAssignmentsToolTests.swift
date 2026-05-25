@@ -113,6 +113,9 @@ import Vapor
         let writeTool = try #require(entries["update_assignment"])
         #expect(writeTool["outputSchema"] != nil)
         #expect(writeTool["annotations"]?.objectFields?["readOnlyHint"] == .bool(false))
+        // The write tool's per-tool annotation override must actually win over
+        // the inferred default (it carries an idempotent hint the default lacks).
+        #expect(writeTool["annotations"]?.objectFields?["idempotentHint"] == .bool(true))
     }
 
     @Test func dispatcherToolsCallReturnsContentAndStructured() async throws {

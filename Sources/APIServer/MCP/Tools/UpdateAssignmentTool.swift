@@ -65,7 +65,7 @@ struct UpdateAssignmentTool: ContentTool {
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
     ])
-    static let outputSchema: JSONValue = .object([
+    static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
             "publicID": .object(["type": .string("string")]),
@@ -79,7 +79,7 @@ struct UpdateAssignmentTool: ContentTool {
             .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
         ]),
     ])
-    static let annotations = MCPToolAnnotations(
+    static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 

@@ -59,7 +59,7 @@ struct GetSuiteTool: ContentTool {
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
     ])
-    static let outputSchema: JSONValue = .object([
+    static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
             "assignmentPublicID": .object(["type": .string("string")]),

@@ -66,7 +66,7 @@ struct CloneAssignmentTool: ContentTool {
         ]),
         "additionalProperties": .bool(false),
     ])
-    static let outputSchema: JSONValue = .object([
+    static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
             "publicID": .object(["type": .string("string")]),
@@ -82,7 +82,7 @@ struct CloneAssignmentTool: ContentTool {
             .string("sourceAssignmentPublicID"), .string("isOpen"),
         ]),
     ])
-    static let annotations = MCPToolAnnotations(
+    static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: false)
     static let requiredScopes: Set<ContentScope> = [.write]
 
