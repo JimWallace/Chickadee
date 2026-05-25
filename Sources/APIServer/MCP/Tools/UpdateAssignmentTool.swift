@@ -65,6 +65,22 @@ struct UpdateAssignmentTool: ContentTool {
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "publicID": .object(["type": .string("string")]),
+            "title": .object(["type": .string("string")]),
+            "slug": .object(["type": .string("string")]),
+            "isOpen": .object(["type": .string("boolean")]),
+            "dueAt": .object(["type": .string("string")]),
+            "validationStatus": .object(["type": .string("string")]),
+        ]),
+        "required": .array([
+            .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
+        ]),
+    ])
+    static let annotations = MCPToolAnnotations(
+        readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

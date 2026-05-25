@@ -72,7 +72,9 @@ func registerMCPRoutes(_ app: Application) throws {
     }
 
     let dispatcher = MCPDispatcher(
-        serverInfo: MCPServerInfo(name: "Chickadee MCP", version: ChickadeeVersion.current),
+        serverInfo: MCPServerInfo(
+            name: "Chickadee MCP", version: ChickadeeVersion.current,
+            title: "Chickadee Content Authoring"),
         tools: MCPToolCatalog.live
     )
     let routeConfiguration = MCPRoutes.Configuration(

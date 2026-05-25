@@ -66,6 +66,24 @@ struct CloneAssignmentTool: ContentTool {
         ]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "publicID": .object(["type": .string("string")]),
+            "title": .object(["type": .string("string")]),
+            "slug": .object(["type": .string("string")]),
+            "courseCode": .object(["type": .string("string")]),
+            "sourceAssignmentPublicID": .object(["type": .string("string")]),
+            "isOpen": .object(["type": .string("boolean")]),
+            "validationStatus": .object(["type": .string("string")]),
+        ]),
+        "required": .array([
+            .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
+            .string("sourceAssignmentPublicID"), .string("isOpen"),
+        ]),
+    ])
+    static let annotations = MCPToolAnnotations(
+        readOnlyHint: false, destructiveHint: false, idempotentHint: false)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

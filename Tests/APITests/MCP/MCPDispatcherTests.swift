@@ -27,10 +27,20 @@ import Testing
         let serverInfo = try #require(result["serverInfo"]?.objectFields)
         #expect(serverInfo["name"] == .string("Chickadee MCP"))
         #expect(serverInfo["version"] == .string("test-1.2.3"))
+        // No title was supplied here, so it is omitted from the wire.
+        #expect(serverInfo["title"] == nil)
 
         let capabilities = try #require(result["capabilities"]?.objectFields)
         #expect(capabilities["tools"] == .object(["listChanged": .bool(false)]))
-        #expect(capabilities["resources"] == .object(["listChanged": .bool(false)]))
+        // v1 advertises tools only — the unimplemented `resources` capability is
+        // no longer advertised.
+        #expect(capabilities["resources"] == nil)
+
+        // The result carries server-level instructions that teach the agent the
+        // domain model and workflow up front.
+        let instructions = try #require(result["instructions"]?.stringValue)
+        #expect(instructions.contains("list_courses"))
+        #expect(instructions.contains("validation"))
     }
 
     @Test func pingReturnsEmptyObject() async throws {
@@ -75,6 +85,12 @@ private extension JSONValue {
     /// The underlying object dictionary, or nil if this value is not an object.
     var objectFields: [String: JSONValue]? {
         if case .object(let fields) = self { return fields }
+        return nil
+    }
+
+    /// The underlying string, or nil if this value is not a string.
+    var stringValue: String? {
+        if case .string(let value) = self { return value }
         return nil
     }
 }

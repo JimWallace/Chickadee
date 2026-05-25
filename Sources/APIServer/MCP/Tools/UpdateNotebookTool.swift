@@ -55,6 +55,17 @@ struct UpdateNotebookTool: ContentTool {
         "required": .array([.string("assignmentPublicID"), .string("notebook")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "assignmentPublicID": .object(["type": .string("string")]),
+            "cellCount": .object(["type": .string("integer")]),
+            "validationStatus": .object(["type": .string("string")]),
+        ]),
+        "required": .array([.string("assignmentPublicID"), .string("cellCount")]),
+    ])
+    static let annotations = MCPToolAnnotations(
+        readOnlyHint: false, destructiveHint: true, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

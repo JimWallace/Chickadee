@@ -39,6 +39,29 @@ struct ListAssignmentsTool: ContentTool {
         "required": .array([.string("courseCode")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "courseCode": .object(["type": .string("string")]),
+            "assignments": .object([
+                "type": .string("array"),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "publicID": .object(["type": .string("string")]),
+                        "title": .object(["type": .string("string")]),
+                        "slug": .object(["type": .string("string")]),
+                        "isOpen": .object(["type": .string("boolean")]),
+                        "dueAt": .object(["type": .string("string")]),
+                    ]),
+                    "required": .array([
+                        .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
+                    ]),
+                ]),
+            ]),
+        ]),
+        "required": .array([.string("courseCode"), .string("assignments")]),
+    ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

@@ -103,6 +103,16 @@ import Vapor
         let request = JSONRPCRequest(jsonrpc: "2.0", id: .number(1), method: "tools/list", params: nil)
         let response = try #require(await dispatcher.dispatch(request))
         #expect(toolNames(in: response.result) == ["list_assignments", "update_assignment"])
+
+        // Each entry advertises an output schema and behavioural annotations;
+        // the read tool is read-only, the write tool is not.
+        let entries = toolEntries(in: response.result)
+        let readTool = try #require(entries["list_assignments"])
+        #expect(readTool["outputSchema"] != nil)
+        #expect(readTool["annotations"]?.objectFields?["readOnlyHint"] == .bool(true))
+        let writeTool = try #require(entries["update_assignment"])
+        #expect(writeTool["outputSchema"] != nil)
+        #expect(writeTool["annotations"]?.objectFields?["readOnlyHint"] == .bool(false))
     }
 
     @Test func dispatcherToolsCallReturnsContentAndStructured() async throws {
@@ -173,6 +183,17 @@ private func toolNames(in result: JSONValue?) -> [String] {
         guard case .object(let fields) = entry, case .string(let name)? = fields["name"] else { return nil }
         return name
     }
+}
+
+/// The `tools/list` entries keyed by tool name, each as its raw field map.
+private func toolEntries(in result: JSONValue?) -> [String: [String: JSONValue]] {
+    guard case .object(let object)? = result, case .array(let tools)? = object["tools"] else { return [:] }
+    var byName: [String: [String: JSONValue]] = [:]
+    for entry in tools {
+        guard case .object(let fields) = entry, case .string(let name)? = fields["name"] else { continue }
+        byName[name] = fields
+    }
+    return byName
 }
 
 private extension JSONValue {
