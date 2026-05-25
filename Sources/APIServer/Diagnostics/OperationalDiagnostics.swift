@@ -56,6 +56,13 @@ struct DiagnosticsConfiguration: Sendable {
     /// debugging, short enough to satisfy FIPPA / PIPEDA's "dispose
     /// once the operational need ends" principle.
     let auditLogRetentionDays: Int
+    /// How many days after a course is archived ("end of term") its student
+    /// submissions become eligible for purging. Default 365 — one year, per
+    /// UWaterloo TL55 / FIPPA. This is a *report-first* window: it only
+    /// controls when the `/admin/retention` page flags a course as
+    /// purgeable; an admin still triggers the deletion manually. See
+    /// `SubmissionRetentionService`.
+    let submissionRetentionDays: Int
 
     static func fromEnvironment() -> Self {
         Self(
@@ -66,7 +73,8 @@ struct DiagnosticsConfiguration: Sendable {
             activeRunnerWindowSeconds: TimeInterval(environmentInt("RUNNER_ACTIVE_WINDOW_SECONDS") ?? 120),
             recentMetricsWindowHours: environmentInt("METRICS_RECENT_WINDOW_HOURS") ?? 24,
             pruneIntervalHours: environmentInt("OBSERVABILITY_PRUNE_INTERVAL_HOURS") ?? 24,
-            auditLogRetentionDays: environmentInt("AUDIT_LOG_RETENTION_DAYS") ?? 90
+            auditLogRetentionDays: environmentInt("AUDIT_LOG_RETENTION_DAYS") ?? 90,
+            submissionRetentionDays: environmentInt("SUBMISSION_RETENTION_DAYS") ?? 365
         )
     }
 }

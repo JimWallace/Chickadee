@@ -217,6 +217,7 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateAssignmentParticipations())
     app.migrations.add(AddUrlTokenToUsers())
     app.migrations.add(AddUserFKConstraints())
+    app.migrations.add(AddCourseArchivedAt())
     // MCP OAuth authorization-server tables (Phase 2). FKs reference `users`.
     app.migrations.add(CreateMCPOAuthClients())
     app.migrations.add(CreateMCPAuthorizationCodes())

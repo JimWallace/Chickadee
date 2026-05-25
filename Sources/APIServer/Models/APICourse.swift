@@ -43,6 +43,14 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_org_unit_id")
     var brightspaceOrgUnitID: String?
 
+    /// When this course was archived. Set by `toggleCourseArchive` when a
+    /// course is archived (and cleared when un-archived). Archiving is
+    /// Chickadee's "end of term" signal, so this is the anchor for the
+    /// submission-retention clock — see `SubmissionRetentionService`. Nil
+    /// while the course is active.
+    @OptionalField(key: "archived_at")
+    var archivedAt: Date?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
