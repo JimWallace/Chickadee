@@ -13,20 +13,34 @@
 //   POST /register   → create account (first user becomes admin), redirect to / (local/dual only)
 //   POST /logout     → clear session, redirect to /login
 
+import CSRF
 import Core
 import Fluent
 import Foundation
 import Vapor
 
 struct AuthRoutes: RouteCollection {
+    let csrf: CSRF
+
     func boot(routes: RoutesBuilder) throws {
+        // Login and register are CSRF-protected (defends against login-CSRF).
         // Tight per-endpoint body limits on the public auth POSTs: login and
         // register only carry two short form fields, so 8 KB is generous and
         // closes the OOM vector that the 10 MB global default leaves open.
-        routes.get("login", use: loginForm)
-        routes.on(.POST, "login", body: .collect(maxSize: "8kb"), use: login)
-        routes.get("register", use: registerForm)
-        routes.on(.POST, "register", body: .collect(maxSize: "8kb"), use: register)
+        let protected = routes.grouped(csrf)
+        protected.get("login", use: loginForm)
+        protected.on(.POST, "login", body: .collect(maxSize: "8kb"), use: login)
+        protected.get("register", use: registerForm)
+        protected.on(.POST, "register", body: .collect(maxSize: "8kb"), use: register)
+
+        // Logout is intentionally NOT CSRF-protected. A timed-out browser tab
+        // POSTs /logout?reason=timeout carrying the CSRF token minted when the
+        // page first loaded; by then the server-side session (and its CSRF
+        // secret) may be gone — reaped, expired, or already torn down by the
+        // idle-timeout middleware on another request — so the stale token fails
+        // validation and the user hits a 403 "Invalid CSRF token" instead of a
+        // clean logout. Logout CSRF is low risk (worst case: an unwanted
+        // sign-out) and the handler is fully idempotent, so it runs unconditionally.
         routes.post("logout", use: logout)
     }
 

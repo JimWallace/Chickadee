@@ -309,6 +309,37 @@ import XCTVapor
         }
     }
 
+    @Test func logoutWithoutCSRFTokenStillSucceeds() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Logout is CSRF-exempt: a stale browser tab whose session (and CSRF
+            // secret) is already gone must still log out cleanly rather than 403.
+            try await app.asyncTest(
+                .POST, "/logout",
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?loggedout=1")
+                })
+        }
+    }
+
+    @Test func logoutTimeoutWithStaleCSRFTokenRedirectsNotForbidden() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Reproduces the idle-logout bug: the inactivity watchdog POSTs
+            // /logout?reason=timeout with the token minted at page load, but the
+            // server-side secret has since been torn down so the token is stale.
+            // Must redirect to the timeout notice, not 403.
+            try await app.asyncTest(
+                .POST, "/logout?reason=timeout",
+                beforeRequest: { req in
+                    try req.content.encode(["_csrf": "stale-token"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?error=timeout")
+                })
+        }
+    }
+
     @Test func logoutInvalidatesServerSideSession() async throws {
         try await withApp(try await makeApp()) { app in
             let authCookie = try await loginUser(
