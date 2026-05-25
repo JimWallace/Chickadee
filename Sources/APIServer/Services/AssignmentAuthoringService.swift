@@ -19,8 +19,9 @@ enum AssignmentAuthoringError: Error, Sendable, Equatable {
     case setupCopyFailed(reason: String)
 }
 
-/// The freshly created assignment + its new test setup, returned by `cloneAssignment`.
-struct ClonedAssignment: Sendable {
+/// A freshly authored assignment + its new test setup, returned by the
+/// creation operations (`cloneAssignment`, `createAssignment`).
+struct AuthoredAssignment: Sendable {
     let assignment: APIAssignment
     let setup: APITestSetup
 }
@@ -103,7 +104,7 @@ enum AssignmentAuthoringService {
         targetCourseID: UUID,
         setupsDirectory: String,
         on db: Database
-    ) async throws -> ClonedAssignment {
+    ) async throws -> AuthoredAssignment {
         let newSetupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let fm = FileManager.default
 
@@ -142,11 +143,64 @@ enum AssignmentAuthoringService {
                 validationStatus: nil,
                 validationSubmissionID: nil,
                 courseID: targetCourseID)
-            return ClonedAssignment(assignment: assignment, setup: newSetup)
+            return AuthoredAssignment(assignment: assignment, setup: newSetup)
         } catch {
             // Roll back the copied files so a failed clone leaves no orphans.
             try? fm.removeItem(atPath: dstZip)
             if let newNotebookPath { try? fm.removeItem(atPath: newNotebookPath) }
+            throw error
+        }
+    }
+
+    /// Creates a brand-new browser-graded, notebook-based assignment from
+    /// scratch: a minimal empty-suite manifest + an empty runner zip + the
+    /// supplied notebook, then a fresh assignment row (closed, unvalidated, no
+    /// due date). The agent fills in tests afterwards with the suite/family
+    /// tools. Mirrors the per-setup work the web new-assignment publish does,
+    /// minus the draft scaffolding, so the paths can't drift.
+    ///
+    /// Empty suite ⇒ no validation is queued, so a from-scratch assignment can
+    /// be opened by the instructor without a runner once it has content.
+    static func createAssignment(
+        courseID: UUID,
+        title: String,
+        notebookData: Data,
+        setupsDirectory: String,
+        on db: Database
+    ) async throws -> AuthoredAssignment {
+        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
+        let zipPath = setupsDirectory + "\(setupID).zip"
+        do {
+            _ = try createRunnerSetupZip(suiteFiles: [], suiteConfigJSON: nil, zipPath: zipPath)
+        } catch {
+            throw AssignmentAuthoringError.setupCopyFailed(reason: "\(error)")
+        }
+
+        let manifest =
+            #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}"#
+        let setup = APITestSetup(
+            id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: nil,
+            courseID: courseID)
+
+        do {
+            try await setup.save(on: db)
+            try await writeAssignmentNotebook(
+                setup: setup, notebookData: notebookData, setupsDirectory: setupsDirectory, on: db)
+            let assignment = try await createAssignmentWithUniquePublicID(
+                on: db,
+                testSetupID: setupID,
+                title: title,
+                dueAt: nil,
+                isOpen: false,
+                sortOrder: nil,
+                validationStatus: nil,
+                validationSubmissionID: nil,
+                courseID: courseID)
+            return AuthoredAssignment(assignment: assignment, setup: setup)
+        } catch {
+            // Roll back the files written so a failed create leaves no orphans.
+            try? FileManager.default.removeItem(atPath: zipPath)
+            if let nb = setup.notebookPath { try? FileManager.default.removeItem(atPath: nb) }
             throw error
         }
     }
