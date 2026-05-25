@@ -276,3 +276,29 @@ struct AdminAuditContext: Encodable {
     let activeAdminTab: String
     let rows: [AdminAuditRow]
 }
+
+/// One archived course on the retention report.
+struct AdminRetentionRow: Encodable {
+    let id: String
+    let code: String
+    let name: String
+    /// Formatted archival timestamp, or "—" if unknown (legacy rows).
+    let archivedAt: String
+    /// Formatted `archivedAt + retentionDays`, or "—" if archival is unknown.
+    let purgeEligibleAt: String
+    let submissionCount: Int
+    /// True once the retention window has elapsed — the Purge button is only
+    /// rendered (and the server only honours a purge) when this is true.
+    let isPurgeable: Bool
+}
+
+struct AdminRetentionContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeAdminTab: String
+    let retentionDays: Int
+    let rows: [AdminRetentionRow]
+    /// How many of `rows` are currently purgeable (drives the summary line).
+    let purgeableCount: Int
+    let flashSuccess: String?
+    let flashError: String?
+}

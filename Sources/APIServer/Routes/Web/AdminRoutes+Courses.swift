@@ -69,7 +69,19 @@ extension AdminRoutes {
             throw Abort(.notFound)
         }
         course.isArchived.toggle()
+        // Archiving is Chickadee's "end of term" signal: stamp the moment so
+        // the submission-retention clock has an anchor (see
+        // SubmissionRetentionService). Un-archiving clears it so a course that
+        // re-opens isn't carrying a stale retention deadline.
+        course.archivedAt = course.isArchived ? Date() : nil
         try await course.save(on: req.db)
+        await AuditLogger.record(
+            action: course.isArchived ? .courseArchived : .courseUnarchived,
+            targetType: .course,
+            targetID: idString,
+            metadata: ["course_code": course.code],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(idString)")
     }
 

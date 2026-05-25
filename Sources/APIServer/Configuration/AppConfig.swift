@@ -101,7 +101,7 @@ struct AppConfig: Sendable {
             )
         }
         logger.info(
-            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d"
+            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots/audit/submissions)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d/\(diagnostics.auditLogRetentionDays)d/\(diagnostics.submissionRetentionDays)d"
         )
         if alerts.enabled {
             logger.info(
@@ -198,7 +198,8 @@ extension AppConfig {
                 activeRunnerWindowSeconds: 120,
                 recentMetricsWindowHours: 24,
                 pruneIntervalHours: 24,
-                auditLogRetentionDays: 90
+                auditLogRetentionDays: 90,
+                submissionRetentionDays: 365
             ),
             alerts: .default,
             outboundProxy: nil,

@@ -1,0 +1,88 @@
+#extend("base"):
+#export("title"):
+Retention
+#endexport
+#export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
+<nav class="admin-tabs" aria-label="Admin sections">
+    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
+    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
+    <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
+    #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
+    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
+    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
+</nav>
+<section class="admin-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <h2 style="margin:0">Submission Retention</h2>
+    </div>
+
+    #if(flashSuccess):
+    <div class="flash flash-success" role="status" style="margin-bottom:1rem;padding:.6rem .8rem;border-radius:.4rem;background:#d4edda;color:#155724">#(flashSuccess)</div>
+    #endif
+    #if(flashError):
+    <div class="flash flash-error" role="alert" style="margin-bottom:1rem;padding:.6rem .8rem;border-radius:.4rem;background:#f8d7da;color:#721c24">#(flashError)</div>
+    #endif
+
+    <p style="color:var(--muted);margin-top:0">
+        Student submissions are retained for #(retentionDays) days after a
+        course is archived — archiving marks the end of term (FIPPA /
+        UWaterloo&nbsp;TL55). After that window an admin may purge the
+        submissions here. Grades themselves are not retained in Chickadee
+        long-term: they flow to LEARN for TL60 retention. Purging removes
+        submission files and their results from this server; courses,
+        assignments, test suites, and user accounts are left intact.
+        <strong>Purging cannot be undone.</strong>
+    </p>
+
+    #if(rows.isEmpty):
+    <p style="color:var(--muted)">No archived courses. The retention clock starts when a course is archived.</p>
+    #else:
+    <p style="color:var(--muted)">
+        #if(purgeableCount > 0):#(purgeableCount) course(s) past retention and eligible to purge.#else:No courses are past their retention window yet.#endif
+    </p>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th style="width:11rem">Archived</th>
+                <th style="width:7rem">Submissions</th>
+                <th style="width:11rem">Purge eligible</th>
+                <th style="width:8rem">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            #for(row in rows):
+            <tr class="#if(row.isPurgeable):status-closed#else:status-open#endif">
+                <td><a href="/admin/courses/#(row.id)"><strong>#(row.code)</strong></a></td>
+                <td>#(row.name)</td>
+                <td style="font-size:.85rem">#(row.archivedAt)</td>
+                <td>#(row.submissionCount)</td>
+                <td style="font-size:.85rem">
+                    #if(row.isPurgeable):
+                    <span class="tier tier-closed">eligible</span>
+                    #else:
+                    #(row.purgeEligibleAt)
+                    #endif
+                </td>
+                <td>
+                    #if(row.isPurgeable):
+                    <form method="post" action="/admin/courses/#(row.id)/purge-submissions" style="display:inline;margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                onclick="return confirm('Permanently delete all #(row.submissionCount) submission(s) for #(row.code)? This cannot be undone.')">Purge</button>
+                    </form>
+                    #else:
+                    <span style="color:var(--muted)">—</span>
+                    #endif
+                </td>
+            </tr>
+            #endfor
+        </tbody>
+    </table>
+    #endif
+</section>
+#endexport
+#endextend
