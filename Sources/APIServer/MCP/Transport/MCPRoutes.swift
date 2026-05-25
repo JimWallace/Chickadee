@@ -1,8 +1,16 @@
 // APIServer/MCP/Transport/MCPRoutes.swift
 //
 // The MCP Streamable HTTP transport, mounted at a single endpoint (`/mcp`).
-// v1 returns plain JSON synchronously; there is no server-initiated SSE stream
-// yet, so GET and DELETE return 405.
+//
+// A POST carries one JSON-RPC request. The response is returned either as plain
+// JSON (the default) or — when the client advertises `Accept: text/event-stream`
+// — as a single-shot SSE stream framing the same JSON-RPC response as an
+// `event: message`. Content negotiation is the only difference; the dispatched
+// result is identical. The SSE form is what the Claude connector speaks and is
+// forward-compatible: `notifications/progress` events can later be interleaved
+// before the final response without changing the tool contract. The transport
+// stays stateless (no `Mcp-Session-Id` / `Last-Event-ID` resumability), and the
+// standalone server-initiated stream is still unsupported, so GET/DELETE 405.
 //
 // DNS-rebinding mitigation (transport spec §Security): the `Origin` header is
 // validated against an allowlist (403 on mismatch), and — because Vapor does
@@ -10,6 +18,7 @@
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
 
 import Foundation
+import NIOCore
 import Vapor
 
 struct MCPRoutes: RouteCollection {
@@ -81,18 +90,26 @@ struct MCPRoutes: RouteCollection {
             return Response(status: .accepted)
         }
         // A per-tool scope denial is surfaced as HTTP 403 insufficient_scope so
-        // clients see the authorization failure at the transport layer.
+        // clients see the authorization failure at the transport layer. This
+        // (and the parse-error 400 above) stays plain JSON regardless of Accept:
+        // an SSE body must be HTTP 200, so a non-200 status couldn't carry it.
         if let error = rpcResponse.error, error.code == JSONRPCError.insufficientScopeCode {
             return try jsonResponse(
                 rpcResponse, status: .forbidden, challenge: insufficientScopeChallenge(error))
+        }
+        // Happy path (success or an in-result tool error, both HTTP 200): stream
+        // it as SSE when the client asked for it, otherwise return plain JSON.
+        if clientAcceptsEventStream(req) {
+            return try eventStreamResponse(rpcResponse)
         }
         return try jsonResponse(rpcResponse, status: .ok)
     }
 
     func streamingUnsupported(req: Request) async throws -> Response {
-        // v1 offers no server-initiated SSE stream at this endpoint.
-        // TODO: implement the Streamable HTTP GET/DELETE flows if a tool needs
-        // server-to-client streaming.
+        // POST may return an SSE stream (see eventStreamResponse), but the
+        // standalone server-initiated stream (GET) and session teardown (DELETE)
+        // are unused by the stateless model — there's no session to resume or
+        // delete — so both stay 405.
         // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
         throw Abort(.methodNotAllowed)
     }
@@ -138,6 +155,47 @@ struct MCPRoutes: RouteCollection {
             headers.replaceOrAdd(name: .wwwAuthenticate, value: challenge)
         }
         return Response(status: status, headers: headers, body: .init(data: data))
+    }
+
+    /// True when the client advertises it can accept an SSE stream
+    /// (`Accept: …, text/event-stream`). Matches case-insensitively and ignores
+    /// any `;q=` weighting — presence is enough to opt into the stream form.
+    private func clientAcceptsEventStream(_ req: Request) -> Bool {
+        req.headers[.accept].contains { value in
+            value.lowercased().contains("text/event-stream")
+        }
+    }
+
+    /// Frames a single JSON-RPC response as a one-shot SSE stream: one
+    /// `event: message` carrying the compact JSON, then the stream ends. This is
+    /// the Streamable HTTP "POST returns an SSE stream" form; we emit exactly one
+    /// event (no progress notifications yet), but the shape is forward-compatible
+    /// — additional `notifications/progress` events could precede the response.
+    ///
+    /// `X-Accel-Buffering: no` + `Cache-Control: no-cache` defeat reverse-proxy
+    /// buffering (nginx/squid) that would otherwise hold the event until the
+    /// connection closes, which is fatal for incremental streaming.
+    private func eventStreamResponse(_ payload: JSONRPCResponse) throws -> Response {
+        let json = String(bytes: try JSONEncoder().encode(payload), encoding: .utf8) ?? ""
+        // SSE framing: `event:` line, one `data:` line (compact JSON has no
+        // newlines, so a single data line is valid), terminated by a blank line.
+        let frame = "event: message\ndata: \(json)\n\n"
+
+        var headers = HTTPHeaders()
+        headers.replaceOrAdd(name: .contentType, value: "text/event-stream")
+        headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
+        headers.replaceOrAdd(name: .connection, value: "keep-alive")
+        headers.replaceOrAdd(name: "X-Accel-Buffering", value: "no")
+
+        let response = Response(status: .ok, headers: headers)
+        response.body = .init(stream: { writer in
+            var buffer = ByteBufferAllocator().buffer(capacity: frame.utf8.count)
+            buffer.writeString(frame)
+            writer.write(.buffer(buffer)).whenComplete { _ in
+                writer.write(.end, promise: nil)
+            }
+        })
+        return response
     }
 
     /// Builds the `WWW-Authenticate: Bearer …, error="insufficient_scope", scope="…"`
