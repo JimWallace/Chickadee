@@ -13,7 +13,9 @@ func routes(_ app: Application) throws {
     let loginRateLimit = LoginRateLimitMiddleware(
         configuration: app.loginRateLimitConfiguration
     )
-    try app.grouped(csrf, loginRateLimit).register(collection: AuthRoutes())
+    // CSRF is applied inside AuthRoutes (login/register only) so that POST
+    // /logout stays exempt — a timed-out tab POSTs a stale token, see AuthRoutes.
+    try app.grouped(loginRateLimit).register(collection: AuthRoutes(csrf: csrf))
     if app.authMode != .local {
         try app.register(
             collection: SSOAuthRoutes(configuredCallbackPath: app.appConfig.oidc.callbackPath)
