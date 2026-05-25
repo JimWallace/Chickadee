@@ -154,6 +154,78 @@ import XCTVapor
         }
     }
 
+    @Test func indexShowsClosedAssignmentWithEditLinkWhenPreviouslyOpened() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+
+            let setupID = "setup_closed_opened"
+            let courseID = try await wrMakeCourse(on: app).requireID()
+            let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
+            let notebookJSON = """
+                {"cells":[],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"},"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}
+                """
+            try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: notebookPath))
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_browser.py"}],"timeLimitSeconds":10}
+                """
+            let setup = APITestSetup(
+                id: setupID,
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip",
+                notebookPath: notebookPath,
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            // Deliberately closed (isOpen=false), but the student already
+            // opened it — modelled here by a prior submission.
+            try await wrInsertAssignment(testSetupID: setupID, title: "Past Lab", isOpen: false, on: app)
+            try await wrInsertSubmission(
+                id: "sub_closed_opened", testSetupID: setupID, userID: try user.requireID(), on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("Past Lab"),
+                        "A closed assignment the student opened must stay on the dashboard")
+                    #expect(
+                        html.contains(#"title="Edit""#),
+                        "The Edit link must show for a previously-opened closed assignment")
+                })
+        }
+    }
+
+    @Test func indexHidesClosedAssignmentNeverOpenedFromStudent() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+
+            try await wrInsertSetup(id: "setup_closed_unopened", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_closed_unopened", title: "Secret Lab", isOpen: false, on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("Secret Lab") == false,
+                        "A closed assignment the student never opened must not appear on the dashboard")
+                })
+        }
+    }
+
     @Test func indexHidesUnpublishedSetupsFromStudent() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)

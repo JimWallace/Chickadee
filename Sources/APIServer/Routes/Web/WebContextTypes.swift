@@ -25,6 +25,11 @@ struct TestSetupRow: Encodable {
     let dueAt: String?  // formatted due date, nil if no assignment or no due date
     let status: String  // "unpublished" | "open" | "closed"
     let isOpen: Bool
+    /// True when the Edit link should be shown: the assignment is open for
+    /// this user, OR it is closed but the student has previously opened it
+    /// (so they can keep reviewing past work).  The Upload link stays gated
+    /// on `isOpen` alone — you can never submit to a closed assignment.
+    let canEdit: Bool
     let gradingMode: String  // "browser" | "worker"
     let hasNotebook: Bool  // false → hide Edit button (no starter notebook available)
     let submissionCount: Int
