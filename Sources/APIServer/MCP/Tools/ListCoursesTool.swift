@@ -29,6 +29,23 @@ struct ListCoursesTool: ContentTool {
         "properties": .object([:]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "courses": .object([
+                "type": .string("array"),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "code": .object(["type": .string("string")]),
+                        "name": .object(["type": .string("string")]),
+                    ]),
+                    "required": .array([.string("code"), .string("name")]),
+                ]),
+            ])
+        ]),
+        "required": .array([.string("courses")]),
+    ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

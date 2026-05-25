@@ -74,6 +74,25 @@ struct UpdatePatternFamilyTool: ContentTool {
         "required": .array([.string("assignmentPublicID"), .string("familyID")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "assignmentPublicID": .object(["type": .string("string")]),
+            "familyID": .object(["type": .string("string")]),
+            "defaultTier": .object(["type": .string("string")]),
+            "defaultPoints": .object(["type": .string("integer")]),
+            "enabledCaseKeys": .object([
+                "type": .string("array"), "items": .object(["type": .string("string")]),
+            ]),
+            "validationStatus": .object(["type": .string("string")]),
+        ]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("familyID"), .string("defaultTier"),
+            .string("defaultPoints"), .string("enabledCaseKeys"),
+        ]),
+    ])
+    static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
+        readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

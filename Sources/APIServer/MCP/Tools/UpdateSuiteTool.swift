@@ -87,6 +87,19 @@ struct UpdateSuiteTool: ContentTool {
         "required": .array([.string("assignmentPublicID"), .string("edits")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "assignmentPublicID": .object(["type": .string("string")]),
+            "updatedScripts": .object([
+                "type": .string("array"), "items": .object(["type": .string("string")]),
+            ]),
+            "validationStatus": .object(["type": .string("string")]),
+        ]),
+        "required": .array([.string("assignmentPublicID"), .string("updatedScripts")]),
+    ])
+    static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
+        readOnlyHint: false, destructiveHint: false, idempotentHint: true)
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

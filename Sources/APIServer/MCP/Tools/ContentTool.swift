@@ -19,10 +19,61 @@ protocol ContentTool: Sendable {
     static var description: String { get }
     /// JSON Schema (draft 2020-12) describing `Input`, surfaced in `tools/list`.
     static var inputSchema: JSONValue { get }
+    /// JSON Schema (draft 2020-12) describing `Output`, surfaced as the tool's
+    /// `outputSchema` so clients can validate the `structuredContent` it
+    /// returns.  Defaults to nil (no declared output schema).
+    static var outputSchema: JSONValue? { get }
+    /// Behavioural hints surfaced as the tool's `annotations` (read-only,
+    /// destructive, idempotent…).  Defaults to a read-only hint inferred from
+    /// `requiredScopes`.
+    static var annotations: MCPToolAnnotations? { get }
     /// Scopes the caller's token must carry before the dispatcher invokes this tool.
     static var requiredScopes: Set<ContentScope> { get }
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output
+}
+
+/// Behavioural hints for a tool, surfaced in `tools/list` under `annotations`.
+/// All fields are optional; nil fields are omitted from the wire.  These are
+/// hints, not a security boundary — enforcement still lives in `requiredScopes`
+/// and the per-tool authorization checks.
+/// https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+struct MCPToolAnnotations: Encodable, Sendable {
+    /// Human-friendly display title for the tool.
+    var title: String?
+    /// The tool does not modify its environment.
+    var readOnlyHint: Bool?
+    /// The tool may perform destructive updates (meaningful only when not read-only).
+    var destructiveHint: Bool?
+    /// Repeated calls with the same arguments have no additional effect beyond the first.
+    var idempotentHint: Bool?
+    /// The tool interacts with an open world of external entities.
+    var openWorldHint: Bool?
+
+    init(
+        title: String? = nil,
+        readOnlyHint: Bool? = nil,
+        destructiveHint: Bool? = nil,
+        idempotentHint: Bool? = nil,
+        openWorldHint: Bool? = nil
+    ) {
+        self.title = title
+        self.readOnlyHint = readOnlyHint
+        self.destructiveHint = destructiveHint
+        self.idempotentHint = idempotentHint
+        self.openWorldHint = openWorldHint
+    }
+}
+
+extension ContentTool {
+    /// Tools declare no output schema unless they override this.
+    static var outputSchema: JSONValue? { nil }
+    /// By default a tool is annotated read-only iff its only required scope is
+    /// `content:read`; write tools override this to add destructive/idempotent
+    /// hints.
+    static var annotations: MCPToolAnnotations? {
+        MCPToolAnnotations(readOnlyHint: requiredScopes == [.read])
+    }
 }
 
 // MARK: - Errors
@@ -51,6 +102,8 @@ struct AnyContentTool: Sendable {
     let name: String
     let description: String
     let inputSchema: JSONValue
+    let outputSchema: JSONValue?
+    let annotations: MCPToolAnnotations?
     let requiredScopes: Set<ContentScope>
     let invoke: @Sendable (_ arguments: JSONValue, _ context: ToolContext) async throws -> JSONValue
 }
@@ -62,6 +115,8 @@ extension ContentTool {
             name: Self.name,
             description: Self.description,
             inputSchema: Self.inputSchema,
+            outputSchema: Self.outputSchema,
+            annotations: Self.annotations,
             requiredScopes: Self.requiredScopes,
             invoke: { arguments, context in
                 let input: Input

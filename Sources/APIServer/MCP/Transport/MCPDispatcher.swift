@@ -55,12 +55,19 @@ struct MCPDispatcher: Sendable {
     // MARK: - tools/list
 
     private func toolsListResult() -> JSONValue {
-        let entries = tools.all.map { tool in
-            JSONValue.object([
+        let entries = tools.all.map { tool -> JSONValue in
+            var fields: [String: JSONValue] = [
                 "name": .string(tool.name),
                 "description": .string(tool.description),
                 "inputSchema": tool.inputSchema,
-            ])
+            ]
+            if let outputSchema = tool.outputSchema {
+                fields["outputSchema"] = outputSchema
+            }
+            if let annotations = tool.annotations, let encoded = try? JSONValue(encoding: annotations) {
+                fields["annotations"] = encoded
+            }
+            return .object(fields)
         }
         return .object(["tools": .array(entries)])
     }
@@ -156,7 +163,8 @@ struct MCPDispatcher: Sendable {
         let result = MCPInitializeResult(
             protocolVersion: MCPProtocol.version,
             capabilities: .v1,
-            serverInfo: serverInfo
+            serverInfo: serverInfo,
+            instructions: MCPServerInstructions.text
         )
         do {
             return .success(id: id, result: try JSONValue(encoding: result))

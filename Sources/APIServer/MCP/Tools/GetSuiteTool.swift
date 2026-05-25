@@ -59,6 +59,48 @@ struct GetSuiteTool: ContentTool {
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "assignmentPublicID": .object(["type": .string("string")]),
+            "sections": .object([
+                "type": .string("array"),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "id": .object(["type": .string("string")]),
+                        "name": .object(["type": .string("string")]),
+                    ]),
+                    "required": .array([.string("id"), .string("name")]),
+                ]),
+            ]),
+            "items": .object([
+                "type": .string("array"),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "kind": .object(["type": .string("string")]),
+                        "name": .object(["type": .string("string")]),
+                        "tier": .object(["type": .string("string")]),
+                        "points": .object(["type": .string("integer")]),
+                        "displayName": .object(["type": .string("string")]),
+                        "dependsOn": .object([
+                            "type": .string("array"), "items": .object(["type": .string("string")]),
+                        ]),
+                        "sectionID": .object(["type": .string("string")]),
+                        "familyID": .object(["type": .string("string")]),
+                    ]),
+                    "required": .array([
+                        .string("kind"), .string("name"), .string("tier"), .string("points"),
+                        .string("dependsOn"),
+                    ]),
+                ]),
+            ]),
+        ]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("sections"), .string("items"),
+        ]),
+    ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {

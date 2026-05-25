@@ -45,6 +45,17 @@ struct GetNotebookTool: ContentTool {
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
     ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "assignmentPublicID": .object(["type": .string("string")]),
+            "cellCount": .object(["type": .string("integer")]),
+            "notebook": .object(["type": .string("object")]),
+        ]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("cellCount"), .string("notebook"),
+        ]),
+    ])
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
