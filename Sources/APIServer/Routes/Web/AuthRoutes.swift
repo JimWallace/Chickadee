@@ -130,6 +130,7 @@ struct AuthRoutes: RouteCollection {
         try await user.save(on: req.db)
 
         req.auth.login(user)
+        req.session.rotateID()  // session-fixation defense: fresh id on login
         req.session.authenticate(user)
         await AuditLogger.record(
             action: .loginSuccess,
@@ -200,6 +201,7 @@ struct AuthRoutes: RouteCollection {
         try await user.save(on: req.db)
 
         req.auth.login(user)
+        req.session.rotateID()  // session-fixation defense: fresh id on login
         req.session.authenticate(user)
         return try await postLoginRedirect(for: user, req: req)
     }

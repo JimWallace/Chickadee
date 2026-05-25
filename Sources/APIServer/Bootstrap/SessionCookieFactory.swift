@@ -54,3 +54,17 @@ func chickadeeReauthMarkerCookie(isSecure: Bool) -> HTTPCookies.Value {
         sameSite: .lax
     )
 }
+
+extension Session {
+    /// Session-fixation defense — call right before authenticating a user.
+    ///
+    /// Dropping the id makes `SessionsMiddleware` issue a brand-new session id
+    /// and `Set-Cookie` when it commits this (still-valid) session on the way
+    /// out, so the authenticated session gets an identifier the pre-login
+    /// cookie never had. The pre-login row keeps its old id but never receives
+    /// the auth marker (that lands on the new id), so a session id fixed onto
+    /// the victim before login can't be used to ride the resulting session.
+    func rotateID() {
+        self.id = nil
+    }
+}

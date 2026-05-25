@@ -135,6 +135,45 @@ import XCTVapor
         }
     }
 
+    @Test func loginRotatesSessionID() async throws {
+        // Session-fixation defense: the authenticated session must get a fresh
+        // id, different from the pre-login one.
+        func sessionValue(_ header: String) -> String? {
+            for part in header.split(separator: ";") {
+                let kv = part.split(separator: "=", maxSplits: 1)
+                if kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces) == "vapor-session" {
+                    return String(kv[1])
+                }
+            }
+            return nil
+        }
+        try await withApp(try await makeApp()) { app in
+            let hash = try Bcrypt.hash("pass1234")
+            try await APIUser(username: "rot", passwordHash: hash, role: "student").save(on: app.db)
+
+            let (token, preCookie) = try await csrfFields(for: "/login", on: app)
+            let preID = sessionValue(preCookie)
+            #expect(preID != nil)
+
+            var postID: String?
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: preCookie)
+                    try req.content.encode(
+                        ["username": "rot", "password": "pass1234", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    for sc in res.headers[.setCookie] where sessionValue(sc) != nil {
+                        postID = sessionValue(sc)
+                    }
+                })
+            #expect(postID != nil)
+            #expect(postID != preID, "session id must rotate on login (fixation defense)")
+        }
+    }
+
     @Test func loginWithWrongPasswordRedirectsWithError() async throws {
         try await withApp(try await makeApp()) { app in
             let hash = try Bcrypt.hash("mypassword")
