@@ -1,8 +1,12 @@
 # MCP Assignment-Authoring Roadmap
 
-Status: **planning**. Goal: let MCP agents help instructors **create and edit
-assignments**, built out in phases. This document is the agreed sequencing and
-the file/function-level plan for the early phases.
+Status: **largely delivered**. Goal: let MCP agents help instructors **create
+and edit assignments**, built out in phases. Every tool phase (1–5) plus the SSE
+streaming track has shipped; this document is kept as the design record and the
+sequencing/rationale behind the work. The "where we are today" and
+sequencing/open-question sections below are updated to mark what landed; the
+design-principle sections (§2–§5) remain the rationale that still governs new
+tools.
 
 It builds on the MCP server foundation already shipped: the OAuth 2.1 bearer
 flow, `content:read` / `content:write` scopes, per-tool scope enforcement, and
@@ -13,20 +17,34 @@ added in the `mcp-course-scoping-and-hardening` work, PR #704).
 
 ## 1. Where we are today
 
-The live tool catalog (`MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) is exactly two
-tools:
+The original vertical slice (two tools, proving the auth/transport/dispatch
+pipeline) has grown into the full feature. The live tool catalog
+(`MCPToolCatalog.live` in
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships twelve
+tools, all `content:read` / `content:write` scoped and course-scoped:
 
 | Tool | Scope | Capability |
 |------|-------|------------|
-| `list_assignments` | `content:read` | List a course's assignments (id, title, slug, open/closed, due date) |
-| `update_assignment_title` | `content:write` | Rename one assignment (title only) |
+| `list_courses` | `content:read` | Courses the subject may act on |
+| `list_assignments` | `content:read` | A course's assignments (id, title, slug, open/closed, due date) |
+| `get_assignment` | `content:read` | One assignment's full detail |
+| `get_suite` | `content:read` | Test-suite structure (items, tiers, points, deps, sections) |
+| `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
+| `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
+| `update_assignment` | `content:write` | Metadata: title, due date, open/close |
+| `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
+| `update_pattern_family` | `content:write` | Family defaults + per-case enable/disable |
+| `update_notebook` | `content:write` | Replace the starter notebook |
+| `clone_assignment` | `content:write` | Duplicate an assignment (closed, unvalidated) |
+| `create_assignment` | `content:write` | New notebook-based assignment from scratch |
 
-Everything else an instructor does when authoring — due dates, open/close,
-sections, test suites, pattern families, notebooks, creation — is **not**
-exposed. The two tools were a deliberate vertical slice to prove the
-auth/transport/dispatch pipeline; this roadmap turns that slice into the
-feature.
+In addition to tools, the server exposes **resources**: `resources/list` /
+`resources/read` surface each accessible assignment's raw `test.properties.json`
+manifest at `chickadee://assignment/<publicID>/manifest` (the verbatim authoring
+spec; `get_suite` is the structured view). See
+`Sources/APIServer/MCP/Resources/MCPResourceProvider.swift`.
+
+The legacy `update_assignment_title` tool folded into `update_assignment`.
 
 ### The authoring domain (what a full assignment is)
 
@@ -182,49 +200,63 @@ Ship (b) first; layer (a) on once Phase 3 tools are proven.
 
 ---
 
-## 6. Sequencing / PR plan
+## 6. Sequencing / PR plan — **all shipped**
 
-1. **PR: Phase 0 + Phase 1.** Extract `AssignmentAuthoringService`, refactor web
-   handlers to use it (no behavior change), ship `get_assignment` +
-   `list_courses`. Low risk, fully CI-testable, de-risks everything after.
-2. **PR: Phase 2.** `update_assignment` (metadata).
-3. **PR: Phase 3a.** `get_suite` / `update_suite`.
-4. **PR: Phase 3b.** Pattern-family editing.
-5. **PR: Phase 4a.** `clone_assignment`.
-6. **PR: Phase 4b.** `create_assignment` (structured spec).
-7. **PR(s): Phase 5.** Notebook content — small slices.
+1. ✅ **Phase 0 + Phase 1.** `AssignmentAuthoringService` extracted; web handlers
+   refactored to use it; `get_assignment` + `list_courses` shipped.
+2. ✅ **Phase 2.** `update_assignment` (metadata).
+3. ✅ **Phase 3a.** `get_suite` / `update_suite`.
+4. ✅ **Phase 3b.** Pattern-family editing (`update_pattern_family`).
+5. ✅ **Phase 4a.** `clone_assignment`.
+6. ✅ **Phase 4b.** `create_assignment` (structured spec).
+7. ✅ **Phase 5.** Notebook content: `get_notebook` (read) + `update_notebook`
+   (write).
 
-Each PR: `content:*` scope + `authorizeCourseAccess`, blast-radius reporting on
-manifest-changing tools, swift-format + SwiftLint `--strict` clean, tests green.
+Plus, beyond the original plan: the SSE streaming track (§8) and the
+`validate_assignment` tool that closes the validation loop (§7), and MCP
+resources for manifests (§1).
+
+Each PR held to: `content:*` scope + `authorizeCourseAccess`, swift-format +
+SwiftLint `--strict` clean, tests green.
 
 ---
 
 ## 7. Open questions
 
-- **Validation feedback shape** — leaning toward the **bounded-wait hybrid**
-  (§8): write tools return fast with a validation handle + status, optionally
-  blocking a short capped window (~20s, likely on by default) to return the
-  result inline for the common fast case; the agent polls `get_assignment`'s
-  `validationStatus` otherwise. Open: default wait window + whether it's on by
-  default. SSE (§8) later upgrades this to live progress without changing the
-  tool contract.
-- **Destructive-edit confirmation** — do we want a `dryRun` flag on
-  suite/family/metadata edits that would trigger a regrade?
-- **Notebook input format for Phase 5** — `.ipynb` JSON vs. a simpler source
-  representation.
-- **Tool granularity** — one `update_suite` taking the whole authored list vs.
-  fine-grained add/remove/reorder tools (the former matches `PUT /suite`).
+- ✅ **Validation feedback shape** — *resolved.* Shipped as the
+  `validate_assignment` tool: write tools enqueue validation as a side effect,
+  and an agent then calls `validate_assignment` to bounded-wait (default 30s,
+  clamped 1–120) for the terminal status — or, over an SSE connection carrying a
+  `progressToken`, receive live `queued → running → done` progress before the
+  result (§8). The agent can also poll `get_assignment`'s `validationStatus`.
+- ✅ **Notebook input format** — *resolved.* The agent supplies full `.ipynb`
+  JSON (`update_notebook` / `create_assignment`); the server normalizes it for
+  the in-browser kernel.
+- ✅ **Tool granularity** — *resolved.* `update_suite` takes per-script metadata
+  edits and `update_pattern_family` takes family-level edits; both re-save
+  through the same `applySuiteEdit` the `PUT /suite` web path uses.
+- **Destructive-edit confirmation** — *still open.* No `dryRun` flag yet, and
+  manifest-changing tools do not yet report a blast-radius (affected-submission)
+  count in their result (design principle #3). A follow-up could add both.
 
 ---
 
-## 8. Transport track: SSE / streaming progress (parallel, not a prerequisite)
+## 8. Transport track: SSE / streaming progress — **shipped**
+
+**Delivered in two PRs:** #724 made the `/mcp` POST response negotiable to an
+SSE stream (`Accept: text/event-stream`); #726 added the worker→stream bridge so
+`validate_assignment` emits live `notifications/progress` (`queued → running →
+done`) before the final result when the call carries a `progressToken`. The
+transport stays stateless (no `Mcp-Session-Id` / `Last-Event-ID` resumability);
+the standalone server-initiated GET stream remains unimplemented (405). The
+design notes below are retained as the rationale.
 
 **Target client:** the **Claude connector**, which speaks Streamable HTTP with
 SSE — so the streaming UX pays off, and resumability is not required.
 
-Today the `/mcp` POST returns a single JSON response; GET/DELETE 405
-(`streamingUnsupported`). Streamable HTTP also allows the POST response to be an
-**SSE stream** (`text/event-stream`), letting the server emit
+The `/mcp` POST returns either a single JSON response or an SSE stream
+(`text/event-stream`) by content negotiation; GET/DELETE 405
+(`streamingUnsupported`). The SSE form lets the server emit
 `notifications/progress` during a long tool call and then the final result.
 
 **What it buys us:** a tight, live agent loop on validation —

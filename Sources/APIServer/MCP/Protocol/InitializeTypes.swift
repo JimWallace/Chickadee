@@ -1,8 +1,8 @@
 // APIServer/MCP/Protocol/InitializeTypes.swift
 //
 // Result types for the MCP `initialize` handshake.  Capabilities advertise
-// only what v1 implements — tools, without list-change notifications, since
-// there is no server-initiated streaming yet.  The result also carries a
+// what v1 implements — tools and resources, without list-change notifications,
+// since there is no server-initiated streaming yet.  The result also carries a
 // human-readable `instructions` string so a connecting agent learns the domain
 // model, the read-before-write workflow, and the validation/safety rules up
 // front rather than reverse-engineering them from the tool list alone.
@@ -18,19 +18,28 @@ struct MCPInitializeResult: Encodable, Sendable {
     let instructions: String?
 }
 
-/// Capabilities this server advertises at initialization.  Only `tools` is
-/// advertised: v1 exposes no resources or prompts, and `listChanged` is false
-/// because it pushes no list-change notifications (no streaming).
+/// Capabilities this server advertises at initialization.  `tools` and
+/// `resources` are advertised; `prompts` is not.  `listChanged` is false on
+/// both (no server-initiated list-change notifications), and resources are not
+/// subscribable.
 struct MCPServerCapabilities: Encodable, Sendable {
     let tools: ListChanged
+    let resources: Resources
 
     struct ListChanged: Encodable, Sendable {
         let listChanged: Bool
     }
 
-    /// The capability set advertised by v1: tools only, no list-change
-    /// notifications.
-    static let v1 = MCPServerCapabilities(tools: ListChanged(listChanged: false))
+    struct Resources: Encodable, Sendable {
+        let subscribe: Bool
+        let listChanged: Bool
+    }
+
+    /// The capability set advertised by v1: tools + resources, neither pushing
+    /// list-change notifications, resources not subscribable.
+    static let v1 = MCPServerCapabilities(
+        tools: ListChanged(listChanged: false),
+        resources: Resources(subscribe: false, listChanged: false))
 }
 
 /// Identifies this server to the client in the `initialize` result.  `name` is
@@ -93,5 +102,9 @@ enum MCPServerInstructions {
         is regraded; validate and open it with update_assignment when ready.
         - You author structure and metadata, not the underlying test logic: you cannot write raw \
         script bodies or a pattern case's args/expected values.
+        - Resources: each accessible assignment's raw test.properties.json manifest is also exposed \
+        as an MCP resource (resources/list, then resources/read on \
+        chickadee://assignment/<publicID>/manifest). get_suite is the structured view; the resource \
+        is the verbatim canonical JSON, useful to read the full authoring spec into context.
         """
 }

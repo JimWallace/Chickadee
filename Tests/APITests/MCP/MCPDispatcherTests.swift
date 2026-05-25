@@ -32,9 +32,11 @@ import Testing
 
         let capabilities = try #require(result["capabilities"]?.objectFields)
         #expect(capabilities["tools"] == .object(["listChanged": .bool(false)]))
-        // v1 advertises tools only — the unimplemented `resources` capability is
-        // no longer advertised.
-        #expect(capabilities["resources"] == nil)
+        // v1 advertises tools + resources; neither pushes list-change
+        // notifications and resources are not subscribable.
+        #expect(
+            capabilities["resources"]
+                == .object(["subscribe": .bool(false), "listChanged": .bool(false)]))
 
         // The result carries server-level instructions that teach the agent the
         // domain model and workflow up front.
@@ -75,9 +77,20 @@ import Testing
         #expect(response.result == .object(["tools": .array([])]))
     }
 
-    @Test func resourcesListIsEmptyForNow() async throws {
+    @Test func resourcesListWithoutContextErrors() async throws {
+        // resources/list is course-scoped, so it needs an execution context;
+        // dispatched without one (as here) it reports an internal error rather
+        // than leaking an unscoped listing. The DB-backed happy path is covered
+        // in MCPResourcesTests.
         let response = try #require(await dispatcher.dispatch(request("resources/list")))
-        #expect(response.result == .object(["resources": .array([])]))
+        #expect(response.error?.code == -32_603)
+    }
+
+    @Test func resourcesReadWithoutContextErrors() async throws {
+        let response = try #require(
+            await dispatcher.dispatch(
+                request("resources/read", params: .object(["uri": .string("chickadee://x")]))))
+        #expect(response.error?.code == -32_603)
     }
 }
 
