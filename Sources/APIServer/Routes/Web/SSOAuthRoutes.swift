@@ -192,8 +192,12 @@ struct SSOAuthRoutes: RouteCollection {
         req.session.data["oidc_refresh_token"] = tokenResponse.refreshToken
         req.session.data["oidc_id_token"] = tokenResponse.idToken
 
-        // Establish session — identical to local login
+        // Establish session — identical to local login. rotateID() runs after
+        // the tokens are stashed (so they carry to the new session) but before
+        // authenticate(), giving the logged-in session a fresh id the pre-login
+        // cookie never had (session-fixation defense).
         req.auth.login(user)
+        req.session.rotateID()
         req.session.authenticate(user)
         return try await postLoginRedirect(for: user, req: req)
     }
