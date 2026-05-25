@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.272] - 2026-05-25
+
+### Changed
+
+- **The login page no longer auto-initiates SSO — it shows the "Login with
+  UWaterloo" button.** In SSO-only mode `/login` used to redirect straight into
+  `/auth/sso/start`, which made logout look broken: opening the app after
+  logging out silently re-authenticated against the IdP's still-live SSO session
+  instead of showing a logged-out page (IRA-PIA finding). Signing in now takes
+  an explicit click, so logout visibly takes effect. The button still runs the
+  full SSO flow (including `prompt=login` after a logout). One extra click per
+  sign-in is the trade-off. (`AuthRoutes.loginForm`.)
+
+
 ## [0.4.271] - 2026-05-25
 
 ### Security
