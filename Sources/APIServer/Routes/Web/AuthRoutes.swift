@@ -42,15 +42,14 @@ struct AuthRoutes: RouteCollection {
         let loggedOut = req.query[String.self, at: "loggedout"] != nil
         let authMode = req.application.authMode
 
-        // In SSO-only mode, start the SSO flow immediately so users do not
-        // need to click a button. Keep error states on /login so the message
-        // can be shown instead of creating a redirect loop. A just-logged-out
-        // user is held on the form too — otherwise logout would bounce them
-        // straight back into SSO and silently re-authenticate, defeating the
-        // whole point of the button.
-        if authMode == .sso, error == nil, !loggedOut {
-            return req.redirect(to: "/auth/sso/start")
-        }
+        // Always render the login page — including in SSO-only mode, where it
+        // shows the "Login with UWaterloo" button. We deliberately do NOT
+        // auto-redirect into `/auth/sso/start`: auto-initiating SSO made logout
+        // look broken (IRA-PIA finding). Because the IdP keeps its own SSO
+        // session alive, landing on the app would silently re-authenticate
+        // instead of showing a logged-out page. Requiring an explicit click
+        // means logout visibly takes effect; the button still runs the full
+        // SSO flow (with `prompt=login` after a logout).
 
         return try await req.view.render(
             "login",
