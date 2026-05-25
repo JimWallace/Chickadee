@@ -70,7 +70,13 @@ struct SSOAuthRoutes: RouteCollection {
             URLQueryItem(name: "code_challenge_method", value: "S256"),
         ]
         if forceReauth {
+            // `prompt=login` asks the IdP to re-authenticate; `max_age=0` says
+            // the acceptable authentication age is zero, i.e. re-auth now.
+            // We send both because some IdPs honour one but not the other
+            // (and a federating IdP like Duo→ADFS may only translate one of
+            // them into an upstream re-auth / SAML ForceAuthn).
             queryItems.append(URLQueryItem(name: "prompt", value: "login"))
+            queryItems.append(URLQueryItem(name: "max_age", value: "0"))
         }
         components?.queryItems = queryItems
 

@@ -338,6 +338,7 @@ import XCTVapor
                 afterResponse: { res in
                     let location = res.headers.first(name: .location) ?? ""
                     #expect(location.contains("prompt=login"))
+                    #expect(location.contains("max_age=0"))
                     // The marker is consumed: a Set-Cookie clears it (empty value).
                     let setCookies = res.headers[.setCookie]
                     let cleared = setCookies.contains { $0.contains("\(reauthMarkerCookieName)=;") }

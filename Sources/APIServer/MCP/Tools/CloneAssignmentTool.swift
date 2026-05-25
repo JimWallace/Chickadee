@@ -126,7 +126,7 @@ struct CloneAssignmentTool: ContentTool {
             targetCourseID = source.courseID
         }
 
-        let cloned: ClonedAssignment
+        let cloned: AuthoredAssignment
         do {
             cloned = try await AssignmentAuthoringService.cloneAssignment(
                 source: source,
