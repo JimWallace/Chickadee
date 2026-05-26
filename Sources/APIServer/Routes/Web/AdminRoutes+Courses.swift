@@ -21,6 +21,7 @@ extension AdminRoutes {
             enrollmentMode: CourseEnrollmentMode.open.rawValue,
             enrollmentCount: 0,
             assignmentCount: 0,
+            submissionCount: 0,
             createdAt: "",
             brightspaceOrgUnitID: nil,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil
@@ -199,8 +200,21 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else { throw Abort(.notFound) }
-        guard course.isArchived else {
-            throw AppError.badRequest(reason: "Only archived courses can be deleted.")
+
+        // Deletion is gated on the same retention window as Purge: a course
+        // can only be deleted from the Retention tab once it has been archived
+        // and its retention window has elapsed. Never trust the posting page.
+        let retentionDays = req.application.appConfig.diagnostics.submissionRetentionDays
+        guard course.isArchived, let archivedAt = course.archivedAt else {
+            return req.redirect(
+                to: retentionRedirect(error: "\(course.code) is not archived — cannot delete."))
+        }
+        let eligibleAt = SubmissionRetentionService.purgeEligibleDate(
+            archivedAt: archivedAt, retentionDays: retentionDays)
+        guard Date() >= eligibleAt else {
+            return req.redirect(
+                to: retentionRedirect(
+                    error: "\(course.code) is not yet past its retention window."))
         }
 
         let setupsDir = req.application.testSetupsDirectory
@@ -249,7 +263,8 @@ extension AdminRoutes {
         }
 
         req.logger.info("Admin permanently deleted course \(course.code) (\(idString))")
-        return req.redirect(to: "/admin")
+        return req.redirect(
+            to: retentionRedirect(ok: "Deleted \(course.code) and all its data."))
     }
 
     // MARK: - POST /admin/courses/:courseID/edit
@@ -332,6 +347,8 @@ extension AdminRoutes {
         async let assignmentCountFetch = APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
             .count()
+        async let submissionCountFetch = SubmissionRetentionService.submissionCountsByCourse(
+            courseIDs: [courseID], on: req.db)
         let courseRow = AdminCourseRow(
             id: idString,
             code: course.code,
@@ -340,6 +357,7 @@ extension AdminRoutes {
             enrollmentMode: course.enrollmentMode.rawValue,
             enrollmentCount: try await enrollmentCountFetch,
             assignmentCount: try await assignmentCountFetch,
+            submissionCount: (try await submissionCountFetch)[courseID] ?? 0,
             createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
             brightspaceOrgUnitID: course.brightspaceOrgUnitID,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil
