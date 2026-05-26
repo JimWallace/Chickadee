@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.285] - 2026-05-26
+
+### Changed
+
+- **Admin MCP tab tidied.** Removed the explanatory "MCP agents" and
+  "Connected agents" prose blurbs from the admin MCP tab. The Connected
+  agents table now shows a centred "No agents have connected yet."
+  placeholder when empty, which disappears once an agent connects.
+
+
 ## [0.4.284] - 2026-05-26
 
 ### Changed
