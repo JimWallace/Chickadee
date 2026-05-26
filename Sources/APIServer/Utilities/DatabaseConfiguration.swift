@@ -224,6 +224,8 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateMCPGrants())
     app.migrations.add(AddPreviousRefreshTokenHashToGrants())
     app.migrations.add(AddAssignmentStartsAt())
+    app.migrations.add(AddBrightSpaceOrgUnitName())
+    app.migrations.add(CreateBrightSpaceSyncLog())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())

@@ -135,6 +135,9 @@ private func pushGradeForResult(
         throw BrightSpaceSyncError.missingPoints
     }
 
+    // Username snapshot for the sync log (readable without a join).
+    let username = try await APIUser.find(userID, on: db)?.username ?? userID.uuidString
+
     // Resolve D2L user ID (cached on APIUser, looked up on first sync).
     let bsUserID = try await resolvedBrightSpaceUserID(
         for: userID,
@@ -143,21 +146,35 @@ private func pushGradeForResult(
         application: application
     )
     guard let bsUserID else {
-        // No BrightSpace account for this student — skip silently.
+        // No BrightSpace account for this student — record + skip.
         result.brightspaceSyncPending = false
         result.brightspaceSyncError = "Student has no BrightSpace account (orgDefinedId not found)"
         try await result.save(on: db)
+        await recordBrightSpaceSyncLog(
+            db: db, course: course, assignment: assignment, userID: userID, username: username,
+            orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: points,
+            status: .skipped, detail: "No BrightSpace account (orgDefinedId not found)")
         return
     }
 
     // Push the grade.
-    try await client.pushGrade(
-        orgUnitID: orgUnitID,
-        gradeObjectID: gradeObjectID,
-        bsUserID: bsUserID,
-        earnedPoints: points,
-        on: application
-    )
+    do {
+        try await client.pushGrade(
+            orgUnitID: orgUnitID,
+            gradeObjectID: gradeObjectID,
+            bsUserID: bsUserID,
+            earnedPoints: points,
+            on: application
+        )
+    } catch {
+        // Log with full context here (the sweep's catch lacks it), then
+        // rethrow so the existing per-result error handling still runs.
+        await recordBrightSpaceSyncLog(
+            db: db, course: course, assignment: assignment, userID: userID, username: username,
+            orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: points,
+            status: .error, detail: error.localizedDescription)
+        throw error
+    }
 
     result.brightspaceSyncPending = false
     result.brightspacePendingSince = nil
@@ -165,7 +182,41 @@ private func pushGradeForResult(
     result.brightspaceSyncError = nil
     try await result.save(on: db)
 
+    await recordBrightSpaceSyncLog(
+        db: db, course: course, assignment: assignment, userID: userID, username: username,
+        orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: points,
+        status: .success, detail: nil)
+
     logger.info("BrightSpace grade synced: user \(userID) assignment '\(assignment.title)' → \(points) pts")
+}
+
+/// Appends one row to the BrightSpace sync log.  Best-effort: a logging
+/// failure must never abort or retry a grade push, so errors are swallowed.
+private func recordBrightSpaceSyncLog(
+    db: Database,
+    course: APICourse,
+    assignment: APIAssignment,
+    userID: UUID?,
+    username: String,
+    orgUnitID: String?,
+    gradeObjectID: String?,
+    points: Double?,
+    status: APIBrightSpaceSyncLog.Status,
+    detail: String?
+) async {
+    let entry = APIBrightSpaceSyncLog(
+        courseID: course.id,
+        testSetupID: assignment.testSetupID,
+        assignmentTitle: assignment.title,
+        userID: userID,
+        username: username,
+        orgUnitID: orgUnitID,
+        gradeObjectID: gradeObjectID,
+        points: points,
+        status: status,
+        detail: detail
+    )
+    try? await entry.save(on: db)
 }
 
 /// Returns the cached D2L user ID for `userID`, looking it up via studentID if not yet cached.

@@ -95,24 +95,4 @@ extension InstructorDashboardRoutes {
         )
         return roster.rows
     }
-
-    // MARK: - GET /instructor/brightspace
-
-    @Sendable
-    func brightspacePage(req: Request) async throws -> View {
-        let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        let userContext = CurrentUserContext(
-            user: user,
-            activeCourse: courseState.active,
-            enrolledCourses: courseState.all
-        )
-        let ctx = InstructorBrightspaceContext(
-            currentUser: userContext,
-            activeInstructorTab: "brightspace",
-            hasActiveCourse: courseState.active != nil,
-            brightspaceSyncEnabled: req.application.brightSpaceClient != nil
-        )
-        return try await req.view.render("instructor-brightspace", ctx)
-    }
 }
