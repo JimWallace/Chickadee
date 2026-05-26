@@ -1,20 +1,22 @@
 // APIServer/Services/SubmissionRetentionService.swift
 //
-// Submission-retention policy: student submissions are kept for one year
-// (the SUBMISSION_RETENTION_DAYS window) after the END OF TERM, then purged.
-// Chickadee has no term/semester concept, so "end of term" is signalled by
-// archiving the course — the retention clock starts at `APICourse.archivedAt`.
+// Submission-retention policy: a course's data is kept for one year
+// (the SUBMISSION_RETENTION_DAYS window) after the END OF TERM, then becomes
+// eligible for permanent deletion. Chickadee has no term/semester concept, so
+// "end of term" is signalled by archiving the course — the retention clock
+// starts at `APICourse.archivedAt`.
 //
 // This is FIPPA / UWaterloo TL55 retention: assignments (submissions) are
 // personal information that must be retained for one year after term end and
 // then disposed of. Grades themselves are not kept here long-term — they flow
 // to LEARN (D2L) for TL60 retention via BrightSpaceGradeSyncService.
 //
-// The policy is deliberately *report-first*: this service surfaces what is
-// (and will be) purgeable and performs a purge only when an admin explicitly
-// triggers it from /admin/retention. There is no timer and nothing deletes
-// student work automatically — mirroring how cautiously a privacy-impacting
-// deletion should be rolled out.
+// The policy is deliberately *report-first*: this service only computes the
+// eligibility date and counts submissions for the /admin/retention report.
+// The actual destructive action is the admin-triggered `deleteCourse`
+// (gated on `purgeEligibleDate`). There is no timer and nothing deletes
+// automatically — mirroring how cautiously a privacy-impacting deletion
+// should be rolled out.
 
 import Core
 import Fluent
@@ -22,19 +24,9 @@ import Foundation
 
 enum SubmissionRetentionService {
 
-    /// Retention status for one archived course, used to render the report.
-    struct CourseRetentionStatus: Sendable {
-        /// When the course was archived (the retention-clock anchor).
-        let archivedAt: Date
-        /// `archivedAt + retentionDays` — when submissions become purgeable.
-        let purgeEligibleAt: Date
-        /// True once `now >= purgeEligibleAt`.
-        let isPurgeable: Bool
-        /// How many submissions would be removed by a purge.
-        let submissionCount: Int
-    }
-
-    /// The date an archived course's submissions become eligible for purging.
+    /// The date an archived course becomes eligible for permanent deletion
+    /// (`archivedAt + retentionDays`). Named historically for the retention
+    /// "purge" window; `AdminRoutes.deleteCourse` gates on this.
     static func purgeEligibleDate(archivedAt: Date, retentionDays: Int) -> Date {
         archivedAt.addingTimeInterval(TimeInterval(retentionDays) * 86_400)
     }
@@ -72,52 +64,5 @@ enum SubmissionRetentionService {
             }
         }
         return counts
-    }
-
-    /// Deletes every submission belonging to `courseID`'s test setups: the
-    /// submission rows, their `results` rows, and the on-disk submission
-    /// artifacts. `submission_diagnostics` rows cascade away via their
-    /// `onDelete: .cascade` FK on `submission_id`.
-    ///
-    /// Deliberately scoped to *submission data only* — the course, its
-    /// assignments, test setups, enrollments, and user accounts are left
-    /// intact (a user may have submissions in other, still-active courses).
-    /// Mirrors the submission-deletion portion of `deleteCourse`.
-    ///
-    /// Returns the number of submission rows removed.
-    @discardableResult
-    static func purgeSubmissions(
-        forCourseID courseID: UUID,
-        on db: Database
-    ) async throws -> Int {
-        try await db.transaction { tx -> Int in
-            let setups = try await APITestSetup.query(on: tx)
-                .filter(\.$courseID == courseID)
-                .all()
-            let setupIDs = setups.compactMap { $0.id }
-            guard !setupIDs.isEmpty else { return 0 }
-
-            let submissions = try await APISubmission.query(on: tx)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .all()
-            guard !submissions.isEmpty else { return 0 }
-
-            let submissionIDs = submissions.compactMap { $0.id }
-            if !submissionIDs.isEmpty {
-                try await APIResult.query(on: tx)
-                    .filter(\.$submissionID ~~ submissionIDs)
-                    .delete()
-            }
-
-            for submission in submissions {
-                try? FileManager.default.removeItem(atPath: submission.zipPath)
-            }
-
-            try await APISubmission.query(on: tx)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .delete()
-
-            return submissions.count
-        }
     }
 }

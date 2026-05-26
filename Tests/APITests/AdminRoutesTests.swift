@@ -256,6 +256,8 @@ private struct PassthroughResponder: AsyncResponder {
                 })
 
             // The Storage panel must no longer appear on the Overview tab.
+            // (Use a storage-only label — the Overview courses table now has its
+            // own "Submissions" column header.)
             try await app.asyncTest(
                 .GET, "/admin",
                 beforeRequest: { req in
@@ -264,7 +266,7 @@ private struct PassthroughResponder: AsyncResponder {
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = String(buffer: res.body)
-                    #expect(body.contains(">Submissions<") == false)
+                    #expect(body.contains(">Test Setups<") == false)
                 })
         }
     }
@@ -513,6 +515,9 @@ private struct PassthroughResponder: AsyncResponder {
             let student = try await makeUser(username: "delete_student", role: "student")
             let studentID = try student.requireID()
             let course = try await makeCourse(code: "DEL101", name: "Delete Me", archived: true)
+            // Past the 365-day retention window so deletion is permitted.
+            course.archivedAt = Date().addingTimeInterval(-400 * 86_400)
+            try await course.save(on: app.db)
             let courseID = try course.requireID()
             let setup = try await makeSetup(id: "setup_delete_admin", courseID: courseID)
             _ = try await makeAssignment(testSetupID: "setup_delete_admin", courseID: courseID)
@@ -531,7 +536,7 @@ private struct PassthroughResponder: AsyncResponder {
                 },
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin")
+                    #expect(res.headers.first(name: .location)?.hasPrefix("/admin/retention") == true)
                 })
 
             let deletedCourse = try await APICourse.find(courseID, on: app.db)
@@ -556,6 +561,34 @@ private struct PassthroughResponder: AsyncResponder {
             #expect(FileManager.default.fileExists(atPath: submission.zipPath) == false)
             _ = setup
 
+        }
+    }
+
+    @Test func deleteCourseRejectedWhenRetentionWindowNotElapsed() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "DELRECENT", name: "Recently Archived", archived: true)
+            // Archived just now — well inside the retention window.
+            course.archivedAt = Date()
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(
+                cookie, path: "/admin/courses/\(courseID.uuidString)")
+
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("error=") == true)
+                })
+
+            // The course must survive — deletion was refused.
+            let survivor = try await APICourse.find(courseID, on: app.db)
+            #expect(survivor != nil)
         }
     }
 
