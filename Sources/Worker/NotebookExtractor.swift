@@ -238,9 +238,19 @@ struct NotebookExtractor {
 /// Returns true if a non-indented Python statement is safe to emit at module
 /// level — i.e. it defines something (function, class, import, constant) rather
 /// than executing side-effectful or control-flow code.
-private func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
+private func isSafeTopLevelStatement(_ rawTrimmed: String) -> Bool {
+    // Strip any trailing `#` comment first, so comment text (which may contain
+    // `=` or `(`) can't be mistaken for assignment or call syntax below
+    // (e.g. `print(x)  # a = b` must not look like an assignment).
+    let trimmed = strippingTrailingComment(from: rawTrimmed).trimmingCharacters(in: .whitespaces)
+
+    // A line that was nothing but a comment is harmless at module level.
+    if trimmed.isEmpty {
+        return true
+    }
+
     // Definitions and structural annotations are always safe.
-    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@", "#"]
+    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@"]
     where trimmed.hasPrefix(prefix) {
         return true
     }
@@ -278,6 +288,33 @@ private func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
 
     // Bare expression or unrecognised statement — quarantine to be safe.
     return false
+}
+
+/// Removes a trailing `#` comment from a single line, leaving `#` characters
+/// that appear inside string literals untouched. The scan tracks single- and
+/// double-quoted string state (honouring backslash escapes) and stops at the
+/// first `#` seen outside a string.
+private func strippingTrailingComment(from line: String) -> String {
+    var stringDelimiter: Character?
+    var prev: Character = " "
+    var idx = line.startIndex
+    while idx < line.endIndex {
+        let ch = line[idx]
+        if let delim = stringDelimiter {
+            if ch == delim && prev != "\\" {
+                stringDelimiter = nil
+            }
+        } else {
+            switch ch {
+            case "\"", "'": stringDelimiter = ch
+            case "#": return String(line[line.startIndex..<idx])
+            default: break
+            }
+        }
+        prev = ch
+        idx = line.index(after: idx)
+    }
+    return line
 }
 
 /// Returns the index just past the `=` of a plain or annotated assignment
