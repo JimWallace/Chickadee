@@ -25,6 +25,7 @@ struct NewAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentName: String
     let dueAt: String
+    let startsAt: String
     let sections: [CourseSectionRow]  // available sections for the section picker
     let preselectedSectionID: String  // from ?sectionID= query param
     let draftID: String?
@@ -96,6 +97,7 @@ struct EditAssignmentContext: Encodable {
     let testSetupID: String
     let assignmentName: String
     let dueAt: String
+    let startsAt: String
     let currentAssignmentFile: String
     let currentAssignmentURL: String
     let assignmentNotebookEditURL: String

@@ -61,6 +61,85 @@ import XCTVapor
         }
     }
 
+    @Test func openScheduledAssignmentsOpensOnlyEligibleAssignments() async throws {
+        try await withAssignmentRoutesApp { app in
+            // Open date already passed, validation passed, no/future due → opens.
+            _ = try await arInsertSetup(id: "setup_open_due", on: app)
+            let ready = try await arInsertAssignment(
+                testSetupID: "setup_open_due", title: "Ready",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400),
+                startsAt: Date().addingTimeInterval(-60),
+                validationStatus: "passed", on: app
+            )
+
+            // Open date still in the future → stays closed.
+            _ = try await arInsertSetup(id: "setup_open_future", on: app)
+            let future = try await arInsertAssignment(
+                testSetupID: "setup_open_future", title: "Future",
+                isOpen: false,
+                startsAt: Date().addingTimeInterval(86_400),
+                validationStatus: "passed", on: app
+            )
+
+            // Open date passed but validation not passed → stays closed.
+            _ = try await arInsertSetup(id: "setup_open_pending", on: app)
+            let pending = try await arInsertAssignment(
+                testSetupID: "setup_open_pending", title: "Pending",
+                isOpen: false,
+                startsAt: Date().addingTimeInterval(-60),
+                validationStatus: "pending", on: app
+            )
+
+            // Whole window already in the past (due also passed) → stays closed.
+            _ = try await arInsertSetup(id: "setup_open_pastdue", on: app)
+            let pastDue = try await arInsertAssignment(
+                testSetupID: "setup_open_pastdue", title: "Past window",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(-60),
+                startsAt: Date().addingTimeInterval(-120),
+                validationStatus: "passed", on: app
+            )
+
+            let openedCount = try await openScheduledAssignments(on: app.db, logger: app.logger)
+            #expect(openedCount == 1)
+
+            let readyReloaded = try #require(try await APIAssignment.find(ready.id, on: app.db))
+            #expect(readyReloaded.isOpen)
+            #expect(readyReloaded.startsAt == nil, "Open date is consumed once it fires")
+
+            let futureReloaded = try #require(try await APIAssignment.find(future.id, on: app.db))
+            #expect(futureReloaded.isOpen == false)
+            #expect(futureReloaded.startsAt != nil)
+
+            let pendingReloaded = try #require(try await APIAssignment.find(pending.id, on: app.db))
+            #expect(pendingReloaded.isOpen == false, "Must not auto-open before validation passes")
+
+            let pastDueReloaded = try #require(try await APIAssignment.find(pastDue.id, on: app.db))
+            #expect(pastDueReloaded.isOpen == false, "Must not open a window whose due date already passed")
+        }
+    }
+
+    @Test func openSweepDoesNotReopenAfterScheduleConsumed() async throws {
+        try await withAssignmentRoutesApp { app in
+            // Mirrors the state after auto-open + a manual close: isOpen false,
+            // startsAt already cleared.  The sweep must leave it closed.
+            _ = try await arInsertSetup(id: "setup_open_consumed", on: app)
+            let closed = try await arInsertAssignment(
+                testSetupID: "setup_open_consumed", title: "Consumed",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400),
+                startsAt: nil,
+                validationStatus: "passed", on: app
+            )
+
+            let openedCount = try await openScheduledAssignments(on: app.db, logger: app.logger)
+            #expect(openedCount == 0)
+            let reloaded = try #require(try await APIAssignment.find(closed.id, on: app.db))
+            #expect(reloaded.isOpen == false)
+        }
+    }
+
     @Test func closeExpiredAssignmentsKeepsAssignmentsWithActiveExtensionsOpen() async throws {
         try await withAssignmentRoutesApp { app in
             _ = try await arInsertSetup(id: "setup_ext_keepopen", on: app)

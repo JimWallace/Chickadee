@@ -23,7 +23,10 @@ struct TestSetupRow: Encodable {
     let suiteCount: Int
     let createdAt: String
     let dueAt: String?  // formatted due date, nil if no assignment or no due date
-    let status: String  // "unpublished" | "open" | "closed"
+    /// Formatted automatic open date, set only while the assignment is still
+    /// "scheduled" (start date in the future). nil once open or never scheduled.
+    let opensAtText: String?
+    let status: String  // "unpublished" | "open" | "closed" | "scheduled"
     let isOpen: Bool
     /// True when the Edit link should be shown: the assignment is open for
     /// this user, OR it is closed but the student has previously opened it

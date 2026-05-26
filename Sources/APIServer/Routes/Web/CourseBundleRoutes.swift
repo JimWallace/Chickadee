@@ -208,6 +208,7 @@ struct CourseBundleRoutes: RouteCollection {
                 bundleID: bid,
                 title: a.title,
                 dueAt: a.dueAt,
+                startsAt: a.startsAt,
                 isOpen: a.isOpen,
                 sortOrder: a.sortOrder,
                 testSetupBundleID: setupBid
@@ -707,6 +708,7 @@ private func importBundledAssignments(
             title: bundledAssign.title,
             slug: try await uniqueAssignmentSlug(title: bundledAssign.title, courseID: courseID, db: db),
             dueAt: bundledAssign.dueAt,
+            startsAt: bundledAssign.startsAt,
             isOpen: bundledAssign.isOpen,
             sortOrder: bundledAssign.sortOrder,
             validationStatus: nil,  // not imported — requires re-validation

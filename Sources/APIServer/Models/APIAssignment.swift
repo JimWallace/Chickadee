@@ -39,6 +39,13 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "due_at")
     var dueAt: Date?
 
+    /// Optional automatic open date. nil = open as soon as published.
+    /// When set and still in the future, students cannot access or submit
+    /// even if `isOpen` is true; the assignment becomes submittable on its
+    /// own once this time passes (gated live, no background job).
+    @OptionalField(key: "starts_at")
+    var startsAt: Date?
+
     /// false = published but closed (students can no longer submit).
     @Field(key: "is_open")
     var isOpen: Bool
@@ -87,7 +94,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     init(
         id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
         slug: String? = nil,
-        dueAt: Date? = nil, isOpen: Bool = true,
+        dueAt: Date? = nil, startsAt: Date? = nil, isOpen: Bool = true,
         deadlineOverrideActive: Bool = false,
         sortOrder: Int? = nil,
         validationStatus: String? = nil,
@@ -101,6 +108,7 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         self.title = title
         self.slug = slug ?? VanityURLRoutes.slugify(title)
         self.dueAt = dueAt
+        self.startsAt = startsAt
         self.isOpen = isOpen
         self.deadlineOverrideActive = deadlineOverrideActive
         self.sortOrder = sortOrder

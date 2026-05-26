@@ -900,6 +900,11 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     color: var(--closed-fg);
 }
 
+.tier-scheduled {
+    background: #fff3d6;
+    color: #8a5a00;
+}
+
 .tier-unpublished {
     background: var(--gray-100);
     color: var(--gray-600);

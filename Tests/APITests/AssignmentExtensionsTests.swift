@@ -271,6 +271,37 @@ import XCTVapor
                 baselineDueAt: nil, effectiveDueAt: nil, now: now))
     }
 
+    @Test func futureOpenDateGatesAccessUntilItPasses() {
+        let now = Date()
+        let past = now.addingTimeInterval(-3_600)
+        let future = now.addingTimeInterval(3_600)
+
+        // Open, no deadline, but the open date is still ahead → closed for all.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: true, overrideActive: false,
+                baselineDueAt: nil, effectiveDueAt: nil,
+                startsAt: future, now: now) == false)
+        // A future open date wins even over an active deadline extension.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: false, overrideActive: false,
+                baselineDueAt: past, effectiveDueAt: future.addingTimeInterval(86_400),
+                startsAt: future, now: now) == false)
+        // Open date already passed → behaves exactly as if unset (open).
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: true, overrideActive: false,
+                baselineDueAt: future, effectiveDueAt: future,
+                startsAt: past, now: now))
+        // nil open date is the existing behaviour (open immediately).
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: true, overrideActive: false,
+                baselineDueAt: future, effectiveDueAt: future,
+                startsAt: nil, now: now))
+    }
+
     // MARK: - Scoped retest
 
     @Test func scopedRetestFlipsOnlyThisStudentsSubmissions() async throws {

@@ -20,6 +20,7 @@ struct ExistingSolution {
 struct NewAssignmentDraftFormState: Codable {
     var assignmentName: String
     var dueAt: String
+    var startsAt: String
     var sectionID: String
     var requiredPlatform: String
     var requiredArchitecture: String
@@ -31,6 +32,7 @@ struct NewAssignmentDraftFormState: Codable {
     static let empty = NewAssignmentDraftFormState(
         assignmentName: "",
         dueAt: "",
+        startsAt: "",
         sectionID: "",
         requiredPlatform: "",
         requiredArchitecture: "",

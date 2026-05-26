@@ -51,7 +51,9 @@ func arInsertAssignment(
     title: String,
     isOpen: Bool,
     dueAt: Date? = nil,
+    startsAt: Date? = nil,
     deadlineOverrideActive: Bool = false,
+    validationStatus: String? = nil,
     on app: Application
 ) async throws -> APIAssignment {
     let courseID = try await app.testCourseID(enrollmentMode: .auto)
@@ -59,8 +61,10 @@ func arInsertAssignment(
         testSetupID: testSetupID,
         title: title,
         dueAt: dueAt,
+        startsAt: startsAt,
         isOpen: isOpen,
         deadlineOverrideActive: deadlineOverrideActive,
+        validationStatus: validationStatus,
         courseID: courseID
     )
     try await a.save(on: app.db)

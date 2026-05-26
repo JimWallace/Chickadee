@@ -19,6 +19,7 @@ struct ListAssignmentsTool: ContentTool {
             let slug: String
             let isOpen: Bool
             let dueAt: String?
+            let startsAt: String?
         }
         let courseCode: String
         let assignments: [Assignment]
@@ -27,7 +28,8 @@ struct ListAssignmentsTool: ContentTool {
     static let name = "list_assignments"
     static let description =
         "List the assignments in a course, identified by course code. Returns each assignment's "
-        + "public ID, title, slug, open/closed state, and due date (ISO 8601)."
+        + "public ID, title, slug, open/closed state, due date (ISO 8601), and scheduled open date "
+        + "(ISO 8601, if any)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -53,6 +55,7 @@ struct ListAssignmentsTool: ContentTool {
                         "slug": .object(["type": .string("string")]),
                         "isOpen": .object(["type": .string("boolean")]),
                         "dueAt": .object(["type": .string("string")]),
+                        "startsAt": .object(["type": .string("string")]),
                     ]),
                     "required": .array([
                         .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
@@ -86,7 +89,8 @@ struct ListAssignmentsTool: ContentTool {
                 title: assignment.title,
                 slug: assignment.slug,
                 isOpen: assignment.isOpen,
-                dueAt: assignment.dueAt.map { formatter.string(from: $0) }
+                dueAt: assignment.dueAt.map { formatter.string(from: $0) },
+                startsAt: assignment.startsAt.map { formatter.string(from: $0) }
             )
         }
         return Output(courseCode: input.courseCode, assignments: summaries)
