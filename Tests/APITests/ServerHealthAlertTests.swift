@@ -154,67 +154,62 @@ import Testing
         #expect(abs(config.errorRateThreshold - 0.30) < 0.001)
         #expect(config.cooldownSeconds == 1800)
         #expect(config.runnerOfflineSeconds == 300)
-        #expect(config.runnerAbsentSeconds == 600)
     }
 
-    // MARK: - Runner offline / absent rule
+    // MARK: - Runner offline rule
 
-    private func presence(offline: Bool, absent: Bool, known: Bool) -> RunnerPresenceState {
-        RunnerPresenceState(recentWithinOffline: offline, recentWithinAbsent: absent, anyKnownRunner: known)
+    private func presence(offline: Bool, known: Bool) -> RunnerPresenceState {
+        RunnerPresenceState(recentWithinOffline: offline, anyKnownRunner: known)
     }
 
     @Test func runnerOffline_firesWhenJobsQueuedAndNoRecentRunner() {
         let evaluation = decideRunnerOffline(
             pending: PendingQueueState(pendingCount: 3, oldestPendingAge: 120),
-            presence: presence(offline: false, absent: false, known: true),
-            offlineSeconds: 300,
-            absentSeconds: 600
+            presence: presence(offline: false, known: true),
+            offlineSeconds: 300
         )
         #expect(evaluation.isFiring)
         #expect(evaluation.details["pending_count"] == "3")
     }
 
-    @Test func runnerOffline_okWhenJobsQueuedButRunnerRecent() {
+    @Test func runnerOffline_okWhenRunnerRecent() {
         let evaluation = decideRunnerOffline(
             pending: PendingQueueState(pendingCount: 3, oldestPendingAge: 10),
-            presence: presence(offline: true, absent: true, known: true),
-            offlineSeconds: 300,
-            absentSeconds: 600
+            presence: presence(offline: true, known: true),
+            offlineSeconds: 300
         )
         #expect(evaluation.isFiring == false)
     }
 
-    @Test func runnerAbsent_firesWithEmptyQueueWhenKnownRunnerGoesQuiet() {
-        // The proactive case: queue is empty, but a runner we've seen this
-        // session hasn't checked in within the absent grace period.
+    @Test func runnerOffline_firesWithEmptyQueueWhenKnownRunnerGoesQuiet() {
+        // Queue state is not a gate: a runner we've seen this session that has
+        // gone quiet past the offline grace fires even with nothing pending.
         let evaluation = decideRunnerOffline(
             pending: .empty,
-            presence: presence(offline: false, absent: false, known: true),
-            offlineSeconds: 300,
-            absentSeconds: 600
+            presence: presence(offline: false, known: true),
+            offlineSeconds: 300
         )
         #expect(evaluation.isFiring)
-        #expect(evaluation.details["runner_absent_threshold_seconds"] == "600")
+        #expect(evaluation.details["pending_count"] == "0")
+        #expect(evaluation.details["runner_offline_threshold_seconds"] == "300")
     }
 
-    @Test func runnerAbsent_okWithEmptyQueueWhenRunnerStillChecksIn() {
+    @Test func runnerOffline_okWithEmptyQueueWhenRunnerStillChecksIn() {
         let evaluation = decideRunnerOffline(
             pending: .empty,
-            presence: presence(offline: true, absent: true, known: true),
-            offlineSeconds: 300,
-            absentSeconds: 600
+            presence: presence(offline: true, known: true),
+            offlineSeconds: 300
         )
         #expect(evaluation.isFiring == false)
     }
 
-    @Test func runnerAbsent_okWithEmptyQueueWhenNoRunnerEverConnected() {
+    @Test func runnerOffline_okWhenNoRunnerEverConnected() {
         // A deployment with no runners (e.g. browser-graded only) must not page
         // forever just because the store is empty.
         let evaluation = decideRunnerOffline(
             pending: .empty,
-            presence: presence(offline: false, absent: false, known: false),
-            offlineSeconds: 300,
-            absentSeconds: 600
+            presence: presence(offline: false, known: false),
+            offlineSeconds: 300
         )
         #expect(evaluation.isFiring == false)
     }
