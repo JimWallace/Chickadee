@@ -64,12 +64,61 @@ struct InstructorStudentsContext: Encodable {
     let courseIsArchived: Bool
 }
 
-/// BrightSpace tab (`GET /instructor/brightspace`): grade export + sync status.
+/// BrightSpace tab (`GET /instructor/brightspace`): connection status, the
+/// assignment→grade-item mapping, the sync log, and grade export.
 struct InstructorBrightspaceContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
     let hasActiveCourse: Bool
+    let courseIsArchived: Bool
+    /// True when the server has BrightSpace credentials configured at all.
     let brightspaceSyncEnabled: Bool
+    /// True when this course is bound to a D2L org unit (admin-set).
+    let courseLinked: Bool
+    let orgUnitID: String?
+    let orgUnitName: String?
+    let assignmentRows: [BrightspaceAssignmentRow]
+    let hasAssignments: Bool
+    let logRows: [BrightspaceLogRow]
+    let hasLog: Bool
+    let summary: BrightspaceSyncSummary
+    let unmappedStudents: [BrightspaceUnmappedStudentRow]
+    let hasUnmapped: Bool
+}
+
+/// One assignment's BrightSpace grade-item mapping + its latest sync state.
+struct BrightspaceAssignmentRow: Encodable {
+    let assignmentID: String  // publicID
+    let title: String
+    let gradeObjectID: String  // "" when unmapped
+    let lastSyncText: String  // formatted time, or "—"
+    let lastSyncStatus: String  // "success" | "error" | "skipped" | "none"
+    let lastSyncDetail: String?
+}
+
+/// One row of the sync-activity log.
+struct BrightspaceLogRow: Encodable {
+    let attemptedAt: String
+    let username: String
+    let assignmentTitle: String
+    let points: String  // formatted, or "—"
+    let status: String  // "success" | "error" | "skipped"
+    let detail: String?
+}
+
+/// Headline counts shown as cards atop the panel.
+struct BrightspaceSyncSummary: Encodable {
+    let synced: Int
+    let pending: Int
+    let errored: Int
+    let unmapped: Int
+}
+
+/// A student whose grade can't sync because they have no resolvable D2L account.
+struct BrightspaceUnmappedStudentRow: Encodable {
+    let username: String
+    let displayName: String
+    let reason: String
 }
 
 struct InstructorDashboardMetric: Encodable {

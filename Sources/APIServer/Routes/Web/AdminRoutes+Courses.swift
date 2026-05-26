@@ -24,6 +24,7 @@ extension AdminRoutes {
             submissionCount: 0,
             createdAt: "",
             brightspaceOrgUnitID: nil,
+            brightspaceOrgUnitName: nil,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil
         )
         return try await req.view.render(
@@ -302,12 +303,37 @@ extension AdminRoutes {
 
         course.code = code
         course.name = name
-        if req.application.brightSpaceClient != nil {
+        if let client = req.application.brightSpaceClient {
             let rawOrgUnit = (body.brightspaceOrgUnitID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            course.brightspaceOrgUnitID = rawOrgUnit.isEmpty ? nil : rawOrgUnit
+            let newOrgUnit = rawOrgUnit.isEmpty ? nil : rawOrgUnit
+            course.brightspaceOrgUnitID = newOrgUnit
+            // Verify the binding against D2L and cache the org-unit name so the
+            // admin can confirm they pointed at the right course. Verification
+            // failures (D2L unreachable, bad ID) don't block the save — the
+            // name just stays nil and the UI shows "unverified".
+            if let orgUnit = newOrgUnit {
+                course.brightspaceOrgUnitName = await verifiedOrgUnitName(
+                    orgUnitID: orgUnit, client: client, req: req)
+            } else {
+                course.brightspaceOrgUnitName = nil
+            }
         }
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
+    }
+
+    /// Looks the org unit up in D2L and returns its name, or nil if it can't
+    /// be verified (not found, or D2L unreachable). Never throws — a failed
+    /// verification must not block saving the course.
+    private func verifiedOrgUnitName(
+        orgUnitID: String, client: BrightSpaceAPIClient, req: Request
+    ) async -> String? {
+        do {
+            return try await client.getOrgUnit(orgUnitID: orgUnitID, on: req.application)?.name
+        } catch {
+            req.logger.warning("BrightSpace org-unit verification failed for \(orgUnitID): \(error)")
+            return nil
+        }
     }
 
     // MARK: - POST /admin/courses/:courseID/unenroll/:userID
@@ -360,6 +386,7 @@ extension AdminRoutes {
             submissionCount: (try await submissionCountFetch)[courseID] ?? 0,
             createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
             brightspaceOrgUnitID: course.brightspaceOrgUnitID,
+            brightspaceOrgUnitName: course.brightspaceOrgUnitName,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil
         )
 

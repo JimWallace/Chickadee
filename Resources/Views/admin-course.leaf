@@ -91,8 +91,22 @@
     </form>
     #if(course.brightspaceSyncEnabled):
     <p class="card-meta" style="margin-top:.5rem">
-        BrightSpace grade sync is active. Set the Org Unit ID to enable nightly grade push for this course.
-        Per-assignment grade item IDs are configured on each assignment's edit page.
+        #if(course.brightspaceOrgUnitID):
+            #if(course.brightspaceOrgUnitName):
+            <span class="tier tier-open">verified</span>
+            Linked to D2L org unit <strong>#(course.brightspaceOrgUnitName)</strong>
+            (ID <code>#(course.brightspaceOrgUnitID)</code>).
+            #else:
+            <span class="tier tier-closed">unverified</span>
+            Org Unit ID <code>#(course.brightspaceOrgUnitID)</code> could not be confirmed in D2L
+            (wrong ID, or D2L unreachable). Re-save to retry verification.
+            #endif
+        #else:
+            BrightSpace grade sync is active. Set the Org Unit ID to bind this course to its D2L
+            grade book — it's verified against D2L on save.
+        #endif
+        Per-assignment grade item IDs are configured on the
+        <a href="/instructor/brightspace">BrightSpace</a> tab.
     </p>
     #endif
 </section>
