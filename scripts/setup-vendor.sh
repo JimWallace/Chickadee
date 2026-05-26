@@ -101,6 +101,11 @@ npx esbuild codemirror-entry.js \
     --minify \
     --outfile="$public_vendor/codemirror.js"
 
+# Inject Chickadee's extra pure-Python wheels (nb_mypy + deps) that aren't in
+# the upstream Pyodide distribution, so a re-vendor never silently drops them.
+# Pinned + sha-verified; see Tools/vendor/pyodide-extra-packages.json.
+python3 "$repo_root/scripts/add-pyodide-extras.py"
+
 # Belt-and-suspenders: confirm the just-vended Pyodide matches the kernel.
 # Since the version is derived from the kernel above this should always pass;
 # it catches a stale Public/pyodide that wasn't actually rewritten.
