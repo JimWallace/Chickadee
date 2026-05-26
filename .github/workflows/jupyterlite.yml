@@ -25,3 +25,10 @@ jobs:
 
       - name: Verify generated assets are committed
         run: git diff --exit-code -- Public/jupyterlite
+
+      - name: Verify Pyodide parity (vended == kernel)
+        # Fails if Public/pyodide drifts from the version the editor kernel is
+        # pinned to — the latent condition behind the #574 editor outage. This
+        # is what makes the editor's same-origin Pyodide trustworthy: green
+        # here means the vended copy actually matches the kernel.
+        run: scripts/check-pyodide-parity.sh
