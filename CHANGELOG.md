@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.279] - 2026-05-26
+
+### Changed
+
+- **The login page now shows the Chickadee mascot.** Added the (transparent)
+  `chickadee-icon-alt.png` logo centered above the "Log in to Chickadee"
+  heading. (`login.leaf` + `.auth-logo` in `styles.css`.)
+
+
 ## [0.4.278] - 2026-05-25
 
 ### Changed
