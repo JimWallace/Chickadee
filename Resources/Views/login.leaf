@@ -4,7 +4,7 @@ Log in
 #endexport
 #export("content"):
 <div class="auth-box">
-    <img class="auth-logo" src="/images/chickadee-icon-alt.png?v=#appVersion()" alt="" width="128" height="128">
+    <img class="auth-logo" src="/images/chickadee-icon-alt.png?v=#appVersion()" alt="" width="200" height="200">
     <h1>Log in to Chickadee</h1>
     #if(loggedOut && !error):
     <div class="notice-box" style="margin-bottom:1rem">
