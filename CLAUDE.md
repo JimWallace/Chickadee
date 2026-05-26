@@ -350,24 +350,42 @@ aren't leaked to `cdn.jsdelivr.net` and `esm.sh` on every page load
 (FIPPA / PIPEDA concern surfaced in the v0.4.171 audit).
 
 ```
-Public/pyodide/              — full Pyodide distribution (~1.4 GB on disk)
+Public/pyodide/              — the ONE canonical Pyodide distribution (~1.4 GB)
 Public/vendor/jszip.min.js   — jszip browser-runner uses for zip extraction
 Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
 ```
 
-Source-of-truth is the version pinned in `scripts/setup-vendor.sh`
-(Pyodide, jszip) and `Tools/vendor/{package.json, codemirror-entry.js}`
-(CodeMirror).  Rebuild:
+**One canonical Pyodide.** There is exactly one vended Pyodide, served at
+`/pyodide`, and *both* consumers load it: the JupyterLite editor kernel (via
+`pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's own
+browser paths (`browser-runner.js`, `assignment-validate.js`,
+`pyodide-worker.js`, `setup-edit.js`, `notebook.js`).  The editor and grader
+therefore run the identical Python environment.  (Historically the editor
+loaded a *second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped
+that allowance and broke the editor — see `SecurityHeadersMiddleware`.)
+
+**The Pyodide version is not hardcoded — it is derived from the kernel.**
+The only version pin is `jupyterlite-pyodide-kernel` in
+`Tools/jupyterlite/requirements.txt`; its bundled core wheels are ABI-locked
+to a specific Pyodide release, so `scripts/setup-vendor.sh` reads that version
+out of the built bundle and vends exactly it.  One pin, one version, no drift.
+
+Rebuild order matters:
 
 ```bash
-scripts/setup-vendor.sh
+scripts/setup-jupyterlite.sh     # build the .venv-jlite toolchain
+scripts/build-jupyterlite.sh     # rebuild the bundle (kernel version baked in)
+scripts/setup-vendor.sh          # derives Pyodide version from the kernel, re-vendors
 ```
 
-This downloads the Pyodide release tarball, fetches jszip, and bundles
-CodeMirror via `npm` + `esbuild`.  Rebuild only when bumping versions.
-`Public/pyodide` and `Public/vendor` are checked in for the same reason
-`Public/jupyterlite` is — every contributor and every CI runner sees the
-same bytes without a build-time network fetch.
+`scripts/check-pyodide-parity.sh` fails the build (and CI, via
+`jupyterlite.yml`) if the vended Pyodide ever drifts from the kernel's pinned
+version — the guard against repeating #574.  jszip is fetched by
+`setup-vendor.sh`; CodeMirror is bundled via `npm` + `esbuild` from
+`Tools/vendor/{package.json, codemirror-entry.js}`.  `Public/pyodide` and
+`Public/vendor` are checked in for the same reason `Public/jupyterlite` is —
+every contributor and CI runner sees the same bytes without a build-time
+network fetch.
 
 ---
 

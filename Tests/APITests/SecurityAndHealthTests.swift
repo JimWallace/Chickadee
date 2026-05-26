@@ -178,6 +178,37 @@ import XCTVapor
         }
     }
 
+    @Test func cSPHasNoExternalScriptConnectOrWorkerOrigins() async throws {
+        // End-state guard against the #574 regression CLASS (replaces the
+        // transitional cSPAllowsEditorKernelPyodideCDN hotfix guard).
+        //
+        // Every browser runtime — the JupyterLite editor kernel and
+        // Chickadee's own Pyodide paths — now loads the one vended,
+        // same-origin Pyodide (pyodideUrl = /pyodide/... in
+        // Tools/jupyterlite/jupyter-lite.json). So script-src / connect-src /
+        // worker-src must carry only same-origin keywords (self, blob:,
+        // unsafe-*) and NO http(s) origin. If a CDN dependency ever creeps
+        // back in, this fails — paired with verify-jupyterlite.sh's
+        // pyodideUrl-is-same-origin check, the editor can't silently revert to
+        // a third-party Pyodide while the CSP quietly drifts out of sync.
+        try await withApp(try await makeSecurityHeadersApp()) { app in
+            try await app.asyncTest(.GET, "/headers") { res in
+                let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
+                let directives = csp.split(separator: ";").map {
+                    $0.trimmingCharacters(in: .whitespaces)
+                }
+                for name in ["script-src", "connect-src", "worker-src"] {
+                    let directive = directives.first { $0.hasPrefix(name + " ") }
+                    #expect(directive != nil, "CSP missing \(name) directive; got: \(csp)")
+                    #expect(
+                        directive?.contains("://") != true,
+                        "\(name) must contain no external origins (Pyodide is served same-origin); got: \(directive ?? "<nil>")"
+                    )
+                }
+            }
+        }
+    }
+
     @Test func cSPFormActionIncludesIdPOriginWhenSSOConfigured() async throws {
         // Regression: CSP form-action 'self' alone blocks the SSO logout
         // redirect chain (POST /logout → 303 → end_session_endpoint), which

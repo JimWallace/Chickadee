@@ -43,6 +43,28 @@ piplite_urls = (
 if not piplite_urls:
     fail("pipliteUrls missing from pyodide kernel settings")
 
+# The editor kernel must load Pyodide from the one vended same-origin copy,
+# not the jupyterlite-pyodide-kernel CDN default (cdn.jsdelivr.net).  This is
+# the structural guard against the #574 regression class: if pyodideUrl is
+# unset or external, the editor depends on a third-party origin (and on the
+# CSP allowing it).  Keep it a same-origin absolute path (served from
+# Public/pyodide).
+pyodide_url = (
+    data.get("litePluginSettings", {})
+    .get("@jupyterlite/pyodide-kernel-extension:kernel", {})
+    .get("pyodideUrl")
+)
+if not pyodide_url:
+    fail(
+        "pyodideUrl is unset — the editor kernel would fall back to the "
+        "cdn.jsdelivr.net default. Pin it to the local /pyodide copy in "
+        "Tools/jupyterlite/jupyter-lite.json."
+    )
+if "://" in pyodide_url or pyodide_url.startswith("//"):
+    fail(f"pyodideUrl must be a same-origin local path, got external: {pyodide_url}")
+if not pyodide_url.startswith("/"):
+    fail(f"pyodideUrl must be a same-origin absolute path beginning with '/', got: {pyodide_url}")
+
 remote_entry_dir = build_dir / "extensions" / "@jupyterlite" / "pyodide-kernel-extension" / "static"
 remote_entries = [p for p in sorted(remote_entry_dir.glob("remoteEntry.*.js")) if not p.name.endswith(".map")]
 if not remote_entries:
