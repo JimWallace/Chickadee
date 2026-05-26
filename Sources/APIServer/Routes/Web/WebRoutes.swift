@@ -318,17 +318,16 @@ struct WebRoutes: RouteCollection {
             let assignment = assignmentBySetup[setupID]
             let latestSubmission = latestSubmissionBySetupID[setupID]
             let submissionCount = submissionCountBySetupID[setupID] ?? 0
+            // A future open date drives the "Opens …" hint in the Due column,
+            // but not a distinct status — every assignment is scheduled, so a
+            // "scheduled" badge would add no signal.
             let notYetOpen: Bool = {
                 guard let assignment, let startsAt = assignment.startsAt else { return false }
                 return Date() < startsAt
             }()
             let status: String
             if let assignment {
-                if notYetOpen {
-                    status = "scheduled"
-                } else {
-                    status = assignment.isOpen ? "open" : "closed"
-                }
+                status = assignment.isOpen ? "open" : "closed"
             } else {
                 status = "unpublished"
             }

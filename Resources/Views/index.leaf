@@ -58,7 +58,6 @@
                 <span class="tier
                     #if(setup.status == "open"):tier-open
                     #elseif(setup.status == "closed"):tier-closed
-                    #elseif(setup.status == "scheduled"):tier-scheduled
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
             </td>
@@ -162,7 +161,6 @@
                 <span class="tier
                     #if(setup.status == "open"):tier-open
                     #elseif(setup.status == "closed"):tier-closed
-                    #elseif(setup.status == "scheduled"):tier-scheduled
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
             </td>
@@ -266,7 +264,6 @@
                 <span class="tier
                     #if(setup.status == "open"):tier-open
                     #elseif(setup.status == "closed"):tier-closed
-                    #elseif(setup.status == "scheduled"):tier-scheduled
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
             </td>
