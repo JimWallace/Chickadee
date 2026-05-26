@@ -183,9 +183,9 @@ import XCTVapor
                     #expect(res.headers.first(name: .location) == "/instructor/brightspace")
                 })
 
-            let reloaded = try await APIResult.find("res_bs_push", on: app.db)
-            #expect(reloaded?.brightspaceSyncPending == true)
-            #expect((reloaded?.brightspaceSyncError ?? "").isEmpty)
+            let reloaded = try #require(try await APIResult.find("res_bs_push", on: app.db))
+            #expect(reloaded.brightspaceSyncPending == true)
+            #expect((reloaded.brightspaceSyncError ?? "").isEmpty)
         }
     }
 

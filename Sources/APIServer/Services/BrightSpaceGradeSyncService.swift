@@ -104,39 +104,36 @@ private func pushGradeForResult(
         return
     }
 
-    // Compute best grade for this student across all results for this test setup.
-    let studentSubmissions = try await APISubmission.query(on: db)
-        .filter(\.$userID == userID)
-        .filter(\.$testSetupID == testSetupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-
-    let submissionIDs = studentSubmissions.compactMap(\.id)
-    guard !submissionIDs.isEmpty else {
+    // Best grade for this student across the test setup. nil → no submissions
+    // yet (nothing to push); throws if submissions exist but yield no points.
+    guard let points = try await bestPointsForStudent(userID: userID, testSetupID: testSetupID, db: db)
+    else {
         result.brightspaceSyncPending = false
         try await result.save(on: db)
         return
     }
 
-    let allResults = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ submissionIDs)
-        .all()
-
-    // Prefer worker results; fall back to browser results for best-grade computation.
-    let workerResults = allResults.filter { $0.source != "browser" }
-    let resultsForGrade = workerResults.isEmpty ? allResults : workerResults
-
-    let bestPoints =
-        resultsForGrade
-        .compactMap { gradePointsFromCollectionJSON($0.collectionJSON) }
-        .max()
-
-    guard let points = bestPoints else {
-        throw BrightSpaceSyncError.missingPoints
-    }
-
     // Username snapshot for the sync log (readable without a join).
     let username = try await APIUser.find(userID, on: db)?.username ?? userID.uuidString
+
+    // Appends one row to the sync log. Best-effort: a logging failure must
+    // never abort or retry a grade push, so errors are swallowed. Captures
+    // the surrounding push context so callers pass only status + detail.
+    func appendSyncLog(_ status: APIBrightSpaceSyncLog.Status, detail: String?) async {
+        let entry = APIBrightSpaceSyncLog(
+            courseID: course.id,
+            testSetupID: assignment.testSetupID,
+            assignmentTitle: assignment.title,
+            userID: userID,
+            username: username,
+            orgUnitID: orgUnitID,
+            gradeObjectID: gradeObjectID,
+            points: points,
+            status: status,
+            detail: detail
+        )
+        try? await entry.save(on: db)
+    }
 
     // Resolve D2L user ID (cached on APIUser, looked up on first sync).
     let bsUserID = try await resolvedBrightSpaceUserID(
@@ -150,10 +147,7 @@ private func pushGradeForResult(
         result.brightspaceSyncPending = false
         result.brightspaceSyncError = "Student has no BrightSpace account (orgDefinedId not found)"
         try await result.save(on: db)
-        await recordBrightSpaceSyncLog(
-            db: db, course: course, assignment: assignment, userID: userID, username: username,
-            orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: points,
-            status: .skipped, detail: "No BrightSpace account (orgDefinedId not found)")
+        await appendSyncLog(.skipped, detail: "No BrightSpace account (orgDefinedId not found)")
         return
     }
 
@@ -169,10 +163,7 @@ private func pushGradeForResult(
     } catch {
         // Log with full context here (the sweep's catch lacks it), then
         // rethrow so the existing per-result error handling still runs.
-        await recordBrightSpaceSyncLog(
-            db: db, course: course, assignment: assignment, userID: userID, username: username,
-            orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: points,
-            status: .error, detail: error.localizedDescription)
+        await appendSyncLog(.error, detail: error.localizedDescription)
         throw error
     }
 
@@ -182,41 +173,44 @@ private func pushGradeForResult(
     result.brightspaceSyncError = nil
     try await result.save(on: db)
 
-    await recordBrightSpaceSyncLog(
-        db: db, course: course, assignment: assignment, userID: userID, username: username,
-        orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: points,
-        status: .success, detail: nil)
+    await appendSyncLog(.success, detail: nil)
 
     logger.info("BrightSpace grade synced: user \(userID) assignment '\(assignment.title)' → \(points) pts")
 }
 
-/// Appends one row to the BrightSpace sync log.  Best-effort: a logging
-/// failure must never abort or retry a grade push, so errors are swallowed.
-private func recordBrightSpaceSyncLog(
-    db: Database,
-    course: APICourse,
-    assignment: APIAssignment,
-    userID: UUID?,
-    username: String,
-    orgUnitID: String?,
-    gradeObjectID: String?,
-    points: Double?,
-    status: APIBrightSpaceSyncLog.Status,
-    detail: String?
-) async {
-    let entry = APIBrightSpaceSyncLog(
-        courseID: course.id,
-        testSetupID: assignment.testSetupID,
-        assignmentTitle: assignment.title,
-        userID: userID,
-        username: username,
-        orgUnitID: orgUnitID,
-        gradeObjectID: gradeObjectID,
-        points: points,
-        status: status,
-        detail: detail
-    )
-    try? await entry.save(on: db)
+/// Best (max) points for this student across all results for the test setup,
+/// preferring worker results over browser ones.  Returns nil when the student
+/// has no submissions yet (nothing to push); throws `.missingPoints` when
+/// submissions exist but none yielded a parseable grade.
+private func bestPointsForStudent(
+    userID: UUID,
+    testSetupID: String,
+    db: Database
+) async throws -> Double? {
+    let submissionIDs = try await APISubmission.query(on: db)
+        .filter(\.$userID == userID)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .all()
+        .compactMap(\.id)
+    guard !submissionIDs.isEmpty else { return nil }
+
+    let allResults = try await APIResult.query(on: db)
+        .filter(\.$submissionID ~~ submissionIDs)
+        .all()
+    // Prefer worker results; fall back to browser results for best-grade computation.
+    let workerResults = allResults.filter { $0.source != "browser" }
+    let resultsForGrade = workerResults.isEmpty ? allResults : workerResults
+
+    guard
+        let points =
+            resultsForGrade
+            .compactMap({ gradePointsFromCollectionJSON($0.collectionJSON) })
+            .max()
+    else {
+        throw BrightSpaceSyncError.missingPoints
+    }
+    return points
 }
 
 /// Returns the cached D2L user ID for `userID`, looking it up via studentID if not yet cached.
