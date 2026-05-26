@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.280] - 2026-05-26
+
+### Changed
+
+- **Bigger Chickadee logo on the login page** — bumped from 128px to 200px
+  (capped at 80% width on narrow screens). The source PNG is 1024px so it stays
+  crisp.
+
+
 ## [0.4.279] - 2026-05-26
 
 ### Changed
