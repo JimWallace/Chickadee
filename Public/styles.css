@@ -767,9 +767,10 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
    cleanly on the page background in both light and dark mode. */
 .auth-logo {
     display: block;
-    width: 128px;
-    height: 128px;
-    margin: 0 auto .75rem;
+    width: 200px;
+    height: 200px;
+    max-width: 80%;
+    margin: 0 auto 1rem;
 }
 
 .auth-box h1 { margin-bottom: 1.5rem; }
