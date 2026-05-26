@@ -194,6 +194,11 @@ func registerMigrations(on app: Application) {
     // our own).
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateCourses())
+    // Must precede any migration that queries the APICourse *model* (e.g.
+    // AddCourseArchivedAt's backfill). Fluent's model query SELECTs every
+    // declared column, so the column has to exist before those run on a
+    // fresh DB. Existing prod is unaffected — only this new migration runs.
+    app.migrations.add(AddBrightSpaceOrgUnitName())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
@@ -224,7 +229,6 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateMCPGrants())
     app.migrations.add(AddPreviousRefreshTokenHashToGrants())
     app.migrations.add(AddAssignmentStartsAt())
-    app.migrations.add(AddBrightSpaceOrgUnitName())
     app.migrations.add(CreateBrightSpaceSyncLog())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
