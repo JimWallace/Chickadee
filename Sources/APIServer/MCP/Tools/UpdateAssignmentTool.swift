@@ -15,12 +15,17 @@ struct UpdateAssignmentTool: ContentTool {
         let assignmentPublicID: String
         let title: String?
         let dueAt: String?
+        let startsAt: String?
         let isOpen: Bool?
 
-        init(assignmentPublicID: String, title: String? = nil, dueAt: String? = nil, isOpen: Bool? = nil) {
+        init(
+            assignmentPublicID: String, title: String? = nil, dueAt: String? = nil,
+            startsAt: String? = nil, isOpen: Bool? = nil
+        ) {
             self.assignmentPublicID = assignmentPublicID
             self.title = title
             self.dueAt = dueAt
+            self.startsAt = startsAt
             self.isOpen = isOpen
         }
     }
@@ -31,6 +36,7 @@ struct UpdateAssignmentTool: ContentTool {
         let slug: String
         let isOpen: Bool
         let dueAt: String?
+        let startsAt: String?
         let validationStatus: String?
     }
 
@@ -38,8 +44,10 @@ struct UpdateAssignmentTool: ContentTool {
     static let description =
         "Edit an assignment's metadata by its public ID. Provide only the fields you want to "
         + "change: title (non-empty), dueAt (ISO 8601 datetime, or an empty string to remove the "
-        + "due date), and/or isOpen (true to open for submissions — refused until runner validation "
-        + "passes — or false to close). Does not change test content, so it never triggers a regrade."
+        + "due date), startsAt (ISO 8601 automatic open date — the assignment opens to students on "
+        + "its own when this time arrives — or an empty string to remove it), and/or isOpen (true to "
+        + "open for submissions now — refused until runner validation passes, and clears any pending "
+        + "open date — or false to close). Does not change test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -57,6 +65,13 @@ struct UpdateAssignmentTool: ContentTool {
                     "Due date as an ISO 8601 datetime (e.g. \"2026-04-22T23:59:00Z\"), "
                         + "or an empty string to remove the due date."),
             ]),
+            "startsAt": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Automatic open date as an ISO 8601 datetime (e.g. \"2026-04-15T09:00:00Z\"). "
+                        + "The assignment opens to students on its own once this time arrives. "
+                        + "Pass an empty string to remove a scheduled open date."),
+            ]),
             "isOpen": .object([
                 "type": .string("boolean"),
                 "description": .string("true to open the assignment for submissions, false to close it."),
@@ -73,6 +88,7 @@ struct UpdateAssignmentTool: ContentTool {
             "slug": .object(["type": .string("string")]),
             "isOpen": .object(["type": .string("boolean")]),
             "dueAt": .object(["type": .string("string")]),
+            "startsAt": .object(["type": .string("string")]),
             "validationStatus": .object(["type": .string("string")]),
         ]),
         "required": .array([
@@ -85,10 +101,12 @@ struct UpdateAssignmentTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let dueUpdate = try Self.resolveDueDate(input.dueAt)
+        let startsUpdate = try Self.resolveStartDate(input.startsAt)
         let newTitle = try Self.resolveTitle(input.title)
-        guard newTitle != nil || input.isOpen != nil || dueUpdate != .unchanged else {
+        guard newTitle != nil || input.isOpen != nil || dueUpdate != .unchanged || startsUpdate != .unchanged
+        else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "Specify at least one of: title, dueAt, isOpen.")
+                tool: Self.name, detail: "Specify at least one of: title, dueAt, startsAt, isOpen.")
         }
 
         guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
@@ -98,7 +116,8 @@ struct UpdateAssignmentTool: ContentTool {
         try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
         do {
             try await AssignmentAuthoringService.updateMetadata(
-                assignment, title: newTitle, dueAt: dueUpdate, open: input.isOpen, on: context.db)
+                assignment, title: newTitle, dueAt: dueUpdate, startsAt: startsUpdate,
+                open: input.isOpen, on: context.db)
         } catch AssignmentAuthoringError.validationNotPassed {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
@@ -112,6 +131,7 @@ struct UpdateAssignmentTool: ContentTool {
             slug: assignment.slug,
             isOpen: assignment.isOpen,
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
+            startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus
         )
     }
@@ -125,6 +145,20 @@ struct UpdateAssignmentTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: name,
                 detail: "dueAt must be an ISO 8601 datetime (e.g. \"2026-04-22T23:59:00Z\") "
+                    + "or an empty string to clear it.")
+        }
+        return .set(date)
+    }
+
+    /// Maps the optional `startsAt` argument to an `OpenDateUpdate`: absent → no
+    /// change, empty string → clear, ISO 8601 → set (else invalid).
+    private static func resolveStartDate(_ raw: String?) throws -> OpenDateUpdate {
+        guard let raw else { return .unchanged }
+        if raw.trimmingCharacters(in: .whitespaces).isEmpty { return .clear }
+        guard let date = ISO8601DateFormatter().date(from: raw) else {
+            throw MCPToolError.invalidArguments(
+                tool: name,
+                detail: "startsAt must be an ISO 8601 datetime (e.g. \"2026-04-15T09:00:00Z\") "
                     + "or an empty string to clear it.")
         }
         return .set(date)

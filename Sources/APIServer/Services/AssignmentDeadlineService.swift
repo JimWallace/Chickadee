@@ -45,8 +45,12 @@ func isAssignmentOpenForUser(
     overrideActive: Bool,
     baselineDueAt: Date?,
     effectiveDueAt: Date?,
+    startsAt: Date? = nil,
     now: Date = Date()
 ) -> Bool {
+    // Front gate: a future open date holds the assignment closed for
+    // everyone, regardless of `isOpen` or any deadline/extension state.
+    if let startsAt, now < startsAt { return false }
     let deadlinePassed = baselineDueAt.map { $0 <= now } ?? false
     if isOpen {
         if !deadlinePassed { return true }
@@ -104,6 +108,7 @@ func isAssignmentEffectivelyOpen(
         overrideActive: assignmentDeadlineOverrideIsActive(assignment),
         baselineDueAt: assignment.dueAt,
         effectiveDueAt: effective,
+        startsAt: assignment.startsAt,
         now: now
     )
 }
@@ -160,6 +165,53 @@ func closeExpiredAssignments(
     return closedCount
 }
 
+/// Auto-opens a single scheduled assignment once its open date has arrived —
+/// the mirror image of `closeAssignmentIfExpired`.  Returns true if it flipped
+/// `isOpen` to true.
+///
+/// The open date is *consumed* on success (`startsAt` set to nil) so a later
+/// manual close (or the deadline sweep) can't be undone by a subsequent open
+/// sweep.  Opening is suppressed when runner validation has not passed (mirrors
+/// the manual-open guard) and when the due date has already passed (the window
+/// is entirely in the past — opening would only be reversed by the close sweep).
+@discardableResult
+func openScheduledAssignment(
+    _ assignment: APIAssignment,
+    on db: Database,
+    logger: Logger,
+    now: Date = Date()
+) async throws -> Bool {
+    guard !assignment.isOpen else { return false }
+    guard let startsAt = assignment.startsAt, startsAt <= now else { return false }
+    guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else { return false }
+    if let dueAt = assignment.dueAt, dueAt <= now { return false }
+
+    assignment.isOpen = true
+    assignment.startsAt = nil
+    try await assignment.save(on: db)
+    logger.info("Auto-opened assignment '\(assignment.title)' (\(assignment.publicID)) at its open date")
+    return true
+}
+
+@discardableResult
+func openScheduledAssignments(
+    on db: Database,
+    logger: Logger,
+    now: Date = Date()
+) async throws -> Int {
+    let assignments = try await APIAssignment.query(on: db)
+        .filter(\.$isOpen == false)
+        .filter(\.$startsAt <= now)
+        .all()
+
+    var openedCount = 0
+    for assignment in assignments
+    where try await openScheduledAssignment(assignment, on: db, logger: logger, now: now) {
+        openedCount += 1
+    }
+    return openedCount
+}
+
 func requireOpenStudentAssignment(
     for testSetupID: String,
     user: APIUser,
@@ -203,6 +255,10 @@ final class AssignmentDeadlineMonitor: @unchecked Sendable {
         task = Task {
             while !Task.isCancelled {
                 do {
+                    _ = try await openScheduledAssignments(
+                        on: application.db,
+                        logger: application.logger
+                    )
                     _ = try await closeExpiredAssignments(
                         on: application.db,
                         logger: application.logger
@@ -234,6 +290,7 @@ struct AssignmentDeadlineLifecycleHandler: LifecycleHandler {
     func didBoot(_ application: Application) throws {
         Task {
             do {
+                _ = try await openScheduledAssignments(on: application.db, logger: application.logger)
                 _ = try await closeExpiredAssignments(on: application.db, logger: application.logger)
             } catch {
                 application.logger.error("Initial assignment deadline sweep failed: \(error.localizedDescription)")

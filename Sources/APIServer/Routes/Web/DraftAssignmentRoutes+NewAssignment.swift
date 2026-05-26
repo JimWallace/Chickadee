@@ -18,6 +18,7 @@ extension DraftAssignmentRoutes {
         struct NewQuery: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var error: String?
             var notice: String?
             var sectionID: String?
@@ -55,12 +56,14 @@ extension DraftAssignmentRoutes {
         let assignmentName = (q?.assignmentName ?? storedState.assignmentName).trimmingCharacters(
             in: .whitespacesAndNewlines)
         let dueAt = q?.dueAt ?? storedState.dueAt
+        let startsAt = q?.startsAt ?? storedState.startsAt
         let selectedSectionID = q?.sectionID ?? storedState.sectionID
 
         let ctx = NewAssignmentContext(
             currentUser: req.currentUserContext,
             assignmentName: assignmentName,
             dueAt: dueAt,
+            startsAt: startsAt,
             sections: sections,
             preselectedSectionID: selectedSectionID,
             draftID: setup?.id,
@@ -130,6 +133,7 @@ extension DraftAssignmentRoutes {
         var formState = loadDraftFormState(req: req, draftID: setupID)
         formState.assignmentName = payload.assignmentName
         formState.dueAt = payload.dueAt
+        formState.startsAt = payload.startsAt
         formState.sectionID = payload.sectionIDRaw
         formState.requiredPlatform = payload.requiredPlatform
         formState.requiredArchitecture = payload.requiredArchitecture
@@ -158,6 +162,7 @@ extension DraftAssignmentRoutes {
             draftID: setupID,
             assignmentName: payload.assignmentName,
             dueAt: payload.dueAt,
+            startsAt: payload.startsAt,
             sectionID: payload.sectionIDRaw,
             notice: nil,
             error: errorMessage
@@ -182,6 +187,11 @@ extension DraftAssignmentRoutes {
             try multipartTextField(named: ["dueAt"], from: req)
             ?? bodyMany?.dueAt
             ?? bodySingle?.dueAt
+            ?? ""
+        let startsAt =
+            try multipartTextField(named: ["startsAt"], from: req)
+            ?? bodyMany?.startsAt
+            ?? bodySingle?.startsAt
             ?? ""
         let sectionIDRaw =
             try multipartTextField(named: ["sectionID"], from: req)
@@ -232,6 +242,7 @@ extension DraftAssignmentRoutes {
         return NewAssignmentDraftPayload(
             assignmentName: assignmentName,
             dueAt: dueAt,
+            startsAt: startsAt,
             sectionIDRaw: sectionIDRaw,
             draftIDRaw: draftIDRaw,
             action: action,
@@ -327,6 +338,7 @@ extension DraftAssignmentRoutes {
                     draftID: validated.draftID,
                     assignmentName: validated.title,
                     dueAt: validated.dueAtRaw,
+                    startsAt: validated.startsAtRaw,
                     sectionID: validated.sectionIDRaw,
                     notice: nil,
                     error: "No compatible active runner is available to validate this assignment."
@@ -360,6 +372,7 @@ extension DraftAssignmentRoutes {
     fileprivate struct DraftBodyMany: Content {
         var assignmentName: String?
         var dueAt: String?
+        var startsAt: String?
         var sectionID: String?
         var draftID: String?
         var draftAction: String?
@@ -376,6 +389,7 @@ extension DraftAssignmentRoutes {
     fileprivate struct DraftBodySingle: Content {
         var assignmentName: String?
         var dueAt: String?
+        var startsAt: String?
         var sectionID: String?
         var draftID: String?
         var draftAction: String?
@@ -587,6 +601,7 @@ extension DraftAssignmentRoutes {
             testSetupID: setupID,
             title: validated.title,
             dueAt: validated.dueAt,
+            startsAt: validated.startsAt,
             isOpen: false,
             sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: shouldQueueValidation ? "pending" : nil,
@@ -636,6 +651,7 @@ extension DraftAssignmentRoutes {
         draftID: String,
         assignmentName: String,
         dueAt: String,
+        startsAt: String,
         sectionID: String,
         notice: String?,
         error: String?
@@ -644,6 +660,7 @@ extension DraftAssignmentRoutes {
             "draftID=\(urlEncode(draftID))",
             "assignmentName=\(urlEncode(assignmentName))",
             "dueAt=\(urlEncode(dueAt))",
+            "startsAt=\(urlEncode(startsAt))",
             "sectionID=\(urlEncode(sectionID))",
         ]
         if let notice, !notice.isEmpty {

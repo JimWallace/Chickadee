@@ -33,6 +33,15 @@ enum DueDateUpdate: Sendable, Equatable {
     case set(Date)
 }
 
+/// How a metadata update should treat the automatic open date
+/// (absent / clear / set). Same shape as `DueDateUpdate`, kept distinct so
+/// call sites read unambiguously.
+enum OpenDateUpdate: Sendable, Equatable {
+    case unchanged
+    case clear
+    case set(Date)
+}
+
 enum AssignmentAuthoringService {
     /// Opens or closes an assignment for student submissions.
     ///
@@ -62,6 +71,7 @@ enum AssignmentAuthoringService {
         _ assignment: APIAssignment,
         title: String? = nil,
         dueAt: DueDateUpdate = .unchanged,
+        startsAt: OpenDateUpdate = .unchanged,
         open: Bool? = nil,
         on db: Database,
         now: Date = Date()
@@ -81,6 +91,16 @@ enum AssignmentAuthoringService {
             assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
                 dueAt: date, existingOverride: assignment.deadlineOverrideActive ?? false)
         }
+        switch startsAt {
+        case .unchanged:
+            break
+        case .clear:
+            assignment.startsAt = nil
+        case .set(let date):
+            assignment.startsAt = date
+        }
+        // Applied after startsAt so an explicit `open: true` wins over a
+        // just-set future open date (it consumes the schedule in applyOpenState).
         if let open {
             try applyOpenState(assignment, open: open, now: now)
         }
@@ -242,6 +262,10 @@ enum AssignmentAuthoringService {
                 throw AssignmentAuthoringError.validationNotPassed
             }
             assignment.isOpen = true
+            // Opening now consumes any pending scheduled open date — otherwise the
+            // student gate would keep blocking until that future date, and the
+            // auto-open sweep could later re-open after a manual close.
+            assignment.startsAt = nil
             assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(
                 dueAt: assignment.dueAt, now: now)
         } else {

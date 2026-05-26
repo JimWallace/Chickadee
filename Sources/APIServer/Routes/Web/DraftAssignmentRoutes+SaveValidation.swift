@@ -22,6 +22,7 @@ import Vapor
 struct SaveNewAssignmentForm {
     let assignmentName: String?
     let dueAtRaw: String?
+    let startsAtRaw: String?
     let sectionIDRaw: String?
     let draftIDRaw: String?
     let assignmentNotebookFile: File?
@@ -54,6 +55,8 @@ struct ValidatedSaveNewAssignment {
     let dueAt: Date?
     let dueAtRaw: String
     let sectionIDRaw: String
+    let startsAt: Date?
+    let startsAtRaw: String
     let draftID: String
     let draftSetup: APITestSetup?
     let draftState: NewAssignmentDraftFormState
@@ -79,6 +82,7 @@ extension DraftAssignmentRoutes {
         struct SaveBodyMany: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var sectionID: String?
             var draftID: String?
             var assignmentNotebookFile: File?
@@ -93,6 +97,7 @@ extension DraftAssignmentRoutes {
         struct SaveBodySingle: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var sectionID: String?
             var draftID: String?
             var assignmentNotebookFile: File?
@@ -124,6 +129,8 @@ extension DraftAssignmentRoutes {
                 ?? bodyMany?.assignmentName ?? bodySingle?.assignmentName,
             dueAtRaw: try multipartTextField(named: ["dueAt"], from: req)
                 ?? bodyMany?.dueAt ?? bodySingle?.dueAt,
+            startsAtRaw: try multipartTextField(named: ["startsAt"], from: req)
+                ?? bodyMany?.startsAt ?? bodySingle?.startsAt,
             sectionIDRaw: try multipartTextField(named: ["sectionID"], from: req)
                 ?? bodyMany?.sectionID ?? bodySingle?.sectionID,
             draftIDRaw: try multipartTextField(named: ["draftID"], from: req)
@@ -158,6 +165,7 @@ extension DraftAssignmentRoutes {
     ) async throws -> SaveNewAssignmentValidation {
         let title = (form.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(form.dueAtRaw)
+        let starts = parseDueDate(form.startsAtRaw)
         let draftID = (form.draftIDRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let draftSetup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
         let draftState =
@@ -166,6 +174,7 @@ extension DraftAssignmentRoutes {
             : loadDraftFormState(req: req, draftID: draftID)
 
         let dueAtRaw = form.dueAtRaw ?? ""
+        let startsAtRaw = form.startsAtRaw ?? ""
         let sectionIDRaw = form.sectionIDRaw ?? ""
 
         guard !title.isEmpty else {
@@ -173,6 +182,7 @@ extension DraftAssignmentRoutes {
                 toURL: newAssignmentErrorRedirect(
                     title: "",
                     dueAt: dueAtRaw,
+                    startsAt: startsAtRaw,
                     sectionID: sectionIDRaw,
                     draftID: draftID,
                     error: "Assignment name is required"
@@ -189,7 +199,7 @@ extension DraftAssignmentRoutes {
         if let earlyRedirect = redirectIfNotebookDataInvalid(
             data: assignmentNotebookRaw,
             isPresent: !assignmentNotebookRaw.isEmpty,
-            title: title, dueAtRaw: dueAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            title: title, dueAtRaw: dueAtRaw, startsAtRaw: startsAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
             missingError: "Assignment notebook (.ipynb) is required",
             invalidJSONError: "Assignment notebook is not valid JSON (.ipynb)"
         ) {
@@ -201,7 +211,7 @@ extension DraftAssignmentRoutes {
         if let earlyRedirect = redirectIfNotebookDataInvalid(
             data: solutionNotebookRaw,
             isPresent: !solutionNotebookRaw.isEmpty,
-            title: title, dueAtRaw: dueAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            title: title, dueAtRaw: dueAtRaw, startsAtRaw: startsAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
             missingError: "Solution notebook (.ipynb) is required",
             invalidJSONError: "Solution notebook is not valid JSON (.ipynb)"
         ) {
@@ -221,6 +231,8 @@ extension DraftAssignmentRoutes {
                 dueAt: due,
                 dueAtRaw: dueAtRaw,
                 sectionIDRaw: sectionIDRaw,
+                startsAt: starts,
+                startsAtRaw: startsAtRaw,
                 draftID: draftID,
                 draftSetup: draftSetup,
                 draftState: draftState,
@@ -292,6 +304,7 @@ extension DraftAssignmentRoutes {
         isPresent: Bool,
         title: String,
         dueAtRaw: String,
+        startsAtRaw: String,
         sectionIDRaw: String,
         draftID: String,
         missingError: String,
@@ -300,14 +313,14 @@ extension DraftAssignmentRoutes {
         guard isPresent else {
             return .redirect(
                 toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    title: title, dueAt: dueAtRaw, startsAt: startsAtRaw, sectionID: sectionIDRaw, draftID: draftID,
                     error: missingError
                 ))
         }
         guard (try? JSONSerialization.jsonObject(with: data)) != nil else {
             return .redirect(
                 toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    title: title, dueAt: dueAtRaw, startsAt: startsAtRaw, sectionID: sectionIDRaw, draftID: draftID,
                     error: invalidJSONError
                 ))
         }
@@ -323,6 +336,7 @@ extension DraftAssignmentRoutes {
     func newAssignmentErrorRedirect(
         title: String,
         dueAt: String,
+        startsAt: String,
         sectionID: String,
         draftID: String,
         error: String
@@ -330,6 +344,7 @@ extension DraftAssignmentRoutes {
         let q =
             "assignmentName=\(urlEncode(title))"
             + "&dueAt=\(urlEncode(dueAt))"
+            + "&startsAt=\(urlEncode(startsAt))"
             + "&sectionID=\(urlEncode(sectionID))"
             + "&draftID=\(urlEncode(draftID))"
             + "&error=\(urlEncode(error))"

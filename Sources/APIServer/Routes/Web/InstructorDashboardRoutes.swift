@@ -405,6 +405,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         struct EditQuery: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var error: String?
             var notice: String?
         }
@@ -423,6 +424,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             solutionFilename: existingSolutionName ?? fallbackSolutionFilename
         )
         let currentDueAt = dueAtLocalInputString(assignment.dueAt)
+        let currentStartsAt = dueAtLocalInputString(assignment.startsAt)
         let manifest = setup.decodedManifest()
         let patternFamiliesJSON: String = {
             guard let props = manifest else { return "[]" }
@@ -444,6 +446,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             testSetupID: assignment.testSetupID,
             assignmentName: (q?.assignmentName ?? assignment.title).trimmingCharacters(in: .whitespacesAndNewlines),
             dueAt: q?.dueAt ?? currentDueAt,
+            startsAt: q?.startsAt ?? currentStartsAt,
             currentAssignmentFile: currentFiles.assignmentFile.name,
             currentAssignmentURL: currentFiles.assignmentFile.url,
             assignmentNotebookEditURL:

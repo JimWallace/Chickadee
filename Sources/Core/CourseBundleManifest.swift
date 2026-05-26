@@ -114,18 +114,22 @@ public struct BundledAssignment: Codable, Sendable {
     public let bundleID: String
     public let title: String
     public let dueAt: Date?
+    /// Optional automatic open date. Absent in bundles exported before this
+    /// field existed (decodes as nil).
+    public let startsAt: Date?
     public let isOpen: Bool
     public let sortOrder: Int?
     /// References BundledTestSetup.bundleID.
     public let testSetupBundleID: String
 
     public init(
-        bundleID: String, title: String, dueAt: Date?, isOpen: Bool,
+        bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool,
         sortOrder: Int?, testSetupBundleID: String
     ) {
         self.bundleID = bundleID
         self.title = title
         self.dueAt = dueAt
+        self.startsAt = startsAt
         self.isOpen = isOpen
         self.sortOrder = sortOrder
         self.testSetupBundleID = testSetupBundleID

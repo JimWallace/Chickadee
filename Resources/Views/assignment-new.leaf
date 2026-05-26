@@ -32,6 +32,12 @@ Create Assignment
                    style="font-size:1.4rem;font-weight:600;border:none;border-bottom:2px solid var(--border,#ddd);border-radius:0;padding:.15rem 0;background:transparent;width:100%">
             <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:.6rem;align-items:center">
                 <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                    Opens
+                    <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)"
+                           title="Optional. Students cannot access or submit until this date; leave blank to open immediately."
+                           style="font-size:.875rem;padding:.2rem .5rem">
+                </label>
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
                     Due
                     <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)"
                            style="font-size:.875rem;padding:.2rem .5rem">

@@ -20,6 +20,7 @@ struct GetAssignmentTool: ContentTool {
         let courseCode: String
         let isOpen: Bool
         let dueAt: String?
+        let startsAt: String?
         let validationStatus: String?
         let deadlineOverrideActive: Bool
     }
@@ -27,7 +28,8 @@ struct GetAssignmentTool: ContentTool {
     static let name = "get_assignment"
     static let description =
         "Get an assignment's details by its public ID: title, course code, slug, "
-        + "open/closed state, due date (ISO 8601), and runner validation status."
+        + "open/closed state, due date (ISO 8601), scheduled open date (ISO 8601, if any), "
+        + "and runner validation status."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -48,6 +50,7 @@ struct GetAssignmentTool: ContentTool {
             "courseCode": .object(["type": .string("string")]),
             "isOpen": .object(["type": .string("boolean")]),
             "dueAt": .object(["type": .string("string")]),
+            "startsAt": .object(["type": .string("string")]),
             "validationStatus": .object(["type": .string("string")]),
             "deadlineOverrideActive": .object(["type": .string("boolean")]),
         ]),
@@ -76,6 +79,7 @@ struct GetAssignmentTool: ContentTool {
             courseCode: course.code,
             isOpen: assignment.isOpen,
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
+            startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus,
             deadlineOverrideActive: assignment.deadlineOverrideActive ?? false
         )
