@@ -35,6 +35,11 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         let r = routes.grouped("instructor")
         r.get(use: list)
+        // Students roster tab + its self-updating poll endpoint.
+        r.get("students", use: studentsPage)
+        r.get("students-data", use: studentsData)
+        // BrightSpace tab (grade export + sync status).
+        r.get("brightspace", use: brightspacePage)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
@@ -146,28 +151,15 @@ struct InstructorDashboardRoutes: RouteCollection {
             sectionByPublicID: sectionByPublicID
         )
 
-        // Fetch enrollment mode and archived state for the active course.
-        var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
-        var courseIsArchived = false
-        if let activeCourseUUID = courseState.activeCourseUUID,
-            let activeCourseModel = try await APICourse.find(activeCourseUUID, on: req.db)
-        {
-            courseEnrollmentMode = activeCourseModel.enrollmentMode.rawValue
-            courseIsArchived = activeCourseModel.isArchived
-        }
-
         let ctx = AssignmentsContext(
             currentUser: userContext,
+            activeInstructorTab: "overview",
             metrics: roster.metrics,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,
             hasUngrouped: !ungroupedRows.isEmpty,
-            enrolledStudents: roster.enrolledStudents,
-            hasEnrolledStudents: !roster.enrolledStudents.isEmpty,
-            enrolledStudentCount: roster.enrolledStudentCount,
-            courseEnrollmentMode: courseEnrollmentMode,
-            courseIsArchived: courseIsArchived
+            enrolledStudentCount: roster.enrolledStudentCount
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }

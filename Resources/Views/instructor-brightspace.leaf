@@ -1,0 +1,44 @@
+#extend("base"):
+#export("title"):
+BrightSpace
+#endexport
+#export("content"):
+<nav class="instructor-tabs" aria-label="Instructor sections">
+    <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
+    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>BrightSpace</a>
+</nav>
+
+<h1 style="margin:0 0 1.25rem">BrightSpace</h1>
+
+<section style="margin-bottom:2.5rem">
+    <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 .5rem">Export grades</h2>
+    <p style="color:var(--gray-600);margin:0 0 .9rem;max-width:46rem">
+        Download a CSV of every enrolled student's best grade per assignment,
+        formatted for BrightSpace grade import (OrgDefinedId + per-assignment
+        points columns).
+    </p>
+    #if(hasActiveCourse):
+    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+    #else:
+    <p class="empty">Select a course to export grades.</p>
+    #endif
+</section>
+
+<section>
+    <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 .5rem">Automatic grade sync</h2>
+    #if(brightspaceSyncEnabled):
+    <p style="color:var(--gray-600);margin:0;max-width:46rem">
+        BrightSpace grade sync is <strong>enabled</strong> on this server.
+        Grades push automatically as students submit, for assignments with a
+        BrightSpace grade item ID configured on the assignment edit page.
+    </p>
+    #else:
+    <p style="color:var(--gray-600);margin:0;max-width:46rem">
+        Automatic grade sync is not configured on this server. Use the CSV
+        export above to upload grades to BrightSpace manually.
+    </p>
+    #endif
+</section>
+#endexport
+#endextend

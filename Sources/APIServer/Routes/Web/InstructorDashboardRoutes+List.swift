@@ -141,6 +141,41 @@ extension InstructorDashboardRoutes {
         )
     }
 
+    /// Enrolled-student rows + active-student count for the active course,
+    /// without the (relatively expensive) dashboard-metric computation.
+    /// Shared by the Students-tab page render and its polling endpoint, which
+    /// only need the roster.  Mirrors the roster half of `buildCourseRoster`:
+    /// active enrollments first (last-seen-desc), pending CSV pre-enrollments
+    /// appended as muted rows, with the count covering both.
+    func loadEnrolledStudentRows(
+        req: Request,
+        activeCourseUUID: UUID,
+        activeCourseCode: String,
+        fmt: DateFormatter,
+        isoFormatter: ISO8601DateFormatter
+    ) async throws -> (rows: [EnrolledStudentRow], count: Int) {
+        let enrolledUsers = try await loadEnrolledUsersForRoster(req: req, activeCourseUUID: activeCourseUUID)
+        var rows = buildEnrolledStudentRows(
+            enrolledUsers: enrolledUsers,
+            activeCourseUUID: activeCourseUUID,
+            activeCourseCode: activeCourseCode,
+            fmt: fmt,
+            isoFormatter: isoFormatter
+        )
+        let pendingPreEnrollments = try await APIPreEnrollment.query(on: req.db)
+            .filter(\.$course.$id == activeCourseUUID)
+            .sort(\.$username)
+            .all()
+        rows.append(
+            contentsOf: buildPendingPreEnrollmentRows(
+                pendingPreEnrollments: pendingPreEnrollments,
+                activeCourseUUID: activeCourseUUID
+            )
+        )
+        let activeStudentCount = enrolledUsers.filter { $0.role == "student" }.count
+        return (rows, activeStudentCount + pendingPreEnrollments.count)
+    }
+
     /// Loads the enrolled users for the course, sorted last-seen-desc then
     /// username-asc.  Returns an empty array if no enrollments exist.
     private func loadEnrolledUsersForRoster(

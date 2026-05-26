@@ -252,8 +252,10 @@ import XCTVapor
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
+            // The enrol-from-CSV link lives on the Students tab as of the
+            // instructor-view rework (v0.4.283+).
             try await app.asyncTest(
-                .GET, "/instructor",
+                .GET, "/instructor/students",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -286,8 +288,10 @@ import XCTVapor
             try await recent.save(on: app.db)
             try await arEnrollStudentInTestCourse(recent, on: app)
 
+            // The enrolled-students roster moved to the Students tab in the
+            // instructor-view rework (v0.4.283+).
             try await app.asyncTest(
-                .GET, "/instructor",
+                .GET, "/instructor/students",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },

@@ -7,6 +7,7 @@
 // view changes.
 
 import Foundation
+import Vapor
 
 struct AssignmentRow: Encodable {
     let setupID: String
@@ -33,13 +34,29 @@ struct CourseSectionRow: Encodable {
     let rows: [AssignmentRow]  // assignments in this section, sorted
 }
 
+/// Overview tab (`GET /instructor`): dashboard metrics + the assignment /
+/// section listing.  The enrolled-students roster and BrightSpace export
+/// moved to their own tabs (`/instructor/students`, `/instructor/brightspace`)
+/// in the v0.4 instructor-view rework, so this context no longer carries the
+/// roster — only `enrolledStudentCount`, which the per-assignment "X / Y"
+/// submitted badge still needs.
 struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
+    let activeInstructorTab: String
     let metrics: [InstructorDashboardMetric]
     let sections: [CourseSectionRow]  // sections with their assignments
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
     let hasSections: Bool
     let hasUngrouped: Bool
+    let enrolledStudentCount: Int
+}
+
+/// Students tab (`GET /instructor/students`): the enrolled-students roster
+/// plus enrollment-mode controls.  The table self-updates by polling
+/// `GET /instructor/students-data`, which returns `[EnrolledStudentRow]`.
+struct InstructorStudentsContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeInstructorTab: String
     let enrolledStudents: [EnrolledStudentRow]
     let hasEnrolledStudents: Bool  // explicit flag — Leaf's array.isEmpty is unreliable
     let enrolledStudentCount: Int
@@ -47,12 +64,20 @@ struct AssignmentsContext: Encodable {
     let courseIsArchived: Bool
 }
 
+/// BrightSpace tab (`GET /instructor/brightspace`): grade export + sync status.
+struct InstructorBrightspaceContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeInstructorTab: String
+    let hasActiveCourse: Bool
+    let brightspaceSyncEnabled: Bool
+}
+
 struct InstructorDashboardMetric: Encodable {
     let label: String
     let value: String
 }
 
-struct EnrolledStudentRow: Encodable {
+struct EnrolledStudentRow: Content {
     let id: String
     let username: String
     let displayName: String
