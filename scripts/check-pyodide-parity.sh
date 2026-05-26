@@ -72,3 +72,22 @@ if [[ "$VENDORED_VERSION" != "$KERNEL_VERSION" ]]; then
 fi
 
 echo "pyodide-parity: OK — vendored and kernel-pinned Pyodide both at $VENDORED_VERSION"
+
+# Extras guard: every package in the extras manifest must be present in the lock.
+# A re-vendor that forgot scripts/add-pyodide-extras.py would silently drop
+# nb_mypy and disable editor type-checking — fail loudly instead.
+EXTRAS_MANIFEST="$ROOT_DIR/Tools/vendor/pyodide-extra-packages.json"
+LOCK_JSON="$ROOT_DIR/Public/pyodide/pyodide-lock.json"
+if [[ -f "$EXTRAS_MANIFEST" ]]; then
+  python3 - "$EXTRAS_MANIFEST" "$LOCK_JSON" <<'PY'
+import json, sys
+manifest = json.load(open(sys.argv[1]))["packages"]
+lock = json.load(open(sys.argv[2]))["packages"]
+missing = [p["name"] for p in manifest if p["name"] not in lock]
+if missing:
+    print(f"pyodide-parity: FAIL — extras missing from lock: {missing}", file=sys.stderr)
+    print("  Run scripts/add-pyodide-extras.py (or scripts/setup-vendor.sh) to restore them.", file=sys.stderr)
+    sys.exit(1)
+print(f"pyodide-parity: OK — {len(manifest)} extra package(s) present in lock")
+PY
+fi

@@ -1,0 +1,23 @@
+{
+  "_comment": "Pure-Python packages NOT in the upstream Pyodide distribution that Chickadee needs in the one canonical Pyodide (Public/pyodide). scripts/add-pyodide-extras.py downloads each pinned wheel, verifies its sha256, drops it into Public/pyodide, and injects a pyodide-lock.json entry so loadPyodide({packages:[...]}) can load it. Re-run by scripts/setup-vendor.sh after every re-vendor so a Pyodide bump never silently drops these. All wheels must be py3/py2.py3-none-any (ABI-independent) so they survive a Pyodide ABI bump unchanged.",
+  "packages": [
+    {
+      "name": "astor",
+      "version": "0.8.1",
+      "file_name": "astor-0.8.1-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/c3/88/97eef84f48fa04fbd6750e62dcceafba6c63c81b7ac1420856c8dcc0a3f9/astor-0.8.1-py2.py3-none-any.whl",
+      "sha256": "070a54e890cefb5b3739d19f30f5a5ec840ffc9c50ffa7d23cc9fc1a38ebbfc5",
+      "imports": ["astor"],
+      "depends": []
+    },
+    {
+      "name": "nb_mypy",
+      "version": "1.0.6",
+      "file_name": "nb_mypy-1.0.6-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/96/ea/32bdae4f0f60ce907c42c413364c117fa76ef18f083e210fa566010c840d/nb_mypy-1.0.6-py3-none-any.whl",
+      "sha256": "d3c0426d3c84b407adaaea961f268abdae353e08044ba420918a459191c7823f",
+      "imports": ["nb_mypy"],
+      "depends": ["mypy", "astor"]
+    }
+  ]
+}

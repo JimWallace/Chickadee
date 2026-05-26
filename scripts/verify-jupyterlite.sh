@@ -78,5 +78,39 @@ if "const originalList = (config || {}).federated_extensions || [];" not in conf
 if "config.federated_extensions = allExtensions;" not in config_utils:
     fail("config-utils.js is missing federated extension assignment fix")
 
+# Sha-cascade guard for the nb_mypy kernel patch (scripts/patch-pyodide-kernel.py).
+# piplite verifies the kernel wheel against the sha256 recorded in all.json, and
+# the build derives the pipliteUrls ?sha256= from all.json. If the patched wheel,
+# all.json, and pipliteUrls ever fall out of sync, piplite rejects the wheel and
+# the editor kernel never loads. Assert the chain here so that becomes a build
+# failure, not a (browser-only) surprise.
+import hashlib
+
+pypi_dir = remote_entry_dir / "pypi"
+kernel_wheels = sorted(pypi_dir.glob("pyodide_kernel-*.whl"))
+if not kernel_wheels:
+    fail(f"no pyodide_kernel-*.whl under {pypi_dir}")
+kernel_wheel = kernel_wheels[0]
+wheel_sha = hashlib.sha256(kernel_wheel.read_bytes()).hexdigest()
+
+all_json_path = pypi_dir / "all.json"
+all_index = json.loads(all_json_path.read_text())
+recorded_sha = None
+for pkg in all_index.values():
+    for files in pkg.get("releases", {}).values():
+        for entry in files:
+            if entry.get("filename") == kernel_wheel.name:
+                recorded_sha = entry.get("digests", {}).get("sha256")
+if recorded_sha != wheel_sha:
+    fail(
+        f"pyodide_kernel wheel sha256 {wheel_sha} != all.json digest {recorded_sha} — "
+        "piplite would reject the kernel wheel (run scripts/setup-jupyterlite.sh to re-patch)"
+    )
+
+all_json_sha = hashlib.sha256(all_json_path.read_bytes()).hexdigest()
+piplite_shas = [u.split("sha256=", 1)[1] for u in piplite_urls if "sha256=" in u]
+if all_json_sha not in piplite_shas:
+    fail(f"sha256(all.json)={all_json_sha} not referenced by pipliteUrls {piplite_shas}")
+
 print("JupyterLite verification passed.")
 PY

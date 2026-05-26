@@ -387,6 +387,21 @@ version — the guard against repeating #574.  jszip is fetched by
 every contributor and CI runner sees the same bytes without a build-time
 network fetch.
 
+**Extra packages + nb_mypy.** Pure-Python packages not in the upstream Pyodide
+distribution are declared in `Tools/vendor/pyodide-extra-packages.json` (pinned
+URL + sha256) and injected into the one lock by `scripts/add-pyodide-extras.py`
+(run from `setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're
+present so a re-vendor can't silently drop them.  This is how `nb_mypy` (+
+`astor`) gets into the editor.  nb_mypy type-checking is **on by default**:
+the kernel wheel's `__init__.py` is patched (deterministically, `ZIP_STORED`,
+by `scripts/patch-pyodide-kernel.py` from `setup-jupyterlite.sh`) to run
+`%load_ext nb_mypy; %nb_mypy On` at startup, wrapped in a fail-safe try/except
+so a missing/incompatible nb_mypy degrades to "no warnings", never a dead
+kernel.  Patching a bundled wheel means a sha cascade (wheel → `all.json`
+digest → `pipliteUrls` sha); `verify-jupyterlite.sh` asserts that chain is
+consistent so a mismatch (which would make piplite reject the kernel) is a
+build failure, not a browser surprise.
+
 ---
 
 ## Coding Conventions
