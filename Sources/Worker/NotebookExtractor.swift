@@ -4,6 +4,7 @@ import RunnerCore
 
 struct NotebookExtraction {
     let source: String
+    let introspectableSource: String
     let codeCellCount: Int
 }
 
@@ -52,6 +53,7 @@ struct NotebookExtractor {
 
         return NotebookExtraction(
             source: extracted.executableModule,
+            introspectableSource: extracted.introspectableSource,
             codeCellCount: extracted.codeCellCount
         )
     }

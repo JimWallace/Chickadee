@@ -201,6 +201,31 @@ def load_student_module():
     return modules.get(_loaded_student_order[0])
 
 
+def student_source() -> str:
+    # Introspectable student source (real module-level defs, side-effects
+    # quarantined into `if __name__`) for AST / source-property checks. The
+    # grading workspace writes it to a sidecar named by the
+    # `.chickadee_student_source` hint (both runners share one extractor);
+    # falls back to inspect.getsource on the loaded module.
+    hint = Path(".chickadee_student_source")
+    try:
+        if hint.exists():
+            name = Path(hint.read_text(encoding="utf-8").strip()).name
+            sidecar = Path(name)
+            if name and sidecar.exists():
+                return sidecar.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    try:
+        import inspect
+        module = load_student_module()
+        if module is not None:
+            return inspect.getsource(module)
+    except Exception:
+        pass
+    return ""
+
+
 def require_function(name: str, num_args: Optional[int] = None):
     modules = load_student_modules()
     for key in _loaded_student_order:

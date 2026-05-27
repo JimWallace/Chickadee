@@ -207,6 +207,26 @@ let testRuntimePy = """
         return modules.get(_loaded_student_order[0])
 
 
+    def student_source() -> str:
+        hint = Path(".chickadee_student_source")
+        try:
+            if hint.exists():
+                name = Path(hint.read_text(encoding="utf-8").strip()).name
+                sidecar = Path(name)
+                if name and sidecar.exists():
+                    return sidecar.read_text(encoding="utf-8")
+        except Exception:
+            pass
+        try:
+            import inspect
+            module = load_student_module()
+            if module is not None:
+                return inspect.getsource(module)
+        except Exception:
+            pass
+        return ""
+
+
     def require_function(name: str, num_args: Optional[int] = None):
         modules = load_student_modules()
         for key in _loaded_student_order:

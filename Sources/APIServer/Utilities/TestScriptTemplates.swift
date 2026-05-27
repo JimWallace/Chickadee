@@ -373,7 +373,6 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                 # when NotebookExtractor has quarantined them inside an
                 # `if __name__ == "__main__":` block.
                 import ast
-                import inspect
 
                 target_function     = "\(functionName)"    # "" to skip per-function checks
                 parameter_count     = None                # int — require exactly N parameters
@@ -384,8 +383,13 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                 min_module_asserts  = None                # int — require >= N module-level asserts (anywhere)
 
                 # ── AST walk ───────────────────────────────────────────────────────
+                # `student_source()` returns the introspectable source (real
+                # module-level defs) on both runners — see RunnerCore extraction +
+                # the .chickadee_student_source sidecar. inspect.getsource on the
+                # exec(compile())-wrapped module would not expose the defs.
                 try:
-                    source = inspect.getsource(student_module)
+                    from test_runtime import student_source
+                    source = student_source()
                     tree   = ast.parse(source)
                 except Exception as ex:
                     errored(f"Could not parse student source: {type(ex).__name__}: {ex}")
