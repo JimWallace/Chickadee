@@ -9,6 +9,12 @@ const runnerSource = await fs.readFile(
   'utf8',
 );
 
+// Shared producer/parser contract for the dependency-skip wording; the worker
+// side is pinned by Tests/CoreTests/DependencySkipMessageTests.swift.
+const skipFixture = JSON.parse(
+  await fs.readFile(path.resolve('Tests/Fixtures/dependency-skip-message.json'), 'utf8'),
+);
+
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -484,7 +490,9 @@ test('dependency failures are skipped without executing blocked scripts', async 
       {
         name: 'test_unit',
         status: 'fail',
-        shortResult: "Skipped: prerequisite 'test_build.py' did not pass",
+        // Pinned to the shared fixture so the browser producer can't drift from
+        // the worker producer (skippedPrerequisiteMessage) or the parsers.
+        shortResult: skipFixture.message,
       },
     ],
   );

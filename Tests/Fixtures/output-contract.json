@@ -48,6 +48,30 @@
       "exitCode": 1,
       "status": "fail",
       "native": { "shortResult": "failed", "longResult": null }
+    },
+    {
+      "name": "partial-credit score field present (pass)",
+      "stdout": "{\"score\":0.75,\"shortResult\":\"3/4 cases passed\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "3/4 cases passed", "longResult": null }
+    },
+    {
+      "name": "JSON footer followed by trailing blank lines (last-non-empty-line robustness)",
+      "stdout": "partial output\n{\"shortResult\":\"t: 2 of 3\",\"status\":\"fail\"}\n\n  \n",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "t: 2 of 3", "longResult": "stdout:\npartial output" }
+    },
+    {
+      "name": "pass with human stdout then JSON footer (footer stripped on the pass path)",
+      "stdout": "Nice work!\n{\"shortResult\":\"t: passed\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "t: passed", "longResult": "stdout:\nNice work!" }
     }
   ]
 }

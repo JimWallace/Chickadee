@@ -555,7 +555,7 @@ extension WorkerDaemon {
                         testClass: nil,
                         tier: entry.tier,
                         status: .fail,
-                        shortResult: "Skipped: prerequisite '\(blockedBy)' did not pass",
+                        shortResult: skippedPrerequisiteMessage(prerequisite: blockedBy),
                         longResult: nil,
                         executionTimeMs: 0,
                         memoryUsageBytes: nil,
