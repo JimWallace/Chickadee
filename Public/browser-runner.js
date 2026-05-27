@@ -1129,6 +1129,10 @@ for _module_name in _tr.student_module_names_in_load_order():
             SITECUSTOMIZE_PY,
             runAndSubmit,
             runScripts,
+            // Exposed so the cross-runner dispatch contract test can assert this
+            // stays in sync with Sources/Worker/ScriptInvocation.swift.
+            classifyScript,
+            scriptExtension,
             extractNotebook,
             runPyScript,
             buildCollection,
