@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.300] - 2026-05-27
+
+### Changed
+
+- **Instructor UI cleanup.** Renamed the instructor "BrightSpace" tab to "LEARN" (page title and heading too) and dropped the "grade sync is not configured" notice, leaving just the CSV export. The navbar instructor link now shows the active course code instead of the word "Instructor". Removed the open-date help text on the create/edit assignment pages.
+
+
 ## [0.4.299] - 2026-05-27
 
 ### Added
