@@ -1,5 +1,6 @@
 {
   "_comment": "Pure-Python packages NOT in the upstream Pyodide distribution that Chickadee needs in the one canonical Pyodide (Public/pyodide). scripts/add-pyodide-extras.py downloads each pinned wheel, verifies its sha256, drops it into Public/pyodide, and injects a pyodide-lock.json entry so loadPyodide({packages:[...]}) can load it. Re-run by scripts/setup-vendor.sh after every re-vendor so a Pyodide bump never silently drops these. All wheels must be py3/py2.py3-none-any (ABI-independent) so they survive a Pyodide ABI bump unchanged.",
+  "_mypy_deps_note": "The upstream Pyodide 'mypy' package lists depends:[] in pyodide-lock.json, but mypy needs typing_extensions and mypy_extensions at runtime (mypy/build.py, mypy/errorcodes.py). typing-extensions is already in the base lock; mypy_extensions is not, so it is vendored here. Both are pulled in via nb_mypy's depends so they load whenever the editor kernel loads nb_mypy. Without them mypy.api.run() raises ModuleNotFoundError and the kernel's nb_mypy type checker errors.",
   "packages": [
     {
       "name": "astor",
@@ -11,13 +12,22 @@
       "depends": []
     },
     {
+      "name": "mypy_extensions",
+      "version": "1.1.0",
+      "file_name": "mypy_extensions-1.1.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl",
+      "sha256": "1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505",
+      "imports": ["mypy_extensions"],
+      "depends": []
+    },
+    {
       "name": "nb_mypy",
       "version": "1.0.6",
       "file_name": "nb_mypy-1.0.6-py3-none-any.whl",
       "url": "https://files.pythonhosted.org/packages/96/ea/32bdae4f0f60ce907c42c413364c117fa76ef18f083e210fa566010c840d/nb_mypy-1.0.6-py3-none-any.whl",
       "sha256": "d3c0426d3c84b407adaaea961f268abdae353e08044ba420918a459191c7823f",
       "imports": ["nb_mypy"],
-      "depends": ["mypy", "astor"]
+      "depends": ["mypy", "astor", "typing_extensions", "mypy_extensions"]
     }
   ]
 }
