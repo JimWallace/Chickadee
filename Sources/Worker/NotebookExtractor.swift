@@ -1,6 +1,6 @@
 import Core
 import Foundation
-import NotebookExtractionCore
+import RunnerCore
 
 struct NotebookExtraction {
     let source: String
@@ -56,21 +56,21 @@ struct NotebookExtractor {
         )
     }
 
-    // The per-cell transforms now live in NotebookExtractionCore (the single,
-    // wasm-ready source of truth shared with the browser runner). These thin
-    // wrappers are kept so existing call sites and tests stay unchanged — they
-    // must qualify the core functions to avoid recursing into themselves.
+    // The per-cell transforms now live in RunnerCore (the single, wasm-ready
+    // source of truth shared with the browser runner). These thin wrappers are
+    // kept so existing call sites and tests stay unchanged — they must qualify
+    // the core functions to avoid recursing into themselves.
 
     func sanitizeCellForModule(_ source: String) -> String {
-        NotebookExtractionCore.sanitizeCellForModule(source)
+        RunnerCore.sanitizeCellForModule(source)
     }
 
     func wrapCellForResilientLoad(_ body: String, label: String) -> String {
-        NotebookExtractionCore.wrapCellForResilientLoad(body, label: label)
+        RunnerCore.wrapCellForResilientLoad(body, label: label)
     }
 
     func pythonStringLiteral(_ s: String) -> String {
-        NotebookExtractionCore.pythonStringLiteral(s)
+        RunnerCore.pythonStringLiteral(s)
     }
 }
 

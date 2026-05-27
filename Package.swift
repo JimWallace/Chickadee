@@ -25,14 +25,16 @@ let package = Package(
         .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.63.0"),
     ],
     targets: [
-        // MARK: - Notebook extraction core
+        // MARK: - Runner core
         //
         // Dependency-free (Swift stdlib only) so it can compile to wasm32 and be
         // shared by the native worker AND the browser runner via a JS bridge.
-        // Single source of truth for notebook → Python extraction.
+        // The substrate-free home for grading logic shared across runners —
+        // currently notebook → Python extraction; in time, script dispatch,
+        // output interpretation, and the shared suite-execution orchestration.
         .target(
-            name: "NotebookExtractionCore",
-            path: "Sources/NotebookExtractionCore",
+            name: "RunnerCore",
+            path: "Sources/RunnerCore",
             swiftSettings: strictWarnings
         ),
 
@@ -91,7 +93,7 @@ let package = Package(
             name: "chickadee-runner",
             dependencies: [
                 .target(name: "Core"),
-                .target(name: "NotebookExtractionCore"),
+                .target(name: "RunnerCore"),
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
@@ -126,7 +128,7 @@ let package = Package(
             name: "WorkerTests",
             dependencies: [
                 .target(name: "chickadee-runner"),
-                .target(name: "NotebookExtractionCore"),
+                .target(name: "RunnerCore"),
             ],
             path: "Tests/WorkerTests",
             swiftSettings: strictWarnings

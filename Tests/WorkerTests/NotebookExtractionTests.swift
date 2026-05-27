@@ -1,13 +1,13 @@
 import Testing
 
-@testable import NotebookExtractionCore
+@testable import RunnerCore
 
-// Direct tests for the shared, dependency-free extraction core. The native
-// worker (NotebookExtractor) and, in a follow-up, the browser runner both call
-// this, so its behaviour is the single source of truth. The existing
-// NotebookExtractorTests additionally exercise this logic through the worker's
-// thin delegations, guarding against any drift in the port.
-@Suite struct NotebookExtractionCoreTests {
+// Direct tests for RunnerCore's notebook extraction (the shared, dependency-free
+// transform). The native worker (NotebookExtractor) and, in a follow-up, the
+// browser runner both call this, so its behaviour is the single source of truth.
+// The existing NotebookExtractorTests additionally exercise this logic through
+// the worker's thin delegations, guarding against any drift in the port.
+@Suite struct NotebookExtractionTests {
 
     private func code(_ src: String) -> NotebookCell { NotebookCell(cellType: "code", source: src) }
 

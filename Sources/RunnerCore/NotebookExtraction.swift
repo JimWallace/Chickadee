@@ -1,12 +1,12 @@
-// NotebookExtractionCore — the single source of truth for turning a Jupyter
-// notebook's code cells into runnable Python.
+// RunnerCore notebook extraction — the single source of truth for turning a
+// Jupyter notebook's code cells into runnable Python.
 //
-// This module is deliberately dependency-free (Swift stdlib only — no
-// Foundation, no Process, no filesystem) so it can compile to `wasm32` and run
-// inside the browser runner via a thin JS bridge, exactly as the native worker
-// runs it today. Keeping ONE implementation here is what stops the worker and
-// browser extractors from drifting (the class of bug behind the HLTH-230
-// validation failures).
+// RunnerCore is deliberately dependency-free (Swift stdlib only — no Foundation,
+// no Process, no filesystem) so it can compile to `wasm32` and run inside the
+// browser runner via a thin JS bridge, exactly as the native worker runs it
+// today. Keeping ONE implementation here is what stops the worker and browser
+// extractors from drifting (the class of bug behind the HLTH-230 validation
+// failures).
 //
 // Each code cell produces TWO views, computed from the same sanitized body:
 //   • executableModule    — the resilient `exec(compile(...))`-per-cell form
