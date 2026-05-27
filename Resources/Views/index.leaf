@@ -62,7 +62,9 @@
                     #endif">#(setup.status)</span>
             </td>
             <td class="due-col">
-                #if(setup.hasActiveExtension):
+                #if(setup.opensAtText):
+                    <span title="This assignment opens automatically at this time.">Opens #(setup.opensAtText)</span>
+                #elseif(setup.hasActiveExtension):
                     <span title="Personal deadline extension granted by your instructor.">#(setup.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">(extension)</span></span>
                 #elseif(setup.dueAt):
                     #(setup.dueAt)
@@ -163,7 +165,9 @@
                     #endif">#(setup.status)</span>
             </td>
             <td class="due-col">
-                #if(setup.hasActiveExtension):
+                #if(setup.opensAtText):
+                    <span title="This assignment opens automatically at this time.">Opens #(setup.opensAtText)</span>
+                #elseif(setup.hasActiveExtension):
                     <span title="Personal deadline extension granted by your instructor.">#(setup.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">(extension)</span></span>
                 #elseif(setup.dueAt):
                     #(setup.dueAt)
@@ -264,7 +268,9 @@
                     #endif">#(setup.status)</span>
             </td>
             <td class="due-col">
-                #if(setup.hasActiveExtension):
+                #if(setup.opensAtText):
+                    <span title="This assignment opens automatically at this time.">Opens #(setup.opensAtText)</span>
+                #elseif(setup.hasActiveExtension):
                     <span title="Personal deadline extension granted by your instructor.">#(setup.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">(extension)</span></span>
                 #elseif(setup.dueAt):
                     #(setup.dueAt)

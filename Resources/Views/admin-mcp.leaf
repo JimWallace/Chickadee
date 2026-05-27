@@ -148,21 +148,9 @@ MCP
         #endif
         </tbody>
     </table>
-    #else:
-    <h2 style="margin-top:0">MCP agents</h2>
-    <p style="color:var(--gray-600);font-size:.85rem;max-width:70ch">
-        Instructors authorize agents through single sign-on (the browser OAuth flow) — no service
-        accounts are created here. Each agent acts on the authorizing instructor's behalf, and its
-        actions are recorded in the <a href="/admin/audit">audit log</a> as
-        <code>&lt;username&gt;-MCP</code>, separate from the instructor's own.
-    </p>
     #endif
 
     <h2 style="margin-top:2rem">Connected agents</h2>
-    <p style="color:var(--gray-600);font-size:.85rem;max-width:70ch">
-        Browser-authorized OAuth grants — an instructor approved an agent to act on their behalf.
-        Revoking stops the agent immediately; any access token it holds lapses within minutes.
-    </p>
     <table class="results-table sortable-table">
         <thead>
             <tr>
@@ -198,7 +186,7 @@ MCP
             </tr>
         #endfor
         #if(grants.isEmpty):
-            <tr><td colspan="7" style="color:var(--gray-600)">No connected agents.</td></tr>
+            <tr><td colspan="7" style="color:var(--gray-600);text-align:center;padding:1rem">No agents have connected yet.</td></tr>
         #endif
         </tbody>
     </table>

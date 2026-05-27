@@ -41,7 +41,6 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
         admin.post("courses", ":courseID", "copy", use: copyCourse)
         admin.post("courses", ":courseID", "delete", use: deleteCourse)
-        admin.post("courses", ":courseID", "purge-submissions", use: purgeCourseSubmissions)
         admin.post("courses", ":courseID", "enrollment-mode", use: setEnrollmentMode)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
@@ -63,7 +62,6 @@ struct AdminRoutes: RouteCollection {
     func dashboard(req: Request) async throws -> View {
         let workerRows = try await makeWorkerRows(req: req)
         let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
-        let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
 
         // Course management data — all three queries are independent so run in parallel.
         async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
@@ -71,9 +69,15 @@ struct AdminRoutes: RouteCollection {
         async let assignmentsFetch = assignmentCountsByCourse(on: req.db)
         let (allCourses, enrollmentCounts, assignmentCounts) =
             try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
+        // Submission counts need the (active) course IDs, so they run after the
+        // course fetch resolves.
+        let activeCourseIDs = allCourses.filter { !$0.isArchived }.compactMap { $0.id }
+        let submissionCounts = try await SubmissionRetentionService.submissionCountsByCourse(
+            courseIDs: activeCourseIDs, on: req.db)
         let bsSyncEnabled = req.application.brightSpaceClient != nil
+        // Archived courses move out of Overview and live on the Retention tab.
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
-            guard let id = course.id else { return nil }
+            guard let id = course.id, !course.isArchived else { return nil }
             return AdminCourseRow(
                 id: id.uuidString,
                 code: course.code,
@@ -82,6 +86,7 @@ struct AdminRoutes: RouteCollection {
                 enrollmentMode: course.enrollmentMode.rawValue,
                 enrollmentCount: enrollmentCounts[id] ?? 0,
                 assignmentCount: assignmentCounts[id] ?? 0,
+                submissionCount: submissionCounts[id] ?? 0,
                 createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
                 brightspaceOrgUnitID: course.brightspaceOrgUnitID,
                 brightspaceSyncEnabled: bsSyncEnabled
@@ -93,7 +98,6 @@ struct AdminRoutes: RouteCollection {
             activeAdminTab: "overview",
             workers: workerRows,
             workerSecret: effectiveSecret,
-            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
             courses: courseRows,
             version: ChickadeeVersion.current
         )

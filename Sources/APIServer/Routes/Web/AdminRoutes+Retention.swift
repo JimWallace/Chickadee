@@ -1,13 +1,15 @@
 // APIServer/Routes/Web/AdminRoutes+Retention.swift
 //
-// Admin "Retention" tab: a report-first view of the submission-retention
-// policy (student submissions purged one year after a course is archived,
-// per FIPPA / UWaterloo TL55).  Lists every archived course with its
-// archival date, the date its submissions become purgeable, and a manual
-// Purge action that only the admin can trigger and only once the retention
-// window has elapsed.  Nothing here deletes automatically.
+// Admin "Retention" tab: a report-first view of archived courses (FIPPA /
+// UWaterloo TL55 retention — student submissions are personal information
+// kept one year after the end of term, signalled here by archiving).  Lists
+// every archived course with its archival date and the date it becomes
+// eligible for permanent deletion.  Each row can be Restored (unarchived) at
+// any time; once the retention window has elapsed it can also be permanently
+// Deleted.  Nothing here deletes automatically.
 //
-// Routes are registered in AdminRoutes.boot().
+// The Restore and Delete actions reuse the course endpoints registered in
+// AdminRoutes.boot() (`/archive` toggle and `/delete`).
 
 import Core
 import Fluent
@@ -38,14 +40,15 @@ extension AdminRoutes {
 
         let now = Date()
         let df = waterlooDateTimeFormatter()
+        let iso = ISO8601DateFormatter()
 
-        // Build (course, status) pairs so we can sort by purgeability before
-        // mapping to the formatted row shape.
+        // Build (course, status) pairs so we can sort by delete-eligibility
+        // before mapping to the formatted row shape.
         struct Entry {
             let course: APICourse
             let archivedAt: Date?
             let eligibleAt: Date?
-            let isPurgeable: Bool
+            let isDeletable: Bool
             let count: Int
         }
         let entries: [Entry] = archivedCourses.compactMap { course in
@@ -54,17 +57,17 @@ extension AdminRoutes {
             guard let archivedAt = course.archivedAt else {
                 return Entry(
                     course: course, archivedAt: nil, eligibleAt: nil,
-                    isPurgeable: false, count: count)
+                    isDeletable: false, count: count)
             }
             let eligibleAt = SubmissionRetentionService.purgeEligibleDate(
                 archivedAt: archivedAt, retentionDays: retentionDays)
             return Entry(
                 course: course, archivedAt: archivedAt, eligibleAt: eligibleAt,
-                isPurgeable: now >= eligibleAt, count: count)
+                isDeletable: now >= eligibleAt, count: count)
         }
         .sorted { lhs, rhs in
-            // Purgeable courses first, then soonest-eligible, then by code.
-            if lhs.isPurgeable != rhs.isPurgeable { return lhs.isPurgeable }
+            // Delete-eligible courses first, then soonest-eligible, then by code.
+            if lhs.isDeletable != rhs.isDeletable { return lhs.isDeletable }
             switch (lhs.eligibleAt, rhs.eligibleAt) {
             case (let l?, let r?) where l != r: return l < r
             case (.some, .none): return true
@@ -80,9 +83,11 @@ extension AdminRoutes {
                 code: entry.course.code,
                 name: entry.course.name,
                 archivedAt: entry.archivedAt.map { df.string(from: $0) } ?? "—",
+                archivedAtISO: entry.archivedAt.map { iso.string(from: $0) } ?? "",
                 purgeEligibleAt: entry.eligibleAt.map { df.string(from: $0) } ?? "—",
+                purgeEligibleAtISO: entry.eligibleAt.map { iso.string(from: $0) } ?? "",
                 submissionCount: entry.count,
-                isPurgeable: entry.isPurgeable
+                isDeletable: entry.isDeletable
             )
         }
 
@@ -91,64 +96,15 @@ extension AdminRoutes {
             activeAdminTab: "retention",
             retentionDays: retentionDays,
             rows: rows,
-            purgeableCount: rows.filter { $0.isPurgeable }.count,
+            deletableCount: rows.filter { $0.isDeletable }.count,
             flashSuccess: flash.ok,
             flashError: flash.error
         )
         return try await req.view.render("admin-retention", ctx)
     }
-
-    // MARK: - POST /admin/courses/:courseID/purge-submissions
-
-    @Sendable
-    func purgeCourseSubmissions(req: Request) async throws -> Response {
-        guard
-            let idString = req.parameters.get("courseID"),
-            let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db)
-        else {
-            throw Abort(.notFound)
-        }
-
-        let retentionDays = req.application.appConfig.diagnostics.submissionRetentionDays
-
-        // Server-side eligibility guard. Never trust the page that posted
-        // here: a purge is only honoured for an archived course whose
-        // retention window has actually elapsed.
-        guard course.isArchived, let archivedAt = course.archivedAt else {
-            return req.redirect(
-                to: retentionRedirect(error: "\(course.code) is not archived — cannot purge."))
-        }
-        let eligibleAt = SubmissionRetentionService.purgeEligibleDate(
-            archivedAt: archivedAt, retentionDays: retentionDays)
-        guard Date() >= eligibleAt else {
-            return req.redirect(
-                to: retentionRedirect(
-                    error: "\(course.code) is not yet past its retention window."))
-        }
-
-        let deleted = try await SubmissionRetentionService.purgeSubmissions(
-            forCourseID: courseID, on: req.db)
-        req.logger.info(
-            "Admin purged \(deleted) submission(s) for archived course \(course.code) (\(idString)) under retention policy"
-        )
-        await AuditLogger.record(
-            action: .submissionsPurged,
-            targetType: .course,
-            targetID: idString,
-            metadata: [
-                "course_code": course.code,
-                "submissions_deleted": String(deleted),
-                "retention_days": String(retentionDays),
-            ],
-            on: req
-        )
-        return req.redirect(
-            to: retentionRedirect(ok: "Purged \(deleted) submission(s) for \(course.code)."))
-    }
 }
 
-private func retentionRedirect(ok: String? = nil, error: String? = nil) -> String {
+func retentionRedirect(ok: String? = nil, error: String? = nil) -> String {
     var pairs: [String] = []
     if let okValue = ok?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
         pairs.append("ok=\(okValue)")

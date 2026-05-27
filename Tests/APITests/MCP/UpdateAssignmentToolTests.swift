@@ -126,6 +126,55 @@ import Vapor
         }
     }
 
+    @Test func setsAndClearsOpenDate() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            let setOutput = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, startsAt: "2030-04-15T09:00:00Z"),
+                context(app))
+            #expect(setOutput.startsAt != nil)
+            let afterSet = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(afterSet?.startsAt != nil)
+
+            _ = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, startsAt: ""),
+                context(app))
+            let afterClear = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(afterClear?.startsAt == nil)
+        }
+    }
+
+    @Test func openingClearsPendingOpenDate() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app, isOpen: false)
+            // Schedule a future open, then explicitly open now — the open date
+            // must be consumed so the student gate and auto-open sweep agree.
+            _ = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, startsAt: "2030-04-15T09:00:00Z",
+                    isOpen: true),
+                context(app))
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.isOpen == true)
+            #expect(reloaded?.startsAt == nil)
+        }
+    }
+
+    @Test func rejectsInvalidOpenDate() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateAssignmentTool().execute(
+                    UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, startsAt: "soon"),
+                    context(app))
+            }
+        }
+    }
+
     @Test func appliesTitleDueAndOpenTogether() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

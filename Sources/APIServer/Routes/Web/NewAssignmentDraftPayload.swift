@@ -19,6 +19,7 @@ import Vapor
 struct NewAssignmentDraftPayload {
     let assignmentName: String
     let dueAt: String
+    let startsAt: String
     let sectionIDRaw: String
     let draftIDRaw: String?
     let action: String

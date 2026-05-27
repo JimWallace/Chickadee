@@ -3,16 +3,15 @@
 #if(currentUser.activeCourse):#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)#else:Assignments#endif
 #endexport
 #export("content"):
+<nav class="instructor-tabs" aria-label="Instructor sections">
+    <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
+    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>BrightSpace</a>
+</nav>
 #if(currentUser.activeCourse):
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
-    <h1 style="margin:0">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
-    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
-</div>
+<h1 style="margin:0 0 1.25rem">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
 #else:
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
-    <h1 style="margin:0">Assignments</h1>
-    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
-</div>
+<h1 style="margin:0 0 1.25rem">Assignments</h1>
 #endif
 <section class="instructor-diagnostics">
     #extend("_diagnostic-cards")
@@ -498,91 +497,6 @@
 
 #endif
 
-<!-- ── Enrolled students ──────────────────────────────────────────────── -->
-<div style="margin-top:2.5rem">
-    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-        <h2 style="font-size:1.05rem;font-weight:600;margin:0">Enrolled students (#(enrolledStudentCount))</h2>
-        #if(currentUser.activeCourse):
-        #if(!courseIsArchived):
-        <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" style="margin:0">
-            #csrfFormField()
-            <label class="form-label" style="font-size:.875rem;margin:0">
-                <select name="enrollmentMode" class="form-input"
-                        style="display:block;font-size:.875rem"
-                        onchange="this.form.submit()">
-                    <option value="open"   #if(courseEnrollmentMode == "open"):selected#endif>Open enrolment</option>
-                    <option value="auto"   #if(courseEnrollmentMode == "auto"):selected#endif>Auto enrolment</option>
-                    <option value="closed" #if(courseEnrollmentMode == "closed"):selected#endif>Closed enrolment</option>
-                </select>
-            </label>
-        </form>
-        <a class="btn action-btn" href="/instructor/enroll-csv">Enrol from CSV</a>
-        #endif
-        #endif
-        <input id="enrolled-filter" class="form-input" type="search" autocomplete="off"
-               placeholder="Filter by name or username…"
-               style="width:220px;flex:1 1 220px;min-width:220px" aria-label="Filter enrolled students"
-               readonly onfocus="this.removeAttribute('readonly')">
-    </div>
-    #if(hasEnrolledStudents):
-    <table class="results-table" id="enrolled-students-table">
-        <thead>
-            <tr>
-                <th class="sortable" data-col="0" style="cursor:pointer;user-select:none">Name <span class="sort-icon">⇕</span></th>
-                <th class="sortable" data-col="1" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇕</span></th>
-                <th class="sortable" data-col="2" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇕</span></th>
-                <th class="sortable" data-col="3" style="cursor:pointer;user-select:none">Last Seen <span class="sort-icon">⇕</span></th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        #for(student in enrolledStudents):
-            <tr class="student-row-link#if(student.isPending): student-row-pending#endif"
-                #if(!student.isPending):data-href="#(student.submissionsURL)"#endif>
-                <td>
-                    #if(student.isPending):
-                    <strong style="color:var(--gray-500)">#(student.displayName)</strong>
-                    <span style="font-size:.72rem;color:var(--gray-500);margin-left:.4rem">awaiting first login</span>
-                    #else:
-                    <a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a>
-                    #endif
-                </td>
-                <td>
-                    #if(student.isPending):
-                    <code style="color:var(--gray-500)">#(student.username)</code>
-                    #else:
-                    <a href="#(student.submissionsURL)"><code>#(student.username)</code></a>
-                    #endif
-                </td>
-                <td>#(student.role)</td>
-                <td class="js-relative-time"
-                    #if(student.lastSeenAtISO):data-iso="#(student.lastSeenAtISO)"#endif>
-                    #(student.lastSeenAtText)
-                </td>
-                <td>
-                    #if(!courseIsArchived):
-                    #if(currentUser.activeCourse):
-                    <form method="post" action="#(student.unenrollURL)"
-                          style="display:inline;margin:0">
-                        #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit"
-                                title="Remove from course" aria-label="Remove from course" style="padding:.25rem .35rem"
-                                onclick="return confirm('Remove @#(student.username) from this course?')">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                        </button>
-                    </form>
-                    #endif
-                    #endif
-                </td>
-            </tr>
-        #endfor
-        </tbody>
-    </table>
-    #else:
-    <p class="empty">No students enrolled yet.</p>
-    #endif
-</div>
-
 <style>
 .instructor-diagnostics {
     margin-bottom: 1.25rem;
@@ -630,17 +544,6 @@
 .status-form {
     display: inline-flex;
     align-items: center;
-}
-.student-row-link {
-    cursor: pointer;
-}
-.student-row-link td a {
-    color: inherit;
-    text-decoration: none;
-}
-.student-row-link:hover td a strong,
-.student-row-link:hover td a code {
-    text-decoration: underline;
 }
 tr.assignment-draggable.dragging {
     opacity: .55;
@@ -1002,92 +905,6 @@ tr.assignment-draggable td {
         if (!warning) return;
         input.addEventListener('change', function () { checkUWDates(input.value, warning); });
     });
-
-    // ── Enrolled students table sort ──────────────────────────────────────────
-    var enrolledTable = document.getElementById('enrolled-students-table');
-    if (enrolledTable) {
-        var sortCol = 3;
-        var sortAsc = false;
-        enrolledTable.querySelectorAll('tbody tr.student-row-link').forEach(function (row) {
-            row.addEventListener('click', function (event) {
-                var target = event.target;
-                if (target instanceof Element && target.closest('a')) return;
-                var href = row.getAttribute('data-href');
-                if (href) window.location.href = href;
-            });
-        });
-        enrolledTable.querySelectorAll('th.sortable').forEach(function (th) {
-            th.addEventListener('click', function () {
-                var col = parseInt(th.getAttribute('data-col'), 10);
-                if (sortCol === col) {
-                    sortAsc = !sortAsc;
-                } else {
-                    sortCol = col;
-                    sortAsc = true;
-                }
-                enrolledTable.querySelectorAll('th.sortable .sort-icon').forEach(function (icon) {
-                    icon.textContent = '⇕';
-                });
-                th.querySelector('.sort-icon').textContent = sortAsc ? '↑' : '↓';
-                var tbody = enrolledTable.querySelector('tbody');
-                var rows = Array.from(tbody.querySelectorAll('tr'));
-                rows.sort(function (a, b) {
-                    var result;
-                    if (col === 3) {
-                        var aISO = a.cells[col] ? a.cells[col].getAttribute('data-iso') : '';
-                        var bISO = b.cells[col] ? b.cells[col].getAttribute('data-iso') : '';
-                        var aDate = aISO ? new Date(aISO).getTime() : 0;
-                        var bDate = bISO ? new Date(bISO).getTime() : 0;
-                        result = aDate - bDate;
-                    } else {
-                        var aText = (a.cells[col] ? a.cells[col].textContent : '').trim().toLowerCase();
-                        var bText = (b.cells[col] ? b.cells[col].textContent : '').trim().toLowerCase();
-                        result = aText.localeCompare(bText);
-                    }
-                    if (result === 0) {
-                        var aUsername = (a.cells[1] ? a.cells[1].textContent : '').trim().toLowerCase();
-                        var bUsername = (b.cells[1] ? b.cells[1].textContent : '').trim().toLowerCase();
-                        result = aUsername.localeCompare(bUsername);
-                    }
-                    return sortAsc ? result : -result;
-                });
-                rows.forEach(function (row) { tbody.appendChild(row); });
-            });
-        });
-
-        var defaultEnrolledSortHeader = enrolledTable.querySelector('th.sortable[data-col="3"]');
-        if (defaultEnrolledSortHeader) {
-            defaultEnrolledSortHeader.querySelector('.sort-icon').textContent = '↓';
-            var defaultEnrolledBody = enrolledTable.querySelector('tbody');
-            var defaultEnrolledRows = Array.from(defaultEnrolledBody.querySelectorAll('tr'));
-            defaultEnrolledRows.sort(function (a, b) {
-                var aISO = a.cells[3] ? a.cells[3].getAttribute('data-iso') : '';
-                var bISO = b.cells[3] ? b.cells[3].getAttribute('data-iso') : '';
-                var aDate = aISO ? new Date(aISO).getTime() : 0;
-                var bDate = bISO ? new Date(bISO).getTime() : 0;
-                var result = aDate - bDate;
-                if (result === 0) {
-                    var aUsername = (a.cells[1] ? a.cells[1].textContent : '').trim().toLowerCase();
-                    var bUsername = (b.cells[1] ? b.cells[1].textContent : '').trim().toLowerCase();
-                    result = aUsername.localeCompare(bUsername);
-                }
-                return sortAsc ? result : -result;
-            });
-            defaultEnrolledRows.forEach(function (row) { defaultEnrolledBody.appendChild(row); });
-        }
-
-        var enrolledFilter = document.getElementById('enrolled-filter');
-        if (enrolledFilter) {
-            var enrolledTbody = enrolledTable.querySelector('tbody');
-            enrolledFilter.addEventListener('input', function () {
-                var query = enrolledFilter.value.trim().toLowerCase();
-                Array.from(enrolledTbody.querySelectorAll('tr')).forEach(function (row) {
-                    if (!query) { row.hidden = false; return; }
-                    row.hidden = !(row.textContent || '').toLowerCase().includes(query);
-                });
-            });
-        }
-    }
 })();
 
 function copyAssignmentURL(btn, vanityPath) {

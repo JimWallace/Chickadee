@@ -39,8 +39,10 @@ struct AdminCourseRow: Encodable {
     let enrollmentMode: String
     let enrollmentCount: Int
     let assignmentCount: Int
+    let submissionCount: Int
     let createdAt: String
     var brightspaceOrgUnitID: String?
+    var brightspaceOrgUnitName: String?
     var brightspaceSyncEnabled: Bool
 }
 
@@ -128,7 +130,6 @@ struct AdminContext: Encodable {
     let activeAdminTab: String
     let workers: [AdminWorkerRow]
     let workerSecret: String
-    let localRunnerAutoStartEnabled: Bool
     let courses: [AdminCourseRow]
     let version: String
 }
@@ -287,12 +288,17 @@ struct AdminRetentionRow: Encodable {
     let name: String
     /// Formatted archival timestamp, or "—" if unknown (legacy rows).
     let archivedAt: String
+    /// ISO archival timestamp for client-side date sorting ("" if unknown).
+    let archivedAtISO: String
     /// Formatted `archivedAt + retentionDays`, or "—" if archival is unknown.
     let purgeEligibleAt: String
+    /// ISO purge-eligible timestamp for client-side date sorting ("" if unknown).
+    let purgeEligibleAtISO: String
     let submissionCount: Int
-    /// True once the retention window has elapsed — the Purge button is only
-    /// rendered (and the server only honours a purge) when this is true.
-    let isPurgeable: Bool
+    /// True once the retention window has elapsed — the Delete button is only
+    /// rendered (and the server only honours a delete) when this is true.
+    /// Restore (unarchive) is offered regardless of this flag.
+    let isDeletable: Bool
 }
 
 struct AdminRetentionContext: Encodable {
@@ -300,8 +306,9 @@ struct AdminRetentionContext: Encodable {
     let activeAdminTab: String
     let retentionDays: Int
     let rows: [AdminRetentionRow]
-    /// How many of `rows` are currently purgeable (drives the summary line).
-    let purgeableCount: Int
+    /// How many of `rows` are currently past the retention window and eligible
+    /// for permanent deletion (drives the summary line).
+    let deletableCount: Int
     let flashSuccess: String?
     let flashError: String?
 }

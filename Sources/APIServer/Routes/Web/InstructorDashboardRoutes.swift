@@ -35,6 +35,15 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         let r = routes.grouped("instructor")
         r.get(use: list)
+        // Students roster tab + its self-updating poll endpoint.
+        r.get("students", use: studentsPage)
+        r.get("students-data", use: studentsData)
+        // BrightSpace tab: status, grade-item mapping, sync log, manual actions.
+        r.get("brightspace", use: brightspacePage)
+        r.post("brightspace", "test", use: brightspaceTestConnection)
+        r.get("brightspace", "grade-objects", use: brightspaceGradeObjects)
+        r.post("brightspace", "sync-now", use: brightspaceSyncNow)
+        r.post("brightspace", "retry-failed", use: brightspaceRetryFailed)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
@@ -50,6 +59,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.get(":assignmentID", "validate", use: validatePage)
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
+        r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
         r.post(":assignmentID", "close", use: closeAssignment)
@@ -146,28 +156,15 @@ struct InstructorDashboardRoutes: RouteCollection {
             sectionByPublicID: sectionByPublicID
         )
 
-        // Fetch enrollment mode and archived state for the active course.
-        var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
-        var courseIsArchived = false
-        if let activeCourseUUID = courseState.activeCourseUUID,
-            let activeCourseModel = try await APICourse.find(activeCourseUUID, on: req.db)
-        {
-            courseEnrollmentMode = activeCourseModel.enrollmentMode.rawValue
-            courseIsArchived = activeCourseModel.isArchived
-        }
-
         let ctx = AssignmentsContext(
             currentUser: userContext,
+            activeInstructorTab: "overview",
             metrics: roster.metrics,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,
             hasUngrouped: !ungroupedRows.isEmpty,
-            enrolledStudents: roster.enrolledStudents,
-            hasEnrolledStudents: !roster.enrolledStudents.isEmpty,
-            enrolledStudentCount: roster.enrolledStudentCount,
-            courseEnrollmentMode: courseEnrollmentMode,
-            courseIsArchived: courseIsArchived
+            enrolledStudentCount: roster.enrolledStudentCount
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
@@ -313,11 +310,19 @@ struct InstructorDashboardRoutes: RouteCollection {
         guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
         }
-        struct BSBody: Content { var gradeObjectID: String? }
+        struct BSBody: Content {
+            var gradeObjectID: String?
+            /// "brightspace" → return to the BrightSpace tab (mapping table);
+            /// otherwise the assignment edit page (the legacy caller).
+            var returnTo: String?
+        }
         let body = try req.content.decode(BSBody.self)
         let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
         try await assignment.save(on: req.db)
+        if body.returnTo == "brightspace" {
+            return req.redirect(to: "/instructor/brightspace")
+        }
         return req.redirect(to: "/instructor/\(idStr)/edit?notice=BrightSpace+grade+item+ID+saved")
     }
 
@@ -405,6 +410,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         struct EditQuery: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var error: String?
             var notice: String?
         }
@@ -423,6 +429,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             solutionFilename: existingSolutionName ?? fallbackSolutionFilename
         )
         let currentDueAt = dueAtLocalInputString(assignment.dueAt)
+        let currentStartsAt = dueAtLocalInputString(assignment.startsAt)
         let manifest = setup.decodedManifest()
         let patternFamiliesJSON: String = {
             guard let props = manifest else { return "[]" }
@@ -444,6 +451,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             testSetupID: assignment.testSetupID,
             assignmentName: (q?.assignmentName ?? assignment.title).trimmingCharacters(in: .whitespacesAndNewlines),
             dueAt: q?.dueAt ?? currentDueAt,
+            startsAt: q?.startsAt ?? currentStartsAt,
             currentAssignmentFile: currentFiles.assignmentFile.name,
             currentAssignmentURL: currentFiles.assignmentFile.url,
             assignmentNotebookEditURL:

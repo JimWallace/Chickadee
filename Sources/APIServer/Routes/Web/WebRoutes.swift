@@ -318,6 +318,13 @@ struct WebRoutes: RouteCollection {
             let assignment = assignmentBySetup[setupID]
             let latestSubmission = latestSubmissionBySetupID[setupID]
             let submissionCount = submissionCountBySetupID[setupID] ?? 0
+            // A future open date drives the "Opens …" hint in the Due column,
+            // but not a distinct status — every assignment is scheduled, so a
+            // "scheduled" badge would add no signal.
+            let notYetOpen: Bool = {
+                guard let assignment, let startsAt = assignment.startsAt else { return false }
+                return Date() < startsAt
+            }()
             let status: String
             if let assignment {
                 status = assignment.isOpen ? "open" : "closed"
@@ -364,7 +371,8 @@ struct WebRoutes: RouteCollection {
                     isOpen: assignment.isOpen,
                     overrideActive: assignment.deadlineOverrideActive ?? false,
                     baselineDueAt: baselineDueAt,
-                    effectiveDueAt: effectiveDueAt
+                    effectiveDueAt: effectiveDueAt,
+                    startsAt: assignment.startsAt
                 )
             }()
             let canEdit = isOpenForThisUser || previouslyOpenedSetupIDs.contains(setupID)
@@ -377,6 +385,7 @@ struct WebRoutes: RouteCollection {
                 suiteCount: props?.testSuites.count ?? 0,
                 createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
+                opensAtText: notYetOpen ? assignment?.startsAt.map { fmt.string(from: $0) } : nil,
                 status: status,
                 isOpen: isOpenForThisUser,
                 canEdit: canEdit,

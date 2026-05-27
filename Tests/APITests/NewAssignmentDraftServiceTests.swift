@@ -68,6 +68,7 @@ import XCTVapor
         NewAssignmentDraftPayload(
             assignmentName: "Test Assignment",
             dueAt: "",
+            startsAt: "",
             sectionIDRaw: "",
             draftIDRaw: nil,
             action: action,
@@ -290,7 +291,7 @@ import XCTVapor
     @Test func notebookTitleFallsBackToPlaceholderWhenAssignmentNameEmpty() async throws {
         try await withApp(app) { _ in
             let payload = NewAssignmentDraftPayload(
-                assignmentName: "  ", dueAt: "", sectionIDRaw: "",
+                assignmentName: "  ", dueAt: "", startsAt: "", sectionIDRaw: "",
                 draftIDRaw: nil, action: "",
                 assignmentNotebookFile: nil, solutionNotebookFile: nil,
                 suiteFiles: [], suiteConfigRaw: nil,
@@ -310,7 +311,7 @@ import XCTVapor
     @Test func notebookTitleUsesTrimmedAssignmentNameWhenSet() async throws {
         try await withApp(app) { _ in
             let payload = NewAssignmentDraftPayload(
-                assignmentName: "  Linked Lists  ", dueAt: "", sectionIDRaw: "",
+                assignmentName: "  Linked Lists  ", dueAt: "", startsAt: "", sectionIDRaw: "",
                 draftIDRaw: nil, action: "",
                 assignmentNotebookFile: nil, solutionNotebookFile: nil,
                 suiteFiles: [], suiteConfigRaw: nil,

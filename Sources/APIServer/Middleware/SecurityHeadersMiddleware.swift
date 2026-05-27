@@ -72,9 +72,23 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     ///     in the Leaf templates.
     ///   - blob: in worker-src is required by JupyterLite's web workers.
     ///
-    /// Pyodide, jszip, and CodeMirror are now vendored under `Public/`
-    /// (see `scripts/setup-vendor.sh`), so no third-party origins appear
-    /// in the policy.  Tighten with per-response nonces in a follow-up.
+    /// jszip, CodeMirror, and Pyodide are all vendored under `Public/` (see
+    /// `scripts/setup-vendor.sh`).  There is ONE canonical Pyodide, served at
+    /// `/pyodide`, loaded by both the JupyterLite editor kernel (via
+    /// `pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's
+    /// own browser paths (browser-runner grading, `/validate`, setup-edit).
+    /// Every browser asset is therefore same-origin, so NO third-party origin
+    /// appears in the policy.
+    ///
+    /// History worth keeping: the editor kernel used to load Pyodide from
+    /// `cdn.jsdelivr.net` (the jupyterlite-pyodide-kernel default).  #574
+    /// dropped the CDN allowance assuming self-hosting was complete — but the
+    /// editor had never been repointed, so its kernel broke (a student-facing
+    /// outage).  The editor is now served the vendored copy, so the allowance
+    /// is gone for good.  Two guards keep a CDN dependency from creeping back
+    /// in: `cSPHasNoExternalScriptConnectOrWorkerOrigins` here, and the
+    /// `pyodideUrl`-is-same-origin check in `scripts/verify-jupyterlite.sh`.
+    /// Tighten with per-response nonces in a follow-up.
     ///
     /// `form-action` is rendered per-request so the IdP origin from
     /// `app.oidcConfig?.discovery.endSessionEndpoint` can be appended when

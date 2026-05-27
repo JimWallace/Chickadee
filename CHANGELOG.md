@@ -6,6 +6,185 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.290] - 2026-05-27
+
+### Fixed
+
+- **In-browser notebook editor kernel failed to start (`kernel-unhealthy` /
+  `watchdog_timeout`).** `scripts/add-pyodide-extras.py` keyed the injected
+  `nb_mypy` wheel in `pyodide-lock.json` under its raw project name, but Pyodide
+  resolves packages by their PEP 503 canonical name (`nb-mypy`). Since the
+  editor kernel loads `nb_mypy` eagerly at boot, `loadPackage` raised "No known
+  package with name 'nb_mypy'" and the whole kernel died. The injector now
+  normalizes the lock key, the vendored lock is corrected, and
+  `scripts/check-pyodide-parity.sh` now fails CI if any package the kernel loads
+  at boot can't be resolved in the lock under its canonical name.
+
+
+## [0.4.289] - 2026-05-27
+
+### Security
+
+- **Drop the Windows `python.exe` bundled in the Pyodide 0.29.x distribution.**
+  The upstream Pyodide tarball ships a native Windows executable at the dist
+  root that nothing in Chickadee runs — the server, runner, and browser all
+  serve `Public/pyodide/` as static WASM assets. It was built with a Go stdlib
+  carrying CVE-2025-68121, which tripped the release-build Trivy scan. The file
+  is removed and `scripts/setup-vendor.sh` now strips any `*.exe` after
+  vendoring so a future Pyodide bump can't reintroduce it.
+
+
+## [0.4.288] - 2026-05-26
+
+### Added
+
+- **Type-checking in the in-browser notebook editor (nb_mypy), on by default.**
+  Every cell is now type-checked by mypy as it runs, surfacing type warnings
+  inline — no setup cell, across every assignment. Built on the unified
+  canonical Pyodide: `nb_mypy` (+ `astor`) are vendored into the one
+  `Public/pyodide` lock via a declarative extras manifest
+  (`Tools/vendor/pyodide-extra-packages.json`), preloaded through
+  `loadPyodideOptions`, and activated at kernel startup
+  (`%load_ext nb_mypy; %nb_mypy On`). Activation is **fail-safe**: if nb_mypy
+  is ever unavailable or incompatible, the kernel still starts and type-checking
+  is simply absent — it can never block the editor. nb_mypy 1.0.6 targets
+  IPython 9 / mypy 1.x / Python ≥3.11, matching the Pyodide 0.29.3 runtime.
+
+
+## [0.4.287] - 2026-05-26
+
+### Fixed
+
+- **In-browser notebook editor could not start its Pyodide kernel.** The
+  JupyterLite editor kernel loaded Pyodide from `cdn.jsdelivr.net`, but the
+  #574 CSP cleanup dropped that origin from `script-src`/`connect-src`/
+  `worker-src` — so as students' cached assets expired the kernel began
+  failing with CSP-refused errors.
+
+### Changed
+
+- **Unified on a single canonical Pyodide.** The editor kernel is now served
+  the same vendored Pyodide (`/pyodide`) as Chickadee's own browser paths
+  (browser-runner grading, `/validate`, setup-edit) via `pyodideUrl` in
+  `Tools/jupyterlite/jupyter-lite.json`, instead of fetching a second copy
+  from the CDN. The vended version is **derived from the JupyterLite kernel**
+  (`scripts/setup-vendor.sh` no longer hardcodes it), so there is one pin, one
+  version, and the editor and grader are guaranteed to run the identical
+  Python environment. The `cdn.jsdelivr.net` CSP allowance is removed.
+
+### Security
+
+- **Regression guards so this can't recur.** `scripts/check-pyodide-parity.sh`
+  fails the build if the vended Pyodide drifts from the kernel's pinned
+  version; `scripts/verify-jupyterlite.sh` asserts `pyodideUrl` is same-origin;
+  and `cSPHasNoExternalScriptConnectOrWorkerOrigins` asserts the CSP carries no
+  third-party script/connect/worker origins. Together they make "editor depends
+  on a CDN while the CSP silently drifts" a hard failure.
+
+
+## [0.4.286] - 2026-05-26
+
+### Added
+
+- **BrightSpace tab build-out (grade-sync console).** The instructor BrightSpace
+  tab is now a working console for the D2L grade sync: a connection test
+  (`whoami`), an assignment→grade-item mapping table with a dropdown sourced
+  from the course's D2L grade book (free-text fallback), a sync-activity log,
+  summary counts (synced / pending / errored / unmapped), an "unmapped students"
+  diagnostic, and manual **Sync now** / **Retry failed** / per-assignment
+  **Push all** actions. Grade pushes now write an append-only
+  `brightspace_sync_log` audit trail (success / error / skipped-no-account).
+  Course→org-unit binding stays an admin action and is now **verified against
+  D2L on save** — the org-unit name is looked up and cached so the binding is
+  confirmable at a glance. New D2L client calls: `whoami`, `getOrgUnit`,
+  `listGradeObjects`. See [docs/architecture.md](../docs/architecture.md)
+  → "BrightSpace grade sync".
+
+
+## [0.4.285] - 2026-05-26
+
+### Changed
+
+- **Admin MCP tab tidied.** Removed the explanatory "MCP agents" and
+  "Connected agents" prose blurbs from the admin MCP tab. The Connected
+  agents table now shows a centred "No agents have connected yet."
+  placeholder when empty, which disappears once an agent connects.
+
+
+## [0.4.284] - 2026-05-26
+
+### Changed
+
+- **Instructor view split into tabs.** The instructor dashboard now uses the
+  same tabbed layout as the admin view. **Overview** keeps the dashboard
+  metrics and the assignment/section listing; **Students** moves the enrolled-
+  students roster to its own panel that self-updates every few seconds (like
+  the admin Users panel) via a new `GET /instructor/students-data` poll
+  endpoint; and a new **BrightSpace** tab hosts the "Export Grades CSV" button
+  (moved off the Overview header) alongside the automatic grade-sync status.
+
+
+## [0.4.283] - 2026-05-26
+
+### Changed
+
+- **Admin Retention tab reworked around Restore + Delete.** Archived courses now live only on the Retention tab (they no longer appear on the Overview). Each row has icon actions to Restore (unarchive) and Export a course bundle at any time, plus a permanent Delete once the course is past its retention window. The table is sortable by column.
+- **Overview courses table shows a Submissions count** in place of the always-"active" Status column.
+
+### Removed
+
+- **Submission "Purge" action**, folded into the retention lifecycle (restore any time; permanently delete course + data once the retention window elapses).
+- **"Auto-start local" runner checkbox** from the admin Overview (the worker-secret control is unchanged).
+- **Redundant page-title headers** on the admin Storage and Users tabs.
+
+### Changed
+
+- **Dropped the "scheduled" assignment status badge.** A future open date no
+  longer renders a distinct `scheduled` status on the dashboard — every
+  assignment is scheduled, so the badge added no signal. The "Opens …" hint in
+  the Due column is unchanged.
+
+
+## [0.4.282] - 2026-05-26
+
+### Added
+
+- **Assignment open dates (auto-open).** Instructors can set an optional open
+  date on an assignment (new + edit pages, next to the due date). The
+  assignment opens to students automatically once that time arrives — a
+  periodic sweep mirrors the deadline auto-close, flipping the assignment open
+  and consuming the date (a later manual close is never undone). Auto-open is
+  held until runner validation passes. Manually opening an assignment early
+  clears any pending open date. Existing assignments have no open date and are
+  unaffected; the field round-trips through course bundle export/import.
+- **MCP open-date support.** `update_assignment` accepts a `startsAt` argument
+  (ISO 8601, or empty string to clear); `get_assignment` and `list_assignments`
+  report it.
+
+
+## [0.4.281] - 2026-05-26
+
+### Changed
+
+- **Runner-offline alert no longer depends on the queue.** The runner-offline
+  health rule now fires whenever a runner we've seen this session stops checking
+  in for `ALERT_RUNNER_OFFLINE_SECONDS` (default 300s), regardless of whether
+  any submissions are pending. It still stays quiet on a runner-less deployment
+  and auto-resolves once a long-dead runner ages out of the dashboard window.
+  This collapses the previous two-mode (urgent-while-queued vs. proactive-while-
+  empty) design and removes the now-unused `ALERT_RUNNER_ABSENT_SECONDS` setting.
+  The admin Health Alerts page reflects the new threshold wording.
+
+
+## [0.4.280] - 2026-05-26
+
+### Changed
+
+- **Bigger Chickadee logo on the login page** — bumped from 128px to 200px
+  (capped at 80% width on narrow screens). The source PNG is 1024px so it stays
+  crisp.
+
+
 ## [0.4.279] - 2026-05-26
 
 ### Changed
