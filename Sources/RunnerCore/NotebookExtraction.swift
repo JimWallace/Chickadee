@@ -158,7 +158,13 @@ public func sanitizeCellForModule(_ source: String) -> String {
 /// skipped. `from __future__` imports must stay at module top, so those cells
 /// are emitted unwrapped.
 public func wrapCellForResilientLoad(_ body: String, label: String) -> String {
-    if body.contains("from __future__") {
+    // `from __future__` imports must stay at module top. Detected line-by-line
+    // (hasPrefix) rather than `String.contains(_: String)`, which Embedded Swift
+    // lacks (no string-processing module) — RunnerCore compiles to wasm32.
+    let hasFutureImport = splitLines(body).contains { line in
+        trimSpacesAndTabs(line).hasPrefix("from __future__")
+    }
+    if hasFutureImport {
         return body
     }
     return """
@@ -285,7 +291,7 @@ func rhsContainsFunctionCall(_ rhs: String) -> Bool {
 
 /// Split on "\n" keeping empty substrings (matches `components(separatedBy:)`).
 private func splitLines(_ s: String) -> [String] {
-    s.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    s.split(separator: "\n" as Character, omittingEmptySubsequences: false).map(String.init)
 }
 
 /// Trim leading/trailing spaces and tabs only (matches `.whitespaces`).
