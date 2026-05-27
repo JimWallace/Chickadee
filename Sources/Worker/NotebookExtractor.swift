@@ -1,5 +1,6 @@
 import Core
 import Foundation
+import RunnerCore
 
 struct NotebookExtraction {
     let source: String
@@ -35,295 +36,42 @@ struct NotebookExtractor {
             throw SubmissionNormalizationError.invalidPythonSubmission(filename)
         }
 
-        var parts: [String] = []
-        var codeCellCount = 0
-
-        for (index, cell) in cells.enumerated() {
-            guard cell["cell_type"] as? String == "code" else { continue }
-
-            let trimmedSource = NotebookCellSources.cellSource(cell)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedSource.isEmpty else { continue }
-
-            let cellSource = sanitizeCellForModule(trimmedSource)
-            guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            codeCellCount += 1
-            let wrapped = wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)")
-            parts.append("# --- cell \(index + 1) ---\n\(wrapped)")
+        // Delegate to the shared, dependency-free core so the native worker and
+        // the (wasm) browser runner extract notebooks identically.
+        let inputCells = cells.map { cell in
+            NotebookCell(
+                cellType: (cell["cell_type"] as? String) ?? "",
+                source: NotebookCellSources.cellSource(cell)
+            )
         }
+        let extracted = extractPython(cells: inputCells, filename: filename)
 
-        guard !parts.isEmpty else {
+        guard extracted.codeCellCount > 0 else {
             throw SubmissionNormalizationError.notebookHasNoCodeCells(filename)
         }
 
         return NotebookExtraction(
-            source: "# Generated from \(filename)\n\n" + parts.joined(separator: "\n\n") + "\n",
-            codeCellCount: codeCellCount
+            source: extracted.executableModule,
+            codeCellCount: extracted.codeCellCount
         )
     }
 
-    // Sanitizes a single notebook code cell for use as a module-level Python
-    // source block:
-    //
-    //   • IPython magic commands (lines beginning with %) and shell pass-through
-    //     commands (lines beginning with !) are stripped — they are never valid
-    //     Python outside a Jupyter kernel.
-    //
-    //   • Top-level statements are classified as either *safe* (definitions,
-    //     imports, constants, and other side-effect-free declarations) or
-    //     *quarantined* (executable statements that could crash or produce
-    //     side-effects at import time).
-    //
-    //   • Safe code is emitted at module level so functions, classes, and
-    //     module-level constants remain accessible to the test runner.
-    //
-    //   • Quarantined code is wrapped in `if __name__ == "__main__":` so it
-    //     does not execute when the file is imported as a module, but remains
-    //     visible in the generated file for debugging.
-    //
-    //   • Bracket depth is tracked across lines so that continuation lines of
-    //     a multi-line statement (e.g. the elements of a list literal whose
-    //     closing `]` sits at column 0) are not re-classified as new statements.
-    //
-    // Example input cell:
-    //
-    //   BMI_UNDERWEIGHT_MAX: float = 18.5
-    //
-    //   assert BMI_UNDERWEIGHT_MAX > 0
-    //
-    //   def bmi_category(b: float) -> str:
-    //       if b < BMI_UNDERWEIGHT_MAX:
-    //           return "underweight"
-    //
-    //   print(bmi_category(22.0))
-    //
-    // Output:
-    //
-    //   BMI_UNDERWEIGHT_MAX: float = 18.5
-    //
-    //   def bmi_category(b: float) -> str:
-    //       if b < BMI_UNDERWEIGHT_MAX:
-    //           return "underweight"
-    //
-    //   if __name__ == "__main__":
-    //       assert BMI_UNDERWEIGHT_MAX > 0
-    //       print(bmi_category(22.0))
-    //
+    // The per-cell transforms now live in RunnerCore (the single, wasm-ready
+    // source of truth shared with the browser runner). These thin wrappers are
+    // kept so existing call sites and tests stay unchanged — they must qualify
+    // the core functions to avoid recursing into themselves.
+
     func sanitizeCellForModule(_ source: String) -> String {
-        // Strip magic/shell lines first.
-        let lines = source.components(separatedBy: "\n").filter { line in
-            let s = line.trimmingCharacters(in: .whitespaces)
-            return !s.hasPrefix("%") && !s.hasPrefix("!")
-        }
-
-        // Walk line-by-line, routing each line to the safe or quarantine bucket.
-        // A top-level (non-indented, non-empty) line sets the current block kind;
-        // subsequent indented lines (the block body) inherit that kind.
-        // Bracket depth prevents flush-left continuation lines (e.g. a bare `]`)
-        // from being mistaken for new top-level statements.
-        var defLines: [String] = []
-        var usageLines: [String] = []
-        var inUsage = false
-        var bracketDepth = 0
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            // Only treat as a new top-level statement if we are not inside open brackets.
-            let isTopLevel = bracketDepth == 0 && !line.isEmpty && !(line.first?.isWhitespace ?? true)
-
-            // Update depth *after* the isTopLevel check — depth reflects prior lines.
-            for ch in line {
-                switch ch {
-                case "(", "[", "{": bracketDepth += 1
-                case ")", "]", "}": bracketDepth = max(0, bracketDepth - 1)
-                default: break
-                }
-            }
-
-            if isTopLevel && !trimmed.isEmpty {
-                inUsage = !isSafeTopLevelStatement(trimmed)
-            }
-
-            if inUsage {
-                usageLines.append(line)
-            } else {
-                defLines.append(line)
-            }
-        }
-
-        var parts: [String] = []
-
-        let defBlock = defLines.joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !defBlock.isEmpty {
-            parts.append(defBlock)
-        }
-
-        let usageBlock = usageLines.joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !usageBlock.isEmpty {
-            let indented =
-                usageBlock
-                .components(separatedBy: "\n")
-                .map { "    " + $0 }
-                .joined(separator: "\n")
-            parts.append("if __name__ == \"__main__\":\n\(indented)")
-        }
-
-        return parts.joined(separator: "\n\n")
+        RunnerCore.sanitizeCellForModule(source)
     }
 
-    // Wraps one cell's sanitized body so it loads independently of every other
-    // cell: the body is compiled and executed as its own unit inside try/except.
-    //
-    //   • A *syntax error* in this cell (a typo, an unfilled comment-only cell)
-    //     is raised by compile() and caught here — only this cell is skipped,
-    //     the rest of the module still loads.  (A plain inline wrap can't do
-    //     this: one bad cell would fail the whole-module compile.)
-    //   • A *runtime error* (e.g. `x = ____` → NameError) is raised by exec()
-    //     and caught here too.
-    //   • exec(..., globals()) defines names in the module namespace, so
-    //     functions/variables defined in one cell remain visible to later cells
-    //     and to the test scripts — identical to plain module scope.
-    //
-    // `from __future__` imports must stay at the top of the module as raw
-    // statements (a per-cell compile would scope them to that cell only), so
-    // those cells are emitted unwrapped.
     func wrapCellForResilientLoad(_ body: String, label: String) -> String {
-        if body.contains("from __future__") {
-            return body
-        }
-        return """
-            try:
-                exec(compile(\(pythonStringLiteral(body)), \(pythonStringLiteral(label)), "exec"), globals())
-            except Exception:
-                pass
-            """
+        RunnerCore.wrapCellForResilientLoad(body, label: label)
     }
 
-    // Encodes a Swift string as a Python string literal.  We escape exactly the
-    // characters Python needs — backslash, double-quote, and the standard
-    // control escapes — and pass everything else through unchanged.
-    //
-    // We deliberately do NOT use JSONSerialization here.  It escapes `/` as
-    // `\/` (valid JSON, but `\/` is not a valid Python escape).  Because this
-    // literal is fed to `compile()` inside the generated module, a `\/` makes
-    // that inner compile raise SyntaxError ("unexpected character after line
-    // continuation character"), which drops every cell containing a `/` —
-    // e.g. `daily_l = daily_ml / 1000`.  (Regression fixed in v0.4.220.)
     func pythonStringLiteral(_ s: String) -> String {
-        var out = "\""
-        for scalar in s.unicodeScalars {
-            switch scalar {
-            case "\\": out += "\\\\"
-            case "\"": out += "\\\""
-            case "\n": out += "\\n"
-            case "\r": out += "\\r"
-            case "\t": out += "\\t"
-            default:
-                if scalar.value < 0x20 {
-                    out += String(format: "\\x%02x", scalar.value)
-                } else {
-                    out.unicodeScalars.append(scalar)
-                }
-            }
-        }
-        out += "\""
-        return out
+        RunnerCore.pythonStringLiteral(s)
     }
-}
-
-// MARK: - Top-level statement classification helpers
-
-/// Returns true if a non-indented Python statement is safe to emit at module
-/// level — i.e. it defines something (function, class, import, constant) rather
-/// than executing side-effectful or control-flow code.
-private func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
-    // Definitions and structural annotations are always safe.
-    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@", "#"]
-    where trimmed.hasPrefix(prefix) {
-        return true
-    }
-
-    // Bare string literals are module-level docstrings — safe.
-    if trimmed.hasPrefix("\"\"\"") || trimmed.hasPrefix("'''") || trimmed.hasPrefix("\"") || trimmed.hasPrefix("'") {
-        return true
-    }
-
-    // Control-flow, side-effecting, and other executable statements are quarantined.
-    // The `token + "("` branch catches bare calls whose name matches a keyword
-    // (e.g. `match(...)` in older code), while preventing false matches on names
-    // that merely share a prefix (e.g. `format` vs `for`).
-    for token in [
-        "assert", "raise", "return", "del", "pass", "for", "while",
-        "if", "with", "try", "except", "match", "finally", "else",
-        "elif", "break", "continue", "yield", "global", "nonlocal",
-        "async for", "async with",
-    ] {
-        if trimmed == token || trimmed.hasPrefix(token + " ") || trimmed.hasPrefix(token + ":")
-            || trimmed.hasPrefix(token + "(")
-        {
-            return false
-        }
-    }
-
-    // Assignments: emit at module level only when the RHS is free of function calls.
-    // This keeps module-level constants (simple literals, arithmetic, tuples, lists)
-    // while quarantining constructions like `patient0 = Patient(name="Alice")` that
-    // execute code and may fail at import time.
-    if let rhsStart = findAssignmentRHS(in: trimmed) {
-        let rhs = String(trimmed[rhsStart...]).trimmingCharacters(in: .whitespaces)
-        return !rhsContainsFunctionCall(rhs)
-    }
-
-    // Bare expression or unrecognised statement — quarantine to be safe.
-    return false
-}
-
-/// Returns the index just past the `=` of a plain or annotated assignment
-/// (`x = …`, `x: T = …`, `a, b = …`).
-/// Returns nil for comparisons (`==`, `!=`, `<=`, `>=`), walrus (`:=`), and
-/// augmented assignments (`+=`, `-=`, `*=`, …).
-private func findAssignmentRHS(in line: String) -> String.Index? {
-    var depth = 0
-    var prev: Character = " "
-    var idx = line.startIndex
-    while idx < line.endIndex {
-        let ch = line[idx]
-        switch ch {
-        case "(", "[", "{": depth += 1
-        case ")", "]", "}": depth = max(0, depth - 1)
-        case "=":
-            if depth == 0 {
-                let nextIdx = line.index(after: idx)
-                let next: Character = nextIdx < line.endIndex ? line[nextIdx] : " "
-                let isComparison = prev == "!" || prev == "<" || prev == ">" || prev == "="
-                let isWalrus = prev == ":"
-                let isAugmented = "+-*/%|&^~".contains(prev)
-                let isDoubleEq = next == "="
-                if !isComparison && !isWalrus && !isAugmented && !isDoubleEq {
-                    return line.index(after: idx)
-                }
-            }
-        default: break
-        }
-        prev = ch
-        idx = line.index(after: idx)
-    }
-    return nil
-}
-
-/// Returns true if `rhs` contains an identifier immediately followed by `(`,
-/// which indicates a function or method call.
-private func rhsContainsFunctionCall(_ rhs: String) -> Bool {
-    var prev: Character = " "
-    for ch in rhs {
-        if ch == "(" && (prev.isLetter || prev.isNumber || prev == "_" || prev == ")") {
-            return true
-        }
-        prev = ch
-    }
-    return false
 }
 
 // MARK: - Notebook-to-code extraction for test setup directories
