@@ -276,8 +276,21 @@
         function open(opts) {
             opts = opts || {};
             editingItem = opts.editing || null;
-            var kind = opts.kind || (editingItem && editingItem.kind) || typeSelect.value;
-            var mechanism = opts.mechanism || mechanismForKind(kind) || 'script';
+            // When editing, the mechanism + kind are authoritative from the
+            // edit payload — the type dropdown is hidden and its leftover
+            // value must not decide which renderer runs. Mechanism comes from
+            // `editing.mechanism`; kind from the item (checks/families carry
+            // `.kind`, raw scripts use the 'script' catalog entry). Without
+            // this, a check/script edit resolved to whatever the dropdown last
+            // showed (default 'family'), so `enterMode` called reset() instead
+            // of populate() and the modal opened blank.
+            var mechanism = opts.mechanism
+                || (editingItem && editingItem.mechanism)
+                || mechanismForKind(opts.kind || typeSelect.value)
+                || 'script';
+            var kind = opts.kind
+                || (editingItem && editingItem.item && editingItem.item.kind)
+                || (mechanism === 'script' ? 'script' : typeSelect.value);
 
             // Editing fixes the type; creating lets the instructor switch it.
             typeRow.style.display = editingItem ? 'none' : 'flex';
