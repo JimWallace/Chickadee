@@ -855,6 +855,7 @@ model quickly.
 - `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
+- `docs/runner-wasm-migration.md` — plan to share one Swift grading core (RunnerCore) between the worker + browser runner via SwiftWasm; staging, the ScriptExecutor protocol, type-hoist
 - `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)
 - `reference/` — original Java source for behavioural reference only
 - `CHANGELOG.md` — release history
