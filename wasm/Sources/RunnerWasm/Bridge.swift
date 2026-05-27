@@ -8,8 +8,13 @@ import RunnerCore
 // uses Foundation for JSON.
 
 private struct CellDTO: Codable {
-    let cell_type: String
+    let cellType: String
     let source: String
+
+    enum CodingKeys: String, CodingKey {
+        case cellType = "cell_type"
+        case source
+    }
 }
 
 private struct ResultDTO: Codable {
@@ -29,7 +34,7 @@ private struct ResultDTO: Codable {
         return #"{"error":"failed to decode cells JSON"}"#
     }
 
-    let cells = dtos.map { NotebookCell(cellType: $0.cell_type, source: $0.source) }
+    let cells = dtos.map { NotebookCell(cellType: $0.cellType, source: $0.source) }
     let extracted = extractPython(cells: cells, filename: filename)
 
     let result = ResultDTO(
@@ -37,8 +42,10 @@ private struct ResultDTO: Codable {
         introspectableSource: extracted.introspectableSource,
         codeCellCount: extracted.codeCellCount
     )
-    guard let data = try? JSONEncoder().encode(result) else {
+    guard let data = try? JSONEncoder().encode(result),
+        let json = String(bytes: data, encoding: .utf8)
+    else {
         return #"{"error":"failed to encode result"}"#
     }
-    return String(decoding: data, as: UTF8.self)
+    return json
 }
