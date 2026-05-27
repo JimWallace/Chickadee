@@ -93,7 +93,8 @@ func registerMCPRoutes(_ app: Application) throws {
 
     try app.grouped(bearer).register(
         collection: MCPRoutes(dispatcher: dispatcher, configuration: routeConfiguration))
-    try app.register(collection: MCPMetadataRoutes(endpoints: endpoints))
+    try app.register(
+        collection: MCPMetadataRoutes(endpoints: endpoints, advertisedScopes: mcp.mode.advertisedScopes))
 
     app.logger.info(
         "MCP endpoint mounted at /mcp — issuer=\(endpoints.issuer), resource=\(endpoints.resource)")

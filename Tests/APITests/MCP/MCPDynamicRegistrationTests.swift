@@ -15,9 +15,9 @@ import XCTVapor
     private let resource = "https://chickadee.example/mcp"
     private let redirectURI = "https://app.example/cb"
 
-    private func makeApp() async throws -> Application {
+    private func makeApp(mode: MCPMode = .readWrite) async throws -> Application {
         let mcp = MCPConfig(
-            mode: .readWrite, allowedHosts: [], allowedOrigins: [],
+            mode: mode, allowedHosts: [], allowedOrigins: [],
             tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: resource)
         let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp))
         app.mcpTokenAuthority = try await MCPTokenAuthority.make(
@@ -43,12 +43,26 @@ import XCTVapor
             let object = jsonObject(res)
             let clientID = try #require(object?["client_id"] as? String)
             #expect(object?["token_endpoint_auth_method"] as? String == "none")
+            // read_write grants the full advertised scope set.
+            #expect(object?["scope"] as? String == "content:read content:write")
 
             let client = try #require(
                 try await MCPOAuthClient.query(on: app.db).filter(\.$clientID == clientID).first())
             #expect(client.name == "My Agent")
             #expect(client.redirectURIs == [redirectURI])
             #expect(client.isPublic)
+        }
+    }
+
+    /// In read_only, DCR must grant only `content:read` — matching the
+    /// discovery metadata — so a client never asks for `content:write` and gets
+    /// silently downgraded (or, before the fix, refused at /authorize).
+    @Test func registrationGrantsReadOnlyScopeInReadOnlyMode() async throws {
+        try await withApp(try await makeApp(mode: .readOnly)) { app in
+            let res = try await register(
+                app, body: #"{"client_name":"RO Agent","redirect_uris":["\#(redirectURI)"]}"#)
+            #expect(res.status == .created)
+            #expect(jsonObject(res)?["scope"] as? String == "content:read")
         }
     }
 
