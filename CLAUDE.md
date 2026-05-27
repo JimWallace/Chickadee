@@ -392,15 +392,21 @@ distribution are declared in `Tools/vendor/pyodide-extra-packages.json` (pinned
 URL + sha256) and injected into the one lock by `scripts/add-pyodide-extras.py`
 (run from `setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're
 present so a re-vendor can't silently drop them.  This is how `nb_mypy` (+
-`astor`) gets into the editor.  nb_mypy type-checking is **on by default**:
-the kernel wheel's `__init__.py` is patched (deterministically, `ZIP_STORED`,
-by `scripts/patch-pyodide-kernel.py` from `setup-jupyterlite.sh`) to run
-`%load_ext nb_mypy; %nb_mypy On` at startup, wrapped in a fail-safe try/except
-so a missing/incompatible nb_mypy degrades to "no warnings", never a dead
-kernel.  Patching a bundled wheel means a sha cascade (wheel → `all.json`
-digest → `pipliteUrls` sha); `verify-jupyterlite.sh` asserts that chain is
-consistent so a mismatch (which would make piplite reject the kernel) is a
-build failure, not a browser surprise.
+`astor`) gets into the editor.  nb_mypy type-checking is **on by default** but
+**loaded lazily, off the kernel-boot critical path**: the kernel wheel's
+`__init__.py` is patched (deterministically, `ZIP_STORED`, by
+`scripts/patch-pyodide-kernel.py` from `setup-jupyterlite.sh`) to schedule a
+background task that — once the kernel is up — `loadPackage`s nb_mypy from the
+vended Pyodide lock and runs `%load_ext nb_mypy; %nb_mypy On`.  nb_mypy is
+deliberately **not** in `loadPyodideOptions.packages`: a package named there is
+loaded by `loadPyodide()` itself, so any failure (bad PEP 503 lock key, dropped
+wheel, ABI mismatch) would reject the boot and brick the whole editor.  The
+background load is wrapped in a fail-safe try/except so a missing/incompatible
+nb_mypy degrades to "no type warnings", never a dead kernel.  Patching a bundled
+wheel means a sha cascade (wheel → `all.json` digest → `pipliteUrls` sha);
+`verify-jupyterlite.sh` asserts that chain is consistent so a mismatch (which
+would make piplite reject the kernel) is a build failure, not a browser
+surprise.
 
 ---
 
