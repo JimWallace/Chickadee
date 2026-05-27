@@ -215,7 +215,6 @@ for _module_name in student_module_names_in_load_order():
 
             for (const entry of manifest.testSuites || []) {
                 const script     = entry.script || '';
-                const ext        = script.split('.').pop().toLowerCase();
                 const tier       = entry.tier || 'public';
                 const scriptPath = `${workDir}/${script}`;
                 const deps       = Array.isArray(entry.dependsOn) ? entry.dependsOn : [];
@@ -229,31 +228,38 @@ for _module_name in student_module_names_in_load_order():
                     continue;
                 }
 
-                let outcome;
-                if (ext === 'py') {
-                    let src = '';
-                    try { src = py.FS.readFile(scriptPath, { encoding: 'utf8' }); }
-                    catch (_) {
-                        outcomes.push(makeOutcome(script, tier, 'error',
-                            `Script not found: ${script}`, null, 0));
-                        continue;
-                    }
-                    outcome = await runPyScript(py, src, script, tier,
-                        manifest.timeLimitSeconds || 10);
+                // Read the source up front: needed to run Python scripts, and to
+                // classify extensionless scripts by shebang/content.
+                let src = null;
+                try { src = py.FS.readFile(scriptPath, { encoding: 'utf8' }); }
+                catch (_) { src = null; }
 
-                } else if (ext === 'r') {
+                const kind = classifyScript(script, src);
+
+                let outcome;
+                if (kind === 'python') {
+                    if (src === null) {
+                        outcome = makeOutcome(script, tier, 'error',
+                            `Script not found: ${script}`, null, 0);
+                    } else {
+                        outcome = await runPyScript(py, src, script, tier,
+                            manifest.timeLimitSeconds || 10);
+                    }
+
+                } else if (kind === 'r') {
                     outcome = makeOutcome(script, tier, 'error',
                         'R test scripts require WebR — not yet supported in browser runner',
                         null, 0);
 
-                } else if (ext === 'sh' || ext === 'bash') {
+                } else if (kind === 'shell') {
                     outcome = makeOutcome(script, tier, 'error',
                         'Shell scripts cannot run in the browser runner',
                         null, 0);
 
                 } else {
+                    const ext = scriptExtension(script);
                     outcome = makeOutcome(script, tier, 'error',
-                        `Unsupported test script type: .${ext}`,
+                        `Unsupported test script type: ${ext ? '.' + ext : script}`,
                         null, 0);
                 }
 
@@ -360,6 +366,66 @@ for _module_name in student_module_names_in_load_order():
     // -------------------------------------------------------------------------
     // Python script execution
     // -------------------------------------------------------------------------
+
+    // Lowercased file extension of a script name, or '' when there is none —
+    // a bare name like `beats` or a leading-dot dotfile. Mirrors the semantics
+    // of URL.pathExtension on the worker side.
+    function scriptExtension(name) {
+        const base = name.slice(name.lastIndexOf('/') + 1);
+        const dot  = base.lastIndexOf('.');
+        return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
+    }
+
+    // Decide how a test script should be dispatched in the browser. Mirrors
+    // Sources/Worker/ScriptInvocation.swift: a recognised extension wins;
+    // otherwise the shebang, then a Python content-sniff, decides. The browser
+    // can only execute Python (Pyodide), but we still recognise 'r' / 'shell'
+    // so the student sees a precise message rather than a generic one.
+    // Returns one of: 'python', 'r', 'shell', 'unknown'.
+    function classifyScript(script, src) {
+        switch (scriptExtension(script)) {
+            case 'py':                          return 'python';
+            case 'r':                           return 'r';
+            case 'sh': case 'bash': case 'zsh': return 'shell';
+            default:                            break;   // unknown/extensionless
+        }
+        const fromShebang = scriptKindFromShebang(src);
+        if (fromShebang) return fromShebang;
+        return looksLikePython(src) ? 'python' : 'unknown';
+    }
+
+    // Map a `#!` shebang on the first line to a script kind, matching
+    // invocationFromShebang() in ScriptInvocation.swift. Returns null when there
+    // is no recognised shebang.
+    function scriptKindFromShebang(src) {
+        if (typeof src !== 'string') return null;
+        const firstLine = src.replace(/^[\uFEFF\s]+/, '').split('\n', 1)[0] || '';
+        if (!firstLine.startsWith('#!')) return null;
+        const lower = firstLine.toLowerCase();
+        if (lower.includes('python')) return 'python';
+        if (lower.includes('node') || lower.includes('javascript')
+            || lower.includes('ruby') || lower.includes('perl')) {
+            return 'unknown';   // recognised, but not runnable in-browser
+        }
+        if (lower.includes('bash') || lower.includes('zsh') || lower.includes('sh')) {
+            return 'shell';
+        }
+        return null;
+    }
+
+    // Content sniff: do the first few non-comment lines look like Python?
+    // Mirrors looksLikePythonScript() in ScriptInvocation.swift.
+    function looksLikePython(src) {
+        if (typeof src !== 'string' || !src) return false;
+        const lines = src.split('\n')
+            .map(l => l.trim())
+            .filter(l => l && !l.startsWith('#'))
+            .slice(0, 5);
+        return lines.some(l =>
+            l.startsWith('import ') || l.startsWith('from ')
+            || l.startsWith('def ') || l.startsWith('class ')
+            || l.startsWith('if __name__ =='));
+    }
 
     async function runPyScript(py, src, scriptName, tier, timeLimitSeconds) {
         const startMs = Date.now();
