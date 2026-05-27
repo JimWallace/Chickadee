@@ -305,25 +305,62 @@ for _module_name in student_module_names_in_load_order():
         const ksName = (ks.name || '').toLowerCase();
         const liName = ((meta.language_info || {}).name || '').toLowerCase();
         const isR    = ksName === 'ir' || ksName === 'r' || ksName === 'webr' || liName === 'r';
-        const ext    = isR ? 'R' : 'py';
+        const stem   = filename.replace(/\.ipynb$/i, '');
 
-        const stem    = filename.replace(/\.ipynb$/i, '');
-        const outPath = `${workDir}/${stem}.${ext}`;
-
-        let code = `# Generated from ${filename}\n\n`;
-        for (const [i, cell] of (notebook.cells || []).entries()) {
-            if (cell.cell_type !== 'code') continue;
-            const src = Array.isArray(cell.source)
-                ? cell.source.join('')
-                : (cell.source || '');
-            const block = isR ? extractRCell(src) : extractPythonCell(src, `cell ${i + 1}`);
-            if (block) code += block + '\n\n';
+        if (isR) {
+            // R stays on the JS path — RunnerCore (the shared wasm extractor) is
+            // Python-only, matching the native worker.
+            let code = `# Generated from ${filename}\n\n`;
+            for (const cell of (notebook.cells || [])) {
+                if (cell.cell_type !== 'code') continue;
+                const src = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
+                const block = extractRCell(src);
+                if (block) code += block + '\n\n';
+            }
+            py.FS.writeFile(`${workDir}/${stem}.R`, code);
+            py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.R`);
+            return;
         }
 
-        py.FS.writeFile(outPath, code);
+        // Python: extract via the shared RunnerCore wasm — the SAME code the
+        // native worker runs (Sources/RunnerCore), instead of a JS reimplementation.
+        const cells = (notebook.cells || []).map(cell => ({
+            cell_type: cell.cell_type,
+            source: Array.isArray(cell.source) ? cell.source.join('') : (cell.source || ''),
+        }));
+        const extract = await loadRunnerExtractor();
+        const result = extract(cells, filename);
 
-        // Write .chickadee_student_module hint so test_runtime.py can find the file.
-        py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.${ext}`);
+        py.FS.writeFile(`${workDir}/${stem}.py`, result.executableModule);
+        py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.py`);
+
+        // Sidecar: the introspectable (un-exec-wrapped) source, so structural /
+        // AST NotebookChecks can read real `def`s via student_source().
+        py.FS.writeFile(`${workDir}/${stem}.source.py`, result.introspectableSource);
+        py.FS.writeFile(`${workDir}/.chickadee_student_source`, `${stem}.source.py`);
+    }
+
+    // -------------------------------------------------------------------------
+    // RunnerCore wasm extractor (lazy singleton)
+    //
+    // Loads the vendored, embedded-Swift RunnerCore bridge and returns its
+    // `runnerExtractPython(cells, filename)` function. A test harness can preset
+    // `globalThis.runnerExtractPython` to skip loading the wasm.
+    // -------------------------------------------------------------------------
+
+    let _runnerExtractor = null;
+
+    async function loadRunnerExtractor() {
+        if (_runnerExtractor) return _runnerExtractor;
+        if (typeof globalThis.runnerExtractPython !== 'function') {
+            const mod = await import('/runner-wasm/runner-core.js');
+            await mod.init();  // runs the wasm module's entrypoint → registers the global
+        }
+        if (typeof globalThis.runnerExtractPython !== 'function') {
+            throw new Error('RunnerCore wasm did not register runnerExtractPython');
+        }
+        _runnerExtractor = globalThis.runnerExtractPython;
+        return _runnerExtractor;
     }
 
     // R cells are emitted verbatim — the browser R path (WebR) is not yet active.
@@ -332,36 +369,9 @@ for _module_name in student_module_names_in_load_order():
         return trimmed.trim() ? trimmed : '';
     }
 
-    // Each Python cell is compiled and executed as its own unit inside
-    // try/except so that one broken cell can't take down the rest of the module:
-    //   • a SYNTAX error (a typo, or an unfilled comment-only "# Your code here"
-    //     cell) is raised by compile() and caught here — only this cell is
-    //     skipped.  A plain inline wrap can't do this: a syntax error anywhere
-    //     fails the whole-module compile before any try/except runs.
-    //   • a RUNTIME error (e.g. `x = ____` → NameError) is raised by exec() and
-    //     caught here too.
-    //   • exec(..., globals()) defines names in the module namespace, so
-    //     functions/variables defined in one cell stay visible to later cells
-    //     and to the test scripts — identical to plain module scope.
-    // IPython magics (% / !) are stripped so a cell that mixes a magic with real
-    // code still runs the real code.  `from __future__` imports must stay at
-    // module top as raw statements (a per-cell compile would scope them away).
-    function extractPythonCell(src, label) {
-        const cleaned = src
-            .split('\n')
-            .filter(line => {
-                const s = line.trim();
-                return !s.startsWith('%') && !s.startsWith('!');
-            })
-            .join('\n');
-        const trimmed = cleaned.replace(/\s+$/, '');
-        if (!trimmed.trim()) return '';
-
-        if (/(^|\n)\s*from\s+__future__\s+import\b/.test(trimmed)) return trimmed;
-
-        return `try:\n    exec(compile(${JSON.stringify(trimmed)}, ${JSON.stringify(label)}, "exec"), globals())\n`
-            + `except Exception:\n    pass`;
-    }
+    // Python per-cell extraction (magic stripping, def/usage split,
+    // exec(compile()) wrapping) now lives in RunnerCore (Swift, compiled to
+    // wasm) and is shared with the native worker — see extractNotebook above.
 
     // -------------------------------------------------------------------------
     // Python script execution
@@ -1148,6 +1158,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             __resetStateForTests() {
                 _pyodide = null;
                 _JSZip   = null;
+                _runnerExtractor = null;
                 if (statusEl) {
                     statusEl.textContent = '';
                     statusEl.className   = '';

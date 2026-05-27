@@ -328,6 +328,14 @@ async function loadRunnerHarness(options = {}) {
     fetch: fetchImpl,
     getCsrfToken: () => options.csrfToken ?? 'csrf-test-token',
     document,
+    // Test seam: preset the RunnerCore extractor so the runner never loads the
+    // real wasm bundle. The actual extraction logic is covered by the Swift
+    // RunnerCore tests; here a stub returns deterministic output.
+    runnerExtractPython: options.runnerExtractor ?? ((cells, filename) => ({
+      executableModule: `# Generated from ${filename}\n# (stub executable module)\n`,
+      introspectableSource: `# Generated from ${filename}\n# (stub introspectable source)\n`,
+      codeCellCount: (cells || []).filter(c => c.cell_type === 'code').length,
+    })),
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
@@ -664,56 +672,74 @@ test('manifest and setup download failures bubble up with browser-runner context
   );
 });
 
-test('extractNotebook writes python and R student module hints correctly', async () => {
-  const harness = await loadRunnerHarness();
+test('extractNotebook delegates Python to RunnerCore (module + introspectable sidecar + hints) and keeps R on the JS path', async () => {
+  // The per-cell extraction logic now lives in RunnerCore (Swift/wasm) and is
+  // covered by Tests/WorkerTests/NotebookExtractionTests.swift. Here we assert
+  // the browser glue: cells handed to the shared extractor, and its outputs
+  // (executable module + introspectable-source sidecar) written with hints.
+  let received = null;
+  const harness = await loadRunnerHarness({
+    runnerExtractor: (cells, filename) => {
+      received = { cells, filename };
+      return {
+        executableModule: '# exec module\nMODULE_BODY\n',
+        introspectableSource: '# real source\ndef tax():\n    pass\n',
+        codeCellCount: cells.filter(c => c.cell_type === 'code').length,
+      };
+    },
+  });
   const { extractNotebook } = harness.hooks;
 
   harness.py.FS.mkdir('/course');
-
   await extractNotebook(
     harness.py,
     '/course',
     'submission.ipynb',
     JSON.stringify({
       nbformat: 4,
-      metadata: {
-        kernelspec: { name: 'python3' },
-      },
+      metadata: { kernelspec: { name: 'python3' } },
       cells: [
         { cell_type: 'markdown', source: ['ignore'], metadata: {} },
         { cell_type: 'code', source: ['x = 1\n'], metadata: {} },
-        { cell_type: 'code', source: ['print(x)\n'], metadata: {} },
       ],
     }),
   );
 
+  // Cells passed through to the shared extractor (source joined, type preserved).
+  assert.equal(received.filename, 'submission.ipynb');
+  assert.deepEqual(plain(received.cells), [
+    { cell_type: 'markdown', source: 'ignore' },
+    { cell_type: 'code', source: 'x = 1\n' },
+  ]);
+  // Executable module + introspectable sidecar both written, with both hints.
   assert.equal(
     harness.py.FS.readFile('/course/submission.py', { encoding: 'utf8' }),
-    '# Generated from submission.ipynb\n\n'
-      + 'try:\n    exec(compile("x = 1", "cell 2", "exec"), globals())\nexcept Exception:\n    pass\n\n'
-      + 'try:\n    exec(compile("print(x)", "cell 3", "exec"), globals())\nexcept Exception:\n    pass\n\n',
+    '# exec module\nMODULE_BODY\n',
+  );
+  assert.equal(
+    harness.py.FS.readFile('/course/submission.source.py', { encoding: 'utf8' }),
+    '# real source\ndef tax():\n    pass\n',
   );
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
     'submission.py',
   );
+  assert.equal(
+    harness.py.FS.readFile('/course/.chickadee_student_source', { encoding: 'utf8' }),
+    'submission.source.py',
+  );
 
+  // R notebooks stay on the JS path (RunnerCore is Python-only) — no sidecar.
   await extractNotebook(
     harness.py,
     '/course',
     'lab.ipynb',
     JSON.stringify({
       nbformat: 4,
-      metadata: {
-        kernelspec: { name: 'webr' },
-        language_info: { name: 'r' },
-      },
-      cells: [
-        { cell_type: 'code', source: ['x <- 2\n'], metadata: {} },
-      ],
+      metadata: { kernelspec: { name: 'webr' }, language_info: { name: 'r' } },
+      cells: [{ cell_type: 'code', source: ['x <- 2\n'], metadata: {} }],
     }),
   );
-
   assert.equal(
     harness.py.FS.readFile('/course/lab.R', { encoding: 'utf8' }),
     '# Generated from lab.ipynb\n\nx <- 2\n\n',
@@ -722,72 +748,6 @@ test('extractNotebook writes python and R student module hints correctly', async
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
     'lab.R',
   );
-});
-
-test('extractNotebook sequesters each Python cell so one broken cell cannot fail the rest', async () => {
-  const harness = await loadRunnerHarness();
-  const { extractNotebook } = harness.hooks;
-
-  harness.py.FS.mkdir('/lab');
-
-  await extractNotebook(
-    harness.py,
-    '/lab',
-    'submission.ipynb',
-    JSON.stringify({
-      nbformat: 4,
-      metadata: { kernelspec: { name: 'python3' } },
-      cells: [
-        { cell_type: 'code', source: ['%matplotlib inline\nresting_hr = 72\n'], metadata: {} },
-        { cell_type: 'code', source: ['daily_ml = ____\n'], metadata: {} },
-      ],
-    }),
-  );
-
-  const generated = harness.py.FS.readFile('/lab/submission.py', { encoding: 'utf8' });
-
-  // IPython magic stripped, real code preserved.
-  assert.ok(!generated.includes('%matplotlib'), 'magic line must be stripped');
-  // Each cell is compiled+exec'd as its own unit.
-  assert.equal(generated.split('exec(compile(').length - 1, 2, 'each code cell compiled independently');
-  assert.ok(generated.includes('exec(compile("resting_hr = 72"'));
-  assert.ok(generated.includes('exec(compile("daily_ml = ____"'));
-  assert.equal(generated.split('except Exception:').length - 1, 2);
-});
-
-test('extractNotebook compiles each cell as a string so syntax errors and comment-only cells are isolated', async () => {
-  const harness = await loadRunnerHarness();
-  const { extractNotebook } = harness.hooks;
-
-  harness.py.FS.mkdir('/lab2');
-
-  await extractNotebook(
-    harness.py,
-    '/lab2',
-    'submission.ipynb',
-    JSON.stringify({
-      nbformat: 4,
-      metadata: { kernelspec: { name: 'python3' } },
-      cells: [
-        { cell_type: 'code', source: ['# Your code here\n'], metadata: {} },   // comment-only
-        { cell_type: 'code', source: ['good = 1\n'], metadata: {} },
-        { cell_type: 'code', source: ['broken = (\n'], metadata: {} },          // syntax error
-      ],
-    }),
-  );
-
-  const generated = harness.py.FS.readFile('/lab2/submission.py', { encoding: 'utf8' });
-
-  // All three cells become their own exec(compile()) unit — none can fail the
-  // whole-module compile.
-  assert.equal(generated.split('exec(compile(').length - 1, 3);
-  // Comment-only cell is a compiled string, NOT a bare `try:\n    # comment`
-  // (which would be an empty try body → SyntaxError zeroing the notebook).
-  assert.ok(generated.includes('exec(compile("# Your code here"'));
-  assert.ok(!generated.includes('try:\n    # Your code here'));
-  // The syntactically-broken source lives inside a compile() string literal.
-  assert.ok(generated.includes('exec(compile("good = 1"'));
-  assert.ok(generated.includes('broken = ('));
 });
 
 test('failure detail strips the trailing JSON envelope so students never see the raw payload', async () => {
