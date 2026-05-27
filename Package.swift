@@ -8,6 +8,11 @@ let package = Package(
     platforms: [
         .macOS(.v15)
     ],
+    products: [
+        // Exposed so the wasm bridge sub-package (wasm/) can depend on the pure
+        // extraction logic without pulling in the rest of Chickadee.
+        .library(name: "RunnerCore", targets: ["RunnerCore"])
+    ],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.121.3"),
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
