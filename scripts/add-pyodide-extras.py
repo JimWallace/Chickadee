@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import re
 import sys
 import urllib.request
 
@@ -27,6 +28,19 @@ LOCK = PYODIDE_DIR / "pyodide-lock.json"
 def fail(msg: str) -> None:
     print(f"add-pyodide-extras: FAIL — {msg}", file=sys.stderr)
     sys.exit(1)
+
+
+def canonical_name(name: str) -> str:
+    """PEP 503 normalized project name (e.g. ``nb_mypy`` -> ``nb-mypy``).
+
+    Pyodide canonicalizes the requested name before looking it up, and every key
+    in pyodide-lock.json is stored in this form.  The lock KEY must therefore be
+    normalized even when the manifest / wheel use an underscored project name —
+    otherwise ``loadPackage("nb_mypy")`` raises "No known package with name
+    'nb_mypy'", and because the editor kernel loads it eagerly at boot, the whole
+    kernel dies with kernel-unhealthy / watchdog_timeout.
+    """
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def main() -> None:
@@ -57,23 +71,28 @@ def main() -> None:
                 fail(f"{name}: sha256 mismatch (expected {pkg['sha256']}, got {digest})")
             dest.write_bytes(data)
 
+        # The lock key and the entry's "name" must be PEP 503 canonical so the
+        # Pyodide resolver finds them; "imports" stays the real module name.
+        key = canonical_name(name)
+        depends = [canonical_name(dep) for dep in pkg["depends"]]
+
         # Validate any declared deps resolve (mypy/astor must already be present).
-        for dep in pkg["depends"]:
+        for dep in depends:
             if dep not in packages:
                 fail(f"{name}: dependency '{dep}' is not in the Pyodide lock")
 
-        packages[name] = {
-            "name": name,
+        packages[key] = {
+            "name": key,
             "version": pkg["version"],
             "file_name": pkg["file_name"],
             "install_dir": "site",
             "sha256": pkg["sha256"],
             "package_type": "package",
             "imports": pkg["imports"],
-            "depends": pkg["depends"],
+            "depends": depends,
             "unvendored_tests": False,
         }
-        print(f"  locked {name}=={pkg['version']}")
+        print(f"  locked {key}=={pkg['version']}")
 
     # Match the upstream lock's compact, key-sorted formatting to keep the diff minimal.
     LOCK.write_text(json.dumps(lock, separators=(", ", ": "), sort_keys=True))
