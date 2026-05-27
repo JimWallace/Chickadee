@@ -55,7 +55,7 @@ import XCTVapor
 
     @Test func loginWithValidCSRFTokenSucceeds() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             let user = APIUser(username: "csrfuser", passwordHash: hash, role: "student")
             try await user.save(on: app.db)
 

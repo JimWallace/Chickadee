@@ -82,15 +82,15 @@ import XCTVapor
 
             // Three users with distinct roles, all saved.
             let admin = APIUser(
-                username: "admin_100", passwordHash: try Bcrypt.hash("pass"), role: "admin"
+                username: "admin_100", passwordHash: try testPasswordHash("pass"), role: "admin"
             )
             try await admin.save(on: app.db)
             let instructor = APIUser(
-                username: "instructor_100", passwordHash: try Bcrypt.hash("pass"), role: "instructor"
+                username: "instructor_100", passwordHash: try testPasswordHash("pass"), role: "instructor"
             )
             try await instructor.save(on: app.db)
             let student = APIUser(
-                username: "student_100", passwordHash: try Bcrypt.hash("pass"), role: "student"
+                username: "student_100", passwordHash: try testPasswordHash("pass"), role: "student"
             )
             try await student.save(on: app.db)
 

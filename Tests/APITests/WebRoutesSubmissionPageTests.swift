@@ -505,7 +505,7 @@ import XCTVapor
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             // Create a submission owned by a different user
-            let otherUser = APIUser(username: "other", passwordHash: try Bcrypt.hash("pass"), role: "student")
+            let otherUser = APIUser(username: "other", passwordHash: try testPasswordHash("pass"), role: "student")
             try await otherUser.save(on: app.db)
             let otherID = try otherUser.requireID()
             try await wrInsertSetup(id: "setup_priv", on: app)
@@ -526,7 +526,7 @@ import XCTVapor
     @Test func instructorCanViewAnySubmission() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
-            let student = APIUser(username: "s2", passwordHash: try Bcrypt.hash("pass"), role: "student")
+            let student = APIUser(username: "s2", passwordHash: try testPasswordHash("pass"), role: "student")
             try await student.save(on: app.db)
             let studentID = try student.requireID()
             try await wrInsertSetup(id: "setup_any", on: app)
@@ -637,7 +637,7 @@ import XCTVapor
             // Student A owns the submission; Student B must be forbidden from viewing it.
             // This exercises the ownership guard in WebRoutes+Submission.swift
             // (submission.userID == user.id check).
-            let studentA = APIUser(username: "peer_student_a", passwordHash: try Bcrypt.hash("pass"), role: "student")
+            let studentA = APIUser(username: "peer_student_a", passwordHash: try testPasswordHash("pass"), role: "student")
             try await studentA.save(on: app.db)
             let studentAID = try studentA.requireID()
 
@@ -662,7 +662,7 @@ import XCTVapor
     @Test func instructorSeesAllTiers() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
-            let student = APIUser(username: "s3", passwordHash: try Bcrypt.hash("pass"), role: "student")
+            let student = APIUser(username: "s3", passwordHash: try testPasswordHash("pass"), role: "student")
             try await student.save(on: app.db)
             let studentID = try student.requireID()
             try await wrInsertSetup(id: "setup_all", on: app)

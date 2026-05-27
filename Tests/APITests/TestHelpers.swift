@@ -469,6 +469,24 @@ private extension Data {
 
 // MARK: - Login helper
 
+/// Hashes a password at the minimum bcrypt cost (4) for test fixtures.
+///
+/// Production hashing uses the default cost (12, ~150 ms). Test security is
+/// irrelevant, but running a cost-12 hash + verify for every login across the
+/// parallel suite saturates a 2-core CI runner — under the nightly coverage
+/// build that CPU starvation slows test-app/login setup enough to flake
+/// auth-dependent tests (303/401 / ~80 s stalls). bcrypt verify reads the cost
+/// from the stored hash, so logins against these fixtures are fast too.
+///
+/// This only changes *test fixture* hashes. It does NOT touch the app's
+/// configured password hasher, so `AuthProvider`'s timing-equalizer (the
+/// account-enumeration defense exercised by
+/// `loginWithUnknownUserStillRunsBcryptVerify`) still runs at the production
+/// cost.
+func testPasswordHash(_ password: String) throws -> String {
+    try Bcrypt.hash(password, cost: 4)
+}
+
 /// Creates `username` in the database (if not already present) with `role`,
 /// then performs the full two-step GET /login → POST /login flow so the CSRF
 /// token is valid. Returns the authenticated session cookie.
@@ -480,7 +498,7 @@ func loginUser(
     on app: Application
 ) async throws -> String {
     if try await APIUser.query(on: app.db).filter(\.$username == username).first() == nil {
-        let hash = try Bcrypt.hash(password)
+        let hash = try testPasswordHash(password)
         let user = APIUser(username: username, passwordHash: hash, role: role)
         try await user.save(on: app.db)
     }
