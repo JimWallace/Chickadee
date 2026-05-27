@@ -1,7 +1,17 @@
 {
   "_comment": "Pure-Python packages NOT in the upstream Pyodide distribution that Chickadee needs in the one canonical Pyodide (Public/pyodide). scripts/add-pyodide-extras.py downloads each pinned wheel, verifies its sha256, drops it into Public/pyodide, and injects a pyodide-lock.json entry so loadPyodide({packages:[...]}) can load it. Re-run by scripts/setup-vendor.sh after every re-vendor so a Pyodide bump never silently drops these. All wheels must be py3/py2.py3-none-any (ABI-independent) so they survive a Pyodide ABI bump unchanged.",
   "_mypy_deps_note": "The upstream Pyodide 'mypy' package lists depends:[] in pyodide-lock.json, but mypy needs typing_extensions and mypy_extensions at runtime (mypy/build.py, mypy/errorcodes.py). typing-extensions is already in the base lock; mypy_extensions is not, so it is vendored here. Both are pulled in via nb_mypy's depends so they load whenever the editor kernel loads nb_mypy. Without them mypy.api.run() raises ModuleNotFoundError and the kernel's nb_mypy type checker errors.",
+  "_comm_note": "pyodide_kernel imports `comm` at kernel startup (pyodide_kernel/comm.py -> kernel.py), but `comm` is in neither the upstream Pyodide lock nor the kernel's piplite all.json index. In the notebooks editor (which eagerly initializes the comm manager) the kernel's auto-install runs `piplite.install('comm')`, which fails with 'Can't find a pure Python 3 wheel for: comm' because disablePyPIFallback blocks the CDN. Vendoring it into the lock lets micropip resolve it locally (micropip checks the lock before the index).",
   "packages": [
+    {
+      "name": "comm",
+      "version": "0.2.3",
+      "file_name": "comm-0.2.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/60/97/891a0971e1e4a8c5d2b20bbe0e524dc04548d2307fee33cdeba148fd4fc7/comm-0.2.3-py3-none-any.whl",
+      "sha256": "c615d91d75f7f04f095b30d1c1711babd43bdc6419c1be9886a85f2f4e489417",
+      "imports": ["comm"],
+      "depends": []
+    },
     {
       "name": "astor",
       "version": "0.8.1",
