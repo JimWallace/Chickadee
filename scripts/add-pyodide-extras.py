@@ -37,8 +37,10 @@ def canonical_name(name: str) -> str:
     in pyodide-lock.json is stored in this form.  The lock KEY must therefore be
     normalized even when the manifest / wheel use an underscored project name —
     otherwise ``loadPackage("nb_mypy")`` raises "No known package with name
-    'nb_mypy'", and because the editor kernel loads it eagerly at boot, the whole
-    kernel dies with kernel-unhealthy / watchdog_timeout.
+    'nb_mypy'".  The editor loads nb_mypy lazily in a background task (see
+    scripts/patch-pyodide-kernel.py), so a bad key now silently disables editor
+    type-checking rather than bricking the kernel — but keeping the key
+    canonical keeps type-checking working.
     """
     return re.sub(r"[-_.]+", "-", name).lower()
 

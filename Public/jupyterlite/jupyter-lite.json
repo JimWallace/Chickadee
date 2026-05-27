@@ -395,14 +395,9 @@
     "litePluginSettings": {
       "@jupyterlite/pyodide-kernel-extension:kernel": {
         "disablePyPIFallback": true,
-        "loadPyodideOptions": {
-          "packages": [
-            "nb_mypy"
-          ]
-        },
         "pipliteUrls": [
           "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=783d01f64a330ecbbd82318ba2fde8842bc8eece502b821b8c0f57cacdde5cdc",
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=c8d148450939d4fb14829d8a6dd2d38b245c996489056e1baa75e2a7023bd03c"
+          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=b9716dbed8ec49193ad09d5dcc9ff682b55bc5b7f5d03a93a13cd3f737d46f2d"
         ],
         "pyodideUrl": "/pyodide/pyodide.js"
       }

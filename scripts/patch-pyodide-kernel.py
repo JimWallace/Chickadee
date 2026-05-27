@@ -5,8 +5,19 @@ JupyterLite has no config hook for "run Python at kernel startup", so we append
 a fail-safe activation block to `pyodide_kernel/__init__.py` inside the
 pyodide_kernel wheel that the pyodide-kernel labextension ships (the one
 `jupyter lite build` bundles into Public/jupyterlite/.../pypi/). At kernel boot
-the editor then runs `%load_ext nb_mypy; %nb_mypy On` so mypy diagnostics show
-on every cell — across every notebook, with no setup cell.
+the editor schedules a background task that loads nb_mypy and runs
+`%load_ext nb_mypy; %nb_mypy On`, so mypy diagnostics show on every cell —
+across every notebook, with no setup cell.
+
+LAZY + NON-FATAL by design. nb_mypy is deliberately NOT listed in
+`loadPyodideOptions.packages` (the kernel-boot critical path): a package named
+there is loaded by `loadPyodide()` itself, so ANY failure (a bad PEP 503 lock
+key, a future Pyodide bump dropping the wheel, an ABI mismatch) rejects the
+boot and bricks the WHOLE editor — even though type-checking is only an
+optional nicety. Instead the injected block schedules a background coroutine
+that loads the wheel from the vended Pyodide lock (`pyodide.loadPackage`) AFTER
+the kernel is up, then enables nb_mypy. The whole thing is wrapped so any
+failure degrades to "no type warnings" while the kernel stays healthy.
 
 Run from scripts/setup-jupyterlite.sh AFTER pip install and BEFORE the build, so
 CI's rebuild applies the identical patch (reproducible).
@@ -20,13 +31,15 @@ recomputes the `pipliteUrls` sha. The result is fully consistent and
 LOCALLY VERIFIABLE (wheel sha == all.json digest == pipliteUrls sha) without a
 browser — see scripts/verify-jupyterlite.sh.
 
-Idempotent (marker guard for the wheel; digest update always runs) and
-deterministic (sorted entries + fixed timestamps + stable JSON) so the bundle
-stays byte-stable → `git diff Public/jupyterlite` is clean.
+Re-patchable + deterministic: an existing activation block is stripped and
+re-appended, so editing the block below and re-running yields identical bytes;
+combined with sorted entries + fixed timestamps + stable JSON the bundle stays
+byte-stable → `git diff Public/jupyterlite` is clean.
 
 FAIL-SAFE: the injected block swallows every exception, so a missing or
 IPython-incompatible nb_mypy degrades to "no type warnings", never a dead
-kernel. (A wheel that won't load at all is prevented by the sha cascade above.)
+kernel. Because the load is off the boot critical path, even a wheel that
+cannot be fetched/loaded at all no longer takes the kernel down with it.
 """
 from __future__ import annotations
 
@@ -39,23 +52,46 @@ import zipfile
 MARKER = "CHICKADEE_NB_MYPY_ACTIVATION"
 TARGET_MEMBER = "pyodide_kernel/__init__.py"
 
+# NOTE: a plain string literal (not str.format) so the f-strings and braces in
+# the emitted Python below need no escaping; the marker comments embed MARKER
+# verbatim and _strip_activation() locates them by that text.
 ACTIVATION = '''
 
-# --- {marker} -----------------------------------------------------------
-# Enable nb_mypy type-checking by default for the in-browser editor. nb_mypy
-# (+ mypy, astor) is preloaded via loadPyodideOptions in jupyter-lite.json.
-# Fail-safe: NEVER let type-checking setup stop the kernel from starting.
+# --- CHICKADEE_NB_MYPY_ACTIVATION -----------------------------------------------------------
+# Enable nb_mypy type-checking for the in-browser editor — LAZILY, off the
+# kernel-boot critical path. nb_mypy (+ mypy, astor) lives in the vended Pyodide
+# lock but is deliberately NOT in loadPyodideOptions.packages: loading it there
+# would tie kernel boot to nb_mypy, so any load failure would brick the whole
+# editor. Instead we schedule a background task that loads it AFTER the kernel
+# is up, then turns type-checking on. Fail-safe: any failure (missing or
+# incompatible wheel, bad lock key, scheduling error) degrades to "no type
+# warnings" — the kernel stays healthy and usable.
 try:  # pragma: no cover - exercised only in the in-browser kernel
-    ipython_shell.run_line_magic("load_ext", "nb_mypy")
-    ipython_shell.run_line_magic("nb_mypy", "On")
-except Exception as _chickadee_nbmypy_err:  # noqa: BLE001
+    import asyncio as _chickadee_asyncio
+
+    async def _chickadee_enable_nb_mypy():
+        try:
+            import pyodide_js as _chickadee_pyodide_js
+
+            await _chickadee_pyodide_js.loadPackage("nb-mypy")
+            ipython_shell.run_line_magic("load_ext", "nb_mypy")
+            ipython_shell.run_line_magic("nb_mypy", "On")
+        except Exception as _chickadee_nbmypy_err:  # noqa: BLE001
+            import warnings as _chickadee_warnings
+
+            _chickadee_warnings.warn(
+                f"Chickadee: nb_mypy type-checking not enabled: {_chickadee_nbmypy_err!r}"
+            )
+
+    _chickadee_asyncio.ensure_future(_chickadee_enable_nb_mypy())
+except Exception as _chickadee_nbmypy_sched_err:  # noqa: BLE001
     import warnings as _chickadee_warnings
 
     _chickadee_warnings.warn(
-        f"Chickadee: nb_mypy type-checking not enabled: {{_chickadee_nbmypy_err!r}}"
+        f"Chickadee: nb_mypy activation could not be scheduled: {_chickadee_nbmypy_sched_err!r}"
     )
-# --- end {marker} -------------------------------------------------------
-'''.format(marker=MARKER)
+# --- end CHICKADEE_NB_MYPY_ACTIVATION -------------------------------------------------------
+'''
 
 # Fixed timestamp for deterministic, byte-stable repacking across machines.
 _FIXED_DATE = (1980, 1, 1, 0, 0, 0)
@@ -66,8 +102,22 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
+def _strip_activation(text: str) -> str:
+    """Return the wheel's __init__.py with any prior activation block removed.
+
+    The block is always appended at end-of-file between the marker delimiters,
+    so we cut from the start delimiter onward and restore the single trailing
+    newline the upstream file ends with. This makes the patch re-patchable:
+    editing ACTIVATION and re-running reproduces a fresh-patch byte-for-byte.
+    """
+    start = text.find(f"# --- {MARKER} ")
+    if start == -1:
+        return text
+    return text[:start].rstrip() + "\n"
+
+
 def repack_wheel(wheel: pathlib.Path) -> None:
-    """Append the activation block to __init__.py inside the wheel (idempotent)."""
+    """Inject (or refresh) the activation block in __init__.py inside the wheel."""
     with zipfile.ZipFile(wheel) as zin:
         names = zin.namelist()
         if TARGET_MEMBER not in names:
@@ -75,10 +125,8 @@ def repack_wheel(wheel: pathlib.Path) -> None:
         members = {name: zin.read(name) for name in names}
 
     init_text = members[TARGET_MEMBER].decode("utf-8")
-    if MARKER in init_text:
-        print(f"patch-pyodide-kernel: wheel already patched ({wheel.name})")
-        return
-    members[TARGET_MEMBER] = (init_text + ACTIVATION).encode("utf-8")
+    patched = _strip_activation(init_text) + ACTIVATION
+    members[TARGET_MEMBER] = patched.encode("utf-8")
 
     # Repack with ZIP_STORED (no compression): unlike DEFLATE, stored bytes have
     # no zlib-version variability, so the wheel is byte-identical on macOS (dev)
