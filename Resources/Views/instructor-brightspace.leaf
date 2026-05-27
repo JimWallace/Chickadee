@@ -1,23 +1,17 @@
 #extend("base"):
 #export("title"):
-BrightSpace
+LEARN
 #endexport
 #export("content"):
 <nav class="instructor-tabs" aria-label="Instructor sections">
     <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
-    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>BrightSpace</a>
+    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
 </nav>
 
-<h1 style="margin:0 0 1.25rem">BrightSpace</h1>
+<h1 style="margin:0 0 1.25rem">LEARN</h1>
 
 #if(!brightspaceSyncEnabled):
-<section class="bs-section">
-    <p class="empty">
-        Automatic BrightSpace grade sync is not configured on this server.
-        You can still export grades as a CSV for manual upload below.
-    </p>
-</section>
 #elseif(!hasActiveCourse):
 <section class="bs-section">
     <p class="empty">Select a course to manage its BrightSpace grade sync.</p>

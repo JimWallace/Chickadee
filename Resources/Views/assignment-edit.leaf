@@ -49,7 +49,6 @@
                     Open Date (optional)
                     <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)">
                 </label>
-                <p class="card-meta" style="margin:-.35rem 0 .5rem;font-size:.78rem">Students cannot access or submit until this date. Leave blank to open as soon as the assignment is opened.</p>
                 <label class="form-label" style="margin:0">
                     Due Date (optional)
                     <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">

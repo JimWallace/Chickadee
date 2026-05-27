@@ -39,9 +39,10 @@ import XCTVapor
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("BrightSpace"))
-                    // brightSpaceClient is nil in tests → not-configured branch.
-                    #expect(html.contains("not configured on this server"))
+                    #expect(html.contains("LEARN"))
+                    // brightSpaceClient is nil in tests → the not-configured branch
+                    // renders nothing, but the CSV export section is always present.
+                    #expect(html.contains("Export grades"))
                 })
         }
     }

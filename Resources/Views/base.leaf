@@ -27,7 +27,11 @@
 
     #if(currentUser):
         #if(currentUser.isInstructor):
+            #if(currentUser.activeCourse):
+            <a class="nav-link" href="/instructor">#(currentUser.activeCourse.code)</a>
+            #else:
             <a class="nav-link" href="/instructor">Instructor</a>
+            #endif
         #endif
         #if(currentUser.isAdmin):
             <a class="nav-link" href="/admin">Admin</a>
