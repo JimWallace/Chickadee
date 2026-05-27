@@ -17,6 +17,11 @@ import Vapor
 
 struct MCPMetadataRoutes: RouteCollection {
     let endpoints: MCPEndpoints
+    /// Scopes advertised in both discovery documents, derived from `MCP_MODE`
+    /// (`MCPMode.advertisedScopes`) at registration so the metadata can never
+    /// claim a scope the server won't grant — read_only advertises only
+    /// `content:read`, read_write advertises read + write.
+    let advertisedScopes: [ContentScope]
 
     func boot(routes: RoutesBuilder) throws {
         let wellKnown = routes.grouped(".well-known")
@@ -27,7 +32,7 @@ struct MCPMetadataRoutes: RouteCollection {
 
     /// RFC 9728 protected-resource metadata.
     func protectedResourceMetadata(req: Request) throws -> Response {
-        let scopes = ContentScope.allCases.map { JSONValue.string($0.rawValue) }
+        let scopes = advertisedScopes.map { JSONValue.string($0.rawValue) }
         let metadata = JSONValue.object([
             "resource": .string(endpoints.resource),
             "authorization_servers": .array([.string(endpoints.issuer)]),
@@ -39,7 +44,7 @@ struct MCPMetadataRoutes: RouteCollection {
 
     /// RFC 8414 authorization-server metadata for the browser flow.
     func authorizationServerMetadata(req: Request) throws -> Response {
-        let scopes = ContentScope.allCases.map { JSONValue.string($0.rawValue) }
+        let scopes = advertisedScopes.map { JSONValue.string($0.rawValue) }
         let metadata = JSONValue.object([
             "issuer": .string(endpoints.issuer),
             "authorization_endpoint": .string(endpoints.authorizationEndpoint),

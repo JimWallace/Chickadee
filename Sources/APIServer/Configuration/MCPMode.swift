@@ -24,17 +24,25 @@ enum MCPMode: String, Sendable, CaseIterable {
     /// nothing.
     var isMounted: Bool { self != .off }
 
-    /// The maximum set of content scopes a request may exercise in this mode.
-    /// The bearer middleware intersects each token's scopes with this set, so
-    /// the rest of the stack (per-tool scope checks, `tools/list` filtering,
-    /// resources) needs no mode awareness.
-    var scopeCeiling: Set<ContentScope> {
+    /// The scopes this mode advertises and grants, in stable display order
+    /// (read before write).  This is the single source of truth for every
+    /// spec-facing surface — the two `.well-known` discovery documents, the
+    /// `scope` granted by DCR (`/oauth/register`), and the consent screen — so
+    /// the metadata never advertises more (or less) than the server honors.
+    /// `scopeCeiling` is the set projection of this list.
+    var advertisedScopes: [ContentScope] {
         switch self {
         case .off: return []
         case .readOnly: return [.read]
         case .readWrite: return [.read, .write]
         }
     }
+
+    /// Set form of `advertisedScopes`, used for membership/intersection checks:
+    /// the bearer middleware intersects each token's scopes with this set, so
+    /// the rest of the stack (per-tool scope checks, `tools/list` filtering,
+    /// resources) needs no mode awareness.
+    var scopeCeiling: Set<ContentScope> { Set(advertisedScopes) }
 
     /// Parses `MCP_MODE`.  Canonical values are `off`, `read_only`,
     /// `read_write`; a handful of obvious synonyms are accepted so an operator

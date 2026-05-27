@@ -297,8 +297,11 @@ struct MCPOAuthRoutes: Sendable {
             grantTypes: ["authorization_code", "refresh_token"],
             responseTypes: ["code"],
             tokenEndpointAuthMethod: "none",
-            scope: req.application.appConfig.mcp.mode.scopeCeiling
-                .map(\.rawValue).sorted().joined(separator: " "))
+            // Grant exactly what the discovery metadata advertises — same
+            // source (MCPMode.advertisedScopes) so DCR and the .well-known docs
+            // can never disagree.
+            scope: req.application.appConfig.mcp.mode.advertisedScopes
+                .map(\.rawValue).joined(separator: " "))
         let result = Response(status: .created)
         try result.content.encode(response, as: .json)
         result.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
