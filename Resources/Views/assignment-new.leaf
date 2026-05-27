@@ -34,7 +34,6 @@ Create Assignment
                 <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
                     Opens
                     <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)"
-                           title="Optional. Students cannot access or submit until this date; leave blank to open immediately."
                            style="font-size:.875rem;padding:.2rem .5rem">
                 </label>
                 <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
