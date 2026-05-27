@@ -530,6 +530,47 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
   assert.match(result.outcomes[2].shortResult, /WebR/);
 });
 
+test('extensionless Python test scripts dispatch via their shebang instead of failing as unsupported', async () => {
+  const harness = await loadRunnerHarness({
+    zipFiles: {
+      // A generated test script with no file extension whose first line is a
+      // Python shebang — the shape produced by the variableEquality template.
+      'beats': '#!/usr/bin/env python3\nvariable_name = "beats"\nJSON_RESULT_PASS\n',
+      // Extensionless file with a shell shebang stays a (browser-unsupported) shell.
+      'runtests': '#!/bin/sh\necho hi\n',
+      // No extension, no shebang, nothing Python-looking → genuinely unsupported.
+      'mystery': 'just some text\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'beats', tier: 'public' },
+        { script: 'runtests', tier: 'public' },
+        { script: 'mystery', tier: 'public' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_extensionless',
+  );
+
+  assert.deepEqual(
+    plain(result.outcomes.map(outcome => [outcome.testName, outcome.status])),
+    [
+      ['beats', 'pass'],
+      ['runtests', 'error'],
+      ['mystery', 'error'],
+    ],
+  );
+  // The extensionless Python script actually executed (it was compiled).
+  assert.ok(harness.py.state.configuredScripts.includes('beats'));
+  assert.match(result.outcomes[1].shortResult, /Shell scripts cannot run/);
+  assert.match(result.outcomes[2].shortResult, /Unsupported test script type: mystery/);
+});
+
 test('browser runner keeps display names separate from output and extracts traceback-only details', async () => {
   const harness = await loadRunnerHarness({
     zipFiles: {
