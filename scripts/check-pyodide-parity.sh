@@ -73,21 +73,50 @@ fi
 
 echo "pyodide-parity: OK — vendored and kernel-pinned Pyodide both at $VENDORED_VERSION"
 
-# Extras guard: every package in the extras manifest must be present in the lock.
-# A re-vendor that forgot scripts/add-pyodide-extras.py would silently drop
-# nb_mypy and disable editor type-checking — fail loudly instead.
+# Extras + kernel-boot guard.
+#
+# Pyodide looks packages up by their PEP 503 canonical name (nb_mypy -> nb-mypy),
+# so the lock KEY must be canonical.  Two failure modes this catches:
+#   1. A re-vendor that forgot scripts/add-pyodide-extras.py silently drops
+#      nb_mypy and disables editor type-checking.
+#   2. A package the editor kernel loads EAGERLY at boot (loadPyodideOptions.
+#      packages) isn't resolvable in the lock under its canonical name — then
+#      loadPackage() throws "No known package" and the whole editor kernel dies
+#      at boot (kernel-unhealthy / watchdog_timeout).  This is the regression
+#      that shipped in v0.4.289: the lock keyed nb_mypy with an underscore while
+#      the kernel requested it canonically.
 EXTRAS_MANIFEST="$ROOT_DIR/Tools/vendor/pyodide-extra-packages.json"
 LOCK_JSON="$ROOT_DIR/Public/pyodide/pyodide-lock.json"
-if [[ -f "$EXTRAS_MANIFEST" ]]; then
-  python3 - "$EXTRAS_MANIFEST" "$LOCK_JSON" <<'PY'
-import json, sys
-manifest = json.load(open(sys.argv[1]))["packages"]
-lock = json.load(open(sys.argv[2]))["packages"]
-missing = [p["name"] for p in manifest if p["name"] not in lock]
-if missing:
-    print(f"pyodide-parity: FAIL — extras missing from lock: {missing}", file=sys.stderr)
-    print("  Run scripts/add-pyodide-extras.py (or scripts/setup-vendor.sh) to restore them.", file=sys.stderr)
-    sys.exit(1)
-print(f"pyodide-parity: OK — {len(manifest)} extra package(s) present in lock")
+KERNEL_CONFIG="$ROOT_DIR/Public/jupyterlite/jupyter-lite.json"
+python3 - "$EXTRAS_MANIFEST" "$LOCK_JSON" "$KERNEL_CONFIG" <<'PY'
+import json, os, re, sys
+
+def canon(name):
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+extras_path, lock_path, kernel_cfg_path = sys.argv[1], sys.argv[2], sys.argv[3]
+lock_keys = set(json.load(open(lock_path))["packages"])
+
+if os.path.exists(extras_path):
+    manifest = json.load(open(extras_path))["packages"]
+    missing = [p["name"] for p in manifest if canon(p["name"]) not in lock_keys]
+    if missing:
+        print(f"pyodide-parity: FAIL — extras missing from lock (by canonical name): {missing}", file=sys.stderr)
+        print("  Run scripts/add-pyodide-extras.py (or scripts/setup-vendor.sh) to restore them.", file=sys.stderr)
+        sys.exit(1)
+    print(f"pyodide-parity: OK — {len(manifest)} extra package(s) present in lock")
+
+if os.path.exists(kernel_cfg_path):
+    cfg = json.load(open(kernel_cfg_path))
+    # litePluginSettings lives under jupyter-config-data in the built config.
+    settings = (cfg.get("jupyter-config-data") or cfg).get("litePluginSettings") or {}
+    kernel = settings.get("@jupyterlite/pyodide-kernel-extension:kernel") or {}
+    boot_pkgs = ((kernel.get("loadPyodideOptions") or {}).get("packages")) or []
+    unresolved = [p for p in boot_pkgs if canon(p) not in lock_keys]
+    if unresolved:
+        print(f"pyodide-parity: FAIL — kernel boot packages not resolvable in lock: {unresolved}", file=sys.stderr)
+        print("  Each loadPyodideOptions.packages entry must match a canonical key in pyodide-lock.json;", file=sys.stderr)
+        print("  the kernel loads them eagerly, so an unresolved name kills the editor kernel at boot.", file=sys.stderr)
+        sys.exit(1)
+    print(f"pyodide-parity: OK — {len(boot_pkgs)} kernel boot package(s) resolve in lock")
 PY
-fi
