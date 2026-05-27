@@ -32,3 +32,11 @@ jobs:
         # is what makes the editor's same-origin Pyodide trustworthy: green
         # here means the vended copy actually matches the kernel.
         run: scripts/check-pyodide-parity.sh
+
+      - name: Verify editor kernel boots with zero external fetches (FIPPA)
+        # Asserts every module the editor kernel imports at startup is provided
+        # by the locally-vended Pyodide. A miss would fall through to
+        # piplite.install(...) -> CDN/PyPI at boot, which FIPPA blocks — bricking
+        # the editor (the v0.4.292 `comm` outage). Catches that class in CI
+        # instead of on a student's screen.
+        run: python3 scripts/check-kernel-deps-vendored.py
