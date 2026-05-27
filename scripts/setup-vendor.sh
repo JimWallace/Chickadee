@@ -83,6 +83,18 @@ while IFS= read -r -d '' big; do
     rm -f "$big" "$big.metadata"
 done < <(find "$public_pyodide" -name '*.whl' -size +100M -print0)
 
+# Strip native executables that ship inside the upstream Pyodide tarball
+# (0.29.x bundles a Windows python.exe at the dist root).  Nothing in Chickadee
+# can run one: the Linux container, the runner, and the browser all serve this
+# tree as static WASM assets and never execute a native binary.  But Trivy
+# scans it and fails the release build on the (vulnerable, never-reached) Go
+# stdlib it was built with.  Drop them so we neither ship nor scan a binary we
+# never run.
+while IFS= read -r -d '' exe; do
+    echo "    stripping non-WASM executable from Pyodide dist: $(basename "$exe")" >&2
+    rm -f "$exe"
+done < <(find "$public_pyodide" -name '*.exe' -print0)
+
 # ── jszip ─────────────────────────────────────────────────────────────
 echo "==> Fetching jszip $JSZIP_VERSION"
 mkdir -p "$public_vendor"
