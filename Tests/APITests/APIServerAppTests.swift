@@ -124,8 +124,24 @@ struct APIServerAppTests {
         #expect(cookie.maxAge == nil)
         #expect(cookie.isHTTPOnly)
         #expect(cookie.isSecure)
-        #expect(cookie.sameSite == .lax)
         #expect(cookie.string == "abc123")
+    }
+
+    @Test func sessionCookieUsesSameSiteNoneOverHTTPS() {
+        // The MCP OAuth popup is opened by a cross-site opener (claude.ai), so the
+        // login POST that resumes /oauth/authorize is cross-site. SameSite=None is
+        // required for the session cookie to ride along on that POST (and it must
+        // be Secure for browsers to accept None).
+        let cookie = chickadeeSessionCookie(sessionID: SessionID(string: "abc123"), isSecure: true)
+        #expect(cookie.sameSite == HTTPCookies.SameSitePolicy.none)
+    }
+
+    @Test func sessionCookieFallsBackToLaxWithoutSecure() {
+        // Plain-HTTP dev: browsers reject SameSite=None without Secure, so fall
+        // back to Lax so local development still logs in.
+        let cookie = chickadeeSessionCookie(sessionID: SessionID(string: "abc123"), isSecure: false)
+        #expect(cookie.sameSite == .lax)
+        #expect(!cookie.isSecure)
     }
 
     @Test func parseSSOIdentityAllowlistNormalizesAndDeduplicates() {
