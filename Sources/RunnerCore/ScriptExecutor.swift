@@ -13,7 +13,8 @@
 // resolves names against whatever workspace it owns.
 //
 // `import _Concurrency` is required for the `async` protocol requirements to
-// lower under Embedded Swift (see the note in SuiteExecution.swift).
+// lower under Embedded Swift (see the note in SuiteExecution.swift, and
+// upstream https://github.com/swiftlang/swift/issues/89492).
 import _Concurrency
 
 /// Runs a single test script and reports whether a named script exists in the
