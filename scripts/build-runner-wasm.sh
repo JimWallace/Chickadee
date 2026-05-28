@@ -28,6 +28,13 @@ out_dir="$repo_root/Public/runner-wasm"
 
 cd "$repo_root/wasm"
 
+# NOTE: do NOT set JAVASCRIPTKIT_EXPERIMENTAL_EMBEDDED_WASM here. The embedded
+# wasm SDK already forces Embedded mode globally, so JavaScriptKit +
+# JavaScriptEventLoop compile embedded without it — and setting it flips the
+# PackageToJS output from the required WASI *reactor* model (exported
+# `_initialize`) to a *command* (`_start`), which JavaScriptKit's runtime
+# rejects ("supports only WASI reactor ABI").
+
 echo "Building RunnerWasm (Embedded Swift, SDK: $sdk)…"
 swift package --swift-sdk "$sdk" js -c release
 
