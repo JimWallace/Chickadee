@@ -46,6 +46,9 @@ jobs:
       - name: Block new XCTest imports
         run: scripts/no-new-xctest.sh
 
+      - name: Check runner wasm size budget
+        run: scripts/check-runner-wasm-size.sh
+
   # Single shared compile of the whole package + all test targets.  The
   # resulting `.build/` tree is cached and reused by every test job below
   # via `swift test --skip-build`, replacing five from-scratch compiles

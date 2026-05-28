@@ -131,6 +131,11 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // and prevent the app from initialising.  Modern Pyodide (0.27+) does not
     // require SharedArrayBuffer — it uses a service-worker-based synchronisation
     // fallback — so cross-origin isolation on the iframe document is unnecessary.
+    // Registered just OUTSIDE FileMiddleware so it can set immutable cache +
+    // application/wasm headers on the content-hashed wasm runner served from
+    // Public/runner-wasm/ (FileMiddleware short-circuits, so a middleware after
+    // it never sees those responses).
+    app.middleware.use(RunnerWasmCacheMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware())
 }
