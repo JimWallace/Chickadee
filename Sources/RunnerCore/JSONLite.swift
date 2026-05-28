@@ -144,9 +144,92 @@ private struct JSONParser {
         while let c = current, (c >= "0" && c <= "9") || c == "." || c == "e" || c == "E" || c == "+" || c == "-" {
             pos += 1
         }
-        let text = String(chars[start..<pos])
-        guard let d = Double(text) else { return nil }
-        return .number(d)
+        guard let value = JSONParser.parseDoubleLiteral(chars[start..<pos]) else { return nil }
+        return .number(value)
+    }
+
+    /// Parse a JSON number literal to `Double` WITHOUT `Double(String)`: the
+    /// latter lowers to `_swift_stdlib_strtod_clocale`, which the Embedded Swift
+    /// wasm runtime does not provide (it becomes a link error the moment the
+    /// browser bridge reaches this path via `executeSuites`). The value here is
+    /// a footer's reserved `score`, which `interpretScriptOutput` never reads —
+    /// we only need a finite `Double` so the enclosing object parses. Shared by
+    /// the native and embedded builds (one implementation, no drift); precise to
+    /// full `Double` for typical inputs via an integer mantissa + decimal scale.
+    static func parseDoubleLiteral(_ slice: ArraySlice<Character>) -> Double? {
+        let chars = Array(slice)
+        let count = chars.count
+        var index = 0
+        guard count > 0 else { return nil }
+
+        var sign = 1.0
+        if chars[index] == "-" {
+            sign = -1.0
+            index += 1
+        } else if chars[index] == "+" {
+            index += 1
+        }
+
+        var mantissa = 0.0
+        var fractionDigits = 0
+        var sawDigit = false
+        while index < count, let digit = asciiDigit(chars[index]) {
+            mantissa = mantissa * 10 + Double(digit)
+            index += 1
+            sawDigit = true
+        }
+        if index < count, chars[index] == "." {
+            index += 1
+            while index < count, let digit = asciiDigit(chars[index]) {
+                mantissa = mantissa * 10 + Double(digit)
+                fractionDigits += 1
+                index += 1
+                sawDigit = true
+            }
+        }
+        guard sawDigit else { return nil }
+
+        var exponent = 0
+        if index < count, chars[index] == "e" || chars[index] == "E" {
+            index += 1
+            var exponentSign = 1
+            if index < count, chars[index] == "-" {
+                exponentSign = -1
+                index += 1
+            } else if index < count, chars[index] == "+" {
+                index += 1
+            }
+            var sawExponentDigit = false
+            while index < count, let digit = asciiDigit(chars[index]) {
+                exponent = exponent * 10 + digit
+                index += 1
+                sawExponentDigit = true
+            }
+            guard sawExponentDigit else { return nil }
+            exponent *= exponentSign
+        }
+        guard index == count else { return nil }
+
+        return sign * mantissa * powerOfTen(exponent - fractionDigits)
+    }
+
+    /// ASCII digit value (0–9) or nil — avoids `wholeNumberValue` (Unicode
+    /// tables) and force-unwrapping, keeping number parsing embedded-clean.
+    private static func asciiDigit(_ c: Character) -> Int? {
+        guard let ascii = c.asciiValue, ascii >= 48, ascii <= 57 else { return nil }
+        return Int(ascii - 48)
+    }
+
+    /// `10` raised to an integer power via repeated f64 multiply/divide — no
+    /// `pow` (libm) dependency.
+    private static func powerOfTen(_ exponent: Int) -> Double {
+        var result = 1.0
+        var remaining = exponent >= 0 ? exponent : -exponent
+        while remaining > 0 {
+            result *= 10
+            remaining -= 1
+        }
+        return exponent >= 0 ? result : 1.0 / result
     }
 
     private mutating func parseBool() -> JSONValue? {
