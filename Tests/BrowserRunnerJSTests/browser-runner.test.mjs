@@ -15,6 +15,33 @@ const skipFixture = JSON.parse(
   await fs.readFile(path.resolve('Tests/Fixtures/dependency-skip-message.json'), 'utf8'),
 );
 
+// Mirrors RunnerCore.classifyScriptInterpreter (the real logic is wasm/Swift,
+// covered by ScriptClassificationTests) — returns the interpreter raw value so
+// the browser dispatch wiring can be tested without loading the wasm.
+function defaultClassifyStub(name, source) {
+  const base = String(name).slice(String(name).lastIndexOf('/') + 1);
+  const dot = base.lastIndexOf('.');
+  const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
+  const byExt = { py: 'python', sh: 'sh', bash: 'bash', zsh: 'zsh', rb: 'ruby', pl: 'perl', js: 'node', php: 'php', r: 'rscript' };
+  if (byExt[ext]) return byExt[ext];
+  const first = String(source || '').replace(/^[﻿\s]+/, '').split('\n', 1)[0] || '';
+  if (first.startsWith('#!')) {
+    const lo = first.toLowerCase();
+    if (lo.includes('python')) return 'python';
+    if (lo.includes('node') || lo.includes('javascript')) return 'node';
+    if (lo.includes('ruby')) return 'ruby';
+    if (lo.includes('perl')) return 'perl';
+    if (lo.includes('bash')) return 'bash';
+    if (lo.includes('zsh')) return 'zsh';
+    if (lo.includes('sh')) return 'sh';
+  }
+  const lines = String(source || '').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).slice(0, 5);
+  if (lines.some(l => l.startsWith('import ') || l.startsWith('from ') || l.startsWith('def ') || l.startsWith('class ') || l.startsWith('if __name__ =='))) {
+    return 'python';
+  }
+  return 'unknown';
+}
+
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -336,6 +363,10 @@ async function loadRunnerHarness(options = {}) {
       introspectableSource: `# Generated from ${filename}\n# (stub introspectable source)\n`,
       codeCellCount: (cells || []).filter(c => c.cell_type === 'code').length,
     })),
+    // Test seam for the shared classifier (real logic is RunnerCore/Swift,
+    // covered by ScriptClassificationTests). This stub mirrors it, returning the
+    // interpreter raw value so dispatch wiring can be exercised.
+    runnerClassifyScript: options.runnerClassify ?? defaultClassifyStub,
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
