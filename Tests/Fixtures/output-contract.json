@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to BOTH the native worker (interpretScriptOutput in Sources/Worker/RunnerDaemon+JobProcessing.swift) and the browser runner (runPyScript in Public/browser-runner.js). `status` is asserted by BOTH runners — grading parity is lock-step. `native` records the exact native display strings as a regression lock. The browser runner is asserted to (a) agree on `status` and (b) never leak the raw JSON envelope into the student-facing strings. The browser runner's shortResult/longResult FORMATTING still differs from native (it omits the `stdout:`/`stderr:` section prefixes and strips the leading `label: `); making those byte-identical is the runner-unification follow-up, not asserted here. Consumed by Tests/WorkerTests/OutputContractTests.swift and Tests/BrowserRunnerJSTests/output-contract.test.mjs.",
+  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to RunnerCore's interpretScriptOutput, which BOTH runners now use (the worker directly; the browser via the wasm executeSuites bridge). `native` records the exact display strings interpretScriptOutput produces and is the single source of truth — Tests/WorkerTests/OutputContractTests.swift asserts the native build matches it, and Tests/BrowserRunnerJSTests/output-contract.test.mjs drives the REAL vendored wasm and asserts it matches too, so the two runners are byte-identical (status, shortResult, longResult). interpretScriptOutput strips a leading `<test>: ` label from shortResult (when the footer carries a `test` field) and surfaces a footer `traceback` field as longResult.",
   "cases": [
     {
       "name": "pass with JSON footer only",
@@ -15,7 +15,7 @@
       "stderr": "",
       "exitCode": 1,
       "status": "fail",
-      "native": { "shortResult": "t: msg line1", "longResult": "stdout:\nmsg line1\nmsg line2" }
+      "native": { "shortResult": "msg line1", "longResult": "stdout:\nmsg line1\nmsg line2" }
     },
     {
       "name": "error with JSON footer",
@@ -23,7 +23,15 @@
       "stderr": "",
       "exitCode": 2,
       "status": "error",
-      "native": { "shortResult": "t: boom", "longResult": null }
+      "native": { "shortResult": "boom", "longResult": null }
+    },
+    {
+      "name": "error with footer traceback field (surfaced as longResult)",
+      "stdout": "Could not test calculate_bmi\n{\"shortResult\":\"Q1: Could not test calculate_bmi\",\"status\":\"error\",\"test\":\"Q1\",\"error\":\"Could not test calculate_bmi\",\"traceback\":\"Traceback (most recent call last):\\n  File \\\"t.py\\\", line 3\\nNotImplementedError\"}\n",
+      "stderr": "",
+      "exitCode": 2,
+      "status": "error",
+      "native": { "shortResult": "Could not test calculate_bmi", "longResult": "Traceback (most recent call last):\n  File \"t.py\", line 3\nNotImplementedError" }
     },
     {
       "name": "plain-text last line (no JSON)",

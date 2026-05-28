@@ -58,9 +58,13 @@ function stemOf(name) {
 function defaultShort(status) {
   return status === 'pass' ? 'passed' : status === 'fail' ? 'failed' : status === 'timeout' ? 'timed out' : 'error';
 }
-function longResultOf(raw, footer) {
+function longResultOf(raw, footerObj) {
+  // A footer `traceback` is the most useful detail — surface it verbatim.
+  if (footerObj && typeof footerObj.traceback === 'string' && footerObj.traceback.trim()) {
+    return footerObj.traceback.trim();
+  }
   let stdout = String(raw.stdout || '');
-  if (footer) {
+  if (footerObj) {
     const arr = stdout.split('\n');
     for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].trim()) { arr.splice(i, 1); break; } }
     stdout = arr.join('\n');
@@ -73,23 +77,29 @@ function longResultOf(raw, footer) {
   return sections.length ? sections.join('\n\n') : null;
 }
 function interpretRaw(raw) {
-  if (raw.timedOut) return { status: 'timeout', shortResult: 'timed out', longResult: longResultOf(raw, false) };
+  if (raw.timedOut) return { status: 'timeout', shortResult: 'timed out', longResult: longResultOf(raw, null) };
   const status = raw.exitCode === 0 ? 'pass' : (raw.exitCode === 1 || raw.exitCode === 3) ? 'fail' : 'error';
   const lines = String(raw.stdout || '').split('\n').map(l => l.trim()).filter(Boolean);
   const last = lines[lines.length - 1] || '';
-  let footer = false;
-  let shortResult;
+  let footerObj = null;
   if (last) {
     try {
       const obj = JSON.parse(last);
-      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-        footer = true;
-        shortResult = typeof obj.shortResult === 'string' ? obj.shortResult : defaultShort(status);
-      }
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) footerObj = obj;
     } catch (_) { /* not a JSON footer */ }
   }
-  if (shortResult === undefined) shortResult = last || defaultShort(status);
-  return { status, shortResult, longResult: longResultOf(raw, footer) };
+  let shortResult;
+  if (footerObj) {
+    shortResult = typeof footerObj.shortResult === 'string' ? footerObj.shortResult : defaultShort(status);
+    // Strip a redundant "<test>: " label prefix when the footer names the test.
+    if (typeof footerObj.test === 'string' && footerObj.test) {
+      const prefix = footerObj.test + ': ';
+      if (shortResult.startsWith(prefix)) shortResult = shortResult.slice(prefix.length);
+    }
+  } else {
+    shortResult = last || defaultShort(status);
+  }
+  return { status, shortResult, longResult: longResultOf(raw, footerObj) };
 }
 function makeStubOutcome(suite, interp, executionTimeMs, attempt) {
   const displayName = (typeof suite.displayName === 'string' && suite.displayName.trim()) ? suite.displayName : null;

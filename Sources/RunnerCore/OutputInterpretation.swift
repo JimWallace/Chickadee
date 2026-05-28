@@ -56,7 +56,11 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     let shortResult: String
     if let footer {
         if case .string(let s)? = footer["shortResult"] {
-            shortResult = s
+            // Drop the redundant "<test label>: " prefix — the test name is
+            // already shown as the row heading, so repeating it in the one-line
+            // summary is noise. (Shared by both runners; the browser runner used
+            // to do this in JS.)
+            shortResult = stripTestLabelPrefix(s, footer: footer)
         } else {
             shortResult = status.defaultShortResult
         }
@@ -82,6 +86,13 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     let stdoutText = trimWhitespaceAndNewlines(strippedStdout)
     let stderrText = trimWhitespaceAndNewlines(output.stderr)
     let longResult: String? = {
+        // A footer `traceback` (emitted by test_runtime's errored(err=…)) is the
+        // most useful failure detail — surface it verbatim rather than the bare
+        // summary. (Shared by both runners; the browser runner used to do this.)
+        if let footer, case .string(let traceback)? = footer["traceback"] {
+            let trimmed = trimWhitespaceAndNewlines(traceback)
+            if !trimmed.isEmpty { return trimmed }
+        }
         var sections: [String] = []
         if !stdoutText.isEmpty { sections.append("stdout:\n\(stdoutText)") }
         if !stderrText.isEmpty { sections.append("stderr:\n\(stderrText)") }
@@ -89,6 +100,17 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     }()
 
     return InterpretedScriptResult(status: status, shortResult: shortResult, longResult: longResult)
+}
+
+/// Strip a leading `"<test>: "` label from a footer's `shortResult` when the
+/// footer carries a matching `test` field, so the one-line summary doesn't
+/// repeat the test name shown as the row heading. Returns the input unchanged
+/// when there's no `test` field or no matching prefix.
+private func stripTestLabelPrefix(_ shortResult: String, footer: [String: JSONValue]) -> String {
+    guard case .string(let label)? = footer["test"], !label.isEmpty else { return shortResult }
+    let prefix = "\(label): "
+    guard shortResult.hasPrefix(prefix) else { return shortResult }
+    return String(shortResult.dropFirst(prefix.count))
 }
 
 // MARK: - Embedded-safe string helpers (file-private to avoid collisions)
