@@ -868,26 +868,9 @@ func testSetupCacheKey(for job: Job) -> String {
     return "\(job.testSetupID)-\(digest.prefix(16))"
 }
 
-// MARK: - Script result JSON (optional last-line protocol)
-
-/// Scripts may optionally write this as their last stdout line to report a score.
-struct ScriptResultJSON: Decodable {
-    let score: Double?
-    let shortResult: String?
-}
-
-// MARK: - Helpers
-
-extension TestStatus {
-    var defaultShortResult: String {
-        switch self {
-        case .pass: return "passed"
-        case .fail: return "failed"
-        case .error: return "error"
-        case .timeout: return "timed out"
-        }
-    }
-}
+// The optional last-line JSON result footer is now parsed by RunnerCore
+// (interpretScriptOutput + JSONLite), and `TestStatus.defaultShortResult`
+// lives there too — shared with the browser runner.
 
 // MARK: - Errors
 
