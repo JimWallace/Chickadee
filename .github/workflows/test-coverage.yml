@@ -50,6 +50,19 @@ jobs:
           done
 
       - name: Run tests with coverage
+        # Swift Testing schedules many class-suite instances in parallel
+        # regardless of the swift test --parallel flag.  Each test app opens
+        # its own connection pool with one connection per EventLoop, and at
+        # unbounded parallelism the combined pool requests time out (AsyncKit
+        # "Connection request timed out") — which surfaces here as spurious
+        # test failures (e.g. empty query results, validation stuck "pending")
+        # and an occasional "Index out of range" crash that kills the whole
+        # test process.  This job is the worst case: it runs *all* targets in
+        # one process (no --filter split) with code coverage, so it's the most
+        # pool-pressured run we have, yet it was the only one missing the cap
+        # that swift-tests.yml already applies.  Match that cap here.
+        env:
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: swift test --enable-code-coverage
 
       - name: Export coverage to lcov
@@ -138,7 +151,7 @@ jobs:
           label="nightly-clean-build"
 
           # Ensure the label exists (idempotent).
-          gh label create "$label" --color B60205 \
+          gh label create "$label" --repo "$REPO" --color B60205 \
             --description "Nightly from-scratch clean build canary failed" \
             --force >/dev/null 2>&1 || true
 
