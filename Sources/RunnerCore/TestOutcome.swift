@@ -1,10 +1,10 @@
-// Core/Models/TestOutcome.swift
+// RunnerCore/TestOutcome.swift
 
 /// The complete record for a single test case execution.
 ///
 /// Fields marked "gamification" are present from day one but can be
 /// null/zero until the corresponding feature is implemented.
-public struct TestOutcome: Codable, Equatable, Sendable {
+public struct TestOutcome: Equatable, Sendable {
 
     // MARK: - Identity
     public let testName: String  // e.g. "testBitCount"
@@ -54,8 +54,14 @@ public struct TestOutcome: Codable, Equatable, Sendable {
         self.attemptNumber = attemptNumber
         self.isFirstPassSuccess = isFirstPassSuccess
     }
+}
 
-    // Custom decoder so old records without `points` default to 1.
+// Codable is unavailable in Embedded Swift (RunnerCore compiles to wasm); only
+// the native targets serialize TestOutcome. The conformance is synthesized
+// (CodingKeys + encode) except for the custom decoder below, which defaults
+// `points` to 1 for older records.
+#if !hasFeature(Embedded)
+extension TestOutcome: Codable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         testName = try c.decode(String.self, forKey: .testName)
@@ -71,3 +77,4 @@ public struct TestOutcome: Codable, Equatable, Sendable {
         isFirstPassSuccess = try c.decode(Bool.self, forKey: .isFirstPassSuccess)
     }
 }
+#endif
