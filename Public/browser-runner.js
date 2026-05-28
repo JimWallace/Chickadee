@@ -209,71 +209,38 @@ for _module_name in student_module_names_in_load_order():
             } catch (e) {
                 throw new Error('Failed to load test configuration: ' + toMessage(e));
             }
-            const outcomes = [];
-            // Track which scripts passed so dependent tests can be pre-checked.
-            const passedScripts = new Set();
-
-            // Shared RunnerCore (wasm) — used to classify each script the same
-            // way the native worker does.
+            // Shared RunnerCore (wasm): the SAME Swift `executeSuites` loop the
+            // native worker runs. Dependency gating, the "Skipped: prerequisite…"
+            // messages, missing-script handling, and — crucially — output
+            // interpretation (exit code → status, JSON-footer parsing, longResult
+            // assembly) all live in RunnerCore now. The browser supplies only the
+            // one substrate-specific operation: run a script via Pyodide and
+            // report its RAW output (exit code + stdout/stderr), which RunnerCore
+            // interprets byte-for-byte the way the worker does. No grading logic
+            // or output interpretation remains in JS.
             const runnerCore = await loadRunnerCore();
-
-            for (const entry of manifest.testSuites || []) {
-                const script     = entry.script || '';
-                const tier       = entry.tier || 'public';
-                const scriptPath = `${workDir}/${script}`;
-                const deps       = Array.isArray(entry.dependsOn) ? entry.dependsOn : [];
-
-                // Dependency pre-check: if any prerequisite did not pass, auto-fail
-                // without running the script (mirrors worker RunnerDaemon behaviour).
-                const blockedBy = deps.find(dep => !passedScripts.has(dep));
-                if (blockedBy !== undefined) {
-                    outcomes.push(makeOutcome(script, tier, 'fail',
-                        `Skipped: prerequisite '${blockedBy}' did not pass`, null, 0));
-                    continue;
-                }
-
-                // Read the source up front: needed to run Python scripts, and to
-                // classify extensionless scripts by shebang/content.
-                let src = null;
-                try { src = py.FS.readFile(scriptPath, { encoding: 'utf8' }); }
-                catch (_) { src = null; }
-
-                const kind = interpreterToKind(runnerCore.classifyScript(script, src ?? ''));
-
-                let outcome;
-                if (kind === 'python') {
-                    if (src === null) {
-                        outcome = makeOutcome(script, tier, 'error',
-                            `Script not found: ${script}`, null, 0);
-                    } else {
-                        outcome = await runPyScript(py, src, script, tier,
-                            manifest.timeLimitSeconds || 10);
-                    }
-
-                } else if (kind === 'r') {
-                    outcome = makeOutcome(script, tier, 'error',
-                        'R test scripts require WebR — not yet supported in browser runner',
-                        null, 0);
-
-                } else if (kind === 'shell') {
-                    outcome = makeOutcome(script, tier, 'error',
-                        'Shell scripts cannot run in the browser runner',
-                        null, 0);
-
-                } else {
-                    const ext = scriptExtension(script);
-                    outcome = makeOutcome(script, tier, 'error',
-                        `Unsupported test script type: ${ext ? '.' + ext : script}`,
-                        null, 0);
-                }
-
-                outcome.scriptName = script;
-                outcome.displayName = (typeof entry.name === 'string' && entry.name.trim())
-                    ? entry.name.trim()
-                    : null;
-                outcomes.push(outcome);
-                if (outcome.status === 'pass') passedScripts.add(script);
+            if (typeof globalThis.runnerExecuteSuites !== 'function') {
+                throw new Error('RunnerCore wasm did not register runnerExecuteSuites');
             }
+
+            const timeLimitSeconds = manifest.timeLimitSeconds || 10;
+            const suites = (manifest.testSuites || []).map(entry => ({
+                script: entry.script || '',
+                tier: entry.tier || 'public',
+                displayName: (typeof entry.name === 'string' && entry.name.trim()) ? entry.name.trim() : null,
+                dependsOn: Array.isArray(entry.dependsOn) ? entry.dependsOn : [],
+                points: typeof entry.points === 'number' ? entry.points : 1,
+            }));
+
+            // Substrate callbacks handed to the Swift loop.
+            const scriptExists = (name) => {
+                try { py.FS.stat(`${workDir}/${name}`); return true; }
+                catch (_) { return false; }
+            };
+            const runScript = (name, limit) => runRawScript(py, runnerCore, workDir, name, limit);
+
+            const outcomes = await globalThis.runnerExecuteSuites(
+                suites, timeLimitSeconds, 1, scriptExists, runScript);
 
             // 5. Build collection. The caller decides whether to submit it.
             const collection = buildCollection(setupID, outcomes);
@@ -412,15 +379,50 @@ for _module_name in student_module_names_in_load_order():
     // content-sniff) now lives in RunnerCore (Swift/wasm) and is shared with the
     // native worker \u2014 see loadRunnerCore().classifyScript / interpreterToKind.
 
-    async function runPyScript(py, src, scriptName, tier, timeLimitSeconds) {
-        const startMs = Date.now();
-        let stdout    = '';
-        let stderr    = '';
+    // Run one script and return a RAW ScriptOutput
+    // { exitCode, stdout, stderr, executionTimeMs, timedOut }. RunnerCore's
+    // shared `interpretScriptOutput` (driven by `executeSuites`) turns it into a
+    // TestOutcome — identical interpretation to the native worker. The browser
+    // only runs Python (Pyodide); other interpreters return their "not here"
+    // message as a non-zero exit so the shared interpreter surfaces it the same
+    // way for every runner.
+    async function runRawScript(py, runnerCore, workDir, scriptName, timeLimitSeconds) {
+        let src = null;
+        try { src = py.FS.readFile(`${workDir}/${scriptName}`, { encoding: 'utf8' }); }
+        catch (_) { src = null; }
 
-        // Auto-load any Pyodide packages the script imports (numpy, pandas,
-        // scipy, etc.).  loadPackagesFromImports inspects import statements and
-        // fetches the matching WASM wheels from Pyodide's CDN package index.
-        // Unknown names (test_runtime, student modules) are silently skipped.
+        const kind = interpreterToKind(runnerCore.classifyScript(scriptName, src ?? ''));
+        if (kind === 'r') {
+            return rawError('R test scripts require WebR — not yet supported in browser runner');
+        }
+        if (kind === 'shell') {
+            return rawError('Shell scripts cannot run in the browser runner');
+        }
+        if (kind !== 'python') {
+            const ext = scriptExtension(scriptName);
+            return rawError(`Unsupported test script type: ${ext ? '.' + ext : scriptName}`);
+        }
+        if (src === null) {
+            return rawError(`Script not found: ${scriptName}`);
+        }
+        return runPyScriptRaw(py, src, scriptName, timeLimitSeconds);
+    }
+
+    // A synthetic raw output for a substrate error: exit 2 → RunnerCore maps to
+    // `error`, with `message` as the (last-line) shortResult.
+    function rawError(message) {
+        return { exitCode: 2, stdout: message, stderr: '', executionTimeMs: 0, timedOut: false };
+    }
+
+    // Execute a Python test script in Pyodide and capture RAW output. The exit
+    // code comes from the SystemExit that test_runtime's passed/failed/errored
+    // raise — the SAME codes the native subprocess exits with — so RunnerCore's
+    // exit-code → status mapping is identical across runners. No interpretation
+    // happens here.
+    async function runPyScriptRaw(py, src, scriptName, timeLimitSeconds) {
+        const startMs = Date.now();
+
+        // Auto-load any Pyodide packages the script imports (numpy, pandas, …).
         try { await py.loadPackagesFromImports(src); } catch (_) { /* non-fatal */ }
 
         // Redirect sys.stdout / sys.stderr to JS buffers.
@@ -435,20 +437,10 @@ sys.stderr = _br_stderr
         let timedOut = false;
         let pyErr    = null;
 
-        // Run the test script via compile() + exec() from its MEMFS file:
-        //
-        // 1. compile(source, scriptName) gives inspect.stack() the real
-        //    filename so test_runtime._first_comment_label() reads the
-        //    correct test label (not "<exec>").
-        //
-        // 2. except SystemExit catches the exit that test_runtime's
-        //    passed()/failed()/errored() raise.  In the native runner
-        //    this terminates the subprocess cleanly; in Pyodide it would
-        //    become a PythonError with noisy tracebacks in stderr.
-        //
-        // 3. The imports + compile + exec all run in the SAME exec() call
-        //    so they share one locals dict (Pyodide may isolate locals
-        //    between separate runPythonAsync calls).
+        // compile(source, scriptName) gives inspect.stack() the real filename so
+        // test_runtime reads the correct test label; `except SystemExit` catches
+        // the exit that passed()/failed()/errored() raise (a clean subprocess
+        // exit on the native side); imports + exec share one globals dict.
         const runSrc = `
 from test_runtime import passed, failed, errored, require_function
 _br_exit_code = None
@@ -460,11 +452,9 @@ except SystemExit as _e:
 `;
         const runPromise     = py.runPythonAsync(runSrc).catch(err => { pyErr = err; });
         const timeoutPromise = sleep(timeLimitSeconds * 1000).then(() => { timedOut = true; });
-
         await Promise.race([runPromise, timeoutPromise]);
 
-        // Restore stdout/stderr, collect output, and read exit code.
-        let brExitCode = null;
+        let stdout = '', stderr = '', brExitCode = null;
         try {
             const captured = await py.runPythonAsync(`
 (str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
@@ -482,108 +472,40 @@ sys.stderr = sys.__stderr__
 `);
 
         const executionTimeMs = Date.now() - startMs;
-
         if (timedOut) {
-            return makeOutcome(scriptName, tier, 'timeout', 'timed out', null, executionTimeMs);
+            return { exitCode: -1, stdout, stderr, executionTimeMs, timedOut: true };
         }
 
-        // Parse status from stdout.  test_runtime.py prints one JSON line then
-        // raises SystemExit.  If no JSON was printed, fall back to exit-code logic.
-        const lastLine = (stdout || '')
-            .split('\n')
-            .map(l => l.trim())
-            .filter(l => l)
-            .pop() || '';
-
-        let status      = 'pass';
-        let shortResult = 'passed';
-        let longResult  = null;
-        let parsedPayload = null;
-
-        // Determine status: prefer the Python-side exit code (caught SystemExit),
-        // fall back to JS-side pyErr if the wrapper itself threw.
+        // Exit code: prefer the SystemExit code; otherwise mirror a `python3
+        // script` subprocess — 0 on clean completion, 1 on an uncaught exception
+        // (with the traceback on stderr so RunnerCore puts it in longResult).
+        let exitCode;
         if (brExitCode !== null && brExitCode !== undefined) {
-            const code = typeof brExitCode === 'number' ? brExitCode : parseInt(brExitCode) || 1;
-            status = statusFromExitCode(code);
+            exitCode = typeof brExitCode === 'number' ? brExitCode : (parseInt(brExitCode) || 1);
         } else if (pyErr) {
             const msg = pyErr.message || String(pyErr);
-            if (msg.includes('SystemExit')) {
-                const exitMatch = msg.match(/SystemExit:\s*(-?\d+)/);
-                const code = exitMatch ? parseInt(exitMatch[1]) : 1;
-                status = statusFromExitCode(code);
+            const match = msg.match(/SystemExit:\s*(-?\d+)/);
+            if (match) {
+                exitCode = parseInt(match[1]);
             } else {
-                status = 'error';
-            }
-        }
-
-        // Prefer the JSON result the script printed (same protocol as native runner).
-        if (lastLine) {
-            try {
-                parsedPayload = JSON.parse(lastLine);
-                if (typeof parsedPayload.status === 'string' && parsedPayload.status.trim()) {
-                    status = parsedPayload.status.trim();
-                }
-                shortResult = structuredSummaryText(parsedPayload, status)
-                    || (status === 'pass' ? 'passed' : status);
-            } catch (_) {
-                shortResult = lastLine;
+                exitCode = 1;
+                if (!stderr.trim()) stderr = msg;
             }
         } else {
-            shortResult = status === 'pass' ? 'passed' : status === 'fail' ? 'failed' : 'error';
+            exitCode = 0;
         }
-
-        if (status !== 'pass') {
-            // Drop the trailing machine-readable JSON line that test_runtime's
-            // failed()/errored() print after the human-readable message, so the
-            // student sees only the message — mirrors the native runner's footer
-            // stripping in RunnerDaemon+JobProcessing.swift.
-            const stdoutTrim = (parsedPayload ? stripJsonFooterLine(stdout || '') : (stdout || '')).trim();
-            const stderrTrim = (stderr || '').trim();
-            longResult = detailedOutputFromParts({
-                parsedPayload,
-                stdout: stdoutTrim,
-                stderr: stderrTrim,
-                pyErr,
-            });
-        } else if ((stderr || '').trim()) {
-            // For passing tests, only include stderr if it has real content
-            // (not just SystemExit tracebacks).
-            const cleanStderr = (stderr || '').trim();
-            if (cleanStderr && !cleanStderr.match(/^\s*$/)) longResult = cleanStderr;
-        }
-
-        return makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs);
+        return { exitCode, stdout, stderr, executionTimeMs, timedOut: false };
     }
 
     // -------------------------------------------------------------------------
     // Outcome / collection builders
     // -------------------------------------------------------------------------
 
-    // Map a process exit code to a test status — kept identical to the native
-    // runner (RunnerDaemon+JobProcessing.swift): 0=pass, 1=fail, 3=fail
-    // (Marmoset chickadee.py convention), everything else=error.
-    function statusFromExitCode(code) {
-        if (code === 0) return 'pass';
-        if (code === 1 || code === 3) return 'fail';
-        return 'error';
-    }
-
-    function makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs) {
-        // Strip extension to get test name (matches native runner).
-        const testName = scriptName.replace(/\.\w+$/, '') || scriptName;
-        return {
-            testName,
-            testClass:          null,
-            tier,
-            status,
-            shortResult,
-            longResult:         longResult || null,
-            executionTimeMs,
-            memoryUsageBytes:   null,
-            attemptNumber:      1,
-            isFirstPassSuccess: status === 'pass',
-        };
-    }
+    // Exit-code → status mapping and result interpretation (JSON-footer parsing,
+    // traceback extraction, longResult assembly) now live in RunnerCore
+    // (interpretScriptOutput), shared with the native worker and applied inside
+    // `executeSuites`. The browser no longer interprets output in JS — it only
+    // produces raw ScriptOutput (see runPyScriptRaw).
 
     function buildCollection(setupID, outcomes) {
         const passCount    = outcomes.filter(o => o.status === 'pass').length;
@@ -613,102 +535,6 @@ sys.stderr = sys.__stderr__
     function safeSubmissionFilename(filename) {
         const raw = String(filename || '').split(/[\\/]/).pop().trim();
         return raw || 'submission.ipynb';
-    }
-
-    function structuredSummaryText(payload, status) {
-        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-
-        if (status !== 'pass') {
-            for (const key of ['error', 'message', 'detail', 'reason']) {
-                const text = trimmedString(payload[key]);
-                if (text) return text;
-            }
-        }
-
-        const shortResult = trimmedString(payload.shortResult);
-        if (shortResult) {
-            const testLabel = trimmedString(payload.test);
-            return stripLeadingLabel(shortResult, testLabel) || shortResult;
-        }
-
-        return trimmedString(payload.status) || null;
-    }
-
-    function detailedOutputFromParts({ parsedPayload, stdout, stderr, pyErr }) {
-        const traceback = extractTracebackText(parsedPayload)
-            || extractTracebackText(stdout)
-            || extractTracebackText(stderr);
-        if (traceback) return traceback;
-
-        const exceptionText = pyErr && !String(pyErr.message || '').includes('SystemExit')
-            ? trimmedString(pyErr.message || String(pyErr))
-            : null;
-        return stderr || stdout || exceptionText || null;
-    }
-
-    function extractTracebackText(value) {
-        if (!value) return null;
-        if (typeof value === 'object' && !Array.isArray(value)) {
-            return trimmedString(value.traceback) || null;
-        }
-
-        const text = trimmedString(value);
-        if (!text) return null;
-
-        const structured = parseStructuredPayload(text);
-        if (structured) {
-            const traceback = extractTracebackText(structured);
-            if (traceback) return traceback;
-        }
-
-        const marker = text.indexOf('Traceback (most recent call last):');
-        return marker >= 0 ? text.slice(marker).trim() : null;
-    }
-
-    function parseStructuredPayload(text) {
-        const trimmed = trimmedString(text);
-        if (!trimmed) return null;
-
-        const candidates = [trimmed];
-        const stdoutMatch = trimmed.match(/(?:^|\n)stdout:\n([\s\S]*?)(?:\n\nstderr:\n|$)/);
-        if (stdoutMatch && stdoutMatch[1]) candidates.unshift(stdoutMatch[1].trim());
-        const stderrMatch = trimmed.match(/(?:^|\n)stderr:\n([\s\S]*)$/);
-        if (stderrMatch && stderrMatch[1]) candidates.push(stderrMatch[1].trim());
-
-        for (const candidate of candidates) {
-            try {
-                return JSON.parse(candidate);
-            } catch (_) {
-                // Try the next candidate shape.
-            }
-        }
-        return null;
-    }
-
-    function stripLeadingLabel(text, label) {
-        const trimmedText = trimmedString(text);
-        const trimmedLabel = trimmedString(label);
-        if (!trimmedText || !trimmedLabel) return null;
-        const prefix = `${trimmedLabel}: `;
-        return trimmedText.startsWith(prefix) ? trimmedText.slice(prefix.length).trim() : null;
-    }
-
-    function trimmedString(value) {
-        return typeof value === 'string' ? value.trim() : '';
-    }
-
-    // Removes the trailing machine-readable JSON result line emitted by
-    // test_runtime's passed()/failed()/errored() so students see only the
-    // human-readable output above it.
-    function stripJsonFooterLine(text) {
-        const lines = String(text || '').split('\n');
-        for (let i = lines.length - 1; i >= 0; i--) {
-            if (lines[i].trim()) {
-                lines.splice(i, 1);
-                break;
-            }
-        }
-        return lines.join('\n');
     }
 
     // -------------------------------------------------------------------------
@@ -1136,13 +962,9 @@ for _module_name in _tr.student_module_names_in_load_order():
             runScripts,
             scriptExtension,
             extractNotebook,
-            runPyScript,
+            runRawScript,
+            runPyScriptRaw,
             buildCollection,
-            makeOutcome,
-            structuredSummaryText,
-            detailedOutputFromParts,
-            extractTracebackText,
-            parseStructuredPayload,
             removeRecursive,
             fetchBytes,
             fetchText,

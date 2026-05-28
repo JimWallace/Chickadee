@@ -27,6 +27,7 @@ let package = Package(
             dependencies: [
                 .product(name: "RunnerCore", package: "Chickadee"),
                 "JavaScriptKit",
+                .product(name: "JavaScriptEventLoop", package: "JavaScriptKit"),
             ],
             swiftSettings: [.enableExperimentalFeature("Extern")],
             linkerSettings: [.unsafeFlags(["-lswiftUnicodeDataTables"])]
