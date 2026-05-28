@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.309] - 2026-05-28
+
+### Changed
+
+- **`TestOutcome` and `TestTier` hoisted into `RunnerCore`.** The canonical
+  grading-result types now live in the wasm-safe leaf (re-exported by `Core` via
+  `@_exported import`, so call sites are unchanged). Their `Codable`
+  conformances are gated `#if !hasFeature(Embedded)` — only native targets
+  serialize them. Prepares the shared `executeSuites` orchestration. No
+  behaviour change (Codable round-trips + core tests pass; native + embedded
+  builds green).
+
+
 ## [0.4.308] - 2026-05-28
 
 ### Changed
