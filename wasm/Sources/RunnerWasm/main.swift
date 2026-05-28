@@ -77,12 +77,13 @@ JSObject.global.runnerClassifyScript = .object(runnerClassifyScript)
 //                      points, executionTimeMs, memoryUsageBytes, attemptNumber,
 //                      isFirstPassSuccess }]  (canonical TestOutcome shape)
 
-/// Drives `executeSuites` by delegating to JS callbacks. Holds `JSFunction`s
-/// (not `Sendable`) — fine here: the wasm package builds in Swift 5 language
-/// mode (single-threaded cooperative executor), so no cross-thread send occurs.
+/// Drives `executeSuites` by delegating to JS callbacks (callable `JSObject`s —
+/// not `Sendable`, which is fine here: the wasm package builds in Swift 5
+/// language mode with a single-threaded cooperative executor, so no cross-thread
+/// send occurs).
 struct BrowserScriptExecutor: ScriptExecutor {
-    let existsFn: JSFunction
-    let runFn: JSFunction
+    let existsFn: JSObject
+    let runFn: JSObject
 
     func scriptExists(_ name: String) async -> Bool {
         existsFn(name).boolean ?? false
@@ -180,8 +181,8 @@ private func outcomesToJS(_ outcomes: [TestOutcome]) -> JSValue {
 let runnerExecuteSuites = JSClosure { args in
     guard args.count >= 5,
         let suitesArray = args[0].object,
-        let existsFn = args[3].function,
-        let runFn = args[4].function
+        let existsFn = args[3].object,
+        let runFn = args[4].object
     else { return .undefined }
 
     let timeLimit = Int(args[1].number ?? 10)

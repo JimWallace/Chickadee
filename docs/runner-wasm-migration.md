@@ -162,24 +162,28 @@ compiler chases every `import`, and we never create a type we later discard.
     file containing `async` code**, or SILGen crashes (signal 11) instead of
     emitting a diagnostic. `SuiteExecution.swift` / `ScriptExecutor.swift`
     import it with a comment.
-  - **Browser half — Stage 4.** `BrowserScriptExecutor` + deleting the JS loop
-    + re-vendoring the wasm artifact are deferred to Stage 4 (where the browser
-    actually calls `executeSuites`), so Stage 3 ships no browser-bound bytes
-    and the vendored artifact carries no dead code.
+  - **Browser half — done (Stage 4).** See below.
 
-- **Stage 4 — thin the shell.** `browser-runner.js` becomes a ~50-line
-  bootstrap: load Pyodide + wasm, hand Swift the Pyodide handle and notebook
-  bytes, take back the result collection, POST it. Zero grading logic remains in
-  JS.
+- **Stage 4 — thin the shell. DONE (#772).** `browser-runner.js` no longer
+  contains a suite loop or output interpretation: it calls `runnerExecuteSuites`
+  in the wasm bridge (`JavaScriptEventLoop` + `JSPromise.async` +
+  `BrowserScriptExecutor`), which drives the SAME `executeSuites` +
+  `interpretScriptOutput` the worker runs. JS supplies only the substrate — a
+  `run` callback that executes a script in Pyodide and returns raw
+  `ScriptOutput`. The dead JS interpretation cluster (8 functions) was deleted;
+  browser- and worker-graded submissions now produce byte-identical
+  `TestOutcome`s. Enabling fix: the `JSONLite` number parser was made
+  Embedded-safe (no `strtod`, #771). `output-contract.test.mjs` now drives the
+  REAL vendored wasm against the shared fixture (cross-runner contract);
+  in-browser smoke verified via Preview.
 
-- **Stage 5 — Swift→Wasm review.** Run the full
+- **Stage 5 — Swift→Wasm review. DONE.** Ran the
   [Swift → Wasm PR Review Checklist](swift-wasm-review-checklist.md) over the
-  migration: compilation mode (embedded vs WASI), platform conditionals,
-  Foundation/concurrency usage, the JS-interop boundary, binary size (with
-  `wasm-opt`), static-linking constraints, SwiftPM/SDK config, pointer/ABI
-  gotchas, Wasm-SDK testing, build hygiene, and docs. Produce the report in the
-  checklist's format (Summary / Blocking / Concerns / Passed / Skipped / size
-  delta) and address blocking findings.
+  migration. Report: [runner-wasm-review.md](runner-wasm-review.md). No blocking
+  findings; concerns (dynamic JS interop [forced by Embedded], no `wasm-opt`, no
+  per-PR wasm-SDK CI build [artifact vendored], no WasmKit test run) are
+  documented trade-offs/follow-ups. The `JSFunction`-deprecation warning was
+  fixed (unified `JSObject`) so the release build is warning-clean.
 
 ## What stays JS forever
 
