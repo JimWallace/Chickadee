@@ -42,6 +42,94 @@ function defaultClassifyStub(name, source) {
   return 'unknown';
 }
 
+// Same-realm test double for the shared RunnerCore `executeSuites` +
+// `interpretScriptOutput`. The REAL wasm interpretation/loop are pinned against
+// the shared fixture by output-contract.test.mjs (which drives the actual wasm)
+// and by the Swift SuiteExecutionTests / OutputContractTests. Here we only need
+// a faithful-enough stand-in so the browser-runner GLUE (suite building,
+// run/exists wiring, dependency gating, collection posting) can be exercised in
+// this vm realm — loading the real wasm here would hit a cross-realm Promise
+// hazard (the run callback's Promise lives in the vm realm, not the wasm's).
+function stemOf(name) {
+  const slash = name.lastIndexOf('/');
+  const dot = name.lastIndexOf('.');
+  return dot > slash + 1 ? name.slice(0, dot) : name;
+}
+function defaultShort(status) {
+  return status === 'pass' ? 'passed' : status === 'fail' ? 'failed' : status === 'timeout' ? 'timed out' : 'error';
+}
+function longResultOf(raw, footer) {
+  let stdout = String(raw.stdout || '');
+  if (footer) {
+    const arr = stdout.split('\n');
+    for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].trim()) { arr.splice(i, 1); break; } }
+    stdout = arr.join('\n');
+  }
+  stdout = stdout.trim();
+  const stderr = String(raw.stderr || '').trim();
+  const sections = [];
+  if (stdout) sections.push('stdout:\n' + stdout);
+  if (stderr) sections.push('stderr:\n' + stderr);
+  return sections.length ? sections.join('\n\n') : null;
+}
+function interpretRaw(raw) {
+  if (raw.timedOut) return { status: 'timeout', shortResult: 'timed out', longResult: longResultOf(raw, false) };
+  const status = raw.exitCode === 0 ? 'pass' : (raw.exitCode === 1 || raw.exitCode === 3) ? 'fail' : 'error';
+  const lines = String(raw.stdout || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const last = lines[lines.length - 1] || '';
+  let footer = false;
+  let shortResult;
+  if (last) {
+    try {
+      const obj = JSON.parse(last);
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        footer = true;
+        shortResult = typeof obj.shortResult === 'string' ? obj.shortResult : defaultShort(status);
+      }
+    } catch (_) { /* not a JSON footer */ }
+  }
+  if (shortResult === undefined) shortResult = last || defaultShort(status);
+  return { status, shortResult, longResult: longResultOf(raw, footer) };
+}
+function makeStubOutcome(suite, interp, executionTimeMs, attempt) {
+  const displayName = (typeof suite.displayName === 'string' && suite.displayName.trim()) ? suite.displayName : null;
+  return {
+    testName: displayName || stemOf(suite.script),
+    testClass: null,
+    tier: suite.tier,
+    status: interp.status,
+    shortResult: interp.shortResult,
+    longResult: interp.longResult ?? null,
+    points: typeof suite.points === 'number' ? suite.points : 1,
+    executionTimeMs,
+    memoryUsageBytes: null,
+    attemptNumber: attempt,
+    isFirstPassSuccess: attempt === 1 && interp.status === 'pass',
+  };
+}
+function executeSuitesStub(suites, timeLimit, attempt, scriptExists, run) {
+  return (async () => {
+    const outcomes = [];
+    const passed = new Set();
+    for (const suite of suites) {
+      const deps = suite.dependsOn || [];
+      const blockedBy = deps.find(dep => !passed.has(dep));
+      if (deps.length && blockedBy !== undefined) {
+        outcomes.push(makeStubOutcome(suite,
+          { status: 'fail', shortResult: `Skipped: prerequisite '${blockedBy}' did not pass`, longResult: null },
+          0, attempt));
+        continue;
+      }
+      if (!scriptExists(suite.script)) continue;
+      const raw = await run(suite.script, timeLimit);
+      const interp = interpretRaw(raw);
+      outcomes.push(makeStubOutcome(suite, interp, raw.executionTimeMs, attempt));
+      if (interp.status === 'pass') passed.add(suite.script);
+    }
+    return outcomes;
+  })();
+}
+
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -367,6 +455,10 @@ async function loadRunnerHarness(options = {}) {
     // covered by ScriptClassificationTests). This stub mirrors it, returning the
     // interpreter raw value so dispatch wiring can be exercised.
     runnerClassifyScript: options.runnerClassify ?? defaultClassifyStub,
+    // Test seam for the shared loop + interpretation (real logic is
+    // RunnerCore/Swift via wasm; this faithful double avoids the cross-realm
+    // Promise hazard — see executeSuitesStub).
+    runnerExecuteSuites: options.runnerExecuteSuites ?? executeSuitesStub,
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
@@ -618,7 +710,13 @@ test('extensionless Python test scripts dispatch via their shebang instead of fa
   assert.match(result.outcomes[2].shortResult, /Unsupported test script type: mystery/);
 });
 
-test('browser runner keeps display names separate from output and extracts traceback-only details', async () => {
+test('browser produces canonical worker-shaped outcomes (display name -> testName, no bespoke fields)', async () => {
+  // Post-migration the browser emits the SAME TestOutcome shape the worker does
+  // — testName is the display name (falling back to the script stem), and the
+  // result strings come from the shared interpretScriptOutput (footer
+  // shortResult; stdout/stderr → longResult). The browser-only fields
+  // (scriptName, displayName) and the bespoke JSON-envelope field extraction
+  // (error/traceback/exception) are gone — both runners are now identical.
   const harness = await loadRunnerHarness({
     zipFiles: {
       'test_q1_bmi.py': '# q1\n',
@@ -635,12 +733,8 @@ test('browser runner keeps display names separate from output and extracts trace
         stdout: `${JSON.stringify({
           shortResult: 'Q1: BMI Calculation: Could not test calculate_bmi',
           status: 'error',
-          test: 'Q1: BMI Calculation',
-          error: 'Could not test calculate_bmi',
-          exception: "NotImplementedError('Implement calculate_bmi')",
-          traceback: 'Traceback (most recent call last):\n  File "test_q1_bmi.py", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi\n',
         })}\n`,
-        stderr: '',
+        stderr: 'Traceback (most recent call last):\nNotImplementedError: Implement calculate_bmi\n',
         exitCode: 2,
       },
     },
@@ -654,18 +748,17 @@ test('browser runner keeps display names separate from output and extracts trace
   assert.deepEqual(
     plain(result.outcomes[0]),
     {
-      testName: 'test_q1_bmi',
+      testName: 'Q1: BMI Calculation',
       testClass: null,
       tier: 'public',
       status: 'error',
-      shortResult: 'Could not test calculate_bmi',
-      longResult: 'Traceback (most recent call last):\n  File "test_q1_bmi.py", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi',
+      shortResult: 'Q1: BMI Calculation: Could not test calculate_bmi',
+      longResult: 'stderr:\nTraceback (most recent call last):\nNotImplementedError: Implement calculate_bmi',
+      points: 1,
       executionTimeMs: result.outcomes[0].executionTimeMs,
       memoryUsageBytes: null,
       attemptNumber: 1,
       isFirstPassSuccess: false,
-      scriptName: 'test_q1_bmi.py',
-      displayName: 'Q1: BMI Calculation',
     },
   );
 });
@@ -818,8 +911,10 @@ test('failure detail strips the trailing JSON envelope so students never see the
   assert.equal(outcome.status, 'fail');
   assert.ok(!outcome.longResult.includes('"shortResult"'), 'JSON envelope must be stripped from longResult');
   assert.ok(!outcome.longResult.includes('{'), 'no JSON braces should remain in student-facing detail');
+  // Shared interpretScriptOutput strips the JSON footer line, then presents the
+  // remaining stdout under a "stdout:" section header — identical to the worker.
   assert.equal(
     outcome.longResult,
-    'Variable `age` is not defined in the student notebook.\n  expected: a module-level variable named `age`',
+    'stdout:\nVariable `age` is not defined in the student notebook.\n  expected: a module-level variable named `age`',
   );
 });

@@ -501,31 +501,11 @@ sys.stderr = sys.__stderr__
     // Outcome / collection builders
     // -------------------------------------------------------------------------
 
-    // Map a process exit code to a test status — kept identical to the native
-    // runner (RunnerDaemon+JobProcessing.swift): 0=pass, 1=fail, 3=fail
-    // (Marmoset chickadee.py convention), everything else=error.
-    function statusFromExitCode(code) {
-        if (code === 0) return 'pass';
-        if (code === 1 || code === 3) return 'fail';
-        return 'error';
-    }
-
-    function makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs) {
-        // Strip extension to get test name (matches native runner).
-        const testName = scriptName.replace(/\.\w+$/, '') || scriptName;
-        return {
-            testName,
-            testClass:          null,
-            tier,
-            status,
-            shortResult,
-            longResult:         longResult || null,
-            executionTimeMs,
-            memoryUsageBytes:   null,
-            attemptNumber:      1,
-            isFirstPassSuccess: status === 'pass',
-        };
-    }
+    // Exit-code → status mapping and result interpretation (JSON-footer parsing,
+    // traceback extraction, longResult assembly) now live in RunnerCore
+    // (interpretScriptOutput), shared with the native worker and applied inside
+    // `executeSuites`. The browser no longer interprets output in JS — it only
+    // produces raw ScriptOutput (see runPyScriptRaw).
 
     function buildCollection(setupID, outcomes) {
         const passCount    = outcomes.filter(o => o.status === 'pass').length;
@@ -555,102 +535,6 @@ sys.stderr = sys.__stderr__
     function safeSubmissionFilename(filename) {
         const raw = String(filename || '').split(/[\\/]/).pop().trim();
         return raw || 'submission.ipynb';
-    }
-
-    function structuredSummaryText(payload, status) {
-        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-
-        if (status !== 'pass') {
-            for (const key of ['error', 'message', 'detail', 'reason']) {
-                const text = trimmedString(payload[key]);
-                if (text) return text;
-            }
-        }
-
-        const shortResult = trimmedString(payload.shortResult);
-        if (shortResult) {
-            const testLabel = trimmedString(payload.test);
-            return stripLeadingLabel(shortResult, testLabel) || shortResult;
-        }
-
-        return trimmedString(payload.status) || null;
-    }
-
-    function detailedOutputFromParts({ parsedPayload, stdout, stderr, pyErr }) {
-        const traceback = extractTracebackText(parsedPayload)
-            || extractTracebackText(stdout)
-            || extractTracebackText(stderr);
-        if (traceback) return traceback;
-
-        const exceptionText = pyErr && !String(pyErr.message || '').includes('SystemExit')
-            ? trimmedString(pyErr.message || String(pyErr))
-            : null;
-        return stderr || stdout || exceptionText || null;
-    }
-
-    function extractTracebackText(value) {
-        if (!value) return null;
-        if (typeof value === 'object' && !Array.isArray(value)) {
-            return trimmedString(value.traceback) || null;
-        }
-
-        const text = trimmedString(value);
-        if (!text) return null;
-
-        const structured = parseStructuredPayload(text);
-        if (structured) {
-            const traceback = extractTracebackText(structured);
-            if (traceback) return traceback;
-        }
-
-        const marker = text.indexOf('Traceback (most recent call last):');
-        return marker >= 0 ? text.slice(marker).trim() : null;
-    }
-
-    function parseStructuredPayload(text) {
-        const trimmed = trimmedString(text);
-        if (!trimmed) return null;
-
-        const candidates = [trimmed];
-        const stdoutMatch = trimmed.match(/(?:^|\n)stdout:\n([\s\S]*?)(?:\n\nstderr:\n|$)/);
-        if (stdoutMatch && stdoutMatch[1]) candidates.unshift(stdoutMatch[1].trim());
-        const stderrMatch = trimmed.match(/(?:^|\n)stderr:\n([\s\S]*)$/);
-        if (stderrMatch && stderrMatch[1]) candidates.push(stderrMatch[1].trim());
-
-        for (const candidate of candidates) {
-            try {
-                return JSON.parse(candidate);
-            } catch (_) {
-                // Try the next candidate shape.
-            }
-        }
-        return null;
-    }
-
-    function stripLeadingLabel(text, label) {
-        const trimmedText = trimmedString(text);
-        const trimmedLabel = trimmedString(label);
-        if (!trimmedText || !trimmedLabel) return null;
-        const prefix = `${trimmedLabel}: `;
-        return trimmedText.startsWith(prefix) ? trimmedText.slice(prefix.length).trim() : null;
-    }
-
-    function trimmedString(value) {
-        return typeof value === 'string' ? value.trim() : '';
-    }
-
-    // Removes the trailing machine-readable JSON result line emitted by
-    // test_runtime's passed()/failed()/errored() so students see only the
-    // human-readable output above it.
-    function stripJsonFooterLine(text) {
-        const lines = String(text || '').split('\n');
-        for (let i = lines.length - 1; i >= 0; i--) {
-            if (lines[i].trim()) {
-                lines.splice(i, 1);
-                break;
-            }
-        }
-        return lines.join('\n');
     }
 
     // -------------------------------------------------------------------------

@@ -159,7 +159,7 @@ private func outcomesToJS(_ outcomes: [TestOutcome]) -> JSValue {
         let objectConstructor = JSObject.global.Object.function
     else { return .undefined }
     let array = arrayConstructor.new()
-    for outcome in outcomes {
+    for (index, outcome) in outcomes.enumerated() {
         let obj = objectConstructor.new()
         obj.testName = .string(outcome.testName)
         obj.testClass = outcome.testClass.map { JSValue.string($0) } ?? .null
@@ -172,7 +172,7 @@ private func outcomesToJS(_ outcomes: [TestOutcome]) -> JSValue {
         obj.memoryUsageBytes = outcome.memoryUsageBytes.map { JSValue.number(Double($0)) } ?? .null
         obj.attemptNumber = .number(Double(outcome.attemptNumber))
         obj.isFirstPassSuccess = .boolean(outcome.isFirstPassSuccess)
-        _ = array.push!(obj)
+        array[index] = .object(obj)
     }
     return .object(array)
 }
