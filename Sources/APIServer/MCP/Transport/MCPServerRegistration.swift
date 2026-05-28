@@ -8,7 +8,6 @@
 // MCPConfig, falling back to PUBLIC_BASE_URL.  The signing-key authority itself
 // is loaded asynchronously at startup (see runAPIServer).
 
-import CSRF
 import Core
 import Vapor
 
@@ -101,10 +100,12 @@ func registerMCPRoutes(_ app: Application) throws {
 }
 
 /// Registers the Phase-2 browser OAuth flow when MCP is enabled: the consent
-/// `/oauth/authorize` (session + CSRF guarded) and the machine `/oauth/token`
-/// (no session/CSRF — a back-channel call from the agent).  A no-op otherwise.
+/// `GET /oauth/authorize` (session-guarded, mints a single-use consent token)
+/// plus the back-channel POSTs — the consent submit (guarded by that token, not
+/// a cookie) and the machine `/oauth/token`/`/revoke`/`/register`.  A no-op
+/// otherwise.
 func registerMCPOAuthRoutes(
-    _ app: Application, sessionAuth: UserSessionAuthenticator, csrf: CSRF
+    _ app: Application, sessionAuth: UserSessionAuthenticator
 ) throws {
     let mcp = app.appConfig.mcp
     guard mcp.mode.isMounted,
@@ -118,17 +119,20 @@ func registerMCPOAuthRoutes(
         maxRegisteredClients: mcp.maxRegisteredClients,
         maxRedirectURIsPerClient: mcp.maxRedirectURIsPerClient
     )
-    // Consent UI: needs a logged-in human + a CSRF-protected form.
-    let userFacing = app.grouped(sessionAuth, csrf)
-    userFacing.get("oauth", "authorize", use: oauth.authorizeForm)
-    userFacing.post("oauth", "authorize", use: oauth.authorizeSubmit)
-    // Token + revoke + register: back-channel POSTs — no session, no CSRF, but
-    // rate-limited per IP since they're unauthenticated (register is open).
+    // Consent screen (GET): needs the logged-in human so we can mint a
+    // consent token bound to them. The submit is handled separately below.
+    let consentForm = app.grouped(sessionAuth)
+    consentForm.get("oauth", "authorize", use: oauth.authorizeForm)
+    // Back-channel POSTs — rate-limited per IP, no session/CSRF middleware:
+    //   • /authorize submit is guarded by the single-use consent token (not a
+    //     cookie), so it survives Safari/ITP dropping the cross-site cookie;
+    //   • /token, /revoke, /register are machine calls from the agent.
     let limiter = MCPOAuthRateLimitMiddleware(
         perMinute: mcp.oauthRateLimitPerMin,
         trustForwardedFor: app.loginRateLimitConfiguration.trustForwardedFor
     )
     let backChannel = app.grouped(limiter)
+    backChannel.post("oauth", "authorize", use: oauth.authorizeSubmit)
     backChannel.post("oauth", "token", use: oauth.token)
     backChannel.post("oauth", "revoke", use: oauth.revoke)
     backChannel.post("oauth", "register", use: oauth.register)

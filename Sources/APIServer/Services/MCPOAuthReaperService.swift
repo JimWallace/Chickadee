@@ -4,6 +4,8 @@
 //   • oauth_authorization_codes — single-use, 60-second-lived; one row per
 //     /authorize. They're useless the moment they expire or are consumed, but
 //     are never deleted in-flow, so they accumulate fast under any real use.
+//   • oauth_consent_requests — single-use, ~10-minute-lived; one row per
+//     rendered consent screen. Same accumulation problem.
 //   • oauth_grants — refresh-token grants that are revoked or past their
 //     expiry can never mint again, so they're safe to drop. (Reuse-detection
 //     only consults non-revoked grants, so removing revoked ones is harmless.)
@@ -15,9 +17,15 @@ import Fluent
 import Foundation
 import Vapor
 
-/// Deletes expired authorization codes and revoked/expired grants.
+/// Deletes expired authorization codes, expired consent requests, and
+/// revoked/expired grants.
 func reapExpiredMCPOAuthRecords(on db: Database, logger: Logger, now: Date = Date()) async throws {
     try await MCPAuthorizationCode.query(on: db)
+        .filter(\.$expiresAt < now)
+        .delete()
+    // Single-use consent requests: one row per rendered consent screen, dead
+    // the moment they expire or are redeemed. Like auth codes, they accumulate.
+    try await MCPConsentRequest.query(on: db)
         .filter(\.$expiresAt < now)
         .delete()
     try await MCPGrant.query(on: db)

@@ -31,13 +31,7 @@ Authorize agent
         It cannot access student data, grades, enrolment, or submissions. You can revoke access later.
     </p>
     <form class="form" method="post" action="/oauth/authorize">
-        #csrfFormField()
-        <input type="hidden" name="client_id" value="#(clientID)">
-        <input type="hidden" name="redirect_uri" value="#(redirectURI)">
-        <input type="hidden" name="scope" value="#(scopeRaw)">
-        <input type="hidden" name="state" value="#(state)">
-        <input type="hidden" name="code_challenge" value="#(codeChallenge)">
-        <input type="hidden" name="code_challenge_method" value="#(codeChallengeMethod)">
+        <input type="hidden" name="request_token" value="#(requestToken)">
         <div style="display:flex;gap:.5rem">
             <button class="btn btn-primary" type="submit" name="decision" value="authorize">Authorize</button>
             <button class="btn" type="submit" name="decision" value="deny">Deny</button>

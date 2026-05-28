@@ -43,12 +43,26 @@ import XCTVapor
                 refreshTokenHash: "grant-live", expiresAt: now.addingTimeInterval(3600)
             ).save(on: app.db)
 
+            // Consent requests: one expired, one still live.
+            try await MCPConsentRequest(
+                tokenHash: "consent-expired", userID: uid, clientID: "c", redirectURI: "r",
+                scope: "content:read", state: "", codeChallenge: "x", codeChallengeMethod: "S256",
+                expiresAt: now.addingTimeInterval(-60)
+            ).save(on: app.db)
+            try await MCPConsentRequest(
+                tokenHash: "consent-live", userID: uid, clientID: "c", redirectURI: "r",
+                scope: "content:read", state: "", codeChallenge: "x", codeChallengeMethod: "S256",
+                expiresAt: now.addingTimeInterval(60)
+            ).save(on: app.db)
+
             try await reapExpiredMCPOAuthRecords(on: app.db, logger: app.logger, now: now)
 
             let codeHashes = try await MCPAuthorizationCode.query(on: app.db).all().map(\.codeHash)
             #expect(codeHashes == ["code-live"])
             let grantHashes = try await MCPGrant.query(on: app.db).all().map(\.refreshTokenHash).sorted()
             #expect(grantHashes == ["grant-live"])
+            let consentHashes = try await MCPConsentRequest.query(on: app.db).all().map(\.tokenHash)
+            #expect(consentHashes == ["consent-live"])
         }
     }
 }

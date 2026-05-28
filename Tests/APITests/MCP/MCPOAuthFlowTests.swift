@@ -4,6 +4,7 @@
 // /mcp, and the refresh token rotates.  Plus the guard rails: PKCE mismatch,
 // deny, and the instructor/admin-only consent gate.
 
+import Core
 import Crypto
 import Fluent
 import Foundation
@@ -63,22 +64,50 @@ import XCTVapor
         return components.string ?? "/oauth/authorize"
     }
 
-    /// Runs the consent step and returns the POST response (a 303 to the client).
+    /// Renders the consent screen (authenticated) and returns its single-use
+    /// `request_token`.
+    private func mintConsentToken(
+        _ app: Application, cookie: String, scope: String
+    ) async throws -> String {
+        var html = ""
+        try await app.asyncTest(
+            .GET, authorizePath(scope: scope),
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in html = res.body.string })
+        return try Self.extractRequestToken(html)
+    }
+
+    /// Pulls the value of the hidden `request_token` input out of the consent HTML.
+    private static func extractRequestToken(_ html: String) throws -> String {
+        let marker = "name=\"request_token\" value=\""
+        let after = try #require(html.range(of: marker)).upperBound
+        let tail = html[after...]
+        let end = try #require(tail.firstIndex(of: "\""))
+        return String(tail[..<end])
+    }
+
+    /// Submits the consent decision. By default the session cookie is *not* sent
+    /// on the POST — the single-use token alone must carry identity + CSRF, which
+    /// is the whole point (Safari/ITP drops the cookie on this cross-site hop).
+    private func submitConsent(
+        _ app: Application, token: String, decision: String, cookie: String? = nil
+    ) async throws -> XCTHTTPResponse {
+        try await app.asyncSendRequest(
+            .POST, "/oauth/authorize",
+            beforeRequest: { req in
+                if let cookie { req.headers.add(name: .cookie, value: cookie) }
+                try req.content.encode(
+                    ["request_token": token, "decision": decision], as: .urlEncodedForm)
+            })
+    }
+
+    /// Runs the consent step (GET to mint the token, then a cookie-less POST) and
+    /// returns the POST response (a 303 to the client).
     private func consent(
         _ app: Application, cookie: String, scope: String, decision: String
     ) async throws -> XCTHTTPResponse {
-        let (csrf, bound) = try await csrfFields(for: authorizePath(scope: scope), cookie: cookie, on: app)
-        return try await app.asyncSendRequest(
-            .POST, "/oauth/authorize",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: bound)
-                try req.content.encode(
-                    [
-                        "client_id": clientID, "redirect_uri": redirectURI, "scope": scope,
-                        "state": "xyz", "code_challenge": codeChallenge,
-                        "code_challenge_method": "S256", "decision": decision, "_csrf": csrf,
-                    ], as: .urlEncodedForm)
-            })
+        let token = try await mintConsentToken(app, cookie: cookie, scope: scope)
+        return try await submitConsent(app, token: token, decision: decision)
     }
 
     private func queryValue(_ name: String, in location: String?) -> String? {
@@ -216,6 +245,87 @@ import XCTVapor
                 app, cookie: cookie, scope: "content:read", decision: "deny")
             #expect(res.status == .seeOther)
             #expect(queryValue("error", in: res.headers.first(name: .location)) == "access_denied")
+        }
+    }
+
+    @Test func authorizeSucceedsWithoutSessionCookieOnPost() async throws {
+        // The Safari/ITP case: the cross-site consent POST carries no session
+        // cookie. The single-use token alone must authenticate the consent.
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let token = try await mintConsentToken(
+                app, cookie: cookie, scope: "content:read content:write")
+            let res = try await submitConsent(app, token: token, decision: "authorize", cookie: nil)
+            #expect(res.status == .seeOther)
+            #expect(queryValue("code", in: res.headers.first(name: .location)) != nil)
+        }
+    }
+
+    @Test func unknownConsentTokenIsRejected() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let res = try await submitConsent(
+                app, token: "not-a-real-consent-token", decision: "authorize")
+            #expect(res.status == .badRequest)
+        }
+    }
+
+    @Test func consumedConsentTokenCannotBeReplayed() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let token = try await mintConsentToken(app, cookie: cookie, scope: "content:read")
+            #expect(try await submitConsent(app, token: token, decision: "authorize").status == .seeOther)
+            // Single-use: replaying the same token is rejected.
+            #expect(try await submitConsent(app, token: token, decision: "authorize").status == .badRequest)
+        }
+    }
+
+    @Test func expiredConsentTokenIsRejected() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            _ = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let prof = try #require(
+                await APIUser.query(on: app.db).filter(\.$username == "prof").first())
+            let token = "expired-consent-token-aaaaaaaaaaaaaaaaaaaaaaaa"
+            try await MCPConsentRequest(
+                tokenHash: sha256HexDigest(token),
+                userID: try prof.requireID(),
+                clientID: clientID,
+                redirectURI: redirectURI,
+                scope: "content:read",
+                state: "xyz",
+                codeChallenge: codeChallenge,
+                codeChallengeMethod: "S256",
+                expiresAt: Date().addingTimeInterval(-60)
+            ).save(on: app.db)
+            let res = try await submitConsent(app, token: token, decision: "authorize")
+            #expect(res.status == .badRequest)
+        }
+    }
+
+    @Test func roleDowngradeBetweenConsentAndSubmitIsRejected() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+            let token = try await mintConsentToken(app, cookie: cookie, scope: "content:read")
+            // Demote the consenting user after the screen rendered but before submit.
+            let prof = try #require(
+                await APIUser.query(on: app.db).filter(\.$username == "prof").first())
+            prof.role = "student"
+            try await prof.save(on: app.db)
+            let res = try await submitConsent(app, token: token, decision: "authorize")
+            #expect(res.status == .forbidden)
         }
     }
 
