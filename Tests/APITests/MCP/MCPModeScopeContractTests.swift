@@ -70,22 +70,26 @@ import XCTVapor
         return components.string ?? "/oauth/authorize"
     }
 
-    /// Runs the CSRF-protected consent POST and returns its 303 response.
+    /// Renders the consent screen to mint the single-use token, then submits it
+    /// (cookie-less, like the cross-site connector POST) and returns the 303.
     private func consent(
         _ app: Application, cookie: String, clientID: String, scope: String
     ) async throws -> XCTHTTPResponse {
-        let (csrf, bound) = try await csrfFields(
-            for: authorizePath(clientID: clientID, scope: scope), cookie: cookie, on: app)
+        var html = ""
+        try await app.asyncTest(
+            .GET, authorizePath(clientID: clientID, scope: scope),
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in html = res.body.string })
+        let marker = "name=\"request_token\" value=\""
+        let after = try #require(html.range(of: marker)).upperBound
+        let tail = html[after...]
+        let end = try #require(tail.firstIndex(of: "\""))
+        let token = String(tail[..<end])
         return try await app.asyncSendRequest(
             .POST, "/oauth/authorize",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: bound)
                 try req.content.encode(
-                    [
-                        "client_id": clientID, "redirect_uri": redirectURI, "scope": scope,
-                        "state": "xyz", "code_challenge": codeChallenge,
-                        "code_challenge_method": "S256", "decision": "authorize", "_csrf": csrf,
-                    ], as: .urlEncodedForm)
+                    ["request_token": token, "decision": "authorize"], as: .urlEncodedForm)
             })
     }
 
