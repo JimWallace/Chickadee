@@ -151,6 +151,15 @@ compiler chases every `import`, and we never create a type we later discard.
   bytes, take back the result collection, POST it. Zero grading logic remains in
   JS.
 
+- **Stage 5 — Swift→Wasm review.** Run the full
+  [Swift → Wasm PR Review Checklist](swift-wasm-review-checklist.md) over the
+  migration: compilation mode (embedded vs WASI), platform conditionals,
+  Foundation/concurrency usage, the JS-interop boundary, binary size (with
+  `wasm-opt`), static-linking constraints, SwiftPM/SDK config, pointer/ABI
+  gotchas, Wasm-SDK testing, build hygiene, and docs. Produce the report in the
+  checklist's format (Summary / Blocking / Concerns / Passed / Skipped / size
+  delta) and address blocking findings.
+
 ## What stays JS forever
 
 The bootstrap above, and Pyodide itself. Everything with a worker counterpart is
