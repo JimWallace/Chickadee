@@ -1,12 +1,10 @@
-// Core/ScriptOutput.swift
+// RunnerCore/ScriptOutput.swift
 //
 // Result of running a single test script subprocess.  Returned by
 // implementations of `ScriptRunner` in the worker; converted to
-// `TestOutcome` by `RunnerDaemon`.  Lives in `Core` (v0.4.180+) so
-// future tooling (server-side validation, tests, etc.) can reference
-// the same shape without duplicating it.
-
-import Foundation
+// `TestOutcome` by `RunnerDaemon`.  Lives in `RunnerCore` (the wasm-safe,
+// dependency-free leaf) so both the worker and the browser runner share the
+// shape; `Core` re-exports it via `@_exported import RunnerCore`.
 
 public struct ScriptOutput: Sendable {
     public let exitCode: Int32

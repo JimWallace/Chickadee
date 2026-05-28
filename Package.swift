@@ -47,7 +47,8 @@ let package = Package(
         .target(
             name: "Core",
             dependencies: [
-                .product(name: "Crypto", package: "swift-crypto")
+                .target(name: "RunnerCore"),
+                .product(name: "Crypto", package: "swift-crypto"),
             ],
             path: "Sources/Core",
             exclude: ["README.md"],
