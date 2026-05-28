@@ -13,7 +13,9 @@
 //
 // `import _Concurrency` is REQUIRED here: Embedded Swift only lowers `async`
 // code when the concurrency module is imported in the file. Without it, SILGen
-// crashes (signal 11) instead of emitting a diagnostic. The runtime supplies
+// crashes (signal 11) instead of emitting a diagnostic — upstream bug
+// https://github.com/swiftlang/swift/issues/89492 (when that lands as a clean
+// diagnostic / auto-import, this explicit import can go). The runtime supplies
 // the executor — on wasm it's the single cooperative executor — so `await`ing
 // the substrate (subprocess on the worker, Pyodide in the browser) just works.
 import _Concurrency
