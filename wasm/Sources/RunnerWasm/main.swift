@@ -39,3 +39,15 @@ let runnerExtractPython = JSClosure { args in
 }
 
 JSObject.global.runnerExtractPython = .object(runnerExtractPython)
+
+// Exposed to JS as `globalThis.runnerClassifyScript(name, source)` → the
+// interpreter raw value ("python", "sh", "bash", "ruby", …, "unknown"). The
+// shared "which interpreter?" decision (RunnerCore.classifyScriptInterpreter),
+// so the browser dispatches scripts identically to the native worker.
+let runnerClassifyScript = JSClosure { args in
+    let name = args.first?.string ?? ""
+    let source = args.count > 1 ? (args[1].string ?? "") : ""
+    return .string(classifyScriptInterpreter(name: name, source: source).rawValue)
+}
+
+JSObject.global.runnerClassifyScript = .object(runnerClassifyScript)

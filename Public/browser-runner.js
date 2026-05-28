@@ -213,6 +213,10 @@ for _module_name in student_module_names_in_load_order():
             // Track which scripts passed so dependent tests can be pre-checked.
             const passedScripts = new Set();
 
+            // Shared RunnerCore (wasm) — used to classify each script the same
+            // way the native worker does.
+            const runnerCore = await loadRunnerCore();
+
             for (const entry of manifest.testSuites || []) {
                 const script     = entry.script || '';
                 const tier       = entry.tier || 'public';
@@ -234,7 +238,7 @@ for _module_name in student_module_names_in_load_order():
                 try { src = py.FS.readFile(scriptPath, { encoding: 'utf8' }); }
                 catch (_) { src = null; }
 
-                const kind = classifyScript(script, src);
+                const kind = interpreterToKind(runnerCore.classifyScript(script, src ?? ''));
 
                 let outcome;
                 if (kind === 'python') {
@@ -328,8 +332,8 @@ for _module_name in student_module_names_in_load_order():
             cell_type: cell.cell_type,
             source: Array.isArray(cell.source) ? cell.source.join('') : (cell.source || ''),
         }));
-        const extract = await loadRunnerExtractor();
-        const result = extract(cells, filename);
+        const core = await loadRunnerCore();
+        const result = core.extractPython(cells, filename);
 
         py.FS.writeFile(`${workDir}/${stem}.py`, result.executableModule);
         py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.py`);
@@ -341,26 +345,44 @@ for _module_name in student_module_names_in_load_order():
     }
 
     // -------------------------------------------------------------------------
-    // RunnerCore wasm extractor (lazy singleton)
+    // RunnerCore wasm (lazy singleton)
     //
     // Loads the vendored, embedded-Swift RunnerCore bridge and returns its
-    // `runnerExtractPython(cells, filename)` function. A test harness can preset
-    // `globalThis.runnerExtractPython` to skip loading the wasm.
+    // exported functions — `extractPython(cells, filename)` and
+    // `classifyScript(name, source)`, the SAME Swift code the native worker
+    // runs. A test harness can preset the `globalThis.runner*` globals to skip
+    // loading the wasm.
     // -------------------------------------------------------------------------
 
-    let _runnerExtractor = null;
+    let _runnerCore = null;
 
-    async function loadRunnerExtractor() {
-        if (_runnerExtractor) return _runnerExtractor;
-        if (typeof globalThis.runnerExtractPython !== 'function') {
+    async function loadRunnerCore() {
+        if (_runnerCore) return _runnerCore;
+        const ready = () =>
+            typeof globalThis.runnerExtractPython === 'function'
+            && typeof globalThis.runnerClassifyScript === 'function';
+        if (!ready()) {
             const mod = await import('/runner-wasm/runner-core.js');
-            await mod.init();  // runs the wasm module's entrypoint → registers the global
+            await mod.init();  // runs the wasm entrypoint → registers the globals
         }
-        if (typeof globalThis.runnerExtractPython !== 'function') {
-            throw new Error('RunnerCore wasm did not register runnerExtractPython');
+        if (!ready()) {
+            throw new Error('RunnerCore wasm did not register its exports');
         }
-        _runnerExtractor = globalThis.runnerExtractPython;
-        return _runnerExtractor;
+        _runnerCore = {
+            extractPython: globalThis.runnerExtractPython,
+            classifyScript: globalThis.runnerClassifyScript,
+        };
+        return _runnerCore;
+    }
+
+    // Map a RunnerCore interpreter raw value to how the browser dispatches it.
+    // The browser can only execute Python (Pyodide); other interpreters get a
+    // precise "not here" message.
+    function interpreterToKind(interp) {
+        if (interp === 'python') return 'python';
+        if (interp === 'rscript') return 'r';
+        if (interp === 'sh' || interp === 'bash' || interp === 'zsh') return 'shell';
+        return 'unsupported';  // ruby / perl / node / php / unknown
     }
 
     // R cells are emitted verbatim — the browser R path (WebR) is not yet active.
@@ -386,56 +408,9 @@ for _module_name in student_module_names_in_load_order():
         return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
     }
 
-    // Decide how a test script should be dispatched in the browser. Mirrors
-    // Sources/Worker/ScriptInvocation.swift: a recognised extension wins;
-    // otherwise the shebang, then a Python content-sniff, decides. The browser
-    // can only execute Python (Pyodide), but we still recognise 'r' / 'shell'
-    // so the student sees a precise message rather than a generic one.
-    // Returns one of: 'python', 'r', 'shell', 'unknown'.
-    function classifyScript(script, src) {
-        switch (scriptExtension(script)) {
-            case 'py':                          return 'python';
-            case 'r':                           return 'r';
-            case 'sh': case 'bash': case 'zsh': return 'shell';
-            default:                            break;   // unknown/extensionless
-        }
-        const fromShebang = scriptKindFromShebang(src);
-        if (fromShebang) return fromShebang;
-        return looksLikePython(src) ? 'python' : 'unknown';
-    }
-
-    // Map a `#!` shebang on the first line to a script kind, matching
-    // invocationFromShebang() in ScriptInvocation.swift. Returns null when there
-    // is no recognised shebang.
-    function scriptKindFromShebang(src) {
-        if (typeof src !== 'string') return null;
-        const firstLine = src.replace(/^[\uFEFF\s]+/, '').split('\n', 1)[0] || '';
-        if (!firstLine.startsWith('#!')) return null;
-        const lower = firstLine.toLowerCase();
-        if (lower.includes('python')) return 'python';
-        if (lower.includes('node') || lower.includes('javascript')
-            || lower.includes('ruby') || lower.includes('perl')) {
-            return 'unknown';   // recognised, but not runnable in-browser
-        }
-        if (lower.includes('bash') || lower.includes('zsh') || lower.includes('sh')) {
-            return 'shell';
-        }
-        return null;
-    }
-
-    // Content sniff: do the first few non-comment lines look like Python?
-    // Mirrors looksLikePythonScript() in ScriptInvocation.swift.
-    function looksLikePython(src) {
-        if (typeof src !== 'string' || !src) return false;
-        const lines = src.split('\n')
-            .map(l => l.trim())
-            .filter(l => l && !l.startsWith('#'))
-            .slice(0, 5);
-        return lines.some(l =>
-            l.startsWith('import ') || l.startsWith('from ')
-            || l.startsWith('def ') || l.startsWith('class ')
-            || l.startsWith('if __name__ =='));
-    }
+    // Script classification (recognised extension \u2192 shebang \u2192 Python
+    // content-sniff) now lives in RunnerCore (Swift/wasm) and is shared with the
+    // native worker \u2014 see loadRunnerCore().classifyScript / interpreterToKind.
 
     async function runPyScript(py, src, scriptName, tier, timeLimitSeconds) {
         const startMs = Date.now();
@@ -1159,9 +1134,6 @@ for _module_name in _tr.student_module_names_in_load_order():
             SITECUSTOMIZE_PY,
             runAndSubmit,
             runScripts,
-            // Exposed so the cross-runner dispatch contract test can assert this
-            // stays in sync with Sources/Worker/ScriptInvocation.swift.
-            classifyScript,
             scriptExtension,
             extractNotebook,
             runPyScript,
@@ -1178,7 +1150,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             __resetStateForTests() {
                 _pyodide = null;
                 _JSZip   = null;
-                _runnerExtractor = null;
+                _runnerCore = null;
                 if (statusEl) {
                     statusEl.textContent = '';
                     statusEl.className   = '';
