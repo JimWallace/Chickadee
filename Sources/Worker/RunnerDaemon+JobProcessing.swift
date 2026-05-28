@@ -530,122 +530,48 @@ extension WorkerDaemon {
 
     // MARK: - Test execution
 
-    /// Walks `manifest.testSuites` in order, honouring the `dependsOn`
-    /// pass-gate: a test whose prerequisite hasn't passed is auto-failed
-    /// with a `Skipped:` short result instead of executed. Missing script
-    /// files are logged and skipped entirely (no outcome emitted, matching
-    /// the pre-extraction behaviour).
+    /// Projects the manifest entries to RunnerCore's runtime `SuiteItem` view
+    /// and drives the shared `executeSuites` loop. The dependency pass-gate,
+    /// skip messages, missing-script handling, and outcome shaping all live in
+    /// RunnerCore now — shared byte-for-byte with the browser runner. The worker
+    /// supplies its substrate (`NativeScriptExecutor`) and its structured
+    /// logging via the event sink.
     private func executeTestSuites(
         manifest: TestProperties,
         testSetupDir: URL,
         job: Job
     ) async -> [TestOutcome] {
-        var outcomes: [TestOutcome] = []
-        var passedScripts: Set<String> = []
-
-        for entry in manifest.testSuites {
-            if let blockedBy = entry.dependsOn.first(where: { !passedScripts.contains($0) }),
-                !entry.dependsOn.isEmpty
-            {
-                let baseName = (entry.script as NSString).deletingPathExtension
-                let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-                outcomes.append(
-                    TestOutcome(
-                        testName: displayName ?? (baseName.isEmpty ? entry.script : baseName),
-                        testClass: nil,
-                        tier: entry.tier,
-                        status: .fail,
-                        shortResult: skippedPrerequisiteMessage(prerequisite: blockedBy),
-                        longResult: nil,
-                        executionTimeMs: 0,
-                        memoryUsageBytes: nil,
-                        attemptNumber: job.attemptNumber,
-                        isFirstPassSuccess: false
-                    ))
-                continue
-            }
-
-            let scriptURL = testSetupDir.appendingPathComponent(entry.script)
-            guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-                writeStructuredRunnerLog(
-                    event: "local_execution_error",
-                    fields: [
-                        "runner_id": workerID,
-                        "submission_id": job.submissionID,
-                        "test_id": entry.script,
-                        "error_type": "missing_script",
-                        "error_message_summary": entry.script,
-                    ])
-                continue
-            }
-
-            writeStructuredRunnerLog(
-                event: "test_execution_start",
-                fields: [
-                    "runner_id": workerID,
-                    "submission_id": job.submissionID,
-                    "test_id": entry.script,
-                ])
-
-            // Phase 1 of issue #461 — surface the per-(student, assignment)
-            // seed to the grading subprocess. Nil seed means non-personalized
-            // job; leaving the env var unset preserves legacy behaviour.
-            var scriptEnv: [String: String] = [:]
-            if let seed = job.assignmentSeed, !seed.isEmpty {
-                scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
-            }
-            let output = await runner.run(
-                script: scriptURL,
-                workDir: testSetupDir,
-                timeLimitSeconds: manifest.timeLimitSeconds,
-                env: scriptEnv
-            )
-
-            let isFirstAttempt = job.attemptNumber == 1
-            let outcome = interpretOutput(
-                output, entry: entry, attemptNumber: job.attemptNumber, isFirstAttempt: isFirstAttempt)
-            outcomes.append(outcome)
-            writeStructuredRunnerLog(
-                event: output.timedOut ? "timeout" : "test_execution_end",
-                fields: [
-                    "runner_id": workerID,
-                    "submission_id": job.submissionID,
-                    "test_id": normalizedTestID(for: outcome),
-                    "status": outcome.status.rawValue,
-                    "execution_ms": outcome.executionTimeMs,
-                ])
-            if outcome.status == .pass {
-                passedScripts.insert(entry.script)
-            }
+        // Phase 1 of issue #461 — surface the per-(student, assignment) seed to
+        // the grading subprocess. Nil/empty seed means non-personalized job;
+        // leaving the env var unset preserves legacy behaviour.
+        var scriptEnv: [String: String] = [:]
+        if let seed = job.assignmentSeed, !seed.isEmpty {
+            scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
         }
 
-        return outcomes
-    }
+        let executor = NativeScriptExecutor(runner: runner, workDir: testSetupDir, env: scriptEnv)
+        let items = manifest.testSuites.map { entry in
+            SuiteItem(
+                script: entry.script,
+                tier: entry.tier,
+                displayName: entry.name,
+                dependsOn: entry.dependsOn,
+                points: entry.points
+            )
+        }
 
-    // MARK: - Script output interpretation
-
-    private func interpretOutput(
-        _ output: ScriptOutput,
-        entry: TestSuiteEntry,
-        attemptNumber: Int,
-        isFirstAttempt: Bool
-    ) -> TestOutcome {
-        let interpreted = interpretScriptOutput(output)
-        let baseName = (entry.script as NSString).deletingPathExtension
-        let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-
-        return TestOutcome(
-            testName: displayName ?? (baseName.isEmpty ? entry.script : baseName),
-            testClass: nil,
-            tier: entry.tier,
-            status: interpreted.status,
-            shortResult: interpreted.shortResult,
-            longResult: interpreted.longResult,
-            points: entry.points,
-            executionTimeMs: output.executionTimeMs,
-            memoryUsageBytes: nil,
-            attemptNumber: attemptNumber,
-            isFirstPassSuccess: isFirstAttempt && interpreted.status == .pass
+        // Capture only value types so the @Sendable event sink can run on the
+        // loop's (nonisolated) executor without touching actor state.
+        let runnerID = workerID
+        let submissionID = job.submissionID
+        return await executeSuites(
+            items,
+            timeLimitSeconds: manifest.timeLimitSeconds,
+            attemptNumber: job.attemptNumber,
+            executor: executor,
+            onEvent: { event in
+                logSuiteRunEvent(event, runnerID: runnerID, submissionID: submissionID)
+            }
         )
     }
 
@@ -694,5 +620,55 @@ extension WorkerDaemon {
 // MARK: - Script output interpretation (pure contract)
 
 // `InterpretedScriptResult` and `interpretScriptOutput(_:)` now live in
-// RunnerCore (the wasm-safe leaf shared with the browser runner). Reached here
-// via `import Core` (which re-exports RunnerCore).
+// RunnerCore (the wasm-safe leaf shared with the browser runner), as does the
+// suite-execution loop itself (`executeSuites` + the `ScriptExecutor` protocol).
+// Reached here via `import Core` (which re-exports RunnerCore).
+
+// MARK: - Suite-run event logging
+
+/// Maps RunnerCore's `SuiteRunEvent`s onto the worker's structured log stream,
+/// preserving the exact event names and fields the loop used to emit inline
+/// (`local_execution_error` / `test_execution_start` / `test_execution_end` /
+/// `timeout`). A free function — not an actor method — so the shared
+/// `executeSuites` loop can invoke it from its own (nonisolated) executor; it
+/// captures only value types.
+private func logSuiteRunEvent(_ event: SuiteRunEvent, runnerID: String, submissionID: String) {
+    switch event {
+    case .missingScript(let script):
+        writeStructuredRunnerLog(
+            event: "local_execution_error",
+            fields: [
+                "runner_id": runnerID,
+                "submission_id": submissionID,
+                "test_id": script,
+                "error_type": "missing_script",
+                "error_message_summary": script,
+            ])
+    case .willRun(let script):
+        writeStructuredRunnerLog(
+            event: "test_execution_start",
+            fields: [
+                "runner_id": runnerID,
+                "submission_id": submissionID,
+                "test_id": script,
+            ])
+    case .didFinish(_, let outcome, let timedOut):
+        writeStructuredRunnerLog(
+            event: timedOut ? "timeout" : "test_execution_end",
+            fields: [
+                "runner_id": runnerID,
+                "submission_id": submissionID,
+                "test_id": normalizedTestID(for: outcome),
+                "status": outcome.status.rawValue,
+                "execution_ms": outcome.executionTimeMs,
+            ])
+    }
+}
+
+/// Combines `testClass` + `testName` into the dotted ID used in log events.
+/// Free function so both the `WorkerDaemon` actor and the suite-run event sink
+/// can call it without crossing an isolation boundary.
+func normalizedTestID(for outcome: TestOutcome) -> String {
+    let classPart = outcome.testClass?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return classPart.isEmpty ? outcome.testName : "\(classPart).\(outcome.testName)"
+}
