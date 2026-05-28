@@ -665,11 +665,6 @@ actor WorkerDaemon {
             ])
     }
 
-    func normalizedTestID(for outcome: TestOutcome) -> String {
-        let classPart = outcome.testClass?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return classPart.isEmpty ? outcome.testName : "\(classPart).\(outcome.testName)"
-    }
-
     func inferredCollectionStatus(_ collection: TestOutcomeCollection) -> RunnerJobStatus {
         if collection.timeoutCount > 0 { return .timeout }
         if collection.errorCount > 0 { return .error }

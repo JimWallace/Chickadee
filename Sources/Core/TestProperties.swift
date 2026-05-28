@@ -91,17 +91,9 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     }
 }
 
-/// The `shortResult` emitted when a test is auto-failed because one of its
-/// `dependsOn` prerequisites did not pass.  Both grading runners emit this
-/// exact string — the native worker (`RunnerDaemon`) and the browser runner
-/// (`Public/browser-runner.js`) — and two consumers parse it back: the server
-/// results view (`parseSkip` in `SubmissionOutputFormatting`) and `notebook.js`.
-/// Keeping the wording here (and pinned by the shared
-/// `Tests/Fixtures/dependency-skip-message.json` fixture) is what stops the
-/// producers and parsers from drifting apart.
-public func skippedPrerequisiteMessage(prerequisite: String) -> String {
-    "Skipped: prerequisite '\(prerequisite)' did not pass"
-}
+// `skippedPrerequisiteMessage(prerequisite:)` moved down into RunnerCore (the
+// wasm-safe leaf shared by both runners). Reached here via `import Core`, which
+// re-exports RunnerCore — so existing call sites are unchanged.
 
 /// A named grouping of test suite entries.  Sections drive visual
 /// grouping on the instructor suite editor and the student submission

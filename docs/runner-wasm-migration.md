@@ -145,6 +145,27 @@ compiler chases every `import`, and we never create a type we later discard.
   with them. **Migrate the worker onto it first** (`NativeScriptExecutor`). Add
   `BrowserScriptExecutor` (Pyodide via JavaScriptKit). Delete the duplicated
   loop in `browser-runner.js`.
+  - **Worker half — done.** `ScriptExecutor` (narrow async protocol:
+    `scriptExists` + `run`), `SuiteItem` (runtime projection of a manifest
+    entry), `SuiteRunEvent`, and the shared async `executeSuites` loop now
+    live in `RunnerCore`. The worker drives it via `NativeScriptExecutor`
+    (subprocess + sandbox) and maps `SuiteRunEvent`s onto its structured log
+    stream; the old in-worker loop and `interpretOutput` are gone.
+    `skippedPrerequisiteMessage` moved down into `RunnerCore` too. Verified:
+    native build, embedded compile of `RunnerCore`, 222 WorkerTests,
+    113 CoreTests (incl. the relocated skip-message pin), 60 JS tests, and
+    new `SuiteExecutionTests` unit coverage of the loop.
+  - **Embedded async — confirmed working.** Embedded Swift *does* support
+    `async` (generic `some ScriptExecutor` witness calls, `@Sendable` closures,
+    `await` in `for`/`guard`) — the SDK supplies the cooperative executor. The
+    one non-obvious requirement: **`import _Concurrency` must appear in any
+    file containing `async` code**, or SILGen crashes (signal 11) instead of
+    emitting a diagnostic. `SuiteExecution.swift` / `ScriptExecutor.swift`
+    import it with a comment.
+  - **Browser half — Stage 4.** `BrowserScriptExecutor` + deleting the JS loop
+    + re-vendoring the wasm artifact are deferred to Stage 4 (where the browser
+    actually calls `executeSuites`), so Stage 3 ships no browser-bound bytes
+    and the vendored artifact carries no dead code.
 
 - **Stage 4 — thin the shell.** `browser-runner.js` becomes a ~50-line
   bootstrap: load Pyodide + wasm, hand Swift the Pyodide handle and notebook
