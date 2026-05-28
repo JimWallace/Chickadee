@@ -13,7 +13,13 @@ import path from 'node:path';
 // one fixture, so the two runners cannot drift.
 
 const RUNNER_CORE = path.resolve('Public/runner-wasm/runner-core.js');
-const RUNNER_WASM = path.resolve('Public/runner-wasm/RunnerWasm.wasm');
+// The wasm filename is content-hashed (RunnerWasm.<hash>.wasm) for immutable
+// caching, so discover it rather than hardcoding the name.
+const RUNNER_DIR = path.resolve('Public/runner-wasm');
+const RUNNER_WASM = path.join(
+  RUNNER_DIR,
+  (await fs.readdir(RUNNER_DIR)).find(f => /^RunnerWasm\..*\.wasm$/.test(f)),
+);
 
 let _ready;
 async function ensureWasm() {

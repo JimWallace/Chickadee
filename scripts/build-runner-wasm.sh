@@ -46,8 +46,53 @@ echo "Bundling a self-contained, no-CDN browser ESM with esbuild…"
 rm -rf "$out_dir"
 mkdir -p "$out_dir"
 npx --yes esbuild "$pkg/index.js" --bundle --format=esm --outfile="$out_dir/runner-core.js"
-cp "$pkg/RunnerWasm.wasm" "$out_dir/RunnerWasm.wasm"
+
+unopt_size=$(wc -c < "$pkg/RunnerWasm.wasm")
+
+# Optimize for size — this is a browser-delivered artifact, so -Oz (size) over
+# -O (speed). wasm-opt ships with binaryen; run it via npx so no system install
+# is needed (same mechanism as esbuild above). If it's unavailable (offline),
+# fall back to the unoptimized module with a warning — the build still produces
+# a correct, working artifact.
+opt_wasm="$out_dir/.RunnerWasm.opt.wasm"
+if npx --yes wasm-opt --version >/dev/null 2>&1; then
+    echo "Optimizing with wasm-opt -Oz…"
+    npx --yes wasm-opt -Oz "$pkg/RunnerWasm.wasm" -o "$opt_wasm"
+else
+    echo "WARNING: wasm-opt unavailable — vendoring the UNOPTIMIZED module."
+    cp "$pkg/RunnerWasm.wasm" "$opt_wasm"
+fi
+opt_size=$(wc -c < "$opt_wasm")
+
+# Content-hash the filename so the artifact can be cached immutably: new bytes →
+# new filename → clean cache bust; unchanged bytes → identical filename → served
+# from cache effectively forever (see RunnerWasmCacheMiddleware).
+hash=$(shasum -a 256 "$opt_wasm" | cut -c1-12)
+wasm_name="RunnerWasm.${hash}.wasm"
+mv "$opt_wasm" "$out_dir/$wasm_name"
+
+# Point the generated loader at the hashed filename (it fetches
+# `new URL("RunnerWasm.wasm", import.meta.url)`). The loader keeps its stable
+# name and is served must-revalidate, so it always resolves to the current hash.
+sed -i.bak "s/RunnerWasm\.wasm/${wasm_name}/g" "$out_dir/runner-core.js"
+rm -f "$out_dir/runner-core.js.bak"
+
+gzip_size=$(gzip -9 -c "$out_dir/$wasm_name" | wc -c)
+if command -v brotli >/dev/null 2>&1; then
+    brotli_size="$(brotli -q 11 -c "$out_dir/$wasm_name" | wc -c) bytes"
+else
+    brotli_size="(brotli not installed — install binaryen/brotli to measure)"
+fi
 
 echo "Done. Vendored:"
-echo "  $out_dir/runner-core.js   ($(wc -c < "$out_dir/runner-core.js") bytes)"
-echo "  $out_dir/RunnerWasm.wasm  ($(wc -c < "$out_dir/RunnerWasm.wasm") bytes)"
+echo "  $out_dir/runner-core.js        ($(wc -c < "$out_dir/runner-core.js") bytes, loader)"
+echo "  $out_dir/$wasm_name  (content-hashed)"
+echo ""
+echo "Wasm size:"
+echo "  unoptimized:  ${unopt_size} bytes"
+echo "  wasm-opt -Oz: ${opt_size} bytes"
+echo "  gzip -9:      ${gzip_size} bytes"
+echo "  brotli -q11:  ${brotli_size}"
+echo ""
+echo "Size budget:"
+"$repo_root/scripts/check-runner-wasm-size.sh" || true
