@@ -233,6 +233,8 @@ func registerMigrations(on app: Application) {
     // Single-use consent requests for the browser OAuth flow (cookie-less
     // POST /oauth/authorize). FK references `users`.
     app.migrations.add(CreateMCPConsentRequests())
+    // Per-student grade overrides. FKs reference `users` and `test_setups`.
+    app.migrations.add(CreateGradeOverrides())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())

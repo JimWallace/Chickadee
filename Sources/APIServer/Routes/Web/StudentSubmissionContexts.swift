@@ -69,6 +69,10 @@ struct StudentAssignmentRow: Encodable {
     let latestSubmittedAtText: String
     let additionalSubmissionCount: Int
     let bestGradeText: String?
+    let gradeIsOverridden: Bool
+    let gradeOverridePercent: Int  // form prefill; 0 when no override is set
+    let gradeOverrideSavePath: String
+    let gradeOverrideClearPath: String
     let badges: [AchievementBadge]
 }
 

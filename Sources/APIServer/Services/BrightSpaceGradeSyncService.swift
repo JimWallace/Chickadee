@@ -187,13 +187,29 @@ private func bestPointsForStudent(
     testSetupID: String,
     db: Database
 ) async throws -> Double? {
+    // An instructor override replaces the runner-derived grade. It stores a
+    // percent, so it needs a points denominator: the suite's total possible
+    // points (the BrightSpace grade item's max).
+    let override = try await APIGradeOverride.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == userID)
+        .first()
+
     let submissionIDs = try await APISubmission.query(on: db)
         .filter(\.$userID == userID)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$kind == APISubmission.Kind.student)
         .all()
         .compactMap(\.id)
-    guard !submissionIDs.isEmpty else { return nil }
+
+    guard !submissionIDs.isEmpty else {
+        // No submissions yet. Only an override gives us anything to push.
+        guard let override else { return nil }
+        guard let total = try await suiteTotalPoints(testSetupID: testSetupID, db: db) else {
+            return nil
+        }
+        return Double(override.overridePercent) / 100.0 * total
+    }
 
     let allResults = try await APIResult.query(on: db)
         .filter(\.$submissionID ~~ submissionIDs)
@@ -201,6 +217,16 @@ private func bestPointsForStudent(
     // Prefer worker results; fall back to browser results for best-grade computation.
     let workerResults = allResults.filter { $0.source != "browser" }
     let resultsForGrade = workerResults.isEmpty ? allResults : workerResults
+
+    if let override {
+        // Prefer the suite manifest's total; fall back to the best result's
+        // recorded totalPoints for setups whose manifest is unavailable.
+        let total =
+            try await suiteTotalPoints(testSetupID: testSetupID, db: db)
+            ?? resultsForGrade.compactMap { gradeTotalPointsFromCollectionJSON($0.collectionJSON) }.max()
+        guard let total, total > 0 else { throw BrightSpaceSyncError.missingPoints }
+        return Double(override.overridePercent) / 100.0 * total
+    }
 
     guard
         let points =
@@ -211,6 +237,19 @@ private func bestPointsForStudent(
         throw BrightSpaceSyncError.missingPoints
     }
     return points
+}
+
+/// Total possible points for a test setup — the sum of its suite items'
+/// weights, which is the BrightSpace grade item's max.  Nil when the manifest
+/// is missing/malformed or sums to zero.
+private func suiteTotalPoints(testSetupID: String, db: Database) async throws -> Double? {
+    guard let setup = try await APITestSetup.find(testSetupID, on: db),
+        let props = setup.decodedManifest()
+    else {
+        return nil
+    }
+    let total = props.testSuites.map(\.points).reduce(0, +)
+    return total > 0 ? Double(total) : nil
 }
 
 /// Returns the cached D2L user ID for `userID`, looking it up via studentID if not yet cached.

@@ -164,6 +164,20 @@ func gradePointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
     return passCount
 }
 
+/// Returns the total possible points recorded on a submission result, used as
+/// the denominator when converting a percent grade override into BrightSpace
+/// points.  Nil when the result predates weighted grading (no `totalPoints`).
+func gradeTotalPointsFromCollectionJSON(_ collectionJSON: String) -> Double? {
+    guard let data = collectionJSON.data(using: .utf8),
+        let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+        return nil
+    }
+    let totalPoints = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
+    if let total = totalPoints, total > 0 { return total }
+    return nil
+}
+
 func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
     guard let data = collectionJSON.data(using: .utf8),
         let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]

@@ -65,10 +65,13 @@ extension StudentCourseRoutes {
             req: req, student: student, assignments: assignments)
         async let classBadgesBySetupIDFuture = loadStudentCourseClassBadges(
             req: req, student: student, setupIDs: setupIDs)
+        async let overrideBySetupIDFuture = loadStudentCourseOverrides(
+            req: req, student: student, setupIDs: setupIDs)
         let setupsByID = try await setupsByIDFuture
         let submissions = try await submissionsFuture
         let extensionByAssignmentID = try await extensionByAssignmentIDFuture
         let classBadgesBySetupID = try await classBadgesBySetupIDFuture
+        let overrideBySetupID = try await overrideBySetupIDFuture
 
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
         // preferredResults must wait until submissions resolves (it needs
@@ -94,6 +97,7 @@ extension StudentCourseRoutes {
                 history: submissionsBySetupID[assignment.testSetupID] ?? [],
                 classBadges: classBadgesBySetupID[assignment.testSetupID] ?? [],
                 activeExtension: assignment.id.flatMap { extensionByAssignmentID[$0] },
+                activeOverride: overrideBySetupID[assignment.testSetupID],
                 context: rowContext
             )
         }
@@ -189,6 +193,21 @@ extension StudentCourseRoutes {
             }
         }
         return classBadgesBySetupID
+    }
+
+    fileprivate func loadStudentCourseOverrides(
+        req: Request, student: APIUser, setupIDs: [String]
+    ) async throws -> [String: APIGradeOverride] {
+        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [:] }
+        let overrides = try await APIGradeOverride.query(on: req.db)
+            .filter(\.$testSetupID ~~ Set(setupIDs))
+            .filter(\.$userID == studentUUID)
+            .all()
+        var overrideBySetupID: [String: APIGradeOverride] = [:]
+        for row in overrides {
+            overrideBySetupID[row.testSetupID] = row
+        }
+        return overrideBySetupID
     }
 
     /// Sort comparator matches the student dashboard (`WebRoutes.swift`):
@@ -549,6 +568,161 @@ extension StudentCourseRoutes {
             )
         )
     }
+
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/grade-override
+
+    @Sendable
+    func saveStudentAssignmentGradeOverride(req: Request) async throws -> Response {
+        struct OverrideBody: Content {
+            var overridePercent: Int?
+            var note: String?
+        }
+
+        let actor = try req.auth.require(APIUser.self)
+        guard actor.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "override grades")
+        }
+        let (course, student) = try await resolveCourseAndStudent(req: req)
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard
+            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
+            assignment.courseID == course.id,
+            let studentUUID = student.id
+        else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+        }
+        let testSetupID = assignment.testSetupID
+
+        let body = try req.content.decode(OverrideBody.self)
+        guard let percent = body.overridePercent, (0...100).contains(percent) else {
+            throw WebAssignmentError.invalidParameter(
+                name: "overridePercent",
+                reason: "Provide a whole-number percent between 0 and 100."
+            )
+        }
+        let trimmedNote = body.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
+
+        let existing = try await APIGradeOverride.query(on: req.db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$userID == studentUUID)
+            .first()
+
+        if let existing {
+            existing.overridePercent = percent
+            existing.note = note
+            existing.grantedByUserID = actor.id
+            try await existing.save(on: req.db)
+        } else {
+            let row = APIGradeOverride(
+                testSetupID: testSetupID,
+                userID: studentUUID,
+                overridePercent: percent,
+                note: note,
+                grantedByUserID: actor.id
+            )
+            try await row.save(on: req.db)
+        }
+
+        // The override changes what BrightSpace should receive; re-flag the
+        // student's results so the next sweep re-pushes the new grade.
+        try await flagResultsPendingSync(
+            testSetupID: testSetupID, studentUserID: studentUUID, on: req.db)
+
+        await AuditLogger.record(
+            action: .gradeOverrideSet,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignmentIDRaw,
+                "student_username": student.username,
+                "override_percent": String(percent),
+            ],
+            on: req
+        )
+
+        return req.redirect(
+            to: StudentCoursePaths.submissions(
+                courseCode: course.code,
+                urlToken: try student.requireURLToken()
+            )
+        )
+    }
+
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/grade-override/delete
+
+    @Sendable
+    func deleteStudentAssignmentGradeOverride(req: Request) async throws -> Response {
+        let actor = try req.auth.require(APIUser.self)
+        guard actor.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "clear grade overrides")
+        }
+        let (course, student) = try await resolveCourseAndStudent(req: req)
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard
+            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
+            assignment.courseID == course.id,
+            let studentUUID = student.id
+        else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+        }
+        let testSetupID = assignment.testSetupID
+
+        let existing = try await APIGradeOverride.query(on: req.db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$userID == studentUUID)
+            .first()
+        if let existing {
+            try await existing.delete(on: req.db)
+            // Clearing reverts BrightSpace to the runner-computed grade; re-flag
+            // the student's results so the next sweep re-pushes it.
+            try await flagResultsPendingSync(
+                testSetupID: testSetupID, studentUserID: studentUUID, on: req.db)
+            await AuditLogger.record(
+                action: .gradeOverrideCleared,
+                targetType: .assignment,
+                targetID: assignment.id?.uuidString,
+                metadata: [
+                    "assignment": assignmentIDRaw,
+                    "student_username": student.username,
+                ],
+                on: req
+            )
+        }
+
+        return req.redirect(
+            to: StudentCoursePaths.submissions(
+                courseCode: course.code,
+                urlToken: try student.requireURLToken()
+            )
+        )
+    }
+
+    /// Marks every result on one student's submissions for a test setup as
+    /// pending BrightSpace sync, so the debounced sweep re-pushes the grade
+    /// after an override is set or cleared.
+    fileprivate func flagResultsPendingSync(
+        testSetupID: String, studentUserID: UUID, on db: Database
+    ) async throws {
+        let submissionIDs = try await APISubmission.query(on: db)
+            .filter(\.$userID == studentUserID)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .all()
+            .compactMap(\.id)
+        guard !submissionIDs.isEmpty else { return }
+        let results = try await APIResult.query(on: db)
+            .filter(\.$submissionID ~~ submissionIDs)
+            .all()
+        let now = Date()
+        for result in results {
+            result.brightspaceSyncPending = true
+            if result.brightspacePendingSince == nil {
+                result.brightspacePendingSince = now
+            }
+            try await result.save(on: db)
+        }
+    }
 }
 
 // MARK: - Private helpers
@@ -597,9 +771,9 @@ extension StudentCourseRoutes {
         return (course, student)
     }
 
-    /// Bundles the per-table inputs that don't vary across rows.  Lets
-    /// `buildStudentAssignmentRow` stay at 5 parameters even with 9
-    /// logical inputs.  `urlToken` is the student's opaque URL token
+    /// Bundles the per-table inputs that don't vary across rows.  Keeps
+    /// `buildStudentAssignmentRow` to a handful of parameters even with
+    /// many logical inputs.  `urlToken` is the student's opaque URL token
     /// (#556) — used to build per-student action URLs without leaking
     /// the username into request logs.
     fileprivate struct StudentAssignmentRowContext {
@@ -615,6 +789,7 @@ extension StudentCourseRoutes {
         history: [APISubmission],
         classBadges: [AchievementBadge],
         activeExtension: APIAssignmentExtension?,
+        activeOverride: APIGradeOverride?,
         context: StudentAssignmentRowContext
     ) -> StudentAssignmentRow {
         let courseCode = context.courseCode
@@ -716,7 +891,20 @@ extension StudentCourseRoutes {
             latestSubmissionID: latest?.id ?? "",
             latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
             additionalSubmissionCount: max(history.count - 1, 0),
-            bestGradeText: bestGradePercent.map { "\($0)%" },
+            bestGradeText: activeOverride.map { "\($0.overridePercent)%" }
+                ?? bestGradePercent.map { "\($0)%" },
+            gradeIsOverridden: activeOverride != nil,
+            gradeOverridePercent: activeOverride?.overridePercent ?? bestGradePercent ?? 0,
+            gradeOverrideSavePath: StudentCoursePaths.gradeOverrideSave(
+                courseCode: courseCode,
+                urlToken: urlToken,
+                assignmentID: assignment.publicID
+            ),
+            gradeOverrideClearPath: StudentCoursePaths.gradeOverrideClear(
+                courseCode: courseCode,
+                urlToken: urlToken,
+                assignmentID: assignment.publicID
+            ),
             badges: badges
         )
     }

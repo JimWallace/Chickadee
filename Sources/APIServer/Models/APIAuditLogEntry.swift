@@ -96,6 +96,8 @@ enum AuditAction: String, Sendable {
     case submissionRetestForStudent = "submission.retest_for_student"
     case extensionGranted = "extension.granted"
     case extensionRevoked = "extension.revoked"
+    case gradeOverrideSet = "grade_override.set"
+    case gradeOverrideCleared = "grade_override.cleared"
     case loginSuccess = "auth.login_success"
     case loginFailure = "auth.login_failure"
     case loginLocked = "auth.login_locked"

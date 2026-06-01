@@ -39,5 +39,14 @@ struct StudentCourseRoutes: RouteCollection {
             "delete",
             use: deleteStudentAssignmentExtension
         )
+        routes.post(
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "grade-override",
+            use: saveStudentAssignmentGradeOverride
+        )
+        routes.post(
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "grade-override",
+            "delete",
+            use: deleteStudentAssignmentGradeOverride
+        )
     }
 }
