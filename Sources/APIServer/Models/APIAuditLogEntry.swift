@@ -24,6 +24,7 @@ import Fluent
 import Vapor
 
 final class APIAuditLogEntry: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "audit_log"
 
     @ID(key: .id)

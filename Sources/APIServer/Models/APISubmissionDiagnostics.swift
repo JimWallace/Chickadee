@@ -2,6 +2,7 @@ import Fluent
 import Vapor
 
 final class APISubmissionDiagnostics: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "submission_diagnostics"
 
     @ID(custom: "submission_id", generatedBy: .user)

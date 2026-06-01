@@ -37,6 +37,9 @@ func reapStuckAssignedSubmissions(
 }
 
 final class StuckSubmissionReaperMonitor: @unchecked Sendable {
+    // @unchecked Sendable: the only mutable state (`task`) is touched solely
+    // from start()/stop() on the app lifecycle (didBoot/shutdown), never
+    // concurrently.
     private var task: Task<Void, Never>?
     private let intervalNanoseconds: UInt64
     private let maxAge: TimeInterval
