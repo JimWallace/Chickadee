@@ -80,6 +80,24 @@
       "exitCode": 0,
       "status": "pass",
       "native": { "shortResult": "t: passed", "longResult": "stdout:\nNice work!" }
+    },
+    {
+      "name": "timeout wins over exit code (SIGKILL after the limit, empty output)",
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 0,
+      "timedOut": true,
+      "status": "timeout",
+      "native": { "shortResult": "timed out", "longResult": null }
+    },
+    {
+      "name": "timeout with partial stderr surfaced (exit -1 SIGKILL)",
+      "stdout": "",
+      "stderr": "still running when killed\n",
+      "exitCode": -1,
+      "timedOut": true,
+      "status": "timeout",
+      "native": { "shortResult": "timed out", "longResult": "stderr:\nstill running when killed" }
     }
   ]
 }

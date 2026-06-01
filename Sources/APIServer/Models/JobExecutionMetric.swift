@@ -2,6 +2,7 @@ import Fluent
 import Vapor
 
 final class JobExecutionMetric: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "job_execution_metrics"
 
     @ID(key: .id)

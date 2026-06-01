@@ -14,16 +14,24 @@ needed, but the architecture has been redesigned from scratch.
 
 ## Architecture Overview
 
-Three Swift targets share a clean dependency boundary:
+Swift targets share a clean dependency boundary:
 
-- **`chickadee-server`** — Vapor app. REST API + Leaf web UI. Handles auth,
-  assignment management, submission intake, result storage, and the JupyterLite
-  notebook workflow.
-- **`chickadee-runner`** — Daemon process. Polls for jobs, runs shell-script
-  test suites in subprocesses (sandboxed or unsandboxed), reports structured
-  results back to the server.
-- **`Core`** — Shared models and types. No Vapor dependency. Both targets
-  depend on this.
+- **`APIServer` / `chickadee-server`** — Vapor app. REST API + Leaf web UI.
+  Handles auth, assignment management, submission intake, result storage, the
+  JupyterLite notebook workflow, and the MCP server (see below).
+- **`Worker` / `chickadee-runner`** — Daemon process. Polls for jobs, runs
+  shell-script test suites in subprocesses (sandboxed or unsandboxed), reports
+  structured results back to the server.
+- **`RunnerCore`** — The shared, Vapor-free, **Embedded-Swift-compatible**
+  grading core. Compiled two ways: natively (linked into the worker) and to
+  **WebAssembly** (the in-browser runner). It owns suite execution
+  (`executeSuites`), output interpretation (`interpretScriptOutput`), script
+  classification, and the `TestOutcome` / `TestTier` / `TestStatus` types — so
+  the native and browser graders run one implementation and cannot drift. Pinned
+  by the shared `Tests/Fixtures/output-contract.json` contract, asserted against
+  both the native build and the *real vendored wasm* in CI.
+- **`Core`** — Shared models and types. No Vapor dependency; `@_exported import
+  RunnerCore` re-exports the grading types. Every other target depends on this.
 
 Test suites are **shell scripts** bundled by the instructor inside the test
 setup zip. The runner executes them generically. Adding a new language means
@@ -108,6 +116,22 @@ All runner↔server requests are HMAC-signed (`WorkerHMACAuthMiddleware`).
 automatically if `.local-runner-autostart` exists (or is toggled via the admin
 dashboard). This is a development convenience; production runs the runner
 separately.
+
+**MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server *and*
+its own OAuth 2.1 authorization server, so an agent (e.g. the Claude connector)
+can manage course content on an instructor's behalf. Gated by `MCP_MODE`
+(`off` / `read_only` / `read_write`). The browser OAuth flow is Authorization
+Code + PKCE (S256); codes, consent tokens, and refresh tokens are stored only as
+SHA-256 hashes and are strictly single-use — consumption is an **atomic
+conditional `UPDATE … WHERE consumed = false RETURNING`** so concurrent
+exchanges can't replay a code. Refresh tokens rotate with prior-hash theft
+detection; the human's role is re-checked at consent and on every refresh.
+Scopes are clamped to the mode ceiling (`MCPMode.advertisedScopes`, the single
+source for discovery + DCR). Access tokens are short-lived ES256 JWTs minted by
+`MCPTokenAuthority`; bearer auth + per-request scope clamping live in
+`MCPBearerAuthMiddleware`. An hourly reaper drops dead OAuth rows. The consent
+POST is deliberately cookie-independent (identity + CSRF ride the single-use
+consent token) so it survives Safari/ITP cross-site cookie blocking.
 
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —
@@ -824,6 +848,55 @@ model quickly.
   `isShadowed` unconditionally; `.chickadee` bundle exports have
   only emitted `enrollmentMode` (never `openEnrollment`) since the
   helper extraction in #501.
+
+### v0.4.171 – v0.4.318 highlights (themed digest)
+
+The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
+
+- **Swift→WASM grading core (RunnerCore, #764–#775).**  A staged migration
+  hoisted suite execution, output interpretation, script classification, and
+  the `TestOutcome` / `TestTier` / `TestStatus` types out of the worker into
+  the new Vapor-free, Embedded-Swift `RunnerCore` target, which compiles both
+  natively and to WebAssembly.  The browser runner now drives the *same*
+  `executeSuites` loop via the wasm bridge (Stage 4), so the in-browser and
+  native graders share one implementation.  Embedded-safe JSON (`JSONLite`, no
+  `strtod`).  The wasm is `wasm-opt -Oz`'d, content-hashed
+  (`RunnerWasm.<hash>.wasm`), immutably cached (`RunnerWasmCacheMiddleware`),
+  and size-guarded in CI.  Parity is pinned by `Tests/Fixtures/output-contract.json`,
+  asserted against the native build *and* the real vendored wasm.  This is the
+  "first use of Swift WASM in prod" path.
+
+- **MCP server + OAuth 2.1 authorization server (`Sources/APIServer/MCP/`).**
+  Chickadee exposes course-management tools to agents over MCP, gated by
+  `MCP_MODE`, with its own Authorization Code + PKCE OAuth server, rotating
+  refresh tokens, ES256 access JWTs, dynamic client registration, an hourly
+  reaper, and an admin "connected agents" view.  Recent fixes (#776, #778) made
+  the consent flow cookie-independent so it works in Safari/cross-site-cookie
+  contexts.  See the "MCP server" design decision above.
+
+- **Per-student personalization (issue #461, Slices 1–5+).**  Per-assignment
+  seeds (`AssignmentSeedStore`, deterministic per student), Global Inputs +
+  section variables, per-student expressions evaluated by a server-side
+  `python3` subprocess (`PersonalizationEvaluator`), `{{name}}` notebook
+  substitution at student first-open, and support-file/`solution.py` imports.
+  Docs: `docs/inputs.md`, `docs/personalization-phase1.md`.  Remaining UI work
+  tracked in #664.  This is the "first personalized assignments" path.
+
+- **Notebook checks, BrightSpace grade sync, AppScan/security hardening,
+  assignment-revision retest loop, sections** — see the per-version `CHANGELOG.md`.
+
+- **v0.4.x "tock" audit hardening (this pass).**  Ahead of the first prod
+  deployments of the three subsystems above: MCP single-use token consumption
+  made atomic (conditional-`UPDATE` compare-and-set, closing a code-replay
+  TOCTOU); the personalization expression subprocess no longer inherits the
+  server environment (was leaking `RUNNER_SHARED_SECRET` / DB / OIDC secrets to
+  instructor expressions — now an explicit allowlist); browser-graded results
+  reconcile their attempt number / `isFirstPassSuccess` server-side (was always
+  stamped `1`, corrupting the First-Try-Perfect badge); pattern-family arg cells
+  may reference Global Inputs via `$name` (validator was rejecting the documented
+  worked example).  Plus OAuth `no-store` headers, reaper consumed-row cleanup,
+  an `oauth_grants.previous_refresh_token_hash` index, a `timedOut`
+  output-contract case, and `@unchecked Sendable` justification comments.
 
 **Near-term roadmap:**
 

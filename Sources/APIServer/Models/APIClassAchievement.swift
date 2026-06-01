@@ -11,6 +11,7 @@ import Fluent
 import Vapor
 
 final class APIClassAchievement: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "class_achievements"
 
     @ID(key: .id)

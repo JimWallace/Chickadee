@@ -243,6 +243,9 @@ private func resolvedBrightSpaceUserID(
 // MARK: - Monitor
 
 final class BrightSpaceGradeSyncMonitor: @unchecked Sendable {
+    // @unchecked Sendable: the only mutable state (`task`) is touched solely
+    // from start()/stop() on the app lifecycle (didBoot/shutdown), never
+    // concurrently.
     private var task: Task<Void, Never>?
     private let sweepIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
 

@@ -17,6 +17,7 @@ import Testing
         let stdout: String
         let stderr: String
         let exitCode: Int32
+        let timedOut: Bool?
         let status: String
         let native: Native
     }
@@ -42,7 +43,7 @@ import Testing
                 stdout: c.stdout,
                 stderr: c.stderr,
                 executionTimeMs: 0,
-                timedOut: false
+                timedOut: c.timedOut ?? false
             )
             let result = interpretScriptOutput(output)
             #expect(result.status.rawValue == c.status, "status mismatch for case '\(c.name)'")

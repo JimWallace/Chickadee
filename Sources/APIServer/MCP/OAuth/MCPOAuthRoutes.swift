@@ -22,6 +22,7 @@ import Core
 import Crypto
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 struct MCPOAuthRoutes: Sendable {
@@ -135,10 +136,10 @@ struct MCPOAuthRoutes: Sendable {
         // cookie — so this works in the cross-site connector context where the
         // cookie is dropped. Look the token up by hash, then burn it.
         let form = try req.content.decode(ConsentForm.self)
+        let tokenHash = sha256HexDigest(form.requestToken)
         guard
             let record = try await MCPConsentRequest.query(on: req.db)
-                .filter(\.$tokenHash == sha256HexDigest(form.requestToken)).first(),
-            !record.consumed,
+                .filter(\.$tokenHash == tokenHash).first(),
             record.expiresAt > Date()
         else {
             throw Abort(
@@ -146,9 +147,18 @@ struct MCPOAuthRoutes: Sendable {
                 reason: "This authorization request has expired or already been used. "
                     + "Restart the connection to try again.")
         }
-        // Single-use: burn before any further work so a replay loses.
-        record.consumed = true
-        try await record.save(on: req.db)
+        // Single-use: atomically burn the consent token before any further work
+        // and only proceed if this submit won the burn — a concurrent replay
+        // loses the conditional UPDATE and is rejected.
+        guard
+            try await Self.burnConsumable(
+                on: req.db, table: MCPConsentRequest.schema, hashColumn: "token_hash", hash: tokenHash)
+        else {
+            throw Abort(
+                .badRequest,
+                reason: "This authorization request has expired or already been used. "
+                    + "Restart the connection to try again.")
+        }
 
         // Re-validate the client/redirect from the frozen record (defense in
         // depth — the record is server-authored, but a stale client edit could
@@ -215,17 +225,24 @@ struct MCPOAuthRoutes: Sendable {
         else {
             return Self.tokenError(.badRequest, "invalid_request")
         }
+        let codeHash = sha256HexDigest(code)
         guard
             let authCode = try await MCPAuthorizationCode.query(on: req.db)
-                .filter(\.$codeHash == sha256HexDigest(code)).first(),
-            !authCode.consumed,
+                .filter(\.$codeHash == codeHash).first(),
             authCode.expiresAt > Date()
         else {
             return Self.tokenError(.badRequest, "invalid_grant")
         }
-        // Single-use: burn the code before any further work so a replay loses.
-        authCode.consumed = true
-        try await authCode.save(on: req.db)
+        // Single-use: atomically burn the code BEFORE any further work and only
+        // proceed if this request won the burn.  A concurrent replay of the same
+        // code loses the conditional UPDATE and is rejected (the prior in-process
+        // read-modify-write could otherwise mint two token pairs from one code).
+        guard
+            try await Self.burnConsumable(
+                on: req.db, table: MCPAuthorizationCode.schema, hashColumn: "code_hash", hash: codeHash)
+        else {
+            return Self.tokenError(.badRequest, "invalid_grant")
+        }
 
         guard
             authCode.redirectURI == redirectURI,
@@ -288,10 +305,19 @@ struct MCPOAuthRoutes: Sendable {
             try await grant.save(on: req.db)
             return Self.tokenError(.badRequest, "invalid_grant")
         }
-        // Rotate: remember the spent token (for replay detection) and issue a new one.
+        // Rotate: issue a new refresh token and swap it in atomically, gated on
+        // the CURRENT hash so two concurrent rotations of the same token can't
+        // both win (the loser matches zero rows and is rejected as a replay).
         let newRefresh = Self.randomToken()
-        grant.previousRefreshTokenHash = grant.refreshTokenHash
-        grant.refreshTokenHash = sha256HexDigest(newRefresh)
+        let newHash = sha256HexDigest(newRefresh)
+        guard try await Self.rotateRefreshHash(on: req.db, currentHash: hash, newHash: newHash) else {
+            return Self.tokenError(.badRequest, "invalid_grant")
+        }
+        // We won the rotation: mirror the swap onto the in-memory model and
+        // persist last-used telemetry (kept out of the atomic UPDATE to avoid
+        // Fluent↔raw-SQL date-format skew). Only the winner reaches this save.
+        grant.previousRefreshTokenHash = hash
+        grant.refreshTokenHash = newHash
         grant.lastUsedAt = Date()
         try await grant.save(on: req.db)
 
@@ -378,6 +404,8 @@ struct MCPOAuthRoutes: Sendable {
     private static func registrationError(_ error: String, _ description: String) -> Response {
         let response = Response(status: .badRequest)
         response.headers.contentType = .json
+        // RFC 6749 §5.1: credential/token-adjacent responses must not be cached.
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
         response.body = .init(string: "{\"error\":\"\(error)\",\"error_description\":\"\(description)\"}")
         return response
     }
@@ -422,7 +450,11 @@ struct MCPOAuthRoutes: Sendable {
 
     private func renderConsent(_ req: Request, context: ConsentContext) async throws -> Response {
         let view = try await req.view.render("oauth-consent", context)
-        return try await view.encodeResponse(for: req)
+        let response = try await view.encodeResponse(for: req)
+        // The consent page embeds the single-use consent token; keep it out of
+        // any shared/proxy cache.
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+        return response
     }
 
     /// Keeps only valid content scopes, then clamps to the server-wide ceiling
@@ -491,6 +523,39 @@ struct MCPOAuthRoutes: Sendable {
 
     private static func pkceMatches(verifier: String, challenge: String) -> Bool {
         base64url(Data(SHA256.hash(data: Data(verifier.utf8)))) == challenge
+    }
+
+    /// Atomically flips a single-use `consumed` flag from false→true for the row
+    /// whose `hashColumn` equals `hash`, returning true iff *this* call won the
+    /// flip.  One conditional `UPDATE … WHERE consumed = false RETURNING`
+    /// statement is atomic on both SQLite (WAL) and Postgres, so two concurrent
+    /// `/token` (or `/authorize`) submits of the same code/consent token can
+    /// never both win — closing the OAuth code-replay race that the prior
+    /// read-check-then-save left open.  `table`/`hashColumn` are compile-time
+    /// schema constants (no injection surface); only the hash is bound.
+    private static func burnConsumable(
+        on db: Database, table: String, hashColumn: String, hash: String
+    ) async throws -> Bool {
+        guard let sql = db as? SQLDatabase else { return true }
+        let rows = try await sql.raw(
+            "UPDATE \(unsafeRaw: table) SET consumed = true WHERE \(unsafeRaw: hashColumn) = \(bind: hash) AND consumed = false RETURNING id"
+        ).all()
+        return !rows.isEmpty
+    }
+
+    /// Atomically rotates a grant's refresh-token hash, gated on the *current*
+    /// hash so two concurrent rotations of the same refresh token can't both
+    /// succeed (the loser matches zero rows).  Returns true iff this call won the
+    /// rotation; the caller then mirrors the swap onto the in-memory model and
+    /// persists non-security telemetry (`lastUsedAt`).
+    private static func rotateRefreshHash(
+        on db: Database, currentHash: String, newHash: String
+    ) async throws -> Bool {
+        guard let sql = db as? SQLDatabase else { return true }
+        let rows = try await sql.raw(
+            "UPDATE \(unsafeRaw: MCPGrant.schema) SET previous_refresh_token_hash = refresh_token_hash, refresh_token_hash = \(bind: newHash) WHERE refresh_token_hash = \(bind: currentHash) AND revoked = false RETURNING id"
+        ).all()
+        return !rows.isEmpty
     }
 
     private static func randomToken() -> String {
