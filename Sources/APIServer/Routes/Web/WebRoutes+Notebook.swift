@@ -102,6 +102,53 @@ extension WebRoutes {
         ).encodeResponse(for: req)
     }
 
+    // MARK: - POST /testsetups/:id/reset-notebook
+    //
+    // Student self-service reset of their *own* working-copy notebook back to
+    // the assignment's canonical starter.  Mirrors the instructor-driven
+    // `resetStudentNotebook`, but scoped to the caller and gated on the
+    // assignment being open to them — `requireOpenStudentAssignment` enforces
+    // course enrollment and effective-open state, throwing `.closed` for a
+    // closed / not-yet-open assignment and `.notFound` for an unenrolled
+    // student.  Past submissions are never touched: only the live working copy
+    // at jupyterlite/files/users/{userID}/{setupID}/<filename> is overwritten.
+    @Sendable
+    func resetOwnNotebook(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        // A bare test setup with no assignment row is not a student-facing
+        // assignment; `requireOpenStudentAssignment` returns nil there without
+        // an enrollment check, so reject it explicitly to avoid a bypass.
+        guard try await requireOpenStudentAssignment(for: setupID, user: user, on: req) != nil else {
+            throw Abort(.notFound)
+        }
+
+        let starter: Data
+        do {
+            starter = try notebookData(for: setup)
+        } catch {
+            throw Abort(.badRequest, reason: "This assignment has no starter notebook to reset to.")
+        }
+
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req,
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: setup,
+            overwriteWith: starter
+        )
+
+        req.logger.info("student_self_notebook_reset setup=\(setupID) student=\(userID.uuidString)")
+        return req.redirect(to: "/")
+    }
+
     /// Renders the submission-view branch of `notebookPage` (read-only,
     /// per-submission working copy, fresh JupyterLite workspace).
     private func renderSubmissionNotebookView(
