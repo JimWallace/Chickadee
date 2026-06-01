@@ -47,6 +47,14 @@ import XCTVapor
             res.headers.contentType = .html
             return res
         }
+        // Mimics the MCP consent page: a handler that relaxes form-action +
+        // COOP for a single response so its Authorize-button redirect to a
+        // cross-origin connector isn't blocked.
+        app.get("consent-style") { req -> Response in
+            SecurityHeadersMiddleware.allowFormAction("https://app.example", on: req)
+            SecurityHeadersMiddleware.setOpenerPolicy("same-origin-allow-popups", on: req)
+            return Response(status: .ok, body: .init(string: "ok"))
+        }
         return app
     }
 
@@ -205,6 +213,29 @@ import XCTVapor
                         "\(name) must contain no external origins (Pyodide is served same-origin); got: \(directive ?? "<nil>")"
                     )
                 }
+            }
+        }
+    }
+
+    @Test func consentPageRelaxesFormActionAndOpenerPolicy() async throws {
+        // Regression: the MCP consent Authorize button POSTs and the server
+        // 303s to the OAuth client's redirect_uri. Browsers enforce
+        // `form-action` across that redirect, so the default `form-action
+        // 'self'` silently blocks the hop back to the connector (the consent
+        // token burns, the page just sits there — the reported symptom). The
+        // page must add the redirect origin to form-action and relax COOP so a
+        // popup-driven connector keeps its `window.opener`.
+        try await withApp(try await makeSecurityHeadersApp()) { app in
+            try await app.asyncTest(.GET, "/consent-style") { res in
+                #expect(res.status == .ok)
+                let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
+                #expect(
+                    csp.contains("form-action 'self' https://app.example"),
+                    "expected redirect origin in form-action, got: \(csp)"
+                )
+                #expect(
+                    res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin-allow-popups"
+                )
             }
         }
     }

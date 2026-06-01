@@ -41,8 +41,13 @@
 //   Cross-Origin-Opener-Policy: same-origin
 //     Severs the `window.opener` reference when our pages are opened from a
 //     third-party origin, mitigating tab-nabbing attacks and isolating our
-//     browsing-context group.  Chickadee's auth flows are redirects, not
-//     popups, so cutting the opener reference does not break anything.
+//     browsing-context group.  Most Chickadee auth flows are redirects, not
+//     popups, so cutting the opener reference does not break anything.  The
+//     exception is the MCP OAuth consent screen: a connector (e.g. Claude)
+//     may drive `/oauth/authorize` in a popup and expect a
+//     `window.opener.postMessage` handshake after the redirect, which
+//     `same-origin` would sever.  A handler can therefore relax COOP for a
+//     single response via `SecurityHeadersMiddleware.setOpenerPolicy(_:on:)`.
 //
 //   Cross-Origin-Resource-Policy: same-origin
 //     Stops third-party origins from embedding our resources (scripts,
@@ -65,6 +70,37 @@
 import Vapor
 
 struct SecurityHeadersMiddleware: AsyncMiddleware {
+    /// Per-request extra `form-action` CSP origins.  A handler that renders a
+    /// page whose form submits (directly or via a redirect) to a validated
+    /// cross-origin URL sets this so the global `form-action 'self'` doesn't
+    /// block the navigation.  The MCP consent page uses it: its Authorize
+    /// button 303s to the OAuth client's registered `redirect_uri`, and Chrome
+    /// / Firefox enforce `form-action` across that redirect chain.
+    private struct FormActionOriginsKey: StorageKey {
+        typealias Value = [String]
+    }
+
+    /// Per-request `Cross-Origin-Opener-Policy` override.  Lets a handler relax
+    /// the default `same-origin` for a single response (e.g. the OAuth consent
+    /// page, which a connector may open as a popup that needs its `opener`).
+    private struct OpenerPolicyKey: StorageKey {
+        typealias Value = String
+    }
+
+    /// Appends a validated origin (`scheme://host[:port]`) to this response's
+    /// `form-action` allow-list.  No-op when `origin` is nil.
+    static func allowFormAction(_ origin: String?, on request: Request) {
+        guard let origin else { return }
+        var origins = request.storage[FormActionOriginsKey.self] ?? []
+        if !origins.contains(origin) { origins.append(origin) }
+        request.storage[FormActionOriginsKey.self] = origins
+    }
+
+    /// Overrides the `Cross-Origin-Opener-Policy` header for this one response.
+    static func setOpenerPolicy(_ value: String, on request: Request) {
+        request.storage[OpenerPolicyKey.self] = value
+    }
+
     /// CSP for application pages.  Permissive enough to keep JupyterLite,
     /// Pyodide, and the CodeMirror-based assignment editor functional:
     ///   - 'unsafe-eval' is required by Pyodide's WASM bootstrap.
@@ -216,8 +252,10 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
         response.headers.replaceOrAdd(name: "Permissions-Policy", value: permissionsPolicy)
         // COOP is set unconditionally; COEPMiddleware may override it for the
         // narrow set of pages that need cross-origin isolation, but its value
-        // is `same-origin` too so the replaceOrAdd is a no-op there.
-        response.headers.replaceOrAdd(name: "Cross-Origin-Opener-Policy", value: crossOriginOpenerPolicy)
+        // is `same-origin` too so the replaceOrAdd is a no-op there.  A handler
+        // can relax it per-response (the OAuth consent popup) via the override.
+        let coop = request.storage[OpenerPolicyKey.self] ?? crossOriginOpenerPolicy
+        response.headers.replaceOrAdd(name: "Cross-Origin-Opener-Policy", value: coop)
         response.headers.replaceOrAdd(name: "Cross-Origin-Resource-Policy", value: crossOriginResourcePolicy)
         if let hsts = strictTransportSecurity {
             response.headers.replaceOrAdd(name: "Strict-Transport-Security", value: hsts)
@@ -229,10 +267,14 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// redirected to after POST /logout.  Without it in form-action, the
     /// redirect chain is blocked and "Log out" silently does nothing.
     private func formActionExtras(for request: Request) -> [String] {
-        guard
-            let endpoint = request.application.oidcConfig?.discovery.endSessionEndpoint,
-            let origin = Self.cspOrigin(of: endpoint)
-        else { return [] }
-        return [origin]
+        // Per-request origins set by a handler (e.g. the OAuth consent page's
+        // redirect_uri) come first, then the SSO end_session_endpoint origin.
+        var origins = request.storage[FormActionOriginsKey.self] ?? []
+        if let endpoint = request.application.oidcConfig?.discovery.endSessionEndpoint,
+            let origin = Self.cspOrigin(of: endpoint), !origins.contains(origin)
+        {
+            origins.append(origin)
+        }
+        return origins
     }
 }
