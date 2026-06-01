@@ -44,7 +44,7 @@ import XCTVapor
     @Test func registerSecondUserBecomesStudent() async throws {
         try await withApp(try await makeApp()) { app in
             // Seed an existing admin.
-            let hash = try Bcrypt.hash("password1")
+            let hash = try testPasswordHash("password1")
             let admin = APIUser(username: "admin", passwordHash: hash, role: "admin")
             try await admin.save(on: app.db)
 
@@ -70,7 +70,7 @@ import XCTVapor
 
     @Test func registerDuplicateUsernameRedirectsWithError() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("password1")
+            let hash = try testPasswordHash("password1")
             let existing = APIUser(username: "jim", passwordHash: hash, role: "admin")
             try await existing.save(on: app.db)
 
@@ -113,7 +113,7 @@ import XCTVapor
 
     @Test func loginWithCorrectCredentialsRedirects() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("mypassword")
+            let hash = try testPasswordHash("mypassword")
             let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
             try await user.save(on: app.db)
 
@@ -148,7 +148,7 @@ import XCTVapor
             return nil
         }
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             try await APIUser(username: "rot", passwordHash: hash, role: "student").save(on: app.db)
 
             let (token, preCookie) = try await csrfFields(for: "/login", on: app)
@@ -176,7 +176,7 @@ import XCTVapor
 
     @Test func loginWithWrongPasswordRedirectsWithError() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("mypassword")
+            let hash = try testPasswordHash("mypassword")
             let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
             try await user.save(on: app.db)
 
@@ -419,7 +419,7 @@ import XCTVapor
     @Test func studentCannotAccessTestSetupNew() async throws {
         try await withApp(try await makeApp()) { app in
             // Create a student, get a session cookie, then try to access instructor-only page.
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
 
@@ -439,7 +439,7 @@ import XCTVapor
 
     @Test func studentCannotAccessAdminPage() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
 
@@ -459,7 +459,7 @@ import XCTVapor
 
     @Test func studentCannotAccessAssignmentsPage() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student2", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
 

@@ -447,7 +447,7 @@ import XCTVapor
             let cookie = try await loginAsAdmin()
 
             // Pre-create the user that the bundle will reference
-            let hash = try Bcrypt.hash("existing-pw")
+            let hash = try testPasswordHash("existing-pw")
             let existingUser = APIUser(username: "cb_existing_student", passwordHash: hash, role: "student")
             try await existingUser.save(on: app.db)
             let existingID = try existingUser.requireID()
