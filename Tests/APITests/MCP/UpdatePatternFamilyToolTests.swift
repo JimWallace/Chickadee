@@ -91,6 +91,99 @@ import Vapor
         }
     }
 
+    @Test func editsCaseArgsAndExpected() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // Use a non-integral double: an integral value (16.0) would round-trip
+            // through the manifest JSON as the integer 16, an inherent JSON
+            // normalization, not a faithfulness bug.
+            let output = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    cases: [
+                        UpdatePatternFamilyTool.CaseEdit(
+                            key: "01", args: [.double(16.5)], expected: .string("severely underweight"))
+                    ]),
+                context(app))
+            #expect(output.editedCaseKeys == ["01"])
+
+            let family = try await reloadFamily(assignment, on: app.db)
+            let edited = try #require(family.cases.first { $0.key == "01" })
+            #expect(edited.args == [.double(16.5)])
+            #expect(edited.expected == .string("severely underweight"))
+            // Other cases untouched.
+            #expect(family.cases.first { $0.key == "02" }?.expected == .string("normal"))
+        }
+    }
+
+    @Test func wrongArgCountThrows() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // BMI family declares one parameter; two args must be rejected by
+            // the kind validation that runs on save (mapped from Vapor Abort).
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        cases: [
+                            UpdatePatternFamilyTool.CaseEdit(
+                                key: "01", args: [.double(1.0), .double(2.0)])
+                        ]),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func unknownCaseKeyInCasesThrows() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        cases: [UpdatePatternFamilyTool.CaseEdit(key: "99", expected: .string("x"))]),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func argVarRefsLengthMismatchThrows() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        cases: [
+                            UpdatePatternFamilyTool.CaseEdit(
+                                key: "01", args: [.double(16.0)], argVarRefs: [nil, nil])
+                        ]),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func duplicateCaseEditThrows() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        cases: [
+                            UpdatePatternFamilyTool.CaseEdit(key: "01", expected: .string("a")),
+                            UpdatePatternFamilyTool.CaseEdit(key: "01", expected: .string("b")),
+                        ]),
+                    context(app))
+            }
+        }
+    }
+
     @Test func unknownFamilyThrows() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
