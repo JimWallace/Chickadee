@@ -51,10 +51,12 @@ struct BrowserResultRoutes: RouteCollection {
             throw AppError.unprocessable(reason: "Invalid TestOutcomeCollection: \(e)")
         }
 
-        // Persist the notebook to disk as the submission artifact.
-        // Merge the student's notebook with the instructor's canonical notebook
-        // so that hidden test cells (secret, release) are re-injected before
-        // the worker runs the full authoritative test suite.
+        // Persist the notebook to disk as the submission artifact.  Merge the
+        // student's notebook with the instructor's canonical notebook so the
+        // hidden test cells (secret, release) are present in the stored artifact:
+        // no native worker runs here (browser results are stored as-is), but if
+        // this submission is later re-graded by a worker (a retest, or the
+        // browser-mode backstop) the authoritative suite has its cells.
         let subsDir = req.application.submissionsDirectory
         let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
         let nbPath = subsDir + "\(subID).ipynb"
@@ -92,10 +94,18 @@ struct BrowserResultRoutes: RouteCollection {
         )
         try await submission.save(on: req.db)
 
-        // Persist the browser result, tagged source="browser".
+        // Persist the browser result, tagged source="browser".  The browser
+        // builds its collection before it knows the server-authoritative attempt
+        // number, so it always stamps attemptNumber=1 (and isFirstPassSuccess for
+        // every pass).  Reconcile those fields — and the submission ID — from the
+        // values the server derived above so the stored result agrees with the
+        // submission row and the First-Try-Perfect badge / per-attempt analytics
+        // stay correct for browser-graded assignments.
+        let reconciled = Self.reconcileBrowserCollection(
+            collection, submissionID: subID, attemptNumber: attemptNumber)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        let collectionJSON = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
+        let collectionJSON = try String(data: encoder.encode(reconciled), encoding: .utf8) ?? "{}"
 
         let browserResult = APIResult(
             id: "res_\(UUID().uuidString.lowercased().prefix(8))",
@@ -196,6 +206,48 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         return RunnerSubmissionResponse(submissionID: subID)
+    }
+
+    /// Rewrites a browser-supplied collection with the server-authoritative
+    /// submission ID and attempt number, recomputing `isFirstPassSuccess` from
+    /// the true attempt (a pass only counts as a first-pass success on attempt
+    /// 1).  Everything else is carried through verbatim.
+    static func reconcileBrowserCollection(
+        _ collection: TestOutcomeCollection, submissionID: String, attemptNumber: Int
+    ) -> TestOutcomeCollection {
+        let outcomes = collection.outcomes.map { o in
+            TestOutcome(
+                testName: o.testName,
+                testClass: o.testClass,
+                tier: o.tier,
+                status: o.status,
+                shortResult: o.shortResult,
+                longResult: o.longResult,
+                points: o.points,
+                executionTimeMs: o.executionTimeMs,
+                memoryUsageBytes: o.memoryUsageBytes,
+                attemptNumber: attemptNumber,
+                isFirstPassSuccess: attemptNumber == 1 && o.status == .pass)
+        }
+        return TestOutcomeCollection(
+            submissionID: submissionID,
+            testSetupID: collection.testSetupID,
+            attemptNumber: attemptNumber,
+            buildStatus: collection.buildStatus,
+            compilerOutput: collection.compilerOutput,
+            outcomes: outcomes,
+            totalTests: collection.totalTests,
+            passCount: collection.passCount,
+            failCount: collection.failCount,
+            errorCount: collection.errorCount,
+            timeoutCount: collection.timeoutCount,
+            executionTimeMs: collection.executionTimeMs,
+            totalPoints: collection.totalPoints,
+            earnedPoints: collection.earnedPoints,
+            warnings: collection.warnings,
+            jobStartedAt: collection.jobStartedAt,
+            runnerVersion: collection.runnerVersion,
+            timestamp: collection.timestamp)
     }
 }
 
