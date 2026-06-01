@@ -20,13 +20,20 @@ import Vapor
 /// Deletes expired authorization codes, expired consent requests, and
 /// revoked/expired grants.
 func reapExpiredMCPOAuthRecords(on db: Database, logger: Logger, now: Date = Date()) async throws {
+    // Auth codes are dead once expired OR consumed — a consumed code can never
+    // be redeemed again (the atomic burn blocks it), so there's no reason to
+    // keep it around until its 60-second TTL lapses.
     try await MCPAuthorizationCode.query(on: db)
-        .filter(\.$expiresAt < now)
+        .group(.or) { group in
+            group.filter(\.$expiresAt < now).filter(\.$consumed == true)
+        }
         .delete()
     // Single-use consent requests: one row per rendered consent screen, dead
     // the moment they expire or are redeemed. Like auth codes, they accumulate.
     try await MCPConsentRequest.query(on: db)
-        .filter(\.$expiresAt < now)
+        .group(.or) { group in
+            group.filter(\.$expiresAt < now).filter(\.$consumed == true)
+        }
         .delete()
     try await MCPGrant.query(on: db)
         .group(.or) { group in
@@ -37,6 +44,9 @@ func reapExpiredMCPOAuthRecords(on db: Database, logger: Logger, now: Date = Dat
 }
 
 final class MCPOAuthReaperMonitor: @unchecked Sendable {
+    // @unchecked Sendable: the only mutable state (`task`) is touched solely
+    // from start()/stop() on the app lifecycle (didBoot/shutdown), never
+    // concurrently.
     private var task: Task<Void, Never>?
     private let intervalNanoseconds: UInt64
 

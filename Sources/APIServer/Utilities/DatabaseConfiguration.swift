@@ -236,4 +236,5 @@ func registerMigrations(on app: Application) {
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())
+    app.migrations.add(AddGrantPreviousRefreshTokenHashIndex())
 }
