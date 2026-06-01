@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.319] - 2026-06-01
+
+### Fixed
+
+- **Browser-graded results now record the true attempt number.** The browser
+  runner builds its result before it knows the server-side attempt number, so it
+  always stamped `attemptNumber: 1` (and therefore `isFirstPassSuccess` for every
+  pass). The server now reconciles the stored collection — submission ID, attempt
+  number, and each outcome's `isFirstPassSuccess` — against the value it derived
+  for the submission, so the First-Try-Perfect badge and per-attempt analytics
+  are correct for browser-graded assignments.
+
+### Security
+
+- **MCP OAuth single-use tokens are now burned atomically.** The authorization
+  code, the consent token, and refresh-token rotation each consumed their
+  single-use record with a read-check-then-save, leaving a small TOCTOU window
+  where two concurrent `POST /oauth/token` (or `/oauth/authorize`) requests for
+  the same code could both succeed and mint two token pairs. Consumption is now
+  a single conditional `UPDATE … WHERE consumed = false RETURNING` (atomic on
+  both SQLite-WAL and Postgres), so only one caller can ever win.
+
+### Fixed
+
+- **MCP OAuth hardening.** Token-endpoint error and dynamic-registration error
+  responses (and the consent page) now send `Cache-Control: no-store`; the
+  hourly OAuth reaper now also drops consumed-but-unexpired authorization codes
+  and consent requests; and a new index on
+  `oauth_grants.previous_refresh_token_hash` keeps refresh-token theft detection
+  and `POST /oauth/revoke` off a full table scan as long-lived grants accumulate.
+
+### Security
+
+- **Per-student personalization expressions no longer see the server's
+  environment.** The subprocess that evaluates instructor-authored
+  personalization expressions inherited the full server environment, so an
+  expression such as `__import__('os').environ['RUNNER_SHARED_SECRET']` could
+  read the worker secret, database credentials, the OIDC client secret, or
+  BrightSpace keys and surface them through a substituted notebook value. The
+  subprocess now receives only an explicit allowlist (`PATH`, `HOME`, locale,
+  `PYTHONHOME`) plus the assignment seed and an optional support-files
+  `PYTHONPATH` — never the inherited secrets.
+
+### Fixed
+
+- **Pattern-family arg cells can reference assignment-scope global inputs.** A
+  `$name` reference to a Global Input (the worked example in `docs/inputs.md`)
+  was rejected by the pattern-family validator with "references unknown
+  variable", even though the renderer puts global inputs in scope alongside
+  section and family variables. The validator now accepts `$global` references,
+  matching what actually renders.
+
+
 ## [0.4.318] - 2026-05-28
 
 ### Fixed
