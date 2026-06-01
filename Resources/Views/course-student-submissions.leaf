@@ -65,6 +65,9 @@
             <td>
                 #if(row.bestGradeText):
                     <strong>#(row.bestGradeText)</strong>
+                    #if(row.gradeIsOverridden):
+                    <span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>
+                    #endif
                 #else:
                     <span class="empty">—</span>
                 #endif
@@ -121,6 +124,28 @@
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.hasExtension):
                                 <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
+                                #endif
+                            </div>
+                        </form>
+                    </details>
+                    <details class="ext-details" style="margin:0">
+                        <summary class="btn action-btn ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif" style="padding:.25rem .35rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                        </summary>
+                        <form method="post" action="#(row.gradeOverrideSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                            #csrfFormField()
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                Override grade (%)
+                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required style="width:100%;margin-top:.2rem">
+                            </label>
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                Note (optional)
+                                <input type="text" name="note" placeholder="Reason for override" style="width:100%;margin-top:.2rem">
+                            </label>
+                            <div style="display:flex;gap:.3rem">
+                                <button class="btn action-btn" type="submit">Save</button>
+                                #if(row.gradeIsOverridden):
+                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
                                 #endif
                             </div>
                         </form>
@@ -183,6 +208,9 @@
             <td>
                 #if(row.bestGradeText):
                     <strong>#(row.bestGradeText)</strong>
+                    #if(row.gradeIsOverridden):
+                    <span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>
+                    #endif
                 #else:
                     <span class="empty">—</span>
                 #endif
@@ -243,6 +271,28 @@
                             </div>
                         </form>
                     </details>
+                    <details class="ext-details" style="margin:0">
+                        <summary class="btn action-btn ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif" style="padding:.25rem .35rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                        </summary>
+                        <form method="post" action="#(row.gradeOverrideSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                            #csrfFormField()
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                Override grade (%)
+                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required style="width:100%;margin-top:.2rem">
+                            </label>
+                            <label style="font-size:.78rem;color:var(--gray-700)">
+                                Note (optional)
+                                <input type="text" name="note" placeholder="Reason for override" style="width:100%;margin-top:.2rem">
+                            </label>
+                            <div style="display:flex;gap:.3rem">
+                                <button class="btn action-btn" type="submit">Save</button>
+                                #if(row.gradeIsOverridden):
+                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
+                                #endif
+                            </div>
+                        </form>
+                    </details>
                 </div>
             </td>
         </tr>
@@ -259,6 +309,23 @@
 .ext-summary { margin-top: 0; list-style: none; }
 .ext-summary::-webkit-details-marker { display: none; }
 .ext-details[open] > .ext-summary { background: var(--gray-100); }
+/* Grade-override affordances: a subtle tag next to an overridden grade and a
+   highlighted icon button when an override is active for the row. */
+.grade-override-tag {
+    display: inline-block;
+    margin-left: .35rem;
+    padding: 0 .3rem;
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: var(--gray-700);
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    border-radius: .2rem;
+    vertical-align: middle;
+}
+.grade-override-active { border-color: var(--gray-500); background: var(--gray-100); }
 </style>
 #endexport
 #endextend
