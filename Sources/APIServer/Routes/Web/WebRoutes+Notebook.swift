@@ -563,70 +563,42 @@ private func applyNotebookSubstitutionsIfNeeded(
     else {
         return seedData
     }
-    // Combined static name pool — same precedence rules the runner sees.
-    var staticVars: [FamilyVariable] = manifest.globalVariables
-    for section in manifest.sections {
-        staticVars.append(contentsOf: section.variables)
-    }
-    var substitutions: [String: String] = [:]
-    for v in staticVars {
-        substitutions[v.name] = v.value.pythonLiteral
-    }
 
-    // Slice 2 + Slice 4: evaluate per-student expressions if any are
-    // declared.  Combine globals and section expressions in declared
-    // order (globals first, then sections) so same-named section
-    // expressions shadow globals, matching the literal precedence
-    // already applied to staticVars above.
-    var allExpressions: [PersonalizationExpression] = manifest.globalExpressions
-    for section in manifest.sections {
-        allExpressions.append(contentsOf: section.expressions)
-    }
-    if !allExpressions.isEmpty {
-        do {
-            guard let setupID = setup.id else {
-                logger.warning("Setup has no id; skipping expression eval.")
-                return try applySubstitutions(seedData, substitutions: substitutions, setup: setup, logger: logger)
-            }
-            guard
-                let assignment = try await APIAssignment.query(on: db)
-                    .filter(\.$testSetupID == setupID)
-                    .first(),
-                let assignmentID = assignment.id
-            else {
-                logger.warning("No assignment found for setup \(setupID); skipping expression eval.")
-                return try applySubstitutions(seedData, substitutions: substitutions, setup: setup, logger: logger)
-            }
-            let seedHex = try await AssignmentSeedStore.ensureSeed(
-                userID: userID,
-                assignmentID: assignmentID,
-                on: db
-            )
-            let evaluated = try await PersonalizationEvaluator.evaluate(
-                seedHex: seedHex,
-                staticVariables: staticVars,
-                expressions: allExpressions,
-                supportFilesDirectory: supportFilesDirectory
-            )
-            // Per-student values override literals on name collision —
-            // matches the editor's "expressions shadow same-named
-            // literals" precedence (and the validator enforces no clash
-            // at save time anyway, so this is belt-and-suspenders).
-            for (name, literal) in evaluated {
-                substitutions[name] = literal
-            }
-        } catch {
-            let msg =
-                "Personalization evaluator failed for setup \(setup.id ?? "<nil>"): \(error). "
-                + "Notebook will be substituted with literal values only."
-            logger.warning(Logger.Message(stringLiteral: msg))
+    // A seed is only needed to evaluate per-student expressions; literal-only
+    // assignments substitute without one (and without an assignment lookup).
+    let hasExpressions =
+        !manifest.globalExpressions.isEmpty
+        || manifest.sections.contains { !$0.expressions.isEmpty }
+    var seedHex: String?
+    if hasExpressions, let setupID = setup.id {
+        if let assignment = try? await APIAssignment.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .first(),
+            let assignmentID = assignment.id
+        {
+            seedHex = try? await AssignmentSeedStore.ensureSeed(
+                userID: userID, assignmentID: assignmentID, on: db)
+        }
+        if seedHex == nil {
+            logger.warning(
+                "Could not resolve a seed for setup \(setupID); substituting literal values only.")
         }
     }
 
-    guard !substitutions.isEmpty else { return seedData }
+    let resolution = await PersonalizationSubstitution.resolve(
+        manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportFilesDirectory)
+    if let evalError = resolution.evaluationError {
+        logger.warning(
+            Logger.Message(
+                stringLiteral:
+                    "Personalization evaluator failed for setup \(setup.id ?? "<nil>"): \(evalError). "
+                    + "Notebook will be substituted with literal values only."))
+    }
+
+    guard !resolution.substitutions.isEmpty else { return seedData }
     return
         (try? applySubstitutions(
-            seedData, substitutions: substitutions,
+            seedData, substitutions: resolution.substitutions,
             setup: setup, logger: logger)) ?? seedData
 }
 

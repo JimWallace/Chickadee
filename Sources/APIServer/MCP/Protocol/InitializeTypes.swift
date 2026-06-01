@@ -92,7 +92,9 @@ enum MCPServerInstructions {
 
         Recommended workflow:
         1. Discover: list_courses, then list_assignments for a course.
-        2. Inspect before editing: get_assignment, get_suite, get_notebook, get_global_inputs.
+        2. Inspect before editing: get_assignment, get_suite, get_notebook, get_global_inputs. Use \
+        preview_personalization to see the name→value map and starter-notebook placeholder audit a \
+        student (or a given seed) would get.
         3. Edit: update_assignment (metadata), update_suite (script metadata), update_pattern_family \
         (family defaults/cases), update_global_inputs (personalization variables/expressions), \
         update_section_variables (a section's scoped variables/expressions), update_notebook (replace \
