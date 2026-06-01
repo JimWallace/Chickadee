@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.323] - 2026-06-01
+
+### Added
+
+- **MCP personalization tools — section variables.** The content-authoring MCP
+  server now exposes `update_section_variables` (and `get_suite` now returns each
+  section's `variables` and `expressions`), letting an authorized agent read and
+  replace a test-suite section's scoped personalization inputs. The write path
+  drives the same `SectionInputsService` the web editor uses, so name/`seed`/
+  cross-scope-uniqueness validation and the save-time expression eval run
+  identically across surfaces.
+
+
 ## [0.4.322] - 2026-06-01
 
 ### Added
