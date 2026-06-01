@@ -161,6 +161,37 @@
             return it ? (it.dependsOn && it.dependsOn.length > 0) : false;
         }
 
+        /// The whole connected dependency cluster reachable from `rootID`,
+        /// walking edges in BOTH directions: an item's prerequisites (the ids
+        /// in its `dependsOn`) and its dependents (items whose `dependsOn`
+        /// names it).  Used when moving a test between sections so the entire
+        /// group travels together instead of stranding dependents in the old
+        /// section.  Because the closure includes every prerequisite and every
+        /// dependent, all dependency edges of the returned set are internal —
+        /// moving them as a block leaves no cross-section dangling links.
+        /// Returns the member ids (order unspecified; callers preserve the
+        /// existing `items[]` order, which is already topologically valid).
+        function connectedDependencyGroup(rootID) {
+            var byID = {};
+            items.forEach(function (it) { byID[it.id] = it; });
+            var seen = {};
+            var stack = [rootID];
+            while (stack.length) {
+                var id = stack.pop();
+                if (seen[id] || !byID[id]) continue;
+                seen[id] = true;
+                (byID[id].dependsOn || []).forEach(function (d) {
+                    if (byID[d] && !seen[d]) stack.push(d);
+                });
+                items.forEach(function (other) {
+                    if (!seen[other.id] && (other.dependsOn || []).indexOf(id) >= 0) {
+                        stack.push(other.id);
+                    }
+                });
+            }
+            return Object.keys(seen);
+        }
+
         function stemOf(filename) {
             var dot = filename.lastIndexOf('.');
             return dot > 0 ? filename.slice(0, dot) : filename;
@@ -671,11 +702,27 @@
                 items = items.filter(function (it) { return it.id !== dragID; });
                 var aIdx = items.findIndex(function (it) { return it.id === tid; });
                 items.splice(aIdx + 1, 0, dragItem);
+            } else if (!sameSection) {
+                // Cross-section move: carry the whole connected dependency
+                // group so dependents/prerequisites aren't stranded in the old
+                // section.  Preserve each member's dependsOn (don't wipe the
+                // links) and keep their existing relative order — already
+                // topologically valid — as a contiguous block in the target
+                // section.
+                var groupSet = {};
+                connectedDependencyGroup(dragID).forEach(function (id) { groupSet[id] = true; });
+                var moving = items.filter(function (it) { return groupSet[it.id]; });
+                moving.forEach(function (it) { it.sectionID = targetSid || null; });
+                items = items.filter(function (it) { return !groupSet[it.id]; });
+                var gIdx = items.findIndex(function (it) { return it.id === tid; });
+                if (gIdx < 0) {
+                    items = items.concat(moving);
+                } else {
+                    var insertAt = relY <= 0.5 ? gIdx : gIdx + 1;
+                    items.splice.apply(items, [insertAt, 0].concat(moving));
+                }
             } else {
                 dragItem.dependsOn = [];
-                if (!sameSection) {
-                    dragItem.sectionID = targetSid || null;
-                }
                 items = items.filter(function (it) { return it.id !== dragID; });
                 var tIdx = items.findIndex(function (it) { return it.id === tid; });
                 items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
