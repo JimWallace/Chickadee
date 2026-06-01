@@ -56,6 +56,16 @@ struct MCPOAuthRoutes: Sendable {
             throw Abort(.badRequest, reason: "redirect_uri is not registered for this client.")
         }
 
+        // The Authorize button POSTs here and the server 303s to the client's
+        // (now-validated) redirect_uri. Browsers enforce `form-action` across
+        // that redirect, so the default `form-action 'self'` would silently
+        // block the hop to the connector — add the redirect origin. Likewise a
+        // connector may drive this in a popup expecting a `window.opener`
+        // handshake, which the default COOP `same-origin` severs; relax it.
+        SecurityHeadersMiddleware.allowFormAction(
+            SecurityHeadersMiddleware.cspOrigin(of: query.redirectURI), on: req)
+        SecurityHeadersMiddleware.setOpenerPolicy("same-origin-allow-popups", on: req)
+
         guard query.responseType == "code" else {
             return redirect(query.redirectURI, error: "unsupported_response_type", state: query.state)
         }
