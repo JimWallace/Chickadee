@@ -56,8 +56,11 @@ unopt_size=$(wc -c < "$pkg/RunnerWasm.wasm")
 # a correct, working artifact.
 opt_wasm="$out_dir/.RunnerWasm.opt.wasm"
 if npx --yes wasm-opt --version >/dev/null 2>&1; then
-    echo "Optimizing with wasm-opt -Oz…"
-    npx --yes wasm-opt -Oz "$pkg/RunnerWasm.wasm" -o "$opt_wasm"
+    echo "Optimizing with wasm-opt -Oz --converge --strip-producers…"
+    # --converge: re-run passes to fixpoint for a little extra size.
+    # --strip-producers: drop the toolchain "producers" metadata section (the
+    # exported grading functions the JS loader calls are unaffected).
+    npx --yes wasm-opt -Oz --converge --strip-producers "$pkg/RunnerWasm.wasm" -o "$opt_wasm"
 else
     echo "WARNING: wasm-opt unavailable — vendoring the UNOPTIMIZED module."
     cp "$pkg/RunnerWasm.wasm" "$opt_wasm"

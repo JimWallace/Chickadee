@@ -131,11 +131,25 @@ private struct JSONParser {
         guard pos + 4 <= chars.count else { return nil }
         var value: UInt32 = 0
         for _ in 0..<4 {
-            guard let digit = chars[pos].hexDigitValue else { return nil }
-            value = value * 16 + UInt32(digit)
+            guard let digit = asciiHexValue(chars[pos]) else { return nil }
+            value = value * 16 + digit
             pos += 1
         }
         return Unicode.Scalar(value)
+    }
+
+    /// ASCII hex digit value (0–15), or nil.  JSON `\uXXXX` escapes are ASCII
+    /// hex by definition, so this is behaviour-identical to
+    /// `Character.hexDigitValue` — but it avoids pulling Unicode numeric-property
+    /// tables into the Embedded wasm build.
+    private func asciiHexValue(_ c: Character) -> UInt32? {
+        guard let b = c.asciiValue else { return nil }
+        switch b {
+        case 0x30...0x39: return UInt32(b - 0x30)  // 0–9
+        case 0x41...0x46: return UInt32(b - 0x41 + 10)  // A–F
+        case 0x61...0x66: return UInt32(b - 0x61 + 10)  // a–f
+        default: return nil
+        }
     }
 
     private mutating func parseNumber() -> JSONValue? {
