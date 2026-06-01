@@ -47,7 +47,7 @@ public func classifyScriptInterpreter(name: String, source: String) -> ScriptInt
 /// Map a `#!` shebang on the first line to an interpreter. Order matters:
 /// "bash"/"zsh" are checked before "sh" (a substring of "bash").
 private func interpreterFromShebang(_ source: String) -> ScriptInterpreter? {
-    let firstLine = firstNonEmptyTrimmedLine(source).lowercased()
+    let firstLine = asciiLowercased(firstNonEmptyTrimmedLine(source))
     guard firstLine.hasPrefix("#!") else { return nil }
     if containsSubstring(firstLine, "python") { return .python }
     if containsSubstring(firstLine, "node") || containsSubstring(firstLine, "javascript") { return .node }
@@ -85,7 +85,7 @@ private func fileExtensionLowercased(_ name: String) -> String {
     let baseStart = name.lastIndex(of: "/").map { name.index(after: $0) } ?? name.startIndex
     let base = name[baseStart...]
     guard let dot = base.lastIndex(of: "."), dot != base.startIndex else { return "" }
-    return base[base.index(after: dot)...].lowercased()
+    return asciiLowercased(String(base[base.index(after: dot)...]))
 }
 
 /// First non-empty line with leading BOM/whitespace trimmed.
@@ -100,6 +100,22 @@ private func firstNonEmptyTrimmedLine(_ source: String) -> String {
 private func trimHorizontalWhitespace(_ s: String) -> String {
     let isHWS: (Character) -> Bool = { $0 == " " || $0 == "\t" }
     return String(s.drop(while: isHWS).reversed().drop(while: isHWS).reversed())
+}
+
+/// ASCII-only lowercase.  Shebang lines and file extensions are ASCII, so this
+/// is behaviour-identical to `lowercased()` for the inputs we classify — but it
+/// avoids linking Embedded Swift's Unicode case-folding tables into the wasm
+/// binary (and sidesteps locale-style folding surprises like Turkish İ).
+private func asciiLowercased(_ s: String) -> String {
+    var out = ""
+    for scalar in s.unicodeScalars {
+        if scalar.value >= 0x41 && scalar.value <= 0x5A {  // A–Z → a–z
+            out.unicodeScalars.append(Unicode.Scalar(UInt8(scalar.value + 0x20)))
+        } else {
+            out.unicodeScalars.append(scalar)
+        }
+    }
+    return out
 }
 
 /// Substring search without the string-processing module (absent in Embedded Swift).
