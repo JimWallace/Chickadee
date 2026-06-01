@@ -1,7 +1,40 @@
 import Foundation
+import RunnerCore
 import Testing
 
 @testable import chickadee_runner
+
+/// Runs `script` via `runner`, retrying only when the subprocess fails to
+/// *launch* — a transient CI flake (fork/posix_spawn under heavy parallel load,
+/// or a spuriously-fired timeout) that surfaces as the `-1` exit sentinel with
+/// no output and `timedOut == false`.
+///
+/// This is deliberately narrow: a genuine env-handling regression produces
+/// output (a wrong `seed=…` line on stderr), never this empty `-1` sentinel, so
+/// it is never retried or masked — only the ambiguous "didn't run at all"
+/// outcome is. Free function (not a method) so it can be called inside the
+/// `@Sendable` `withEnvLock` closure without capturing `self`.
+private func runRetryingLaunchFailure(
+    _ runner: UnsandboxedScriptRunner,
+    script: URL,
+    workDir: URL,
+    timeLimitSeconds: Int,
+    env: [String: String],
+    attempts: Int = 5
+) async -> ScriptOutput {
+    var output = await runner.run(
+        script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env)
+    var remaining = attempts - 1
+    while remaining > 0,
+        output.exitCode == -1, !output.timedOut,
+        output.stdout.isEmpty, output.stderr.isEmpty
+    {
+        remaining -= 1
+        output = await runner.run(
+            script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env)
+    }
+    return output
+}
 
 @Suite final class WorkerTests {
 
@@ -115,7 +148,8 @@ import Testing
         // so a concurrent `unsetenv` in another test can't mutate `environ`
         // mid-read.
         let output = try await withEnvLock {
-            await runner.run(
+            await runRetryingLaunchFailure(
+                runner,
                 script: script,
                 workDir: workDir,
                 timeLimitSeconds: 5,
@@ -154,7 +188,8 @@ import Testing
             }
             // Ensure parent doesn't have the var set in this test's environment.
             unsetenv("CHICKADEE_ASSIGNMENT_SEED")
-            return await runner.run(
+            return await runRetryingLaunchFailure(
+                runner,
                 script: script,
                 workDir: workDir,
                 timeLimitSeconds: 5,
