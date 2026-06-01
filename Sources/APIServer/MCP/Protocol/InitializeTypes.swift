@@ -85,7 +85,8 @@ enum MCPServerInstructions {
         student: literal `variables` (a name + JSON value) and `expressions` (a name + Python source \
         evaluated against the student's `seed`). They inline into generated/raw tests and substitute \
         into the starter notebook's `{{name}}` placeholders. Read with get_global_inputs, replace \
-        with update_global_inputs.
+        with update_global_inputs. Sections can also carry their own scoped variables/expressions \
+        (same shape); get_suite returns them per section and update_section_variables replaces them.
         - Validation — the server validates an assignment's suite against its solution; an assignment \
         cannot be opened (isOpen=true) until validation passes.
 
@@ -94,8 +95,9 @@ enum MCPServerInstructions {
         2. Inspect before editing: get_assignment, get_suite, get_notebook, get_global_inputs.
         3. Edit: update_assignment (metadata), update_suite (script metadata), update_pattern_family \
         (family defaults/cases), update_global_inputs (personalization variables/expressions), \
-        update_notebook (replace the starter notebook). To create a new assignment, clone_assignment \
-        from a known-good one and then edit the copy.
+        update_section_variables (a section's scoped variables/expressions), update_notebook (replace \
+        the starter notebook). To create a new assignment, clone_assignment from a known-good one and \
+        then edit the copy.
 
         Important behaviors:
         - Any content edit (suite, pattern family, notebook) re-runs validation asynchronously; \

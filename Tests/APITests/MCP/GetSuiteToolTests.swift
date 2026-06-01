@@ -55,6 +55,34 @@ import Vapor
         }
     }
 
+    /// Manifest with a section carrying its own variables + expressions.
+    private let sectionInputsManifest = #"""
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test_a.sh","points":1,"sectionID":"sec1"}],"sections":[{"id":"sec1","name":"Part A","variables":[{"name":"cap","value":7}],"expressions":[{"name":"pick","expression":"seed % 4"}]}],"timeLimitSeconds":10}
+        """#
+
+    @Test func returnsSectionVariablesAndExpressions() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(
+                on: app, id: "setup_sv", courseID: courseID, manifest: sectionInputsManifest)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_sv", courseID: courseID, title: "Lab")
+
+            let output = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+
+            let sec = try #require(output.sections.first { $0.id == "sec1" })
+            #expect(sec.variables.map(\.name) == ["cap"])
+            #expect(sec.variables.first?.value == .int(7))
+            #expect(sec.expressions.map(\.name) == ["pick"])
+            #expect(sec.expressions.first?.expression == "seed % 4")
+        }
+    }
+
     @Test func deniesWhenSubjectNotEnrolled() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
