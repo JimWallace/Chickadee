@@ -812,36 +812,12 @@ extension StudentCourseRoutes {
             return best >= 0 ? best : nil
         }()
 
-        var badges: [AchievementBadge] = []
-        if let latestSubmission = latest,
-            let latestSubID = latestSubmission.id,
-            let result = preferredResultBySubmissionID[latestSubID],
-            let collection = visibleCollection(
-                from: result.collectionJSON,
-                for: student,
-                assignment: assignment
-            ),
-            let gradePct = gradePercent(from: collection)
-        {
-            let latestAttempt = latestSubmission.attemptNumber ?? 1
-            let priorSub = history.first(where: { $0.attemptNumber == latestAttempt - 1 })
-            let priorPct: Int? = priorSub.flatMap { ps in
-                guard let psID = ps.id, let pr = preferredResultBySubmissionID[psID] else {
-                    return nil
-                }
-                return gradePercentFromCollectionJSON(pr.collectionJSON)
-            }
-            badges.append(
-                contentsOf: AchievementBadge.forSubmission(
-                    BadgeContext(
-                        attemptNumber: latestAttempt,
-                        gradePercent: gradePct,
-                        executionTimeMs: collection.executionTimeMs,
-                        priorGradePercent: priorPct
-                    )
-                )
-            )
-        }
+        var badges = submissionBadges(
+            assignment: assignment,
+            history: history,
+            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            student: student
+        )
         badges.append(contentsOf: classBadges)
 
         let dueAtText = assignment.dueAt.map { fmt.string(from: $0) }
@@ -906,6 +882,44 @@ extension StudentCourseRoutes {
                 assignmentID: assignment.publicID
             ),
             badges: badges
+        )
+    }
+
+    /// Achievement badges earned on the latest submission (attempt/speed/
+    /// improvement).  Class-wide badges are appended by the caller.
+    fileprivate func submissionBadges(
+        assignment: APIAssignment,
+        history: [APISubmission],
+        preferredResultBySubmissionID: [String: APIResult],
+        student: APIUser
+    ) -> [AchievementBadge] {
+        guard let latestSubmission = history.first,
+            let latestSubID = latestSubmission.id,
+            let result = preferredResultBySubmissionID[latestSubID],
+            let collection = visibleCollection(
+                from: result.collectionJSON,
+                for: student,
+                assignment: assignment
+            ),
+            let gradePct = gradePercent(from: collection)
+        else {
+            return []
+        }
+        let latestAttempt = latestSubmission.attemptNumber ?? 1
+        let priorSub = history.first(where: { $0.attemptNumber == latestAttempt - 1 })
+        let priorPct: Int? = priorSub.flatMap { ps in
+            guard let psID = ps.id, let pr = preferredResultBySubmissionID[psID] else {
+                return nil
+            }
+            return gradePercentFromCollectionJSON(pr.collectionJSON)
+        }
+        return AchievementBadge.forSubmission(
+            BadgeContext(
+                attemptNumber: latestAttempt,
+                gradePercent: gradePct,
+                executionTimeMs: collection.executionTimeMs,
+                priorGradePercent: priorPct
+            )
         )
     }
 }
