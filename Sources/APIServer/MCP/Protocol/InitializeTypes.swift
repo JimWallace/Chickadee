@@ -108,8 +108,9 @@ enum MCPServerInstructions {
         the returned JSON.
         - clone_assignment lands closed, unvalidated, with no due date and no submissions, so nothing \
         is regraded; validate and open it with update_assignment when ready.
-        - You author structure and metadata, not the underlying test logic: you cannot write raw \
-        script bodies or a pattern case's args/expected values.
+        - You author structure, metadata, and pattern-family test cases, but not raw script bodies: \
+        update_pattern_family can edit a generated case's args/expected (validated on save), but the \
+        contents of hand-written `.sh`/`.py` test scripts are not editable through this interface.
         - Resources: each accessible assignment's raw test.properties.json manifest is also exposed \
         as an MCP resource (resources/list, then resources/read on \
         chickadee://assignment/<publicID>/manifest). get_suite is the structured view; the resource \

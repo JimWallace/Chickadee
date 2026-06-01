@@ -8,6 +8,7 @@
 // failures map to `executionFailed`.
 
 import Foundation
+import Vapor
 
 extension MCPToolError {
     /// Translates a `WebAssignmentError` raised by a shared web edit path into
@@ -20,5 +21,16 @@ extension MCPToolError {
             .unprocessable, .validationRequired:
             return .invalidArguments(tool: tool, detail: error.reason)
         }
+    }
+
+    /// Translates a Vapor `AbortError` (e.g. the `Abort(.unprocessableEntity,
+    /// …)` that pattern-family validation throws) into the MCP vocabulary.
+    /// Client-fixable 4xx failures become `invalidArguments`; anything else is
+    /// a genuine server-side failure.
+    static func from(_ error: any AbortError, tool: String) -> MCPToolError {
+        if (400..<500).contains(Int(error.status.code)) {
+            return .invalidArguments(tool: tool, detail: error.reason)
+        }
+        return .executionFailed(tool: tool, detail: error.reason)
     }
 }
