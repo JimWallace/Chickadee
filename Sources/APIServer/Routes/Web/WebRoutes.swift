@@ -29,6 +29,7 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "history", use: submissionHistoryPage)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
+        routes.post("testsetups", ":testSetupID", "reset-notebook", use: resetOwnNotebook)
         routes.get("submissions", ":submissionID", use: submissionPage)
     }
 

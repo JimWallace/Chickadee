@@ -116,6 +116,18 @@
                     </a>
                     #endif
                     #endif
+                    #if(setup.isOpen):
+                    #if(setup.hasNotebook):
+                    <form method="post" action="/testsetups/#(setup.id)/reset-notebook" onsubmit="return confirm('Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected.')" style="margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                title="Reset notebook to starter (discards current edits; past submissions unaffected)"
+                                aria-label="Reset notebook to starter" style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        </button>
+                    </form>
+                    #endif
+                    #endif
                 </div>
             </td>
         </tr>
@@ -219,6 +231,18 @@
                     </a>
                     #endif
                     #endif
+                    #if(setup.isOpen):
+                    #if(setup.hasNotebook):
+                    <form method="post" action="/testsetups/#(setup.id)/reset-notebook" onsubmit="return confirm('Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected.')" style="margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                title="Reset notebook to starter (discards current edits; past submissions unaffected)"
+                                aria-label="Reset notebook to starter" style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        </button>
+                    </form>
+                    #endif
+                    #endif
                 </div>
             </td>
         </tr>
@@ -320,6 +344,18 @@
                        title="Upload" aria-label="Upload" style="padding:.3rem .45rem">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="21" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/><path d="M4 21h16"/></svg>
                     </a>
+                    #endif
+                    #endif
+                    #if(setup.isOpen):
+                    #if(setup.hasNotebook):
+                    <form method="post" action="/testsetups/#(setup.id)/reset-notebook" onsubmit="return confirm('Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected.')" style="margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                title="Reset notebook to starter (discards current edits; past submissions unaffected)"
+                                aria-label="Reset notebook to starter" style="padding:.3rem .45rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        </button>
+                    </form>
                     #endif
                     #endif
                 </div>
