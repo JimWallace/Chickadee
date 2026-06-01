@@ -93,6 +93,12 @@
                         </button>
                     </form>
                     #endif
+                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" style="margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter" style="padding:.25rem .35rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        </button>
+                    </form>
                     <details class="ext-details" style="margin:0">
                         <summary class="btn action-btn ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif" style="padding:.25rem .35rem">
                             #if(row.hasExtension):
@@ -205,6 +211,12 @@
                         </button>
                     </form>
                     #endif
+                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" style="margin:0">
+                        #csrfFormField()
+                        <button class="btn action-btn" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter" style="padding:.25rem .35rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        </button>
+                    </form>
                     <details class="ext-details" style="margin:0">
                         <summary class="btn action-btn ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif" style="padding:.25rem .35rem">
                             #if(row.hasExtension):

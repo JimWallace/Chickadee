@@ -61,6 +61,7 @@ struct StudentAssignmentRow: Encodable {
     let extensionSavePath: String
     let extensionDeletePath: String
     let retestPath: String
+    let resetPath: String
     let historyURL: String
     let submissionCount: Int
     let hasLatestSubmission: Bool
