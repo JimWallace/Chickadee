@@ -20,6 +20,10 @@ struct GetSuiteTool: ContentTool {
         struct Section: Encodable, Sendable {
             let id: String
             let name: String
+            /// Section-scoped literal personalization values (name + JSON value).
+            let variables: [FamilyVariable]
+            /// Section-scoped per-student expressions (name + Python source).
+            let expressions: [PersonalizationExpression]
         }
         struct Item: Encodable, Sendable {
             /// "script", "family", or "check".
@@ -70,6 +74,8 @@ struct GetSuiteTool: ContentTool {
                     "properties": .object([
                         "id": .object(["type": .string("string")]),
                         "name": .object(["type": .string("string")]),
+                        "variables": .object(["type": .string("array")]),
+                        "expressions": .object(["type": .string("array")]),
                     ]),
                     "required": .array([.string("id"), .string("name")]),
                 ]),
@@ -116,7 +122,19 @@ struct GetSuiteTool: ContentTool {
 
         // No zip path → metadata-only rows (raw script bodies omitted).
         let payload = buildSuitePayload(fromManifest: setup.manifest)
-        let sections = payload.sections.map { Output.Section(id: $0.id, name: $0.name) }
+        // Section variables/expressions live on the manifest's section list,
+        // not on the suite-payload DTO (which carries only id + name).
+        let sectionInputs = Dictionary(
+            uniqueKeysWithValues: (setup.decodedManifest()?.sections ?? []).map {
+                ($0.id, (variables: $0.variables, expressions: $0.expressions))
+            })
+        let sections = payload.sections.map { section in
+            Output.Section(
+                id: section.id,
+                name: section.name,
+                variables: sectionInputs[section.id]?.variables ?? [],
+                expressions: sectionInputs[section.id]?.expressions ?? [])
+        }
         let items = payload.items.map { Self.item(from: $0) }
         return Output(assignmentPublicID: assignment.publicID, sections: sections, items: items)
     }
