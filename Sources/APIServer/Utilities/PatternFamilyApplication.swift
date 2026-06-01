@@ -366,7 +366,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         nextFamilies,
         testSuites: authoredAsTestSuites,
         sections: resolvedSections,
-        familySectionID: familySectionIDForValidation
+        familySectionID: familySectionIDForValidation,
+        globalVariableNames: Set(resolvedGlobalVariables.map(\.name))
     )
     try validateNotebookChecks(
         resolvedChecks,

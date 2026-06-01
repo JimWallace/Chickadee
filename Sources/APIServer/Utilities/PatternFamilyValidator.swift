@@ -41,7 +41,8 @@ private func validatePatternCaseHeader(
 /// section.
 private func validateFamilyVariablesAndArgRefs(
     family: PatternFamily,
-    sectionVarNamesHere: Set<String>
+    sectionVarNamesHere: Set<String>,
+    globalVarNames: Set<String>
 ) throws {
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
@@ -67,12 +68,18 @@ private func validateFamilyVariablesAndArgRefs(
     for c in family.cases {
         for (i, maybeRef) in c.argVarRefs.enumerated() {
             guard let ref = maybeRef else { continue }
-            // v0.4.100: a `$name` ref resolves if EITHER the family
-            // declares the variable OR the family's home section
-            // does.  Family-level shadows section-level at render
-            // time — so both are valid refs; only "declared in
-            // neither" is an error.
-            guard seenVarNames.contains(ref) || sectionVarNamesHere.contains(ref) else {
+            // A `$name` ref resolves if the family declares the variable,
+            // the family's home section does, OR it's an assignment-scope
+            // global input.  The renderer puts all three in scope
+            // (`globalVariables + sectionVariables + family.variables`), so
+            // accepting them here matches what actually renders — only
+            // "declared in none of the three" is an error.  (Globals were
+            // previously omitted from this set, which rejected the documented
+            // `$global` worked example in docs/inputs.md.)
+            guard
+                seenVarNames.contains(ref) || sectionVarNamesHere.contains(ref)
+                    || globalVarNames.contains(ref)
+            else {
                 let paramLabel = (i < family.paramNames.count ? family.paramNames[i] : "arg \(i + 1)")
                 throw Abort(
                     .unprocessableEntity,
@@ -155,7 +162,8 @@ func validatePatternFamilies(
     _ families: [PatternFamily],
     testSuites: [TestSuiteEntry],
     sections: [TestSuiteSection] = [],
-    familySectionID: [String: String] = [:]
+    familySectionID: [String: String] = [:],
+    globalVariableNames: Set<String> = []
 ) throws {
     // v0.4.100: build a "extra names in scope for this family" set so
     // each family can reference its home section's variables too.
@@ -207,7 +215,8 @@ func validatePatternFamilies(
         // a case arg cell must resolve to a declared variable.
         try validateFamilyVariablesAndArgRefs(
             family: family,
-            sectionVarNamesHere: sectionVarNames(forFamily: family.id)
+            sectionVarNamesHere: sectionVarNames(forFamily: family.id),
+            globalVarNames: globalVariableNames
         )
     }
 
