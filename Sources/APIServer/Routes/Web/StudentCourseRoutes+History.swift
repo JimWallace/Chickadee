@@ -370,6 +370,63 @@ extension StudentCourseRoutes {
         )
     }
 
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/reset-notebook
+
+    /// Resets one student's working-copy notebook for one assignment back to
+    /// the published starter.  Past submissions are untouched — this only
+    /// overwrites the in-progress JupyterLite copy (e.g. when a student has
+    /// corrupted their notebook and can't recover).  Mirrors the per-assignment
+    /// `resetStudentNotebook` action, scoped to this course-student page so the
+    /// redirect lands back here.
+    @Sendable
+    func resetStudentAssignmentNotebook(req: Request) async throws -> Response {
+        let actor = try req.auth.require(APIUser.self)
+        guard actor.isInstructor else {
+            throw WebAssignmentError.forbidden(action: "reset student notebooks")
+        }
+        let (course, student) = try await resolveCourseAndStudent(req: req)
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard
+            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
+            assignment.courseID == course.id,
+            let studentID = student.id
+        else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+        }
+        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
+            throw WebAssignmentError.notFound(resource: "Test setup")
+        }
+
+        let starter: Data
+        do {
+            starter = try notebookData(for: setup)
+        } catch {
+            throw WebAssignmentError.invalidParameter(
+                name: "setup",
+                reason: "Test setup has no starter notebook to reset to."
+            )
+        }
+
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req,
+            setupID: setup.id ?? assignment.testSetupID,
+            userID: studentID,
+            fallbackSetup: setup,
+            overwriteWith: starter
+        )
+
+        req.logger.info(
+            "student_notebook_reset assignment=\(assignmentIDRaw) student=\(student.username) by=\(actor.id?.uuidString ?? "nil")"
+        )
+
+        return req.redirect(
+            to: StudentCoursePaths.submissions(
+                courseCode: course.code,
+                urlToken: try student.requireURLToken()
+            )
+        )
+    }
+
     // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/extension
 
     @Sendable
@@ -640,6 +697,11 @@ extension StudentCourseRoutes {
                 assignmentID: assignment.publicID
             ),
             retestPath: StudentCoursePaths.retest(
+                courseCode: courseCode,
+                urlToken: urlToken,
+                assignmentID: assignment.publicID
+            ),
+            resetPath: StudentCoursePaths.reset(
                 courseCode: courseCode,
                 urlToken: urlToken,
                 assignmentID: assignment.publicID

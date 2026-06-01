@@ -47,6 +47,19 @@ enum StudentCoursePaths {
         ) + "/retest"
     }
 
+    /// POST target — reset the student's working-copy notebook to the starter.
+    static func reset(
+        courseCode: String,
+        urlToken: String,
+        assignmentID: String
+    ) -> String {
+        baseAssignmentPath(
+            courseCode: courseCode,
+            urlToken: urlToken,
+            assignmentID: assignmentID
+        ) + "/reset-notebook"
+    }
+
     /// POST target — upsert an extension for one student × one assignment.
     static func extensionSave(
         courseCode: String,

@@ -27,6 +27,10 @@ struct StudentCourseRoutes: RouteCollection {
             use: retestStudentAssignment
         )
         routes.post(
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "reset-notebook",
+            use: resetStudentAssignmentNotebook
+        )
+        routes.post(
             ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "extension",
             use: saveStudentAssignmentExtension
         )
