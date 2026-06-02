@@ -38,6 +38,8 @@ struct InstructorDashboardRoutes: RouteCollection {
         // Students roster tab + its self-updating poll endpoint.
         r.get("students", use: studentsPage)
         r.get("students-data", use: studentsData)
+        // Reconcile the roster against the LEARN classlist (flags dropped students).
+        r.get("students", "learn-check", use: studentsLearnCheck)
         // BrightSpace tab: status, grade-item mapping, sync log, manual actions.
         r.get("brightspace", use: brightspacePage)
         r.post("brightspace", "test", use: brightspaceTestConnection)
