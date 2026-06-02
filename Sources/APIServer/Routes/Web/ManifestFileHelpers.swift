@@ -46,8 +46,10 @@ func setupHasAnyTestEntries(manifestJSON: String) throws -> Bool {
 }
 
 /// Returns updated manifest JSON with a new `TestSuiteEntry` appended.
-/// Preserves all existing entries, grading mode, makefile config,
-/// starterNotebook, and pattern families.
+/// Preserves all existing entries (including their `sectionID`,
+/// `generatedByCheck`, and `hint`), grading mode, makefile config,
+/// starterNotebook, pattern families, notebook checks, the `sections`
+/// list, and the assignment-scope global variables/expressions.
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestAddingScript(
     manifestJSON: String,
@@ -66,7 +68,10 @@ func updateManifestAddingScript(
             dependsOn: e.dependsOn,
             points: e.points,
             displayName: e.name,
-            generatedBy: e.generatedBy
+            generatedBy: e.generatedBy,
+            generatedByCheck: e.generatedByCheck,
+            sectionID: e.sectionID,
+            hint: e.hint
         )
     }
     let nextOrder = (existing.map(\.order).max() ?? 0) + 1
@@ -77,7 +82,10 @@ func updateManifestAddingScript(
         dependsOn: entry.dependsOn,
         points: entry.points,
         displayName: entry.displayName,
-        generatedBy: entry.generatedBy
+        generatedBy: entry.generatedBy,
+        generatedByCheck: entry.generatedByCheck,
+        sectionID: entry.sectionID,
+        hint: entry.hint
     )
     let updated = existing + [newEntry]
     return try? makeWorkerManifestJSON(
@@ -85,12 +93,20 @@ func updateManifestAddingScript(
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
         starterNotebook: props.starterNotebook,
-        patternFamilies: props.patternFamilies
+        patternFamilies: props.patternFamilies,
+        notebookChecks: props.notebookChecks,
+        sections: props.sections,
+        globalVariables: props.globalVariables,
+        globalExpressions: props.globalExpressions
     )
 }
 
 /// Returns updated manifest JSON with the entry for `filename` removed.
 /// Also clears references to `filename` in other entries' `dependsOn` arrays.
+/// Preserves the surviving entries' `sectionID` / `generatedByCheck` /
+/// `hint`, plus the manifest's pattern families, notebook checks,
+/// `sections` list, and assignment-scope global variables/expressions —
+/// deleting one script must never drop sections or other suite metadata.
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestRemovingScript(manifestJSON: String, filename: String) -> String? {
     guard let props = decodeManifest(fromJSON: manifestJSON)
@@ -109,7 +125,10 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
                 dependsOn: e.dependsOn.filter { $0 != filename },
                 points: e.points,
                 displayName: e.name,
-                generatedBy: e.generatedBy
+                generatedBy: e.generatedBy,
+                generatedByCheck: e.generatedByCheck,
+                sectionID: e.sectionID,
+                hint: e.hint
             )
         }
     return try? makeWorkerManifestJSON(
@@ -117,7 +136,11 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
         starterNotebook: props.starterNotebook,
-        patternFamilies: props.patternFamilies
+        patternFamilies: props.patternFamilies,
+        notebookChecks: props.notebookChecks,
+        sections: props.sections,
+        globalVariables: props.globalVariables,
+        globalExpressions: props.globalExpressions
     )
 }
 
