@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.332] - 2026-06-02
+
+### Added
+
+- **Flag dropped students against the LEARN classlist.** A "Check against
+  LEARN" button on the instructor Students tab fetches the course's D2L
+  classlist and badges enrolled students (and pending "awaiting first login"
+  rows) who are no longer registered on LEARN, so the instructor can remove
+  stale accounts with the existing per-row delete action. Conservative
+  matching — students with no resolvable student ID are reported as
+  unverifiable rather than flagged for removal, and only `student` rows are
+  checked. The button is hidden unless BrightSpace is configured on the server
+  and the course is linked to a LEARN org unit, so it's inert until D2L
+  credentials are provisioned.
+
+
 ## [0.4.331] - 2026-06-02
 
 ### Added
