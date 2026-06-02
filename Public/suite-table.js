@@ -377,8 +377,15 @@
                 var body = bySection[sid];
                 var logical = sid || null;
                 var visual = visualOrderForSection(logical);
+                // An empty section's only drop target is this row, so label it
+                // as a "move into" target; a populated section's row keeps the
+                // "remove dependency" meaning (dropping a child here within its
+                // own section promotes it to a top-level root).
+                var rootLabel = visual.length
+                    ? '&#9660; Drop here to remove dependency'
+                    : '&#9660; Drop tests here';
                 body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-                    + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
+                    + '<tr class="suite-root-drop"><td colspan="4">' + rootLabel + '</td></tr>';
             });
             // Items whose sectionID doesn't resolve to any server-rendered
             // tbody (shouldn't happen given `normaliseItems` nils orphans,
@@ -556,6 +563,57 @@
             });
         }
 
+        // ── Auto-scroll while dragging ──
+        // HTML5 drag-and-drop doesn't scroll the page on its own, so a suite
+        // list taller than one screen can't be reorganised across the fold
+        // (e.g. dragging a freed test up to its proper section).  When the
+        // pointer nears the top/bottom edge of the viewport during an active
+        // drag, scroll the window — driven by a requestAnimationFrame loop
+        // keyed off the latest pointer Y so the speed ramps with proximity.
+        var autoScrollRAF = null;
+        var autoScrollVel = 0;
+        var AUTO_SCROLL_EDGE = 80;   // px from a viewport edge that triggers scrolling
+        var AUTO_SCROLL_MAX  = 20;   // max px per frame, reached at the very edge
+
+        function autoScrollStep() {
+            if (!autoScrollVel || (!dragID && !dragSectionID)) {
+                autoScrollRAF = null;
+                return;
+            }
+            window.scrollBy(0, autoScrollVel);
+            autoScrollRAF = window.requestAnimationFrame(autoScrollStep);
+        }
+
+        function updateAutoScroll(clientY) {
+            var vh = window.innerHeight || document.documentElement.clientHeight;
+            var vel = 0;
+            if (clientY < AUTO_SCROLL_EDGE) {
+                vel = -AUTO_SCROLL_MAX * (1 - clientY / AUTO_SCROLL_EDGE);
+            } else if (clientY > vh - AUTO_SCROLL_EDGE) {
+                vel = AUTO_SCROLL_MAX * (1 - (vh - clientY) / AUTO_SCROLL_EDGE);
+            }
+            autoScrollVel = vel;
+            if (vel && autoScrollRAF == null) {
+                autoScrollRAF = window.requestAnimationFrame(autoScrollStep);
+            }
+        }
+
+        function stopAutoScroll() {
+            autoScrollVel = 0;
+            if (autoScrollRAF != null) {
+                window.cancelAnimationFrame(autoScrollRAF);
+                autoScrollRAF = null;
+            }
+        }
+
+        // Document-level so the pointer can leave the suite container (into the
+        // page header/footer) and still drive the scroll near the edges.  Only
+        // acts while one of our drags is in flight; never calls preventDefault
+        // so the container's own dragover keeps owning the drop indicators.
+        document.addEventListener('dragover', function (e) {
+            if (dragID || dragSectionID) updateAutoScroll(e.clientY);
+        });
+
         container.addEventListener('dragstart', function (e) {
             var t = e.target;
             if (!t || !t.closest) { e.preventDefault(); return; }
@@ -590,6 +648,7 @@
         container.addEventListener('dragend', function () {
             dragID = null;
             dragSectionID = null;
+            stopAutoScroll();
             container.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
             container.querySelectorAll('.section-dragging').forEach(function (r) { r.classList.remove('section-dragging'); });
             clearDropIndicators();
@@ -651,6 +710,7 @@
 
         container.addEventListener('drop', function (e) {
             e.preventDefault();
+            stopAutoScroll();
             // Section-drag: reorder server-rendered sections via AJAX.
             // On 200, update DOM order (we already did client-side) and
             // persist via a POST to /suite-sections/reorder.  No reload —
@@ -676,8 +736,34 @@
             if (rootZone) {
                 var tbody = rootZone.closest('tbody[data-section-id]');
                 var newSid = tbody ? (tbody.getAttribute('data-section-id') || null) : null;
-                dragItem.sectionID = newSid || null;
-                dragItem.dependsOn = [];
+                var curSid = dragItem.sectionID || null;
+                if ((newSid || null) === curSid) {
+                    // Same section: this zone promotes the item to a top-level
+                    // root by removing its dependency.
+                    dragItem.dependsOn = [];
+                } else {
+                    // Different section (e.g. a freshly created, empty
+                    // section whose only drop target is this row): move the
+                    // whole connected dependency group so dependents and
+                    // prerequisites travel together instead of being
+                    // stranded.  Deps are preserved — the group is
+                    // internally closed — and it lands as a contiguous block
+                    // at the end of the target section.
+                    var groupSet = {};
+                    connectedDependencyGroup(dragID).forEach(function (id) { groupSet[id] = true; });
+                    var moving = items.filter(function (it) { return groupSet[it.id]; });
+                    moving.forEach(function (it) { it.sectionID = newSid || null; });
+                    items = items.filter(function (it) { return !groupSet[it.id]; });
+                    var lastIdx = -1;
+                    items.forEach(function (it, idx) {
+                        if ((it.sectionID || null) === (newSid || null)) lastIdx = idx;
+                    });
+                    if (lastIdx < 0) {
+                        items = items.concat(moving);
+                    } else {
+                        items.splice.apply(items, [lastIdx + 1, 0].concat(moving));
+                    }
+                }
                 renderTree(); schedulePush(); return;
             }
 
