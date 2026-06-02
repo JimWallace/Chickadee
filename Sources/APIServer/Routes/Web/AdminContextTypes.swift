@@ -132,6 +132,10 @@ struct AdminContext: Encodable {
     let workerSecret: String
     let courses: [AdminCourseRow]
     let version: String
+    /// Default (24h) activity series, JSON-encoded into the page so the chart
+    /// renders before the first poll.  The client re-fetches GET /admin/activity
+    /// when the window changes or on its refresh interval.
+    let activityChart: ActivityChartData
 }
 
 struct AdminUsersContext: Encodable {

@@ -24,6 +24,7 @@ struct AdminRoutes: RouteCollection {
         admin.get("storage", use: storagePage)
         admin.get("runners", use: runners)
         admin.get("runners", ":runnerID", use: runnerDetail)
+        admin.get("activity", use: activity)
         admin.get("workers", use: workers)
         admin.post("users", ":userID", "role", use: changeRole)
         admin.post("runner-secret", use: updateWorkerSecret)
@@ -93,15 +94,35 @@ struct AdminRoutes: RouteCollection {
             )
         }
 
+        // Default activity series (24h) so the chart renders server-side on
+        // first paint; the client swaps windows / polls via GET /admin/activity.
+        let activityChart = try await ActivityChartService.chartData(
+            window: .day, on: req.db)
+
         let ctx = AdminContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "overview",
             workers: workerRows,
             workerSecret: effectiveSecret,
             courses: courseRows,
-            version: ChickadeeVersion.current
+            version: ChickadeeVersion.current,
+            activityChart: activityChart
         )
         return try await req.view.render("admin", ctx)
+    }
+
+    // MARK: - GET /admin/activity
+
+    /// JSON series for the "active users over time" chart.  `window` is one of
+    /// `24h` / `1w` / `1m` (defaults to `24h`).  Polled by the dashboard with
+    /// the `X-Background-Refresh` header so the viewing admin's own polls don't
+    /// inflate the counts.
+    @Sendable
+    func activity(req: Request) async throws -> ActivityChartData {
+        let window =
+            (try? req.query.get(String.self, at: "window"))
+            .flatMap(ActivityWindow.init(rawValue:)) ?? .day
+        return try await ActivityChartService.chartData(window: window, on: req.db)
     }
 
     // MARK: - GET /admin/users
