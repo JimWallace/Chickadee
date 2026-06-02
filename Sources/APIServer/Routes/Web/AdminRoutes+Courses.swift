@@ -56,6 +56,13 @@ extension AdminRoutes {
         let course = APICourse(code: code, name: name)
         try await course.save(on: req.db)
         let id = try course.requireID().uuidString
+        await AuditLogger.record(
+            action: .courseCreated,
+            targetType: .course,
+            targetID: id,
+            metadata: ["course_code": code, "course_name": name],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(id)")
     }
 
@@ -220,7 +227,7 @@ extension AdminRoutes {
 
         let setupsDir = req.application.testSetupsDirectory
 
-        try await req.db.transaction { db in
+        let purgedSubmissions = try await req.db.transaction { db -> Int in
             // 1. Test setups for this course.
             let setups = try await APITestSetup.query(on: db)
                 .filter(\.$courseID == courseID).all()
@@ -261,9 +268,28 @@ extension AdminRoutes {
             try await APICourseEnrollment.query(on: db)
                 .filter(\.$course.$id == courseID).delete()
             try await course.delete(on: db)
+            return submissions.count
         }
 
         req.logger.info("Admin permanently deleted course \(course.code) (\(idString))")
+        await AuditLogger.record(
+            action: .courseDeleted,
+            targetType: .course,
+            targetID: idString,
+            metadata: ["course_code": course.code, "submissions_purged": String(purgedSubmissions)],
+            on: req
+        )
+        // The one place student submissions are purged under the retention
+        // policy — record it distinctly when anything was actually removed.
+        if purgedSubmissions > 0 {
+            await AuditLogger.record(
+                action: .submissionsPurged,
+                targetType: .course,
+                targetID: idString,
+                metadata: ["course_code": course.code, "count": String(purgedSubmissions)],
+                on: req
+            )
+        }
         return req.redirect(
             to: retentionRedirect(ok: "Deleted \(course.code) and all its data."))
     }
@@ -354,6 +380,13 @@ extension AdminRoutes {
             .filter(\.$userID == userID)
             .delete()
 
+        await AuditLogger.record(
+            action: .enrollmentRemoved,
+            targetType: .enrollment,
+            targetID: userIDString,
+            metadata: ["course_id": courseIDString, "subject_user_id": userIDString],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(courseIDString)")
     }
 
@@ -499,6 +532,13 @@ extension AdminRoutes {
             .filter(\.$course.$id == courseID)
             .delete()
 
+        await AuditLogger.record(
+            action: .enrollmentRemoved,
+            targetType: .enrollment,
+            targetID: idString,
+            metadata: ["course_id": courseIDString, "subject_user_id": idString],
+            on: req
+        )
         return req.redirect(to: "/admin/users/\(idString)")
     }
 
@@ -528,6 +568,18 @@ extension AdminRoutes {
             on: req.db
         )
 
+        await AuditLogger.record(
+            action: .enrollmentBulkAdded,
+            targetType: .course,
+            targetID: idString,
+            metadata: [
+                "course_code": course.code,
+                "enrolled": String(result.enrolledCount),
+                "pre_enrolled": String(result.preEnrolledCount),
+                "already_enrolled": String(result.alreadyEnrolledCount),
+            ],
+            on: req
+        )
         return try await req.view.render(
             "admin-enroll-csv-result",
             EnrollCSVResultContext(

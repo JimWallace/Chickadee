@@ -69,6 +69,13 @@ struct CourseBundleRoutes: RouteCollection {
 
         try await createZipArchive(sourceDir: stagingDir, outputPath: bundleZipPath)
 
+        await AuditLogger.record(
+            action: .courseBundleExported,
+            targetType: .course,
+            targetID: courseIDStr,
+            metadata: ["course_code": course.code],
+            on: req
+        )
         return try streamExportZip(bundleZipPath: bundleZipPath, bundleName: bundleName)
     }
 
@@ -358,6 +365,18 @@ struct CourseBundleRoutes: RouteCollection {
             subsDir: subsDir
         )
 
+        await AuditLogger.record(
+            action: .courseBundleImported,
+            targetType: .course,
+            targetID: tally.courseID.uuidString,
+            metadata: [
+                "course_code": tally.courseCode,
+                "test_setups": String(tally.testSetupsImported),
+                "assignments": String(tally.assignmentsImported),
+                "submissions": String(tally.submissionsImported),
+            ],
+            on: req
+        )
         return try await renderImportResult(req: req, tally: tally)
     }
 

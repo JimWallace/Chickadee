@@ -199,6 +199,14 @@ struct SSOAuthRoutes: RouteCollection {
         req.auth.login(user)
         req.session.rotateID()
         req.session.authenticate(user)
+        await AuditLogger.record(
+            action: .loginSuccess,
+            targetType: .auth,
+            targetID: user.id?.uuidString,
+            metadata: ["username": user.username, "method": "sso"],
+            actorOverride: user,
+            on: req
+        )
         return try await postLoginRedirect(for: user, req: req)
     }
 
@@ -254,6 +262,7 @@ struct SSOAuthRoutes: RouteCollection {
             existing.studentID = studentID ?? existing.studentID
             existing.email = email ?? existing.email
             existing.displayName = displayName ?? existing.displayName
+            let previousRole = existing.role
             if let mappedRole {
                 existing.role = mappedRole
             }
@@ -261,6 +270,23 @@ struct SSOAuthRoutes: RouteCollection {
             existing.lastLoginAt = now
             existing.lastSeenAt = now
             try await existing.save(on: req.db)
+            // An allowlist-driven privilege change on login is security-relevant
+            // — record it (only when the role actually moved).
+            if let mappedRole, mappedRole != previousRole {
+                await AuditLogger.record(
+                    action: .userRoleChanged,
+                    targetType: .user,
+                    targetID: existing.id?.uuidString,
+                    metadata: [
+                        "subject_username": existing.username,
+                        "previous_role": previousRole,
+                        "new_role": mappedRole,
+                        "source": "sso_allowlist",
+                    ],
+                    actorUsernameOverride: "sso",
+                    on: req
+                )
+            }
             return existing
         }
 
@@ -280,6 +306,18 @@ struct SSOAuthRoutes: RouteCollection {
             lastSeenAt: now
         )
         try await newUser.save(on: req.db)
+        await AuditLogger.record(
+            action: .userProvisioned,
+            targetType: .user,
+            targetID: newUser.id?.uuidString,
+            metadata: [
+                "username": newUser.username,
+                "role": newUser.role,
+                "provider": "duo-oidc",
+            ],
+            actorUsernameOverride: "sso",
+            on: req
+        )
         return newUser
     }
 
