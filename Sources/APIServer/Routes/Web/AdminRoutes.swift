@@ -388,34 +388,6 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
-    // MARK: - GET /admin/audit
-
-    @Sendable
-    func auditPage(req: Request) async throws -> View {
-        let entries = try await APIAuditLogEntry.query(on: req.db)
-            .sort(\.$createdAt, .descending)
-            .limit(200)
-            .all()
-
-        let iso = ISO8601DateFormatter()
-        let rows = entries.map { e -> AdminAuditRow in
-            AdminAuditRow(
-                timestamp: e.createdAt.map { iso.string(from: $0) } ?? "—",
-                actor: e.actorUsername ?? "—",
-                action: e.action,
-                targetType: e.targetType,
-                targetID: e.targetID,
-                metadata: e.metadata ?? "",
-                remoteAddr: e.remoteAddr ?? "—"
-            )
-        }
-        return try await req.view.render(
-            "admin-audit",
-            AdminAuditContext(
-                currentUser: req.currentUserContext, activeAdminTab: "audit", rows: rows)
-        )
-    }
-
     // MARK: - GET /admin/alerts
 
     @Sendable

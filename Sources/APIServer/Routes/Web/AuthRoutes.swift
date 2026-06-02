@@ -149,7 +149,7 @@ struct AuthRoutes: RouteCollection {
             action: .loginSuccess,
             targetType: .auth,
             targetID: user.id?.uuidString,
-            metadata: ["username": user.username],
+            metadata: ["username": user.username, "method": "local"],
             actorOverride: user,
             on: req
         )
@@ -216,6 +216,14 @@ struct AuthRoutes: RouteCollection {
         req.auth.login(user)
         req.session.rotateID()  // session-fixation defense: fresh id on login
         req.session.authenticate(user)
+        await AuditLogger.record(
+            action: .userRegistered,
+            targetType: .user,
+            targetID: user.id?.uuidString,
+            metadata: ["username": user.username, "role": role],
+            actorOverride: user,
+            on: req
+        )
         return try await postLoginRedirect(for: user, req: req)
     }
 
@@ -230,6 +238,19 @@ struct AuthRoutes: RouteCollection {
         // re-authenticated) so it's obvious the session ended.
         let isTimeout = req.query[String.self, at: "reason"] == "timeout"
         let returnPath = isTimeout ? "/login?error=timeout" : "/login?loggedout=1"
+
+        // Audit the sign-out before the session is torn down (the actor is still
+        // resolvable from the live session here).
+        if let user = req.auth.get(APIUser.self) {
+            await AuditLogger.record(
+                action: .logout,
+                targetType: .auth,
+                targetID: user.id?.uuidString,
+                metadata: ["username": user.username, "reason": isTimeout ? "timeout" : "manual"],
+                actorOverride: user,
+                on: req
+            )
+        }
 
         // Capture any SSO tokens stashed at login before tearing the session
         // down — they're needed below to revoke at the IdP and to build the

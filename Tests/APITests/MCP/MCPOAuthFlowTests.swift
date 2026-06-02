@@ -179,6 +179,40 @@ import XCTVapor
         }
     }
 
+    /// The consent grant and the first token issuance must both leave an audit
+    /// trail — the gap behind "I authorized MCP access but the audit log was
+    /// empty".  (Routine refresh rotation is intentionally NOT audited.)
+    @Test func consentAndTokenIssuanceAreAudited() async throws {
+        let (app, _) = try await makeOAuthApp()
+        try await withApp(app) { app in
+            try await seedClient(app)
+            let cookie = try await loginUser(
+                username: "prof", password: "testpassword", role: "instructor", on: app)
+
+            let consentRes = try await consent(
+                app, cookie: cookie, scope: "content:read content:write", decision: "authorize")
+            let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
+            _ = try await tokenPost(
+                app,
+                fields: [
+                    "grant_type": "authorization_code", "code": code,
+                    "redirect_uri": redirectURI, "client_id": clientID,
+                    "code_verifier": codeVerifier,
+                ])
+
+            let consentEntry = try #require(
+                await APIAuditLogEntry.query(on: app.db)
+                    .filter(\.$action == AuditAction.mcpConsentGranted.rawValue).first())
+            #expect(consentEntry.actorUsername == "prof")
+            #expect(consentEntry.metadata?.contains(clientID) == true)
+
+            let tokenEntry = try #require(
+                await APIAuditLogEntry.query(on: app.db)
+                    .filter(\.$action == AuditAction.mcpTokenIssued.rawValue).first())
+            #expect(tokenEntry.actorUsername == "prof")
+        }
+    }
+
     @Test func refreshAfterRoleDowngradeIsRejectedAndRevokesGrant() async throws {
         let (app, _) = try await makeOAuthApp()
         try await withApp(app) { app in

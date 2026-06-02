@@ -207,6 +207,23 @@ struct MCPOAuthRoutes: Sendable {
             scope: scopes.map(\.rawValue).sorted().joined(separator: " "),
             expiresAt: Date().addingTimeInterval(60))
         try await authCode.save(on: req.db)
+        // The human consenting to an agent is the single most security-sensitive
+        // event in the MCP flow — record it (the headline "I authorized MCP and
+        // saw nothing in the audit log" gap).
+        await AuditLogger.record(
+            action: .mcpConsentGranted,
+            targetType: .user,
+            targetID: record.userID.uuidString,
+            metadata: [
+                "username": user.username,
+                "client_id": client.clientID,
+                "client_name": client.name,
+                "scope": authCode.scope,
+                "redirect_host": URLComponents(string: record.redirectURI)?.host ?? record.redirectURI,
+            ],
+            actorOverride: user,
+            on: req
+        )
         return redirect(record.redirectURI, code: code, state: state)
     }
 
@@ -275,6 +292,22 @@ struct MCPOAuthRoutes: Sendable {
         let access = try await mintAccess(
             authority, subject: user.username, scope: authCode.scope,
             clientID: authCode.clientID, agentName: client?.name)
+        // Records the first access+refresh pair an agent receives after consent.
+        // (Routine hourly refresh rotation is deliberately NOT logged — high
+        // volume, low signal; refresh *theft* and downgrade-revoke are below.)
+        await AuditLogger.record(
+            action: .mcpTokenIssued,
+            targetType: .user,
+            targetID: authCode.userID.uuidString,
+            metadata: [
+                "username": user.username,
+                "client_id": authCode.clientID,
+                "client_name": client?.name ?? "",
+                "scope": authCode.scope,
+            ],
+            actorOverride: user,
+            on: req
+        )
         return try tokenSuccess(req, access: access, refresh: refresh, scope: authCode.scope)
     }
 
@@ -293,6 +326,20 @@ struct MCPOAuthRoutes: Sendable {
         {
             reused.revoked = true
             try await reused.save(on: req.db)
+            // Replay of a rotated-away token is a theft signal — record it (and
+            // who/what it was for) before refusing.
+            let reusedUsername = try await APIUser.find(reused.userID, on: req.db)?.username
+            await AuditLogger.record(
+                action: .mcpRefreshReuseDetected,
+                targetType: .user,
+                targetID: reused.userID.uuidString,
+                metadata: [
+                    "username": reusedUsername ?? reused.userID.uuidString,
+                    "client_id": reused.clientID,
+                ],
+                actorUsernameOverride: reusedUsername,
+                on: req
+            )
             return Self.tokenError(.badRequest, "invalid_grant")
         }
 
@@ -313,6 +360,18 @@ struct MCPOAuthRoutes: Sendable {
         guard user.isInstructor else {
             grant.revoked = true
             try await grant.save(on: req.db)
+            await AuditLogger.record(
+                action: .mcpGrantRevoked,
+                targetType: .user,
+                targetID: grant.userID.uuidString,
+                metadata: [
+                    "username": user.username,
+                    "client_id": grant.clientID,
+                    "reason": "role_downgrade",
+                ],
+                actorOverride: user,
+                on: req
+            )
             return Self.tokenError(.badRequest, "invalid_grant")
         }
         // Rotate: issue a new refresh token and swap it in atomically, gated on
@@ -382,6 +441,15 @@ struct MCPOAuthRoutes: Sendable {
         // until an instructor/admin consents at /authorize.
         try await MCPOAuthClient(clientID: clientID, name: name, redirectURIs: redirects, isPublic: true)
             .save(on: req.db)
+        // Open registration is anonymous, but the new client is inert until an
+        // instructor consents — still worth a record of what was registered.
+        await AuditLogger.record(
+            action: .mcpClientRegistered,
+            targetType: .oauthClient,
+            targetID: clientID,
+            metadata: ["client_name": name, "redirect_uri_count": String(redirects.count)],
+            on: req
+        )
 
         let response = RegistrationResponse(
             clientID: clientID,
