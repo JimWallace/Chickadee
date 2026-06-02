@@ -1,11 +1,14 @@
 // APIServer/MCP/Tools/GetSuiteTool.swift
 //
-// Read tool: returns an assignment's test-suite structure by public ID — the
-// ordered items (hand-written scripts, generated pattern families, notebook
+// Read tool: returns an assignment's full test-suite definition by public ID —
+// the ordered items (hand-written scripts, generated pattern families, notebook
 // checks) with tier/points/dependencies/section, plus the section list.
 // content:read, course-scoped. Reuses the author-facing `buildSuitePayload`
-// (without a zip path, so raw script bodies are NOT included — this is a
-// structure view; editing the suite is a later phase).
+// *with* the test setup's zip path, so the response carries the complete
+// declarative state an instructor sees in the suite editor: raw script bodies
+// (`content`), each pattern family's full spec including every case's
+// args/expected (`family`), and notebook-check specs (`check`). This is the
+// same authoring content `GET /instructor/:id/suite` returns to the browser.
 
 import Core
 import Fluent
@@ -40,6 +43,19 @@ struct GetSuiteTool: ContentTool {
             let sectionID: String?
             /// The pattern-family id, for `kind == "family"` items.
             let familyID: String?
+            /// Raw hand-written script body, for `kind == "script"` items, read
+            /// from the test setup zip. Nil for generated family/check rows
+            /// (their source is derived from the spec) or if the file is absent.
+            let content: String?
+            /// Instructor hint for a hand-written script (`kind == "script"`).
+            let hint: String?
+            /// Full pattern-family spec — function, kind, paramNames, defaults,
+            /// variables, and every case's args/expected — for `kind ==
+            /// "family"` items. This is the source of truth the grader renders
+            /// into Python, so it reveals the exact values each case checks.
+            let family: PatternFamily?
+            /// Full notebook-check spec, for `kind == "check"` items.
+            let check: NotebookCheck?
         }
         let assignmentPublicID: String
         let sections: [Section]
@@ -48,10 +64,14 @@ struct GetSuiteTool: ContentTool {
 
     static let name = "get_suite"
     static let description =
-        "Get an assignment's test-suite structure by public ID: the ordered test items "
+        "Get an assignment's full test-suite definition by public ID: the ordered test items "
         + "(hand-written scripts, generated pattern families, notebook checks) with their tier "
         + "(public/release/secret/student), points, display name, dependencies, and section, plus "
-        + "the section list. Read-only — use this to inspect the suite before editing it."
+        + "the section list. Each item also carries its source of truth: hand-written scripts "
+        + "include their raw body (`content`) and `hint`; pattern families include the full spec "
+        + "(`family`) with every case's args and expected value; notebook checks include their "
+        + "spec (`check`). Read-only — use this to inspect exactly what each test checks (e.g. to "
+        + "explain why a submission lost points) before editing the suite."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -95,6 +115,27 @@ struct GetSuiteTool: ContentTool {
                         ]),
                         "sectionID": .object(["type": .string("string")]),
                         "familyID": .object(["type": .string("string")]),
+                        "content": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Raw hand-written script body (kind == \"script\"); absent for "
+                                    + "generated family/check rows."),
+                        ]),
+                        "hint": .object([
+                            "type": .string("string"),
+                            "description": .string("Instructor hint for a hand-written script."),
+                        ]),
+                        "family": .object([
+                            "type": .string("object"),
+                            "description": .string(
+                                "Full pattern-family spec (kind == \"family\"): function, kind, "
+                                    + "paramNames, defaults, variables, and every case's "
+                                    + "args/expected — the exact values each case checks."),
+                        ]),
+                        "check": .object([
+                            "type": .string("object"),
+                            "description": .string("Full notebook-check spec (kind == \"check\")."),
+                        ]),
                     ]),
                     "required": .array([
                         .string("kind"), .string("name"), .string("tier"), .string("points"),
@@ -120,8 +161,11 @@ struct GetSuiteTool: ContentTool {
                 tool: Self.name, detail: "The assignment's test setup could not be found.")
         }
 
-        // No zip path → metadata-only rows (raw script bodies omitted).
-        let payload = buildSuitePayload(fromManifest: setup.manifest)
+        // Pass the zip path so raw hand-written script bodies are filled in
+        // (generated family/check files are derived from their specs and need
+        // no body). This gives the agent the same complete authoring view the
+        // browser suite editor receives from `GET /instructor/:id/suite`.
+        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         // Section variables/expressions live on the manifest's section list,
         // not on the suite-payload DTO (which carries only id + name).
         let sectionInputs = Dictionary(
@@ -151,7 +195,11 @@ struct GetSuiteTool: ContentTool {
                 displayName: nil,
                 dependsOn: dto.dependsOn ?? family?.dependsOn ?? [],
                 sectionID: dto.sectionID,
-                familyID: family?.id)
+                familyID: family?.id,
+                content: nil,
+                hint: nil,
+                family: family,
+                check: nil)
         case "check":
             let check = dto.check
             return Output.Item(
@@ -162,7 +210,11 @@ struct GetSuiteTool: ContentTool {
                 displayName: nil,
                 dependsOn: dto.dependsOn ?? check?.dependsOn ?? [],
                 sectionID: dto.sectionID,
-                familyID: nil)
+                familyID: nil,
+                content: nil,
+                hint: nil,
+                family: nil,
+                check: check)
         default:
             let script = dto.script
             return Output.Item(
@@ -173,7 +225,11 @@ struct GetSuiteTool: ContentTool {
                 displayName: script?.displayName,
                 dependsOn: script?.dependsOn ?? [],
                 sectionID: dto.sectionID,
-                familyID: nil)
+                familyID: nil,
+                content: script?.content,
+                hint: script?.hint,
+                family: nil,
+                check: nil)
         }
     }
 }

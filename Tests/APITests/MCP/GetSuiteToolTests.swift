@@ -83,6 +83,42 @@ import Vapor
         }
     }
 
+    /// Manifest with a pattern family + its generated entry, so we can assert
+    /// the family's full spec (function, params, cases with args/expected) is
+    /// surfaced — this is what an agent needs to explain a submission's score.
+    private let familyManifest = #"""
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"publictest_tax_01.py","generatedBy":"tax","sectionID":"sec1"}],"patternFamilies":[{"id":"tax","name":"tax — boundary cases","kind":"boundary_equality","functionName":"tax","paramNames":["price"],"defaults":{"tier":"public","points":1},"cases":[{"key":"01","label":"tax(100)","args":[100],"expected":113.0,"enabled":true}]}],"sections":[{"id":"sec1","name":"Functions"}],"timeLimitSeconds":10}
+        """#
+
+    @Test func surfacesPatternFamilyCases() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(
+                on: app, id: "setup_fam", courseID: courseID, manifest: familyManifest)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_fam", courseID: courseID, title: "Lab")
+
+            let output = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+
+            let row = try #require(output.items.first { $0.kind == "family" })
+            #expect(row.familyID == "tax")
+            let family = try #require(row.family)
+            #expect(family.functionName == "tax")
+            #expect(family.paramNames == ["price"])
+            let testCase = try #require(family.cases.first)
+            #expect(testCase.key == "01")
+            #expect(testCase.label == "tax(100)")
+            #expect(testCase.args == [.int(100)])
+            // JSONValue normalises the whole-number literal 113.0 to .int(113).
+            #expect(testCase.expected == .int(113))
+        }
+    }
+
     @Test func deniesWhenSubjectNotEnrolled() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

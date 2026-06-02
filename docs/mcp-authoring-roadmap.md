@@ -28,7 +28,7 @@ tools, all `content:read` / `content:write` scoped and course-scoped:
 | `list_courses` | `content:read` | Courses the subject may act on |
 | `list_assignments` | `content:read` | A course's assignments (id, title, slug, open/closed, due date) |
 | `get_assignment` | `content:read` | One assignment's full detail |
-| `get_suite` | `content:read` | Test-suite structure (items, tiers, points, deps, sections) |
+| `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body, each family's full spec (cases' args/expected), and each notebook check's spec |
 | `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
 | `update_assignment` | `content:write` | Metadata: title, due date, open/close |
@@ -41,7 +41,8 @@ tools, all `content:read` / `content:write` scoped and course-scoped:
 In addition to tools, the server exposes **resources**: `resources/list` /
 `resources/read` surface each accessible assignment's raw `test.properties.json`
 manifest at `chickadee://assignment/<publicID>/manifest` (the verbatim authoring
-spec; `get_suite` is the structured view). See
+spec; `get_suite` is the structured view — and now carries the same full detail,
+including script bodies and pattern-family cases). See
 `Sources/APIServer/MCP/Resources/MCPResourceProvider.swift`.
 
 The legacy `update_assignment_title` tool folded into `update_assignment`.
