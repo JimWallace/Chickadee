@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.327] - 2026-06-02
+
+### Added
+
+- **Notebook reset on the course-student submissions page.** The existing
+  "reset working-copy notebook to starter" action is now surfaced on the
+  per-student course submissions page alongside the per-row retest and
+  extension controls, via a course-scoped
+  `POST /:courseCode/students/:urlToken/assignments/:assignmentID/reset-notebook`
+  handler that redirects back to the same page.
+
+### Fixed
+
+- **Suite editor preserves dependencies when moving a test across sections.**
+  Dragging a test into a different section previously cleared its `dependsOn`
+  and stranded any tests depending on it in the old section, breaking the
+  dependency graph. Cross-section drops now move the whole connected
+  dependency cluster (transitive dependents + prerequisites) as a contiguous
+  block into the target section, preserving each member's `dependsOn` and
+  their topologically valid relative order. Same-section reorder is unchanged.
+
+### Added
+
+- **Per-student grade override with BrightSpace sync.** Instructors can set a
+  whole-number percent override on the grouped per-student submissions page
+  (`/:courseCode/students/:urlToken/submissions`), keyed on
+  (test setup, user). The override takes precedence over the runner-assigned
+  best grade both in the page and in the BrightSpace grade sweep, where it is
+  converted to points against the suite's total possible points. Setting or
+  clearing an override re-flags the student's results as sync-pending so
+  BrightSpace re-pushes.
+
+
 ## [0.4.326] - 2026-06-01
 
 ### Added
