@@ -62,6 +62,9 @@ struct InstructorStudentsContext: Encodable {
     let enrolledStudentCount: Int
     let courseEnrollmentMode: String
     let courseIsArchived: Bool
+    /// True when BrightSpace is configured on the server AND the active course
+    /// is linked to a LEARN org unit — gates the "Check against LEARN" button.
+    let brightspaceLinkAvailable: Bool
 }
 
 /// BrightSpace tab (`GET /instructor/brightspace`): connection status, the

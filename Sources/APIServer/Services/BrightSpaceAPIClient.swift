@@ -63,6 +63,7 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible {
     case whoamiFailed(status: Int)
     case orgUnitLookupFailed(orgUnitID: String, status: Int)
     case gradeObjectsFetchFailed(orgUnitID: String, status: Int)
+    case classlistFetchFailed(orgUnitID: String, status: Int)
 
     var description: String {
         switch self {
@@ -82,6 +83,8 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible {
             return "BrightSpace org unit lookup for '\(id)' failed (HTTP \(s))"
         case .gradeObjectsFetchFailed(let id, let s):
             return "BrightSpace grade-objects fetch for org unit '\(id)' failed (HTTP \(s))"
+        case .classlistFetchFailed(let id, let s):
+            return "BrightSpace classlist fetch for org unit '\(id)' failed (HTTP \(s))"
         }
     }
 }
@@ -107,6 +110,14 @@ struct BrightSpaceGradeObject: Content, Sendable {
     let id: String
     let name: String
     let maxPoints: Double?
+}
+
+/// One member of a course's LEARN classlist, reduced to the identity fields
+/// Chickadee can match a roster entry against.  `orgDefinedID` is the student
+/// number (matches `APIUser.studentID`); `username` is the D2L login name.
+struct BrightSpaceClasslistEntry: Content, Sendable {
+    let orgDefinedID: String?
+    let username: String?
 }
 
 // MARK: - Client
@@ -312,6 +323,42 @@ actor BrightSpaceAPIClient {
         let decoded = try response.content.decode([GradeObjectResponse].self)
         return decoded.map {
             BrightSpaceGradeObject(id: String($0.id), name: $0.name, maxPoints: $0.maxPoints)
+        }
+    }
+
+    // MARK: - Classlist (roster reconciliation)
+
+    /// Fetches the org unit's current classlist so the Chickadee roster can be
+    /// reconciled against LEARN.  Withdrawn / dropped students do not appear in
+    /// the classlist, which is the signal the Students tab uses to flag stale
+    /// enrollments for manual removal.
+    func fetchClasslist(
+        orgUnitID: String, on application: Application
+    ) async throws
+        -> [BrightSpaceClasslistEntry]
+    {
+        guard !orgUnitID.isEmpty else { return [] }
+        let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
+        let rawURL = "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(encoded)/classlist/"
+        let url = signed(url: rawURL, method: "GET")
+        let response = try await application.client.get(URI(string: url))
+        guard response.status == .ok else {
+            throw BrightSpaceSyncError.classlistFetchFailed(
+                orgUnitID: orgUnitID, status: Int(response.status.code))
+        }
+        // D2L returns a JSON array of ClasslistUser objects; we keep only the
+        // two identity fields we match on.
+        struct ClasslistUserResponse: Decodable {
+            let orgDefinedId: String?
+            let username: String?
+            enum CodingKeys: String, CodingKey {
+                case orgDefinedId = "OrgDefinedId"
+                case username = "Username"
+            }
+        }
+        let decoded = try response.content.decode([ClasslistUserResponse].self)
+        return decoded.map {
+            BrightSpaceClasslistEntry(orgDefinedID: $0.orgDefinedId, username: $0.username)
         }
     }
 }

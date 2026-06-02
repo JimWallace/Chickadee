@@ -27,6 +27,12 @@ Students
     </form>
     <a class="btn action-btn" href="/instructor/enroll-csv">Enrol from CSV</a>
     #endif
+    #if(brightspaceLinkAvailable):
+    <button type="button" class="btn action-btn" id="learn-check-btn"
+            title="Flag enrolled students who are no longer on the LEARN classlist">Check against LEARN</button>
+    <span id="learn-check-status" role="status" aria-live="polite"
+          style="font-size:.8rem;color:var(--gray-500)"></span>
+    #endif
     #endif
     <input id="enrolled-filter" class="form-input" type="search" autocomplete="off"
            placeholder="Filter by name or username…"
@@ -48,6 +54,7 @@ Students
     <tbody>
     #for(student in enrolledStudents):
         <tr class="student-row-link#if(student.isPending): student-row-pending#endif"
+            data-student-id="#(student.id)"
             #if(!student.isPending):data-href="#(student.submissionsURL)"#endif>
             <td>
                 #if(student.isPending):
@@ -103,6 +110,19 @@ Students
 .student-row-link:hover td a strong,
 .student-row-link:hover td a code {
     text-decoration: underline;
+}
+.learn-flag {
+    display: inline-block;
+    font-size: .68rem;
+    font-weight: 600;
+    color: #b42318;
+    background: rgba(180, 35, 24, .08);
+    border: 1px solid rgba(180, 35, 24, .25);
+    border-radius: 4px;
+    padding: .05rem .3rem;
+    margin-left: .4rem;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 </style>
 <script>
@@ -189,6 +209,7 @@ Students
         }
 
         return '<tr class="student-row-link' + (student.isPending ? ' student-row-pending' : '') + '"'
+            + ' data-student-id="' + escapeHtml(student.id) + '"'
             + (student.isPending ? '' : ' data-href="' + subURL + '"') + '>'
             + '<td>' + nameCell + '</td>'
             + '<td>' + userCell + '</td>'
@@ -236,6 +257,60 @@ Students
         });
     }
 
+    // ── LEARN classlist reconciliation ───────────────────────────────
+    // After a "Check against LEARN" run, rows whose student is no longer on
+    // the LEARN classlist get a "not registered on LEARN" badge.  The id set
+    // is kept in memory so the badges survive the 5s poll repaint.
+    var learnNotOnLearn = new Set();
+    var learnBtn = document.getElementById('learn-check-btn');
+    var learnStatus = document.getElementById('learn-check-status');
+
+    function applyLearnFlags() {
+        Array.from(tbody.querySelectorAll('tr')).forEach(function (row) {
+            var nameCell = row.cells[0];
+            if (!nameCell) return;
+            var existing = nameCell.querySelector('.learn-flag');
+            if (existing) existing.remove();
+            var id = row.getAttribute('data-student-id');
+            if (id && learnNotOnLearn.has(id)) {
+                var span = document.createElement('span');
+                span.className = 'learn-flag';
+                span.textContent = 'not registered on LEARN';
+                span.title = 'Not on the LEARN classlist — remove if confirmed dropped';
+                nameCell.appendChild(span);
+            }
+        });
+    }
+
+    async function checkAgainstLearn() {
+        if (learnBtn) learnBtn.disabled = true;
+        if (learnStatus) learnStatus.textContent = 'Checking against LEARN…';
+        try {
+            var res = await fetch('/instructor/students/learn-check', {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            });
+            if (res.redirected || res.status === 401 || res.status === 403) {
+                window.location.reload();
+                return;
+            }
+            if (!res.ok) {
+                if (learnStatus) learnStatus.textContent = 'LEARN check failed (HTTP ' + res.status + ').';
+                return;
+            }
+            var data = await res.json();
+            learnNotOnLearn = new Set(Array.isArray(data.notOnLearn) ? data.notOnLearn : []);
+            applyLearnFlags();
+            if (learnStatus) learnStatus.textContent = data.message || '';
+        } catch (_) {
+            if (learnStatus) learnStatus.textContent = 'LEARN check failed (network error).';
+        } finally {
+            if (learnBtn) learnBtn.disabled = false;
+        }
+    }
+
+    if (learnBtn) learnBtn.addEventListener('click', checkAgainstLearn);
+
     table.querySelectorAll('th.sortable').forEach(function (th) {
         th.addEventListener('click', function () {
             var col = parseInt(th.getAttribute('data-col'), 10);
@@ -279,12 +354,14 @@ Students
         sortRows();
         applyFilter();
         updateEmptyState();
+        applyLearnFlags();
     }
 
     // ── Initial paint ────────────────────────────────────────────────
     applyRelativeTimes(document);
     sortRows();
     updateEmptyState();
+    applyLearnFlags();
 
     // ── Auto-refresh ─────────────────────────────────────────────────
     // Poll /instructor/students-data every few seconds so last-seen times
