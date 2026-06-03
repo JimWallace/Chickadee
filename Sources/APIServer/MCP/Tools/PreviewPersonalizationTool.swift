@@ -131,7 +131,7 @@ struct PreviewPersonalizationTool: ContentTool {
         let resolution = await PersonalizationSubstitution.resolve(
             manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir)
 
-        let placeholders = Self.placeholderAudit(manifest: manifest, setup: setup, resolution: resolution)
+        let placeholders = Self.placeholderAudit(setup: setup, resolution: resolution)
         let values = resolution.substitutions
             .map { Output.ResolvedValue(name: $0.key, value: $0.value) }
             .sorted { $0.name < $1.name }
@@ -172,11 +172,16 @@ struct PreviewPersonalizationTool: ContentTool {
     }
 
     private static func placeholderAudit(
-        manifest: TestProperties, setup: APITestSetup, resolution: PersonalizationSubstitution.Resolution
+        setup: APITestSetup, resolution: PersonalizationSubstitution.Resolution
     ) -> Output.Placeholders {
-        guard let starterName = manifest.starterNotebook,
-            let notebookData = extractZipEntry(zipPath: setup.zipPath, entryName: starterName)
-        else {
+        // Read the notebook the student actually opens. `notebookData(for:)`
+        // prefers the standalone `notebookPath` blob — what `update_notebook`,
+        // the editor, and the student first-open path all use — and only falls
+        // back to the zip's starter entry. The previous zip-only read missed
+        // markers in notebooks edited via the MCP `update_notebook` path (which
+        // writes `notebookPath`, not the zip entry), so the audit under-reported
+        // `used` even though substitution worked at first-open.
+        guard let notebookData = try? notebookData(for: setup) else {
             return Output.Placeholders(used: [], unresolved: [])
         }
         let used = NotebookSubstitution.placeholderNames(in: notebookData)
