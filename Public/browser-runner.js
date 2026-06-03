@@ -938,7 +938,7 @@ def load_student_module():
     return modules.get(_loaded_student_order[0])
 
 
-def student_source() -> str:
+def student_source_raw() -> str:
     hint = Path(".chickadee_student_source")
     try:
         if hint.exists():
@@ -959,7 +959,7 @@ def student_source() -> str:
 
 
 def student_cell_sources() -> List[Any]:
-    source = student_source()
+    source = student_source_raw()
     chunks: List[Any] = []
     label = "module"
     lines: List[str] = []
@@ -993,6 +993,23 @@ def student_ast(skipped: Optional[List[Any]] = None) -> Any:
             continue
         module.body.extend(node.body)
     return module
+
+
+def student_source() -> str:
+    import ast
+    parts: List[str] = []
+    dropped = False
+    for label, chunk in student_cell_sources():
+        if chunk.strip():
+            try:
+                ast.parse(chunk)
+            except SyntaxError:
+                dropped = True
+                continue
+        parts.append(f"# --- {label} ---\\n{chunk}")
+    if not dropped or not parts:
+        return student_source_raw()
+    return "\\n\\n".join(parts) + "\\n"
 
 
 def require_function(name: str, num_args: Optional[int] = None):

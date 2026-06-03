@@ -207,7 +207,13 @@ let testRuntimePy = """
         return modules.get(_loaded_student_order[0])
 
 
-    def student_source() -> str:
+    def student_source_raw() -> str:
+        # The full introspectable student source, exactly as the extractor wrote
+        # it (every cell, including any that do not parse). Written to a sidecar
+        # named by the `.chickadee_student_source` hint (both runners share one
+        # extractor); falls back to inspect.getsource on the loaded module. Use
+        # this for raw text inspection; use student_source() / student_ast() for
+        # parse-based checks.
         hint = Path(".chickadee_student_source")
         try:
             if hint.exists():
@@ -228,11 +234,11 @@ let testRuntimePy = """
 
 
     def student_cell_sources() -> List[Any]:
-        # Split student_source() into (label, source) chunks on the
+        # Split the raw student source into (label, source) chunks on the
         # `# --- cell N ---` markers the notebook extractor writes between cells,
         # so each notebook cell can be parsed on its own. A raw .py submission has
         # no markers and yields a single ("module", source) chunk.
-        source = student_source()
+        source = student_source_raw()
         chunks: List[Any] = []
         label = "module"
         lines: List[str] = []
@@ -272,6 +278,29 @@ let testRuntimePy = """
                 continue
             module.body.extend(node.body)
         return module
+
+
+    def student_source() -> str:
+        # Best-effort *parseable* introspectable source: like student_source_raw(),
+        # but any single cell that does not parse on its own is dropped, so callers
+        # that do `ast.parse(student_source())` are not blinded by one non-Python
+        # cell (e.g. a Markdown cell saved as a code cell). When nothing needs
+        # dropping the raw source is returned verbatim. Use student_source_raw()
+        # for the unfiltered text.
+        import ast
+        parts: List[str] = []
+        dropped = False
+        for label, chunk in student_cell_sources():
+            if chunk.strip():
+                try:
+                    ast.parse(chunk)
+                except SyntaxError:
+                    dropped = True
+                    continue
+            parts.append(f"# --- {label} ---\\n{chunk}")
+        if not dropped or not parts:
+            return student_source_raw()
+        return "\\n\\n".join(parts) + "\\n"
 
 
     def require_function(name: str, num_args: Optional[int] = None):
