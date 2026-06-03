@@ -198,6 +198,14 @@ shared Swift, compiled once.
   plugin from `wasm/`). Output is vendored under `Public/runner-wasm/`, like
   Pyodide / CodeMirror — so CI and contributors need no wasm SDK; rebuild only
   when `RunnerCore` or the bridge changes.
+- **CI re-vendors automatically (closes the drift gap).** The
+  `runner-wasm-vendor` workflow rebuilds and commits the artifact on `main`
+  whenever the wasm build inputs change, so a `RunnerCore` fix can't reach the
+  native worker while the browser keeps grading stale logic (the #801 failure
+  mode). Drift is gated by `scripts/runnercore-source-hash.sh` vs the recorded
+  `Public/runner-wasm/source.sha`; the SDK source is pinned in `wasm/wasm-sdk.pin`.
+  Prod ships the fresh artifact on the next tag (one-release lag). Contributors
+  still don't need the wasm SDK — the gate just skips when inputs are unchanged.
 - `wasm/.build` is excluded from SwiftLint (it would otherwise lint vendored
   JavaScriptKit checkouts).
 
