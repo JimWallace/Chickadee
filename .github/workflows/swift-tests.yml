@@ -314,7 +314,11 @@ jobs:
           key: ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install worker test dependencies
-        run: apt-get update -qq && apt-get install -y --no-install-recommends file
+        # `file` backs SubmissionNormalizer's MIME detection; `python3` runs the
+        # real local HTTP servers (LocalHTTPTestServer) and notebook probes in
+        # WorkerDaemonTests / NotebookExtractorTests, which otherwise fail (not
+        # skip) when the interpreter is absent.
+        run: apt-get update -qq && apt-get install -y --no-install-recommends file python3
 
       - name: Run WorkerTests
         run: |
