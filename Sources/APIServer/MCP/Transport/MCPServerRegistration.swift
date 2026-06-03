@@ -17,6 +17,7 @@ enum MCPToolCatalog {
     static var live: ToolRegistry {
         ToolRegistry([
             ListCoursesTool().erased(),
+            GetServerInfoTool().erased(),
             ListAssignmentsTool().erased(),
             GetAssignmentTool().erased(),
             GetSuiteTool().erased(),
