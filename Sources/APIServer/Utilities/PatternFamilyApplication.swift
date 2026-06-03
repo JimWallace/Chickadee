@@ -180,6 +180,16 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // flow straight into the manifest write.
     let resolvedGlobalExpressions: [PersonalizationExpression] =
         globalExpressions ?? props.globalExpressions
+
+    // Per-student personalization input names (global + section `=`
+    // expressions).  The renderer uses this set to tell a `$name` arg / an
+    // `expectedVarRef` that resolves to a per-student value — loaded from
+    // `_ck_inputs.py` at grading time — apart from one naming a literal
+    // variable (prepended at save time).
+    let perStudentExpressionNames: Set<String> = Set(
+        resolvedGlobalExpressions.map(\.name)
+            + resolvedSections.flatMap { $0.expressions.map(\.name) }
+    )
     var seenSectionIDs: Set<String> = []
     for s in resolvedSections {
         guard seenSectionIDs.insert(s.id).inserted else {
@@ -367,7 +377,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         testSuites: authoredAsTestSuites,
         sections: resolvedSections,
         familySectionID: familySectionIDForValidation,
-        globalVariableNames: Set(resolvedGlobalVariables.map(\.name))
+        globalVariableNames: Set(resolvedGlobalVariables.map(\.name)),
+        perStudentExpressionNames: perStudentExpressionNames
     )
     try validateNotebookChecks(
         resolvedChecks,
@@ -458,7 +469,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     var renderedByFilename: [String: GeneratedScript] = [:]
     for family in nextFamilies {
         for generated in renderPatternFamily(
-            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables)
+            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables,
+            perStudentNames: perStudentExpressionNames)
         {
             renderedByFilename[generated.filename] = generated
         }
@@ -617,7 +629,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
             emittedFamilyIDs.insert(fid)
             let inherited = expandDeps(family.dependsOn)
             for generated in renderPatternFamily(
-                family, sectionVariables: sectionVars(forFamily: fid), globalVariables: resolvedGlobalVariables)
+                family, sectionVariables: sectionVars(forFamily: fid), globalVariables: resolvedGlobalVariables,
+                perStudentNames: perStudentExpressionNames)
             {
                 order += 1
                 let prior = oldEntryByScript[generated.filename]
@@ -670,7 +683,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
         let inherited = expandDeps(family.dependsOn)
         for generated in renderPatternFamily(
-            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables)
+            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables,
+            perStudentNames: perStudentExpressionNames)
         {
             order += 1
             let prior = oldEntryByScript[generated.filename]

@@ -37,7 +37,8 @@ struct GeneratedScript: Equatable {
 func renderPatternFamily(
     _ family: PatternFamily,
     sectionVariables: [FamilyVariable] = [],
-    globalVariables: [FamilyVariable] = []
+    globalVariables: [FamilyVariable] = [],
+    perStudentNames: Set<String> = []
 ) -> [GeneratedScript] {
     // Pre-combine globals and section vars into a single "scope" list so the
     // existing render-* helpers stay parameterised on a single prepend list.
@@ -50,7 +51,8 @@ func renderPatternFamily(
         guard c.enabled else { return nil }
         return renderCase(
             family: family, case: c,
-            sectionVariables: scopeVariables, specHash: hash)
+            sectionVariables: scopeVariables, specHash: hash,
+            perStudentNames: perStudentNames)
     }
 }
 
@@ -102,11 +104,13 @@ private func renderCase(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
-    specHash: String
+    specHash: String,
+    perStudentNames: Set<String>
 ) -> GeneratedScript {
     let source = patternKindHandler(for: family.kind).render(
         family: family, case: c,
-        sectionVariables: sectionVariables, specHash: specHash)
+        sectionVariables: sectionVariables, specHash: specHash,
+        perStudentNames: perStudentNames)
 
     let tier = c.resolvedTier(defaults: family.defaults)
     return GeneratedScript(
@@ -259,16 +263,81 @@ private func generatedCaseHeader(family: PatternFamily, case c: PatternCase, spe
 // results-display time (see the `hintByFilename` join in
 // `WebRoutes+Submission.swift`), decoupled from the test script.
 
+// MARK: - Personalization (per-student inputs)
+
+/// The Python expression assigned to `expected` in a generated equality case:
+/// a bare identifier when the case pins `expectedVarRef` (bound from a
+/// per-student `_ck_inputs` value), otherwise the baked literal.
+func expectedExpression(for c: PatternCase) -> String {
+    if let ref = c.expectedVarRef, !ref.isEmpty { return ref }
+    return c.expected.pythonLiteral
+}
+
+/// Names referenced by this case — arg `$name` refs plus the expected ref —
+/// that name a per-student `=` expression (vs. a literal variable).  Sorted +
+/// deduped so generated output is deterministic.
+private func perStudentRefsForCase(_ c: PatternCase, perStudentNames: Set<String>) -> [String] {
+    guard !perStudentNames.isEmpty else { return [] }
+    var names = Set<String>()
+    for ref in c.argVarRefs.compactMap({ $0 }) where perStudentNames.contains(ref) {
+        names.insert(ref)
+    }
+    if let ref = c.expectedVarRef, perStudentNames.contains(ref) { names.insert(ref) }
+    return names.sorted()
+}
+
+/// The per-student input preamble for a generated case, or "" when the case
+/// references no per-student expressions.  Loads `_ck_inputs.py` (written by
+/// the runner from the job's resolved values) by path — so it works
+/// regardless of sys.path — fails the test closed with a clear message when a
+/// value is missing (e.g. no assignment seed), then binds each referenced name
+/// as a module-level global the case body uses by bare identifier.
+private func personalizationPreambleForCase(
+    _ c: PatternCase, perStudentNames: Set<String>
+) -> String {
+    let names = perStudentRefsForCase(c, perStudentNames: perStudentNames)
+    guard !names.isEmpty else { return "" }
+    let keyItems = names.map { "\"\(escapeForPythonStringLiteral($0))\"" }
+    let keyTuple = names.count == 1 ? "(\(keyItems[0]),)" : "(\(keyItems.joined(separator: ", ")))"
+    let bindings =
+        names
+        .map { "\($0) = _ck[\"\(escapeForPythonStringLiteral($0))\"]" }
+        .joined(separator: "\n")
+    return """
+        # Per-student personalization inputs, resolved at grading time from the
+        # assignment seed (see _ck_inputs.py, written by the runner).  Do not edit.
+        import importlib.util as _ck_ilu, os as _ck_os
+        _ck = {}
+        if _ck_os.path.exists("_ck_inputs.py"):
+            _ck_spec = _ck_ilu.spec_from_file_location("_ck_inputs", "_ck_inputs.py")
+            _ck_mod = _ck_ilu.module_from_spec(_ck_spec)
+            _ck_spec.loader.exec_module(_ck_mod)
+            _ck = getattr(_ck_mod, "_ck", {})
+        for _ck_k in \(keyTuple):
+            if _ck_k not in _ck:
+                failed(f"Personalization input '{_ck_k}' is unavailable — is the assignment seed set?")
+        \(bindings)
+        """
+}
+
 func renderBoundaryEquality(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
-    specHash: String
+    specHash: String,
+    perStudentNames: Set<String> = []
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
     let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
+
+    // Per-student inputs (arg refs + the expected ref that resolve to a
+    // global/section `=` expression) are bound at grading time from
+    // `_ck_inputs.py`; see personalizationPreambleForCase.
+    let preamble = personalizationPreambleForCase(c, perStudentNames: perStudentNames)
+    let preambleBlock = preamble.isEmpty ? "" : preamble + "\n\n"
+    let expectedExpr = expectedExpression(for: c)
 
     // The `# Test:` line comes FIRST so test_runtime's _first_comment_label()
     // picks up the case label.  Provenance comes second — a reader opening
@@ -277,8 +346,8 @@ func renderBoundaryEquality(
     return """
         \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
-        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-        expected = \(c.expected.pythonLiteral)
+        \(preambleBlock)\(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        expected = \(expectedExpr)
 
         try:
             result = student_module.\(family.functionName)(\(ctx.callArgs))

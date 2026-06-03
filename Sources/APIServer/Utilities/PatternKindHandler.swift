@@ -31,7 +31,8 @@ protocol PatternKindHandler: Sendable {
     /// `render*` function in `PatternFamilyRenderer.swift`.
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String
 
     /// Family-level validation (e.g. tolerance bounds).  Default: no-op.
@@ -86,9 +87,12 @@ private func validatePatternArgCount(
 struct BoundaryEqualityKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
-        renderBoundaryEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
+        renderBoundaryEquality(
+            family: family, case: c, sectionVariables: sectionVariables,
+            specHash: specHash, perStudentNames: perStudentNames)
     }
 
     func validateCase(family: PatternFamily, case c: PatternCase) throws {
@@ -101,7 +105,8 @@ struct BoundaryEqualityKind: PatternKindHandler {
 struct ApproximateEqualityKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderApproximateEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -126,7 +131,8 @@ struct VariableEqualityKind: PatternKindHandler {
 
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderVariableEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -168,7 +174,8 @@ struct VariableEqualityKind: PatternKindHandler {
 struct ReturnTypeCheckKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderReturnTypeCheck(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -192,7 +199,8 @@ struct ReturnTypeCheckKind: PatternKindHandler {
 struct ExceptionExpectedKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderExceptionExpected(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -216,7 +224,8 @@ struct ExceptionExpectedKind: PatternKindHandler {
 struct PerformanceThresholdKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderPerformanceThreshold(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -245,7 +254,8 @@ struct PerformanceThresholdKind: PatternKindHandler {
 struct StdoutEqualityKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderStdoutEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }

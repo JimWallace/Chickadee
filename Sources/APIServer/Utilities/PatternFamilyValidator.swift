@@ -42,7 +42,8 @@ private func validatePatternCaseHeader(
 private func validateFamilyVariablesAndArgRefs(
     family: PatternFamily,
     sectionVarNamesHere: Set<String>,
-    globalVarNames: Set<String>
+    globalVarNames: Set<String>,
+    perStudentExpressionNames: Set<String>
 ) throws {
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
@@ -69,22 +70,48 @@ private func validateFamilyVariablesAndArgRefs(
         for (i, maybeRef) in c.argVarRefs.enumerated() {
             guard let ref = maybeRef else { continue }
             // A `$name` ref resolves if the family declares the variable,
-            // the family's home section does, OR it's an assignment-scope
-            // global input.  The renderer puts all three in scope
-            // (`globalVariables + sectionVariables + family.variables`), so
-            // accepting them here matches what actually renders — only
-            // "declared in none of the three" is an error.  (Globals were
-            // previously omitted from this set, which rejected the documented
-            // `$global` worked example in docs/inputs.md.)
-            guard
+            // the family's home section does, it's an assignment-scope
+            // global input, OR it's a per-student `=` expression (global or
+            // section).  Literal refs are inlined at save time; per-student
+            // refs are bound at grading time from `_ck_inputs.py`.  Only
+            // "declared in none of these" is an error.
+            let isPerStudent = perStudentExpressionNames.contains(ref)
+            let isLiteralVar =
                 seenVarNames.contains(ref) || sectionVarNamesHere.contains(ref)
-                    || globalVarNames.contains(ref)
-            else {
+                || globalVarNames.contains(ref)
+            guard isPerStudent || isLiteralVar else {
                 let paramLabel = (i < family.paramNames.count ? family.paramNames[i] : "arg \(i + 1)")
                 throw Abort(
                     .unprocessableEntity,
                     reason:
                         "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'"
+                )
+            }
+            // Per-student arg refs are bound by the boundary_equality
+            // preamble only (the other kinds don't emit it yet).
+            if isPerStudent, family.kind != .boundaryEquality {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': case '\(c.key)' references per-student input '$\(ref)', which is only supported in boundary_equality families for now."
+                )
+            }
+        }
+        // A per-student expected ref must name a declared `=` expression and
+        // is (for now) supported only in boundary_equality families.
+        if let eref = c.expectedVarRef {
+            guard perStudentExpressionNames.contains(eref) else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': case '\(c.key)' expected reference '$\(eref)' must name a per-student input (a global or section `=` expression)."
+                )
+            }
+            guard family.kind == .boundaryEquality else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': case '\(c.key)' uses a per-student expected, which is only supported in boundary_equality families for now."
                 )
             }
         }
@@ -163,7 +190,8 @@ func validatePatternFamilies(
     testSuites: [TestSuiteEntry],
     sections: [TestSuiteSection] = [],
     familySectionID: [String: String] = [:],
-    globalVariableNames: Set<String> = []
+    globalVariableNames: Set<String> = [],
+    perStudentExpressionNames: Set<String> = []
 ) throws {
     // v0.4.100: build a "extra names in scope for this family" set so
     // each family can reference its home section's variables too.
@@ -216,7 +244,8 @@ func validatePatternFamilies(
         try validateFamilyVariablesAndArgRefs(
             family: family,
             sectionVarNamesHere: sectionVarNames(forFamily: family.id),
-            globalVarNames: globalVariableNames
+            globalVarNames: globalVariableNames,
+            perStudentExpressionNames: perStudentExpressionNames
         )
     }
 

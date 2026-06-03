@@ -549,6 +549,28 @@ extension WorkerDaemon {
             scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
         }
 
+        // Materialize per-student personalization inputs (issue #461) into the
+        // grading workspace as `_ck_inputs.py`, so generated pattern-family
+        // scripts that reference per-student args / expected can load them by
+        // path. Each value is already a Python literal (`repr`) resolved
+        // server-side. The filename is reserved (excluded from student-module
+        // candidates in test_runtime), so it can't be mistaken for the
+        // submission.
+        if let inputs = job.personalizedInputs, !inputs.isEmpty {
+            var lines = [
+                "# Auto-generated per-student grading inputs (issue #461). Do not edit.",
+                "_ck = {",
+            ]
+            for key in inputs.keys.sorted() {
+                lines.append("    \"\(key)\": \(inputs[key] ?? "None"),")
+            }
+            lines.append("}")
+            let source = lines.joined(separator: "\n") + "\n"
+            try? source.write(
+                to: testSetupDir.appendingPathComponent("_ck_inputs.py"),
+                atomically: true, encoding: .utf8)
+        }
+
         let executor = NativeScriptExecutor(runner: runner, workDir: testSetupDir, env: scriptEnv)
         let items = manifest.testSuites.map { entry in
             SuiteItem(

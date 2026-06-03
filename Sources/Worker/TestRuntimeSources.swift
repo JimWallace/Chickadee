@@ -101,7 +101,7 @@ let testRuntimePy = """
         files: List[Path] = []
         for p in cwd.glob("*.py"):
             name = p.name
-            if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py"}:
+            if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py", "_ck_inputs.py"}:
                 continue
             lower = name.lower()
             if lower.startswith("publictest") or lower.startswith("secrettest") or lower.startswith("releasetest"):

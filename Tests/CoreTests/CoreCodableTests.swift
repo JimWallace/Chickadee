@@ -228,6 +228,50 @@ struct CoreCodableTests {
         #expect(decoded.submissionFilename == nil)
     }
 
+    @Test func jobPersonalizedInputsRoundTrip() throws {
+        let manifest = try decoder.decode(
+            TestProperties.self,
+            from: Data(#"{ "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 }"#.utf8))
+        let job = Job(
+            submissionID: "s", testSetupID: "t", attemptNumber: 1,
+            submissionURL: testURL("http://localhost/a"),
+            testSetupURL: testURL("http://localhost/b"),
+            manifest: manifest,
+            assignmentSeed: "deadbeef",
+            personalizedInputs: ["patients": "[{'mrn': '1'}]", "adults_expected": "2"])
+        let decoded = try decoder.decode(Job.self, from: encoder.encode(job))
+        #expect(decoded.personalizedInputs?["patients"] == "[{'mrn': '1'}]")
+        #expect(decoded.personalizedInputs?["adults_expected"] == "2")
+        #expect(decoded.assignmentSeed == "deadbeef")
+    }
+
+    @Test func jobWithoutPersonalizedInputsDecodesNil() throws {
+        // Back-compat: a payload from an older server omits the new fields.
+        let json = #"""
+            { "submissionID": "s", "testSetupID": "t", "attemptNumber": 1,
+              "submissionURL": "http://localhost/a", "testSetupURL": "http://localhost/b",
+              "manifest": { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 } }
+            """#
+        let decoded = try decoder.decode(Job.self, from: Data(json.utf8))
+        #expect(decoded.personalizedInputs == nil)
+        #expect(decoded.assignmentSeed == nil)
+    }
+
+    @Test func patternCaseExpectedVarRefRoundTrip() throws {
+        let c = PatternCase(
+            key: "01", label: "Adults", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "adults_expected")
+        let decoded = try decoder.decode(PatternCase.self, from: encoder.encode(c))
+        #expect(decoded.expectedVarRef == "adults_expected")
+        #expect(decoded.argVarRefs == ["patients"])
+    }
+
+    @Test func patternCaseWithoutExpectedVarRefDecodesNil() throws {
+        let json = #"{ "key": "01", "label": "L", "args": [1], "expected": 2 }"#
+        let decoded = try decoder.decode(PatternCase.self, from: Data(json.utf8))
+        #expect(decoded.expectedVarRef == nil)
+    }
+
     @Test func runnerSanitizedStripsPatternFamilies() throws {
         let family = PatternFamily(
             id: "bmi",
