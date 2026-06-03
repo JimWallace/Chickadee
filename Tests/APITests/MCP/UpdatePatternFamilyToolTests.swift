@@ -117,6 +117,61 @@ import Vapor
         }
     }
 
+    @Test func setsPerStudentExpectedVarRefAndClearsOnLiteralEdit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // Seed the family AND a global `=` expression the case can reference.
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            let setup = try await makeTestSetup(
+                on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
+            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await applyPatternFamilies(
+                to: setup, nextFamilies: [pfBMIFamily()],
+                authoredItems: [.family(id: "bmi_category", sectionID: nil)],
+                globalExpressions: [PersonalizationExpression(name: "exp_val", expression: "seed % 5")],
+                on: app.db)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_pf", courseID: courseID, title: "Lab")
+
+            // Point case 01's expected at the per-student expression.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", expectedVarRef: "exp_val")]),
+                context(app))
+            var family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.cases.first { $0.key == "01" }?.expectedVarRef == "exp_val")
+
+            // Editing to a literal expected clears the per-student ref.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", expected: .string("normal"))]),
+                context(app))
+            family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.cases.first { $0.key == "01" }?.expectedVarRef == nil)
+            #expect(family.cases.first { $0.key == "01" }?.expected == .string("normal"))
+        }
+    }
+
+    @Test func rejectsExpectedVarRefToUndeclaredExpression() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // Fixture has no global expressions, so "nope" resolves to nothing.
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", expectedVarRef: "nope")]),
+                    context(app))
+            }
+        }
+    }
+
     @Test func wrongArgCountThrows() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
