@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.338] - 2026-06-03
+
+### Changed
+
+- **Browser-graded results are grouped by section.** The in-browser results
+  shown after a student submits a notebook (`notebook.js`) and after an
+  instructor validates a solution (`assignment-validate.js`) now render one
+  table per test-suite section with an `<h3>` heading, matching the
+  server-rendered submission view. The browser runner stamps each outcome with
+  its manifest entry's `sectionID` (index correlation, mirroring the server's
+  `groupOutcomesBySection`) and exposes a shared `BrowserRunner.groupBySection`
+  helper; outcomes with no/unknown section fall into a trailing "Ungrouped"
+  block, and assignments without sections render as a single flat table exactly
+  as before. The `.submission-section-block` / `.submission-section-heading`
+  styles moved into the global stylesheet so all three views share them.
+
+
+## [0.4.337] - 2026-06-03
+
+### Changed
+
+- **Instructor student-submissions view: Reset button separated from Re-test.**
+  On the per-student course submissions page the destructive "Reset working
+  notebook" action sat directly beside "Re-test" with identical styling, an
+  easy mis-click. Reset now renders with the `action-danger` treatment used for
+  Delete/Remove elsewhere and moves to the rightmost position in the row, with
+  the Extension and Grade-override controls between it and Re-test.
+
+
 ## [0.4.336] - 2026-06-03
 
 ### Added

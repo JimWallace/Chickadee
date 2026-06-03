@@ -55,7 +55,7 @@
             });
             const outcomes = result.outcomes || [];
 
-            renderResults(outcomes);
+            renderResults(outcomes, result.sections, result.sectionIDs);
             setStatus('', '');
 
             const allPassed = outcomes.length > 0 && outcomes.every(o => o.status === 'pass');
@@ -315,7 +315,7 @@ else:
         if (goLivePanel) goLivePanel.hidden = true;
     }
 
-    function renderResults(outcomes) {
+    function renderResults(outcomes, sections, sectionIDs) {
         if (!resultsEl) return;
 
         const pass    = outcomes.filter(o => o.status === 'pass').length;
@@ -330,6 +330,41 @@ else:
             `<span class="exec-time">(${totalMs} ms)</span>` +
             (allPassed ? ' <span style="color:var(--green)">✓ All tests passed!</span>' : '');
 
+        resultsEl.innerHTML = '';
+        resultsEl.appendChild(scoreEl);
+
+        // One table per section, mirroring the server-rendered submission view
+        // (submission.leaf).  Unlabelled groups (no sections defined) render as
+        // a single bare table, identical to the pre-sections layout.
+        for (const group of groupOutcomesForDisplay(outcomes, sections, sectionIDs)) {
+            const block = document.createElement('section');
+            block.className = 'submission-section-block';
+            if (group.sectionName) {
+                const heading = document.createElement('h3');
+                heading.className = 'submission-section-heading';
+                heading.textContent = group.sectionName;
+                block.appendChild(heading);
+            }
+            block.appendChild(buildResultsTable(group.outcomes));
+            resultsEl.appendChild(block);
+        }
+
+        resultsEl.hidden = false;
+        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Group outcomes for display via the browser runner's shared helper, with a
+    // flat single-bucket fallback if it is somehow unavailable.
+    function groupOutcomesForDisplay(outcomes, sections, sectionIDs) {
+        if (window.BrowserRunner && typeof window.BrowserRunner.groupBySection === 'function') {
+            return window.BrowserRunner.groupBySection(outcomes, sections, sectionIDs);
+        }
+        return [{ sectionName: null, outcomes }];
+    }
+
+    // Build one 4-column results table (Test / Tier / Result / ms) for the
+    // given outcomes.
+    function buildResultsTable(outcomes) {
         const table = document.createElement('table');
         table.className = 'results-table';
         table.innerHTML = `
@@ -354,12 +389,7 @@ else:
             tbody.appendChild(tr);
         }
         table.appendChild(tbody);
-
-        resultsEl.innerHTML = '';
-        resultsEl.appendChild(scoreEl);
-        resultsEl.appendChild(table);
-        resultsEl.hidden = false;
-        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return table;
     }
 
     // Build collapsible output panes from a longResult string.
