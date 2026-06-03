@@ -101,8 +101,8 @@ enum MCPServerInstructions {
         3. Edit: update_assignment (metadata), update_suite (script metadata), update_pattern_family \
         (family defaults/cases), update_global_inputs (personalization variables/expressions), \
         update_section_variables (a section's scoped variables/expressions), update_notebook (replace \
-        the starter notebook). To create a new assignment, clone_assignment from a known-good one and \
-        then edit the copy.
+        the starter notebook), author_script (create/replace a hand-written test or support file). To \
+        create a new assignment, clone_assignment from a known-good one and then edit the copy.
 
         Important behaviors:
         - Any content edit (suite, pattern family, notebook) re-runs validation asynchronously; \
@@ -113,11 +113,16 @@ enum MCPServerInstructions {
         the returned JSON.
         - clone_assignment lands closed, unvalidated, with no due date and no submissions, so nothing \
         is regraded; validate and open it with update_assignment when ready.
-        - You can read everything but author only some of it. get_suite returns hand-written script \
-        bodies and full pattern-family specs for reading, but you author structure, metadata, and \
-        pattern-family test cases only: update_pattern_family can edit a generated case's \
-        args/expected (validated on save), while the contents of hand-written `.sh`/`.py` test \
-        scripts are read-only through this interface.
+        - get_suite returns the full source of truth for reading: hand-written script bodies, \
+        complete pattern-family specs, and notebook-check specs. For authoring, update_pattern_family \
+        edits a generated case's args/expected (validated on save), and author_script writes a single \
+        hand-written file into the test setup. A test tier (public/release/secret/student) creates or \
+        replaces the script AND its suite entry — set points/displayName/dependsOn/sectionID alongside \
+        the body; the runner reads the per-student seed from the CHICKADEE_ASSIGNMENT_SEED env var, so \
+        a secret test can re-derive a personalized expected answer. The "support" tier writes a \
+        non-graded helper file (e.g. a data generator) that tests and personalization expressions can \
+        import by stem. Generated pattern-family / notebook-check scripts are not editable via \
+        author_script — edit the family/check instead.
         - Resources: each accessible assignment's raw test.properties.json manifest is also exposed \
         as an MCP resource (resources/list, then resources/read on \
         chickadee://assignment/<publicID>/manifest). get_suite is the structured view; the resource \
