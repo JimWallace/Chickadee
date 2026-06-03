@@ -65,8 +65,8 @@ enum MCPServerInstructions {
     static let text = """
         Chickadee is a course-content authoring and autograding platform. This server lets an \
         authorized agent author assignment content on an instructor's behalf: assignment metadata, \
-        test suites, and starter notebooks. It never exposes student data, grades, submissions, or \
-        enrollment management.
+        test suites, starter notebooks, and reference solutions. It never exposes student data, \
+        grades, student submissions, or enrollment management.
 
         Access scope: you may only act on courses the authenticated account is enrolled in (an admin \
         account may act on every course); students cannot use this interface. Read tools require the \
@@ -84,6 +84,9 @@ enum MCPServerInstructions {
         defaults, and every case's args/expected), and each notebook check's spec — so you can read \
         exactly what a test checks (e.g. to explain why a submission lost points).
         - Starter notebook — the .ipynb a student opens, stored as Jupyter JSON.
+        - Solution — the instructor's reference answer key (.ipynb), validated against the suite. It \
+        is instructor-authored content, never a student submission. Read with get_solution, replace \
+        with update_solution (which stores it as the validation submission and re-runs validation).
         - Global inputs (personalization) — assignment-scoped names that vary the assignment per \
         student: literal `variables` (a name + JSON value) and `expressions` (a name + Python source \
         evaluated against the student's `seed`). They inline into generated/raw tests and substitute \
@@ -97,14 +100,16 @@ enum MCPServerInstructions {
         1. Discover: list_courses, then list_assignments for a course. get_server_info reports the \
         deployed version and whether writes are honored — call it to confirm a feature/deploy is live \
         (a tool call reflects the running process even if your tool list is cached).
-        2. Inspect before editing: get_assignment, get_suite, get_notebook, get_global_inputs. Use \
+        2. Inspect before editing: get_assignment, get_suite, get_notebook, get_solution, \
+        get_global_inputs. Use \
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), update_suite (script metadata), update_pattern_family \
         (family defaults/cases), update_global_inputs (personalization variables/expressions), \
         update_section_variables (a section's scoped variables/expressions), update_notebook (replace \
-        the starter notebook), author_script (create/replace a hand-written test or support file). To \
-        create a new assignment, clone_assignment from a known-good one and then edit the copy.
+        the starter notebook), update_solution (replace the reference solution and re-validate), \
+        author_script (create/replace a hand-written test or support file). To create a new \
+        assignment, clone_assignment from a known-good one and then edit the copy.
 
         Important behaviors:
         - Any content edit (suite, pattern family, notebook) re-runs validation asynchronously; \
