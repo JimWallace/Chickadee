@@ -37,7 +37,7 @@
             <td>#(row.surname)</td>
             <td>#(row.givenNames)</td>
             <td><strong>#(row.studentID)</strong></td>
-            <td>#(row.gradeText)</td>
+            <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif</td>
             <td data-ts="#(row.latestSubmittedAtEpoch)">
                 #if(row.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">

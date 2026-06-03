@@ -360,12 +360,24 @@ extension WebRoutes {
             currentAttempt: currentAttempt
         )
 
+        // An instructor override is the student's effective grade for the
+        // assignment; surface it above this attempt's autograded breakdown.
+        var overrideGradePercent: Int?
+        if let submissionUserID = submission.userID {
+            overrideGradePercent = try await gradeOverridePercent(
+                setupID: submission.testSetupID, userID: submissionUserID, on: req.db)
+        }
+
         let ctx = buildSubmissionContext(
             subID: subID,
             submission: submission,
             processed: processed,
             sectionedOutcomes: sectionedOutcomes,
-            decorations: SubmissionDecorations(badges: badges, currentUser: req.currentUserContext),
+            decorations: SubmissionDecorations(
+                badges: badges,
+                currentUser: req.currentUserContext,
+                overrideGradePercent: overrideGradePercent
+            ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         return try await req.view.render("submission", ctx)
@@ -653,6 +665,7 @@ extension WebRoutes {
         decorations: SubmissionDecorations,
         delta: DeltaBanner
     ) -> SubmissionContext {
+        let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
         let currentUser = decorations.currentUser
         let isPending = submission.status == "pending" || submission.status == "assigned"
@@ -682,6 +695,8 @@ extension WebRoutes {
             passCount: processed.passCount,
             totalTests: processed.totalTests,
             gradePercent: processed.gradePercent,
+            gradeIsOverridden: overrideGradePercent != nil,
+            overrideGradeText: overrideGradePercent.map { "\($0)%" },
             executionTimeMs: processed.executionTimeMs,
             isWeighted: processed.totalPoints != processed.totalTests,
             totalPoints: processed.totalPoints,
@@ -806,6 +821,9 @@ private struct DeltaBanner {
 private struct SubmissionDecorations {
     let badges: [AchievementBadge]
     let currentUser: CurrentUserContext?
+    /// Instructor override percent for this student × assignment, nil when
+    /// none.  The effective grade shown above the autograded breakdown.
+    let overrideGradePercent: Int?
 }
 
 // `SubmitFormBody` and the submission-output formatting helpers live in

@@ -22,7 +22,12 @@ Submission #(submissionID)
     #if(buildFailed):
     #else:
     <div class="submission-score-row">
+        #if(gradeIsOverridden):
+        <p class="score score-header">Grade: <span class="grade-pill grade-override-active">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
+        <p class="score" style="font-size:.9rem;color:var(--gray-600)">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+        #else:
         <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+        #endif
         #if(!badges.isEmpty):
         <div class="achievement-badges achievement-badges-full">
             #for(badge in badges):

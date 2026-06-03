@@ -42,10 +42,23 @@ extension InstructorDashboardRoutes {
         // Serial follow-on: needs submission IDs from phase 2.
         let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
             for: submissionIDs, on: req.db)
-        let bestPointsByUserAndSetup = bestPointsByUserAndSetup(
+        var bestPointsByUserAndSetup = bestPointsByUserAndSetup(
             submissions: submissions,
             preferredResultBySubmissionID: preferredResultBySubmissionID
         )
+
+        // Instructor grade overrides replace the runner-computed points. They
+        // apply even when the student has no submission, so this overlays the
+        // map rather than filtering within it. The override percent is
+        // converted to points against the setup's total possible points.
+        let overrideMap = try await loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
+        for (key, pct) in overrideMap {
+            guard let setup = setupByID[key.setupID],
+                let points = gradeOverridePoints(percent: pct, setup: setup)
+            else { continue }
+            let mapKey = "\(key.userID.uuidString.lowercased())::\(key.setupID)"
+            bestPointsByUserAndSetup[mapKey] = points
+        }
 
         let csv = renderGradesCSV(
             students: students,
@@ -225,12 +238,21 @@ extension InstructorDashboardRoutes {
         let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
             for: submissionIDs, on: req.db)
 
+        // Instructor grade overrides for this assignment, indexed by student.
+        let overrideMap = try await loadGradeOverridePercents(
+            setupIDs: [assignment.testSetupID], on: req.db)
+        var overrideByStudentID: [UUID: Int] = [:]
+        for (key, pct) in overrideMap where key.setupID == assignment.testSetupID {
+            overrideByStudentID[key.userID] = pct
+        }
+
         let fmt = waterlooDateTimeFormatter()
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             buildAssignmentStudentRow(
                 student: student,
                 submissionsByStudentID: submissionsByStudentID,
                 preferredResultBySubmissionID: preferredResultBySubmissionID,
+                overrideByStudentID: overrideByStudentID,
                 assignmentIDRaw: assignmentIDRaw,
                 fmt: fmt
             )
@@ -299,13 +321,14 @@ extension InstructorDashboardRoutes {
         student: APIUser,
         submissionsByStudentID: [UUID: [APISubmission]],
         preferredResultBySubmissionID: [String: APIResult],
+        overrideByStudentID: [UUID: Int],
         assignmentIDRaw: String,
         fmt: DateFormatter
     ) -> AssignmentStudentRow? {
         guard let studentID = student.id else { return nil }
         let history = submissionsByStudentID[studentID] ?? []
         let latest = history.first
-        let bestGradePercent: Int? = {
+        let runnerBestGradePercent: Int? = {
             var best = -1
             for submission in history {
                 guard let subID = submission.id,
@@ -318,6 +341,10 @@ extension InstructorDashboardRoutes {
             }
             return best >= 0 ? best : nil
         }()
+        // An instructor override is the student's effective grade — it feeds
+        // both the displayed grade and the median metric.
+        let override = overrideByStudentID[studentID]
+        let bestGradePercent = override ?? runnerBestGradePercent
         let inferredName =
             splitHumanName(student.displayName)
             ?? splitHumanName(student.preferredName)
@@ -328,6 +355,7 @@ extension InstructorDashboardRoutes {
             surname: inferredName.surname,
             givenNames: inferredName.givenNames,
             gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
+            gradeIsOverridden: override != nil,
             submissionCount: history.count,
             hasLatestSubmission: latest != nil,
             latestSubmissionID: latest?.id ?? "",

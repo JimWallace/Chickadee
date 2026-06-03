@@ -75,6 +75,9 @@
             <td>
                 #if(setup.bestGradeText):
                     <strong>#(setup.bestGradeText)</strong>
+                    #if(setup.gradeIsOverridden):
+                    <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
+                    #endif
                 #else:
                     <span class="empty">—</span>
                 #endif
@@ -190,6 +193,9 @@
             <td>
                 #if(setup.bestGradeText):
                     <strong>#(setup.bestGradeText)</strong>
+                    #if(setup.gradeIsOverridden):
+                    <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
+                    #endif
                 #else:
                     <span class="empty">—</span>
                 #endif
@@ -305,6 +311,9 @@
             <td>
                 #if(setup.bestGradeText):
                     <strong>#(setup.bestGradeText)</strong>
+                    #if(setup.gradeIsOverridden):
+                    <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
+                    #endif
                 #else:
                     <span class="empty">—</span>
                 #endif

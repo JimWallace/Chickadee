@@ -309,23 +309,6 @@
 .ext-summary { margin-top: 0; list-style: none; }
 .ext-summary::-webkit-details-marker { display: none; }
 .ext-details[open] > .ext-summary { background: var(--gray-100); }
-/* Grade-override affordances: a subtle tag next to an overridden grade and a
-   highlighted icon button when an override is active for the row. */
-.grade-override-tag {
-    display: inline-block;
-    margin-left: .35rem;
-    padding: 0 .3rem;
-    font-size: .68rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .02em;
-    color: var(--gray-700);
-    background: var(--gray-100);
-    border: 1px solid var(--gray-300);
-    border-radius: .2rem;
-    vertical-align: middle;
-}
-.grade-override-active { border-color: var(--gray-500); background: var(--gray-100); }
 </style>
 #endexport
 #endextend

@@ -42,6 +42,9 @@ struct TestSetupRow: Encodable {
     let latestSubmittedAtText: String
     let additionalSubmissionCount: Int
     let bestGradeText: String?
+    /// True when `bestGradeText` is an instructor override rather than the
+    /// runner-computed grade.  Drives the "overridden" tag in the template.
+    let gradeIsOverridden: Bool
     let badges: [AchievementBadge]
     /// True when this student has an active deadline extension on this
     /// assignment.  Used by the template to show the Submit button and
@@ -294,6 +297,12 @@ struct SubmissionContext: Encodable {
     let passCount: Int
     let totalTests: Int
     let gradePercent: Int
+    /// True when an instructor has overridden this student's grade for the
+    /// assignment.  The override is the effective grade regardless of this
+    /// attempt's autograded score; the template shows `overrideGradeText`.
+    let gradeIsOverridden: Bool
+    /// Formatted override grade (e.g. "85%"), nil when not overridden.
+    let overrideGradeText: String?
     let executionTimeMs: Int
     /// True when any test has points > 1 (i.e. grade uses weighted points).
     let isWeighted: Bool
