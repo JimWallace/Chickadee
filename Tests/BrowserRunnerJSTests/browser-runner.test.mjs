@@ -422,7 +422,10 @@ async function loadRunnerHarness(options = {}) {
       return {
         ok: true,
         async text() {
-          return JSON.stringify({ seed: options.assignmentSeed ?? null });
+          return JSON.stringify({
+            seed: options.assignmentSeed ?? null,
+            personalizedInputs: options.personalizedInputs ?? null,
+          });
         },
       };
     }
@@ -993,6 +996,62 @@ test('omits CHICKADEE_ASSIGNMENT_SEED when the assignment is not personalized (n
   );
 
   assert.equal(harness.py.state.assignmentSeedEnv, null);
+});
+
+test('writes _ck_inputs.py from the seed endpoint personalizedInputs (parity with the worker)', async () => {
+  // The worker writes _ck_inputs.py into the grading workspace from
+  // Job.personalizedInputs; the browser must do the same from the seed
+  // endpoint's personalizedInputs so a generated pattern-family script that
+  // loads per-student args/expected grades identically. Values are verbatim
+  // Python literals (repr) the server resolved for this student's seed.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    personalizedInputs: { adults_expected: '2', patients: "[{'mrn': '1001'}]" },
+    zipFiles: { 'publictest_x.py': '# x\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'publictest_x.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_personalized',
+  );
+
+  // FS.writes is an append-only log, so the record survives workdir cleanup.
+  const write = harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py'));
+  assert.ok(write, '_ck_inputs.py must be written to the work dir');
+  const src = String(write.value);
+  assert.ok(src.includes('_ck = {'), 'emits a _ck dict');
+  assert.ok(src.includes('"adults_expected": 2,'), 'value inserted verbatim');
+  assert.ok(src.includes(`"patients": [{'mrn': '1001'}],`), 'Python-literal value preserved');
+  // Keys sorted for determinism (adults_expected before patients).
+  assert.ok(src.indexOf('adults_expected') < src.indexOf('patients'));
+});
+
+test('omits _ck_inputs.py when the seed endpoint returns no personalizedInputs', async () => {
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    zipFiles: { 'publictest_x.py': '# x\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'publictest_x.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_noinputs',
+  );
+
+  assert.equal(
+    harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py')),
+    undefined,
+    'no _ck_inputs.py when there are no per-student inputs',
+  );
 });
 
 // ── Section grouping (results displayed per test-suite section) ──────────────
