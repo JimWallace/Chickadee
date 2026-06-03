@@ -958,6 +958,43 @@ def student_source() -> str:
     return ""
 
 
+def student_cell_sources() -> List[Any]:
+    source = student_source()
+    chunks: List[Any] = []
+    label = "module"
+    lines: List[str] = []
+    for raw in source.split("\\n"):
+        stripped = raw.strip()
+        if stripped.startswith("# --- ") and stripped.endswith(" ---"):
+            if lines:
+                chunks.append((label, "\\n".join(lines)))
+            label = stripped[6:-4].strip() or "module"
+            lines = []
+        else:
+            lines.append(raw)
+    if lines:
+        chunks.append((label, "\\n".join(lines)))
+    if not chunks:
+        chunks.append(("module", source))
+    return chunks
+
+
+def student_ast(skipped: Optional[List[Any]] = None) -> Any:
+    import ast
+    module = ast.parse("")
+    for label, chunk in student_cell_sources():
+        if not chunk.strip():
+            continue
+        try:
+            node = ast.parse(chunk)
+        except SyntaxError as ex:
+            if skipped is not None:
+                skipped.append((label, f"{type(ex).__name__}: {ex}"))
+            continue
+        module.body.extend(node.body)
+    return module
+
+
 def require_function(name: str, num_args: Optional[int] = None):
     modules = load_student_modules()
     for key in _loaded_student_order:

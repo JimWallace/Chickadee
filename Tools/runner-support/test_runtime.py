@@ -226,6 +226,53 @@ def student_source() -> str:
     return ""
 
 
+def student_cell_sources() -> List[Any]:
+    # Split student_source() into (label, source) chunks on the
+    # `# --- cell N ---` markers the notebook extractor writes between cells,
+    # so each notebook cell can be parsed on its own. A raw .py submission has
+    # no markers and yields a single ("module", source) chunk.
+    source = student_source()
+    chunks: List[Any] = []
+    label = "module"
+    lines: List[str] = []
+    for raw in source.split("\n"):
+        stripped = raw.strip()
+        if stripped.startswith("# --- ") and stripped.endswith(" ---"):
+            if lines:
+                chunks.append((label, "\n".join(lines)))
+            label = stripped[6:-4].strip() or "module"
+            lines = []
+        else:
+            lines.append(raw)
+    if lines:
+        chunks.append((label, "\n".join(lines)))
+    if not chunks:
+        chunks.append(("module", source))
+    return chunks
+
+
+def student_ast(skipped: Optional[List[Any]] = None) -> Any:
+    # Best-effort AST of the student's source: parse each notebook cell on its
+    # own and merge the parseable cells' top-level statements into one module.
+    # A single non-Python cell (Markdown pasted into a code cell, a half-written
+    # cell) is then skipped instead of blinding a style/structure check on every
+    # other cell -- mirroring the per-cell resilience of the executable module.
+    # `skipped`, if a list, receives an (label, message) tuple per dropped cell.
+    import ast
+    module = ast.parse("")
+    for label, chunk in student_cell_sources():
+        if not chunk.strip():
+            continue
+        try:
+            node = ast.parse(chunk)
+        except SyntaxError as ex:
+            if skipped is not None:
+                skipped.append((label, f"{type(ex).__name__}: {ex}"))
+            continue
+        module.body.extend(node.body)
+    return module
+
+
 def require_function(name: str, num_args: Optional[int] = None):
     modules = load_student_modules()
     for key in _loaded_student_order:
