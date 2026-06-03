@@ -165,6 +165,9 @@ struct AssignmentStudentRow: Encodable {
     let surname: String
     let givenNames: String
     let gradeText: String
+    /// True when `gradeText` is an instructor override rather than the
+    /// runner-computed best grade.
+    let gradeIsOverridden: Bool
     let submissionCount: Int
     let hasLatestSubmission: Bool
     let latestSubmissionID: String

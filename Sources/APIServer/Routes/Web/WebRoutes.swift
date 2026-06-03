@@ -186,10 +186,19 @@ struct WebRoutes: RouteCollection {
         var latestSubmissionBySetupID: [String: LatestSubmissionItem] = [:]
         var submissionCountBySetupID: [String: Int] = [:]
         var bestGradePercentBySetupID: [String: Int] = [:]
+        var overridePercentBySetupID: [String: Int] = [:]
         var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
         if let userID = user.id {
             let setupIDs = setups.compactMap(\.id)
             if !setupIDs.isEmpty {
+                // Instructor grade overrides for this student take precedence
+                // over the runner-computed best grade below.
+                let overrideMap = try await loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
+                for setupID in setupIDs {
+                    if let pct = overrideMap[GradeOverrideKey(setupID: setupID, userID: userID)] {
+                        overridePercentBySetupID[setupID] = pct
+                    }
+                }
                 let submissions = try await APISubmission.query(on: req.db)
                     .filter(\.$userID == userID)
                     .filter(\.$testSetupID ~~ setupIDs)
@@ -397,7 +406,9 @@ struct WebRoutes: RouteCollection {
                 latestSubmissionID: latestSubmission?.submissionID ?? "",
                 latestSubmittedAtText: latestSubmission?.submittedAtText ?? "—",
                 additionalSubmissionCount: max(submissionCount - 1, 0),
-                bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" },
+                bestGradeText: overridePercentBySetupID[setupID].map { "\($0)%" }
+                    ?? bestGradePercentBySetupID[setupID].map { "\($0)%" },
+                gradeIsOverridden: overridePercentBySetupID[setupID] != nil,
                 badges: latestBadgesBySetupID[setupID] ?? [],
                 hasActiveExtension: hasActiveExtension,
                 effectiveDueAtText: effectiveDueAt.map { fmt.string(from: $0) }

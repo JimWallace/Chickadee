@@ -360,11 +360,20 @@ extension WebRoutes {
             currentAttempt: currentAttempt
         )
 
+        // An instructor override is the student's effective grade for the
+        // assignment; surface it above this attempt's autograded breakdown.
+        var overrideGradePercent: Int?
+        if let submissionUserID = submission.userID {
+            overrideGradePercent = try await gradeOverridePercent(
+                setupID: submission.testSetupID, userID: submissionUserID, on: req.db)
+        }
+
         let ctx = buildSubmissionContext(
             subID: subID,
             submission: submission,
             processed: processed,
             sectionedOutcomes: sectionedOutcomes,
+            overrideGradePercent: overrideGradePercent,
             decorations: SubmissionDecorations(badges: badges, currentUser: req.currentUserContext),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
@@ -650,6 +659,7 @@ extension WebRoutes {
         submission: APISubmission,
         processed: ProcessedCollection,
         sectionedOutcomes: [SectionedOutcomes],
+        overrideGradePercent: Int?,
         decorations: SubmissionDecorations,
         delta: DeltaBanner
     ) -> SubmissionContext {
@@ -682,6 +692,8 @@ extension WebRoutes {
             passCount: processed.passCount,
             totalTests: processed.totalTests,
             gradePercent: processed.gradePercent,
+            gradeIsOverridden: overrideGradePercent != nil,
+            overrideGradeText: overrideGradePercent.map { "\($0)%" },
             executionTimeMs: processed.executionTimeMs,
             isWeighted: processed.totalPoints != processed.totalTests,
             totalPoints: processed.totalPoints,

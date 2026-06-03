@@ -983,3 +983,22 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     margin-top: .875rem;
     font-size: .875rem;
 }
+
+/* Tag shown next to a grade that an instructor has manually overridden.
+   Used on the student dashboard, the submission page, and the instructor
+   roster / per-student views. */
+.grade-override-tag {
+    display: inline-block;
+    margin-left: .35rem;
+    padding: 0 .3rem;
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: var(--gray-700);
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    border-radius: .2rem;
+    vertical-align: middle;
+}
+.grade-override-active { border-color: var(--gray-500); background: var(--gray-100); }
