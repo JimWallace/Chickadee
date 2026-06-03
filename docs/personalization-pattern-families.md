@@ -1,8 +1,8 @@
 # Personalization — Pattern families with per-student values (design)
 
-Status: **in progress** — slices A (#816) + B (#817) shipped; authorable via the
-MCP `update_pattern_family` tool. Slice C is folded into the expected-expression
-pattern (below); the editor UI (D) is the remaining piece.
+Status: **complete** — A (worker, #816), B (browser, #817), MCP authoring +
+C-as-expression-pattern (#818), and D (editor GUI) are all shipped. Personalized
+pattern families are authorable both via MCP/JSON and in the browser editor.
 Tracking: next slice of [issue #461](https://github.com/JimWallace/Chickadee/issues/461).
 Builds on: [personalization-phase1.md](personalization-phase1.md) (per-student
 `CHICKADEE_ASSIGNMENT_SEED`) and [inputs.md](inputs.md) (global/section inputs,
@@ -191,10 +191,14 @@ So the feature's strongest wins are for **worker-graded** assignments and for
 
   No separate auto-derive mechanism is needed; on the worker path the
   `solution.<fn>(...)` form keeps the answer server-side.
-- **D — editor UX** (remaining). Per-case "personalized" toggle, expression
-  cells, `spec_hash` + preview integration, and extend the
-  `preview_personalization` placeholder audit (now reading the right notebook
-  after #811) to cover test scripts.
+- **D — editor UX** ✅. Type `$name` in an arg cell or the Expected cell to
+  reference a per-student `=` expression: the editor learns the Global Input /
+  expression names (so per-student refs validate + highlight rather than being
+  red-flagged), serializes the Expected ref as `expectedVarRef`, and skips
+  Pyodide auto-compute for per-student rows — mirroring the existing arg-cell
+  `$name` UX. Follow-ups (not blocking): surfacing `expectedVarRef` on the
+  `get_suite` read DTO, and extending the `preview_personalization` placeholder
+  audit to test scripts.
 
 ## Open questions
 
