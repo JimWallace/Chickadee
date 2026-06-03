@@ -94,7 +94,9 @@ enum MCPServerInstructions {
         cannot be opened (isOpen=true) until validation passes.
 
         Recommended workflow:
-        1. Discover: list_courses, then list_assignments for a course.
+        1. Discover: list_courses, then list_assignments for a course. get_server_info reports the \
+        deployed version and whether writes are honored — call it to confirm a feature/deploy is live \
+        (a tool call reflects the running process even if your tool list is cached).
         2. Inspect before editing: get_assignment, get_suite, get_notebook, get_global_inputs. Use \
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
