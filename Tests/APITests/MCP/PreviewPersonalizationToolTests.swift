@@ -163,6 +163,42 @@ import Vapor
         }
     }
 
+    @Test func auditIncludesPatternFamilyPerStudentRefs() async throws {
+        // The audit covers grading, not just the notebook: a pattern-family
+        // case that references per-student inputs (argVarRefs / expectedVarRef)
+        // shows up in `used`, and resolves when the inputs are declared.
+        let manifest = #"""
+            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,
+            "globalExpressions":[{"name":"patients","expression":"[1, 2, 3]"},
+            {"name":"adults_expected","expression":"2"}]}
+            """#
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledFixture(
+                on: app, id: "setup_pv", manifest: manifest, withNotebook: false)
+            // Add a personalized family whose case references the per-student inputs.
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pv.zip")
+            let famCase = PatternCase(
+                key: "01", label: "Adults", args: [.null], expected: .null,
+                argVarRefs: ["patients"], expectedVarRef: "adults_expected")
+            let family = PatternFamily(
+                id: "adults", name: "Adults", kind: .boundaryEquality,
+                functionName: "countAdults", paramNames: ["patients"], cases: [famCase])
+            try await applyPatternFamilies(
+                to: setup, nextFamilies: [family],
+                authoredItems: [.family(id: "adults", sectionID: nil)],
+                on: app.db)
+
+            let output = try await PreviewPersonalizationTool().execute(
+                PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: "ff"),
+                context(app))
+            #expect(output.placeholders.used.contains("patients"))
+            #expect(output.placeholders.used.contains("adults_expected"))
+            #expect(output.placeholders.unresolved.isEmpty)
+        }
+    }
+
     @Test func deniesWhenSubjectNotEnrolled() async throws {
         let manifest = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
         let app = try await makeTestApp()

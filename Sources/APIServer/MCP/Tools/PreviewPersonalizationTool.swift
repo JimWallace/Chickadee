@@ -31,9 +31,11 @@ struct PreviewPersonalizationTool: ContentTool {
             let value: String
         }
         struct Placeholders: Encodable, Sendable {
-            /// `{{name}}` markers found in the starter notebook.
+            /// Per-student input names referenced anywhere: `{{name}}` markers in
+            /// the starter notebook AND `$name` refs in pattern-family test-script
+            /// cases (`argVarRefs` / `expectedVarRef`).
             let used: [String]
-            /// Used markers with no matching declared input (would fail at save).
+            /// Used names with no matching declared input (would fail at save).
             let unresolved: [String]
         }
         let assignmentPublicID: String
@@ -131,7 +133,8 @@ struct PreviewPersonalizationTool: ContentTool {
         let resolution = await PersonalizationSubstitution.resolve(
             manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir)
 
-        let placeholders = Self.placeholderAudit(setup: setup, resolution: resolution)
+        let placeholders = Self.placeholderAudit(
+            manifest: manifest, setup: setup, resolution: resolution)
         let values = resolution.substitutions
             .map { Output.ResolvedValue(name: $0.key, value: $0.value) }
             .sorted { $0.name < $1.name }
@@ -172,19 +175,33 @@ struct PreviewPersonalizationTool: ContentTool {
     }
 
     private static func placeholderAudit(
-        setup: APITestSetup, resolution: PersonalizationSubstitution.Resolution
+        manifest: TestProperties, setup: APITestSetup,
+        resolution: PersonalizationSubstitution.Resolution
     ) -> Output.Placeholders {
-        // Read the notebook the student actually opens. `notebookData(for:)`
-        // prefers the standalone `notebookPath` blob — what `update_notebook`,
-        // the editor, and the student first-open path all use — and only falls
-        // back to the zip's starter entry. The previous zip-only read missed
-        // markers in notebooks edited via the MCP `update_notebook` path (which
-        // writes `notebookPath`, not the zip entry), so the audit under-reported
-        // `used` even though substitution worked at first-open.
-        guard let notebookData = try? notebookData(for: setup) else {
-            return Output.Placeholders(used: [], unresolved: [])
+        var used = Set<String>()
+
+        // 1. Notebook `{{name}}` placeholders. Read the notebook the student
+        // actually opens: `notebookData(for:)` prefers the standalone
+        // `notebookPath` blob — what `update_notebook`, the editor, and the
+        // student first-open path all use — and only falls back to the zip's
+        // starter entry. (Before #811 this read the zip and missed markers added
+        // via `update_notebook`, which writes `notebookPath`, not the zip entry.)
+        if let notebookData = try? notebookData(for: setup) {
+            used.formUnion(NotebookSubstitution.placeholderNames(in: notebookData))
         }
-        let used = NotebookSubstitution.placeholderNames(in: notebookData)
+
+        // 2. Test-script per-student refs: a pattern-family case may reference a
+        // per-student input via `$name` (argVarRefs) or `expectedVarRef`. Report
+        // those too so the audit covers grading, not just the notebook.
+        for family in manifest.patternFamilies {
+            for c in family.cases {
+                for ref in c.argVarRefs.compactMap({ $0 }) { used.insert(ref) }
+                if let expectedRef = c.expectedVarRef, !expectedRef.isEmpty {
+                    used.insert(expectedRef)
+                }
+            }
+        }
+
         let resolved = Set(resolution.substitutions.keys)
         let unresolved = used.filter { !resolved.contains($0) }
         return Output.Placeholders(used: used.sorted(), unresolved: unresolved.sorted())
