@@ -1,6 +1,8 @@
 # Personalization — Pattern families with per-student values (design)
 
-Status: **proposed** (design only; not yet implemented).
+Status: **in progress** — slices A (#816) + B (#817) shipped; authorable via the
+MCP `update_pattern_family` tool. Slice C is folded into the expected-expression
+pattern (below); the editor UI (D) is the remaining piece.
 Tracking: next slice of [issue #461](https://github.com/JimWallace/Chickadee/issues/461).
 Builds on: [personalization-phase1.md](personalization-phase1.md) (per-student
 `CHICKADEE_ASSIGNMENT_SEED`) and [inputs.md](inputs.md) (global/section inputs,
@@ -158,18 +160,41 @@ So the feature's strongest wins are for **worker-graded** assignments and for
 
 ## Incremental scope
 
-- **A — worker-only MVP.** Manifest support for per-student args/`expected`
-  expressions on `.boundaryEquality`; renderer emits `_ck_inputs[...]` refs;
-  dispatch-time `PersonalizationEvaluator` run → `Job.personalizedInputs`; worker
-  injects `_ck_inputs`. Authored via MCP/JSON (no editor UI yet). Validate
-  end-to-end against the solution.
-- **B — browser.** Seed + per-student values endpoint + runner injection (rides
-  on the in-flight browser-seed work).
-- **C — auto-derive `expected` from `solution.py`** (worker; documented as
-  unavailable on the browser).
-- **D — editor UX.** Per-case "personalized" toggle, expression cells, `spec_hash`
-  + preview integration, and extend the `preview_personalization` placeholder
-  audit (now reading the right notebook after #811) to cover test scripts.
+- **A — worker-only MVP** ✅ (#816). A `.boundaryEquality` case's `argVarRefs` /
+  new `expectedVarRef` may point at a global/section `=` expression; the renderer
+  emits a `_ck_inputs.py` preamble (loaded by path, fails closed if missing);
+  dispatch resolves `Job.personalizedInputs`; the worker writes `_ck_inputs.py`
+  into the grading workspace (the filename is reserved in `test_runtime`).
+- **B — browser** ✅ (#817). The browser seed endpoint returns
+  `personalizedInputs` and `browser-runner.js` writes `_ck_inputs.py` into the
+  Pyodide workspace. A shared `PersonalizationSubstitution.gradingInputs` helper
+  backs both the worker job payload and the browser endpoint, so they resolve
+  identically.
+- **Authoring (MCP)** ✅. `update_pattern_family` accepts a per-case
+  `expectedVarRef` (and already accepts `$name` `argVarRefs`), so an agent can
+  author a personalized family from JSON. Browser-side validation note: a
+  browser-graded family gives per-student *variety* but not secrecy (§"The
+  `expected` value splits by grading mode").
+- **C — auto-derive `expected` from `solution.py`** — *folded into the
+  expected-expression pattern.* Because the resolver auto-imports `solution.py`
+  (and any uploaded helper, e.g. `dbgen.py`), an instructor writes a case's
+  expected as a per-student expression and points `expectedVarRef` at it:
+
+  ```text
+  Global / section inputs:
+    patients        = = dbgen.generate_patients(seed)
+    adults_expected = = solution.countAdults(patients)   # worker: stays server-side
+                      # …or = dbgen.ref_count_adults(patients) for a browser-safe answer key
+
+  Family case:  args: ["$patients"], expectedVarRef: "adults_expected"
+  ```
+
+  No separate auto-derive mechanism is needed; on the worker path the
+  `solution.<fn>(...)` form keeps the answer server-side.
+- **D — editor UX** (remaining). Per-case "personalized" toggle, expression
+  cells, `spec_hash` + preview integration, and extend the
+  `preview_personalization` placeholder audit (now reading the right notebook
+  after #811) to cover test scripts.
 
 ## Open questions
 

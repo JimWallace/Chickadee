@@ -36,16 +36,24 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// Parallel to `args`: false at a position omits that argument so
         /// Python's own parameter default applies.
         let argsProvided: [Bool]?
+        /// Per-student expected (issue #461): the name of a global/section `=`
+        /// expression whose value, resolved for the student's seed at grading
+        /// time, is the expected return — instead of the literal `expected`.
+        /// `boundary_equality` only. An empty string clears it; setting
+        /// `expected` (a literal) also clears it.
+        let expectedVarRef: String?
 
         init(
             key: String, args: [JSONValue]? = nil, expected: JSONValue? = nil,
-            argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil
+            argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil,
+            expectedVarRef: String? = nil
         ) {
             self.key = key
             self.args = args
             self.expected = expected
             self.argVarRefs = argVarRefs
             self.argsProvided = argsProvided
+            self.expectedVarRef = expectedVarRef
         }
     }
 
@@ -144,6 +152,12 @@ struct UpdatePatternFamilyTool: ContentTool {
                         "argsProvided": .object([
                             "type": .string("array"),
                             "description": .string("Parallel to args: false omits the arg (use Python default)."),
+                        ]),
+                        "expectedVarRef": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Per-student expected: name of a global/section = expression resolved for the "
+                                    + "student's seed (boundary_equality only). Empty string clears it."),
                         ]),
                     ]),
                     "required": .array([.string("key")]),
@@ -307,10 +321,21 @@ struct UpdatePatternFamilyTool: ContentTool {
             explicit: edit.argsProvided, argsReplaced: edit.args != nil,
             existing: caseSpec.argsProvided, argCount: finalArgs.count,
             field: "argsProvided", caseKey: caseSpec.key)
+        // Per-student expected ref: an explicit edit wins (empty string clears);
+        // switching to a literal `expected` clears any stale ref; otherwise the
+        // existing ref carries over.
+        let finalExpectedVarRef: String?
+        if let ref = edit.expectedVarRef {
+            finalExpectedVarRef = ref.isEmpty ? nil : ref
+        } else if edit.expected != nil {
+            finalExpectedVarRef = nil
+        } else {
+            finalExpectedVarRef = caseSpec.expectedVarRef
+        }
         return PatternCase(
             key: caseSpec.key, label: caseSpec.label, args: finalArgs, expected: finalExpected,
-            argsProvided: finalProvided, argVarRefs: finalVarRefs, hint: caseSpec.hint,
-            tier: caseSpec.tier, points: caseSpec.points, enabled: enabled)
+            argsProvided: finalProvided, argVarRefs: finalVarRefs, expectedVarRef: finalExpectedVarRef,
+            hint: caseSpec.hint, tier: caseSpec.tier, points: caseSpec.points, enabled: enabled)
     }
 
     /// Resolves a parallel array (argVarRefs / argsProvided) for an edited case:
@@ -349,7 +374,7 @@ extension PatternCase {
     fileprivate func with(enabled: Bool) -> PatternCase {
         PatternCase(
             key: key, label: label, args: args, expected: expected,
-            argsProvided: argsProvided, argVarRefs: argVarRefs, hint: hint,
-            tier: tier, points: points, enabled: enabled)
+            argsProvided: argsProvided, argVarRefs: argVarRefs, expectedVarRef: expectedVarRef,
+            hint: hint, tier: tier, points: points, enabled: enabled)
     }
 }
