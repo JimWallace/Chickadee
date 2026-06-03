@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.342] - 2026-06-03
+
+### Fixed
+
+- **`preview_personalization` placeholder audit reads the student notebook.**
+  The MCP preview tool's `{{placeholder}}` audit read the test-setup zip's
+  starter entry, so markers added through `update_notebook` — which writes the
+  standalone notebook blob, not the zip — were absent from `placeholders.used`
+  even though substitution worked at student first-open. The audit now uses the
+  same `notebookData(for:)` resolver as the first-open path (notebook blob with
+  precedence, zip as fallback), so it reflects what students actually see.
+
+
 ## [0.4.341] - 2026-06-03
 
 ### Added
