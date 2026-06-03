@@ -23,7 +23,8 @@ func enqueueRunnerValidationSubmission(
     req: Request,
     setupID: String,
     solutionNotebookData: Data,
-    filename: String = "solution.ipynb"
+    filename: String = "solution.ipynb",
+    submitterUserID: UUID? = nil
 ) async throws -> String {
     let sanitizedFilename = submissionFilenameForStorage(
         uploadedName: filename,
@@ -40,14 +41,22 @@ func enqueueRunnerValidationSubmission(
         .filter(\.$kind == APISubmission.Kind.validation)
         .count()
 
-    let user = try req.auth.require(APIUser.self)
+    // Web callers attribute the submission to the session user; MCP callers
+    // authenticate via a bearer token (no `Request.auth` APIUser) and pass the
+    // resolved subject id explicitly.
+    let resolvedSubmitterID: UUID?
+    if let submitterUserID {
+        resolvedSubmitterID = submitterUserID
+    } else {
+        resolvedSubmitterID = try req.auth.require(APIUser.self).id
+    }
     let submission = APISubmission(
         id: subID,
         testSetupID: setupID,
         zipPath: filePath,
         attemptNumber: priorCount + 1,
         filename: sanitizedFilename,
-        userID: user.id,
+        userID: resolvedSubmitterID,
         kind: APISubmission.Kind.validation
     )
     try await submission.save(on: req.db)
