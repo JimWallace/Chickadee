@@ -24,6 +24,7 @@ name: Vendor RunnerCore wasm
 # GITHUB_TOKEN does not re-trigger workflows. Both independently prevent a loop.
 
 on:
+  workflow_dispatch: {}
   push:
     branches: [main]
     paths:
@@ -70,6 +71,16 @@ jobs:
         if: steps.gate.outputs.changed == 'true'
         run: |
           set -euxo pipefail
+          # The Swift toolchain links these system libs at runtime; the bare
+          # ubuntu-latest runner is missing some (swiftly flags libcurl), so the
+          # toolchain installs but `swift` won't run. Install the documented
+          # Swift-on-Ubuntu dependency set (apt is idempotent for ones already
+          # present).
+          sudo apt-get update
+          sudo apt-get install -y \
+            binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev \
+            libncurses-dev libpython3-dev libsqlite3-0 libstdc++-13-dev \
+            libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev
           # Install swiftly from its binary release (the legacy swiftly-install.sh
           # shell script does not support Ubuntu 24.04, the ubuntu-latest runner).
           arch="$(uname -m)"
@@ -79,6 +90,7 @@ jobs:
           . "$HOME/.local/share/swiftly/env.sh"
           swiftly install 6.3.2
           swiftly use 6.3.2
+          hash -r
           swift --version
           url="$(grep '^url=' wasm/wasm-sdk.pin | cut -d= -f2-)"
           checksum="$(grep '^checksum=' wasm/wasm-sdk.pin | cut -d= -f2-)"
