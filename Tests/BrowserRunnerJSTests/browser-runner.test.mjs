@@ -928,3 +928,117 @@ test('failure detail strips the trailing JSON envelope so students never see the
     'stdout:\nVariable `age` is not defined in the student notebook.\n  expected: a module-level variable named `age`',
   );
 });
+
+// ── Section grouping (results displayed per test-suite section) ──────────────
+// The browser-graded results views (notebook.js, assignment-validate.js) group
+// outcomes into one table per section, matching the server-rendered submission
+// view (submission.leaf).  The runner supplies the data — the ordered section
+// list plus a sectionID parallel to the outcomes — and the shared
+// BrowserRunner.groupBySection buckets them, mirroring the server's
+// groupOutcomesBySection (Tests/APITests/SectionsTests.swift).
+
+test('runScripts surfaces ordered sections + a sectionID parallel to outcomes; outcomes stay canonical', async () => {
+  const passing = exit => ({ stdout: '', stderr: '', exitCode: exit });
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'a.py': '# a\n', 'b.py': '# b\n', 'c.py': '# c\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      sections: [
+        { id: 's1', name: 'Question 1' },
+        { id: 's2', name: 'Question 2' },
+      ],
+      testSuites: [
+        { script: 'a.py', tier: 'public', sectionID: 's1' },
+        { script: 'b.py', tier: 'public', sectionID: 's2' },
+        { script: 'c.py', tier: 'public' },
+      ],
+    },
+    scriptBehaviors: { 'a.py': passing(0), 'b.py': passing(0), 'c.py': passing(0) },
+  });
+
+  const result = await harness.window.BrowserRunner.runScripts(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_sections',
+  );
+
+  // Ordered section list (id + name), straight from the manifest.
+  assert.deepEqual(plain(result.sections), [
+    { id: 's1', name: 'Question 1' },
+    { id: 's2', name: 'Question 2' },
+  ]);
+  // sectionIDs[i] is the section of outcomes[i] (c.py is ungrouped -> null).
+  assert.deepEqual(plain(result.sectionIDs), ['s1', 's2', null]);
+  // The outcome objects themselves must NOT carry a sectionID — they stay the
+  // canonical worker TestOutcome shape (guarded above for the single-outcome
+  // case; this is the multi-section regression guard).
+  for (const outcome of result.outcomes) {
+    assert.ok(!Object.hasOwn(outcome, 'sectionID'), 'outcome must not carry a sectionID field');
+  }
+});
+
+test('groupBySection buckets outcomes in section order with a trailing Ungrouped block', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const sections = [{ id: 's1', name: 'One' }, { id: 's2', name: 'Two' }];
+  const outcomes = ['a', 'b', 'c', 'd'].map(n => ({ testName: n }));
+  // d -> null => Ungrouped; matches SectionsTests.groupOutcomesEmits...Ungrouped.
+  const grouped = groupBySection(outcomes, sections, ['s1', 's2', 's1', null]);
+
+  // plain() normalises cross-realm objects returned from the vm context.
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, tests: g.outcomes.map(o => o.testName) }))),
+    [
+      { name: 'One', tests: ['a', 'c'] },
+      { name: 'Two', tests: ['b'] },
+      { name: 'Ungrouped', tests: ['d'] },
+    ],
+  );
+});
+
+test('groupBySection with no sections is a single unlabelled bucket (legacy flat table)', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const outcomes = [{ testName: 'a' }, { testName: 'b' }];
+  const grouped = groupBySection(outcomes, [], [null, null]);
+
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].sectionName, null, 'no sections => unlabelled bucket, identical to pre-sections layout');
+  assert.deepEqual(plain(grouped[0].outcomes.map(o => o.testName)), ['a', 'b']);
+});
+
+test('groupBySection keeps identical display names in their own sections (v0.4.105 index correlation)', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  // Two pattern-family cases sharing the label "Test 1" in different sections.
+  // A name-keyed map would collapse both onto one section; index correlation
+  // via the parallel sectionIDs array keeps them apart.
+  const sections = [{ id: 'warmup', name: 'Warm Up' }, { id: 'warmup2', name: 'Warm Up II' }];
+  const outcomes = [{ testName: 'Test 1' }, { testName: 'Test 1' }];
+  const grouped = groupBySection(outcomes, sections, ['warmup', 'warmup2']);
+
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, n: g.outcomes.length }))),
+    [{ name: 'Warm Up', n: 1 }, { name: 'Warm Up II', n: 1 }],
+  );
+});
+
+test('groupBySection sends a stale/unknown sectionID to the Ungrouped block', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const sections = [{ id: 's1', name: 'One' }];
+  // outcomes[1] points at a section no longer in the manifest.
+  const grouped = groupBySection([{ testName: 'a' }, { testName: 'b' }], sections, ['s1', 's-gone']);
+
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, tests: g.outcomes.map(o => o.testName) }))),
+    [
+      { name: 'One', tests: ['a'] },
+      { name: 'Ungrouped', tests: ['b'] },
+    ],
+  );
+});

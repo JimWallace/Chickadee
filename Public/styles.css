@@ -505,6 +505,24 @@ textarea.form-input {
 
 .results-table tr:last-child td { border-bottom: none; }
 
+/* Section grouping for results tables — one block (optional heading + table)
+   per test-suite section.  Shared by the server-rendered submission view
+   (submission.leaf) and the browser runner's inline results (notebook.js,
+   assignment-validate.js) so both group identically. */
+.submission-section-block {
+    margin-bottom: 1.5rem;
+}
+.submission-section-block:last-of-type {
+    margin-bottom: 0;
+}
+.submission-section-heading {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 1.25rem 0 .5rem 0;
+    color: var(--gray-700, #374151);
+    letter-spacing: .01em;
+}
+
 /* Sortable tables (see Public/sortable-table.js). A header button toggles
    asc/desc; the ↕/↑/↓ glyph reflects the current sort direction. */
 .sort-header {

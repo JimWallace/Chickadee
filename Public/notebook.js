@@ -1162,9 +1162,9 @@ else:
         const notebookBytes = new Uint8Array(
             new TextEncoder().encode(JSON.stringify(notebook))
         );
-        const { outcomes, response } =
+        const { outcomes, response, sections, sectionIDs } =
             await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
-        renderResults(outcomes, response);
+        renderResults(outcomes, response, sections, sectionIDs);
         return { outcomes, response };
     }
 
@@ -1182,7 +1182,7 @@ else:
     // Pattern that identifies a dependency-skip shortResult.
     const SKIP_RE = /^Skipped: prerequisite '(.+)' did not pass$/;
 
-    function renderResults(outcomes, response) {
+    function renderResults(outcomes, response, sections, sectionIDs) {
         if (!resultsEl) return;
         const displayNameMap = buildOutcomeDisplayNameMap(outcomes);
 
@@ -1201,7 +1201,43 @@ else:
         if (timeout) parts.push(`${timeout} timed out`);
         summaryEl.textContent = parts.join(' · ');
 
-        // Results table — 4-column structure matching submission.leaf
+        resultsEl.innerHTML = '';
+        resultsEl.appendChild(summaryEl);
+
+        // One table per section, mirroring the server-rendered submission view
+        // (submission.leaf).  Unlabelled groups (no sections defined) render as
+        // a single bare table, identical to the pre-sections layout.
+        for (const group of groupOutcomesForDisplay(outcomes, sections, sectionIDs)) {
+            const block = document.createElement('section');
+            block.className = 'submission-section-block';
+            if (group.sectionName) {
+                const heading = document.createElement('h3');
+                heading.className = 'submission-section-heading';
+                heading.textContent = group.sectionName;
+                block.appendChild(heading);
+            }
+            block.appendChild(buildResultsTable(group.outcomes, displayNameMap));
+            resultsEl.appendChild(block);
+        }
+
+        resultsEl.hidden = false;
+
+        // Scroll results into view so student sees feedback immediately.
+        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Group outcomes for display via the browser runner's shared helper, with a
+    // flat single-bucket fallback if it is somehow unavailable.
+    function groupOutcomesForDisplay(outcomes, sections, sectionIDs) {
+        if (window.BrowserRunner && typeof window.BrowserRunner.groupBySection === 'function') {
+            return window.BrowserRunner.groupBySection(outcomes, sections, sectionIDs);
+        }
+        return [{ sectionName: null, outcomes }];
+    }
+
+    // Build one 4-column results table (Test / Tier / Output / Mark) for the
+    // given outcomes — the structure matches submission.leaf.
+    function buildResultsTable(outcomes, displayNameMap) {
         const table = document.createElement('table');
         table.className = 'results-table';
         table.innerHTML = `
@@ -1269,14 +1305,7 @@ else:
             tbody.appendChild(tr);
         }
         table.appendChild(tbody);
-
-        resultsEl.innerHTML = '';
-        resultsEl.appendChild(summaryEl);
-        resultsEl.appendChild(table);
-        resultsEl.hidden = false;
-
-        // Scroll results into view so student sees feedback immediately.
-        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return table;
     }
 
     function escHtml(str) {
