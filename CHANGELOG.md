@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.340] - 2026-06-03
+
+### Fixed
+
+- **Browser grading now injects the per-student personalization seed.** The
+  in-browser Pyodide runner previously never set `CHICKADEE_ASSIGNMENT_SEED`,
+  so a test reading the seed graded differently in the browser than on the
+  native worker (which sets it in the test subprocess). The browser runner now
+  fetches the seed from a new session-authenticated endpoint
+  (`GET /api/v1/browser-runner/testsetups/:id/seed`) that resolves it with the
+  same `AssignmentSeedStore.ensureSeed` the worker and notebook substitution
+  use, and injects it into Pyodide's `os.environ` before tests run — so
+  personalized assignments grade identically in both modes.
+
+### Added
+
+- **MCP `get_solution` / `update_solution` tools.** The MCP authoring surface
+  can now read and replace an assignment's reference *solution* notebook (the
+  instructor's answer key), not just the starter notebook. `get_solution`
+  returns the solution resolved from the assignment's validation submission;
+  `update_solution` stores a new solution as a `kind=validation` submission and
+  re-runs validation against the current suite (watch it with
+  `validate_assignment`). Both are instructor-content-only — they resolve the
+  validation/solution submission and never expose or touch a student submission.
+
+
 ## [0.4.339] - 2026-06-03
 
 ### Fixed
