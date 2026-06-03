@@ -69,10 +69,17 @@ jobs:
       - name: Install Swift 6.3.2 + Embedded Wasm SDK
         if: steps.gate.outputs.changed == 'true'
         run: |
-          curl -fsSL https://swiftlang.github.io/swiftly/swiftly-install.sh | bash -s -- -y
+          set -euxo pipefail
+          # Install swiftly from its binary release (the legacy swiftly-install.sh
+          # shell script does not support Ubuntu 24.04, the ubuntu-latest runner).
+          arch="$(uname -m)"
+          curl -fsSLO "https://download.swift.org/swiftly/linux/swiftly-${arch}.tar.gz"
+          tar zxf "swiftly-${arch}.tar.gz"
+          ./swiftly init -y --skip-install --quiet-shell-followup
           . "$HOME/.local/share/swiftly/env.sh"
           swiftly install 6.3.2
           swiftly use 6.3.2
+          swift --version
           url="$(grep '^url=' wasm/wasm-sdk.pin | cut -d= -f2-)"
           checksum="$(grep '^checksum=' wasm/wasm-sdk.pin | cut -d= -f2-)"
           swift sdk install "$url" --checksum "$checksum"
