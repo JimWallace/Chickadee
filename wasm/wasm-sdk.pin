@@ -3,14 +3,15 @@
 # The job installs Swift 6.3.2 via swiftly, then:
 #   swift sdk install "$url" --checksum "$checksum"
 # and builds with `--swift-sdk swift-6.3.2-RELEASE_wasm-embedded`
-# (see scripts/build-runner-wasm.sh). The SDK version MUST match the host
-# toolchain version (6.3.2) and the swiftly version pinned in the workflow.
+# (see scripts/build-runner-wasm.sh).
 #
-# Source: the official swift.org WebAssembly SDK bundle for the 6.3.2 release,
-# which includes the Embedded Swift (`_wasm-embedded`) SDK. Find the exact URL
-# and checksum on https://www.swift.org/install/ (Wasm SDK) or the release's
-# download page, or run `swift sdk install <url>` locally and copy the values.
-#
-# >>> CONFIRM THESE TWO VALUES against your working 6.3.2 build box <<<
-url=https://download.swift.org/swift-6.3.2-release/wasm-sdk/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE_wasm-embedded.artifactbundle.tar.gz
-checksum=REPLACE_WITH_SHA256_FROM_SWIFT_ORG
+# This is the official swift.org WebAssembly SDK bundle for the 6.3.2 release.
+# Installing this ONE bundle provides BOTH SDK identifiers:
+#   * swift-6.3.2-RELEASE_wasm           (full Swift)
+#   * swift-6.3.2-RELEASE_wasm-embedded  (Embedded Swift — what we build with)
+# URL + checksum are the values published at
+# https://www.swift.org/documentation/articles/wasm-getting-started.html
+# Update both when bumping the Swift toolchain (must stay matched to the swiftly
+# version pinned in .github/workflows/runner-wasm-vendor.yml).
+url=https://download.swift.org/swift-6.3.2-release/wasm-sdk/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE_wasm.artifactbundle.tar.gz
+checksum=a61f0584c93283589f8b2f42db05c1f9a182b506c2957271402992655591dd7c
