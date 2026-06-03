@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.337] - 2026-06-03
+
+### Changed
+
+- **Instructor student-submissions view: Reset button separated from Re-test.**
+  On the per-student course submissions page the destructive "Reset working
+  notebook" action sat directly beside "Re-test" with identical styling, an
+  easy mis-click. Reset now renders with the `action-danger` treatment used for
+  Delete/Remove elsewhere and moves to the rightmost position in the row, with
+  the Extension and Grade-override controls between it and Re-test.
+
+
 ## [0.4.336] - 2026-06-03
 
 ### Added
