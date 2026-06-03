@@ -55,7 +55,7 @@
             });
             const outcomes = result.outcomes || [];
 
-            renderResults(outcomes, result.sections);
+            renderResults(outcomes, result.sections, result.sectionIDs);
             setStatus('', '');
 
             const allPassed = outcomes.length > 0 && outcomes.every(o => o.status === 'pass');
@@ -315,7 +315,7 @@ else:
         if (goLivePanel) goLivePanel.hidden = true;
     }
 
-    function renderResults(outcomes, sections) {
+    function renderResults(outcomes, sections, sectionIDs) {
         if (!resultsEl) return;
 
         const pass    = outcomes.filter(o => o.status === 'pass').length;
@@ -336,7 +336,7 @@ else:
         // One table per section, mirroring the server-rendered submission view
         // (submission.leaf).  Unlabelled groups (no sections defined) render as
         // a single bare table, identical to the pre-sections layout.
-        for (const group of groupOutcomesForDisplay(outcomes, sections)) {
+        for (const group of groupOutcomesForDisplay(outcomes, sections, sectionIDs)) {
             const block = document.createElement('section');
             block.className = 'submission-section-block';
             if (group.sectionName) {
@@ -355,9 +355,9 @@ else:
 
     // Group outcomes for display via the browser runner's shared helper, with a
     // flat single-bucket fallback if it is somehow unavailable.
-    function groupOutcomesForDisplay(outcomes, sections) {
+    function groupOutcomesForDisplay(outcomes, sections, sectionIDs) {
         if (window.BrowserRunner && typeof window.BrowserRunner.groupBySection === 'function') {
-            return window.BrowserRunner.groupBySection(outcomes, sections);
+            return window.BrowserRunner.groupBySection(outcomes, sections, sectionIDs);
         }
         return [{ sectionName: null, outcomes }];
     }

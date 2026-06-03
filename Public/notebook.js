@@ -1162,9 +1162,9 @@ else:
         const notebookBytes = new Uint8Array(
             new TextEncoder().encode(JSON.stringify(notebook))
         );
-        const { outcomes, response, sections } =
+        const { outcomes, response, sections, sectionIDs } =
             await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
-        renderResults(outcomes, response, sections);
+        renderResults(outcomes, response, sections, sectionIDs);
         return { outcomes, response };
     }
 
@@ -1182,7 +1182,7 @@ else:
     // Pattern that identifies a dependency-skip shortResult.
     const SKIP_RE = /^Skipped: prerequisite '(.+)' did not pass$/;
 
-    function renderResults(outcomes, response, sections) {
+    function renderResults(outcomes, response, sections, sectionIDs) {
         if (!resultsEl) return;
         const displayNameMap = buildOutcomeDisplayNameMap(outcomes);
 
@@ -1207,7 +1207,7 @@ else:
         // One table per section, mirroring the server-rendered submission view
         // (submission.leaf).  Unlabelled groups (no sections defined) render as
         // a single bare table, identical to the pre-sections layout.
-        for (const group of groupOutcomesForDisplay(outcomes, sections)) {
+        for (const group of groupOutcomesForDisplay(outcomes, sections, sectionIDs)) {
             const block = document.createElement('section');
             block.className = 'submission-section-block';
             if (group.sectionName) {
@@ -1228,9 +1228,9 @@ else:
 
     // Group outcomes for display via the browser runner's shared helper, with a
     // flat single-bucket fallback if it is somehow unavailable.
-    function groupOutcomesForDisplay(outcomes, sections) {
+    function groupOutcomesForDisplay(outcomes, sections, sectionIDs) {
         if (window.BrowserRunner && typeof window.BrowserRunner.groupBySection === 'function') {
-            return window.BrowserRunner.groupBySection(outcomes, sections);
+            return window.BrowserRunner.groupBySection(outcomes, sections, sectionIDs);
         }
         return [{ sectionName: null, outcomes }];
     }

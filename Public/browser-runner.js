@@ -41,7 +41,7 @@
      *
      * @param {Uint8Array} notebookBytes  Raw bytes of the student's .ipynb file.
      * @param {string}     setupID        The test setup ID for this assignment.
-     * @returns {{ outcomes: object[], response: object, sections: object[] }}
+     * @returns {{ outcomes: object[], response: object, sections: object[], sectionIDs: (?string)[] }}
      */
     async function runAndSubmit(notebookBytes, setupID) {
         const result = await runScripts(notebookBytes, setupID, { filename: 'submission.ipynb' });
@@ -53,36 +53,41 @@
             outcomes: result.outcomes,
             response: await postBrowserResult(notebookBytes, result.collection, setupID),
             sections: result.sections,
+            sectionIDs: result.sectionIDs,
         };
     }
 
     /**
      * Bucket outcomes into display sections, mirroring the server's
      * groupOutcomesBySection (Sources/APIServer/Routes/Web/WebRoutes+Submission.swift):
-     * sections in manifest order, each outcome placed by its own stamped
-     * `sectionID` (set in runScripts), with a trailing "Ungrouped" bucket for
-     * outcomes whose section is missing or unknown.  When the assignment defines
-     * no sections at all, returns a single unlabelled bucket so the layout is
-     * identical to the pre-sections flat table.
+     * sections in manifest order, each `outcomes[i]` placed by `sectionIDs[i]`
+     * (index correlation — not a name lookup, so two families that share a case
+     * label can't collapse onto one section, v0.4.105), with a trailing
+     * "Ungrouped" bucket for outcomes whose section is missing or unknown.  When
+     * the assignment defines no sections at all, returns a single unlabelled
+     * bucket so the layout is identical to the pre-sections flat table.
      *
      * @param {object[]} outcomes
      * @param {{id: string, name: string}[]} sections
+     * @param {(?string)[]} sectionIDs  Parallel to outcomes; sectionIDs[i] is the
+     *   section id of the manifest entry that produced outcomes[i] (or null).
      * @returns {{ sectionName: ?string, outcomes: object[] }[]}
      */
-    function groupBySection(outcomes, sections) {
+    function groupBySection(outcomes, sections, sectionIDs) {
         const list = Array.isArray(sections) ? sections : [];
+        const ids = Array.isArray(sectionIDs) ? sectionIDs : [];
         const known = new Set(list.map(s => s.id));
         const byID = new Map();
         const ungrouped = [];
-        for (const o of (outcomes || [])) {
-            const sid = o && o.sectionID;
+        (outcomes || []).forEach((o, i) => {
+            const sid = i < ids.length ? ids[i] : null;
             if (sid && known.has(sid)) {
                 if (!byID.has(sid)) byID.set(sid, []);
                 byID.get(sid).push(o);
             } else {
                 ungrouped.push(o);
             }
-        }
+        });
         const groups = [];
         for (const section of list) {
             const rows = byID.get(section.id);
@@ -273,12 +278,13 @@ for _module_name in student_module_names_in_load_order():
             }));
 
             // Section metadata, so the inline results can be grouped per
-            // section exactly like the server-rendered submission view.
-            // Display-only: the wasm loop ignores it and it never enters the
-            // graded collection.  `sectionIDPerSuite[i]` is the section of the
-            // manifest entry that produces `outcomes[i]` — index correlation,
-            // matching groupOutcomesBySection on the server (a name-keyed map
-            // would collapse two families that share a case label — v0.4.105).
+            // section exactly like the server-rendered submission view.  Kept
+            // as a parallel array (never stamped onto the outcomes, which must
+            // stay the canonical worker TestOutcome shape): `sectionIDPerSuite[i]`
+            // is the section of the manifest entry that produces `outcomes[i]`
+            // — index correlation, matching groupOutcomesBySection on the server
+            // (a name-keyed map would collapse two families that share a case
+            // label — v0.4.105).
             const sections = (Array.isArray(manifest.sections) ? manifest.sections : [])
                 .filter(s => s && typeof s.id === 'string')
                 .map(s => ({ id: s.id, name: typeof s.name === 'string' ? s.name : '' }));
@@ -295,21 +301,12 @@ for _module_name in student_module_names_in_load_order():
             const outcomes = await globalThis.runnerExecuteSuites(
                 suites, timeLimitSeconds, 1, scriptExists, runScript);
 
-            // Stamp each outcome with its manifest entry's sectionID (by index;
-            // see sectionIDPerSuite above) so the results can be grouped for
-            // display.  executeSuites omits an outcome for a missing script, so
-            // this can drift in that rare case — matching the server, drift
-            // falls into the trailing "Ungrouped" bucket rather than
-            // misattributing a row to the wrong section.  The server decodes the
-            // posted collection into a typed TestOutcome (which has no sectionID)
-            // and re-encodes it, so this field never persists.
-            for (let i = 0; i < outcomes.length; i++) {
-                outcomes[i].sectionID = i < sectionIDPerSuite.length ? sectionIDPerSuite[i] : null;
-            }
-
             // 5. Build collection. The caller decides whether to submit it.
+            // `outcomes` stays the canonical worker TestOutcome shape — section
+            // info rides alongside in a parallel array, never on the outcome
+            // objects, so the posted collection is byte-identical to the worker's.
             const collection = buildCollection(setupID, outcomes);
-            return { outcomes, collection, sections };
+            return { outcomes, collection, sections, sectionIDs: sectionIDPerSuite };
 
         } finally {
             // Clean up MEMFS to avoid OOM on repeated submissions.
