@@ -4,38 +4,6 @@ import Testing
 
 @testable import chickadee_runner
 
-/// Runs `script` via `runner`, retrying only when the subprocess fails to
-/// *launch* — a transient CI flake (fork/posix_spawn under heavy parallel load,
-/// or a spuriously-fired timeout) that surfaces as the `-1` exit sentinel with
-/// no output and `timedOut == false`.
-///
-/// This is deliberately narrow: a genuine env-handling regression produces
-/// output (a wrong `seed=…` line on stderr), never this empty `-1` sentinel, so
-/// it is never retried or masked — only the ambiguous "didn't run at all"
-/// outcome is. Free function (not a method) so it can be called inside the
-/// `@Sendable` `withEnvLock` closure without capturing `self`.
-private func runRetryingLaunchFailure(
-    _ runner: UnsandboxedScriptRunner,
-    script: URL,
-    workDir: URL,
-    timeLimitSeconds: Int,
-    env: [String: String],
-    attempts: Int = 5
-) async -> ScriptOutput {
-    var output = await runner.run(
-        script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env)
-    var remaining = attempts - 1
-    while remaining > 0,
-        output.exitCode == -1, !output.timedOut,
-        output.stdout.isEmpty, output.stderr.isEmpty
-    {
-        remaining -= 1
-        output = await runner.run(
-            script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: env)
-    }
-    return output
-}
-
 @Suite final class WorkerTests {
 
     // MARK: - Setup
@@ -85,7 +53,7 @@ private func runRetryingLaunchFailure(
     @Test func scriptExitZeroReportsExitCodeZero() async throws {
         let script = try writeScript("#!/bin/sh\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.exitCode == 0)
         #expect(output.timedOut == false)
     }
@@ -93,7 +61,7 @@ private func runRetryingLaunchFailure(
     @Test func scriptExitOneReportsExitCodeOne() async throws {
         let script = try writeScript("#!/bin/sh\nexit 1")
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.exitCode == 1)
         #expect(output.timedOut == false)
     }
@@ -101,7 +69,7 @@ private func runRetryingLaunchFailure(
     @Test func scriptExitTwoReportsExitCodeTwo() async throws {
         let script = try writeScript("#!/bin/sh\nexit 2")
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.exitCode == 2)
         #expect(output.timedOut == false)
     }
@@ -111,21 +79,21 @@ private func runRetryingLaunchFailure(
     @Test func stdoutIsCaptured() async throws {
         let script = try writeScript("#!/bin/sh\necho 'hello world'\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.stdout.contains("hello world"))
     }
 
     @Test func stderrIsCaptured() async throws {
         let script = try writeScript("#!/bin/sh\necho 'oops' >&2\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.stderr.contains("oops"))
     }
 
     @Test func stdoutAndStderrAreSeparate() async throws {
         let script = try writeScript("#!/bin/sh\necho 'out'\necho 'err' >&2\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.stdout.contains("out"))
         #expect(output.stdout.contains("err") == false)
         #expect(output.stderr.contains("err"))
@@ -148,7 +116,7 @@ private func runRetryingLaunchFailure(
         // so a concurrent `unsetenv` in another test can't mutate `environ`
         // mid-read.
         let output = try await withEnvLock {
-            await runRetryingLaunchFailure(
+            await runScriptRobustly(
                 runner,
                 script: script,
                 workDir: workDir,
@@ -188,7 +156,7 @@ private func runRetryingLaunchFailure(
             }
             // Ensure parent doesn't have the var set in this test's environment.
             unsetenv("CHICKADEE_ASSIGNMENT_SEED")
-            return await runRetryingLaunchFailure(
+            return await runScriptRobustly(
                 runner,
                 script: script,
                 workDir: workDir,
@@ -208,7 +176,7 @@ private func runRetryingLaunchFailure(
     @Test func scriptTimesOut() async throws {
         let script = try writeScript("#!/bin/sh\nsleep 60\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 1)
         #expect(output.timedOut, "Script sleeping 60s should time out with a 1s limit")
         #expect(output.exitCode == -1)
         #expect(output.executionTimeMs < 10_000)
@@ -223,7 +191,7 @@ private func runRetryingLaunchFailure(
             wait
             """)
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 1)
         #expect(output.timedOut, "Timed-out script with a background child should still time out")
         #expect(output.exitCode == -1)
         #expect(
@@ -237,7 +205,7 @@ private func runRetryingLaunchFailure(
     @Test func workDirIsSetCorrectly() async throws {
         let script = try writeScript("#!/bin/sh\ntouch marker.txt\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        _ = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         let markerPath = tmpDir.appendingPathComponent("marker.txt").path
         #expect(
             FileManager.default.fileExists(atPath: markerPath),
@@ -251,7 +219,7 @@ private func runRetryingLaunchFailure(
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\nexit 0")
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.exitCode == 0)
         #expect(output.timedOut == false)
     }
@@ -260,7 +228,7 @@ private func runRetryingLaunchFailure(
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\nexit 1")
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.exitCode == 1)
         #expect(output.timedOut == false)
     }
@@ -269,7 +237,7 @@ private func runRetryingLaunchFailure(
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\necho 'sandbox out'\nexit 0")
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.stdout.contains("sandbox out"))
     }
 
@@ -277,7 +245,7 @@ private func runRetryingLaunchFailure(
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\necho 'sandbox err' >&2\nexit 0")
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         #expect(output.stderr.contains("sandbox err"))
     }
 
@@ -285,7 +253,7 @@ private func runRetryingLaunchFailure(
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\nsleep 60\nexit 0")
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 1)
         #expect(output.timedOut, "Sandboxed script sleeping 60s should time out with 1s limit")
         #expect(output.exitCode == -1)
         #expect(
@@ -301,7 +269,7 @@ private func runRetryingLaunchFailure(
             wait
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 1)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 1)
         #expect(output.timedOut, "Sandboxed script with a background child should still time out")
         #expect(output.exitCode == -1)
         #expect(
@@ -314,7 +282,7 @@ private func runRetryingLaunchFailure(
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt\nexit 0")
         let runner = SandboxedScriptRunner()
-        _ = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
         let markerPath = tmpDir.appendingPathComponent("sandboxmarker.txt").path
         #expect(
             FileManager.default.fileExists(atPath: markerPath),
@@ -344,7 +312,7 @@ private func runRetryingLaunchFailure(
             "
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
         #expect(
             output.exitCode != 0,
             "Sandboxed runner should block outbound network access (exit 0 means connection succeeded)")
@@ -458,7 +426,7 @@ private func runRetryingLaunchFailure(
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
         #expect(output.exitCode == 0)
         #expect(output.stdout.contains("all good"), "stdout should contain the passed message")
         #expect(output.stdout.contains("shortResult"), "stdout should contain shortResult JSON key")
@@ -472,7 +440,7 @@ private func runRetryingLaunchFailure(
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
         #expect(output.exitCode == 1)
         #expect(output.stdout.contains("wrong answer"))
         #expect(output.stdout.contains("shortResult"))
@@ -486,7 +454,7 @@ private func runRetryingLaunchFailure(
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
         #expect(output.exitCode == 2)
         #expect(output.stdout.contains("unexpected"))
         #expect(output.stdout.contains("shortResult"))
@@ -500,7 +468,7 @@ private func runRetryingLaunchFailure(
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
         #expect(output.exitCode == 0)
         #expect(output.stdout.contains("passed"), "default passed() message should be 'passed'")
     }
