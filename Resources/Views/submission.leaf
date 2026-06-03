@@ -243,19 +243,9 @@ Submission #(submissionID)
 .test-output-pre-wide {
     margin-top: .35rem;
 }
-.submission-section-block {
-    margin-bottom: 1.5rem;
-}
-.submission-section-block:last-of-type {
-    margin-bottom: 0;
-}
-.submission-section-heading {
-    font-size: 1rem;
-    font-weight: 600;
-    margin: 1.25rem 0 .5rem 0;
-    color: var(--gray-700, #374151);
-    letter-spacing: .01em;
-}
+/* .submission-section-block / .submission-section-heading now live in the
+   global Public/styles.css so the browser runner's inline results
+   (notebook.js, assignment-validate.js) share the same section styling. */
 .warning-box {
     margin-bottom: 1rem;
     padding: .85rem 1rem;
