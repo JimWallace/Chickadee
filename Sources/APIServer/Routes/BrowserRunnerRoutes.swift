@@ -30,6 +30,7 @@ struct BrowserRunnerRoutes: RouteCollection {
         let br = routes.grouped("api", "v1", "browser-runner")
         br.get("testsetups", ":testSetupID", "download", use: downloadTestSetup)
         br.get("testsetups", ":testSetupID", "manifest", use: getTestSetupManifest)
+        br.get("testsetups", ":testSetupID", "seed", use: getAssignmentSeed)
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/download
@@ -81,4 +82,56 @@ struct BrowserRunnerRoutes: RouteCollection {
             body: .init(string: setup.manifest))
     }
 
+    // MARK: - GET /api/v1/browser-runner/testsetups/:id/seed
+
+    /// Returns the per-(student, assignment) personalization seed the browser
+    /// runner injects into Pyodide as `CHICKADEE_ASSIGNMENT_SEED`.
+    ///
+    /// Personalization parity: the native worker resolves this exact seed in
+    /// `WorkerJobRoutes.buildJobPayload` via `AssignmentSeedStore.ensureSeed`
+    /// and injects it into the test subprocess (`RunnerDaemon+JobProcessing`).
+    /// Browser grading had no equivalent, so any test reading the seed saw
+    /// nothing in-browser. This endpoint calls the SAME `ensureSeed` — keyed by
+    /// the same `(userID, assignmentID)` that also backs notebook substitution —
+    /// so the browser, the worker backstop, and the student's notebook all share
+    /// one seed.
+    ///
+    /// Returns `{ "seed": null }` when the caller has no id or no assignment
+    /// owns the setup — mirroring the worker, which leaves the seed unset in
+    /// those cases (a non-personalized grade is unaffected by the missing var).
+    @Sendable
+    func getAssignmentSeed(req: Request) async throws -> BrowserRunnerSeedResponse {
+        let caller = try req.auth.require(APIUser.self)
+
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+
+        // A test setup belongs to a single assignment (1:1 via test_setup_id),
+        // matching how the worker resolves the assignment for a claimed job.
+        guard
+            let userID = caller.id,
+            let assignment = try await APIAssignment.query(on: req.db)
+                .filter(\.$testSetupID == setupID)
+                .first(),
+            let assignmentID = assignment.id
+        else {
+            return BrowserRunnerSeedResponse(seed: nil)
+        }
+
+        let seed = try await AssignmentSeedStore.ensureSeed(
+            userID: userID, assignmentID: assignmentID, on: req.db)
+        return BrowserRunnerSeedResponse(seed: seed)
+    }
+
+}
+
+/// JSON body for the browser-runner seed endpoint.
+struct BrowserRunnerSeedResponse: Content {
+    let seed: String?
 }

@@ -255,6 +255,109 @@ import XCTVapor
         }
     }
 
+    // MARK: - Seed endpoint (personalization parity)
+
+    @Test func seedRequiresAuthentication() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                afterResponse: { res in
+                    #expect(
+                        res.status == .unauthorized || res.status == .seeOther,
+                        "unauthenticated seed request should be rejected, got \(res.status)")
+                })
+
+        }
+    }
+
+    @Test func seedReturns404ForUnknownSetup() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/setup_missing_seed/seed",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
+    }
+
+    /// A setup with no owning assignment can't resolve a (user, assignment)
+    /// seed — the endpoint returns `{ "seed": null }`, matching the worker
+    /// leaving the env var unset for an assignment-less job.
+    @Test func seedReturnsNullWhenSetupHasNoAssignment() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let json =
+                        try JSONSerialization.jsonObject(
+                            with: Data(res.body.readableBytesView)) as? [String: Any]
+                    #expect(json != nil, "seed body must be a JSON object")
+                    #expect(json?["seed"] as? String == nil, "no assignment → seed must be null")
+                })
+
+        }
+    }
+
+    /// Parity check: the browser seed endpoint returns exactly the value the
+    /// worker resolves via `AssignmentSeedStore.ensureSeed` for the same
+    /// (user, assignment), and that value is stable across calls.
+    @Test func seedMatchesEnsureSeedAndIsStable() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+
+            func fetchSeed() async throws -> String? {
+                var seed: String?
+                try await app.asyncTest(
+                    .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: cookie)
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .ok)
+                        let json =
+                            try JSONSerialization.jsonObject(
+                                with: Data(res.body.readableBytesView)) as? [String: Any]
+                        seed = json?["seed"] as? String
+                    })
+                return seed
+            }
+
+            let first = try #require(try await fetchSeed(), "personalized setup must return a seed")
+            #expect(first.isEmpty == false)
+
+            let second = try await fetchSeed()
+            #expect(second == first, "seed must be stable across calls")
+
+            let user = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student1").first())
+            let direct = try await AssignmentSeedStore.ensureSeed(
+                userID: try user.requireID(),
+                assignmentID: try assignment.requireID(),
+                on: app.db)
+            #expect(
+                direct == first,
+                "browser seed endpoint must return the same seed AssignmentSeedStore.ensureSeed gives the worker")
+
+        }
+    }
+
     // MARK: - Full round-trip: dependency-skipped outcomes stored correctly
 
     /// Regression for #105: when the browser runner skips a test because its

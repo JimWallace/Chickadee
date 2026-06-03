@@ -270,6 +270,7 @@ function createPyodideHarness(options = {}) {
     exitCode: null,
     loadPackageCalls: [],
     configuredScripts: [],
+    assignmentSeedEnv: null,
   };
 
   const py = {
@@ -280,6 +281,12 @@ function createPyodideHarness(options = {}) {
       if (options.packageError) throw options.packageError;
     },
     async runPythonAsync(code) {
+      if (code.includes("os.environ['CHICKADEE_ASSIGNMENT_SEED']")) {
+        const m = code.match(/CHICKADEE_ASSIGNMENT_SEED'\]\s*=\s*"([^"]*)"/);
+        if (m) state.assignmentSeedEnv = m[1];
+        return null;
+      }
+
       if (code.includes("os.chdir('")) {
         const match = code.match(/os\.chdir\('([^']+)'\)/);
         if (match) state.cwd = match[1];
@@ -406,6 +413,16 @@ async function loadRunnerHarness(options = {}) {
         ok: true,
         async json() {
           return { submissionID: 'sub_test_123' };
+        },
+      };
+    }
+
+    if (url.endsWith('/seed')) {
+      if (options.seedFetchResponse) return options.seedFetchResponse;
+      return {
+        ok: true,
+        async text() {
+          return JSON.stringify({ seed: options.assignmentSeed ?? null });
         },
       };
     }
@@ -927,4 +944,53 @@ test('failure detail strips the trailing JSON envelope so students never see the
     outcome.longResult,
     'stdout:\nVariable `age` is not defined in the student notebook.\n  expected: a module-level variable named `age`',
   );
+});
+
+test('injects the per-student seed into os.environ for parity with the native worker', async () => {
+  // The worker sets CHICKADEE_ASSIGNMENT_SEED in the test subprocess
+  // (RunnerDaemon+JobProcessing). The browser must do the same so a test that
+  // reads the seed grades identically. The runner fetches the seed endpoint and
+  // sets os.environ before any script runs.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    zipFiles: { 'test_seed.py': '# seed\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_seed.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_seed',
+  );
+
+  assert.equal(harness.py.state.assignmentSeedEnv, 'deadbeefcafe0123');
+  assert.equal(
+    harness.fetchCalls.filter(call => call.url.endsWith('/seed')).length,
+    1,
+    'the seed endpoint should be fetched exactly once',
+  );
+});
+
+test('omits CHICKADEE_ASSIGNMENT_SEED when the assignment is not personalized (null seed)', async () => {
+  // A null seed (no owning assignment / non-personalized setup, or an older
+  // server) must leave the env var unset, preserving legacy behaviour.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: null,
+    zipFiles: { 'test_seed.py': '# seed\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_seed.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_noseed',
+  );
+
+  assert.equal(harness.py.state.assignmentSeedEnv, null);
 });

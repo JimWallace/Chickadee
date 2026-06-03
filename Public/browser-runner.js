@@ -199,6 +199,34 @@ for _module_name in student_module_names_in_load_order():
                 throw new Error('Failed to configure Python environment: ' + toMessage(e));
             }
 
+            // Personalization parity (issue #461): inject the per-student seed so a
+            // test reading CHICKADEE_ASSIGNMENT_SEED behaves identically to the
+            // native worker, which sets the same env var in RunnerDaemon's test
+            // subprocess. The server resolves the seed with the SAME
+            // AssignmentSeedStore.ensureSeed call the worker and notebook
+            // substitution use, so all three share one value. os.environ persists
+            // for the whole Pyodide session, so one set covers every test script.
+            // A non-personalized setup (or an older server without the endpoint)
+            // yields no seed → leave the env var unset, preserving legacy behaviour.
+            let assignmentSeed = null;
+            try {
+                const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
+                const parsed = JSON.parse(seedText);
+                if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
+                    assignmentSeed = parsed.seed;
+                }
+            } catch (_) {
+                assignmentSeed = null;  // grade without a seed rather than failing the run
+            }
+            if (assignmentSeed !== null) {
+                try {
+                    await py.runPythonAsync(
+                        `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(assignmentSeed)}`);
+                } catch (e) {
+                    throw new Error('Failed to set assignment seed: ' + toMessage(e));
+                }
+            }
+
             // 4. Fetch manifest from server (test.properties.json is not in the zip;
             //    the server serves it directly from the database via the manifest endpoint).
             setRunnerStatus('loading', 'Loading test configuration…');

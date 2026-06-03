@@ -50,7 +50,12 @@ substitutes into starter-notebook `{{name}}` placeholders.
 
   - Test scripts continue using the v0.4.156 env-var contract
     (`CHICKADEE_ASSIGNMENT_SEED`) for any per-student logic — Slice 2
-    is notebook-only.
+    is notebook-only.  This env var is honored in **both** grading modes:
+    the native worker sets it in the test subprocess, and the in-browser
+    Pyodide runner fetches the same seed (`GET /api/v1/browser-runner/
+    testsetups/:id/seed`, resolved by the same `AssignmentSeedStore.ensureSeed`)
+    and injects it into `os.environ` before tests run, so a seed-reading
+    test grades identically whether it runs on the worker or in the browser.
   - Pattern-family `$name` references can NOT target an expression row
     (case args need a save-time literal).
   - Save-time eval: the server runs every expression once against the
