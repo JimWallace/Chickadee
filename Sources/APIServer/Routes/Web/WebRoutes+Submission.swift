@@ -373,8 +373,11 @@ extension WebRoutes {
             submission: submission,
             processed: processed,
             sectionedOutcomes: sectionedOutcomes,
-            overrideGradePercent: overrideGradePercent,
-            decorations: SubmissionDecorations(badges: badges, currentUser: req.currentUserContext),
+            decorations: SubmissionDecorations(
+                badges: badges,
+                currentUser: req.currentUserContext,
+                overrideGradePercent: overrideGradePercent
+            ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         return try await req.view.render("submission", ctx)
@@ -659,10 +662,10 @@ extension WebRoutes {
         submission: APISubmission,
         processed: ProcessedCollection,
         sectionedOutcomes: [SectionedOutcomes],
-        overrideGradePercent: Int?,
         decorations: SubmissionDecorations,
         delta: DeltaBanner
     ) -> SubmissionContext {
+        let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
         let currentUser = decorations.currentUser
         let isPending = submission.status == "pending" || submission.status == "assigned"
@@ -818,6 +821,9 @@ private struct DeltaBanner {
 private struct SubmissionDecorations {
     let badges: [AchievementBadge]
     let currentUser: CurrentUserContext?
+    /// Instructor override percent for this student × assignment, nil when
+    /// none.  The effective grade shown above the autograded breakdown.
+    let overrideGradePercent: Int?
 }
 
 // `SubmitFormBody` and the submission-output formatting helpers live in
