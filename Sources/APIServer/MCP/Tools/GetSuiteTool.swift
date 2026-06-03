@@ -33,6 +33,19 @@ struct GetSuiteTool: ContentTool {
             let kind: String
             /// Script filename, family name, or check name.
             let name: String
+            /// The editable on-disk script filename, for `kind == "script"`
+            /// items only (nil for generated family/check rows). This is the
+            /// exact string to pass to `author_script(filename:)` or
+            /// `update_suite(script:)` — the `name` field carries the same
+            /// value for hand-written scripts but is a label for generated rows,
+            /// so prefer this field when you need a filename.
+            let filename: String?
+            /// The on-disk file(s) a generated row produces, for `kind ==
+            /// "family"` or `kind == "check"` items (nil for hand-written
+            /// scripts). Read-only: these files are owned by the family/check
+            /// spec and are NOT editable via `author_script` / `update_suite` —
+            /// edit the family or check instead. Order follows the manifest.
+            let generatedFilenames: [String]?
             /// "public", "release", "secret", or "student".
             let tier: String
             let points: Int
@@ -70,8 +83,11 @@ struct GetSuiteTool: ContentTool {
         + "the section list. Each item also carries its source of truth: hand-written scripts "
         + "include their raw body (`content`) and `hint`; pattern families include the full spec "
         + "(`family`) with every case's args and expected value; notebook checks include their "
-        + "spec (`check`). Read-only — use this to inspect exactly what each test checks (e.g. to "
-        + "explain why a submission lost points) before editing the suite."
+        + "spec (`check`). For hand-written scripts, `filename` is the exact value to pass to "
+        + "`author_script` / `update_suite`; generated rows list the file(s) they produce in "
+        + "`generatedFilenames` (read-only — edit the family/check instead). Read-only — use this "
+        + "to inspect exactly what each test checks (e.g. to explain why a submission lost points) "
+        + "before editing the suite."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -107,6 +123,21 @@ struct GetSuiteTool: ContentTool {
                     "properties": .object([
                         "kind": .object(["type": .string("string")]),
                         "name": .object(["type": .string("string")]),
+                        "filename": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Editable on-disk script filename (kind == \"script\"); the value "
+                                    + "to pass to author_script / update_suite. Null for generated "
+                                    + "family/check rows."),
+                        ]),
+                        "generatedFilenames": .object([
+                            "type": .string("array"),
+                            "items": .object(["type": .string("string")]),
+                            "description": .string(
+                                "On-disk file(s) a generated row produces (kind == \"family\" or "
+                                    + "\"check\"); read-only, edit the family/check instead. Null "
+                                    + "for hand-written scripts."),
+                        ]),
                         "tier": .object(["type": .string("string")]),
                         "points": .object(["type": .string("integer")]),
                         "displayName": .object(["type": .string("string")]),
@@ -166,10 +197,14 @@ struct GetSuiteTool: ContentTool {
         // no body). This gives the agent the same complete authoring view the
         // browser suite editor receives from `GET /instructor/:id/suite`.
         let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
+        // Decode the manifest once for the two pieces of state that live on it
+        // rather than on the suite-payload DTO: section variables/expressions,
+        // and the concrete on-disk filenames each generated row produces.
+        let manifest = setup.decodedManifest()
         // Section variables/expressions live on the manifest's section list,
         // not on the suite-payload DTO (which carries only id + name).
         let sectionInputs = Dictionary(
-            uniqueKeysWithValues: (setup.decodedManifest()?.sections ?? []).map {
+            uniqueKeysWithValues: (manifest?.sections ?? []).map {
                 ($0.id, (variables: $0.variables, expressions: $0.expressions))
             })
         let sections = payload.sections.map { section in
@@ -179,17 +214,37 @@ struct GetSuiteTool: ContentTool {
                 variables: sectionInputs[section.id]?.variables ?? [],
                 expressions: sectionInputs[section.id]?.expressions ?? [])
         }
-        let items = payload.items.map { Self.item(from: $0) }
+        // Map each generator id to the concrete `testSuites` filenames it
+        // produced, preserving manifest order so multi-case families list
+        // their files in the order the runner walks them.
+        var generatedByFamily: [String: [String]] = [:]
+        var generatedByCheck: [String: [String]] = [:]
+        for entry in manifest?.testSuites ?? [] {
+            if let fid = entry.generatedBy {
+                generatedByFamily[fid, default: []].append(entry.script)
+            } else if let cid = entry.generatedByCheck {
+                generatedByCheck[cid, default: []].append(entry.script)
+            }
+        }
+        let items = payload.items.map {
+            Self.item(from: $0, generatedByFamily: generatedByFamily, generatedByCheck: generatedByCheck)
+        }
         return Output(assignmentPublicID: assignment.publicID, sections: sections, items: items)
     }
 
-    private static func item(from dto: SuiteItemDTO) -> Output.Item {
+    private static func item(
+        from dto: SuiteItemDTO,
+        generatedByFamily: [String: [String]],
+        generatedByCheck: [String: [String]]
+    ) -> Output.Item {
         switch dto.kind {
         case "family":
             let family = dto.family
             return Output.Item(
                 kind: "family",
                 name: family?.name ?? "(family)",
+                filename: nil,
+                generatedFilenames: family.flatMap { generatedByFamily[$0.id] },
                 tier: (family?.defaults.tier ?? .pub).rawValue,
                 points: family?.defaults.points ?? 0,
                 displayName: nil,
@@ -205,6 +260,8 @@ struct GetSuiteTool: ContentTool {
             return Output.Item(
                 kind: "check",
                 name: check?.name ?? check?.id ?? "(check)",
+                filename: nil,
+                generatedFilenames: check.flatMap { generatedByCheck[$0.id] },
                 tier: (check?.tier ?? .pub).rawValue,
                 points: check?.points ?? 0,
                 displayName: nil,
@@ -220,6 +277,8 @@ struct GetSuiteTool: ContentTool {
             return Output.Item(
                 kind: "script",
                 name: script?.script ?? "(script)",
+                filename: script?.script,
+                generatedFilenames: nil,
                 tier: (script?.tier ?? .pub).rawValue,
                 points: script?.points ?? 0,
                 displayName: script?.displayName,

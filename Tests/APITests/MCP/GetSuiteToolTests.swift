@@ -46,12 +46,19 @@ import Vapor
             #expect(a.points == 2)
             #expect(a.displayName == "Test A")
             #expect(a.sectionID == "sec1")
+            // Hand-written script: `filename` mirrors `name` (the editable
+            // on-disk name to pass to author_script / update_suite) and no
+            // files are "generated".
+            #expect(a.filename == "test_a.sh")
+            #expect(a.generatedFilenames == nil)
 
             let b = try #require(output.items.first { $0.name == "test_b.sh" })
             #expect(b.tier == "secret")
             #expect(b.points == 3)
             #expect(b.dependsOn == ["test_a.sh"])
             #expect(b.sectionID == "sec2")
+            #expect(b.filename == "test_b.sh")
+            #expect(b.generatedFilenames == nil)
         }
     }
 
@@ -87,7 +94,7 @@ import Vapor
     /// the family's full spec (function, params, cases with args/expected) is
     /// surfaced — this is what an agent needs to explain a submission's score.
     private let familyManifest = #"""
-        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"publictest_tax_01.py","generatedBy":"tax","sectionID":"sec1"}],"patternFamilies":[{"id":"tax","name":"tax — boundary cases","kind":"boundary_equality","functionName":"tax","paramNames":["price"],"defaults":{"tier":"public","points":1},"cases":[{"key":"01","label":"tax(100)","args":[100],"expected":113.0,"enabled":true}]}],"sections":[{"id":"sec1","name":"Functions"}],"timeLimitSeconds":10}
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"publictest_tax_01.py","generatedBy":"tax","sectionID":"sec1"},{"tier":"public","script":"publictest_tax_02.py","generatedBy":"tax","sectionID":"sec1"}],"patternFamilies":[{"id":"tax","name":"tax — boundary cases","kind":"boundary_equality","functionName":"tax","paramNames":["price"],"defaults":{"tier":"public","points":1},"cases":[{"key":"01","label":"tax(100)","args":[100],"expected":113.0,"enabled":true},{"key":"02","label":"tax(200)","args":[200],"expected":226.0,"enabled":true}]}],"sections":[{"id":"sec1","name":"Functions"}],"timeLimitSeconds":10}
         """#
 
     @Test func surfacesPatternFamilyCases() async throws {
@@ -107,6 +114,10 @@ import Vapor
 
             let row = try #require(output.items.first { $0.kind == "family" })
             #expect(row.familyID == "tax")
+            // A family row is not itself an editable file; it lists the on-disk
+            // files its enabled cases produce, in manifest order.
+            #expect(row.filename == nil)
+            #expect(row.generatedFilenames == ["publictest_tax_01.py", "publictest_tax_02.py"])
             let family = try #require(row.family)
             #expect(family.functionName == "tax")
             #expect(family.paramNames == ["price"])
@@ -116,6 +127,35 @@ import Vapor
             #expect(testCase.args == [.int(100)])
             // JSONValue normalises the whole-number literal 113.0 to .int(113).
             #expect(testCase.expected == .int(113))
+        }
+    }
+
+    /// Manifest with a notebook check + its generated entry, so we can assert
+    /// a check row exposes the on-disk file it produces (and is not itself an
+    /// editable file).
+    private let checkManifest = #"""
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"publiccheck_df.py","generatedByCheck":"df"}],"notebookChecks":[{"id":"df","name":"DataFrame shape","kind":"data_frame_shape","variable":"df","expectedRows":1,"expectedCols":1,"tier":"public","points":1}],"timeLimitSeconds":10}
+        """#
+
+    @Test func surfacesNotebookCheckGeneratedFilename() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(
+                on: app, id: "setup_chk", courseID: courseID, manifest: checkManifest)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_chk", courseID: courseID, title: "Lab")
+
+            let output = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+
+            let row = try #require(output.items.first { $0.kind == "check" })
+            #expect(row.filename == nil)
+            #expect(row.generatedFilenames == ["publiccheck_df.py"])
+            #expect(try #require(row.check).id == "df")
         }
     }
 
