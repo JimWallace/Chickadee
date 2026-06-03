@@ -184,30 +184,13 @@ struct WorkerJobRoutes: RouteCollection {
             throw WorkerJobError.internalInconsistency(reason: "Failed to build worker download URLs from base=\(base)")
         }
 
-        // Resolve per-student personalization inputs (issue #461 — pattern
-        // families with per-student values) for this seed, server-side, so the
-        // worker can bind them in generated scripts via `_ck_inputs.py`. Only
-        // the values of `=` expressions are shipped (literal variables are
-        // inlined into scripts at save time). Best-effort: on evaluation error
-        // the value is simply absent and the generated test fails closed with a
-        // clear message — non-personalized assignments are unaffected.
-        var personalizedInputs: [String: String]?
-        let fullManifest = claimed.manifest
-        let hasExpressions =
-            !fullManifest.globalExpressions.isEmpty
-            || fullManifest.sections.contains { !$0.expressions.isEmpty }
-        if let seed = assignmentSeed, hasExpressions {
-            let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
-            let resolution = await PersonalizationSubstitution.resolve(
-                manifest: fullManifest, seedHex: seed, supportFilesDirectory: supportDir)
-            if let evalError = resolution.evaluationError {
-                req.logger.warning(
-                    "Personalization eval failed for submission \(submissionID): \(evalError)")
-            }
-            let exprNames = Set(resolution.evaluatedExpressionNames)
-            let values = resolution.substitutions.filter { exprNames.contains($0.key) }
-            if !values.isEmpty { personalizedInputs = values }
-        }
+        // Resolve per-student personalization inputs (issue #461) for this seed,
+        // server-side, so the worker can bind them in generated scripts via
+        // `_ck_inputs.py`. Shared with the browser seed endpoint via
+        // `gradingInputs` so the two grading paths resolve identically.
+        let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+        let personalizedInputs = await PersonalizationSubstitution.gradingInputs(
+            manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir)
 
         return Job(
             submissionID: submissionID,

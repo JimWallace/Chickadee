@@ -121,12 +121,22 @@ struct BrowserRunnerRoutes: RouteCollection {
                 .first(),
             let assignmentID = assignment.id
         else {
-            return BrowserRunnerSeedResponse(seed: nil)
+            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil)
         }
 
         let seed = try await AssignmentSeedStore.ensureSeed(
             userID: userID, assignmentID: assignmentID, on: req.db)
-        return BrowserRunnerSeedResponse(seed: seed)
+
+        // Resolve per-student personalization inputs (issue #461) the same way
+        // the worker does — via the shared `gradingInputs` helper — so a
+        // browser-graded submission binds the same values a worker would.
+        var personalizedInputs: [String: String]?
+        if let manifest = setup.decodedManifest() {
+            personalizedInputs = await PersonalizationSubstitution.gradingInputs(
+                manifest: manifest, seedHex: seed,
+                supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/")
+        }
+        return BrowserRunnerSeedResponse(seed: seed, personalizedInputs: personalizedInputs)
     }
 
 }
@@ -134,4 +144,9 @@ struct BrowserRunnerRoutes: RouteCollection {
 /// JSON body for the browser-runner seed endpoint.
 struct BrowserRunnerSeedResponse: Content {
     let seed: String?
+    /// Per-student personalization input values (Python literals), keyed by
+    /// name — the `=` expressions resolved for this student's seed. The browser
+    /// writes these to `_ck_inputs.py` so generated pattern-family scripts can
+    /// load per-student args / expected. Nil when there are none (issue #461).
+    let personalizedInputs: [String: String]?
 }

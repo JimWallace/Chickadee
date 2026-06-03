@@ -358,6 +358,37 @@ import XCTVapor
         }
     }
 
+    /// Slice B of #461: the seed endpoint resolves the assignment's `=`
+    /// expressions for this student and returns them as `personalizedInputs`
+    /// (Python literals), which the browser writes to `_ck_inputs.py` so
+    /// generated pattern-family scripts can bind per-student args / expected.
+    @Test func seedResponseIncludesPersonalizedInputs() async throws {
+        try await withApp(app) { _ in
+            let manifest = """
+                {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\
+                "globalExpressions":[{"name":"answer","expression":"7 * 6"}]}
+                """
+            let setupID = try await insertSetup(manifest: manifest)
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let json =
+                        try JSONSerialization.jsonObject(
+                            with: Data(res.body.readableBytesView)) as? [String: Any]
+                    #expect(json?["seed"] is String, "personalized setup must return a seed")
+                    let inputs = try #require(
+                        json?["personalizedInputs"] as? [String: String],
+                        "seed endpoint must resolve = expressions into personalizedInputs")
+                    #expect(inputs["answer"] == "42", "value must be the expression's repr literal")
+                })
+        }
+    }
+
     // MARK: - Full round-trip: dependency-skipped outcomes stored correctly
 
     /// Regression for #105: when the browser runner skips a test because its

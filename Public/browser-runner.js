@@ -254,14 +254,19 @@ for _module_name in student_module_names_in_load_order():
             // A non-personalized setup (or an older server without the endpoint)
             // yields no seed → leave the env var unset, preserving legacy behaviour.
             let assignmentSeed = null;
+            let personalizedInputs = null;
             try {
                 const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
                 const parsed = JSON.parse(seedText);
                 if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
                     assignmentSeed = parsed.seed;
                 }
+                if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
+                    personalizedInputs = parsed.personalizedInputs;
+                }
             } catch (_) {
                 assignmentSeed = null;  // grade without a seed rather than failing the run
+                personalizedInputs = null;
             }
             if (assignmentSeed !== null) {
                 try {
@@ -269,6 +274,25 @@ for _module_name in student_module_names_in_load_order():
                         `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(assignmentSeed)}`);
                 } catch (e) {
                     throw new Error('Failed to set assignment seed: ' + toMessage(e));
+                }
+            }
+            // Per-student personalization inputs (issue #461, Slice B): mirror the
+            // native worker, which writes _ck_inputs.py into the grading workspace
+            // from Job.personalizedInputs. Each value is already a Python literal
+            // the server resolved for this student's seed (via the same
+            // gradingInputs helper); generated pattern-family scripts load this
+            // file by path. The filename is reserved in test_runtime so it can't
+            // be mistaken for the submission module.
+            if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
+                let ckSource = '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n_ck = {\n';
+                for (const key of Object.keys(personalizedInputs).sort()) {
+                    ckSource += `    ${JSON.stringify(key)}: ${personalizedInputs[key]},\n`;
+                }
+                ckSource += '}\n';
+                try {
+                    py.FS.writeFile(`${workDir}/_ck_inputs.py`, ckSource);
+                } catch (e) {
+                    throw new Error('Failed to write personalization inputs: ' + toMessage(e));
                 }
             }
 
