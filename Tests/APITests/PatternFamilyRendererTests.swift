@@ -438,4 +438,85 @@ import Vapor
         try validatePatternFamilies([], testSuites: [])
     }
 
+    // MARK: - Personalization (per-student inputs, #461)
+
+    private func perStudentBoundaryFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Adults", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "adults_expected")
+        return PatternFamily(
+            id: "adults", name: "Adults", kind: .boundaryEquality,
+            functionName: "countAdults", paramNames: ["patients"], cases: [c])
+    }
+
+    @Test func rendererEmitsPerStudentPreambleAndExpectedRef() throws {
+        let scripts = renderPatternFamily(
+            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"])
+        let src = try #require(scripts.first).source
+        // The full generated script (preamble + body) must be valid Python.
+        try pfAssertValidPythonSyntax(src, label: "adults_01")
+        // Loads per-student inputs by path from the reserved file.
+        #expect(src.contains("_ck_inputs.py"))
+        #expect(src.contains("spec_from_file_location"))
+        // Binds both referenced per-student names from _ck.
+        #expect(src.contains(#"patients = _ck["patients"]"#))
+        #expect(src.contains(#"adults_expected = _ck["adults_expected"]"#))
+        // Fails closed when a value is missing (no seed).
+        #expect(src.contains("Personalization input"))
+        // Expected is the bare per-student ref, not a baked literal.
+        #expect(src.contains("expected = adults_expected"))
+        #expect(!src.contains("expected = None"))
+        // The arg is passed from the bound name and the function is called.
+        #expect(src.contains("patients = patients"))
+        #expect(src.contains("student_module.countAdults(patients)"))
+    }
+
+    @Test func rendererOmitsPreambleWhenNoPerStudentRefs() throws {
+        // A normal family renders unchanged even when the assignment declares
+        // per-student names the family doesn't reference.
+        let scripts = renderPatternFamily(pfBMIFamily(), perStudentNames: ["patients"])
+        let src = try #require(scripts.first).source
+        #expect(!src.contains("_ck_inputs.py"))
+        #expect(!src.contains("Personalization input"))
+        #expect(src.contains("expected = \"underweight\""))
+    }
+
+    @Test func validation_acceptsPerStudentArgAndExpectedRefs() throws {
+        try validatePatternFamilies(
+            [perStudentBoundaryFamily()], testSuites: [],
+            perStudentExpressionNames: ["patients", "adults_expected"])
+    }
+
+    @Test func validation_rejectsUnknownExpectedRef() throws {
+        let c = PatternCase(
+            key: "01", label: "Adults", args: [.int(1)], expected: .null,
+            expectedVarRef: "not_declared")
+        let family = PatternFamily(
+            id: "adults", name: "Adults", kind: .boundaryEquality,
+            functionName: "countAdults", paramNames: ["x"], cases: [c])
+        #expect {
+            try validatePatternFamilies(
+                [family], testSuites: [], perStudentExpressionNames: ["patients"])
+        } throws: { error in
+            #expect("\(error)".contains("must name a per-student input"))
+            return true
+        }
+    }
+
+    @Test func validation_rejectsPerStudentRefOnNonBoundaryKind() throws {
+        let c = PatternCase(
+            key: "01", label: "X", args: [.null], expected: .double(1.0),
+            argVarRefs: ["patients"])
+        let family = PatternFamily(
+            id: "approx", name: "Approx", kind: .approximateEquality,
+            functionName: "f", paramNames: ["patients"], cases: [c])
+        #expect {
+            try validatePatternFamilies(
+                [family], testSuites: [], perStudentExpressionNames: ["patients"])
+        } throws: { error in
+            #expect("\(error)".contains("only supported in boundary_equality"))
+            return true
+        }
+    }
+
 }

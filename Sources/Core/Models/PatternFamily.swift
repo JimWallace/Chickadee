@@ -126,6 +126,13 @@ public struct PatternCase: Codable, Equatable, Sendable {
     public let argVarRefs: [String?]
     /// Value compared with `==` against the function's return.
     public let expected: JSONValue
+    /// When non-nil, the expected value is resolved per-student at grading
+    /// time from the personalization input named here (a global or section
+    /// `=` expression row), instead of the literal `expected`.  The renderer
+    /// emits `expected = <name>` — a bare identifier defined by the
+    /// per-student `_ck_inputs` preamble — rather than baking a literal.  nil
+    /// preserves the pre-personalization behaviour (literal `expected`).
+    public let expectedVarRef: String?
     /// Per-case hint shown at the end of every failure message.  When nil,
     /// the family's `defaults.hint` is used instead.
     public let hint: String?
@@ -139,6 +146,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
     public init(
         key: String, label: String, args: [JSONValue], expected: JSONValue,
         argsProvided: [Bool] = [], argVarRefs: [String?] = [],
+        expectedVarRef: String? = nil,
         hint: String? = nil, tier: TestTier? = nil, points: Int? = nil,
         enabled: Bool = true
     ) {
@@ -148,6 +156,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         self.argsProvided = argsProvided.count == args.count ? argsProvided : []
         self.argVarRefs = argVarRefs.count == args.count ? argVarRefs : []
         self.expected = expected
+        self.expectedVarRef = expectedVarRef
         self.hint = hint
         self.tier = tier
         self.points = points
@@ -164,6 +173,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         let decodedVarRefs = try c.decodeIfPresent([String?].self, forKey: .argVarRefs) ?? []
         argVarRefs = decodedVarRefs.count == args.count ? decodedVarRefs : []
         expected = try c.decode(JSONValue.self, forKey: .expected)
+        expectedVarRef = try c.decodeIfPresent(String.self, forKey: .expectedVarRef)
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         tier = try c.decodeIfPresent(TestTier.self, forKey: .tier)
         points = try c.decodeIfPresent(Int.self, forKey: .points)
