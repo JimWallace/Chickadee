@@ -43,6 +43,34 @@ extension TestOutcomeCollection {
             timestamp: timestamp
         )
     }
+
+    /// Returns a copy with `outcomes` swapped out but every aggregate field
+    /// (counts, points, build status, metadata) left intact.  Used by the
+    /// results API so the response carries the real all-tier grade while
+    /// listing only the caller-visible outcomes — the aggregates therefore may
+    /// not sum to `outcomes`, by design.
+    func replacingOutcomes(with newOutcomes: [TestOutcome]) -> TestOutcomeCollection {
+        TestOutcomeCollection(
+            submissionID: submissionID,
+            testSetupID: testSetupID,
+            attemptNumber: attemptNumber,
+            buildStatus: buildStatus,
+            compilerOutput: compilerOutput,
+            outcomes: newOutcomes,
+            totalTests: totalTests,
+            passCount: passCount,
+            failCount: failCount,
+            errorCount: errorCount,
+            timeoutCount: timeoutCount,
+            executionTimeMs: executionTimeMs,
+            totalPoints: totalPoints,
+            earnedPoints: earnedPoints,
+            warnings: warnings,
+            jobStartedAt: jobStartedAt,
+            runnerVersion: runnerVersion,
+            timestamp: timestamp
+        )
+    }
 }
 
 // MARK: - Tier visibility policy

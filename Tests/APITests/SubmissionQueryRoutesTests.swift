@@ -689,4 +689,88 @@ import XCTVapor
 
         }
     }
+
+    /// Default response: the grade aggregates span EVERY tier (the real grade,
+    /// matching the dashboard / submission page), while `outcomes` lists only
+    /// the results the student may inspect.  The counts intentionally exceed
+    /// `outcomes.count` — this is the fix for the API re-introducing the
+    /// visible-only-grade drift.
+    @Test func getResultsGradeSpansAllTiersWhileHidingOutcomes() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_alltier_grade"
+            let username = "student_atg"
+            let cookie = try await loginAsStudent(username: username)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            try await ensureAssignment(setupID: setupID, dueAt: Date().addingTimeInterval(3600))  // future
+            try await insertSubmission(id: "sub_atg", testSetupID: setupID, userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_atg",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .fail),
+                ]
+            )
+            try await insertResult(submissionID: "sub_atg", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_atg/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    // Grade aggregates span every tier (the real grade).
+                    #expect(body.totalTests == 3)
+                    #expect(body.passCount == 1)
+                    #expect(body.failCount == 2)
+                    #expect(body.totalPoints == 3)
+                    #expect(body.earnedPoints == 1)
+                    // …but only the public outcome is listed (release hidden
+                    // before the deadline, secret never).
+                    #expect(body.outcomes.count == 1)
+                    #expect(body.outcomes[0].testName == "test_pub")
+                    #expect(body.outcomes.contains { $0.tier == .release } == false)
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    /// An explicit `?tiers=` slice still returns a self-consistent
+    /// sub-collection (aggregates recomputed over the requested ∩ visible
+    /// tiers), so power-user slicing is unaffected by the all-tier default.
+    @Test func getResultsExplicitTierSliceIsSelfConsistent() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_slice"
+            let username = "student_slice"
+            let cookie = try await loginAsStudent(username: username)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            try await ensureAssignment(setupID: setupID, dueAt: Date().addingTimeInterval(3600))
+            try await insertSubmission(id: "sub_slice", testSetupID: setupID, userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_slice",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .fail),
+                ]
+            )
+            try await insertResult(submissionID: "sub_slice", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_slice/results?tiers=public",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.count == 1)
+                    #expect(body.totalTests == 1)
+                    #expect(body.passCount == 1)
+                    #expect(body.failCount == 0)
+                })
+
+        }
+    }
 }
