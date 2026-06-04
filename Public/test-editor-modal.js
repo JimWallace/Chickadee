@@ -38,6 +38,7 @@
             items: [
                 { value: 'boundary_equality',     mechanism: 'family', label: 'Returns the right value' },
                 { value: 'approximate_equality',  mechanism: 'family', label: 'Returns the right value (within tolerance)' },
+                { value: 'unordered_equality',    mechanism: 'family', label: 'Returns the right values (any order)' },
                 { value: 'return_type_check',     mechanism: 'family', label: 'Returns the right type' },
                 { value: 'exception_expected',    mechanism: 'family', label: 'Raises the right error' },
                 { value: 'stdout_equality',       mechanism: 'family', label: 'Prints the right output' },
@@ -76,6 +77,7 @@
     var DESCRIPTIONS = {
         boundary_equality:     'Call the student’s function with a table of inputs and check each return value.',
         approximate_equality:  'Like “Returns the right value”, but compares floats within a tolerance.',
+        unordered_equality:    'Like “Returns the right value”, but compares lists ignoring element order.',
         return_type_check:     'Check that the function returns a value of the expected type.',
         exception_expected:    'Check that the function raises the expected exception for given inputs.',
         stdout_equality:       'Check what the function prints to stdout for given inputs.',

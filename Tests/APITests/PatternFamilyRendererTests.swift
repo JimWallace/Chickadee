@@ -614,4 +614,83 @@ import Vapor
         #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
     }
 
+    // MARK: - unorderedEquality (Slice F)
+
+    private func unorderedFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Pick", args: [.array([.int(3), .int(1), .int(2)])],
+            expected: .array([.int(1), .int(2), .int(3)]))
+        return PatternFamily(
+            id: "pick", name: "Pick", kind: .unorderedEquality,
+            functionName: "pick", paramNames: ["xs"], cases: [c])
+    }
+
+    private func unorderedPerStudentFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Find", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "matches")
+        return PatternFamily(
+            id: "find", name: "Find", kind: .unorderedEquality,
+            functionName: "findByDiag", paramNames: ["patients"], cases: [c])
+    }
+
+    @Test func unorderedRendererEmitsCanonicalComparison() throws {
+        let src = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: []).first).source
+        try pfAssertValidPythonSyntax(src, label: "pick_01")
+        #expect(src.contains("_ck_canon"))
+        #expect(src.contains("sort_keys=True"))
+        #expect(src.contains("student_module.pick("))
+    }
+
+    @Test func unorderedGradesOrderInsensitivelyAtRuntime() throws {
+        let body = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: []).first).source
+        // Same elements, original (different) order → pass: order is ignored.
+        let reordered = "def pick(xs):\n    return list(xs)"
+        let sortedFn = "def pick(xs):\n    return sorted(xs)"
+        let missing = "def pick(xs):\n    return xs[:2]"
+        let notList = "def pick(xs):\n    return 5"
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: reordered) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: sortedFn) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: missing) == .fail)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: notList) == .fail)
+    }
+
+    @Test func unorderedPerStudentGradesAtRuntime() throws {
+        let scripts = renderPatternFamily(
+            unorderedPerStudentFamily(), perStudentNames: ["patients", "matches"])
+        let body = try #require(scripts.first).source
+        // `matches` lists the two 'A' patients in a different order than the
+        // student's filter will produce — order-insensitive compare → pass.
+        let ckInputs = """
+            _ck = {
+                "patients": [{'mrn': '1', 'dx': 'A'}, {'mrn': '2', 'dx': 'B'}, {'mrn': '3', 'dx': 'A'}],
+                "matches": [{'mrn': '3', 'dx': 'A'}, {'mrn': '1', 'dx': 'A'}],
+            }
+            """
+        let correct = "def findByDiag(patients):\n    return [p for p in patients if p['dx'] == 'A']"
+        let buggy = "def findByDiag(patients):\n    return patients"
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+    }
+
+    @Test func validation_unorderedRequiresListExpected() throws {
+        let c = PatternCase(key: "01", label: "x", args: [.int(1)], expected: .int(5))
+        let family = PatternFamily(
+            id: "u", name: "U", kind: .unorderedEquality,
+            functionName: "f", paramNames: ["x"], cases: [c])
+        #expect {
+            try validatePatternFamilies([family], testSuites: [])
+        } throws: { error in
+            #expect("\(error)".contains("must be a list"))
+            return true
+        }
+    }
+
+    @Test func validation_acceptsPerStudentRefsForUnordered() throws {
+        try validatePatternFamilies(
+            [unorderedPerStudentFamily()], testSuites: [],
+            perStudentExpressionNames: ["patients", "matches"])
+    }
+
 }

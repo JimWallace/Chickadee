@@ -124,7 +124,7 @@ private func validateFamilyVariablesAndArgRefs(
 /// exhaustive switch — a new `PatternKind` must opt in or out here explicitly.
 private func kindSupportsPerStudentRefs(_ kind: PatternKind) -> Bool {
     switch kind {
-    case .boundaryEquality, .approximateEquality: return true
+    case .boundaryEquality, .approximateEquality, .unorderedEquality: return true
     case .variableEquality, .returnTypeCheck, .exceptionExpected,
         .performanceThreshold, .stdoutEquality:
         return false

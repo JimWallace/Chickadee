@@ -61,6 +61,7 @@ func patternKindHandler(for kind: PatternKind) -> any PatternKindHandler {
     case .exceptionExpected: return ExceptionExpectedKind()
     case .performanceThreshold: return PerformanceThresholdKind()
     case .stdoutEquality: return StdoutEqualityKind()
+    case .unorderedEquality: return UnorderedEqualityKind()
     }
 }
 
@@ -274,6 +275,36 @@ struct StdoutEqualityKind: PatternKindHandler {
                 reason:
                     "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)"
             )
+        }
+    }
+}
+
+// MARK: - unorderedEquality
+
+struct UnorderedEqualityKind: PatternKindHandler {
+    func render(
+        family: PatternFamily, case c: PatternCase,
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
+    ) -> String {
+        renderUnorderedEquality(
+            family: family, case: c, sectionVariables: sectionVariables,
+            specHash: specHash, perStudentNames: perStudentNames)
+    }
+
+    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+        try validatePatternArgCount(family: family, case: c, kindLabel: "unordered_equality")
+        // Expected must be a list (the elements to match, in any order) — except
+        // when it's per-student (expectedVarRef), where the list arrives at
+        // grading time and the literal `expected` is unused.
+        if c.expectedVarRef == nil {
+            guard case .array = c.expected else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)' (unordered_equality): case '\(c.key)' expected must be a list (the elements to match, in any order)"
+                )
+            }
         }
     }
 }
