@@ -86,27 +86,39 @@ struct SubmissionQueryRoutes: RouteCollection {
         decoder.dateDecodingStrategy = .iso8601
         guard
             let data = result.collectionJSON.data(using: .utf8),
-            var collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            let fullCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
         else {
             throw AppError.internalFailure(reason: "Stored result is corrupt")
         }
 
-        // Enforce deadline-based tier visibility first, then honour any ?tiers= filter.
+        // `fullCollection` carries the real grade across every tier.  The caller
+        // may only *inspect* certain outcomes: secret never, release after the
+        // deadline (instructors see all tiers).
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
-        collection = collection.filtering(tiers: visibleTiers(for: caller, assignment: assignment))
+        let visible = fullCollection.filtering(tiers: visibleTiers(for: caller, assignment: assignment))
 
-        // Optional additional tier filter: ?tiers=public,release
+        let responseCollection: TestOutcomeCollection
         if let tiersParam = req.query[String.self, at: "tiers"] {
+            // Explicit tier slice (?tiers=public,release): return a
+            // self-consistent sub-collection — aggregates recomputed over the
+            // requested ∩ visible tiers.
             let requested = Set(tiersParam.split(separator: ",").map(String.init))
-            collection = collection.filtering(tiers: requested)
+            responseCollection = visible.filtering(tiers: requested)
+        } else {
+            // Default: aggregates report the full all-tier grade (matching the
+            // dashboard and submission page), while `outcomes` lists only the
+            // results the caller may inspect.  The counts can exceed
+            // `outcomes.count` — the intended "real grade, partial detail" shape,
+            // identical to the web view.
+            responseCollection = fullCollection.replacingOutcomes(with: visible.outcomes)
         }
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = .sortedKeys
-        let responseData = try encoder.encode(collection)
+        let responseData = try encoder.encode(responseCollection)
 
         return Response(
             status: .ok,
