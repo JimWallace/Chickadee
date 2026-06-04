@@ -50,6 +50,9 @@ struct AuthorScriptTool: ContentTool {
         /// The assignment's validation status; the edit re-kicks validation
         /// asynchronously, so re-read get_assignment to see it settle.
         let validationStatus: String?
+        /// true when this edit closed a previously-open assignment (re-open with
+        /// update_assignment once validation passes).
+        let assignmentClosed: Bool
     }
 
     static let name = "author_script"
@@ -62,7 +65,8 @@ struct AuthorScriptTool: ContentTool {
         + "public test). For test tiers you may also set points, displayName, dependsOn (prerequisite "
         + "script names or family:<id> tokens), and sectionID (an existing section). Cannot edit "
         + "pattern-family or notebook-check generated scripts — edit the family/check instead. Saving "
-        + "re-runs the assignment's validation."
+        + "re-runs the assignment's validation and closes the assignment if it was open (re-open with "
+        + "update_assignment once validation passes)."
 
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -125,10 +129,11 @@ struct AuthorScriptTool: ContentTool {
             "isTest": .object(["type": .string("boolean")]),
             "created": .object(["type": .string("boolean")]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("filename"), .string("tier"),
-            .string("isTest"), .string("created"),
+            .string("isTest"), .string("created"), .string("assignmentClosed"),
         ]),
     ])
 
@@ -233,8 +238,11 @@ struct AuthorScriptTool: ContentTool {
                 setup: setup, context: context)
         }
 
-        // Re-kick validation against the new manifest/zip (debounced), mirroring
+        // Close a currently-open assignment (matching the web Save button) so
+        // students can't submit against the not-yet-revalidated suite, then
+        // re-kick validation against the new manifest/zip (debounced), mirroring
         // the web suite/script edit handlers.
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
         await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
 
         return Output(
@@ -243,7 +251,8 @@ struct AuthorScriptTool: ContentTool {
             tier: resolved.wireValue,
             isTest: resolved.isTest,
             created: !existedInZip,
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     // MARK: - Test-script authoring (suite-payload path)

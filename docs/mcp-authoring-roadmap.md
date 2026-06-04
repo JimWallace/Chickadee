@@ -20,21 +20,29 @@ added in the `mcp-course-scoping-and-hardening` work, PR #704).
 The original vertical slice (two tools, proving the auth/transport/dispatch
 pipeline) has grown into the full feature. The live tool catalog
 (`MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships twelve
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships twenty
 tools, all `content:read` / `content:write` scoped and course-scoped:
 
 | Tool | Scope | Capability |
 |------|-------|------------|
 | `list_courses` | `content:read` | Courses the subject may act on |
+| `get_server_info` | `content:read` | Deployed version + MCP mode/advertised scopes (liveness + capability probe) |
 | `list_assignments` | `content:read` | A course's assignments (id, title, slug, open/closed, due date) |
 | `get_assignment` | `content:read` | One assignment's full detail |
 | `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body, each family's full spec (cases' args/expected), and each notebook check's spec |
 | `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
+| `get_solution` | `content:read` | The reference solution notebook (.ipynb JSON), resolved from the validation submission |
+| `get_global_inputs` | `content:read` | Assignment personalization: global variables + per-student expressions |
+| `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
 | `update_assignment` | `content:write` | Metadata: title, due date, open/close |
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
-| `update_pattern_family` | `content:write` | Family defaults + per-case enable/disable |
+| `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
+| `update_section_variables` | `content:write` | Replace a section's scoped variables/expressions |
+| `update_pattern_family` | `content:write` | Family defaults + per-case args/expected (incl. per-student `$ref`s), enable/disable |
 | `update_notebook` | `content:write` | Replace the starter notebook |
+| `update_solution` | `content:write` | Replace the reference solution and re-validate |
+| `author_script` | `content:write` | Create/replace a hand-written test or support file |
 | `clone_assignment` | `content:write` | Duplicate an assignment (closed, unvalidated) |
 | `create_assignment` | `content:write` | New notebook-based assignment from scratch |
 

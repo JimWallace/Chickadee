@@ -38,6 +38,9 @@ struct UpdateSuiteTool: ContentTool {
         let updatedScripts: [String]
         /// The assignment's validation status after the edit re-kicks validation.
         let validationStatus: String?
+        /// true when this edit closed a previously-open assignment (re-open with
+        /// update_assignment once validation passes).
+        let assignmentClosed: Bool
     }
 
     static let name = "update_suite"
@@ -45,7 +48,8 @@ struct UpdateSuiteTool: ContentTool {
         "Edit test-suite script metadata for an assignment, by its public ID. For each named "
         + "script provide any of: tier (public/release/secret/student), points, displayName, "
         + "dependsOn (prerequisite script names), and sectionID (\"\" to ungroup). Does NOT change "
-        + "script content or pattern families. Saving re-runs the assignment's validation."
+        + "script content or pattern families. Saving re-runs the assignment's validation and closes "
+        + "the assignment if it was open (re-open with update_assignment once validation passes)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -95,8 +99,11 @@ struct UpdateSuiteTool: ContentTool {
                 "type": .string("array"), "items": .object(["type": .string("string")]),
             ]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
-        "required": .array([.string("assignmentPublicID"), .string("updatedScripts")]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("updatedScripts"), .string("assignmentClosed"),
+        ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
@@ -142,14 +149,17 @@ struct UpdateSuiteTool: ContentTool {
         }
 
         try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        // Re-kick validation against the edited manifest (debounced), mirroring
-        // the web PUT /suite handler.
+        // Close a currently-open assignment (matching the web Save button) so
+        // students can't submit against the not-yet-revalidated suite, then
+        // re-kick validation against the edited manifest (debounced).
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
         await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
 
         return Output(
             assignmentPublicID: assignment.publicID,
             updatedScripts: updated,
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     private static func parseTier(_ raw: String?) throws -> TestTier? {

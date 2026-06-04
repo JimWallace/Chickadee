@@ -91,6 +91,9 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// Keys of cases whose args/expected were edited by this call.
         let editedCaseKeys: [String]
         let validationStatus: String?
+        /// true when this edit closed a previously-open assignment (re-open with
+        /// update_assignment once validation passes).
+        let assignmentClosed: Bool
     }
 
     static let name = "update_pattern_family"
@@ -101,7 +104,8 @@ struct UpdatePatternFamilyTool: ContentTool {
         + "(each { key, args?, expected? }). args/expected are raw JSON values (a list of args in "
         + "parameter order, and the expected return). Saving regenerates the family's scripts and "
         + "re-runs validation, which rejects a wrong arg count or an expected value of the wrong shape "
-        + "for the family's kind. Family ids and case keys come from get_suite."
+        + "for the family's kind. Saving also closes the assignment if it was open (re-open with "
+        + "update_assignment once validation passes). Family ids and case keys come from get_suite."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -182,10 +186,12 @@ struct UpdatePatternFamilyTool: ContentTool {
                 "type": .string("array"), "items": .object(["type": .string("string")]),
             ]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("familyID"), .string("defaultTier"),
             .string("defaultPoints"), .string("enabledCaseKeys"), .string("editedCaseKeys"),
+            .string("assignmentClosed"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -255,6 +261,10 @@ struct UpdatePatternFamilyTool: ContentTool {
         } catch let error as any AbortError {
             throw MCPToolError.from(error, tool: Self.name)
         }
+        // Close a currently-open assignment (matching the web Save button) so
+        // students can't submit against the not-yet-revalidated suite, then
+        // re-kick validation (debounced).
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
         await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
 
         return Output(
@@ -264,7 +274,8 @@ struct UpdatePatternFamilyTool: ContentTool {
             defaultPoints: updatedFamily.defaults.points,
             enabledCaseKeys: updatedFamily.cases.filter(\.enabled).map(\.key),
             editedCaseKeys: editsByKey.keys.sorted(),
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     /// Indexes case edits by key, rejecting duplicates so the last-write-wins

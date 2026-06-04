@@ -553,16 +553,20 @@ extension WorkerDaemon {
         // grading workspace as `_ck_inputs.py`, so generated pattern-family
         // scripts that reference per-student args / expected can load them by
         // path. Each value is already a Python literal (`repr`) resolved
-        // server-side. The filename is reserved (excluded from student-module
-        // candidates in test_runtime), so it can't be mistaken for the
-        // submission.
+        // server-side; keys are emitted as escaped Python string literals via
+        // `JSONValue.string(_:).pythonLiteral` — the same canonical escaping the
+        // renderer's reader and the browser path (`JSON.stringify`) use, so the
+        // three stay byte-for-byte consistent (input names are validated
+        // identifiers today, so this is defense in depth). The filename is
+        // reserved (excluded from student-module candidates in test_runtime), so
+        // it can't be mistaken for the submission.
         if let inputs = job.personalizedInputs, !inputs.isEmpty {
             var lines = [
                 "# Auto-generated per-student grading inputs (issue #461). Do not edit.",
                 "_ck = {",
             ]
             for key in inputs.keys.sorted() {
-                lines.append("    \"\(key)\": \(inputs[key] ?? "None"),")
+                lines.append("    \(JSONValue.string(key).pythonLiteral): \(inputs[key] ?? "None"),")
             }
             lines.append("}")
             let source = lines.joined(separator: "\n") + "\n"
