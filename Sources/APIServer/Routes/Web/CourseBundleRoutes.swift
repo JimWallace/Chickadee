@@ -217,6 +217,7 @@ struct CourseBundleRoutes: RouteCollection {
                 dueAt: a.dueAt,
                 startsAt: a.startsAt,
                 isOpen: a.isOpen,
+                visibility: a.visibility,
                 sortOrder: a.sortOrder,
                 testSetupBundleID: setupBid
             )
@@ -728,7 +729,7 @@ private func importBundledAssignments(
             slug: try await uniqueAssignmentSlug(title: bundledAssign.title, courseID: courseID, db: db),
             dueAt: bundledAssign.dueAt,
             startsAt: bundledAssign.startsAt,
-            isOpen: bundledAssign.isOpen,
+            visibility: bundledAssignmentVisibility(bundledAssign),
             sortOrder: bundledAssign.sortOrder,
             validationStatus: nil,  // not imported — requires re-validation
             courseID: courseID

@@ -49,7 +49,15 @@ extension WebRoutes {
         // are unaffected.
         let isClosed: Bool
         if let assignment {
-            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+            let effectivelyOpen = try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db)
+            // Course staff get an editable notebook on a Preview assignment so
+            // they can test-submit it (matching the submission gate's preview
+            // bypass); students see Preview read-only, exactly as for a closed
+            // assignment.
+            let staffPreview =
+                user.isInstructor && assignment.visibility == .preview
+                && (assignment.validationStatus == nil || assignment.validationStatus == "passed")
+            isClosed = !(effectivelyOpen || staffPreview)
         } else {
             isClosed = false
         }

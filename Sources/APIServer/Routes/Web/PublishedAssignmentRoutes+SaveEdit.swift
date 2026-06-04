@@ -101,7 +101,9 @@ extension PublishedAssignmentRoutes {
             dueAt: due,
             existingOverride: assignment.deadlineOverrideActive ?? false
         )
-        assignment.isOpen = false
+        // Editing returns the assignment to closed (re-validation gates the
+        // re-open / re-preview), matching the close-on-save contract.
+        assignment.visibility = .closed
 
         return try await enqueueValidationForEditedAssignment(
             req: req,

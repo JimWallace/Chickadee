@@ -285,9 +285,12 @@ private struct BlockedCandidate {
 private func collectClaimCandidates(
     on db: Database
 ) async throws -> [(APISubmission, APITestSetup, TestProperties)] {
+    // Course-staff "preview" submissions grade through the same worker path as
+    // student work (so staff can test a Preview assignment); they're excluded
+    // from student analytics by kind elsewhere, not here.
     let studentSubmissions = try await APISubmission.query(on: db)
         .filter(\.$status == "pending")
-        .filter(\.$kind == APISubmission.Kind.student)
+        .filter(\.$kind ~~ [APISubmission.Kind.student, APISubmission.Kind.preview])
         .sort(\.$submittedAt, .ascending)
         .all()
         .sorted { lhs, rhs in

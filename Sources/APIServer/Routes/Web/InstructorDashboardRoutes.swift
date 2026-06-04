@@ -274,21 +274,22 @@ struct InstructorDashboardRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(StatusBody.self)
-        switch body.status {
-        case "open":
-            do {
-                try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
-            } catch AssignmentAuthoringError.validationNotPassed {
-                throw WebAssignmentError.validationRequired(
-                    reason: "Assignment cannot be opened until runner validation passes."
-                )
-            }
-        case "closed":
-            try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
-        default:
+        guard let visibility = AssignmentVisibility(rawValue: body.status) else {
             throw WebAssignmentError.invalidParameter(
                 name: "status",
                 reason: "unsupported status '\(body.status)'"
+            )
+        }
+        do {
+            try await AssignmentAuthoringService.setVisibility(assignment, visibility, on: req.db)
+        } catch AssignmentAuthoringError.validationNotPassed {
+            throw WebAssignmentError.validationRequired(
+                reason: "Assignment cannot be opened or previewed until runner validation passes."
+            )
+        } catch AssignmentAuthoringError.cannotPreviewOpenAssignment {
+            throw WebAssignmentError.invalidParameter(
+                name: "status",
+                reason: "Close the assignment before moving it to Preview."
             )
         }
         return req.redirect(to: "/instructor")

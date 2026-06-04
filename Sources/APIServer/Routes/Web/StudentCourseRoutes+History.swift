@@ -778,7 +778,7 @@ extension StudentCourseRoutes {
         return StudentAssignmentRow(
             assignmentID: assignment.publicID,
             title: assignment.title,
-            status: assignment.isOpen ? "open" : "closed",
+            status: assignment.visibility.rawValue,
             isOpen: assignment.isOpen,
             dueAtText: dueAtText,
             effectiveDueAtText: effectiveDueAtText,

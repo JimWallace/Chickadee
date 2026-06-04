@@ -188,4 +188,28 @@ struct CourseBundleManifestTests {
         #expect(decoded.receivedAt == nil)
         #expect(decoded.source == "browser")
     }
+
+    // MARK: - Assignment visibility
+
+    @Test func bundledAssignmentVisibilityRoundTrips() throws {
+        let assignment = BundledAssignment(
+            bundleID: "a_1", title: "Beta Lab", dueAt: nil, isOpen: false,
+            visibility: .preview, sortOrder: 0, testSetupBundleID: "ts_1")
+        let decoded = try decoder.decode(
+            BundledAssignment.self, from: try encoder.encode(assignment))
+        #expect(decoded.visibility == .preview)
+        #expect(bundledAssignmentVisibility(decoded) == .preview)
+    }
+
+    @Test func legacyBundleWithoutVisibilityFallsBackToIsOpen() throws {
+        // A bundle exported before the `visibility` field existed has no key;
+        // resolution falls back to the legacy `isOpen` boolean.
+        let json = #"""
+            {"bundleID":"a_1","title":"Old","dueAt":null,"isOpen":true,
+             "sortOrder":0,"testSetupBundleID":"ts_1"}
+            """#
+        let decoded = try decoder.decode(BundledAssignment.self, from: Data(json.utf8))
+        #expect(decoded.visibility == nil)
+        #expect(bundledAssignmentVisibility(decoded) == .open)
+    }
 }

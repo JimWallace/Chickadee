@@ -140,7 +140,7 @@ struct CloneAssignmentTool: ContentTool {
             case .setupCopyFailed(let reason):
                 throw MCPToolError.executionFailed(
                     tool: Self.name, detail: "Could not copy the source test setup: \(reason)")
-            case .validationNotPassed:
+            case .validationNotPassed, .cannotPreviewOpenAssignment:
                 throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
             }
         }

@@ -18,6 +18,8 @@ struct ListAssignmentsTool: ContentTool {
             let title: String
             let slug: String
             let isOpen: Bool
+            /// Three-state visibility: "closed" | "preview" | "open".
+            let visibility: String
             let dueAt: String?
             let startsAt: String?
         }
@@ -28,8 +30,8 @@ struct ListAssignmentsTool: ContentTool {
     static let name = "list_assignments"
     static let description =
         "List the assignments in a course, identified by course code. Returns each assignment's "
-        + "public ID, title, slug, open/closed state, due date (ISO 8601), and scheduled open date "
-        + "(ISO 8601, if any)."
+        + "public ID, title, slug, visibility (closed/preview/open), the derived isOpen flag, due "
+        + "date (ISO 8601), and scheduled open date (ISO 8601, if any)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -54,11 +56,18 @@ struct ListAssignmentsTool: ContentTool {
                         "title": .object(["type": .string("string")]),
                         "slug": .object(["type": .string("string")]),
                         "isOpen": .object(["type": .string("boolean")]),
+                        "visibility": .object([
+                            "type": .string("string"),
+                            "enum": .array([
+                                .string("closed"), .string("preview"), .string("open"),
+                            ]),
+                        ]),
                         "dueAt": .object(["type": .string("string")]),
                         "startsAt": .object(["type": .string("string")]),
                     ]),
                     "required": .array([
                         .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
+                        .string("visibility"),
                     ]),
                 ]),
             ]),
@@ -89,6 +98,7 @@ struct ListAssignmentsTool: ContentTool {
                 title: assignment.title,
                 slug: assignment.slug,
                 isOpen: assignment.isOpen,
+                visibility: assignment.visibility.rawValue,
                 dueAt: assignment.dueAt.map { formatter.string(from: $0) },
                 startsAt: assignment.startsAt.map { formatter.string(from: $0) }
             )
