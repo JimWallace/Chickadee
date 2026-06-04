@@ -439,7 +439,7 @@ extension InstructorDashboardRoutes {
 
             let status: String
             if let a = assignment {
-                status = a.isOpen ? "open" : "closed"
+                status = a.visibility.rawValue  // "closed" | "preview" | "open"
             } else {
                 status = "unpublished"
             }

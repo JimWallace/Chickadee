@@ -183,7 +183,7 @@ extension AdminRoutes {
                     title: a.title,
                     slug: try await uniqueAssignmentSlug(title: a.title, courseID: newCourseID, db: db),
                     dueAt: a.dueAt,
-                    isOpen: false,
+                    visibility: .closed,
                     sortOrder: a.sortOrder ?? idx,
                     validationStatus: nil,
                     validationSubmissionID: nil,
@@ -462,7 +462,8 @@ extension AdminRoutes {
                 id: a.publicID,
                 title: a.title,
                 dueAt: a.dueAt.map { df.string(from: $0) },
-                isOpen: a.isOpen
+                isOpen: a.isOpen,
+                visibility: a.visibility.rawValue
             )
         }
 

@@ -35,6 +35,8 @@
     --open-fg:  #005963;    /* health-teal-dark */
     --closed-bg: #F3F4F6;   /* neutral gray — inactive/closed state */
     --closed-fg: #4B5563;
+    --preview-bg: #FEF3C7;  /* amber tint — staff-only preview/beta state */
+    --preview-fg: #92400E;  /* dark amber */
     --border: var(--gray-200);
     --success-bg: #E0F7FA;  /* teal-light tint — success state */
 }
@@ -70,6 +72,8 @@
         --open-fg:  #67E8F9;    /* bright cyan-teal — readable on dark teal */
         --closed-bg: #1F2937;   /* dark gray — inactive/closed */
         --closed-fg: #9CA3AF;
+        --preview-bg: #422006;  /* dark amber — staff-only preview/beta */
+        --preview-fg: #FCD34D;  /* bright amber — readable on dark */
         --success-bg: #072D35;
         /* --border inherits dark-mode --gray-200 automatically */
     }
@@ -565,8 +569,9 @@ th.sort-desc .sort-header::after { content: "↓"; }
 .status-skipped td:first-child { border-left: 3px solid var(--gray-400); }
 
 /* Assignment open/closed strips — teal/gray, not traffic-light colours */
-.status-open   td:first-child { border-left: 3px solid var(--health-teal); }
-.status-closed td:first-child { border-left: 3px solid var(--gray-300); }
+.status-open    td:first-child { border-left: 3px solid var(--health-teal); }
+.status-preview td:first-child { border-left: 3px solid var(--amber); }
+.status-closed  td:first-child { border-left: 3px solid var(--gray-300); }
 
 /* Tier badge */
 .tier {
@@ -920,6 +925,11 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 .tier-closed {
     background: var(--closed-bg);
     color: var(--closed-fg);
+}
+
+.tier-preview {
+    background: var(--preview-bg);
+    color: var(--preview-fg);
 }
 
 .tier-unpublished {

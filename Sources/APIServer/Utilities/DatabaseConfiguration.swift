@@ -239,4 +239,7 @@ func registerMigrations(on app: Application) {
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())
     app.migrations.add(AddGrantPreviousRefreshTokenHashIndex())
+    // Replaces assignments.is_open (bool) with assignments.visibility (enum
+    // string). Runs after CreateAssignments on every deploy.
+    app.migrations.add(ChangeAssignmentIsOpenToVisibility())
 }

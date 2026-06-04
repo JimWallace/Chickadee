@@ -1,3 +1,4 @@
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -120,7 +121,7 @@ func closeAssignmentIfExpired(
     logger: Logger,
     now: Date = Date()
 ) async throws -> Bool {
-    guard assignment.isOpen else { return false }
+    guard assignment.visibility == .open else { return false }
     guard assignmentDeadlineHasPassed(assignment, now: now) else { return false }
     guard !assignmentDeadlineOverrideIsActive(assignment) else { return false }
 
@@ -136,7 +137,7 @@ func closeAssignmentIfExpired(
         if activeExtensions > 0 { return false }
     }
 
-    assignment.isOpen = false
+    assignment.visibility = .closed
     try await assignment.save(on: db)
     logger.info("Auto-closed assignment '\(assignment.title)' (\(assignment.publicID)) at deadline")
     return true
@@ -149,7 +150,7 @@ func closeExpiredAssignments(
     now: Date = Date()
 ) async throws -> Int {
     let assignments = try await APIAssignment.query(on: db)
-        .filter(\.$isOpen == true)
+        .filter(\.$visibilityRaw == AssignmentVisibility.open.rawValue)
         .group(.or) { group in
             group.filter(\.$deadlineOverrideActive == nil)
             group.filter(\.$deadlineOverrideActive == false)
@@ -181,12 +182,15 @@ func openScheduledAssignment(
     logger: Logger,
     now: Date = Date()
 ) async throws -> Bool {
-    guard !assignment.isOpen else { return false }
+    // Only a `.closed` assignment auto-opens on its schedule. A `.preview`
+    // assignment is a deliberate staff-only beta state: it is published to
+    // students manually after testing, never by the scheduled-open sweep.
+    guard assignment.visibility == .closed else { return false }
     guard let startsAt = assignment.startsAt, startsAt <= now else { return false }
     guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else { return false }
     if let dueAt = assignment.dueAt, dueAt <= now { return false }
 
-    assignment.isOpen = true
+    assignment.visibility = .open
     assignment.startsAt = nil
     try await assignment.save(on: db)
     logger.info("Auto-opened assignment '\(assignment.title)' (\(assignment.publicID)) at its open date")
@@ -200,7 +204,7 @@ func openScheduledAssignments(
     now: Date = Date()
 ) async throws -> Int {
     let assignments = try await APIAssignment.query(on: db)
-        .filter(\.$isOpen == false)
+        .filter(\.$visibilityRaw == AssignmentVisibility.closed.rawValue)
         .filter(\.$startsAt <= now)
         .all()
 
@@ -235,6 +239,20 @@ func requireOpenStudentAssignment(
     try await requireCourseEnrollment(caller: user, courseID: assignment.courseID, db: req.db)
 
     _ = try await closeAssignmentIfExpired(assignment, on: req.db, logger: req.logger, now: now)
+
+    // Course staff may test-submit to a Preview assignment to exercise the
+    // real grading path before publishing it to students. Gated on validation
+    // having passed (the same guard as opening), so staff can only submit to
+    // content a student could actually be graded against. Students fall through
+    // to the normal gate below and are held out exactly as for a closed
+    // assignment. (The submission itself is stamped `kind = preview` at the
+    // call site so it stays out of student-facing analytics.)
+    if user.isInstructor, assignment.visibility == .preview,
+        assignment.validationStatus == nil || assignment.validationStatus == "passed"
+    {
+        return assignment
+    }
+
     let open = try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db, now: now)
     guard open else {
         throw AssignmentSubmissionGateError.closed

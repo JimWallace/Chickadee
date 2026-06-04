@@ -93,8 +93,11 @@ enum MCPServerInstructions {
         into the starter notebook's `{{name}}` placeholders. Read with get_global_inputs, replace \
         with update_global_inputs. Sections can also carry their own scoped variables/expressions \
         (same shape); get_suite returns them per section and update_section_variables replaces them.
-        - Validation — the server validates an assignment's suite against its solution; an assignment \
-        cannot be opened (isOpen=true) until validation passes.
+        - Visibility — an assignment is closed, preview, or open (set via update_assignment `visibility`, \
+        or the legacy `isOpen` boolean for open/closed). `preview` is a staff-only beta state: only \
+        course staff can see it and they may test-submit to it, while students still can't see it. The \
+        lifecycle is one-way (closed → preview → open); moving an already-open assignment to preview is \
+        refused. Both preview and open require the suite's runner validation to have passed.
 
         Recommended workflow:
         1. Discover: list_courses, then list_assignments for a course. get_server_info reports the \
@@ -118,7 +121,8 @@ enum MCPServerInstructions {
         this as `assignmentClosed`), so students can't submit against a not-yet-revalidated suite. \
         Call validate_assignment to wait for the terminal status (passed/failed/no-runner, with live \
         queued -> running -> done progress over an SSE connection), then re-open with \
-        update_assignment(isOpen:true) once it passes (opening is refused until it does). \
+        update_assignment(visibility:"open") — or visibility:"preview" to beta-test as staff first — \
+        once it passes (opening and previewing are refused until it does). \
         Metadata-only edits via update_assignment never trigger a regrade or a close.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
         and pick up the new notebook when their copy is next reset. Call get_notebook first and edit \
