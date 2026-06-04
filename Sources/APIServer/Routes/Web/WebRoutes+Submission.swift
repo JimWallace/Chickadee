@@ -310,11 +310,16 @@ extension WebRoutes {
             }
         }
 
-        // Fetch the assignment for deadline-based tier visibility.
+        // Fetch the assignment for deadline-based output gating.
         let submissionAssignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
-        let allowedTiers = visibleTiers(for: user, assignment: submissionAssignment)
+        // Students see public + release rows itemized (release output is gated
+        // on the deadline); secret is never itemized.  The grade itself spans
+        // every tier — see `processDisplayResult` — so it is stable across the
+        // deadline and matches the dashboard.
+        let itemized = itemizedTiers(for: user)
+        let releaseOutput = releaseOutputVisible(for: user, assignment: submissionAssignment)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -329,7 +334,8 @@ extension WebRoutes {
         if let result = displayResult {
             processed = processDisplayResult(
                 result: result,
-                viewer: SubmissionViewer(user: user, allowedTiers: allowedTiers),
+                viewer: SubmissionViewer(
+                    user: user, itemizedTiers: itemized, releaseOutputVisible: releaseOutput),
                 submission: submission,
                 priorAttempt: priorAttempt,
                 manifestDisplay: manifestDisplay,
@@ -349,7 +355,7 @@ extension WebRoutes {
             outcomes: processed.outcomes,
             manifestEntries: manifestDisplay.entries,
             manifestSections: manifestDisplay.sections,
-            allowedTiers: allowedTiers
+            allowedTiers: itemized
         )
 
         let currentAttempt = submission.attemptNumber ?? 1
@@ -484,11 +490,12 @@ extension WebRoutes {
             sections: sections, entries: entries)
     }
 
-    /// Decodes the chosen result's `TestOutcomeCollection`, filters by tier,
-    /// computes totals and badges, and renders each visible outcome into an
-    /// `OutcomeRow` for the template.  Hidden-tier summaries (release before
-    /// deadline, secret) are computed for non-instructors only — instructors
-    /// see every tier directly.
+    /// Decodes the chosen result's `TestOutcomeCollection`, computes the
+    /// all-tier grade (so the number matches the dashboard and is stable across
+    /// the deadline), and renders each *itemized* outcome into an `OutcomeRow`.
+    /// Students see public + release rows; release output is redacted until the
+    /// deadline.  Secret never appears as a row — for non-instructors it is
+    /// surfaced as an aggregate pass/fail `TierSummary` instead.
     private func processDisplayResult(
         result: APIResult,
         viewer: SubmissionViewer,
@@ -505,31 +512,28 @@ extension WebRoutes {
             return processed
         }
 
-        // Compute per-tier summaries from the full (unfiltered) collection.
+        // Secret tests count toward the grade but are never itemized for
+        // students; surface them as an aggregate pass/fail summary.
         if !viewer.user.isInstructor {
-            let releaseOutcomes = collection.outcomes.filter { $0.tier == .release }
             let secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
-            let releaseVisible = viewer.allowedTiers.contains("release")
-            if !releaseVisible, !releaseOutcomes.isEmpty {
-                processed.releaseSummary = TierSummary(outcomes: releaseOutcomes, isRelease: true)
-            }
             if !secretOutcomes.isEmpty {
                 processed.secretSummary = TierSummary(outcomes: secretOutcomes, isRelease: false)
             }
         }
 
-        let visible = collection.filtering(tiers: viewer.allowedTiers)
+        // Grade spans every tier (matches `gradePercentFromCollectionJSON` on
+        // the dashboard); only the itemized rows are tier-filtered.
         processed.buildFailed = collection.buildStatus == .failed
         processed.compilerOutput = collection.compilerOutput
         processed.warnings = collection.warnings
-        processed.passCount = visible.passCount
-        processed.totalTests = visible.totalTests
+        processed.passCount = collection.passCount
+        processed.totalTests = collection.totalTests
         processed.executionTimeMs = collection.executionTimeMs
-        processed.totalPoints = visible.totalPoints
-        processed.earnedPoints = visible.earnedPoints
+        processed.totalPoints = collection.totalPoints
+        processed.earnedPoints = collection.earnedPoints
         processed.gradePercent =
-            processed.totalPoints > 0
-            ? Int((Double(processed.earnedPoints) / Double(processed.totalPoints) * 100).rounded())
+            collection.totalPoints > 0
+            ? Int((Double(collection.earnedPoints) / Double(collection.totalPoints) * 100).rounded())
             : 0
         processed.badges = AchievementBadge.forSubmission(
             BadgeContext(
@@ -538,11 +542,16 @@ extension WebRoutes {
                 executionTimeMs: collection.executionTimeMs,
                 priorGradePercent: priorAttempt.gradePercent
             ))
-        let weighted = processed.totalPoints != visible.totalTests
-        processed.outcomes = visible.outcomes.map { outcome in
-            renderOutcomeRow(
+        let weighted = collection.totalPoints != collection.totalTests
+        let itemized = collection.filtering(tiers: viewer.itemizedTiers)
+        processed.outcomes = itemized.outcomes.map { outcome in
+            // Release output stays hidden until the deadline; the row (name,
+            // mark, hint) still renders so the student knows which test failed.
+            let redactOutput = outcome.tier == .release && !viewer.releaseOutputVisible
+            return renderOutcomeRow(
                 outcome: outcome,
                 weighted: weighted,
+                redactOutput: redactOutput,
                 priorOutcomeMap: priorAttempt.outcomeMap,
                 displayNameMap: manifestDisplay.displayNameMap,
                 hintByFilename: manifestDisplay.hintByFilename
@@ -557,20 +566,34 @@ extension WebRoutes {
     private func renderOutcomeRow(
         outcome: TestOutcome,
         weighted: Bool,
+        redactOutput: Bool,
         priorOutcomeMap: [String: TestStatus],
         displayNameMap: [String: String],
         hintByFilename: [String: String]
     ) -> OutcomeRow {
         let skip = parseSkip(shortResult: outcome.shortResult)
-        let shortOutput = formattedShortResult(from: outcome.shortResult, status: outcome.status)
-        let longOutput =
-            outcome.status == .pass
-            ? formattedPassingDetailedOutput(primary: outcome.longResult)
-            : formattedDetailedOutput(
-                primary: outcome.longResult,
-                fallback: outcome.shortResult,
-                status: outcome.status
-            )
+        let shortOutput: String
+        let longOutput: String?
+        if redactOutput {
+            // Release before the deadline: the name, mark, and hint still show
+            // so the student knows which hidden test is failing, but the result
+            // message and output panel (which can leak expected/actual values)
+            // are withheld until the deadline.
+            longOutput = nil
+            shortOutput =
+                (outcome.status == .pass || skip.isSkipped)
+                ? "" : "Detailed feedback is available after the deadline."
+        } else {
+            shortOutput = formattedShortResult(from: outcome.shortResult, status: outcome.status)
+            longOutput =
+                outcome.status == .pass
+                ? formattedPassingDetailedOutput(primary: outcome.longResult)
+                : formattedDetailedOutput(
+                    primary: outcome.longResult,
+                    fallback: outcome.shortResult,
+                    status: outcome.status
+                )
+        }
         let (markLabel, markClass): (String, String) = {
             if skip.isSkipped { return ("—", "skipped") }
             switch outcome.status {
@@ -589,9 +612,13 @@ extension WebRoutes {
         let pointsLabel: String? = weighted && outcome.points > 1 ? "\(outcome.points) pts" : nil
         // Surface the instructor hint only on a genuine failure (not pass, not
         // a skipped/blocked test — there the blocker message is the guidance).
+        // Hints are shown for failing release rows too, even before the deadline.
         let hint: String? =
             (!skip.isSkipped && outcome.status != .pass)
             ? hintByFilename[outcome.testName] : nil
+        // Don't reveal a (possibly hidden-tier) prerequisite name when output
+        // is redacted.
+        let blockerName = redactOutput ? nil : skip.blockerName
         return OutcomeRow(
             testName: displayNameMap[outcome.testName] ?? outcome.testName,
             tier: outcome.tier.rawValue,
@@ -601,7 +628,7 @@ extension WebRoutes {
             markLabel: markLabel,
             markClass: markClass,
             isSkipped: skip.isSkipped,
-            blockerName: skip.blockerName,
+            blockerName: blockerName,
             deltaImproved: deltaImproved,
             deltaRegressed: deltaRegressed,
             pointsLabel: pointsLabel,
@@ -703,7 +730,6 @@ extension WebRoutes {
             earnedPoints: processed.earnedPoints,
             hasDelta: delta.hasDelta,
             deltaHeaderText: delta.headerText,
-            releaseSummary: processed.releaseSummary,
             secretSummary: processed.secretSummary,
             badges: badges,
             currentUser: currentUser
@@ -729,7 +755,6 @@ private struct ProcessedCollection {
     var executionTimeMs: Int
     var gradePercent: Int
     var badges: [AchievementBadge]
-    var releaseSummary: TierSummary?
     var secretSummary: TierSummary?
 
     static let empty = ProcessedCollection(
@@ -745,7 +770,6 @@ private struct ProcessedCollection {
         executionTimeMs: 0,
         gradePercent: 0,
         badges: [],
-        releaseSummary: nil,
         secretSummary: nil
     )
 }
@@ -803,10 +827,16 @@ private struct ManifestDisplayData {
     let entries: [TestSuiteEntry]
 }
 
-/// Viewer-side inputs that gate which tiers and summaries are visible.
+/// Viewer-side inputs that gate which tiers are itemized and whether release
+/// output is shown.  The grade spans every tier regardless of these.
 private struct SubmissionViewer {
     let user: APIUser
-    let allowedTiers: Set<String>
+    /// Tiers rendered as individual rows (public + release for students; all
+    /// tiers for instructors).  Secret is never itemized for students.
+    let itemizedTiers: Set<String>
+    /// Whether release-tier output is shown (true after the deadline / for
+    /// instructors).  Release rows are listed by name either way.
+    let releaseOutputVisible: Bool
 }
 
 /// Banner text shown above the outcomes table comparing this attempt against

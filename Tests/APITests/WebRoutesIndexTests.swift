@@ -305,6 +305,52 @@ import XCTVapor
         }
     }
 
+    /// Regression for the dashboard-vs-submission inconsistency: before the
+    /// deadline both surfaces must show the SAME all-tier grade.  Previously the
+    /// dashboard showed the all-tier grade (33%) while the submission page
+    /// showed a public-only 100%.
+    @Test func dashboardAndSubmissionPageAgreeOnAllTierGrade() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_consistency", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_consistency", title: "Consistency", isOpen: true,
+                dueAt: Date().addingTimeInterval(86400 * 30), on: app
+            )
+            try await wrInsertSubmission(
+                id: "sub_consistency", testSetupID: "setup_consistency", userID: userID, on: app)
+            // 1 of 3 across all tiers → 33% everywhere.
+            try await wrInsertResult(
+                submissionID: "sub_consistency",
+                outcomes: [
+                    wrMakeOutcome(name: "pub_ok", tier: .pub, status: .pass),
+                    wrMakeOutcome(name: "rel_bad", tier: .release, status: .fail),
+                    wrMakeOutcome(name: "sec_bad", tier: .secret, status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("33%"), "Dashboard should show the all-tier grade 33%")
+                })
+
+            try await app.asyncTest(
+                .GET, "/submissions/sub_consistency",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains("33%"),
+                        "Submission page should show the SAME all-tier grade as the dashboard")
+                })
+        }
+    }
+
     @Test func indexShowsFirstTryPerfectBadgeForLatestPerfectFirstSubmission() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)

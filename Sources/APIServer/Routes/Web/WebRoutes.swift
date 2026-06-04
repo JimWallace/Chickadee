@@ -263,12 +263,7 @@ struct WebRoutes: RouteCollection {
                     for (setupID, latest) in latestSubmissionBySetupID {
                         guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
                             let result = preferredResultBySubmissionID[latest.submissionID],
-                            let assignment = assignmentBySetup[setupID],
-                            let collection = visibleCollection(
-                                from: result.collectionJSON,
-                                for: user,
-                                assignment: assignment
-                            ),
+                            let collection = decodedCollection(from: result.collectionJSON),
                             let gradePercent = gradePercent(from: collection)
                         else {
                             continue
