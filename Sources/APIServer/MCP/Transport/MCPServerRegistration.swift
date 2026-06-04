@@ -32,6 +32,7 @@ enum MCPToolCatalog {
             UpdateSectionVariablesTool().erased(),
             UpdatePatternFamilyTool().erased(),
             CreatePatternFamilyTool().erased(),
+            DeleteSuiteItemTool().erased(),
             UpdateNotebookTool().erased(),
             UpdateSolutionTool().erased(),
             AuthorScriptTool().erased(),
