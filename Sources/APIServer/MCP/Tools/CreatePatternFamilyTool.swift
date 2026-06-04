@@ -40,9 +40,30 @@ struct CreatePatternFamilyTool: ContentTool {
         /// Per-student expected: name of a global/section `=` expression resolved
         /// for the student's seed at grading time (validator enforces eligible kinds).
         let expectedVarRef: String?
+        /// Per-case "💡 Hint" shown to the student only when this case fails;
+        /// overrides the family-wide `defaultHint`. Omitted/empty = no per-case hint.
+        let hint: String?
         let points: Int?
         let tier: String?
         let enabled: Bool?
+
+        init(
+            key: String, label: String? = nil, args: [JSONValue]? = nil, expected: JSONValue? = nil,
+            argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil, expectedVarRef: String? = nil,
+            hint: String? = nil, points: Int? = nil, tier: String? = nil, enabled: Bool? = nil
+        ) {
+            self.key = key
+            self.label = label
+            self.args = args
+            self.expected = expected
+            self.argVarRefs = argVarRefs
+            self.argsProvided = argsProvided
+            self.expectedVarRef = expectedVarRef
+            self.hint = hint
+            self.points = points
+            self.tier = tier
+            self.enabled = enabled
+        }
     }
 
     struct VariableInput: Decodable, Sendable {
@@ -64,12 +85,37 @@ struct CreatePatternFamilyTool: ContentTool {
         let paramNames: [String]?
         let defaultTier: String?
         let defaultPoints: Int?
+        /// Family-wide "💡 Hint" applied to any case that has no per-case `hint`.
+        let defaultHint: String?
         let tolerance: Double?
         /// Existing section id to place the family in; nil = ungrouped.
         let sectionID: String?
         let dependsOn: [String]?
         let variables: [VariableInput]?
         let cases: [CaseInput]
+
+        init(
+            assignmentPublicID: String, id: String, name: String, kind: String,
+            function: String? = nil, paramNames: [String]? = nil,
+            defaultTier: String? = nil, defaultPoints: Int? = nil, defaultHint: String? = nil,
+            tolerance: Double? = nil, sectionID: String? = nil, dependsOn: [String]? = nil,
+            variables: [VariableInput]? = nil, cases: [CaseInput]
+        ) {
+            self.assignmentPublicID = assignmentPublicID
+            self.id = id
+            self.name = name
+            self.kind = kind
+            self.function = function
+            self.paramNames = paramNames
+            self.defaultTier = defaultTier
+            self.defaultPoints = defaultPoints
+            self.defaultHint = defaultHint
+            self.tolerance = tolerance
+            self.sectionID = sectionID
+            self.dependsOn = dependsOn
+            self.variables = variables
+            self.cases = cases
+        }
     }
 
     struct Output: Encodable, Sendable {
@@ -88,6 +134,8 @@ struct CreatePatternFamilyTool: ContentTool {
         + "stdout_equality), the `function` it tests, `paramNames`, and a non-empty `cases` list — each "
         + "case a { key, args, expected } with raw-JSON args (in parameter order) and expected return. "
         + "Cases may personalize via argVarRefs / expectedVarRef (names of global/section = expressions). "
+        + "Set a `defaultHint` (family-wide) and/or per-case `hint` to give the student a \"💡 Hint\" "
+        + "shown only when that test fails (per-case overrides the family default). "
         + "Saving renders the family's scripts and runs validation synchronously, rejecting a wrong arg "
         + "count, an expected of the wrong shape for the kind, an unknown $ref, or a duplicate id. To "
         + "edit a family afterwards use update_pattern_family."
@@ -129,6 +177,12 @@ struct CreatePatternFamilyTool: ContentTool {
                 ]),
             ]),
             "defaultPoints": .object(["type": .string("integer")]),
+            "defaultHint": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Family-wide \"💡 Hint\" shown to the student on any failing case that has no "
+                        + "per-case hint."),
+            ]),
             "tolerance": .object([
                 "type": .string("number"),
                 "description": .string("Float tolerance for approximate_equality (default 1e-6)."),
@@ -183,6 +237,11 @@ struct CreatePatternFamilyTool: ContentTool {
                         "expectedVarRef": .object([
                             "type": .string("string"),
                             "description": .string("Per-student expected: name of a = expression."),
+                        ]),
+                        "hint": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint)."),
                         ]),
                         "points": .object(["type": .string("integer")]),
                         "tier": .object([
@@ -304,7 +363,7 @@ struct CreatePatternFamilyTool: ContentTool {
         let defaults = PatternDefaults(
             tier: try parseTier(input.defaultTier) ?? .pub,
             points: input.defaultPoints ?? 1,
-            hint: nil,
+            hint: normalizedHint(input.defaultHint),
             tolerance: input.tolerance)
         let cases = try input.cases.map { c -> PatternCase in
             let args = c.args ?? []
@@ -318,7 +377,8 @@ struct CreatePatternFamilyTool: ContentTool {
             return PatternCase(
                 key: c.key, label: c.label ?? c.key, args: args, expected: c.expected ?? .null,
                 argsProvided: provided, argVarRefs: refs, expectedVarRef: ref,
-                hint: nil, tier: try parseTier(c.tier), points: c.points, enabled: c.enabled ?? true)
+                hint: normalizedHint(c.hint), tier: try parseTier(c.tier), points: c.points,
+                enabled: c.enabled ?? true)
         }
         return PatternFamily(
             id: id, name: input.name, kind: kind, functionName: input.function ?? "",
@@ -364,5 +424,13 @@ struct CreatePatternFamilyTool: ContentTool {
                 tool: name, detail: "tier must be one of: public, release, secret, student.")
         }
         return tier
+    }
+
+    /// Trims an empty hint to nil so an omitted/blank cell doesn't store an
+    /// empty "💡 Hint" callout.  Matches the empty-string handling used for
+    /// per-student refs.
+    private static func normalizedHint(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        return raw
     }
 }

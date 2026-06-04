@@ -39,7 +39,8 @@ tools, all `content:read` / `content:write` scoped and course-scoped:
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_section_variables` | `content:write` | Replace a section's scoped variables/expressions |
-| `update_pattern_family` | `content:write` | Family defaults + per-case args/expected (incl. per-student `$ref`s), enable/disable |
+| `create_pattern_family` | `content:write` | Create a new pattern family: kind, function, cases (args/expected/hint), defaults (tier/points/`defaultHint`) |
+| `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable |
 | `update_notebook` | `content:write` | Replace the starter notebook |
 | `update_solution` | `content:write` | Replace the reference solution and re-validate |
 | `author_script` | `content:write` | Create/replace a hand-written test or support file |

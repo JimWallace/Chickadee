@@ -78,11 +78,12 @@ enum MCPServerInstructions {
         (ISO 8601), and an open/closed state.
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \
-        (public/release/secret/student), points, an optional section, and prerequisites (dependsOn). \
+        (public/release/secret/student), points, an optional section, prerequisites (dependsOn), and \
+        an optional "💡 Hint" shown to the student only when that test fails. \
         get_suite returns the full definition of every item, not just its metadata: each \
         hand-written script's raw body, each pattern family's complete spec (function, paramNames, \
-        defaults, and every case's args/expected), and each notebook check's spec — so you can read \
-        exactly what a test checks (e.g. to explain why a submission lost points).
+        defaults, and every case's args/expected/hint), and each notebook check's spec — so you can \
+        read exactly what a test checks (e.g. to explain why a submission lost points).
         - Starter notebook — the .ipynb a student opens, stored as Jupyter JSON.
         - Solution — the instructor's reference answer key (.ipynb), validated against the suite. It \
         is instructor-authored content, never a student submission. Read with get_solution, replace \
@@ -127,7 +128,9 @@ enum MCPServerInstructions {
         is regraded; validate and open it with update_assignment when ready.
         - get_suite returns the full source of truth for reading: hand-written script bodies, \
         complete pattern-family specs, and notebook-check specs. For authoring, update_pattern_family \
-        edits a generated case's args/expected (validated on save), and author_script writes a single \
+        edits a generated case's args/expected and its hint — per-case `hint` or the family-wide \
+        `defaultHint` (create_pattern_family takes the same), validated on save — and author_script \
+        writes a single \
         hand-written file into the test setup. A test tier (public/release/secret/student) creates or \
         replaces the script AND its suite entry — set points/displayName/dependsOn/sectionID alongside \
         the body; the runner reads the per-student seed from the CHICKADEE_ASSIGNMENT_SEED env var, so \

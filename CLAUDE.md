@@ -923,7 +923,16 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   `get_suite` now returns the full source of truth (script bodies + complete
   pattern-family/notebook-check specs + on-disk filenames), and pattern-family
   cases gained a per-student `expectedVarRef` (the worker/browser materialize
-  per-student `_ck_inputs.py` from `Job.personalizedInputs`).  Agent-facing
+  per-student `_ck_inputs.py` from `Job.personalizedInputs`).  Pattern-family
+  authoring also sets instructor **hints**: `create_pattern_family` /
+  `update_pattern_family` take a family-wide `defaultHint` and a per-case `hint`
+  (on update an empty string clears it, nil leaves it untouched), and `get_suite`
+  returns both in the `family` spec.  A hint surfaces to the student as a
+  "💡 Hint" only on a *failing* case — `buildHintByFilename` joins each case's
+  `resolvedHint(defaults:)` (per-case overriding the family default) by generated
+  filename at results-display time, so nothing is baked into the test script.
+  `PatternCase.hint` / `PatternDefaults.hint` have been manifest-authorable since
+  v0.4.94 but had no agent surface until now.  Agent-facing
   copy lives in two places that must stay in sync with the catalog: each tool's
   `description`/`inputSchema` and the server-level `MCPServerInstructions.text`
   (the `initialize` handshake's `instructions`); the tool table in
