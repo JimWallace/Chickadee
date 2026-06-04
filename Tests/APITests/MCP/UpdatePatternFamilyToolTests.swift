@@ -117,6 +117,56 @@ import Vapor
         }
     }
 
+    @Test func setsAndClearsDefaultAndPerCaseHints() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // Set a family-wide default hint and a per-case hint on case 01.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    defaultHint: "watch the category boundaries",
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", hint: "18.5 rounds up to normal")]),
+                context(app))
+            var family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.defaults.hint == "watch the category boundaries")
+            #expect(family.cases.first { $0.key == "01" }?.hint == "18.5 rounds up to normal")
+            // Case 02 keeps no per-case hint and inherits the family default.
+            let c2 = try #require(family.cases.first { $0.key == "02" })
+            #expect(c2.hint == nil)
+            #expect(c2.resolvedHint(defaults: family.defaults) == "watch the category boundaries")
+            // Args/expected are untouched by a hint-only edit.
+            #expect(family.cases.first { $0.key == "01" }?.expected == .string("underweight"))
+
+            // An empty string clears each hint; everything else is preserved.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    defaultHint: "",
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", hint: "")]),
+                context(app))
+            family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.defaults.hint == nil)
+            #expect(family.cases.first { $0.key == "01" }?.hint == nil)
+            #expect(family.cases.first { $0.key == "01" }?.expected == .string("underweight"))
+        }
+    }
+
+    @Test func defaultHintOnlyIsAValidChangeSet() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // defaultHint alone (no tier/points/case edits) must be accepted.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    defaultHint: "re-read the spec's edge cases"),
+                context(app))
+            let family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.defaults.hint == "re-read the spec's edge cases")
+        }
+    }
+
     @Test func setsPerStudentExpectedVarRefAndClearsOnLiteralEdit() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

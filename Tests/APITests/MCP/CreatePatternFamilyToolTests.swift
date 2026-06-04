@@ -102,6 +102,57 @@ import Vapor
         }
     }
 
+    @Test func createsFamilyWithDefaultAndPerCaseHints() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "hinted", name: "Hinted",
+                    kind: "boundary_equality", function: "f", paramNames: ["x"],
+                    defaultTier: "release", defaultPoints: 1, defaultHint: "mind the boundary",
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", label: "edge", args: [.int(1)], expected: .string("one"),
+                            hint: "1 is the lower edge"),
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "02", label: "plain", args: [.int(2)], expected: .string("two")),
+                    ]),
+                context(app))
+
+            let family = try await reloadFamily(assignment, id: "hinted", on: app.db)
+            #expect(family.defaults.hint == "mind the boundary")
+            let c1 = try #require(family.cases.first { $0.key == "01" })
+            #expect(c1.hint == "1 is the lower edge")
+            #expect(c1.resolvedHint(defaults: family.defaults) == "1 is the lower edge")
+            // Case 02 has no per-case hint; it inherits the family default.
+            let c2 = try #require(family.cases.first { $0.key == "02" })
+            #expect(c2.hint == nil)
+            #expect(c2.resolvedHint(defaults: family.defaults) == "mind the boundary")
+        }
+    }
+
+    @Test func blankPerCaseHintIsStoredAsNil() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "blank", name: "Blank",
+                    kind: "boundary_equality", function: "f", paramNames: ["x"],
+                    defaultHint: "",
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", args: [.int(1)], expected: .string("one"), hint: "")
+                    ]),
+                context(app))
+            let family = try await reloadFamily(assignment, id: "blank", on: app.db)
+            // An empty hint normalizes to nil rather than a blank "💡 Hint".
+            #expect(family.defaults.hint == nil)
+            #expect(family.cases.first?.hint == nil)
+        }
+    }
+
     @Test func rejectsDuplicateFamilyID() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

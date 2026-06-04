@@ -62,10 +62,11 @@ struct GetSuiteTool: ContentTool {
             let content: String?
             /// Instructor hint for a hand-written script (`kind == "script"`).
             let hint: String?
-            /// Full pattern-family spec — function, kind, paramNames, defaults,
-            /// variables, and every case's args/expected — for `kind ==
-            /// "family"` items. This is the source of truth the grader renders
-            /// into Python, so it reveals the exact values each case checks.
+            /// Full pattern-family spec — function, kind, paramNames, defaults
+            /// (including the family `hint`), variables, and every case's
+            /// args/expected/hint — for `kind == "family"` items. This is the
+            /// source of truth the grader renders into Python, so it reveals the
+            /// exact values each case checks and the hints students see on failure.
             let family: PatternFamily?
             /// Full notebook-check spec, for `kind == "check"` items.
             let check: NotebookCheck?
@@ -160,8 +161,9 @@ struct GetSuiteTool: ContentTool {
                             "type": .string("object"),
                             "description": .string(
                                 "Full pattern-family spec (kind == \"family\"): function, kind, "
-                                    + "paramNames, defaults, variables, and every case's "
-                                    + "args/expected — the exact values each case checks."),
+                                    + "paramNames, defaults (incl. family hint), variables, and every "
+                                    + "case's args/expected/hint — the exact values each case checks "
+                                    + "and the hints students see on failure."),
                         ]),
                         "check": .object([
                             "type": .string("object"),
