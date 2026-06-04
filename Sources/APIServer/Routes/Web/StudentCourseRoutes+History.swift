@@ -603,31 +603,14 @@ extension StudentCourseRoutes {
         let trimmedNote = body.note?.trimmingCharacters(in: .whitespacesAndNewlines)
         let note = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
 
-        let existing = try await APIGradeOverride.query(on: req.db)
-            .filter(\.$testSetupID == testSetupID)
-            .filter(\.$userID == studentUUID)
-            .first()
-
-        if let existing {
-            existing.overridePercent = percent
-            existing.note = note
-            existing.grantedByUserID = actor.id
-            try await existing.save(on: req.db)
-        } else {
-            let row = APIGradeOverride(
-                testSetupID: testSetupID,
-                userID: studentUUID,
-                overridePercent: percent,
-                note: note,
-                grantedByUserID: actor.id
-            )
-            try await row.save(on: req.db)
-        }
-
-        // The override changes what BrightSpace should receive; re-flag the
-        // student's results so the next sweep re-pushes the new grade.
-        try await flagResultsPendingSync(
-            testSetupID: testSetupID, studentUserID: studentUUID, on: req.db)
+        try await applyGradeOverride(
+            testSetupID: testSetupID,
+            studentUserID: studentUUID,
+            percent: percent,
+            note: note,
+            grantedByUserID: actor.id,
+            on: req.db
+        )
 
         await AuditLogger.record(
             action: .gradeOverrideSet,
@@ -668,16 +651,9 @@ extension StudentCourseRoutes {
         }
         let testSetupID = assignment.testSetupID
 
-        let existing = try await APIGradeOverride.query(on: req.db)
-            .filter(\.$testSetupID == testSetupID)
-            .filter(\.$userID == studentUUID)
-            .first()
-        if let existing {
-            try await existing.delete(on: req.db)
-            // Clearing reverts BrightSpace to the runner-computed grade; re-flag
-            // the student's results so the next sweep re-pushes it.
-            try await flagResultsPendingSync(
-                testSetupID: testSetupID, studentUserID: studentUUID, on: req.db)
+        if try await clearGradeOverride(
+            testSetupID: testSetupID, studentUserID: studentUUID, on: req.db)
+        {
             await AuditLogger.record(
                 action: .gradeOverrideCleared,
                 targetType: .assignment,
@@ -696,32 +672,6 @@ extension StudentCourseRoutes {
                 urlToken: try student.requireURLToken()
             )
         )
-    }
-
-    /// Marks every result on one student's submissions for a test setup as
-    /// pending BrightSpace sync, so the debounced sweep re-pushes the grade
-    /// after an override is set or cleared.
-    fileprivate func flagResultsPendingSync(
-        testSetupID: String, studentUserID: UUID, on db: Database
-    ) async throws {
-        let submissionIDs = try await APISubmission.query(on: db)
-            .filter(\.$userID == studentUserID)
-            .filter(\.$testSetupID == testSetupID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .all()
-            .compactMap(\.id)
-        guard !submissionIDs.isEmpty else { return }
-        let results = try await APIResult.query(on: db)
-            .filter(\.$submissionID ~~ submissionIDs)
-            .all()
-        let now = Date()
-        for result in results {
-            result.brightspaceSyncPending = true
-            if result.brightspacePendingSince == nil {
-                result.brightspacePendingSince = now
-            }
-            try await result.save(on: db)
-        }
     }
 }
 

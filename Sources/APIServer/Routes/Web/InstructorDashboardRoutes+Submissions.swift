@@ -356,6 +356,7 @@ extension InstructorDashboardRoutes {
             givenNames: inferredName.givenNames,
             gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
             gradeIsOverridden: override != nil,
+            gradeOverridePercent: override ?? runnerBestGradePercent ?? 0,
             submissionCount: history.count,
             hasLatestSubmission: latest != nil,
             latestSubmissionID: latest?.id ?? "",
@@ -651,6 +652,135 @@ extension InstructorDashboardRoutes {
             fallbackPath: fallbackPath
         )
         return req.redirect(to: redirectPath)
+    }
+
+    // MARK: - POST /instructor/:assignmentID/students/:studentID/grade-override
+    //
+    // Per-assignment-roster twin of the grouped per-student page's grade
+    // override.  Both resolve to the same (test_setup, user) row and share
+    // `applyGradeOverride` / `clearGradeOverride`, so an override set from
+    // either page is identical and replaces the runner-computed grade
+    // everywhere (roster median, grades CSV, BrightSpace sync, submission
+    // view).  Student identity here is the UUID path segment, matching the
+    // sibling `reset-notebook` action on this same page.
+
+    @Sendable
+    func saveStudentGradeOverride(req: Request) async throws -> Response {
+        struct OverrideBody: Content {
+            var overridePercent: Int?
+            var note: String?
+            var returnTo: String?
+        }
+
+        let actor = try req.auth.require(APIUser.self)
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+        }
+        let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
+        guard let studentUUID = student.id else {
+            throw WebAssignmentError.notFound(resource: "Student")
+        }
+
+        let body = try req.content.decode(OverrideBody.self)
+        guard let percent = body.overridePercent, (0...100).contains(percent) else {
+            throw WebAssignmentError.invalidParameter(
+                name: "overridePercent",
+                reason: "Provide a whole-number percent between 0 and 100."
+            )
+        }
+        let trimmedNote = body.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
+
+        try await applyGradeOverride(
+            testSetupID: assignment.testSetupID,
+            studentUserID: studentUUID,
+            percent: percent,
+            note: note,
+            grantedByUserID: actor.id,
+            on: req.db
+        )
+
+        await AuditLogger.record(
+            action: .gradeOverrideSet,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignmentIDRaw,
+                "student_username": student.username,
+                "override_percent": String(percent),
+            ],
+            on: req
+        )
+
+        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
+        let redirectPath = sanitizedAssignmentReturnPath(
+            body.returnTo, assignmentIDRaw: assignmentIDRaw, fallbackPath: fallbackPath)
+        return req.redirect(to: redirectPath)
+    }
+
+    // MARK: - POST /instructor/:assignmentID/students/:studentID/grade-override/delete
+
+    @Sendable
+    func deleteStudentGradeOverride(req: Request) async throws -> Response {
+        struct DeleteBody: Content { var returnTo: String? }
+
+        _ = try req.auth.require(APIUser.self)
+        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
+        guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
+        }
+        let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
+        guard let studentUUID = student.id else {
+            throw WebAssignmentError.notFound(resource: "Student")
+        }
+
+        if try await clearGradeOverride(
+            testSetupID: assignment.testSetupID, studentUserID: studentUUID, on: req.db)
+        {
+            await AuditLogger.record(
+                action: .gradeOverrideCleared,
+                targetType: .assignment,
+                targetID: assignment.id?.uuidString,
+                metadata: [
+                    "assignment": assignmentIDRaw,
+                    "student_username": student.username,
+                ],
+                on: req
+            )
+        }
+
+        let body = try? req.content.decode(DeleteBody.self)
+        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
+        let redirectPath = sanitizedAssignmentReturnPath(
+            body?.returnTo, assignmentIDRaw: assignmentIDRaw, fallbackPath: fallbackPath)
+        return req.redirect(to: redirectPath)
+    }
+
+    /// Resolves the `:studentID` UUID parameter to a `role == "student"` user
+    /// enrolled in the assignment's course.  Throws `notFound` when the
+    /// parameter is missing/invalid, the user doesn't exist or isn't a
+    /// student, or the user isn't enrolled — the same gate `resetStudentNotebook`
+    /// applies, so per-student instructor actions stay scoped to the roster.
+    private func resolveEnrolledStudent(
+        req: Request, assignment: APIAssignment
+    ) async throws -> APIUser {
+        guard let studentIDRaw = req.parameters.get("studentID"),
+            let studentID = UUID(uuidString: studentIDRaw),
+            let student = try await APIUser.find(studentID, on: req.db),
+            student.role == "student"
+        else {
+            throw WebAssignmentError.notFound(resource: "Student")
+        }
+        let isEnrolled =
+            try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == assignment.courseID)
+            .filter(\.$userID == studentID)
+            .count() > 0
+        guard isEnrolled else {
+            throw WebAssignmentError.notFound(resource: "Enrolled student")
+        }
+        return student
     }
 }
 

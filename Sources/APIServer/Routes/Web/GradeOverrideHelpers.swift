@@ -57,3 +57,96 @@ func gradeOverridePoints(percent: Int, setup: APITestSetup) -> Double? {
     guard total > 0 else { return nil }
     return Double(percent) / 100.0 * Double(total)
 }
+
+// MARK: - Mutating helpers (shared by every override-setting site)
+//
+// One student's override is the same row no matter which instructor page set
+// it.  Centralising the upsert / clear keeps the per-student grouped view and
+// the per-assignment roster from drifting on the side effects that have to
+// accompany every change — most importantly re-flagging the student's results
+// for BrightSpace sync so the next sweep re-pushes the new effective grade.
+// Audit logging stays at the route layer (it needs the `Request`).
+
+/// Upserts the (setup, user) override to `percent`, storing the note and
+/// granting instructor, then re-flags the student's results for BrightSpace
+/// sync so the next sweep pushes the new effective grade.
+func applyGradeOverride(
+    testSetupID: String,
+    studentUserID: UUID,
+    percent: Int,
+    note: String?,
+    grantedByUserID: UUID?,
+    on db: Database
+) async throws {
+    let existing = try await APIGradeOverride.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == studentUserID)
+        .first()
+    if let existing {
+        existing.overridePercent = percent
+        existing.note = note
+        existing.grantedByUserID = grantedByUserID
+        try await existing.save(on: db)
+    } else {
+        let row = APIGradeOverride(
+            testSetupID: testSetupID,
+            userID: studentUserID,
+            overridePercent: percent,
+            note: note,
+            grantedByUserID: grantedByUserID
+        )
+        try await row.save(on: db)
+    }
+    try await flagGradeResultsPendingSync(
+        testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+}
+
+/// Clears any (setup, user) override and re-flags the student's results for
+/// BrightSpace sync so the next sweep reverts to the runner-computed grade.
+/// Returns `true` when a row existed and was removed (the caller uses this to
+/// gate the audit-log entry).
+@discardableResult
+func clearGradeOverride(
+    testSetupID: String,
+    studentUserID: UUID,
+    on db: Database
+) async throws -> Bool {
+    guard
+        let existing = try await APIGradeOverride.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .filter(\.$userID == studentUserID)
+            .first()
+    else {
+        return false
+    }
+    try await existing.delete(on: db)
+    try await flagGradeResultsPendingSync(
+        testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+    return true
+}
+
+/// Marks every result on one student's submissions for a test setup as pending
+/// BrightSpace sync, so the debounced sweep re-pushes the grade after an
+/// override is set or cleared.
+func flagGradeResultsPendingSync(
+    testSetupID: String, studentUserID: UUID, on db: Database
+) async throws {
+    let submissionIDs = try await APISubmission.query(on: db)
+        .filter(\.$userID == studentUserID)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .all()
+        .compactMap(\.id)
+    guard !submissionIDs.isEmpty else { return }
+    let results = try await APIResult.query(on: db)
+        .filter(\.$submissionID ~~ submissionIDs)
+        .all()
+    let now = Date()
+    for result in results {
+        result.brightspaceSyncPending = true
+        if result.brightspacePendingSince == nil {
+            result.brightspacePendingSince = now
+        }
+        try await result.save(on: db)
+    }
+}
