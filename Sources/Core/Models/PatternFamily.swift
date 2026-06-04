@@ -60,6 +60,13 @@ public enum PatternKind: String, Codable, Sendable, Equatable {
     /// ignored — instructors who care about both stdout and the
     /// return value should write two families (one of each kind).
     case stdoutEquality = "stdout_equality"
+    /// Calls the function with each case's args and compares the returned
+    /// list to `expected` **ignoring order** — each element is canonicalised
+    /// (JSON with sorted keys) and the two canonical multisets are compared.
+    /// For functions that return a collection where order is not part of the
+    /// contract (e.g. "find all patients with diagnosis X"); a plain
+    /// `boundary_equality` would false-fail on a correct-but-reordered result.
+    case unorderedEquality = "unordered_equality"
 }
 
 /// Shared defaults for a family.  Any case may override `tier`, `points`,
