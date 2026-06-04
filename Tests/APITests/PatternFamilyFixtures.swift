@@ -200,3 +200,67 @@ func pfAssertValidPythonSyntax(_ source: String, label: String) throws {
         Issue.record("Generated source for \(label) is not valid Python:\n\(err)\n--- source ---\n\(source)")
     }
 }
+
+/// Runtime outcome of executing a generated pattern-family case body.
+enum PFGeneratedOutcome: Equatable { case pass, fail, error }
+
+/// Executes a generated case `body` the way the runner would: in a workspace
+/// holding an optional `_ck_inputs.py` (exactly what
+/// `RunnerDaemon+JobProcessing` / `browser-runner.js` write from the resolved
+/// per-student values) and a `student_module` exposing `student`'s functions,
+/// with test_runtime's `passed()` / `failed()` stubbed to sentinels and cwd
+/// set to the workspace (so the preamble's relative `_ck_inputs.py` load
+/// resolves).  Returns whether the case passed, failed, or errored — letting a
+/// test assert the per-student preamble actually *grades*, not merely parses.
+func pfRunGeneratedCase(
+    body: String, ckInputs: String?, student: String
+) throws -> PFGeneratedOutcome {
+    let fm = FileManager.default
+    let dir = fm.temporaryDirectory.appendingPathComponent("pf_run_\(UUID().uuidString)", isDirectory: true)
+    try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: dir) }
+
+    if let ckInputs {
+        try ckInputs.write(to: dir.appendingPathComponent("_ck_inputs.py"), atomically: true, encoding: .utf8)
+    }
+    try student.write(to: dir.appendingPathComponent("_student.py"), atomically: true, encoding: .utf8)
+    try body.write(to: dir.appendingPathComponent("_case.py"), atomically: true, encoding: .utf8)
+
+    // Mirrors test_runtime's pass/fail dispatch with sentinels we can catch,
+    // and binds `student_module` the way the runner's bootstrap does.
+    let driver = """
+        import types
+        class _P(Exception): pass
+        class _F(Exception): pass
+        def passed(msg=""):
+            print("OUTCOME:PASS"); raise _P()
+        def failed(msg=""):
+            print("OUTCOME:FAIL"); raise _F()
+        student_module = types.ModuleType("student_module")
+        with open("_student.py") as _f:
+            exec(_f.read(), student_module.__dict__)
+        try:
+            with open("_case.py") as _f:
+                exec(_f.read())
+        except (_P, _F):
+            pass
+        """
+
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    p.arguments = ["python3", "-c", driver]
+    p.currentDirectoryURL = dir
+    let out = Pipe()
+    let err = Pipe()
+    p.standardOutput = out
+    p.standardError = err
+    try p.run()
+    p.waitUntilExit()
+    let stdout = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    if stdout.contains("OUTCOME:PASS") { return .pass }
+    if stdout.contains("OUTCOME:FAIL") { return .fail }
+    let stderrText = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    Issue.record(
+        "Generated case neither passed nor failed:\nstdout=\(stdout)\nstderr=\(stderrText)\n--- body ---\n\(body)")
+    return .error
+}

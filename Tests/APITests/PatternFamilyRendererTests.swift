@@ -471,6 +471,38 @@ import Vapor
         #expect(src.contains("student_module.countAdults(patients)"))
     }
 
+    /// Runtime contract (not just ast.parse): the generated preamble must
+    /// actually load `_ck_inputs.py`, bind the referenced per-student names,
+    /// and grade against them — passing when the student's result matches the
+    /// resolved expected, failing when it doesn't, and failing *closed* (no
+    /// crash) when the seed (hence `_ck_inputs.py`) is absent.  Exercises the
+    /// exact file the worker / browser write, so a renderer/runtime contract
+    /// drift on either side is caught here.
+    @Test func perStudentScriptGradesAgainstCkInputsAtRuntime() throws {
+        let scripts = renderPatternFamily(
+            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"])
+        let body = try #require(scripts.first).source
+
+        // Byte-for-byte the shape `RunnerDaemon+JobProcessing` emits: a `_ck`
+        // dict of Python literals (here a list of dicts + an int).
+        let ckInputs = """
+            # Auto-generated per-student grading inputs (issue #461). Do not edit.
+            _ck = {
+                "adults_expected": 2,
+                "patients": [{'age': 40}, {'age': 17}, {'age': 65}],
+            }
+            """
+        let correct = "def countAdults(patients):\n    return sum(1 for p in patients if p['age'] >= 18)"
+        let buggy = "def countAdults(patients):\n    return len(patients)"
+
+        // Correct student matches the resolved expected (2 adults) → pass.
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        // Buggy student returns 3 → fail.
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        // No `_ck_inputs.py` (no seed resolved) → fail closed, not crash.
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+    }
+
     @Test func rendererOmitsPreambleWhenNoPerStudentRefs() throws {
         // A normal family renders unchanged even when the assignment declares
         // per-student names the family doesn't reference.

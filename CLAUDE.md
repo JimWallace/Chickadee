@@ -882,6 +882,21 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   Docs: `docs/inputs.md`, `docs/personalization-phase1.md`.  Remaining UI work
   tracked in #664.  This is the "first personalized assignments" path.
 
+- **Per-student pattern families (issue #461, v0.4.343–347).**  Pattern-family
+  cases can now personalize: a case's `$name` arg (`argVarRefs`) or its Expected
+  (`expectedVarRef`) may point at a per-student `=` expression instead of a
+  baked literal.  The expression is resolved **server-side** for the
+  submission's seed (`PersonalizationSubstitution.gradingInputs`, shared by the
+  worker job payload and the browser seed endpoint) and delivered to grading as
+  a `_ck_inputs.py` preamble the generated script loads — so a per-student
+  `expected = solution.foo(...)` stays server-side on the worker path.  The
+  generated script is byte-identical across students (cache + `spec_hash`
+  unchanged); only the resolved-values map differs.  Authorable via the browser
+  editor (type `$name` in an arg/Expected cell) and MCP (`update_pattern_family`
+  `expectedVarRef`); `preview_personalization` audits the refs.  Restricted to
+  `boundary_equality` families for now.  Doc:
+  `docs/personalization-pattern-families.md`.
+
 - **Notebook checks, BrightSpace grade sync, AppScan/security hardening,
   assignment-revision retest loop, sections** — see the per-version `CHANGELOG.md`.
 
@@ -927,11 +942,13 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   cycle-detection false positive blocking `assignment-{new,edit}.leaf`
   decomposition is upstream and only fixed in the LeafKit 2 line.
 - **Feature backlog:** continued personalization / notebook-check
-  expansion; pattern kinds beyond
-  `.boundaryEquality` / `.approximateEquality` / `.variableEquality`
-  (e.g. exception-expected, type-check); multi-provider SSO testing
-  beyond UWaterloo DUO; refresh-token handling; gamification
-  expansion (leaderboards, more badges beyond First-Try Perfect).
+  expansion (e.g. per-student refs in pattern kinds beyond
+  `boundary_equality`); pattern kinds beyond the seven shipped
+  (`boundaryEquality` / `approximateEquality` / `variableEquality` /
+  `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
+  `stdoutEquality`); multi-provider SSO testing beyond UWaterloo DUO;
+  refresh-token handling; gamification expansion (leaderboards, more
+  badges beyond First-Try Perfect).
 
 ---
 
@@ -952,6 +969,9 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
 - `docs/runner-wasm-migration.md` — plan to share one Swift grading core (RunnerCore) between the worker + browser runner via SwiftWasm; staging, the ScriptExecutor protocol, type-hoist
+- `docs/personalization-phase1.md` — per-(student, assignment) seed contract (`CHICKADEE_ASSIGNMENT_SEED`), worked hand-written example
+- `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
+- `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
 - `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)
 - `reference/` — original Java source for behavioural reference only
 - `CHANGELOG.md` — release history
