@@ -168,6 +168,9 @@ struct AssignmentStudentRow: Encodable {
     /// True when `gradeText` is an instructor override rather than the
     /// runner-computed best grade.
     let gradeIsOverridden: Bool
+    /// Prefill for the inline override form: the active override percent when
+    /// one is set, else the runner-computed best grade, else 0.
+    let gradeOverridePercent: Int
     let submissionCount: Int
     let hasLatestSubmission: Bool
     let latestSubmissionID: String

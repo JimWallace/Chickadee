@@ -1,7 +1,8 @@
 // Tests/APITests/GradeOverridesTests.swift
 //
-// Coverage for the per-student grade override feature surfaced on the
-// grouped /:courseCode/students/:urlToken/submissions page.
+// Coverage for the per-student grade override feature, surfaced on both the
+// grouped /:courseCode/students/:urlToken/submissions page and the
+// per-assignment /instructor/:assignmentID/submissions roster.
 //
 //  * Override upsert (POST grade-override)        → one row, percent stored.
 //  * Override upsert (overwrite)                  → row updated, no duplicate.
@@ -9,6 +10,8 @@
 //  * Out-of-range percent is rejected            → no row written.
 //  * Setting an override re-flags the student's results for BrightSpace sync.
 //  * Grouped page renders the override value + "overridden" tag.
+//  * Instructor roster: set / update / delete via the UUID-keyed endpoint,
+//    out-of-range + unenrolled-student rejection, control rendered in-page.
 
 import Core
 import Fluent
@@ -374,6 +377,203 @@ import XCTVapor
                     #expect(body.contains("55%"), "Override grade must headline the submission page")
                     #expect(body.contains("overridden"), "Override must carry the tag")
                     #expect(body.contains("Autograded:"), "Autograde breakdown must be labelled")
+                }
+            )
+        }
+    }
+
+    // MARK: - Instructor per-assignment roster: set / clear control
+    //
+    // The same (test_setup, user) override, now reachable from the
+    // /instructor/:assignmentID/submissions roster keyed by the student's
+    // UUID (mirrors the sibling reset-notebook action), in addition to the
+    // grouped per-student page exercised above.
+
+    @Test func rosterOverridePostCreatesAndUpdatesRow() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+            let student = try await arInsertStudent(username: "roster_ovr_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            try await arInsertSetup(id: "roster_ovr_setup", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "roster_ovr_setup", title: "Roster Override", isOpen: true, on: app
+            )
+            let studentUUID = try student.requireID()
+
+            try await app.asyncTest(
+                .POST,
+                "/instructor/\(assignment.publicID)/students/\(studentUUID.uuidString)/grade-override",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(
+                        ["_csrf": csrf, "overridePercent": "88", "note": "Manual regrade"],
+                        as: .urlEncodedForm
+                    )
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(
+                        res.headers.first(name: .location)
+                            == "/instructor/\(assignment.publicID)/submissions",
+                        "Default redirect lands back on the roster"
+                    )
+                }
+            )
+
+            let saved = try await APIGradeOverride.query(on: app.db)
+                .filter(\.$testSetupID == "roster_ovr_setup")
+                .filter(\.$userID == studentUUID)
+                .all()
+            #expect(saved.count == 1, "Upsert must create exactly one row")
+            #expect(saved.first?.overridePercent == 88)
+            #expect(saved.first?.note == "Manual regrade")
+
+            // Second POST updates the same row in place.
+            try await app.asyncTest(
+                .POST,
+                "/instructor/\(assignment.publicID)/students/\(studentUUID.uuidString)/grade-override",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf, "overridePercent": "60"], as: .urlEncodedForm)
+                },
+                afterResponse: { _ in }
+            )
+            let updated = try await APIGradeOverride.query(on: app.db)
+                .filter(\.$testSetupID == "roster_ovr_setup")
+                .filter(\.$userID == studentUUID)
+                .all()
+            #expect(updated.count == 1, "Second POST must not create a duplicate")
+            #expect(updated.first?.overridePercent == 60)
+        }
+    }
+
+    @Test func rosterOverrideDeleteRemovesRow() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+            let student = try await arInsertStudent(username: "roster_ovr_del", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            try await arInsertSetup(id: "roster_ovr_del_setup", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "roster_ovr_del_setup", title: "Roster Removable", isOpen: true, on: app
+            )
+            let studentUUID = try student.requireID()
+            try await APIGradeOverride(
+                testSetupID: "roster_ovr_del_setup", userID: studentUUID, overridePercent: 70
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .POST,
+                "/instructor/\(assignment.publicID)/students/\(studentUUID.uuidString)/grade-override/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                }
+            )
+
+            let remaining = try await APIGradeOverride.query(on: app.db)
+                .filter(\.$testSetupID == "roster_ovr_del_setup")
+                .count()
+            #expect(remaining == 0, "Delete must remove the row")
+        }
+    }
+
+    @Test func rosterOverrideRejectsOutOfRangePercent() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+            let student = try await arInsertStudent(username: "roster_ovr_bad", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            try await arInsertSetup(id: "roster_ovr_bad_setup", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "roster_ovr_bad_setup", title: "Roster Bad", isOpen: true, on: app
+            )
+            let studentUUID = try student.requireID()
+
+            try await app.asyncTest(
+                .POST,
+                "/instructor/\(assignment.publicID)/students/\(studentUUID.uuidString)/grade-override",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf, "overridePercent": "150"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status != .seeOther, "Out-of-range percent must not succeed")
+                }
+            )
+            let count = try await APIGradeOverride.query(on: app.db)
+                .filter(\.$testSetupID == "roster_ovr_bad_setup")
+                .count()
+            #expect(count == 0, "Rejected override must not write a row")
+        }
+    }
+
+    @Test func rosterOverrideRejectsUnenrolledStudent() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+            // Real user, deliberately NOT enrolled in TEST101 — exercises the
+            // enrollment gate rather than the "user missing" branch.
+            let stranger = try await arInsertStudent(username: "roster_ovr_stranger", on: app)
+            try await arInsertSetup(id: "roster_ovr_stranger_setup", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "roster_ovr_stranger_setup", title: "Roster Stranger", isOpen: true, on: app
+            )
+            let strangerUUID = try stranger.requireID()
+
+            try await app.asyncTest(
+                .POST,
+                "/instructor/\(assignment.publicID)/students/\(strangerUUID.uuidString)/grade-override",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf, "overridePercent": "80"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                }
+            )
+            let count = try await APIGradeOverride.query(on: app.db)
+                .filter(\.$testSetupID == "roster_ovr_stranger_setup")
+                .count()
+            #expect(count == 0, "Override for an unenrolled student must not be written")
+        }
+    }
+
+    @Test func rosterRendersOverrideControl() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            let student = try await arInsertStudent(username: "roster_ctrl_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            try await arInsertSetup(id: "roster_ctrl_setup", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "roster_ctrl_setup", title: "Roster Ctrl", isOpen: true, on: app
+            )
+            let studentUUID = try student.requireID()
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(assignment.publicID)/submissions",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(
+                        body.contains(
+                            "/instructor/\(assignment.publicID)/students/\(studentUUID.uuidString)/grade-override"
+                        ),
+                        "Roster must render the per-student override form action"
+                    )
+                    #expect(body.contains("Override grade (%)"), "Override form must be present")
                 }
             )
         }

@@ -52,6 +52,10 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.post(":assignmentID", "retest", use: retestAllSubmissions)
         r.post(":assignmentID", "students", ":studentID", "reset-notebook", use: resetStudentNotebook)
+        r.post(":assignmentID", "students", ":studentID", "grade-override", use: saveStudentGradeOverride)
+        r.post(
+            ":assignmentID", "students", ":studentID", "grade-override", "delete",
+            use: deleteStudentGradeOverride)
         // Draft-assignment authoring (create page, save, publish, draft
         // suite / family / check / script / suite-section CRUD) lives on
         // `DraftAssignmentRoutes` (registered in routes.swift).
