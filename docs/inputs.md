@@ -56,8 +56,14 @@ substitutes into starter-notebook `{{name}}` placeholders.
     testsetups/:id/seed`, resolved by the same `AssignmentSeedStore.ensureSeed`)
     and injects it into `os.environ` before tests run, so a seed-reading
     test grades identically whether it runs on the worker or in the browser.
-  - Pattern-family `$name` references can NOT target an expression row
-    (case args need a save-time literal).
+  - Pattern-family `$name` references targeting an expression row are now
+    supported for **grade-time** use: a case's `$name` arg or its Expected
+    cell (`expectedVarRef`) may point at a per-student `=` expression, whose
+    value is resolved server-side and delivered to grading via
+    `Job.personalizedInputs` (worker) / the browser seed endpoint — see
+    [personalization-pattern-families.md](personalization-pattern-families.md).
+    A `$name` ref that wants a single byte-identical *literal* for every
+    student still targets a literal variable row, inlined at save time.
   - Save-time eval: the server runs every expression once against the
     instructor's own seed when you save the panel.  Broken expressions
     (`= 1/0`, `= unknown_var`, ...) return a 400 with the failure
@@ -199,5 +205,10 @@ Phase 1 test script (unchanged, instructor authors):
 
 Each student sees a different `plaintext` substituted into their
 notebook.  The test script re-derives the expected plaintext from the
-same seed via Phase 1's env-var contract.  Slice 2 doesn't substitute
-into test scripts — test-script substitution remains a future slice.
+same seed via Phase 1's env-var contract.  Slice 2 itself doesn't
+substitute expression values into raw test scripts — that hand-written
+script reads the seed directly.  Per-student values *can* now reach
+**pattern-family** tests, though: a case's `$name` arg / `expectedVarRef`
+resolves an expression server-side and the value is delivered to grading
+via a `_ck_inputs.py` preamble — see
+[personalization-pattern-families.md](personalization-pattern-families.md).

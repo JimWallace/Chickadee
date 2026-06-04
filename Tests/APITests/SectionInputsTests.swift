@@ -55,19 +55,28 @@ import Testing
         #expect(decoded.sections[0].expressions[0].name == "shift")
     }
 
-    @Test func testProperties_runnerSanitizedKeepsSectionExpressions() {
-        // Section expressions are kept on the runner-facing manifest
-        // because the runner doesn't choke on them (FamilyVariable +
-        // PersonalizationExpression are stable Codable types).  This
-        // mirrors the kept-vs-stripped policy for globalVariables.
+    @Test func testProperties_runnerSanitizedStripsSectionExpressions() {
+        // Section expressions are a server-side authoring concern, exactly
+        // like globalExpressions: their source is evaluated server-side per
+        // student and only the resolved value travels to grading (via
+        // Job.personalizedInputs / the browser seed endpoint).  The
+        // runner-facing manifest must not carry the expression source (which
+        // can be reference-solution code like `= solution.foo(...)`), so
+        // runnerSanitized() strips them.  The section's literal *variables*
+        // and its id/name are kept for parity with globalVariables.
         let section = TestSuiteSection(
             id: "s1", name: "Q1",
+            variables: [FamilyVariable(name: "lo", value: .int(1))],
             expressions: [PersonalizationExpression(name: "x", expression: "seed % 2")]
         )
         let props = TestProperties(sections: [section])
         let sanitized = props.runnerSanitized()
         #expect(sanitized.sections.count == 1)
-        #expect(sanitized.sections[0].expressions.count == 1)
+        #expect(sanitized.sections[0].id == "s1")
+        #expect(sanitized.sections[0].variables.count == 1)
+        #expect(
+            sanitized.sections[0].expressions.isEmpty,
+            "Section expressions are server-side only; the runner shouldn't see them.")
     }
 
     // MARK: - End-to-end evaluator integration

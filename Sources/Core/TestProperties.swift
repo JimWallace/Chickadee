@@ -115,9 +115,11 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
     /// Slice 4 of #461 — per-student expressions in section scope.
     /// Evaluated per-student at notebook first-open alongside global
     /// expressions; results substitute into `{{name}}` placeholders.
-    /// Stays literal-only for pattern-family `$name` references and
-    /// raw-script inlining (matches Slice 2's notebooks-only constraint
-    /// for personalization expressions).
+    /// Like `globalExpressions`, a section expression is never inlined
+    /// into a raw test script, but it MAY back a pattern-family
+    /// per-student reference (`$name` arg / `expectedVarRef`), whose
+    /// value is delivered to grading at dispatch time via
+    /// `Job.personalizedInputs` / the browser seed endpoint.
     public let expressions: [PersonalizationExpression]
 
     public init(
@@ -231,12 +233,16 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// values substitute into starter-notebook `{{name}}` placeholders
     /// alongside literal `globalVariables`.
     ///
-    /// Slice 2 scope: notebooks only.  Expression results are NOT
-    /// inlined into raw test scripts (those use the v0.4.156 env-var
-    /// seed contract for any per-student logic) and are NOT used for
-    /// pattern-family `$name` references (case args want save-time
-    /// literals).  Names cannot clash with any `globalVariables`,
-    /// `sections[].variables`, or the reserved name `seed`.
+    /// Expression results are NOT inlined into raw test scripts (those use
+    /// the v0.4.156 env-var seed contract for any per-student logic) and are
+    /// NOT substituted into them at save time.  They ARE, however, available
+    /// to pattern-family per-student references: a case's `$name` arg or
+    /// `expectedVarRef` may point at an expression row, and the resolved
+    /// value is delivered to grading at dispatch time via
+    /// `Job.personalizedInputs` / the browser seed endpoint (see
+    /// `docs/personalization-pattern-families.md`).  Names cannot clash with
+    /// any `globalVariables`, `sections[].variables`, or the reserved name
+    /// `seed`.
     public let globalExpressions: [PersonalizationExpression]
 
     public init(
@@ -361,12 +367,22 @@ public struct TestProperties: Codable, Equatable, Sendable {
             starterNotebook: starterNotebook,
             patternFamilies: [],
             notebookChecks: [],
-            sections: sections,
+            // Expressions are a server-side authoring concern — both global
+            // AND section scope.  Their source is evaluated server-side per
+            // student; only the resolved values travel to grading (worker via
+            // `Job.personalizedInputs`, browser via the seed endpoint), and
+            // the runner reads neither `globalExpressions` nor
+            // `sections[].expressions`.  Strip every `PersonalizationExpression`
+            // from the runner-facing manifest so reference-solution source
+            // (e.g. `= solution.countAdults(...)`) never ships in the Job
+            // payload.  Section *variables* (literals) are kept for parity
+            // with `globalVariables`.
+            sections: sections.map { section in
+                TestSuiteSection(
+                    id: section.id, name: section.name,
+                    variables: section.variables, expressions: [])
+            },
             globalVariables: globalVariables,
-            // Slice 2: expressions are a server-side authoring concern.
-            // They never reach the runner — values are evaluated at
-            // notebook first-open and substituted into the student
-            // working copy before the runner ever sees the assignment.
             globalExpressions: []
         )
     }
