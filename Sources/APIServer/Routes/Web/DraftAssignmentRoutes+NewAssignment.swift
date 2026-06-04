@@ -602,7 +602,7 @@ extension DraftAssignmentRoutes {
             title: validated.title,
             dueAt: validated.dueAt,
             startsAt: validated.startsAt,
-            isOpen: false,
+            visibility: .closed,
             sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: shouldQueueValidation ? "pending" : nil,
             validationSubmissionID: nil,
@@ -768,7 +768,7 @@ extension DraftAssignmentRoutes {
             testSetupID: body.testSetupID,
             title: body.title.isEmpty ? body.testSetupID : body.title,
             dueAt: due,
-            isOpen: false,  // stays closed until instructor validates + opens
+            visibility: .closed,  // stays closed until instructor validates + opens
             sortOrder: try await nextAssignmentSortOrder(req: req),
             courseID: courseID
         )

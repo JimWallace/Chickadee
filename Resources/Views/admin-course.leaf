@@ -135,8 +135,10 @@
                     #if(assignment.dueAt):#(assignment.dueAt)#else:—#endif
                 </td>
                 <td>
-                    #if(assignment.isOpen):
+                    #if(assignment.visibility == "open"):
                     <span class="tier tier-open">open</span>
+                    #elseif(assignment.visibility == "preview"):
+                    <span class="tier tier-preview">preview</span>
                     #else:
                     <span class="tier tier-closed">closed</span>
                     #endif

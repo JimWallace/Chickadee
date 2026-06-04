@@ -137,7 +137,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            assignment.isOpen = false
+            assignment.visibility = .closed
             try await assignment.save(on: app.db)
             let output = try await UpdateSuiteTool().execute(
                 UpdateSuiteTool.Input(

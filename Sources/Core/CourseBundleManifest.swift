@@ -117,13 +117,20 @@ public struct BundledAssignment: Codable, Sendable {
     /// Optional automatic open date. Absent in bundles exported before this
     /// field existed (decodes as nil).
     public let startsAt: Date?
+    /// Legacy open/closed flag. Retained for round-trip compatibility with
+    /// bundles read by older instances; `visibility` is the source of truth on
+    /// import when present.
     public let isOpen: Bool
+    /// Three-state visibility. Absent in bundles exported before this field
+    /// existed (decodes as nil); resolve via `bundledAssignmentVisibility`.
+    public let visibility: AssignmentVisibility?
     public let sortOrder: Int?
     /// References BundledTestSetup.bundleID.
     public let testSetupBundleID: String
 
     public init(
         bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool,
+        visibility: AssignmentVisibility? = nil,
         sortOrder: Int?, testSetupBundleID: String
     ) {
         self.bundleID = bundleID
@@ -131,9 +138,17 @@ public struct BundledAssignment: Codable, Sendable {
         self.dueAt = dueAt
         self.startsAt = startsAt
         self.isOpen = isOpen
+        self.visibility = visibility
         self.sortOrder = sortOrder
         self.testSetupBundleID = testSetupBundleID
     }
+}
+
+/// Resolves the effective `AssignmentVisibility` for an imported assignment,
+/// falling back to the legacy `isOpen` boolean for bundles exported before the
+/// `visibility` field existed.
+public func bundledAssignmentVisibility(_ assignment: BundledAssignment) -> AssignmentVisibility {
+    assignment.visibility ?? AssignmentVisibility(legacyIsOpen: assignment.isOpen)
 }
 
 public struct BundledTestSetup: Codable, Sendable {

@@ -19,6 +19,9 @@ struct GetAssignmentTool: ContentTool {
         let slug: String
         let courseCode: String
         let isOpen: Bool
+        /// Three-state visibility: "closed" | "preview" | "open". `isOpen` is the
+        /// derived legacy flag (true only when "open").
+        let visibility: String
         let dueAt: String?
         let startsAt: String?
         let validationStatus: String?
@@ -36,7 +39,8 @@ struct GetAssignmentTool: ContentTool {
     static let name = "get_assignment"
     static let description =
         "Get an assignment's details by its public ID: title, course code, slug, "
-        + "open/closed state, due date (ISO 8601), scheduled open date (ISO 8601, if any), "
+        + "visibility (closed/preview/open; preview is a staff-only beta state), the "
+        + "derived isOpen flag, due date (ISO 8601), scheduled open date (ISO 8601, if any), "
         + "runner validation status, gradingMode (\"worker\" = graded by the native runner, "
         + "\"browser\" = graded in-browser via Pyodide), and the course section (assignment group "
         + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped)."
@@ -59,6 +63,10 @@ struct GetAssignmentTool: ContentTool {
             "slug": .object(["type": .string("string")]),
             "courseCode": .object(["type": .string("string")]),
             "isOpen": .object(["type": .string("boolean")]),
+            "visibility": .object([
+                "type": .string("string"),
+                "enum": .array([.string("closed"), .string("preview"), .string("open")]),
+            ]),
             "dueAt": .object(["type": .string("string")]),
             "startsAt": .object(["type": .string("string")]),
             "validationStatus": .object(["type": .string("string")]),
@@ -69,7 +77,8 @@ struct GetAssignmentTool: ContentTool {
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
-            .string("isOpen"), .string("deadlineOverrideActive"), .string("gradingMode"),
+            .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
+            .string("gradingMode"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -103,6 +112,7 @@ struct GetAssignmentTool: ContentTool {
             slug: assignment.slug,
             courseCode: course.code,
             isOpen: assignment.isOpen,
+            visibility: assignment.visibility.rawValue,
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
             startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus,

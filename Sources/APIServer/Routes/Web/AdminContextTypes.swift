@@ -238,6 +238,7 @@ struct AdminCourseAssignmentRow: Encodable {
     let title: String
     let dueAt: String?
     let isOpen: Bool
+    let visibility: String  // "closed" | "preview" | "open"
 }
 
 struct AdminAlertsRuleRow: Encodable {

@@ -332,7 +332,7 @@ struct WebRoutes: RouteCollection {
             }()
             let status: String
             if let assignment {
-                status = assignment.isOpen ? "open" : "closed"
+                status = assignment.visibility.rawValue  // "closed" | "preview" | "open"
             } else {
                 status = "unpublished"
             }
