@@ -87,18 +87,18 @@ private func validateFamilyVariablesAndArgRefs(
                         "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'"
                 )
             }
-            // Per-student arg refs are bound by the boundary_equality
-            // preamble only (the other kinds don't emit it yet).
-            if isPerStudent, family.kind != .boundaryEquality {
+            // Per-student arg refs are bound by the generated case's
+            // personalization preamble, which only the equality kinds emit.
+            if isPerStudent, !kindSupportsPerStudentRefs(family.kind) {
                 throw Abort(
                     .unprocessableEntity,
                     reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' references per-student input '$\(ref)', which is only supported in boundary_equality families for now."
+                        "Pattern family '\(family.id)': case '\(c.key)' references per-student input '$\(ref)', which is only supported in boundary_equality and approximate_equality families for now."
                 )
             }
         }
         // A per-student expected ref must name a declared `=` expression and
-        // is (for now) supported only in boundary_equality families.
+        // is (for now) supported only in the equality kinds (boundary/approximate).
         if let eref = c.expectedVarRef {
             guard perStudentExpressionNames.contains(eref) else {
                 throw Abort(
@@ -107,14 +107,27 @@ private func validateFamilyVariablesAndArgRefs(
                         "Pattern family '\(family.id)': case '\(c.key)' expected reference '$\(eref)' must name a per-student input (a global or section `=` expression)."
                 )
             }
-            guard family.kind == .boundaryEquality else {
+            guard kindSupportsPerStudentRefs(family.kind) else {
                 throw Abort(
                     .unprocessableEntity,
                     reason:
-                        "Pattern family '\(family.id)': case '\(c.key)' uses a per-student expected, which is only supported in boundary_equality families for now."
+                        "Pattern family '\(family.id)': case '\(c.key)' uses a per-student expected, which is only supported in boundary_equality and approximate_equality families for now."
                 )
             }
         }
+    }
+}
+
+/// Whether a kind's generated cases bind per-student `_ck_inputs` (so `$name`
+/// arg refs and `expectedVarRef` resolve at grading time).  Extend as renderers
+/// gain the personalization preamble (`personalizationPreambleForCase`).  An
+/// exhaustive switch — a new `PatternKind` must opt in or out here explicitly.
+private func kindSupportsPerStudentRefs(_ kind: PatternKind) -> Bool {
+    switch kind {
+    case .boundaryEquality, .approximateEquality: return true
+    case .variableEquality, .returnTypeCheck, .exceptionExpected,
+        .performanceThreshold, .stdoutEquality:
+        return false
     }
 }
 

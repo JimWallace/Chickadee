@@ -404,7 +404,8 @@ func renderApproximateEquality(
     family: PatternFamily,
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
-    specHash: String
+    specHash: String,
+    perStudentNames: Set<String> = []
 ) -> String {
     let ctx = callContext(for: family, case: c)
 
@@ -416,11 +417,19 @@ func renderApproximateEquality(
     let variableDecls = combinedVariableDecls(sectionVariables: sectionVariables, family: family)
     let variableBlock = variableDecls.isEmpty ? "" : variableDecls + "\n\n"
 
+    // Per-student inputs (arg refs + the expected ref that resolve to a
+    // global/section `=` expression) are bound at grading time from
+    // `_ck_inputs.py` — identical mechanism to renderBoundaryEquality.  When the
+    // case has no per-student refs this is "" and `expectedExpression` returns
+    // the baked literal, so non-personalized cases render byte-for-byte as before.
+    let preamble = personalizationPreambleForCase(c, perStudentNames: perStudentNames)
+    let preambleBlock = preamble.isEmpty ? "" : preamble + "\n\n"
+
     return """
         \(generatedCaseHeader(family: family, case: c, specHash: specHash))
 
-        \(variableBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
-        expected = \(c.expected.pythonLiteral)
+        \(variableBlock)\(preambleBlock)\(ctx.declLines.isEmpty ? "# (no input arguments)" : ctx.declLines)
+        expected = \(expectedExpression(for: c))
         tolerance = \(toleranceLiteral)
 
         try:

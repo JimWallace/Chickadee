@@ -535,20 +535,83 @@ import Vapor
         }
     }
 
-    @Test func validation_rejectsPerStudentRefOnNonBoundaryKind() throws {
+    @Test func validation_rejectsPerStudentRefOnUnsupportedKind() throws {
+        // performance_threshold has no personalization preamble, so a per-student
+        // arg ref is still rejected (boundary + approximate are the supported set).
         let c = PatternCase(
-            key: "01", label: "X", args: [.null], expected: .double(1.0),
+            key: "01", label: "X", args: [.null], expected: .double(100.0),
             argVarRefs: ["patients"])
         let family = PatternFamily(
-            id: "approx", name: "Approx", kind: .approximateEquality,
+            id: "perf", name: "Perf", kind: .performanceThreshold,
             functionName: "f", paramNames: ["patients"], cases: [c])
         #expect {
             try validatePatternFamilies(
                 [family], testSuites: [], perStudentExpressionNames: ["patients"])
         } throws: { error in
-            #expect("\(error)".contains("only supported in boundary_equality"))
+            #expect("\(error)".contains("only supported in boundary_equality and approximate_equality"))
             return true
         }
+    }
+
+    // MARK: - Personalization for approximateEquality (Slice E)
+
+    private func perStudentApproxFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Average", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "avg_expected")
+        return PatternFamily(
+            id: "avg", name: "Average Age", kind: .approximateEquality,
+            functionName: "averageAge", paramNames: ["patients"], cases: [c])
+    }
+
+    @Test func validation_acceptsPerStudentRefsForApproximate() throws {
+        try validatePatternFamilies(
+            [perStudentApproxFamily()], testSuites: [],
+            perStudentExpressionNames: ["patients", "avg_expected"])
+    }
+
+    @Test func approximateRendererEmitsPerStudentPreambleAndExpectedRef() throws {
+        let scripts = renderPatternFamily(
+            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"])
+        let src = try #require(scripts.first).source
+        try pfAssertValidPythonSyntax(src, label: "avg_01")
+        #expect(src.contains("_ck_inputs.py"))
+        #expect(src.contains(#"patients = _ck["patients"]"#))
+        #expect(src.contains(#"avg_expected = _ck["avg_expected"]"#))
+        // Expected is the bare per-student ref, not a baked literal; tolerance kept.
+        #expect(src.contains("expected = avg_expected"))
+        #expect(src.contains("tolerance ="))
+        #expect(src.contains("student_module.averageAge(patients)"))
+    }
+
+    @Test func approximateRendererOmitsPreambleWhenNoPerStudentRefs() throws {
+        // A normal approximate family with a literal expected renders unchanged
+        // (no preamble) even when the assignment declares per-student names.
+        let c = PatternCase(key: "01", label: "x", args: [.double(2.0)], expected: .double(4.0))
+        let family = PatternFamily(
+            id: "sq", name: "Square", kind: .approximateEquality,
+            functionName: "square", paramNames: ["x"], cases: [c])
+        let src = try #require(renderPatternFamily(family, perStudentNames: ["patients"]).first).source
+        #expect(!src.contains("_ck_inputs.py"))
+        #expect(src.contains("expected = 4.0"))
+    }
+
+    @Test func perStudentApproxGradesAgainstCkInputsAtRuntime() throws {
+        let scripts = renderPatternFamily(
+            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"])
+        let body = try #require(scripts.first).source
+        let ckInputs = """
+            # Auto-generated per-student grading inputs (issue #461). Do not edit.
+            _ck = {
+                "avg_expected": 40.0,
+                "patients": [{'age': 40}, {'age': 20}, {'age': 60}],
+            }
+            """
+        let correct = "def averageAge(patients):\n    return sum(p['age'] for p in patients) / len(patients)"
+        let buggy = "def averageAge(patients):\n    return sum(p['age'] for p in patients)"
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
     }
 
 }
