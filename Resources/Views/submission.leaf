@@ -132,23 +132,14 @@ Submission #(submissionID)
 </section>
 #endfor
 
-#if(releaseSummary || secretSummary):
+#if(secretSummary):
 <div class="hidden-tiers-summary">
-    <h3 class="hidden-tiers-heading">Additional Tests</h3>
-    #if(releaseSummary):
-    <div class="tier-summary-row tier-summary-release">
-        <span class="tier tier-release-badge">release</span>
-        <span class="tier-summary-counts">#(releaseSummary.passCount) passed, #(releaseSummary.failCount) failed#if(releaseSummary.errorCount): , #(releaseSummary.errorCount) error(s)#endif</span>
-        <span class="tier-summary-note">— details available after the deadline</span>
-    </div>
-    #endif
-    #if(secretSummary):
+    <h3 class="hidden-tiers-heading">Secret tests</h3>
     <div class="tier-summary-row tier-summary-secret">
         <span class="tier tier-secret-badge">secret</span>
-        <span class="tier-summary-counts">#(secretSummary.total) test#if(secretSummary.total != 1):s#endif</span>
-        <span class="tier-summary-note">— results not shown</span>
+        <span class="tier-summary-counts">#(secretSummary.passCount) passed, #(secretSummary.failCount) failed#if(secretSummary.errorCount): , #(secretSummary.errorCount) error(s)#endif</span>
+        <span class="tier-summary-note">— these count toward your grade; individual tests aren't shown</span>
     </div>
-    #endif
 </div>
 #endif
 

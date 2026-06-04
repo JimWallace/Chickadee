@@ -562,13 +562,15 @@ import XCTVapor
 
     // MARK: - Tier visibility
 
-    @Test func studentSeesOnlyPublicTiersBeforeDeadline() async throws {
+    @Test func studentSeesReleaseNamesButNotOutputBeforeDeadline() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
             try await wrInsertSetup(id: "setup_tier", on: app)
-            // Due date in the future → release tests are hidden
+            // Due date in the future → release OUTPUT is hidden, but the release
+            // test still appears by name so the student knows what they're
+            // failing.  Secret is never itemized.
             try await wrInsertAssignment(
                 testSetupID: "setup_tier", title: "Tiered", isOpen: true,
                 dueAt: Date().addingTimeInterval(86400 * 30), on: app
@@ -578,7 +580,9 @@ import XCTVapor
                 submissionID: "sub_tier",
                 outcomes: [
                     wrMakeOutcome(name: "pub_test", tier: .pub, status: .pass),
-                    wrMakeOutcome(name: "rel_test", tier: .release, status: .fail),
+                    wrMakeOutcome(
+                        name: "rel_test", tier: .release, status: .fail,
+                        shortResult: "expected 42 got 7", longResult: "secret release traceback"),
                     wrMakeOutcome(name: "sec_test", tier: .secret, status: .pass),
                 ], on: app)
 
@@ -591,8 +595,183 @@ import XCTVapor
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(html.contains("pub_test"), "Public test should be visible")
-                    #expect(html.contains("rel_test") == false, "Release test name should be hidden before deadline")
+                    #expect(html.contains("rel_test"), "Release test name should be shown before the deadline")
+                    #expect(
+                        html.contains("expected 42 got 7") == false,
+                        "Release result message must stay hidden before the deadline")
+                    #expect(
+                        html.contains("secret release traceback") == false,
+                        "Release output must stay hidden before the deadline")
+                    #expect(
+                        html.contains("Detailed feedback is available after the deadline"),
+                        "Release row should note that output unlocks at the deadline")
                     #expect(html.contains("sec_test") == false, "Secret test name should never be shown")
+                })
+
+        }
+    }
+
+    /// The headline grade is computed over EVERY tier (public + release +
+    /// secret), so a student who passes only the public tests does not see a
+    /// misleading 100%.  This is the basis fix behind the dashboard/submission
+    /// inconsistency.
+    @Test func submissionGradeSpansAllTiersIncludingHidden() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrInsertSetup(id: "setup_alltier", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_alltier", title: "All Tier", isOpen: true,
+                dueAt: Date().addingTimeInterval(86400 * 30), on: app
+            )
+            try await wrInsertSubmission(id: "sub_alltier", testSetupID: "setup_alltier", userID: userID, on: app)
+            // 1 of 3 tests pass across all tiers → 33%, NOT 100% (public only).
+            try await wrInsertResult(
+                submissionID: "sub_alltier",
+                outcomes: [
+                    wrMakeOutcome(name: "pub_ok", tier: .pub, status: .pass),
+                    wrMakeOutcome(name: "rel_bad", tier: .release, status: .fail),
+                    wrMakeOutcome(name: "sec_bad", tier: .secret, status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/submissions/sub_alltier",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("33%"), "Grade should reflect all tiers (1/3), not public-only 100%")
+                    #expect(html.contains("1 / 3 tests passed"), "Denominator should be the full all-tier count")
+                })
+
+        }
+    }
+
+    /// Secret tests are never itemized but their aggregate pass/fail counts are
+    /// shown, and they count toward the grade.
+    @Test func studentSeesSecretAggregatePassFailCounts() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrInsertSetup(id: "setup_secret_agg", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_secret_agg", title: "Secret Agg", isOpen: true,
+                dueAt: Date().addingTimeInterval(-3600), on: app  // past deadline: secret still hidden
+            )
+            try await wrInsertSubmission(id: "sub_secret_agg", testSetupID: "setup_secret_agg", userID: userID, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_secret_agg",
+                outcomes: [
+                    wrMakeOutcome(name: "pub_ok", tier: .pub, status: .pass),
+                    wrMakeOutcome(name: "secret_alpha", tier: .secret, status: .pass),
+                    wrMakeOutcome(name: "secret_beta", tier: .secret, status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/submissions/sub_secret_agg",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("1 passed, 1 failed"), "Secret aggregate counts should be shown")
+                    #expect(html.contains("count toward your grade"), "Secret note should say they count")
+                    #expect(html.contains("secret_alpha") == false, "Secret test names must never be shown")
+                    #expect(html.contains("secret_beta") == false, "Secret test names must never be shown")
+                })
+
+        }
+    }
+
+    /// A failing release test shows its instructor hint before the deadline
+    /// (guidance without the answer), while its output stays hidden.
+    @Test func releaseHintShownBeforeDeadlineWithoutOutput() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":[\
+                {"tier":"public","script":"test.sh"},\
+                {"tier":"release","script":"releasetest_q2.py","hint":"check the negative case"}\
+                ],"timeLimitSeconds":10}
+                """
+            let course = try await wrMakeCourse(on: app)
+            let courseID = try course.requireID()
+            let setup = APITestSetup(
+                id: "setup_rel_hint",
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "setup_rel_hint.zip",
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            try await wrInsertAssignment(
+                testSetupID: "setup_rel_hint", title: "Rel Hint", isOpen: true,
+                dueAt: Date().addingTimeInterval(86400 * 30), on: app
+            )
+            try await wrInsertSubmission(id: "sub_rel_hint", testSetupID: "setup_rel_hint", userID: userID, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_rel_hint",
+                outcomes: [
+                    wrMakeOutcome(name: "test", tier: .pub, status: .pass),
+                    wrMakeOutcome(
+                        name: "releasetest_q2", tier: .release, status: .fail,
+                        shortResult: "AssertionError: expected -1", longResult: "revealing traceback"),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/submissions/sub_rel_hint",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("releasetest_q2"), "Release test name should show")
+                    #expect(html.contains("check the negative case"), "Release hint should show before the deadline")
+                    #expect(html.contains("revealing traceback") == false, "Release output must stay hidden")
+                    #expect(html.contains("AssertionError: expected -1") == false, "Release message must stay hidden")
+                })
+
+        }
+    }
+
+    /// First-Try Perfect ("Ace") rides the all-tier grade, so passing only the
+    /// public tests while a hidden secret test fails does NOT earn the badge.
+    @Test func firstTryPerfectBadgeNotAwardedWhenSecretTestFails() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrInsertSetup(id: "setup_badge_secret", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_badge_secret", title: "Badge Secret", isOpen: true,
+                dueAt: Date().addingTimeInterval(86400 * 30), on: app
+            )
+            try await wrInsertSubmission(
+                id: "sub_badge_secret", testSetupID: "setup_badge_secret", userID: userID, attemptNumber: 1, on: app)
+            try await wrInsertResult(
+                submissionID: "sub_badge_secret",
+                outcomes: [
+                    wrMakeOutcome(name: "pub_ok", tier: .pub, status: .pass),
+                    wrMakeOutcome(name: "sec_bad", tier: .secret, status: .fail),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/submissions/sub_badge_secret",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("50%"), "All-tier grade is 1/2 = 50%")
+                    #expect(html.contains("Ace") == false, "Ace must not be awarded when a hidden test fails")
                 })
 
         }

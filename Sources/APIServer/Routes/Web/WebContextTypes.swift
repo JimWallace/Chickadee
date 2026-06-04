@@ -251,8 +251,9 @@ struct AchievementBadge: Encodable {
     }
 }
 
-/// Aggregate summary for a hidden test tier (release before deadline, or secret).
-/// No individual test names or output are included — only counts.
+/// Aggregate pass/fail summary for a tier that is never itemized for the
+/// student (currently secret).  No individual test names or output are
+/// included — only counts.
 struct TierSummary: Encodable {
     let total: Int
     let passCount: Int
@@ -306,17 +307,18 @@ struct SubmissionContext: Encodable {
     let executionTimeMs: Int
     /// True when any test has points > 1 (i.e. grade uses weighted points).
     let isWeighted: Bool
-    /// Sum of points for all visible outcomes; equals totalTests when unweighted.
+    /// Sum of points across all tiers; equals totalTests when unweighted.
     let totalPoints: Int
-    /// Sum of points for passing outcomes; equals passCount when unweighted.
+    /// Sum of points for passing tests across all tiers; equals passCount when unweighted.
     let earnedPoints: Int
     /// True when a prior attempt exists and delta data is populated.
     let hasDelta: Bool
     /// E.g. "↑ fixed 2 tests · ↓ broke 1 test since attempt 3"; nil on first attempt.
     let deltaHeaderText: String?
-    /// Non-nil for students when release tests exist but are not yet visible (before deadline).
-    let releaseSummary: TierSummary?
-    /// Non-nil for students when secret tests exist (always hidden).
+    /// Non-nil for students when secret tests exist.  Secret tests count toward
+    /// the grade but are never itemized — only their aggregate pass/fail counts
+    /// are shown.  (Release tests are itemized as ordinary rows, even before the
+    /// deadline, so they no longer need a separate summary.)
     let secretSummary: TierSummary?
     let badges: [AchievementBadge]
     let currentUser: CurrentUserContext?

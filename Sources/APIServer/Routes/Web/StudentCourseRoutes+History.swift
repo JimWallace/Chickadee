@@ -795,7 +795,6 @@ extension StudentCourseRoutes {
         let courseCode = context.courseCode
         let urlToken = context.urlToken
         let preferredResultBySubmissionID = context.preferredResultBySubmissionID
-        let student = context.student
         let fmt = context.fmt
         let latest = history.first
         let bestGradePercent: Int? = {
@@ -813,10 +812,8 @@ extension StudentCourseRoutes {
         }()
 
         var badges = submissionBadges(
-            assignment: assignment,
             history: history,
-            preferredResultBySubmissionID: preferredResultBySubmissionID,
-            student: student
+            preferredResultBySubmissionID: preferredResultBySubmissionID
         )
         badges.append(contentsOf: classBadges)
 
@@ -888,19 +885,13 @@ extension StudentCourseRoutes {
     /// Achievement badges earned on the latest submission (attempt/speed/
     /// improvement).  Class-wide badges are appended by the caller.
     fileprivate func submissionBadges(
-        assignment: APIAssignment,
         history: [APISubmission],
-        preferredResultBySubmissionID: [String: APIResult],
-        student: APIUser
+        preferredResultBySubmissionID: [String: APIResult]
     ) -> [AchievementBadge] {
         guard let latestSubmission = history.first,
             let latestSubID = latestSubmission.id,
             let result = preferredResultBySubmissionID[latestSubID],
-            let collection = visibleCollection(
-                from: result.collectionJSON,
-                for: student,
-                assignment: assignment
-            ),
+            let collection = decodedCollection(from: result.collectionJSON),
             let gradePct = gradePercent(from: collection)
         else {
             return []
