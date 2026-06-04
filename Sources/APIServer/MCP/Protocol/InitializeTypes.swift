@@ -109,12 +109,17 @@ enum MCPServerInstructions {
         update_section_variables (a section's scoped variables/expressions), update_notebook (replace \
         the starter notebook), update_solution (replace the reference solution and re-validate), \
         author_script (create/replace a hand-written test or support file). To create a new \
-        assignment, clone_assignment from a known-good one and then edit the copy.
+        assignment, either clone_assignment from a known-good one and then edit the copy (the safest \
+        path) or create_assignment to start a fresh notebook-based assignment from a starter .ipynb.
 
         Important behaviors:
-        - Any content edit (suite, pattern family, notebook) re-runs validation asynchronously; \
-        re-read get_assignment to see validationStatus settle. Metadata-only edits via \
-        update_assignment never trigger a regrade.
+        - Any content edit (suite, pattern family, notebook, solution) re-runs validation \
+        asynchronously AND closes the assignment if it was open (each write tool's response reports \
+        this as `assignmentClosed`), so students can't submit against a not-yet-revalidated suite. \
+        Call validate_assignment to wait for the terminal status (passed/failed/no-runner, with live \
+        queued -> running -> done progress over an SSE connection), then re-open with \
+        update_assignment(isOpen:true) once it passes (opening is refused until it does). \
+        Metadata-only edits via update_assignment never trigger a regrade or a close.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
         and pick up the new notebook when their copy is next reset. Call get_notebook first and edit \
         the returned JSON.

@@ -849,7 +849,7 @@ model quickly.
   only emitted `enrollmentMode` (never `openEnrollment`) since the
   helper extraction in #501.
 
-### v0.4.171 – v0.4.318 highlights (themed digest)
+### v0.4.171 – v0.4.350 highlights (themed digest)
 
 The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 
@@ -897,6 +897,29 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   worked example).  Plus OAuth `no-store` headers, reaper consumed-row cleanup,
   an `oauth_grants.previous_refresh_token_hash` index, a `timedOut`
   output-contract case, and `@unchecked Sendable` justification comments.
+
+- **MCP authoring-surface expansion (v0.4.328+).**  The agent tool catalog grew
+  from twelve to twenty content tools (`MCPToolCatalog.live`): `get_server_info`
+  (version/capability probe), `get_solution` / `update_solution` (read + replace
+  the reference solution, re-validating), `author_script` (create/replace a
+  hand-written test or support file through the same `applySuiteEdit` path the
+  web editor uses), and the personalization tools (`get_global_inputs`,
+  `update_global_inputs`, `update_section_variables`, `preview_personalization`).
+  `get_suite` now returns the full source of truth (script bodies + complete
+  pattern-family/notebook-check specs + on-disk filenames), and pattern-family
+  cases gained a per-student `expectedVarRef` (the worker/browser materialize
+  per-student `_ck_inputs.py` from `Job.personalizedInputs`).  Agent-facing
+  copy lives in two places that must stay in sync with the catalog: each tool's
+  `description`/`inputSchema` and the server-level `MCPServerInstructions.text`
+  (the `initialize` handshake's `instructions`); the tool table in
+  `docs/mcp-authoring-roadmap.md` is the human index.  MCP content edits
+  (suite/family/script/notebook/solution) close a currently-open assignment and
+  re-validate — matching the web Save button (`saveEditedAssignment`), since the
+  student gate keys off `isOpen`, not `validationStatus` — so students can't
+  submit against a not-yet-revalidated suite; each write tool's response reports
+  it as `assignmentClosed`, and the human re-opens with
+  `update_assignment(isOpen:true)` once validation passes
+  (`closeOpenAssignmentForContentEdit`).
 
 **Near-term roadmap:**
 

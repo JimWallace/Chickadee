@@ -31,6 +31,9 @@ struct UpdateSolutionTool: ContentTool {
         let assignmentPublicID: String
         let cellCount: Int
         let validationStatus: String?
+        /// true when this edit closed a previously-open assignment (re-open with
+        /// update_assignment once validation passes).
+        let assignmentClosed: Bool
     }
 
     static let name = "update_solution"
@@ -39,7 +42,8 @@ struct UpdateSolutionTool: ContentTool {
         + "validate the test suite) with new .ipynb JSON, by assignment public ID. Supply the full "
         + "notebook as a JSON object with a \"cells\" array; the server stores it as a new validation "
         + "submission and re-runs validation against the current suite (watch the result with "
-        + "validate_assignment). This is instructor-authored content — it never touches student "
+        + "validate_assignment), closing the assignment if it was open (re-open with update_assignment "
+        + "once validation passes). This is instructor-authored content — it never touches student "
         + "submissions, and never the starter notebook (use update_notebook for that). Use get_solution "
         + "first to fetch the current solution to edit."
     static let inputSchema: JSONValue = .object([
@@ -65,8 +69,11 @@ struct UpdateSolutionTool: ContentTool {
             "assignmentPublicID": .object(["type": .string("string")]),
             "cellCount": .object(["type": .string("integer")]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
-        "required": .array([.string("assignmentPublicID"), .string("cellCount")]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("cellCount"), .string("assignmentClosed"),
+        ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: true, idempotentHint: true)
@@ -108,6 +115,11 @@ struct UpdateSolutionTool: ContentTool {
                 tool: Self.name, detail: "Could not store the solution for validation: \(error)")
         }
 
+        // Close a currently-open assignment (matching the web Save button) so
+        // students can't submit against the not-yet-revalidated solution/suite;
+        // folded into the same save as the validation-status flip.
+        let closed = assignment.isOpen
+        assignment.isOpen = false
         assignment.validationSubmissionID = validationSubmissionID
         assignment.validationStatus = "pending"
         try await assignment.save(on: context.db)
@@ -115,7 +127,8 @@ struct UpdateSolutionTool: ContentTool {
         return Output(
             assignmentPublicID: assignment.publicID,
             cellCount: Self.cellCount(of: input.notebook),
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     /// A notebook must be a JSON object carrying a `cells` array — the minimal

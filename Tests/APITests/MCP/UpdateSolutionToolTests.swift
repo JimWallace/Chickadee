@@ -75,6 +75,37 @@ import Vapor
         }
     }
 
+    @Test func closesOpenAssignmentOnEdit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)  // makeTestAssignment defaults isOpen: true
+            #expect(assignment.isOpen)
+            let output = try await UpdateSolutionTool().execute(
+                UpdateSolutionTool.Input(
+                    assignmentPublicID: assignment.publicID, notebook: try json(twoCellSolution)),
+                context(app))
+            #expect(output.assignmentClosed)
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(!reloaded.isOpen)
+        }
+    }
+
+    @Test func leavesClosedAssignmentClosed() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            assignment.isOpen = false
+            try await assignment.save(on: app.db)
+            let output = try await UpdateSolutionTool().execute(
+                UpdateSolutionTool.Input(
+                    assignmentPublicID: assignment.publicID, notebook: try json(twoCellSolution)),
+                context(app))
+            #expect(!output.assignmentClosed)
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(!reloaded.isOpen)
+        }
+    }
+
     @Test func roundTripsWithGetSolution() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

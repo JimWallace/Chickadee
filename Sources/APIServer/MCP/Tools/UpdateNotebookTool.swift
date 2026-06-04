@@ -29,15 +29,20 @@ struct UpdateNotebookTool: ContentTool {
         let assignmentPublicID: String
         let cellCount: Int
         let validationStatus: String?
+        /// true when this edit closed a previously-open assignment (re-open with
+        /// update_assignment once validation passes).
+        let assignmentClosed: Bool
     }
 
     static let name = "update_notebook"
     static let description =
         "Replace an assignment's starter notebook (the notebook students open) with new .ipynb JSON, "
         + "by assignment public ID. Supply the full notebook as a JSON object with a \"cells\" array; "
-        + "the server normalizes it for the in-browser kernel and re-runs validation. Only the starter "
-        + "notebook changes — existing students keep their in-progress work and pick up the new notebook "
-        + "when their copy is next reset. Use get_notebook first to fetch the current notebook to edit."
+        + "the server normalizes it for the in-browser kernel and re-runs validation, closing the "
+        + "assignment if it was open (re-open with update_assignment once validation passes). Only the "
+        + "starter notebook changes — existing students keep their in-progress work and pick up the new "
+        + "notebook when their copy is next reset. Use get_notebook first to fetch the current notebook "
+        + "to edit."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -61,8 +66,11 @@ struct UpdateNotebookTool: ContentTool {
             "assignmentPublicID": .object(["type": .string("string")]),
             "cellCount": .object(["type": .string("integer")]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
-        "required": .array([.string("assignmentPublicID"), .string("cellCount")]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("cellCount"), .string("assignmentClosed"),
+        ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: true, idempotentHint: true)
@@ -104,12 +112,17 @@ struct UpdateNotebookTool: ContentTool {
             throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
         }
 
+        // Close a currently-open assignment (matching the web Save button) so
+        // students can't submit against the not-yet-revalidated suite, then
+        // re-kick validation (debounced).
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
         await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
 
         return Output(
             assignmentPublicID: assignment.publicID,
             cellCount: Self.cellCount(of: input.notebook),
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     /// A notebook must be a JSON object carrying a `cells` array — the minimal
