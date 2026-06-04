@@ -23,13 +23,18 @@ struct GetAssignmentTool: ContentTool {
         let startsAt: String?
         let validationStatus: String?
         let deadlineOverrideActive: Bool
+        /// How submissions are graded: "worker" (native runner) or "browser"
+        /// (in-browser Pyodide). Read from the test setup's manifest
+        /// (`TestProperties.gradingMode`, default "worker").
+        let gradingMode: String
     }
 
     static let name = "get_assignment"
     static let description =
         "Get an assignment's details by its public ID: title, course code, slug, "
         + "open/closed state, due date (ISO 8601), scheduled open date (ISO 8601, if any), "
-        + "and runner validation status."
+        + "runner validation status, and gradingMode (\"worker\" = graded by the native runner, "
+        + "\"browser\" = graded in-browser via Pyodide)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -53,10 +58,11 @@ struct GetAssignmentTool: ContentTool {
             "startsAt": .object(["type": .string("string")]),
             "validationStatus": .object(["type": .string("string")]),
             "deadlineOverrideActive": .object(["type": .string("boolean")]),
+            "gradingMode": .object(["type": .string("string")]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
-            .string("isOpen"), .string("deadlineOverrideActive"),
+            .string("isOpen"), .string("deadlineOverrideActive"), .string("gradingMode"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -71,6 +77,12 @@ struct GetAssignmentTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "The assignment's course could not be found.")
         }
+        // Grading mode lives in the test setup's manifest; default to "worker"
+        // (TestProperties' own default) when the setup or manifest is missing.
+        let gradingMode =
+            (try await APITestSetup.find(assignment.testSetupID, on: context.db))?
+            .decodedManifest()?.gradingMode.rawValue ?? "worker"
+
         let formatter = ISO8601DateFormatter()
         return Output(
             publicID: assignment.publicID,
@@ -81,7 +93,8 @@ struct GetAssignmentTool: ContentTool {
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
             startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus,
-            deadlineOverrideActive: assignment.deadlineOverrideActive ?? false
+            deadlineOverrideActive: assignment.deadlineOverrideActive ?? false,
+            gradingMode: gradingMode
         )
     }
 }
