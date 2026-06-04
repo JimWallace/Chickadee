@@ -108,7 +108,9 @@ struct ApproximateEqualityKind: PatternKindHandler {
         sectionVariables: [FamilyVariable], specHash: String,
         perStudentNames: Set<String>
     ) -> String {
-        renderApproximateEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
+        renderApproximateEquality(
+            family: family, case: c, sectionVariables: sectionVariables,
+            specHash: specHash, perStudentNames: perStudentNames)
     }
 
     func validateFamily(_ family: PatternFamily) throws {
