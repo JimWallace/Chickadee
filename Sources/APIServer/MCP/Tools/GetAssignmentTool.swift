@@ -30,6 +30,10 @@ struct GetAssignmentTool: ContentTool {
         /// (in-browser Pyodide). Read from the test setup's manifest
         /// (`TestProperties.gradingMode`, default "worker").
         let gradingMode: String
+        /// The course section (assignment group, e.g. "Labs") this assignment
+        /// belongs to, or nil when ungrouped. Manage with set_assignment_section.
+        let sectionID: String?
+        let sectionName: String?
     }
 
     static let name = "get_assignment"
@@ -37,8 +41,9 @@ struct GetAssignmentTool: ContentTool {
         "Get an assignment's details by its public ID: title, course code, slug, "
         + "visibility (closed/preview/open; preview is a staff-only beta state), the "
         + "derived isOpen flag, due date (ISO 8601), scheduled open date (ISO 8601, if any), "
-        + "runner validation status, and gradingMode (\"worker\" = graded by the native runner, "
-        + "\"browser\" = graded in-browser via Pyodide)."
+        + "runner validation status, gradingMode (\"worker\" = graded by the native runner, "
+        + "\"browser\" = graded in-browser via Pyodide), and the course section (assignment group "
+        + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -67,6 +72,8 @@ struct GetAssignmentTool: ContentTool {
             "validationStatus": .object(["type": .string("string")]),
             "deadlineOverrideActive": .object(["type": .string("boolean")]),
             "gradingMode": .object(["type": .string("string")]),
+            "sectionID": .object(["type": .string("string")]),
+            "sectionName": .object(["type": .string("string")]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
@@ -92,6 +99,12 @@ struct GetAssignmentTool: ContentTool {
             (try await APITestSetup.find(assignment.testSetupID, on: context.db))?
             .decodedManifest()?.gradingMode.rawValue ?? "worker"
 
+        // Resolve the course section (assignment group) the assignment is in.
+        var sectionName: String?
+        if let sectionID = assignment.sectionID {
+            sectionName = try await APICourseSection.find(sectionID, on: context.db)?.name
+        }
+
         let formatter = ISO8601DateFormatter()
         return Output(
             publicID: assignment.publicID,
@@ -104,7 +117,9 @@ struct GetAssignmentTool: ContentTool {
             startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus,
             deadlineOverrideActive: assignment.deadlineOverrideActive ?? false,
-            gradingMode: gradingMode
+            gradingMode: gradingMode,
+            sectionID: assignment.sectionID?.uuidString,
+            sectionName: sectionName
         )
     }
 }

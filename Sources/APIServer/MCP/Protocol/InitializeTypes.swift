@@ -76,6 +76,11 @@ enum MCPServerInstructions {
         - Course — identified by a short code (e.g. "CS136").
         - Assignment — identified by a 6-character public ID; has a title, an optional due date \
         (ISO 8601), and an open/closed state.
+        - Course section — a named group of assignments within a course (e.g. "Labs", "Exams"); an \
+        assignment belongs to at most one. Distinct from a test-suite section (which groups tests \
+        inside one assignment). List with list_course_sections, create with create_course_section, and \
+        assign an assignment with set_assignment_section (which adopts the section's default grading \
+        mode). get_assignment reports an assignment's current course section.
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \
         (public/release/secret/student), points, an optional section, and prerequisites (dependsOn). \
@@ -109,11 +114,13 @@ enum MCPServerInstructions {
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), update_suite (script metadata), update_pattern_family \
         (family defaults/cases), update_global_inputs (personalization variables/expressions), \
-        update_section_variables (a section's scoped variables/expressions), update_notebook (replace \
-        the starter notebook), update_solution (replace the reference solution and re-validate), \
-        author_script (create/replace a hand-written test or support file). To create a new \
-        assignment, either clone_assignment from a known-good one and then edit the copy (the safest \
-        path) or create_assignment to start a fresh notebook-based assignment from a starter .ipynb.
+        update_section_variables (a section's scoped variables/expressions), create_section / \
+        rename_section / delete_section (manage the named display groups) and move_suite_item (place a \
+        script, family, or check into a section, or ungroup it), update_notebook (replace the starter \
+        notebook), update_solution (replace the reference solution and re-validate), author_script \
+        (create/replace a hand-written test or support file). To create a new assignment, either \
+        clone_assignment from a known-good one and then edit the copy (the safest path) or \
+        create_assignment to start a fresh notebook-based assignment from a starter .ipynb.
 
         Important behaviors:
         - Any content edit (suite, pattern family, notebook, solution) re-runs validation \
