@@ -102,6 +102,32 @@ import Vapor
         }
     }
 
+    /// Adding a family auto-re-grades existing student submissions against the
+    /// new suite (the automatic equivalent of the "Retest all" button).
+    @Test func reGradesExistingSubmissions() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let student = try await makeTestUser(on: app, username: "stu", role: "student")
+            try await makeTestSubmission(
+                on: app, id: "sub_pf", setupID: assignment.testSetupID,
+                userID: try student.requireID(), status: "complete")
+
+            _ = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "classify", name: "Classify",
+                    kind: "boundary_equality", function: "classify", paramNames: ["x"],
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", args: [.int(1)], expected: .string("one"))
+                    ]),
+                context(app))
+
+            let reloaded = try #require(try await APISubmission.find("sub_pf", on: app.db))
+            #expect(reloaded.status == "pending")
+        }
+    }
+
     @Test func createsPersonalizedBoundaryFamily() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

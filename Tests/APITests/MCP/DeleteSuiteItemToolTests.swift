@@ -115,6 +115,31 @@ import Vapor
         }
     }
 
+    /// A suite edit auto-re-grades existing student submissions against the new
+    /// suite (the automatic equivalent of the "Retest all" button).
+    @Test func reGradesExistingSubmissions() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, seedScript: "extra_test.py")
+            let student = try await makeTestUser(on: app, username: "stu", role: "student")
+            try await makeTestSubmission(
+                on: app, id: "sub_del", setupID: assignment.testSetupID,
+                userID: try student.requireID(), status: "complete")
+
+            _ = try await DeleteSuiteItemTool().execute(
+                DeleteSuiteItemTool.Input(
+                    assignmentPublicID: assignment.publicID, script: "extra_test.py",
+                    familyID: nil, check: nil),
+                context(app))
+
+            let reloaded = try #require(try await APISubmission.find("sub_del", on: app.db))
+            #expect(reloaded.status == "pending")
+            // The dedup hash is stamped so a follow-up cosmetic save won't re-fan-out.
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(setup.lastRetestedManifestHash == manifestHash(setup.manifest))
+        }
+    }
+
     @Test func unknownScriptThrows() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

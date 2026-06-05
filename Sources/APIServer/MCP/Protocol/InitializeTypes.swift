@@ -81,7 +81,7 @@ enum MCPServerInstructions {
         inside one assignment). List with list_course_sections, create with create_course_section, \
         rename or change the default grading mode with rename_course_section, reorder with \
         reorder_course_sections, delete with delete_course_section (assignments in it are ungrouped, \
-        not deleted), and assign an assignment with set_assignment_section (which adopts the section's \
+        not deleted), and assign an assignment with set_assignment_course_section (which adopts the section's \
         default grading mode). get_assignment reports an assignment's current course section.
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \
@@ -119,7 +119,7 @@ enum MCPServerInstructions {
         update_suite (script metadata), update_pattern_family (edit a family's defaults/cases) / \
         create_pattern_family (add a new family), update_global_inputs (personalization \
         variables/expressions), update_section_variables (a section's scoped variables/expressions), \
-        create_section / rename_section / delete_section (manage the named display groups), \
+        create_suite_section / rename_suite_section / delete_suite_section (manage the named display groups), \
         move_suite_item (place a script, family, or check into a section, or ungroup it), \
         delete_suite_item (remove a script, family, or check), update_notebook (replace the starter \
         notebook), update_solution (replace the reference solution and re-validate), author_script \
@@ -129,14 +129,20 @@ enum MCPServerInstructions {
         notebook-based assignment from a starter .ipynb.
 
         Important behaviors:
-        - Any content edit (suite, pattern family, notebook, solution) re-runs validation \
-        asynchronously AND closes the assignment if it was open (each write tool's response reports \
-        this as `assignmentClosed`), so students can't submit against a not-yet-revalidated suite. \
+        - Any content edit (suite, pattern family, check, script, notebook, solution) re-runs \
+        validation asynchronously AND closes the assignment if it was open (each write tool's response \
+        reports this as `assignmentClosed`), so students can't submit against a not-yet-revalidated \
+        suite. A suite/family/check/script edit also automatically re-queues every existing student \
+        submission to be re-graded against the edited suite — the automatic equivalent of the \
+        instructor "Retest all" button — so prior results reflect the new tests; this fan-out is gated \
+        on a real change to the test manifest. (move_suite_item only re-orders/re-tags items and so \
+        does not re-grade; update_notebook and update_solution don't change the graded suite either.) \
         Call validate_assignment to wait for the terminal status (passed/failed/no-runner, with live \
         queued -> running -> done progress over an SSE connection), then re-open with \
         update_assignment(visibility:"open") — or visibility:"preview" to beta-test as staff first — \
         once it passes (opening and previewing are refused until it does). \
-        Metadata-only edits via update_assignment never trigger a regrade or a close.
+        Metadata-only edits (update_assignment, set_grading_mode, the section-organization tools) \
+        never trigger a regrade or a close.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
         and pick up the new notebook when their copy is next reset. Call get_notebook first and edit \
         the returned JSON.

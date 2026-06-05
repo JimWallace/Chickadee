@@ -946,11 +946,11 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   (`closeOpenAssignmentForContentEdit`).
 
 - **MCP section / check / grading-mode round (v0.4.353+).**  The catalog reached
-  thirty-four tools: test-suite section management (`create_section` /
-  `rename_section` / `delete_section`, plus `move_suite_item` to place a
+  thirty-four tools: test-suite section management (`create_suite_section` /
+  `rename_suite_section` / `delete_suite_section`, plus `move_suite_item` to place a
   script/family/check into a section); course-section management
   (`list_course_sections`, `create_course_section`, `rename_course_section`,
-  `delete_course_section`, `reorder_course_sections`, and `set_assignment_section`,
+  `delete_course_section`, `reorder_course_sections`, and `set_assignment_course_section`,
   which adopts the section's default grading mode); `create_pattern_family` /
   `delete_suite_item`; `author_notebook_check` (create-or-replace a notebook check
   — all ten `NotebookCheckKind`s, validated through `applySuiteEdit`); and
@@ -959,7 +959,15 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   including the two that initially slipped (`create_pattern_family`,
   `delete_suite_item`) — close a currently-open assignment on edit and report
   `assignmentClosed`; metadata-only tools (`set_grading_mode`, section
-  organization) do not.
+  organization) do not.  Content edits that change the graded suite also
+  **auto-re-grade** every existing student submission against the new suite
+  (`retestSubmissionsAfterContentEdit`, gated on a real manifest change), the
+  automatic equivalent of the instructor "Retest all" button; `move_suite_item`
+  (placement-only) and metadata edits do not.  (The suite-section tools were
+  renamed `create_section`→`create_suite_section` etc., and
+  `set_assignment_section`→`set_assignment_course_section`, so the two "section"
+  families read unambiguously — a breaking change to the not-yet-public MCP
+  surface.)
 
 **Near-term roadmap:**
 

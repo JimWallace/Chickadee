@@ -5,11 +5,11 @@
 // content:write, course-scoped.
 //
 // gradingMode lives in the test setup's manifest, not on the assignment row.
-// get_assignment surfaces it and set_assignment_section changes it as a
+// get_assignment surfaces it and set_assignment_course_section changes it as a
 // side-effect of adopting a course section's default; this is the direct setter
 // for an assignment that isn't in a section (or whose mode you want to change
 // without moving it). Changing the grading path doesn't change what the tests
-// check, so — matching set_assignment_section and the web setup editor — it does
+// check, so — matching set_assignment_course_section and the web setup editor — it does
 // NOT re-grade existing submissions, re-run validation, or close the assignment.
 
 import Core
@@ -33,7 +33,7 @@ struct SetGradingModeTool: ContentTool {
         "Set how an assignment's submissions are graded by its public ID: \"worker\" (graded by the "
         + "native runner) or \"browser\" (graded in-browser via Pyodide). This changes only the grading "
         + "path, not the tests, so it does not re-grade existing submissions, re-run validation, or "
-        + "change the open/closed state (matching set_assignment_section and the web setup editor). Read "
+        + "change the open/closed state (matching set_assignment_course_section and the web setup editor). Read "
         + "the current mode from get_assignment. To make a whole course section default to a mode, use "
         + "create_course_section / rename_course_section instead."
     static let inputSchema: JSONValue = .object([

@@ -16,8 +16,8 @@
 // Like the other suite-editing write tools it goes through the validated
 // `applySuiteEdit` reconcile path, then re-kicks validation and closes a
 // currently-open assignment (re-open with update_assignment once validation
-// passes).  Section names themselves are managed by create_section /
-// rename_section / delete_section.
+// passes).  Section names themselves are managed by create_suite_section /
+// rename_suite_section / delete_suite_section.
 
 import Core
 import Fluent
@@ -31,7 +31,7 @@ struct MoveSuiteItemTool: ContentTool {
         let script: String?
         let familyID: String?
         let check: String?
-        /// Target section id (from get_suite / create_section). Empty string or
+        /// Target section id (from get_suite / create_suite_section). Empty string or
         /// omitted ungroups the item (moves it to the trailing Ungrouped block).
         let sectionID: String?
     }
@@ -55,7 +55,7 @@ struct MoveSuiteItemTool: ContentTool {
         "Move one test-suite item into a section, or ungroup it, by assignment public ID. Identify the "
         + "item with exactly one of: script (a hand-written script filename), familyID (a pattern "
         + "family id), or check (a notebook-check id) — all from get_suite. sectionID is the target "
-        + "section's id (from get_suite or create_section); pass \"\" (or omit) to ungroup. The server "
+        + "section's id (from get_suite or create_suite_section); pass \"\" (or omit) to ungroup. The server "
         + "reorders the suite so each section stays a contiguous block. Saving re-runs validation and "
         + "closes the assignment if it was open (re-open with update_assignment once validation "
         + "passes). Use this for families and checks (which update_suite cannot move) and whenever a "
@@ -122,7 +122,7 @@ struct MoveSuiteItemTool: ContentTool {
             guard payload.sections.contains(where: { $0.id == destination }) else {
                 throw MCPToolError.invalidArguments(
                     tool: Self.name,
-                    detail: "No section with id \"\(destination)\". Create it with create_section first.")
+                    detail: "No section with id \"\(destination)\". Create it with create_suite_section first.")
             }
         }
 

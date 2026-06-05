@@ -1,5 +1,5 @@
-// Tests for the test-suite section MCP tools — create_section / rename_section
-// / delete_section (lightweight manifest mutations) and move_suite_item (which
+// Tests for the test-suite section MCP tools — create_suite_section / rename_suite_section
+// / delete_suite_section (lightweight manifest mutations) and move_suite_item (which
 // reorders the suite through the validated applySuiteEdit path). Backed by a
 // real test database + on-disk setup zip, mirroring UpdateSuiteToolTests.
 
@@ -84,7 +84,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            let out = try await CreateSectionTool().execute(
+            let out = try await CreateSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, name: "Question 1"), context(app))
             #expect(!out.sectionID.isEmpty)
             #expect(out.name == "Question 1")
@@ -102,7 +102,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await CreateSectionTool().execute(
+                _ = try await CreateSuiteSectionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, name: "   "), context(app))
             }
         }
@@ -112,9 +112,9 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            let created = try await CreateSectionTool().execute(
+            let created = try await CreateSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, name: "Old"), context(app))
-            _ = try await RenameSectionTool().execute(
+            _ = try await RenameSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, sectionID: created.sectionID, name: "New"),
                 context(app))
             let secs = try await sections(of: assignment, on: app)
@@ -127,7 +127,7 @@ import Vapor
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await RenameSectionTool().execute(
+                _ = try await RenameSuiteSectionTool().execute(
                     .init(assignmentPublicID: assignment.publicID, sectionID: "no-such-id", name: "X"),
                     context(app))
             }
@@ -138,14 +138,14 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            let created = try await CreateSectionTool().execute(
+            let created = try await CreateSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
             _ = try await MoveSuiteItemTool().execute(
                 .init(
                     assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
                     check: nil, sectionID: created.sectionID), context(app))
 
-            let out = try await DeleteSectionTool().execute(
+            let out = try await DeleteSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, sectionID: created.sectionID), context(app))
             #expect(out.removed)
             #expect(out.ungroupedItemCount == 1)
@@ -162,7 +162,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            let out = try await DeleteSectionTool().execute(
+            let out = try await DeleteSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, sectionID: "no-such-id"), context(app))
             #expect(!out.removed)
             #expect(out.ungroupedItemCount == 0)
@@ -175,7 +175,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            let created = try await CreateSectionTool().execute(
+            let created = try await CreateSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
             let out = try await MoveSuiteItemTool().execute(
                 .init(
@@ -207,7 +207,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            let created = try await CreateSectionTool().execute(
+            let created = try await CreateSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
             // Zero identifiers.
             await #expect(throws: MCPToolError.self) {
@@ -230,7 +230,7 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await fixture(on: app)
-            let created = try await CreateSectionTool().execute(
+            let created = try await CreateSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
             _ = try await MoveSuiteItemTool().execute(
                 .init(
@@ -263,7 +263,7 @@ import Vapor
             let famInput = try JSONDecoder().decode(
                 CreatePatternFamilyTool.Input.self, from: Data(famJSON.utf8))
             _ = try await CreatePatternFamilyTool().execute(famInput, context(app))
-            let created = try await CreateSectionTool().execute(
+            let created = try await CreateSuiteSectionTool().execute(
                 .init(assignmentPublicID: assignment.publicID, name: "Q2"), context(app))
 
             let out = try await MoveSuiteItemTool().execute(
@@ -276,6 +276,29 @@ import Vapor
 
             let fam = try #require(try await items(of: assignment, on: app).first { $0.family?.id == "fam1" })
             #expect(fam.sectionID == created.sectionID)
+        }
+    }
+
+    /// move_suite_item only re-orders / re-tags an item; unlike the content-edit
+    /// tools it must NOT re-grade existing submissions (the outcome is unchanged).
+    @Test func moveDoesNotReGradeSubmissions() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let student = try await makeTestUser(on: app, username: "stu", role: "student")
+            try await makeTestSubmission(
+                on: app, id: "sub_mv", setupID: assignment.testSetupID,
+                userID: try student.requireID(), status: "complete")
+            let created = try await CreateSuiteSectionTool().execute(
+                .init(assignmentPublicID: assignment.publicID, name: "Q1"), context(app))
+
+            _ = try await MoveSuiteItemTool().execute(
+                .init(
+                    assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
+                    check: nil, sectionID: created.sectionID), context(app))
+
+            let reloaded = try #require(try await APISubmission.find("sub_mv", on: app.db))
+            #expect(reloaded.status == "complete")  // not flipped to pending
         }
     }
 }

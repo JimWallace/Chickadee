@@ -42,7 +42,7 @@ course-scoped:
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_section_variables` | `content:write` | Replace a section's scoped variables/expressions |
-| `create_section` / `rename_section` / `delete_section` | `content:write` | Manage an assignment's test-suite sections (display groups) |
+| `create_suite_section` / `rename_suite_section` / `delete_suite_section` | `content:write` | Manage an assignment's test-suite sections (display groups) |
 | `move_suite_item` | `content:write` | Move a script/family/check into a suite section, or ungroup it |
 | `create_pattern_family` | `content:write` | Create a new pattern family: kind, function, cases (args/expected/hint), defaults (tier/points/`defaultHint`) |
 | `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable |
@@ -55,7 +55,7 @@ course-scoped:
 | `rename_course_section` | `content:write` | Rename a course section and/or change its default grading mode |
 | `delete_course_section` | `content:write` | Delete a course section (assignments in it are ungrouped, not deleted) |
 | `reorder_course_sections` | `content:write` | Set the display order of a course's sections |
-| `set_assignment_section` | `content:write` | Place an assignment into a course section (adopts its grading mode), or ungroup it |
+| `set_assignment_course_section` | `content:write` | Place an assignment into a course section (adopts its grading mode), or ungroup it |
 | `clone_assignment` | `content:write` | Duplicate an assignment (closed, unvalidated) |
 | `create_assignment` | `content:write` | New notebook-based assignment from scratch |
 
@@ -263,9 +263,13 @@ SwiftLint `--strict` clean, tests green.
 - ✅ **Tool granularity** — *resolved.* `update_suite` takes per-script metadata
   edits and `update_pattern_family` takes family-level edits; both re-save
   through the same `applySuiteEdit` the `PUT /suite` web path uses.
-- **Destructive-edit confirmation** — *still open.* No `dryRun` flag yet, and
-  manifest-changing tools do not yet report a blast-radius (affected-submission)
-  count in their result (design principle #3). A follow-up could add both.
+- **Destructive-edit confirmation** — *partially addressed.* Manifest-changing
+  content edits now **automatically re-grade** every existing student submission
+  against the new suite (gated on a real manifest change, idempotent), matching
+  the human "Retest all" button — so prior grades no longer silently go stale
+  (`retestSubmissionsAfterContentEdit`). Still open: a `dryRun` preview, and
+  surfacing the affected-submission count in the tool result rather than only the
+  server log (design principle #3).
 
 ---
 

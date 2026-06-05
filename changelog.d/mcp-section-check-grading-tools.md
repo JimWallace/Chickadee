@@ -22,10 +22,25 @@
   structure, …) by id, through the same validated `applySuiteEdit` path the web
   editor uses. Agents could already read, move, and delete checks but not author
   them.
+- **MCP content edits auto-re-grade existing submissions.** After an agent edits
+  a suite, pattern family, notebook check, or script, every existing student
+  submission is automatically re-queued for grading against the new suite — the
+  automatic equivalent of the instructor "Retest all" button. Gated on a real
+  manifest change (so no-op edits don't fan out) and idempotent against in-flight
+  retests. Pure placement edits (`move_suite_item`) and metadata edits
+  (`set_grading_mode`, section organization) do not re-grade.
 
 ### Changed
 
-- **MCP grading-mode reporting is consistent.** `set_assignment_section` now
+- **BREAKING (MCP): suite-section tool names are now explicit.** `create_section`
+  / `rename_section` / `delete_section` → `create_suite_section` /
+  `rename_suite_section` / `delete_suite_section`, and `set_assignment_section` →
+  `set_assignment_course_section`, so the test-suite-section tools and the
+  course-section tools are unambiguous at a glance (e.g. `create_suite_section`
+  vs `create_course_section`). The MCP authoring surface has no external
+  consumers yet, so no migration is provided.
+
+- **MCP grading-mode reporting is consistent.** `set_assignment_course_section` now
   reports a missing manifest `gradingMode` as `"worker"` (matching
   `get_assignment` and `TestProperties`' default) instead of null.
 - **MCP docs/instructions refreshed.** The `initialize` instructions now list

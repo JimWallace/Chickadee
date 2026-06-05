@@ -2,14 +2,14 @@
 //
 // Tools for *course* sections — the named groups that organize an assignment
 // list (e.g. "Labs", "Assignments", "Exams"), distinct from the test-suite
-// sections inside a single assignment (create_section / move_suite_item).  A
+// sections inside a single assignment (create_suite_section / move_suite_item).  A
 // course section (`APICourseSection`) has a name, a sort order, and a default
 // grading mode; an assignment belongs to at most one via its nullable
 // `sectionID`.  content:read for the listing, content:write for the rest.
 //
 // These mirror the web instructor dashboard handlers
 // (`CourseAdminRoutes+Sections.swift`): create_course_section ~ createSection,
-// set_assignment_section ~ moveToSection (including the grading-mode sync when
+// set_assignment_course_section ~ moveToSection (including the grading-mode sync when
 // moving into a named section).  This is assignment-organization metadata, not
 // student/enrollment data.
 
@@ -39,7 +39,7 @@ struct ListCourseSectionsTool: ContentTool {
     static let description =
         "List the course sections (assignment groups like \"Labs\" or \"Assignments\") for a course, "
         + "identified by course code, in display order. Returns each section's id (use it as "
-        + "set_assignment_section's courseSectionID), name, default grading mode (browser/worker), and "
+        + "set_assignment_course_section's courseSectionID), name, default grading mode (browser/worker), and "
         + "sort order. These are course-level groups for organizing the assignment list — not the "
         + "test-suite sections inside an assignment (those come from get_suite)."
     static let inputSchema: JSONValue = .object([
@@ -119,7 +119,7 @@ struct CreateCourseSectionTool: ContentTool {
         "Create a new course section (an assignment group like \"Labs\") in a course, by course code. "
         + "Provide a name and optionally defaultGradingMode (\"browser\" or \"worker\", default "
         + "\"browser\") — the mode an assignment adopts when moved into this section. The new section "
-        + "is appended after the existing ones. Returns its id for use with set_assignment_section."
+        + "is appended after the existing ones. Returns its id for use with set_assignment_course_section."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -187,9 +187,9 @@ struct CreateCourseSectionTool: ContentTool {
     }
 }
 
-// MARK: - set_assignment_section
+// MARK: - set_assignment_course_section
 
-struct SetAssignmentSectionTool: ContentTool {
+struct SetAssignmentCourseSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let assignmentPublicID: String
         /// Course-section id (from list_course_sections); "" / "none" / omitted ungroups.
@@ -205,7 +205,7 @@ struct SetAssignmentSectionTool: ContentTool {
         let gradingMode: String?
     }
 
-    static let name = "set_assignment_section"
+    static let name = "set_assignment_course_section"
     static let description =
         "Place an assignment into a course section (assignment group like \"Labs\"), or ungroup it, by "
         + "assignment public ID. courseSectionID comes from list_course_sections; pass \"\" (or omit) "
@@ -323,9 +323,9 @@ struct RenameCourseSectionTool: ContentTool {
         "Rename a course section (assignment group like \"Labs\") and/or change its default grading "
         + "mode, by course-section id (from list_course_sections). Provide name and/or "
         + "defaultGradingMode (\"browser\"/\"worker\") — at least one. The default grading mode applies "
-        + "only to assignments moved into the section AFTERWARDS (via set_assignment_section); it does "
+        + "only to assignments moved into the section AFTERWARDS (via set_assignment_course_section); it does "
         + "not re-grade or change assignments already in it. This is a course section (assignment "
-        + "group), not a test-suite section inside an assignment — use rename_section for those."
+        + "group), not a test-suite section inside an assignment — use rename_suite_section for those."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -414,7 +414,7 @@ struct DeleteCourseSectionTool: ContentTool {
         "Delete a course section (assignment group like \"Labs\"), by course-section id (from "
         + "list_course_sections). Assignments in the section are NOT deleted — they are ungrouped (their "
         + "section link is cleared) and keep their current grading mode. This is a course section, not a "
-        + "test-suite section inside an assignment — use delete_section for those. Idempotent: deleting "
+        + "test-suite section inside an assignment — use delete_suite_section for those. Idempotent: deleting "
         + "an id that no longer exists reports removed=false."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),

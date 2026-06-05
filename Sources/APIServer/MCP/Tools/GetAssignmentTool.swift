@@ -31,7 +31,7 @@ struct GetAssignmentTool: ContentTool {
         /// (`TestProperties.gradingMode`, default "worker").
         let gradingMode: String
         /// The course section (assignment group, e.g. "Labs") this assignment
-        /// belongs to, or nil when ungrouped. Manage with set_assignment_section.
+        /// belongs to, or nil when ungrouped. Manage with set_assignment_course_section.
         let sectionID: String?
         let sectionName: String?
     }
