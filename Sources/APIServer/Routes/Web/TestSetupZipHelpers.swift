@@ -24,6 +24,15 @@ enum ScriptZipError: Error {
 /// on any failure — caller decides whether to translate to a higher-level
 /// error.
 func repackZipFromDirectory(zipPath: String, sourceDir: URL) throws {
+    // `/usr/bin/zip -r . ` aborts with "Nothing to do!" (exit 12) when the
+    // source directory holds no files. An empty test setup is a legitimate
+    // state — attaching personalization inputs to a brand-new assignment before
+    // any test script exists, or deleting the last script — so emit a valid
+    // empty archive rather than failing the whole save with a raw zip error.
+    guard directoryContainsFile(sourceDir) else {
+        try writeEmptyZip(at: zipPath)
+        return
+    }
     try withZipProcessLock {
         let zip = Process()
         zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
@@ -35,6 +44,30 @@ func repackZipFromDirectory(zipPath: String, sourceDir: URL) throws {
         zip.waitUntilExit()
         guard zip.terminationStatus == 0 else { throw ScriptZipError.zipFailed }
     }
+}
+
+/// True when `dir` contains at least one regular file (searched recursively).
+/// `zip` has "nothing to do" — and exits non-zero — when this is false.
+private func directoryContainsFile(_ dir: URL) -> Bool {
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: dir, includingPropertiesForKeys: [.isRegularFileKey])
+    else { return false }
+    for case let url as URL in enumerator
+    where (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true {
+        return true
+    }
+    return false
+}
+
+/// Writes a valid, empty zip archive (a bare 22-byte End-Of-Central-Directory
+/// record) to `zipPath`. `zip(1)` refuses to create an empty archive, so we
+/// emit the canonical empty-zip bytes directly; `unzip` / `listZipEntries` read
+/// it back as an archive with zero entries.
+private func writeEmptyZip(at zipPath: String) throws {
+    let endOfCentralDirectory: [UInt8] = [0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18)
+    try? FileManager.default.removeItem(atPath: zipPath)
+    try Data(endOfCentralDirectory).write(to: URL(fileURLWithPath: zipPath))
 }
 
 // MARK: - Zip upload size guard
