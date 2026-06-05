@@ -1,5 +1,5 @@
 // Tests for the course-section MCP tools — list_course_sections,
-// create_course_section, and set_assignment_section (which mirrors the web
+// create_course_section, and set_assignment_course_section (which mirrors the web
 // dashboard's moveToSection, including the grading-mode sync). Backed by a real
 // test database.
 
@@ -97,7 +97,7 @@ import Vapor
                 on: app, name: "Labs", mode: "worker", order: 1, courseID: courseID)
             let sectionID = try section.requireID()
 
-            let out = try await SetAssignmentSectionTool().execute(
+            let out = try await SetAssignmentCourseSectionTool().execute(
                 .init(assignmentPublicID: fx.assignment.publicID, courseSectionID: sectionID.uuidString),
                 context(app))
             #expect(out.sectionID == sectionID.uuidString)
@@ -120,12 +120,12 @@ import Vapor
             let courseID = try fx.course.requireID()
             let section = try await makeSection(
                 on: app, name: "Labs", mode: "browser", order: 1, courseID: courseID)
-            _ = try await SetAssignmentSectionTool().execute(
+            _ = try await SetAssignmentCourseSectionTool().execute(
                 .init(
                     assignmentPublicID: fx.assignment.publicID,
                     courseSectionID: try section.requireID().uuidString), context(app))
 
-            let out = try await SetAssignmentSectionTool().execute(
+            let out = try await SetAssignmentCourseSectionTool().execute(
                 .init(assignmentPublicID: fx.assignment.publicID, courseSectionID: ""), context(app))
             #expect(out.sectionID.isEmpty)
             let reloaded = try #require(try await APIAssignment.find(fx.assignment.id, on: app.db))
@@ -138,7 +138,7 @@ import Vapor
         try await withApp(app) { app in
             let fx = try await fixture(on: app)
             await #expect(throws: MCPToolError.self) {
-                _ = try await SetAssignmentSectionTool().execute(
+                _ = try await SetAssignmentCourseSectionTool().execute(
                     .init(
                         assignmentPublicID: fx.assignment.publicID,
                         courseSectionID: UUID().uuidString), context(app))
@@ -155,7 +155,7 @@ import Vapor
             let foreign = try await makeSection(
                 on: app, name: "Labs", mode: "browser", order: 1, courseID: try other.requireID())
             await #expect(throws: MCPToolError.self) {
-                _ = try await SetAssignmentSectionTool().execute(
+                _ = try await SetAssignmentCourseSectionTool().execute(
                     .init(
                         assignmentPublicID: fx.assignment.publicID,
                         courseSectionID: try foreign.requireID().uuidString), context(app))

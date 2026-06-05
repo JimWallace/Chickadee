@@ -124,6 +124,8 @@ struct CreatePatternFamilyTool: ContentTool {
         let kind: String
         let caseKeys: [String]
         let validationStatus: String?
+        /// true when this edit closed a previously-open (or preview) assignment.
+        let assignmentClosed: Bool
     }
 
     static let name = "create_pattern_family"
@@ -137,8 +139,9 @@ struct CreatePatternFamilyTool: ContentTool {
         + "Set a `defaultHint` (family-wide) and/or per-case `hint` to give the student a \"💡 Hint\" "
         + "shown only when that test fails (per-case overrides the family default). "
         + "Saving renders the family's scripts and runs validation synchronously, rejecting a wrong arg "
-        + "count, an expected of the wrong shape for the kind, an unknown $ref, or a duplicate id. To "
-        + "edit a family afterwards use update_pattern_family."
+        + "count, an expected of the wrong shape for the kind, an unknown $ref, or a duplicate id. It "
+        + "also closes the assignment if it was open (reported as `assignmentClosed`; re-open with "
+        + "update_assignment once validation passes). To edit a family afterwards use update_pattern_family."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -274,9 +277,11 @@ struct CreatePatternFamilyTool: ContentTool {
                 "type": .string("array"), "items": .object(["type": .string("string")]),
             ]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("familyID"), .string("kind"), .string("caseKeys"),
+            .string("assignmentClosed"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -332,6 +337,13 @@ struct CreatePatternFamilyTool: ContentTool {
         } catch let error as any AbortError {
             throw MCPToolError.from(error, tool: Self.name)
         }
+        // A new family adds graded cases, so close a currently-open assignment
+        // (matching update_pattern_family and the web Save button) before the
+        // debounced re-validation.
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
+        // Re-grade existing submissions against the edited suite (gated on a real
+        // manifest change), the automatic equivalent of the "Retest all" button.
+        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
         await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
 
         return Output(
@@ -339,7 +351,8 @@ struct CreatePatternFamilyTool: ContentTool {
             familyID: family.id,
             kind: family.kind.rawValue,
             caseKeys: family.cases.map(\.key),
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     private static func assertUniqueCaseKeys(_ cases: [CaseInput]) throws {

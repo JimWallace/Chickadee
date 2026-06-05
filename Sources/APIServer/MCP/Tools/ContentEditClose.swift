@@ -36,3 +36,24 @@ func closeOpenAssignmentForContentEdit(
     try await assignment.save(on: db)
     return true
 }
+
+/// MCP wrapper around `retestSubmissionsIfManifestChanged` (defined alongside
+/// `retestAllSubmissionsForSetup`): resolves the acting subject for attribution
+/// and runs best-effort — the edit has already persisted, so a retest failure is
+/// logged, never thrown. See that function for the gating/idempotency contract.
+///
+/// Call this only from tools whose edit can change an outcome (create/delete/edit
+/// of tests, families, checks, or script bodies/points) — not from pure
+/// placement edits like `move_suite_item`, which only reorder/re-tag and never
+/// change a grade. Returns the number of submissions re-queued.
+@discardableResult
+func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext) async -> Int {
+    do {
+        let actingUser = try await context.requireEligibleSubject(tool: "retest")
+        return try await retestSubmissionsIfManifestChanged(
+            setup: setup, triggeredBy: actingUser.id, on: context.db)
+    } catch {
+        context.logger.warning("retestSubmissionsAfterContentEdit failed: \(error)")
+        return 0
+    }
+}

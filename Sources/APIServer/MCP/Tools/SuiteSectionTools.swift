@@ -22,9 +22,9 @@ import Core
 import Fluent
 import Foundation
 
-// MARK: - create_section
+// MARK: - create_suite_section
 
-struct CreateSectionTool: ContentTool {
+struct CreateSuiteSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let assignmentPublicID: String
         let name: String
@@ -36,7 +36,7 @@ struct CreateSectionTool: ContentTool {
         let name: String
     }
 
-    static let name = "create_section"
+    static let name = "create_suite_section"
     static let description =
         "Create a new, empty test-suite section (a named display group) on an assignment, by its "
         + "public ID. Returns the new section's id; put tests into it with move_suite_item (or pass "
@@ -97,9 +97,9 @@ struct CreateSectionTool: ContentTool {
     }
 }
 
-// MARK: - rename_section
+// MARK: - rename_suite_section
 
-struct RenameSectionTool: ContentTool {
+struct RenameSuiteSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let assignmentPublicID: String
         let sectionID: String
@@ -112,7 +112,7 @@ struct RenameSectionTool: ContentTool {
         let name: String
     }
 
-    static let name = "rename_section"
+    static let name = "rename_suite_section"
     static let description =
         "Rename an existing test-suite section on an assignment, by assignment public ID + section id "
         + "(both from get_suite). Section names are display-only, so this does NOT re-run validation "
@@ -181,9 +181,9 @@ struct RenameSectionTool: ContentTool {
     }
 }
 
-// MARK: - delete_section
+// MARK: - delete_suite_section
 
-struct DeleteSectionTool: ContentTool {
+struct DeleteSuiteSectionTool: ContentTool {
     struct Input: Decodable, Sendable {
         let assignmentPublicID: String
         let sectionID: String
@@ -199,7 +199,7 @@ struct DeleteSectionTool: ContentTool {
         let ungroupedItemCount: Int
     }
 
-    static let name = "delete_section"
+    static let name = "delete_suite_section"
     static let description =
         "Delete a test-suite section on an assignment, by assignment public ID + section id. Any tests "
         + "in the section are NOT deleted — they are ungrouped (moved to the trailing Ungrouped block). "

@@ -153,6 +153,9 @@ struct UpdateSuiteTool: ContentTool {
         // students can't submit against the not-yet-revalidated suite, then
         // re-kick validation against the edited manifest (debounced).
         let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
+        // Re-grade existing submissions against the edited suite (gated on a real
+        // manifest change), the automatic equivalent of the "Retest all" button.
+        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
         await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
 
         return Output(
