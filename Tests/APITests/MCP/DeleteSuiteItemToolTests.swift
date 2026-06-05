@@ -95,6 +95,26 @@ import Vapor
         }
     }
 
+    /// Removing a graded item closes a currently-open assignment so students
+    /// can't submit against the not-yet-revalidated suite, and reports it.
+    @Test func closesAnOpenAssignmentAndReportsIt() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app, seedScript: "extra_test.py")
+            #expect(assignment.visibility == .open)  // makeTestAssignment defaults isOpen: true
+
+            let output = try await DeleteSuiteItemTool().execute(
+                DeleteSuiteItemTool.Input(
+                    assignmentPublicID: assignment.publicID, script: "extra_test.py",
+                    familyID: nil, check: nil),
+                context(app))
+            #expect(output.assignmentClosed)
+
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.visibility == .closed)
+        }
+    }
+
     @Test func unknownScriptThrows() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

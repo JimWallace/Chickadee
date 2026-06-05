@@ -78,9 +78,11 @@ enum MCPServerInstructions {
         (ISO 8601), and an open/closed state.
         - Course section — a named group of assignments within a course (e.g. "Labs", "Exams"); an \
         assignment belongs to at most one. Distinct from a test-suite section (which groups tests \
-        inside one assignment). List with list_course_sections, create with create_course_section, and \
-        assign an assignment with set_assignment_section (which adopts the section's default grading \
-        mode). get_assignment reports an assignment's current course section.
+        inside one assignment). List with list_course_sections, create with create_course_section, \
+        rename or change the default grading mode with rename_course_section, reorder with \
+        reorder_course_sections, delete with delete_course_section (assignments in it are ungrouped, \
+        not deleted), and assign an assignment with set_assignment_section (which adopts the section's \
+        default grading mode). get_assignment reports an assignment's current course section.
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \
         (public/release/secret/student), points, an optional section, prerequisites (dependsOn), and \
@@ -113,15 +115,18 @@ enum MCPServerInstructions {
         get_global_inputs. Use \
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
-        3. Edit: update_assignment (metadata), update_suite (script metadata), update_pattern_family \
-        (family defaults/cases), update_global_inputs (personalization variables/expressions), \
-        update_section_variables (a section's scoped variables/expressions), create_section / \
-        rename_section / delete_section (manage the named display groups) and move_suite_item (place a \
-        script, family, or check into a section, or ungroup it), update_notebook (replace the starter \
+        3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
+        update_suite (script metadata), update_pattern_family (edit a family's defaults/cases) / \
+        create_pattern_family (add a new family), update_global_inputs (personalization \
+        variables/expressions), update_section_variables (a section's scoped variables/expressions), \
+        create_section / rename_section / delete_section (manage the named display groups), \
+        move_suite_item (place a script, family, or check into a section, or ungroup it), \
+        delete_suite_item (remove a script, family, or check), update_notebook (replace the starter \
         notebook), update_solution (replace the reference solution and re-validate), author_script \
-        (create/replace a hand-written test or support file). To create a new assignment, either \
-        clone_assignment from a known-good one and then edit the copy (the safest path) or \
-        create_assignment to start a fresh notebook-based assignment from a starter .ipynb.
+        (create/replace a hand-written test or support file), and author_notebook_check \
+        (create/replace a notebook check). To create a new assignment, either clone_assignment from a \
+        known-good one and then edit the copy (the safest path) or create_assignment to start a fresh \
+        notebook-based assignment from a starter .ipynb.
 
         Important behaviors:
         - Any content edit (suite, pattern family, notebook, solution) re-runs validation \

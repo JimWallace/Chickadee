@@ -42,6 +42,8 @@ struct DeleteSuiteItemTool: ContentTool {
         let removed: String
         let remainingItemCount: Int
         let validationStatus: String?
+        /// true when this edit closed a previously-open (or preview) assignment.
+        let assignmentClosed: Bool
     }
 
     static let name = "delete_suite_item"
@@ -50,8 +52,9 @@ struct DeleteSuiteItemTool: ContentTool {
         + "`script` (a hand-written script filename), `familyID` (a pattern family id — also removes "
         + "its generated cases), or `check` (a notebook-check id). A generated family case is not a "
         + "`script`; to remove those delete the family. Saving rebuilds the manifest (the item is no "
-        + "longer graded) and re-runs validation, which rejects the removal if it would leave a "
-        + "dangling dependsOn. Ids and filenames come from get_suite."
+        + "longer graded), closes the assignment if it was open (reported as `assignmentClosed`; re-open "
+        + "with update_assignment once validation passes), and re-runs validation, which rejects the "
+        + "removal if it would leave a dangling dependsOn. Ids and filenames come from get_suite."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -83,10 +86,11 @@ struct DeleteSuiteItemTool: ContentTool {
             "removed": .object(["type": .string("string")]),
             "remainingItemCount": .object(["type": .string("integer")]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("removed"),
-            .string("remainingItemCount"),
+            .string("remainingItemCount"), .string("assignmentClosed"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -121,6 +125,10 @@ struct DeleteSuiteItemTool: ContentTool {
         } catch let error as any AbortError {
             throw MCPToolError.from(error, tool: Self.name)
         }
+        // Removing a graded item changes what the suite grades, so close a
+        // currently-open assignment (matching every other content-edit tool and
+        // the web Save button) before the debounced re-validation.
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
         await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
 
         return Output(
@@ -128,7 +136,8 @@ struct DeleteSuiteItemTool: ContentTool {
             kind: target.kind,
             removed: target.id,
             remainingItemCount: payload.items.count,
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     private struct Target { let kind: String; let id: String }

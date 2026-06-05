@@ -78,6 +78,30 @@ import Vapor
         }
     }
 
+    /// Adding a family with graded cases closes a currently-open assignment so
+    /// students can't submit against the not-yet-revalidated suite, and reports it.
+    @Test func closesAnOpenAssignment() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            #expect(assignment.visibility == .open)  // makeTestAssignment defaults isOpen: true
+
+            let output = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "classify", name: "Classify",
+                    kind: "boundary_equality", function: "classify", paramNames: ["x"],
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", args: [.int(1)], expected: .string("one"))
+                    ]),
+                context(app))
+            #expect(output.assignmentClosed)
+
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.visibility == .closed)
+        }
+    }
+
     @Test func createsPersonalizedBoundaryFamily() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

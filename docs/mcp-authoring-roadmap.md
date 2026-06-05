@@ -20,32 +20,50 @@ added in the `mcp-course-scoping-and-hardening` work, PR #704).
 The original vertical slice (two tools, proving the auth/transport/dispatch
 pipeline) has grown into the full feature. The live tool catalog
 (`MCPToolCatalog.live` in
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships twenty
-tools, all `content:read` / `content:write` scoped and course-scoped:
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships
+thirty-four tools, all `content:read` / `content:write` scoped and
+course-scoped:
 
 | Tool | Scope | Capability |
 |------|-------|------------|
 | `list_courses` | `content:read` | Courses the subject may act on |
 | `get_server_info` | `content:read` | Deployed version + MCP mode/advertised scopes (liveness + capability probe) |
 | `list_assignments` | `content:read` | A course's assignments (id, title, slug, open/closed, due date) |
-| `get_assignment` | `content:read` | One assignment's full detail |
+| `list_course_sections` | `content:read` | A course's assignment groups (id, name, default grading mode, order) |
+| `get_assignment` | `content:read` | One assignment's full detail (incl. gradingMode + course section) |
 | `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body, each family's full spec (cases' args/expected), and each notebook check's spec |
 | `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
 | `get_solution` | `content:read` | The reference solution notebook (.ipynb JSON), resolved from the validation submission |
 | `get_global_inputs` | `content:read` | Assignment personalization: global variables + per-student expressions |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
-| `update_assignment` | `content:write` | Metadata: title, due date, open/close |
+| `update_assignment` | `content:write` | Metadata: title, due date, visibility (closed/preview/open) |
+| `set_grading_mode` | `content:write` | Set an assignment's grading path (worker vs browser); no regrade/close |
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_section_variables` | `content:write` | Replace a section's scoped variables/expressions |
+| `create_section` / `rename_section` / `delete_section` | `content:write` | Manage an assignment's test-suite sections (display groups) |
+| `move_suite_item` | `content:write` | Move a script/family/check into a suite section, or ungroup it |
 | `create_pattern_family` | `content:write` | Create a new pattern family: kind, function, cases (args/expected/hint), defaults (tier/points/`defaultHint`) |
 | `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable |
+| `delete_suite_item` | `content:write` | Remove a script, family (+ its cases), or notebook check from the suite |
+| `author_notebook_check` | `content:write` | Create/replace a notebook check (DataFrame shape/columns/equality, figures, AST, …) |
+| `author_script` | `content:write` | Create/replace a hand-written test or support file |
 | `update_notebook` | `content:write` | Replace the starter notebook |
 | `update_solution` | `content:write` | Replace the reference solution and re-validate |
-| `author_script` | `content:write` | Create/replace a hand-written test or support file |
+| `create_course_section` | `content:write` | Create a course section (assignment group) with a default grading mode |
+| `rename_course_section` | `content:write` | Rename a course section and/or change its default grading mode |
+| `delete_course_section` | `content:write` | Delete a course section (assignments in it are ungrouped, not deleted) |
+| `reorder_course_sections` | `content:write` | Set the display order of a course's sections |
+| `set_assignment_section` | `content:write` | Place an assignment into a course section (adopts its grading mode), or ungroup it |
 | `clone_assignment` | `content:write` | Duplicate an assignment (closed, unvalidated) |
 | `create_assignment` | `content:write` | New notebook-based assignment from scratch |
+
+Every content-edit write tool (suite/family/check/script/notebook/solution)
+re-runs validation and **closes** a currently-open assignment so students can't
+submit against a not-yet-revalidated suite — reported in the tool result as
+`assignmentClosed`. Metadata-only edits (`update_assignment`,
+`set_grading_mode`, section organization) do not.
 
 In addition to tools, the server exposes **resources**: `resources/list` /
 `resources/read` surface each accessible assignment's raw `test.properties.json`

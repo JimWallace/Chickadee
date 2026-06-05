@@ -1,0 +1,34 @@
+### Fixed
+
+- **MCP: `create_pattern_family` and `delete_suite_item` now close an open
+  assignment on edit.** Both change what the suite grades but previously left an
+  open (or preview) assignment open during the asynchronous re-validation
+  window, letting students submit against a not-yet-revalidated suite. They now
+  close the assignment and report `assignmentClosed`, matching every other
+  content-edit MCP tool and the web Save button.
+
+### Added
+
+- **MCP course-section management.** New `rename_course_section`,
+  `delete_course_section`, and `reorder_course_sections` tools complete the
+  course-section CRUD an agent can perform (creation and assignment already
+  existed), mirroring the instructor dashboard handlers.
+- **MCP `set_grading_mode`.** Directly set an assignment's grading path
+  (`worker`/`browser`) by public ID, instead of only as a side-effect of moving
+  it into a course section. Changing the path does not re-grade, re-validate, or
+  close the assignment.
+- **MCP `author_notebook_check`.** Create or replace a notebook check (all ten
+  `NotebookCheckKind`s — DataFrame shape/columns/equality, figure count, AST
+  structure, …) by id, through the same validated `applySuiteEdit` path the web
+  editor uses. Agents could already read, move, and delete checks but not author
+  them.
+
+### Changed
+
+- **MCP grading-mode reporting is consistent.** `set_assignment_section` now
+  reports a missing manifest `gradingMode` as `"worker"` (matching
+  `get_assignment` and `TestProperties`' default) instead of null.
+- **MCP docs/instructions refreshed.** The `initialize` instructions now list
+  `create_pattern_family`, `delete_suite_item`, `author_notebook_check`,
+  `set_grading_mode`, and the course-section tools in the recommended workflow;
+  `docs/mcp-authoring-roadmap.md` lists the full thirty-four-tool catalog.

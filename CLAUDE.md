@@ -914,7 +914,7 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   output-contract case, and `@unchecked Sendable` justification comments.
 
 - **MCP authoring-surface expansion (v0.4.328+).**  The agent tool catalog grew
-  from twelve to twenty content tools (`MCPToolCatalog.live`): `get_server_info`
+  from twelve to thirty-four content tools (`MCPToolCatalog.live`): `get_server_info`
   (version/capability probe), `get_solution` / `update_solution` (read + replace
   the reference solution, re-validating), `author_script` (create/replace a
   hand-written test or support file through the same `applySuiteEdit` path the
@@ -944,6 +944,22 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   it as `assignmentClosed`, and the human re-opens with
   `update_assignment(isOpen:true)` once validation passes
   (`closeOpenAssignmentForContentEdit`).
+
+- **MCP section / check / grading-mode round (v0.4.353+).**  The catalog reached
+  thirty-four tools: test-suite section management (`create_section` /
+  `rename_section` / `delete_section`, plus `move_suite_item` to place a
+  script/family/check into a section); course-section management
+  (`list_course_sections`, `create_course_section`, `rename_course_section`,
+  `delete_course_section`, `reorder_course_sections`, and `set_assignment_section`,
+  which adopts the section's default grading mode); `create_pattern_family` /
+  `delete_suite_item`; `author_notebook_check` (create-or-replace a notebook check
+  — all ten `NotebookCheckKind`s, validated through `applySuiteEdit`); and
+  `set_grading_mode` (worker/browser, no regrade/close).  `get_assignment` now
+  reports `gradingMode` + the course section.  All the content-edit tools —
+  including the two that initially slipped (`create_pattern_family`,
+  `delete_suite_item`) — close a currently-open assignment on edit and report
+  `assignmentClosed`; metadata-only tools (`set_grading_mode`, section
+  organization) do not.
 
 **Near-term roadmap:**
 
