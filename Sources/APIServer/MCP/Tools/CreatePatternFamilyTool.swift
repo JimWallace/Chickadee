@@ -130,7 +130,10 @@ struct CreatePatternFamilyTool: ContentTool {
 
     static let name = "create_pattern_family"
     static let description =
-        "Create a NEW pattern family on an assignment, by public ID. Provide the family `id` "
+        "Author a graded test as a pattern family — preferred over a hand-written author_script "
+        + "whenever the check is a function-call assertion (equality, float tolerance, return type, "
+        + "expected exception, performance bound, or stdout). "
+        + "Create a NEW pattern family on an assignment, by public ID. Provide the family `id` "
         + "(unique; not an existing family), `name`, `kind` (boundary_equality / approximate_equality "
         + "/ variable_equality / return_type_check / exception_expected / performance_threshold / "
         + "stdout_equality), the `function` it tests, `paramNames`, and a non-empty `cases` list — each "

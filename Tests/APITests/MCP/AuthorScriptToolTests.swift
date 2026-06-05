@@ -10,6 +10,17 @@ import Vapor
 @testable import APIServer
 
 @Suite struct AuthorScriptToolTests {
+    /// The tool description must frame author_script as an escape hatch and
+    /// point at the native check types, so an agent reaches for pattern families
+    /// / notebook checks first for graded tests (regression guard for the
+    /// "prefer native" steering).
+    @Test func descriptionFramesItAsAnEscapeHatchPreferringNativeChecks() {
+        let description = AuthorScriptTool.description
+        #expect(description.contains("Escape hatch"))
+        #expect(description.contains("create_pattern_family"))
+        #expect(description.contains("author_notebook_check"))
+    }
+
     private func context(_ app: Application) -> ToolContext {
         ToolContext(
             request: Request(application: app, on: app.eventLoopGroup.any()),

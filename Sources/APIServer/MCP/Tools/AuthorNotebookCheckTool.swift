@@ -123,7 +123,10 @@ struct AuthorNotebookCheckTool: ContentTool {
 
     static let name = "author_notebook_check"
     static let description =
-        "Create or replace a notebook check on an assignment, by public ID — a single-shot assertion "
+        "Author a graded check about a student's notebook — preferred over a hand-written "
+        + "author_script whenever the assertion is about a DataFrame/Series/array, a figure count, a "
+        + "defined function or variable, or the notebook source. "
+        + "Create or replace a notebook check on an assignment, by public ID — a single-shot assertion "
         + "about a student's notebook (e.g. is `df` a (rows, cols) DataFrame, did the notebook produce "
         + ">= N figures, does the source use a list comprehension). Provide a stable `id` (reusing an "
         + "existing id replaces that check), a `kind` (data_frame_shape / data_frame_columns / "

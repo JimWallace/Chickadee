@@ -57,7 +57,16 @@ struct AuthorScriptTool: ContentTool {
 
     static let name = "author_script"
     static let description =
-        "Create or replace a single hand-written test or support file in an assignment's test "
+        "Escape hatch for a hand-written test, plus the normal way to add a non-graded support/helper "
+        + "file. For a GRADED test, prefer Chickadee's native check types first: create_pattern_family "
+        + "/ update_pattern_family (a function's return value equals / is close to an expected, names a "
+        + "type, raises, meets a performance bound, prints expected stdout, or a module variable equals "
+        + "a value) and author_notebook_check (DataFrame / Series / array / figure / source-AST / "
+        + "variable assertions). Native checks are validated on save, personalize per student, and can "
+        + "be read back via get_suite; a raw script is written verbatim (only the async validation run "
+        + "catches errors in it) and is opaque to readers. Use a graded tier here only when no pattern "
+        + "kind or notebook check fits. "
+        + "Create or replace a single hand-written test or support file in an assignment's test "
         + "setup, by its public ID. Provide filename (a bare name, no path separators) and content "
         + "(the full script body). tier is public/release/secret/student for a graded test, or "
         + "\"support\" for a helper file that tests or personalization expressions can import but that "
