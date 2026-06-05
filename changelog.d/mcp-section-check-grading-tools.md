@@ -1,5 +1,13 @@
 ### Fixed
 
+- **Editing a test suite re-grades existing submissions again.** The live suite
+  editor (`PUT /instructor/:id/suite`) stopped re-queuing student submissions
+  when suite editing moved off the Save button (the v0.4.93 auto-retest only
+  fired on the now-suite-free Save path). It once more automatically re-grades
+  every existing student submission against the edited suite — gated on a real
+  manifest change — so prior grades no longer silently reflect the old tests.
+  The same gated helper backs the new MCP auto-re-grade, so the human and agent
+  paths stay in lockstep.
 - **MCP: `create_pattern_family` and `delete_suite_item` now close an open
   assignment on edit.** Both change what the suite grades but previously left an
   open (or preview) assignment open during the asynchronous re-validation

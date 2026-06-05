@@ -180,6 +180,34 @@ func retestAllSubmissionsForSetup(
     return touched
 }
 
+/// Re-queues every student submission on `setup` for regrade **iff** the
+/// manifest changed since the last regrade — the shared core of the automatic
+/// "Retest all" behavior, used by both the web suite editor (`PUT /suite`) and
+/// the MCP content-edit tools so the human and agent paths stay in lockstep.
+///
+/// Compares `manifestHash(setup.manifest)` (the post-edit manifest, which
+/// `applyPatternFamilies` has already written onto `setup`) against
+/// `setup.lastRetestedManifestHash`: on a change it retests (`force: false`, so
+/// rows already pending/assigned are skipped) and bumps the stored hash so a
+/// later cosmetic save won't duplicate the work; on no change it's a no-op.
+/// Returns the number of submissions re-queued (0 when unchanged). Throws on a
+/// DB failure — callers that must not fail the edit wrap it best-effort.
+@discardableResult
+func retestSubmissionsIfManifestChanged(
+    setup: APITestSetup, triggeredBy userID: UUID?, on db: any Database
+) async throws -> Int {
+    let currentHash = manifestHash(setup.manifest)
+    guard setup.lastRetestedManifestHash != currentHash else { return 0 }
+    let count = try await retestAllSubmissionsForSetup(
+        setupID: try setup.requireID(),
+        triggeredBy: userID,
+        on: db,
+        force: false)
+    setup.lastRetestedManifestHash = currentHash
+    try await setup.save(on: db)
+    return count
+}
+
 /// Retests every `kind == .student` submission on `setupID` for one user
 /// only (used by the per-student × per-assignment Retest button).  Skips
 /// `kind == .validation` and other students' submissions.  Honours the

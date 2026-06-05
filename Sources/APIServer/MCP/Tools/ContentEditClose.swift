@@ -37,39 +37,21 @@ func closeOpenAssignmentForContentEdit(
     return true
 }
 
-/// Re-queues every student submission on `setup` for regrade after a content
-/// edit that can change a grade — the automatic equivalent of an instructor
-/// clicking "Retest all" after editing the suite. Runs the same
-/// `retestAllSubmissionsForSetup` path the web button uses, so the agent leaves
-/// existing submissions graded against the new suite rather than against the old
-/// one.
-///
-/// Gated on a *real* manifest change: compares `manifestHash(setup.manifest)`
-/// (the post-edit manifest, which `applyPatternFamilies` has already written onto
-/// `setup`) against `setup.lastRetestedManifestHash`, so a no-op edit doesn't fan
-/// out, and bumps the stored hash on success so a later cosmetic save won't
-/// duplicate the work. Idempotent against in-flight retests (`force: false` skips
-/// rows already pending/assigned). Best-effort: the edit has already persisted,
-/// so a retest failure is logged, never thrown. Returns the number re-queued.
+/// MCP wrapper around `retestSubmissionsIfManifestChanged` (defined alongside
+/// `retestAllSubmissionsForSetup`): resolves the acting subject for attribution
+/// and runs best-effort — the edit has already persisted, so a retest failure is
+/// logged, never thrown. See that function for the gating/idempotency contract.
 ///
 /// Call this only from tools whose edit can change an outcome (create/delete/edit
 /// of tests, families, checks, or script bodies/points) — not from pure
-/// placement edits like `move_suite_item`, which only reorder/retag and never
-/// change a grade.
+/// placement edits like `move_suite_item`, which only reorder/re-tag and never
+/// change a grade. Returns the number of submissions re-queued.
 @discardableResult
 func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext) async -> Int {
-    let currentHash = manifestHash(setup.manifest)
-    guard setup.lastRetestedManifestHash != currentHash else { return 0 }
     do {
         let actingUser = try await context.requireEligibleSubject(tool: "retest")
-        let count = try await retestAllSubmissionsForSetup(
-            setupID: try setup.requireID(),
-            triggeredBy: actingUser.id,
-            on: context.db,
-            force: false)
-        setup.lastRetestedManifestHash = currentHash
-        try await setup.save(on: context.db)
-        return count
+        return try await retestSubmissionsIfManifestChanged(
+            setup: setup, triggeredBy: actingUser.id, on: context.db)
     } catch {
         context.logger.warning("retestSubmissionsAfterContentEdit failed: \(error)")
         return 0
