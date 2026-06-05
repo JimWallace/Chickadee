@@ -74,11 +74,12 @@ import Vapor
         }
     }
 
-    @Test func setsPreviewVisibility() async throws {
+    @Test func setsPreviewVisibilityWithoutRequiringValidation() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
+            // Preview is a pure visibility flip: no validation gate.
             let assignment = try await enrolledAssignment(
-                on: app, validationStatus: "passed", isOpen: false)
+                on: app, validationStatus: "pending", isOpen: false)
             let output = try await UpdateAssignmentTool().execute(
                 UpdateAssignmentTool.Input(
                     assignmentPublicID: assignment.publicID, visibility: "preview"),
@@ -90,19 +91,19 @@ import Vapor
         }
     }
 
-    @Test func refusesPreviewOnOpenAssignment() async throws {
+    @Test func allowsPreviewOnOpenAssignment() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
+            // No one-way restriction: open → preview is allowed.
             let assignment = try await enrolledAssignment(
                 on: app, validationStatus: "passed", isOpen: true)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await UpdateAssignmentTool().execute(
-                    UpdateAssignmentTool.Input(
-                        assignmentPublicID: assignment.publicID, visibility: "preview"),
-                    context(app))
-            }
+            let output = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, visibility: "preview"),
+                context(app))
+            #expect(output.visibility == "preview")
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
-            #expect(reloaded?.visibility == .open)
+            #expect(reloaded?.visibility == .preview)
         }
     }
 

@@ -284,12 +284,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             try await AssignmentAuthoringService.setVisibility(assignment, visibility, on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
             throw WebAssignmentError.validationRequired(
-                reason: "Assignment cannot be opened or previewed until runner validation passes."
-            )
-        } catch AssignmentAuthoringError.cannotPreviewOpenAssignment {
-            throw WebAssignmentError.invalidParameter(
-                name: "status",
-                reason: "Close the assignment before moving it to Preview."
+                reason: "Assignment cannot be opened until runner validation passes."
             )
         }
         return req.redirect(to: "/instructor")

@@ -103,9 +103,18 @@ func isAssignmentEffectivelyOpen(
     on db: Database,
     now: Date = Date()
 ) async throws -> Bool {
+    // Preview is a staff-only "open": course staff see and use it exactly like an
+    // open assignment, while students are held out as if it were closed. For
+    // .open / .closed the stored visibility applies to everyone.
+    let treatAsOpen: Bool
+    switch assignment.visibility {
+    case .open: treatAsOpen = true
+    case .closed: treatAsOpen = false
+    case .preview: treatAsOpen = user.isInstructor
+    }
     let effective = try await effectiveDueAt(for: assignment, user: user, on: db)
     return isAssignmentOpenForUser(
-        isOpen: assignment.isOpen,
+        isOpen: treatAsOpen,
         overrideActive: assignmentDeadlineOverrideIsActive(assignment),
         baselineDueAt: assignment.dueAt,
         effectiveDueAt: effective,
@@ -240,19 +249,9 @@ func requireOpenStudentAssignment(
 
     _ = try await closeAssignmentIfExpired(assignment, on: req.db, logger: req.logger, now: now)
 
-    // Course staff may test-submit to a Preview assignment to exercise the
-    // real grading path before publishing it to students. Gated on validation
-    // having passed (the same guard as opening), so staff can only submit to
-    // content a student could actually be graded against. Students fall through
-    // to the normal gate below and are held out exactly as for a closed
-    // assignment. (The submission itself is stamped `kind = preview` at the
-    // call site so it stays out of student-facing analytics.)
-    if user.isInstructor, assignment.visibility == .preview,
-        assignment.validationStatus == nil || assignment.validationStatus == "passed"
-    {
-        return assignment
-    }
-
+    // Preview is open for course staff and closed for students — handled
+    // uniformly by isAssignmentEffectivelyOpen, so staff use it via the normal
+    // open path (bundled solution/tests, normal submission) with no special case.
     let open = try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db, now: now)
     guard open else {
         throw AssignmentSubmissionGateError.closed

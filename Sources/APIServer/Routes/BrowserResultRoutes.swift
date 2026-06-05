@@ -90,8 +90,7 @@ struct BrowserResultRoutes: RouteCollection {
             status: "complete",
             filename: "\(subID).ipynb",
             userID: caller.id,
-            // Course-staff submissions are test/preview runs, never class data.
-            kind: caller.isInstructor ? APISubmission.Kind.preview : APISubmission.Kind.student
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
 
@@ -192,8 +191,7 @@ struct BrowserResultRoutes: RouteCollection {
             status: "pending",
             filename: submittedFilename,
             userID: caller.id,
-            // Course-staff submissions are test/preview runs, never class data.
-            kind: caller.isInstructor ? APISubmission.Kind.preview : APISubmission.Kind.student
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
 

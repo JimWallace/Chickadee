@@ -53,9 +53,9 @@ struct UpdateAssignmentTool: ContentTool {
         + "open for submissions now — refused until runner validation passes, and clears any pending "
         + "open date — or false to close), and/or visibility (\"closed\", \"preview\", or \"open\"). "
         + "visibility is the three-state form of isOpen and wins if both are given: \"preview\" is a "
-        + "staff-only beta state where only course staff can see the assignment and test-submit to it "
-        + "(refused until validation passes); the lifecycle is one-way (closed → preview → open), so "
-        + "moving an already-open assignment to preview is refused — close it first. Does not change "
+        + "staff-only state where course staff see and use the assignment exactly like open while "
+        + "students see it as closed. Switching to preview is a pure visibility change (no validation, "
+        + "no close); only opening to students is refused until validation passes. Does not change "
         + "test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
@@ -152,11 +152,7 @@ struct UpdateAssignmentTool: ContentTool {
         } catch AssignmentAuthoringError.validationNotPassed {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
-                detail: "The assignment cannot be opened or previewed until its runner validation has passed.")
-        } catch AssignmentAuthoringError.cannotPreviewOpenAssignment {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "open → preview is not allowed; close the assignment before moving it to preview.")
+                detail: "The assignment cannot be opened until its runner validation has passed.")
         }
 
         let formatter = ISO8601DateFormatter()

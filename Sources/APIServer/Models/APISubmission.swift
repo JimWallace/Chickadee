@@ -11,14 +11,6 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     enum Kind {
         static let student = "student"
         static let validation = "validation"
-        /// A course-staff test submission, made while an assignment is in the
-        /// Preview (or open) state to exercise the real grading path before
-        /// publishing. Graded exactly like a student submission — the worker
-        /// claims it and results are stored normally — but excluded from every
-        /// student-facing aggregate (all class-stat queries filter to
-        /// `.student`), so staff test runs never pollute class data, grades,
-        /// or badges.
-        static let preview = "preview"
     }
 
     @ID(custom: "id", generatedBy: .user)

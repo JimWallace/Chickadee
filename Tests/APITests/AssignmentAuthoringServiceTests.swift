@@ -125,26 +125,28 @@ import Vapor
 
     // MARK: - Three-state visibility (Preview)
 
-    @Test func previewRequiresValidation() async throws {
+    @Test func previewNeedsNoValidation() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
+            // Switching to preview is a pure visibility flip — it must not be
+            // gated on validation the way opening to students is.
             let assignment = try await makeAssignment(on: app, validationStatus: "pending")
-            await #expect(throws: AssignmentAuthoringError.validationNotPassed) {
-                try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
-            }
-            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
-            #expect(reloaded?.visibility == .closed)
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            #expect(assignment.visibility == .preview)
+            // It is not open to students (the derived flag stays false).
+            #expect(assignment.isOpen == false)
         }
     }
 
-    @Test func previewAllowedWhenValidationPassedAndHidesFromStudents() async throws {
+    @Test func previewIsOpenForStaffAndClosedForStudents() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
-            #expect(assignment.visibility == .preview)
-            // Preview is not open to students (the derived flag stays false).
-            #expect(assignment.isOpen == false)
+            let staff = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            let student = try await makeTestUser(on: app, username: "stu", role: "student")
+            #expect(try await isAssignmentEffectivelyOpen(assignment, for: staff, on: app.db))
+            #expect(!(try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)))
         }
     }
 
@@ -158,17 +160,15 @@ import Vapor
         }
     }
 
-    @Test func openToPreviewIsRefused() async throws {
+    @Test func openToPreviewIsAllowed() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
+            // No one-way restriction: an instructor can pull a live assignment
+            // back to staff-only (it just becomes hidden from students again).
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setVisibility(assignment, .open, on: app.db)
-            await #expect(throws: AssignmentAuthoringError.cannotPreviewOpenAssignment) {
-                try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
-            }
-            // The one-way-street guard leaves the assignment open.
-            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
-            #expect(reloaded?.visibility == .open)
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            #expect(assignment.visibility == .preview)
         }
     }
 
@@ -178,7 +178,7 @@ import Vapor
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
             // A past open date auto-opens a *closed* assignment, but a Preview
-            // assignment must stay in its staff-only beta state.
+            // assignment must stay in its staff-only state.
             assignment.startsAt = Date().addingTimeInterval(-3600)
             try await assignment.save(on: app.db)
             let opened = try await openScheduledAssignment(assignment, on: app.db, logger: app.logger)

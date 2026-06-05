@@ -14,13 +14,8 @@ import Vapor
 /// Domain errors from assignment-authoring operations, mapped to transport
 /// errors by callers (`WebAssignmentError` on the web, `MCPToolError` over MCP).
 enum AssignmentAuthoringError: Error, Sendable, Equatable {
-    /// Opening (or entering preview) was refused because runner validation has
-    /// not passed.
+    /// Opening was refused because runner validation has not passed.
     case validationNotPassed
-    /// Refused to move an already-open assignment into the staff-only Preview
-    /// state: that would retract it from students who already saw it. The
-    /// lifecycle is a one-way street (closed → preview → open); close it first.
-    case cannotPreviewOpenAssignment
     /// The source assignment's test setup files (zip) could not be copied.
     case setupCopyFailed(reason: String)
 }
@@ -262,9 +257,8 @@ enum AssignmentAuthoringService {
 
     /// Sets an assignment's three-state visibility (closed / preview / open) and
     /// saves. Metadata-only — never touches the manifest, so it does not trigger
-    /// a regrade. Throws `validationNotPassed` if opening or previewing before
-    /// validation has passed, and `cannotPreviewOpenAssignment` for the one
-    /// forbidden transition (open → preview).
+    /// a regrade. Only opening requires validation to have passed; switching to
+    /// preview or closed is unconditional.
     static func setVisibility(
         _ assignment: APIAssignment,
         _ visibility: AssignmentVisibility,
@@ -283,33 +277,28 @@ enum AssignmentAuthoringService {
 
     /// Mutates visibility in memory (no save).
     ///
-    /// - Opening and entering **preview** both require validation to have passed
-    ///   (or no suite to validate): preview is a staff beta state where staff
-    ///   test-submit, so the content must be gradeable.
-    /// - **open** additionally consumes any pending scheduled open date and
-    ///   re-derives the deadline override from the (possibly past) due date —
-    ///   otherwise the student gate would keep blocking, or the auto-open sweep
-    ///   could re-open after a manual close.
-    /// - **open → preview** is refused (`cannotPreviewOpenAssignment`): the
-    ///   lifecycle is one-way and pulling a live assignment back into the
-    ///   staff-only state would retract it from students who already saw it.
+    /// - **open** requires validation to have passed (or no suite to validate),
+    ///   consumes any pending scheduled open date, and re-derives the deadline
+    ///   override from the (possibly past) due date — otherwise the student gate
+    ///   would keep blocking, or the auto-open sweep could re-open after a close.
+    /// - **preview** is a pure visibility flip with no side effects: it makes an
+    ///   already-validated assignment visible to staff (as open) while staying
+    ///   hidden from students, so it neither re-validates nor closes anything.
+    /// - **closed** simply hides it from everyone.
     private static func applyVisibility(
         _ assignment: APIAssignment, _ visibility: AssignmentVisibility, now: Date
     ) throws {
         switch visibility {
-        case .open, .preview:
+        case .open:
             guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
                 throw AssignmentAuthoringError.validationNotPassed
             }
-            if visibility == .preview, assignment.visibility == .open {
-                throw AssignmentAuthoringError.cannotPreviewOpenAssignment
-            }
-            assignment.visibility = visibility
-            if visibility == .open {
-                assignment.startsAt = nil
-                assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(
-                    dueAt: assignment.dueAt, now: now)
-            }
+            assignment.visibility = .open
+            assignment.startsAt = nil
+            assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(
+                dueAt: assignment.dueAt, now: now)
+        case .preview:
+            assignment.visibility = .preview
         case .closed:
             assignment.visibility = .closed
         }

@@ -168,8 +168,7 @@ extension WebRoutes {
             attemptNumber: priorCount + 1,
             filename: fallbackFilename,
             userID: user.id,
-            // Course-staff submissions are test/preview runs, never class data.
-            kind: user.isInstructor ? APISubmission.Kind.preview : APISubmission.Kind.student
+            kind: APISubmission.Kind.student
         )
         try await submission.save(on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
