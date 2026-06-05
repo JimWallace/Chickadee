@@ -43,6 +43,11 @@ import Testing
         let instructions = try #require(result["instructions"]?.stringValue)
         #expect(instructions.contains("list_courses"))
         #expect(instructions.contains("validation"))
+        // The instructions steer agents toward native check types and frame
+        // author_script as a last-resort escape hatch (regression guard for the
+        // "prefer native" steering).
+        #expect(instructions.contains("Prefer native check types"))
+        #expect(instructions.contains("escape hatch"))
     }
 
     @Test func pingReturnsEmptyObject() async throws {

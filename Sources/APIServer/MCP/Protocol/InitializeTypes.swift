@@ -117,19 +117,39 @@ enum MCPServerInstructions {
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
-        update_suite (script metadata), update_pattern_family (edit a family's defaults/cases) / \
-        create_pattern_family (add a new family), update_global_inputs (personalization \
-        variables/expressions), update_section_variables (a section's scoped variables/expressions), \
-        create_suite_section / rename_suite_section / delete_suite_section (manage the named display groups), \
-        move_suite_item (place a script, family, or check into a section, or ungroup it), \
-        delete_suite_item (remove a script, family, or check), update_notebook (replace the starter \
-        notebook), update_solution (replace the reference solution and re-validate), author_script \
-        (create/replace a hand-written test or support file), and author_notebook_check \
-        (create/replace a notebook check). To create a new assignment, either clone_assignment from a \
-        known-good one and then edit the copy (the safest path) or create_assignment to start a fresh \
-        notebook-based assignment from a starter .ipynb.
+        update_suite (script metadata). To add or change a GRADED test, prefer Chickadee's native \
+        check types — update_pattern_family (edit a family's defaults/cases) / create_pattern_family \
+        (add a new family) and author_notebook_check (create/replace a notebook check) — over a \
+        hand-written script (see "Prefer native check types" below). Personalization and grouping: \
+        update_global_inputs (personalization variables/expressions), update_section_variables (a \
+        section's scoped variables/expressions), create_suite_section / rename_suite_section / \
+        delete_suite_section (manage the named display groups), move_suite_item (place a script, \
+        family, or check into a section, or ungroup it), delete_suite_item (remove a script, family, \
+        or check). Notebook/solution: update_notebook (replace the starter notebook), update_solution \
+        (replace the reference solution and re-validate). Escape hatch: author_script (create/replace \
+        a hand-written test — only when no native kind fits — or a non-graded support/helper file). \
+        To create a new assignment, either clone_assignment from a known-good one and then edit the \
+        copy (the safest path) or create_assignment to start a fresh notebook-based assignment from a \
+        starter .ipynb.
 
         Important behaviors:
+        - Prefer native check types over hand-written scripts. To author a graded test, first check \
+        whether a pattern family or a notebook check expresses the assertion, and use that instead of \
+        a raw script. Pattern-family kinds (create_pattern_family / update_pattern_family): \
+        boundary_equality and approximate_equality (a function's return equals / is within tolerance \
+        of an expected value), variable_equality (a module-level variable equals a value), \
+        return_type_check, exception_expected, performance_threshold, and stdout_equality. \
+        Notebook-check kinds (author_notebook_check): data_frame_shape, data_frame_columns, \
+        data_frame_equality, series_equality, numeric_array_close, figure_count, cell_contains, \
+        function_exists, variable_exists, and ast_structure. Native checks are validated structurally \
+        when you save (arg count, the expected's shape for the kind, $ref resolution), they \
+        personalize per student ($name / expectedVarRef), and get_suite returns their full spec so a \
+        later reader can see exactly what they assert. author_script is the escape hatch: it writes \
+        the file verbatim, so the only safety net is the asynchronous validation run and the body is \
+        opaque to anything reading the suite back. Use a graded tier of author_script only when the \
+        assertion genuinely cannot be expressed as any pattern kind or notebook check — and when you \
+        do, say why no native construct fit. (Writing a non-graded support/helper file with the \
+        support tier is a normal, primary use of author_script, not a fallback.)
         - Any content edit (suite, pattern family, check, script, notebook, solution) re-runs \
         validation asynchronously AND closes the assignment if it was open (each write tool's response \
         reports this as `assignmentClosed`), so students can't submit against a not-yet-revalidated \

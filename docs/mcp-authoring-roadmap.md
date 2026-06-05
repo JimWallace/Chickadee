@@ -48,7 +48,7 @@ course-scoped:
 | `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable |
 | `delete_suite_item` | `content:write` | Remove a script, family (+ its cases), or notebook check from the suite |
 | `author_notebook_check` | `content:write` | Create/replace a notebook check (DataFrame shape/columns/equality, figures, AST, …) |
-| `author_script` | `content:write` | Create/replace a hand-written test or support file |
+| `author_script` | `content:write` | Escape hatch: create/replace a hand-written test (prefer a pattern family / notebook check) or a non-graded support file |
 | `update_notebook` | `content:write` | Replace the starter notebook |
 | `update_solution` | `content:write` | Replace the reference solution and re-validate |
 | `create_course_section` | `content:write` | Create a course section (assignment group) with a default grading mode |
