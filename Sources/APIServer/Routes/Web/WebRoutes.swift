@@ -330,11 +330,26 @@ struct WebRoutes: RouteCollection {
                 guard let assignment, let startsAt = assignment.startsAt else { return false }
                 return Date() < startsAt
             }()
+            // Preview is staff-only: staff see it functioning as "open" with a
+            // subtle staff-only marker, while to students it is indistinguishable
+            // from "closed". So the displayed status is resolved per viewer.
             let status: String
+            let staffOnly: Bool
             if let assignment {
-                status = assignment.visibility.rawValue  // "closed" | "preview" | "open"
+                switch assignment.visibility {
+                case .open:
+                    status = "open"
+                    staffOnly = false
+                case .closed:
+                    status = "closed"
+                    staffOnly = false
+                case .preview:
+                    status = user.isInstructor ? "open" : "closed"
+                    staffOnly = user.isInstructor
+                }
             } else {
                 status = "unpublished"
+                staffOnly = false
             }
             let hasNotebook: Bool = {
                 // True when the setup has a flat notebook file on disk, or the zip
@@ -372,8 +387,15 @@ struct WebRoutes: RouteCollection {
             }()
             let isOpenForThisUser: Bool = {
                 guard let assignment else { return false }
+                // Preview is open for staff, closed for students.
+                let treatAsOpen: Bool
+                switch assignment.visibility {
+                case .open: treatAsOpen = true
+                case .closed: treatAsOpen = false
+                case .preview: treatAsOpen = user.isInstructor
+                }
                 return isAssignmentOpenForUser(
-                    isOpen: assignment.isOpen,
+                    isOpen: treatAsOpen,
                     overrideActive: assignment.deadlineOverrideActive ?? false,
                     baselineDueAt: baselineDueAt,
                     effectiveDueAt: effectiveDueAt,
@@ -392,6 +414,7 @@ struct WebRoutes: RouteCollection {
                 dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
                 opensAtText: notYetOpen ? assignment?.startsAt.map { fmt.string(from: $0) } : nil,
                 status: status,
+                staffOnly: staffOnly,
                 isOpen: isOpenForThisUser,
                 canEdit: canEdit,
                 gradingMode: props?.gradingMode.rawValue ?? GradingMode.worker.rawValue,

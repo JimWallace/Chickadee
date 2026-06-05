@@ -27,7 +27,11 @@ struct TestSetupRow: Encodable {
     /// in the future. Drives the "Opens …" hint in the Due column; nil once
     /// the assignment has opened or when no open date is set.
     let opensAtText: String?
-    let status: String  // "unpublished" | "open" | "closed"
+    let status: String  // "unpublished" | "open" | "closed" (per viewer; preview resolves here)
+    /// True only for course staff viewing a Preview assignment: it functions as
+    /// open for them but carries a subtle "staff-only" marker so they can tell
+    /// at a glance it isn't visible to students yet. Always false for students.
+    let staffOnly: Bool
     let isOpen: Bool
     /// True when the Edit link should be shown: the assignment is open for
     /// this user, OR it is closed but the student has previously opened it

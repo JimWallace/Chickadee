@@ -102,10 +102,11 @@ enum MCPServerInstructions {
         with update_global_inputs. Sections can also carry their own scoped variables/expressions \
         (same shape); get_suite returns them per section and update_section_variables replaces them.
         - Visibility — an assignment is closed, preview, or open (set via update_assignment `visibility`, \
-        or the legacy `isOpen` boolean for open/closed). `preview` is a staff-only beta state: only \
-        course staff can see it and they may test-submit to it, while students still can't see it. The \
-        lifecycle is one-way (closed → preview → open); moving an already-open assignment to preview is \
-        refused. Both preview and open require the suite's runner validation to have passed.
+        or the legacy `isOpen` boolean for open/closed). `preview` is a staff-only state: course staff \
+        see and use it exactly like an open assignment (its bundled solution and tests, normal grading), \
+        while students see it as closed. Switching to preview is a pure visibility change with no side \
+        effects — it neither re-validates nor closes anything. Only opening to students requires the \
+        suite's runner validation to have passed.
 
         Recommended workflow:
         1. Discover: list_courses, then list_assignments for a course. get_server_info reports the \

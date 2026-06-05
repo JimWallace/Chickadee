@@ -117,9 +117,12 @@ struct UpdateSolutionTool: ContentTool {
 
         // Close a currently-open assignment (matching the web Save button) so
         // students can't submit against the not-yet-revalidated solution/suite;
-        // folded into the same save as the validation-status flip.
-        let closed = assignment.visibility != .closed
-        assignment.visibility = .closed
+        // folded into the same save as the validation-status flip. A staff-only
+        // Preview assignment is left as-is (already hidden from students).
+        let closed = assignment.visibility == .open
+        if closed {
+            assignment.visibility = .closed
+        }
         assignment.validationSubmissionID = validationSubmissionID
         assignment.validationStatus = "pending"
         try await assignment.save(on: context.db)

@@ -778,7 +778,8 @@ extension StudentCourseRoutes {
         return StudentAssignmentRow(
             assignmentID: assignment.publicID,
             title: assignment.title,
-            status: assignment.visibility.rawValue,
+            // Student-facing: Preview is indistinguishable from closed.
+            status: assignment.visibility == .preview ? "closed" : assignment.visibility.rawValue,
             isOpen: assignment.isOpen,
             dueAtText: dueAtText,
             effectiveDueAtText: effectiveDueAtText,

@@ -144,7 +144,7 @@
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:5.5rem"
                                 onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
-                            <option value="preview" #if(row.status == "preview"):selected#endif>preview (staff only)</option>
+                            <option value="preview" #if(row.status == "preview"):selected#endif>staff only</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
                     </form>
@@ -190,7 +190,7 @@
                 </td>
                 <td>
                     #if(row.status == "unpublished"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                     <details class="publish-details">
                         <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
                         <form class="publish-form" method="post" action="/instructor">
@@ -222,7 +222,7 @@
                     </form>
                     </div>
                     #elseif(row.status == "closed"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.25rem .35rem"
@@ -254,7 +254,7 @@
                         </form>
                     </div>
                     #elseif(row.status == "open"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.25rem .35rem"
@@ -286,7 +286,7 @@
                         </form>
                     </div>
                     #else:
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
@@ -357,7 +357,7 @@
                                 style="font-size:.8rem;padding:.25rem .45rem;min-width:5.5rem"
                                 onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
-                            <option value="preview" #if(row.status == "preview"):selected#endif>preview (staff only)</option>
+                            <option value="preview" #if(row.status == "preview"):selected#endif>staff only</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
                     </form>
@@ -403,7 +403,7 @@
                 </td>
                 <td>
                     #if(row.status == "unpublished"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                     <details class="publish-details">
                         <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
                         <form class="publish-form" method="post" action="/instructor">
@@ -435,7 +435,7 @@
                     </form>
                     </div>
                     #elseif(row.status == "closed"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.25rem .35rem"
@@ -457,7 +457,7 @@
                         </form>
                     </div>
                     #elseif(row.status == "open"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                 style="padding:.25rem .35rem"
@@ -479,7 +479,7 @@
                         </form>
                     </div>
                     #else:
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
                         <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
