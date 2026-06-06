@@ -494,25 +494,6 @@
     <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500)"></span>
 </div>
 
-<style>
-.suite-drag-handle { cursor: grab; user-select: none; color: var(--gray-500); padding: 0 .3rem; }
-.suite-drag-handle:active { cursor: grabbing; }
-.suite-row-dragging { opacity: .35; }
-tr.drop-before td:first-child { border-top: 2px solid var(--blue); }
-tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue); }
-tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
-.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
-.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--gray-500); cursor: default; }
-.suite-root-drop.drop-hover { background: var(--hover-bg); }
-.suite-child-indent { padding-left: 2rem; white-space: nowrap; }
-.suite-child-connector { color: var(--gray-500); margin-right: .25rem; font-size: .85em; }
-.suite-upload-error { font-size: .78rem; color: var(--red); margin-top: .2rem; }
-.suite-file-hint { font-size: .75rem; color: var(--gray-500); margin-top: .2rem; }
-.suite-file-hint a { color: inherit; }
-#suite-config-table td { vertical-align: top; }
-/* .add-section-details* and .section-block.section-dragging now live in the
-   global stylesheet (shared with assignments.leaf). */
-</style>
 <script src="/suite-list.js?v=#appVersion()"></script>
 <script>
 (function () {
@@ -626,45 +607,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
     // type picker morphs the body to the chosen renderer.
 })();
 </script>
-
-<style>
-/* CodeMirror 6 host element */
-#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
-#cm-editor-mount .cm-scroller { overflow: auto; }
-/* Dark-mode overrides for the CodeMirror editor */
-@media (prefers-color-scheme: dark) {
-    #cm-editor-mount .cm-editor {
-        background: var(--gray-100);
-    }
-    #cm-editor-mount .cm-gutters {
-        background: var(--gray-200);
-        border-color: var(--gray-200);
-        color: var(--gray-500);
-    }
-    #cm-editor-mount .cm-content {
-        color: var(--gray-900);
-        caret-color: var(--gray-900);
-    }
-    #cm-editor-mount .cm-activeLine {
-        background: var(--gray-200);
-    }
-    #cm-editor-mount .cm-selectionBackground,
-    #cm-editor-mount ::selection {
-        background: var(--hover-bg) !important;
-    }
-    #cm-editor-mount .cm-cursor {
-        border-left-color: var(--gray-900);
-    }
-    /* Modal inputs & selects */
-    #test-editor-overlay input,
-    #test-editor-overlay select,
-    #test-editor-overlay textarea {
-        background: var(--gray-100);
-        color: var(--gray-900);
-        border-color: var(--gray-200);
-    }
-}
-</style>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
     if (!dateTimeValue) { if (warningEl) warningEl.style.display = 'none'; return; }

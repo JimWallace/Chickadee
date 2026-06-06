@@ -1201,6 +1201,69 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 /* Wrapper form that should not introduce vertical rhythm (inline action). */
 .inline-form { margin: 0; }
 
+/* ── Diagnostic cards (admin + instructor dashboards) ────────────────────
+   Unified from four near-identical embedded copies (UI audit). One card
+   style everywhere: a flex column with a consistent min-height so cards
+   align uniformly across the admin and instructor dashboards. */
+.diagnostics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+}
+.diagnostic-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 5.5rem;
+    padding: .75rem .9rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
+}
+.diagnostic-label {
+    color: var(--gray-600);
+    font-size: .82rem;
+    line-height: 1.25;
+}
+.diagnostic-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--gray-900);
+}
+
+/* ── Suite editor drag/drop (assignment-new.leaf + assignment-edit.leaf) ──
+   Consolidated from two duplicated embedded <style> blocks (UI audit). */
+.suite-drag-handle { cursor: grab; user-select: none; color: var(--gray-500); padding: 0 .3rem; }
+.suite-drag-handle:active { cursor: grabbing; }
+.suite-row-dragging { opacity: .35; }
+tr.drop-before td:first-child { border-top: 2px solid var(--blue); }
+tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue); }
+tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
+.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
+.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--gray-500); cursor: default; }
+.suite-root-drop.drop-hover { background: var(--hover-bg); }
+.suite-child-indent { padding-left: 2rem; white-space: nowrap; }
+.suite-child-connector { color: var(--gray-500); margin-right: .25rem; font-size: .85em; }
+.suite-upload-error { font-size: .78rem; color: var(--red); margin-top: .2rem; }
+.suite-file-hint { font-size: .75rem; color: var(--gray-500); margin-top: .2rem; }
+.suite-file-hint a { color: inherit; }
+#suite-config-table td { vertical-align: top; }
+
+/* ── CodeMirror 6 host + Test Editor modal dark mode (new + edit pages) ───
+   Consolidated from two duplicated embedded <style> blocks (UI audit). */
+#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
+#cm-editor-mount .cm-scroller { overflow: auto; }
+@media (prefers-color-scheme: dark) {
+    #cm-editor-mount .cm-editor    { background: var(--gray-100); }
+    #cm-editor-mount .cm-gutters   { background: var(--gray-200); border-color: var(--gray-200); color: var(--gray-500); }
+    #cm-editor-mount .cm-content   { color: var(--gray-900); caret-color: var(--gray-900); }
+    #cm-editor-mount .cm-activeLine { background: var(--gray-200); }
+    #cm-editor-mount .cm-selectionBackground, #cm-editor-mount ::selection { background: var(--hover-bg) !important; }
+    #cm-editor-mount .cm-cursor    { border-left-color: var(--gray-900); }
+    #test-editor-overlay input, #test-editor-overlay select, #test-editor-overlay textarea { background: var(--gray-100); color: var(--gray-900); border-color: var(--gray-200); }
+}
+
 /* ════════════════════════════════════════════════════════════════════
    Responsive design  —  see docs/responsive-design-plan.md
    --------------------------------------------------------------------

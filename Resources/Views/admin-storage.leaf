@@ -60,30 +60,6 @@ Storage
     </table>
     #endif
 </section>
-<style>
-.diagnostics-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
-}
-.diagnostic-card {
-    padding: .75rem .9rem;
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
-}
-.diagnostic-label {
-    color: var(--gray-600);
-    font-size: .82rem;
-}
-.diagnostic-value {
-    margin-top: .2rem;
-    font-size: 1.2rem;
-    font-weight: 600;
-    line-height: 1.2;
-    color: var(--gray-900);
-}
-</style>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

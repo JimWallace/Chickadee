@@ -528,32 +528,6 @@
 .instructor-diagnostics {
     margin-bottom: 1.25rem;
 }
-.diagnostics-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
-}
-.diagnostic-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    min-height: 5.5rem;
-    padding: .75rem .9rem;
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
-}
-.diagnostic-label {
-    color: var(--gray-600);
-    font-size: .82rem;
-    line-height: 1.25;
-}
-.diagnostic-value {
-    font-size: 1.2rem;
-    font-weight: 600;
-    line-height: 1.2;
-    color: var(--gray-900);
-}
 .assignment-name-cell {
     display: inline-flex;
     align-items: center;
