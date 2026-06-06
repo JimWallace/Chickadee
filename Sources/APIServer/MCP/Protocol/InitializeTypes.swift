@@ -138,7 +138,8 @@ enum MCPServerInstructions {
         a raw script. Pattern-family kinds (create_pattern_family / update_pattern_family): \
         boundary_equality and approximate_equality (a function's return equals / is within tolerance \
         of an expected value), variable_equality (a module-level variable equals a value), \
-        return_type_check, exception_expected, performance_threshold, and stdout_equality. \
+        return_type_check, exception_expected, performance_threshold, stdout_equality, and \
+        unordered_equality (a function's return equals an expected collection ignoring order). \
         Notebook-check kinds (author_notebook_check): data_frame_shape, data_frame_columns, \
         data_frame_equality, series_equality, numeric_array_close, figure_count, cell_contains, \
         function_exists, variable_exists, and ast_structure. Native checks are validated structurally \

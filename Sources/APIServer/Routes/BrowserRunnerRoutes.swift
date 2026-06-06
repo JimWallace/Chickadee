@@ -49,7 +49,16 @@ struct BrowserRunnerRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        // Gate on effective-open (enrollment + open/visible), not enrollment
+        // alone: a student must not be able to pull the test scripts of a
+        // closed, not-yet-opened, or staff-only (preview) assignment by guessing
+        // its testSetupID. requireOpenStudentAssignment throws .closed (403) for a
+        // gated student and bypasses for staff. It returns nil only when no
+        // assignment owns the setup — then there is no hidden assignment to
+        // protect, so fall back to the plain enrollment check.
+        if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
+            try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        }
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 
@@ -73,7 +82,11 @@ struct BrowserRunnerRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        // Effective-open gate (see downloadTestSetup): the manifest carries the
+        // full testSuites list, so the same hidden-assignment leak applies.
+        if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
+            try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        }
 
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
@@ -110,17 +123,20 @@ struct BrowserRunnerRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-
-        // A test setup belongs to a single assignment (1:1 via test_setup_id),
-        // matching how the worker resolves the assignment for a claimed job.
-        guard
-            let userID = caller.id,
-            let assignment = try await APIAssignment.query(on: req.db)
-                .filter(\.$testSetupID == setupID)
-                .first(),
-            let assignmentID = assignment.id
+        // Effective-open gate (enrollment + open/visible): prevents a student
+        // from fetching the per-student resolved personalization values — which
+        // can encode solution-derived expected answers — for a closed,
+        // not-yet-opened, or preview assignment. requireOpenStudentAssignment
+        // throws .closed (403) for a gated student and bypasses for staff; it
+        // returns nil only when no assignment owns the setup, in which case there
+        // is nothing personalized to resolve — fall back to the enrollment check
+        // and return the empty seed (mirroring the worker leaving it unset).
+        guard let assignment = try await requireOpenStudentAssignment(for: setupID, user: caller, on: req)
         else {
+            try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil)
+        }
+        guard let userID = caller.id, let assignmentID = assignment.id else {
             return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil)
         }
 
