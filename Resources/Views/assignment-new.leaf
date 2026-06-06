@@ -4,7 +4,7 @@ Create Assignment
 #endexport
 #export("content"):
 #if(error):
-<div class="error-box" style="margin-bottom:1rem">
+<div class="error-box">
     <h2>Could not create assignment</h2>
     <p class="card-meta" style="margin-top:.5rem">#(error)</p>
 </div>

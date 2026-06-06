@@ -403,6 +403,7 @@ textarea.form-input {
     border: 1px solid var(--danger-border);
     border-radius: .5rem;
     padding: 1.25rem 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .error-box h2 { color: var(--red); }
@@ -412,6 +413,7 @@ textarea.form-input {
     border: 1px solid var(--border);
     border-radius: .5rem;
     padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
 }
 
 .compiler-output {
@@ -1198,8 +1200,108 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 /* Square-ish icon-only action button (edit / upload / reset glyphs). */
 .action-btn-icon { padding: .3rem .45rem; }
 
-/* Wrapper form that should not introduce vertical rhythm (inline action). */
-.inline-form { margin: 0; }
+/* Wrapper form that should not introduce vertical rhythm (inline action).
+   display:inline is a no-op for flex-item forms (flex blockifies children),
+   so it's safe for both inline contexts and existing flex-row uses. */
+.inline-form { display: inline; margin: 0; }
+
+/* ── Account / enroll / consent / setup pages (UI audit) ─────────────────
+   Page-specific components replacing inline styles on the small static
+   pages.  Grouped here so they share the one cacheable stylesheet. */
+
+/* Account: key/value detail list. */
+.detail-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: .4rem 1.25rem;
+    max-width: 480px;
+}
+.detail-grid dt { color: var(--gray-600); }
+.detail-grid dd { margin: 0; }
+
+/* Enroll: intro paragraph + course checklist. */
+.enroll-intro { margin-bottom: 1.25rem; color: var(--gray-600); }
+.fieldset-plain { border: none; padding: 0; margin: 0 0 1.5rem; }
+.fieldset-plain > legend { margin-bottom: .75rem; font-weight: 600; }
+.checkbox-list { display: flex; flex-direction: column; gap: .6rem; }
+.checkbox-row { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
+
+/* Setup-new / generic option fieldset with radio rows. */
+.option-fieldset {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .75rem 1rem;
+    margin-bottom: 1.25rem;
+}
+.option-fieldset > legend { padding: 0 .4rem; font-weight: 600; font-size: .9rem; }
+.radio-row { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
+.radio-row + .radio-row { margin-top: .4rem; }
+.field-note { margin-top: .25rem; font-size: .82rem; }
+
+/* Consent: scope list + small print. */
+.consent-scope-list { margin: 0 0 1rem 1.25rem; }
+.fine-print { font-size: .9rem; }
+.consent-note { color: var(--gray-600); font-size: .85rem; margin-bottom: 1rem; }
+
+/* ── Shared page components (UI audit: replaces repeated inline styles) ──
+   Cross-page building blocks so individual templates carry semantic class
+   names instead of inline style="" attributes.  Page-unique styling still
+   lives in each page; these are only the patterns that recurred widely. */
+
+/* Success/confirmation banner (distinct from the red .error-box / neutral
+   .notice-box) — green-outlined, sits above page content. */
+.notice-banner {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--green);
+    border-radius: .5rem;
+    background: var(--success-bg);
+}
+.notice-banner p { margin: 0; color: var(--green); font-weight: 600; }
+
+/* A title row: heading on the left, actions on the right, wrapping on
+   narrow screens.  The heading inside sheds its default margin. */
+.page-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.page-titlebar h1, .page-titlebar h2 { margin: 0; }
+.page-titlebar--baseline { align-items: baseline; }
+
+/* Secondary text shown next to / under a page title. */
+.page-subtitle { margin: .35rem 0 0; color: var(--text-secondary); }
+
+/* Horizontal cluster of controls (button groups, inline actions). */
+.toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.toolbar--end { justify-content: flex-end; }
+
+/* A compact inline form field: "Label <input>" on one line. */
+.field-inline {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .875rem;
+    white-space: nowrap;
+}
+/* A stacked field: label above its control. */
+.field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    font-size: .85rem;
+}
+/* Compact form control sizing for dense toolbars/editor rows. */
+.input-compact { font-size: .875rem; padding: .2rem .5rem; }
+
+/* Common block-level bottom spacing for standalone sections/notices. */
+.section-gap { margin-bottom: 1rem; }
+
+/* A button row sitting below form content (relies on .btn + .btn spacing). */
+.form-actions { margin-top: 1rem; }
 
 /* ── Diagnostic cards (admin + instructor dashboards) ────────────────────
    Unified from four near-identical embedded copies (UI audit). One card
