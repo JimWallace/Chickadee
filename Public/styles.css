@@ -1054,6 +1054,12 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 @media (max-width: 1024px) { .col-hide-tablet { display: none; } }
 @media (max-width: 640px)  { .col-hide-phone  { display: none; } }
 
+/* Horizontal-scroll wrapper for dense, desktop-first tables (admin runner /
+   audit log).  Width-agnostic: no scrollbar at desktop when the table fits;
+   on a narrow screen it confines the overflow to the table instead of letting
+   it push the whole page wider. */
+.table-scroll { overflow-x: auto; }
+
 /* Filter/search inputs keep their authored desktop width via the
    --filter-width custom property (so desktop is unchanged) and span the full
    row on phones. */

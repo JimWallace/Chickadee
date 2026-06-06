@@ -1,18 +1,38 @@
 # Responsive Design Plan
 
-Status: **in progress** — Phase 0 (foundation) landed; Phase 1 started with the
-student dashboard (`index.leaf`).
+Status: **first pass complete** — all five phases landed; ready to deploy and
+fine-tune column-priority / breakpoint choices against real content.
 
 ## Implementation status
 
 - **Phase 0 (foundation) — done.** Intrinsic containers (`.main` / `.form` /
   `.auth-box` now use `min(…, 100%)`, `.main` padding fluid via `clamp()`),
   documented breakpoint block + `.col-hide-phone` / `.col-hide-tablet`
-  utilities, phone nav wrapping, `.action-btn` tap targets, and a
-  `.filter-input` class (authored width via `--filter-width`, full-width on
-  phone) wired into the two search inputs.
-- **Phase 1 — in progress.** `index.leaf` (student dashboard) hides the Due and
-  History columns on phones across all three table variants.
+  utilities, `.table-scroll` wrapper, phone nav wrapping, `.action-btn` tap
+  targets, and a `.filter-input` class (authored width via `--filter-width`,
+  full-width on phone) wired into the two search inputs.
+- **Phase 1 (summary pages) — done.** Student dashboard (`index.leaf`) and
+  instructor dashboard (`assignments.leaf`) hide Due / History / Submissions on
+  phones; submission history hides Attempt. `account.leaf` and the single
+  submission view (`submission.leaf`) already fit a phone and were left
+  untouched.
+- **Phase 2 (extension / grade-override flow) — done.** `assignment-submissions.leaf`
+  and `course-student-submissions.leaf` hide Student ID / Due / History on
+  phones and the extension/override forms drop their 14rem min-width below the
+  breakpoint (`.ext-details form`) so opening one no longer forces the table
+  wider than the screen.
+- **Phase 3 (dense admin tables) — done.** Runner dashboard (`admin-runner.leaf`)
+  and audit log (`admin-audit.leaf`) tables are wrapped in `.table-scroll`
+  (horizontal scroll, all columns reachable). `admin-users.leaf` hides Last
+  Seen / Joined on phones — applied to both the server-rendered rows and the
+  JS auto-refresh row template so a poll repaint keeps them hidden.
+- **Phase 4 (notebook tablet gating) — done.** Below 640px `notebook.leaf`
+  hides the editor surface and shows an "open on a larger screen" notice;
+  tablets (641px+) keep the full editor.
+  - *Follow-up:* the hidden iframe still loads JupyterLite/Pyodide in the
+    background on phones (CSS can't stop the `src` from fetching). Preventing
+    that load needs a small markup/JS guard — deferred, since it's wasteful
+    rather than broken.
 - **Table mechanism: viewport `@media` + `.col-hide-phone` utility classes on
   the `<th>` and matching `<td>`s.** Chosen because it needs **no wrapper at
   all** and is therefore provably desktop-inert — the simplest tool that does

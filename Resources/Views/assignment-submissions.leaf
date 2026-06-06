@@ -25,9 +25,9 @@
         <tr>
             <th data-sort-key="surname" data-sort-type="text" tabindex="0" aria-sort="none">Surname</th>
             <th data-sort-key="given_names" data-sort-type="text" tabindex="0" aria-sort="none">Given Names</th>
-            <th data-sort-key="student_id" data-sort-type="text" tabindex="0" aria-sort="none">Student ID</th>
+            <th class="col-hide-phone" data-sort-key="student_id" data-sort-type="text" tabindex="0" aria-sort="none">Student ID</th>
             <th data-sort-key="grade" data-sort-type="number" tabindex="0" aria-sort="none">Grade</th>
-            <th data-sort-key="history" data-sort-type="datetime" tabindex="0" aria-sort="none">History</th>
+            <th class="col-hide-phone" data-sort-key="history" data-sort-type="datetime" tabindex="0" aria-sort="none">History</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -36,9 +36,9 @@
         <tr>
             <td>#(row.surname)</td>
             <td>#(row.givenNames)</td>
-            <td><strong>#(row.studentID)</strong></td>
+            <td class="col-hide-phone"><strong>#(row.studentID)</strong></td>
             <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif</td>
-            <td data-ts="#(row.latestSubmittedAtEpoch)">
+            <td class="col-hide-phone" data-ts="#(row.latestSubmittedAtEpoch)">
                 #if(row.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">
                         #if(row.hasLatestSubmission):
@@ -69,7 +69,7 @@
                         <summary class="btn action-btn ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif" style="padding:.25rem .35rem">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
                         </summary>
-                        <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                        <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
                             #csrfFormField()
                             <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
                             <label style="font-size:.78rem;color:var(--gray-700)">
@@ -151,6 +151,11 @@
 .ext-summary { margin-top: 0; list-style: none; }
 .ext-summary::-webkit-details-marker { display: none; }
 .ext-details[open] > .ext-summary { background: var(--gray-100); }
+/* Desktop keeps the comfortable 14rem override form; on a phone it fills the
+   available width instead of forcing the submissions table wider than the
+   screen. */
+.ext-details form { min-width: 14rem; }
+@media (max-width: 640px) { .ext-details form { min-width: 0; } }
 </style>
 <script>
 (function () {
