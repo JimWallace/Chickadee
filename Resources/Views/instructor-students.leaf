@@ -212,18 +212,18 @@ Students
         var csrfField = '<input type="hidden" name="_csrf" value="' + escapeHtml(csrfToken) + '">';
 
         var nameCell = student.isPending
-            ? '<strong style="color:var(--gray-500)">' + displayName + '</strong>'
-                + '<span style="font-size:.72rem;color:var(--gray-500);margin-left:.4rem">awaiting first login</span>'
+            ? '<strong class="students-pending-name">' + displayName + '</strong>'
+                + '<span class="students-pending-note">awaiting first login</span>'
             : '<a href="' + subURL + '"><strong>' + displayName + '</strong></a>';
         var userCell = student.isPending
-            ? '<code style="color:var(--gray-500)">' + username + '</code>'
+            ? '<code class="students-pending-username">' + username + '</code>'
             : '<a href="' + subURL + '"><code>' + username + '</code></a>';
         var actionCell = '';
         if (!archived) {
-            actionCell = '<form method="post" action="' + unenrollURL + '" style="display:inline;margin:0">'
+            actionCell = '<form method="post" action="' + unenrollURL + '" class="inline-form">'
                 + csrfField
-                + '<button class="btn action-btn action-danger" type="submit" title="Remove from course"'
-                + ' aria-label="Remove from course" style="padding:.25rem .35rem"'
+                + '<button class="btn action-btn action-danger students-unenroll-btn" type="submit" title="Remove from course"'
+                + ' aria-label="Remove from course"'
                 + ' onclick="return confirm(\'Remove @' + username + ' from this course?\')">'
                 + deleteIcon + '</button></form>';
         }

@@ -32,7 +32,7 @@ Log in
     #endif
     #if(showSSOLogin):
     <div class="form">
-        <a class="btn btn-primary" href="/auth/sso/start" style="text-align:center">Login with UWaterloo</a>
+        <a class="btn btn-primary btn--center" href="/auth/sso/start">Login with UWaterloo</a>
     </div>
     #endif
     #if(showLocalLogin):

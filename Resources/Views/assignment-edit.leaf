@@ -11,53 +11,51 @@
 #endif
 
 #if(notice):
-<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:var(--success-bg)">
-    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+<div class="notice-banner">
+    <p>#(notice)</p>
 </div>
 #endif
 
 <form class="form form--wide" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
     #csrfFormField()
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem">
-        <div style="flex:1;min-width:16rem">
+    <div class="editor-titlebar">
+        <div class="editor-title-col">
             <!-- View mode header -->
-            <div id="assign-header-view" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <h1 style="margin:0">#(assignmentName)</h1>
-                <span class="card-meta" id="assign-due-display" style="font-size:.9rem"></span>
-                <button class="btn-link" id="assign-edit-toggle" type="button"
-                        title="Edit name and due date" aria-label="Edit assignment name and due date"
-                        style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+            <div id="assign-header-view" class="assign-header-view">
+                <h1>#(assignmentName)</h1>
+                <span class="card-meta fine-print" id="assign-due-display"></span>
+                <button class="btn-link icon-btn-text" id="assign-edit-toggle" type="button"
+                        title="Edit name and due date" aria-label="Edit assignment name and due date">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                 </button>
             </div>
 
             <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
-            <div id="assign-header-edit" style="display:none;padding:.75rem 1rem;border:1px solid var(--border);border-radius:.5rem;background:var(--gray-50)">
-                <div style="display:flex;align-items:center;margin-bottom:.6rem">
-                    <strong style="font-size:.875rem">Name &amp; Due Date</strong>
-                    <button class="btn-link" id="assign-edit-cancel" type="button"
-                            aria-label="Cancel" title="Cancel"
-                            style="margin-left:auto;font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+            <div id="assign-header-edit" class="assign-header-edit" style="display:none">
+                <div class="assign-header-edit-top">
+                    <strong class="subhead-label">Name &amp; Due Date</strong>
+                    <button class="btn-link icon-btn-text" id="assign-edit-cancel" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
                 </div>
-                <label class="form-label" style="margin-bottom:.5rem">
+                <label class="form-label field-gap">
                     Assignment Name
                     <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
                            value="#(assignmentName)"
                            placeholder="e.g. Lab 2 - Linked Lists">
                 </label>
-                <label class="form-label" style="margin-bottom:.5rem">
+                <label class="form-label field-gap">
                     Open Date (optional)
                     <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)">
                 </label>
-                <label class="form-label" style="margin:0">
+                <label class="form-label">
                     Due Date (optional)
                     <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
-                <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem;margin-bottom:0"></div>
+                <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
             </div>
         </div>
 
-        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
+        <div class="editor-actions">
             <button class="btn btn-primary" type="submit"
                     title="Save assignment metadata (name, due date, notebooks) and re-validate. Suite edits are saved live as you make them.">
                 Save &amp; Validate
@@ -66,7 +64,7 @@
         </div>
     </div>
 
-    <div style="margin:0 0 1.25rem">
+    <div class="editor-block">
         <table class="results-table" id="notebook-files-table">
             <thead>
                 <tr>
@@ -98,7 +96,7 @@
                         #if(solutionNotebookEditURL):
                         <a class="btn action-btn" id="solution-notebook-edit-btn" href="#(solutionNotebookEditURL)">Edit</a>
                         #else:
-                        <form method="post" action="/instructor/#(assignmentID)/create-solution" style="margin:0">
+                        <form method="post" action="/instructor/#(assignmentID)/create-solution" class="inline-form">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
                                     title="Copy the assignment notebook as a starting point for the solution">Create solution</button>
@@ -126,8 +124,8 @@
                     <td colspan="2">
                         <button class="btn action-btn" type="button" id="add-support-file-btn"
                                 title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Upload file</button>
-                        <input type="file" id="support-file-upload-input" style="display:none" multiple>
-                        <span id="support-file-upload-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
+                        <input type="file" id="support-file-upload-input" hidden multiple>
+                        <span id="support-file-upload-status" class="upload-status-inline"></span>
                     </td>
                 </tr>
             </tbody>
@@ -146,24 +144,21 @@
 -->
 <section id="global-inputs-block"
          data-assignment-id="#(assignmentID)"
-         style="margin:0 0 1.25rem">
+         class="editor-block">
     <table class="results-table" id="global-inputs-table">
         <tbody class="global-inputs-body">
             #for(v in globalVariableRows):
             <tr class="global-input-row">
                 <td><strong>Global input</strong></td>
-                <td style="width:14rem;white-space:nowrap">
-                    <span class="global-input-row-valid"
-                          style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>
-                    <input type="text" class="form-input global-input-name"
-                           value="#(v.name)" placeholder="Input Name"
-                           style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-family:monospace">
+                <td class="section-var-namecell">
+                    <span class="global-input-row-valid section-var-valid"></span>
+                    <input type="text" class="form-input global-input-name global-input-name-input"
+                           value="#(v.name)" placeholder="Input Name">
                 </td>
                 <td>
-                    <input type="text" class="form-input global-input-value"
+                    <input type="text" class="form-input global-input-value global-input-value-input"
                            value="#(v.valueJSON)"
-                           placeholder='12, "hello", [1, 2, 3], or = seed % 26'
-                           style="width:100%;padding:.2rem .4rem;font-family:monospace">
+                           placeholder='12, "hello", [1, 2, 3], or = seed % 26'>
                 </td>
                 <td class="time">
                     <button type="button" class="btn action-btn action-danger global-input-remove"
@@ -185,7 +180,7 @@
                 <td><strong>Add input</strong></td>
                 <td colspan="3">
                     <button type="button" class="btn action-btn" id="global-input-add">+ Add Input</button>
-                    <span id="global-inputs-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
+                    <span id="global-inputs-status" class="upload-status-inline"></span>
                 </td>
             </tr>
         </tbody>
@@ -194,20 +189,19 @@
 
 #if(brightspaceSyncEnabled):
 <!-- ── BrightSpace grade sync ─────────────────────────── -->
-<div style="margin-bottom:1.25rem">
+<div class="editor-block">
     <details>
-        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;padding:.4rem 0">BrightSpace Grade Sync</summary>
-        <div style="margin-top:.75rem;max-width:520px">
+        <summary class="bs-summary">BrightSpace Grade Sync</summary>
+        <div class="bs-body">
             <form method="post" action="/instructor/#(assignmentID)/brightspace">
                 #csrfFormField()
-                <label class="form-label" style="margin-bottom:.5rem">
+                <label class="form-label field-gap">
                     BrightSpace Grade Item ID
-                    <input class="form-input" type="text" name="gradeObjectID"
+                    <input class="form-input input-block" type="text" name="gradeObjectID"
                            value="#(brightspaceGradeObjectID)"
-                           placeholder="e.g. 78901"
-                           style="display:block;width:100%">
+                           placeholder="e.g. 78901">
                 </label>
-                <p class="card-meta" style="margin:.3rem 0 .6rem">
+                <p class="card-meta bs-note">
                     Enter the D2L grade item (grade object) ID for this assignment.
                     Find it in BrightSpace → Grades → hover the column → Properties → Grade Object ID in the URL.
                     Leave blank to disable sync for this assignment.
@@ -229,28 +223,26 @@
      the outer form. -->
 
 <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-<input class="form-input" id="suite-files-input" type="file" multiple style="display:none">
+<input class="form-input" id="suite-files-input" type="file" multiple hidden>
 
-<div style="margin-top:1.25rem">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-        <h2 style="margin:0">Test Suite</h2>
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+<div class="suite-editor-section">
+    <div class="suite-editor-head">
+        <h2>Test Suite</h2>
+        <div class="toolbar toolbar--end">
             <!-- Add Section — form POST + full page reload.  Mirrors the
                  dashboard pattern (Resources/Views/assignments.leaf:29-51)
                  so section CRUD doesn't ride the fragile whole-state
                  `PUT /suite` pipeline. -->
-            <details class="add-section-details" id="add-suite-section-details" style="position:relative">
-                <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Section</summary>
-                <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
-                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form" style="margin:0;gap:.6rem">
+            <details class="add-section-details popup-anchor" id="add-suite-section-details">
+                <summary class="btn action-btn summary-btn">+ Section</summary>
+                <div class="add-section-popup card suite-section-popup">
+                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form popup-form">
                         #csrfFormField()
-                        <label class="form-label" style="margin:0">
+                        <label class="form-label">
                             Section name
-                            <input class="form-input" type="text" name="name" placeholder="e.g. Question 1" required
-                                   style="font-size:.85rem;padding:.3rem .5rem">
+                            <input class="form-input editor-input" type="text" name="name" placeholder="e.g. Question 1" required>
                         </label>
-                        <button class="btn btn-primary" type="submit"
-                                style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+                        <button class="btn btn-primary btn-compact" type="submit">Create section</button>
                     </form>
                 </div>
             </details>
@@ -270,52 +262,42 @@
          AssignmentRoutes+SuiteSections.swift. -->
     <div id="suite-sections">
     #for(sec in suiteSectionRows):
-        <div class="section-block" data-section-id="#(sec.sectionID)" style="margin-bottom:1.25rem">
+        <div class="section-block" data-section-id="#(sec.sectionID)">
         #if(!sec.isUngrouped):
-            <div class="section-header" draggable="true"
-                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100);border-radius:.4rem">
-                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
-                      style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
+            <div class="section-header" draggable="true">
+                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
 
                 <!-- View mode -->
-                <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
+                <div class="section-view">
                     <strong>#(sec.name)</strong>
-                    <button class="btn-link section-edit-toggle" type="button"
-                            title="Edit section" aria-label="Edit section"
-                            style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+                    <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+                            title="Edit section" aria-label="Edit section">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                     </button>
                     <!-- Inline section action buttons (v0.4.103).  Add Input
                          lives inside section-view so it sits beside the
                          name; the section-vars-form below just renders the
                          tbody and keeps its action= for the auto-save POST. -->
-                    <span style="flex:1"></span>
-                    <button type="button" class="btn action-btn section-var-add"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
-                    <button type="button" class="btn action-btn section-add-test-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
+                    <span class="section-spacer"></span>
+                    <button type="button" class="btn action-btn btn-xs section-var-add"
+                            data-section-id="#(sec.sectionID)">+ Add Input</button>
+                    <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                            data-section-id="#(sec.sectionID)">+ Add Test</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
-                <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
+                <div class="section-edit" style="display:none">
                     <form class="section-rename-form" method="post"
-                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename"
-                          style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
+                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename">
                         #csrfFormField()
-                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required
-                               style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
-                        <button class="btn btn-primary" type="submit"
-                                style="font-size:.8rem;padding:.25rem .5rem">Save</button>
+                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
+                        <button class="btn btn-primary btn-tiny" type="submit">Save</button>
                     </form>
-                    <button class="btn action-btn action-danger section-delete-btn" type="button"
+                    <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
                             data-action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/delete"
-                            data-name="#(sec.name)"
-                            style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
-                    <button class="btn-link section-edit-cancel" type="button"
-                            aria-label="Cancel" title="Cancel"
-                            style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+                            data-name="#(sec.name)">Delete</button>
+                    <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
                 </div>
             </div>
 
@@ -328,22 +310,18 @@
                  Save & Validate button is clicked. -->
             <form class="section-vars-form" method="post"
                   action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
-                  style="margin:.25rem 0 .5rem"
                   data-section-id="#(sec.sectionID)">
-                <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
+                <table class="results-table section-vars-table">
                     <tbody class="section-vars-body">
                         #for(v in sec.variables):
                         <tr class="section-var-row">
-                            <td style="width:14rem;white-space:nowrap">
-                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>
-                                <input type="text" class="form-input section-var-name" value="#(v.name)" placeholder="Input Name"
-                                       style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
+                            <td class="section-var-namecell">
+                                <span class="section-var-row-valid section-var-valid"></span>
+                                <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
                             </td>
-                            <td><input type="text" class="form-input section-var-value" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"
-                                       style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
-                            <td style="width:2.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove"
-                                        title="Remove input" aria-label="Remove input"
-                                        style="padding:.2rem .4rem;display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
+                            <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
+                            <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
+                                        title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
                         </tr>
                         #endfor
                     </tbody>
@@ -355,14 +333,12 @@
                  The global Upload button at the page top still handles
                  zip uploads. -->
             <div class="section-create-toolbar"
-                 data-section-id="#(sec.sectionID)"
-                 style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
-                <button type="button" class="btn action-btn section-add-test-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
+                 data-section-id="#(sec.sectionID)">
+                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                        data-section-id="#(sec.sectionID)">+ Add Test</button>
             </div>
         #endif
-            <table class="results-table" style="width:100%">
+            <table class="results-table">
                 <tbody data-section-id="#(sec.sectionID)"></tbody>
             </table>
         </div>
@@ -390,25 +366,24 @@
      modal (pattern-family-editor.js registers window.ChickadeeTestRenderers
      .family).  The shell owns the chrome (title / Save / close); this hidden
      body is relocated into the shell panel by the renderer's mount(). -->
-<div id="family-editor-body" hidden style="display:none;flex-direction:column;gap:.75rem">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label id="family-function-label" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+<div id="family-editor-body" class="family-editor-body" hidden style="display:none">
+            <div class="family-editor-grid">
+                <label id="family-function-label" class="field-stack">
                     Function
-                    <select class="form-input" id="family-function-select" style="padding:.3rem .5rem;font-size:.85rem">
+                    <select class="form-input editor-input" id="family-function-select">
                         <option value="">— Scanning solution notebook… —</option>
                     </select>
-                    <span id="family-function-hint" class="card-meta" style="font-size:.72rem"></span>
+                    <span id="family-function-hint" class="card-meta hint-xs"></span>
                 </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+                <label class="field-stack">
                     Family name (shown in UI)
-                    <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
-                           style="padding:.3rem .5rem;font-size:.85rem">
+                    <input type="text" class="form-input editor-input" id="family-name" placeholder="BMI Category Boundaries">
                 </label>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
+            <div class="family-editor-grid">
+                <label class="field-stack">
                     Pattern kind
-                    <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
+                    <select class="form-input editor-input" id="family-kind">
                         <option value="boundary_equality">Exact equality (== comparison)</option>
                         <option value="approximate_equality">Approximate equality (float tolerance)</option>
                         <option value="variable_equality">Variable equality (module-level variable)</option>
@@ -419,17 +394,16 @@
                         <option value="unordered_equality">Unordered equality (list compare, ignore order)</option>
                     </select>
                 </label>
-                <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">
+                <label id="family-tolerance-label" class="field-stack" style="display:none">
                     Tolerance (max |result − expected|)
-                    <input type="number" class="form-input" id="family-default-tolerance" step="any" min="0"
-                           placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
+                    <input type="number" class="form-input editor-input" id="family-default-tolerance" step="any" min="0"
+                           placeholder="1e-6">
                 </label>
             </div>
-            <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                Default hint <span style="color:var(--gray-600);font-weight:400">(optional — shown to students when a case with no hint of its own fails)</span>
-                <input type="text" class="form-input" id="family-default-hint" value=""
-                       placeholder="e.g. Re-check the boundary values in the spec."
-                       style="padding:.3rem .5rem;font-size:.85rem">
+            <label class="field-stack">
+                Default hint <span class="label-note">(optional — shown to students when a case with no hint of its own fails)</span>
+                <input type="text" class="form-input editor-input" id="family-default-hint" value=""
+                       placeholder="e.g. Re-check the boundary values in the spec.">
             </label>
             <!-- Hidden fields: the family id, function name, and param list
                  are derived from the function dropdown selection. -->
@@ -445,53 +419,53 @@
                  title; the legacy hidden span is kept so existing JS
                  that writes to it doesn't break. -->
             <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Variables (shared across all cases) <span id="family-section-name-label" style="font-weight:400;color:var(--gray-600)"></span></strong>
-                    <button class="btn action-btn" type="button" id="add-family-variable-btn" style="padding:.2rem .6rem;font-size:.8rem">
+                <div class="family-subhead">
+                    <strong class="subhead-label">Variables (shared across all cases) <span id="family-section-name-label" class="label-note"></span></strong>
+                    <button class="btn action-btn btn-sm" type="button" id="add-family-variable-btn">
                         + Add variable
                     </button>
                 </div>
-                <table class="results-table" id="family-variables-table" style="font-size:.8rem">
+                <table class="results-table table-sm" id="family-variables-table">
                     <thead>
                         <tr>
-                            <th style="width:2rem" aria-label="Valid"></th>
-                            <th style="width:12rem">Name</th>
+                            <th class="fv-valid-col" aria-label="Valid"></th>
+                            <th class="fv-name-col">Name</th>
                             <th>Value (JSON / Python literal)</th>
-                            <th style="width:4rem"></th>
+                            <th class="fv-action-col"></th>
                         </tr>
                     </thead>
                     <tbody id="family-variables-body"></tbody>
                 </table>
-                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--gray-500)">
+                <p class="card-meta family-empty-note" id="family-variables-empty">
                     Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.  Locked rows come from the section's shared inputs (edit in the section's Inputs table).
                 </p>
             </div>
 
             <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Cases</strong>
-                    <button class="btn action-btn" type="button" id="add-case-btn" style="padding:.2rem .6rem;font-size:.8rem">
+                <div class="family-subhead">
+                    <strong class="subhead-label">Cases</strong>
+                    <button class="btn action-btn btn-sm" type="button" id="add-case-btn">
                         + Add case
                     </button>
                 </div>
-                <table class="results-table" id="family-cases-table" style="font-size:.8rem">
+                <table class="results-table table-sm" id="family-cases-table">
                     <thead>
                         <tr id="family-cases-header">
-                            <th style="width:2.25rem">#</th>
+                            <th class="case-num-col">#</th>
                             <th>Label</th>
                             <!-- One arg column per detected parameter; columns are rebuilt
                                  dynamically when the function changes. -->
                             <th class="pf-case-expected-col">Expected</th>
-                            <th style="width:4rem"></th>
+                            <th class="fv-action-col"></th>
                         </tr>
                     </thead>
                     <tbody id="family-cases-body"></tbody>
                 </table>
-                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--gray-500)">
+                <p class="card-meta family-empty-note" id="family-cases-empty">
                     No cases yet.  Add at least one to save this family.
                 </p>
             </div>
-    <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500)"></span>
+    <span id="family-editor-status" class="editor-status"></span>
 </div>
 
 <script src="/suite-list.js?v=#appVersion()"></script>

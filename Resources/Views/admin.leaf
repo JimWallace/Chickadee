@@ -115,7 +115,7 @@ Admin
     <form method="post" action="/admin/courses/import" enctype="multipart/form-data"
           id="importCourseForm">
         #csrfFormField()
-        <input type="file" name="file" accept=".zip" id="importCourseFile" style="display:none">
+        <input type="file" name="file" accept=".zip" id="importCourseFile" hidden>
     </form>
 
     #if(courses.isEmpty):
@@ -220,19 +220,6 @@ Admin
 }
 tr.runner-row-offline {
     opacity: .5;
-}
-.runner-badge-offline {
-    display: inline-block;
-    font-size: .7rem;
-    font-weight: 600;
-    padding: .1rem .4rem;
-    border-radius: 999px;
-    background: var(--gray-200);
-    color: var(--gray-600);
-    vertical-align: middle;
-    margin-left: .3rem;
-    letter-spacing: .03em;
-    text-transform: uppercase;
 }
 </style>
 <script>
@@ -380,11 +367,11 @@ tr.runner-row-offline {
 
             var idCell = '<a href="' + detailURL + '"><code>' + id + '</code></a>'
                 + (isOffline ? ' <span class="runner-badge-offline">Offline</span>' : '')
-                + (hostname ? '<br><span style="font-size:.8em;color:var(--muted)">' + hostname + '</span>' : '');
+                + (hostname ? '<br><span class="worker-host">' + hostname + '</span>' : '');
             var loadCell = maxJobs > 0
                 ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
                 : String(assignedJobs);
-            var loadStyle = assignedJobs > 0 ? ' style="font-weight:600"' : '';
+            var loadClass = assignedJobs > 0 ? ' runner-load-busy' : '';
 
             return '<tr'
                 + (isOffline ? ' class="runner-row-offline"' : '')
@@ -399,7 +386,7 @@ tr.runner-row-offline {
                 + '>'
                 + '<td>' + idCell + '</td>'
                 + '<td>' + (version || '—') + '</td>'
-                + '<td class="time"' + loadStyle + '>' + loadCell + '</td>'
+                + '<td class="time' + loadClass + '">' + loadCell + '</td>'
                 + '<td class="time">' + jobsProcessed + '</td>'
                 + '<td class="time">' + (avgRun || '—') + '</td>'
                 + '<td class="time">' + (avgWait || '—') + '</td>'

@@ -293,10 +293,10 @@ Users
             + '<td>' + displayName + '</td>'
             + '<td><code>' + username + '</code></td>'
             + '<td>'
-                + '<form method="post" action="/admin/users/' + id + '/role" style="display:flex;gap:.4rem;align-items:center">'
+                + '<form method="post" action="/admin/users/' + id + '/role" class="role-form">'
                     + csrfField
                     + '<label class="visually-hidden" for="role-' + id + '">Role for ' + username + '</label>'
-                    + '<select id="role-' + id + '" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">'
+                    + '<select id="role-' + id + '" name="role" class="form-input role-select">'
                         + roleOption('student') + roleOption('instructor') + roleOption('admin')
                     + '</select>'
                     + '<button class="btn action-btn" type="submit">Save</button>'
@@ -305,11 +305,11 @@ Users
             + '<td class="time js-relative-time col-hide-phone" data-iso="' + lastSeen + '">' + (user.lastSeenAt ? lastSeen : '—') + '</td>'
             + '<td class="time js-relative-time col-hide-phone" data-iso="' + created + '">' + created + '</td>'
             + '<td>'
-                + '<div style="display:flex;align-items:center;gap:.35rem">'
-                    + '<a href="/admin/users/' + id + '" class="btn action-btn" title="Manage user" aria-label="Manage user" style="padding:.3rem .45rem">' + editIcon + '</a>'
-                    + '<form method="post" action="/admin/users/' + id + '/delete" style="display:inline">'
+                + '<div class="user-actions">'
+                    + '<a href="/admin/users/' + id + '" class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">' + editIcon + '</a>'
+                    + '<form method="post" action="/admin/users/' + id + '/delete" class="user-delete-form">'
                         + csrfField
-                        + '<button class="btn action-btn action-danger" type="submit" title="Delete user" aria-label="Delete user" style="padding:.3rem .45rem"'
+                        + '<button class="btn action-btn action-danger action-btn-icon" type="submit" title="Delete user" aria-label="Delete user"'
                             + ' onclick="return confirm(\'Delete this user? Their enrollments will be removed. They can log in again to restore their account.\')">' + deleteIcon + '</button>'
                     + '</form>'
                 + '</div>'
