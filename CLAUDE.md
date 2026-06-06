@@ -483,7 +483,7 @@ the `format-lint` CI job) — keep them green:
   `styles.css` (with a `prefers-color-scheme: dark` value if it's a colour).
   Never reference an undeclared var, and never use a hardcoded colour
   fallback `var(--x, #hex)` — define the var so it routes through the palette
-  and adapts to dark mode. (`scripts/check-css-vars.py` enforces both.)
+  and adapts to dark mode. (`scripts/check-css-vars.sh` enforces both.)
 - **No native `alert()` in templates** — surface errors with the inline
   `.form-error` banner pattern. The guard ratchets a baseline down only.
 

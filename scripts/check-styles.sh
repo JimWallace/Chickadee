@@ -13,7 +13,7 @@ set -euo pipefail
 #     state or a CSS custom-property assignment (e.g. style="--filter-width:220px").
 #   * No new native alert() in templates — use the inline .form-error pattern.
 #   * Every var(--x) resolves, and no var(--x, #hex) colour fallbacks (see
-#     scripts/check-css-vars.py).
+#     scripts/check-css-vars.sh).
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -22,7 +22,7 @@ views=(Resources/Views/*.leaf)
 status=0
 
 # ── 1. CSS custom-property guard ────────────────────────────────────────────
-python3 scripts/check-css-vars.py || status=1
+scripts/check-css-vars.sh || status=1
 
 # ── 2. Inline-style allowlist ───────────────────────────────────────────────
 # A style="" attribute is allowed only if every ;-separated declaration is
