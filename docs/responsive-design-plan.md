@@ -13,15 +13,16 @@ student dashboard (`index.leaf`).
   phone) wired into the two search inputs.
 - **Phase 1 — in progress.** `index.leaf` (student dashboard) hides the Due and
   History columns on phones across all three table variants.
-- **Key finding (changes the table mechanism):** the plan preferred
-  `@container` for table column-hiding, but `container-type: inline-size` (and
-  an `overflow` wrapper) establishes a new containing block / clips, which
-  **moves or clips the absolutely-positioned popups** that live inside some
-  tables (grade-override on the submissions page, add-section/publish popups on
-  the instructor dashboard) — a desktop regression. So column-hiding uses
-  plain **viewport `@media` + `.col-hide-phone` utility classes on the `<th>`
-  and matching `<td>`s** (no wrapper, provably desktop-inert). `overflow-x`
-  wrappers are reserved for the popup-free dense admin tables in Phase 3.
+- **Table mechanism: viewport `@media` + `.col-hide-phone` utility classes on
+  the `<th>` and matching `<td>`s.** Chosen because it needs **no wrapper at
+  all** and is therefore provably desktop-inert — the simplest tool that does
+  the job. (`container-type: inline-size` / `overflow` wrappers would also
+  re-anchor or clip the absolutely-positioned popups inside some tables —
+  grade-override on the submissions page, add-section/publish on the instructor
+  dashboard. Per the instructor (2026-06): **popup positioning is explicitly
+  acceptable to revisit/refine later**, so this is no longer a hard blocker —
+  `@container` and `overflow-x` wrappers are fair game in later phases where
+  they're genuinely cleaner, with any popup nudge handled as a follow-up.)
 
 ## Goal
 

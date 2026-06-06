@@ -10,7 +10,7 @@ Submission History
 <table class="results-table">
     <thead>
         <tr>
-            <th>Attempt</th>
+            <th class="col-hide-phone">Attempt</th>
             <th>Submitted</th>
             <th>Status</th>
             <th>Grade</th>
@@ -20,7 +20,7 @@ Submission History
     <tbody>
     #for(row in rows):
         <tr>
-            <td>#(row.attemptNumber)</td>
+            <td class="col-hide-phone">#(row.attemptNumber)</td>
             <td>#(row.submittedAt)</td>
             <td>#(row.status)</td>
             <td>#(row.gradeText)</td>

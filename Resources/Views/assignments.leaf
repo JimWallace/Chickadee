@@ -101,8 +101,8 @@
                 <th>Name</th>
                 <th>Status</th>
                 <th>Validation</th>
-                <th class="due-col">Due</th>
-                <th>Submissions</th>
+                <th class="due-col col-hide-phone">Due</th>
+                <th class="col-hide-phone">Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -182,8 +182,8 @@
                     <span class="tier">—</span>
                     #endif
                 </td>
-                <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
-                <td style="white-space:nowrap">
+                <td class="due-col col-hide-phone">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td class="col-hide-phone" style="white-space:nowrap">
                     #if(row.assignmentID):
                     <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
                     #else:—#endif
@@ -340,8 +340,8 @@
                 <th>Name</th>
                 <th>Status</th>
                 <th>Validation</th>
-                <th class="due-col">Due</th>
-                <th>Submissions</th>
+                <th class="due-col col-hide-phone">Due</th>
+                <th class="col-hide-phone">Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -414,8 +414,8 @@
                     <span class="tier">—</span>
                     #endif
                 </td>
-                <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
-                <td style="white-space:nowrap">
+                <td class="due-col col-hide-phone">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td class="col-hide-phone" style="white-space:nowrap">
                     #if(row.assignmentID):
                     <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
                     #else:—#endif
