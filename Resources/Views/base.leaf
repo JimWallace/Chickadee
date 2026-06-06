@@ -88,11 +88,31 @@
 // and surfaced a 404 for handlers that render a result view directly
 // (admin / instructor bulk-enroll, etc.).  v0.4.119+.
 (function () {
+    // Surface an upload failure as an inline banner at the top of the form
+    // (reusing the global .form-error styling) instead of a native alert().
+    function showUploadError(form, msg) {
+        if (!form) return;
+        var banner = form.querySelector('.upload-error-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.className = 'form-error upload-error-banner';
+            banner.setAttribute('role', 'alert');
+            form.insertBefore(banner, form.firstChild);
+        }
+        banner.textContent = msg;
+        banner.scrollIntoView({ block: 'nearest' });
+    }
+    function clearUploadError(form) {
+        var banner = form && form.querySelector('.upload-error-banner');
+        if (banner) banner.remove();
+    }
+
     document.addEventListener('submit', function (e) {
         var form = e.target;
         if (!form || form.enctype !== 'multipart/form-data') return;
         if (e.defaultPrevented) return;
         e.preventDefault();
+        clearUploadError(form);
         form.dispatchEvent(new CustomEvent('chickadee:before-multipart-submit', { bubbles: false }));
         var meta = document.querySelector('meta[name="csrf-token"]');
         var csrfToken = meta ? meta.getAttribute('content') : '';
@@ -112,10 +132,14 @@
             // 200 OK with HTML body — render in place via document.open/write
             // so the result page replaces the form, with the same URL the
             // server saw (so a refresh resubmits — same as a native form
-            // submit's behaviour).  Status text shown for non-OK results.
+            // submit's behaviour).  document.write is deliberate here: the
+            // result pages (e.g. the submission view's pending-poll script)
+            // rely on their inline <script> tags running, which a DOMParser /
+            // replaceChild swap would NOT do.  Status text shown for non-OK
+            // results.
             return res.text().then(function (html) {
                 if (!res.ok && !html) {
-                    alert('Upload failed: ' + res.status + ' ' + res.statusText);
+                    showUploadError(form, 'Upload failed: ' + res.status + ' ' + res.statusText);
                     if (btn) btn.disabled = false;
                     return;
                 }
@@ -124,7 +148,7 @@
                 document.close();
             });
         }).catch(function (err) {
-            alert('Upload failed: ' + (err && err.message ? err.message : 'network error'));
+            showUploadError(form, 'Upload failed: ' + (err && err.message ? err.message : 'network error'));
             if (btn) btn.disabled = false;
         });
     });
