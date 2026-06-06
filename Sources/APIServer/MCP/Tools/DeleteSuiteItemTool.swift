@@ -100,15 +100,8 @@ struct DeleteSuiteItemTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let target = try Self.resolveTarget(input)
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard let idx = payload.items.firstIndex(where: { Self.matches($0, target) }) else {
@@ -118,21 +111,10 @@ struct DeleteSuiteItemTool: ContentTool {
         }
         payload.items.remove(at: idx)
 
-        do {
-            try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
-        } catch let error as any AbortError {
-            throw MCPToolError.from(error, tool: Self.name)
-        }
-        // Removing a graded item changes what the suite grades, so close a
-        // currently-open assignment (matching every other content-edit tool and
-        // the web Save button) before the debounced re-validation.
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-        // Re-grade existing submissions against the edited suite (gated on a real
-        // manifest change), the automatic equivalent of the "Retest all" button.
-        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,

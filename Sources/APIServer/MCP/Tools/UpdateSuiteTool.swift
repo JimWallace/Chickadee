@@ -113,21 +113,14 @@ struct UpdateSuiteTool: ContentTool {
         guard !input.edits.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Provide at least one edit.")
         }
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         // Load the full authored suite with script bodies preserved from the zip.
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         var updated: [String] = []
         for edit in input.edits {
-            let tier = try Self.parseTier(edit.tier)
+            let tier = try parseOptionalTier(edit.tier, tool: Self.name)
             guard
                 let idx = payload.items.firstIndex(where: {
                     $0.kind == "script" && $0.script?.script == edit.script
@@ -148,15 +141,10 @@ struct UpdateSuiteTool: ContentTool {
             updated.append(edit.script)
         }
 
-        try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        // Close a currently-open assignment (matching the web Save button) so
-        // students can't submit against the not-yet-revalidated suite, then
-        // re-kick validation against the edited manifest (debounced).
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-        // Re-grade existing submissions against the edited suite (gated on a real
-        // manifest change), the automatic equivalent of the "Retest all" button.
-        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,
@@ -165,12 +153,4 @@ struct UpdateSuiteTool: ContentTool {
             assignmentClosed: closed)
     }
 
-    private static func parseTier(_ raw: String?) throws -> TestTier? {
-        guard let raw else { return nil }
-        guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: public, release, secret, student.")
-        }
-        return tier
-    }
 }

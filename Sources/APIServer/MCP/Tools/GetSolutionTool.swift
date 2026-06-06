@@ -65,13 +65,8 @@ struct GetSolutionTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.read]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db)
-        else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
+        let assignment = try await context.authorizedAssignment(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         guard let solution = try await loadExistingSolution(assignment: assignment, on: context.db)
         else {
@@ -94,15 +89,7 @@ struct GetSolutionTool: ContentTool {
         return Output(
             assignmentPublicID: assignment.publicID,
             filename: solution.filename,
-            cellCount: Self.cellCount(of: notebook),
+            cellCount: notebookCellCount(notebook),
             notebook: notebook)
-    }
-
-    /// Number of cells in the notebook, or 0 if the `cells` array is absent.
-    private static func cellCount(of notebook: JSONValue) -> Int {
-        guard case .object(let root) = notebook, case .array(let cells)? = root["cells"] else {
-            return 0
-        }
-        return cells.count
     }
 }

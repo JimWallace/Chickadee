@@ -222,7 +222,7 @@ struct UpdatePatternFamilyTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let newTier = try Self.parseTier(input.defaultTier)
+        let newTier = try parseOptionalTier(input.defaultTier, tool: Self.name, field: "defaultTier")
         let enable = Set(input.enableCases ?? [])
         let disable = Set(input.disableCases ?? [])
         let caseEdits = input.cases ?? []
@@ -242,15 +242,8 @@ struct UpdatePatternFamilyTool: ContentTool {
         }
         let editsByKey = try Self.indexCaseEdits(caseEdits)
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
@@ -283,21 +276,10 @@ struct UpdatePatternFamilyTool: ContentTool {
         // applySuiteEdit -> applyPatternFamilies -> validatePatternFamilies runs
         // the structural + per-kind case checks synchronously; surface those as
         // clean MCP errors rather than opaque protocol failures.
-        do {
-            try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
-        } catch let error as any AbortError {
-            throw MCPToolError.from(error, tool: Self.name)
-        }
-        // Close a currently-open assignment (matching the web Save button) so
-        // students can't submit against the not-yet-revalidated suite, then
-        // re-kick validation (debounced).
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-        // Re-grade existing submissions against the edited suite (gated on a real
-        // manifest change), the automatic equivalent of the "Retest all" button.
-        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,
@@ -407,14 +389,6 @@ struct UpdatePatternFamilyTool: ContentTool {
         return argsReplaced ? [] : existing
     }
 
-    private static func parseTier(_ raw: String?) throws -> TestTier? {
-        guard let raw else { return nil }
-        guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "defaultTier must be one of: public, release, secret, student.")
-        }
-        return tier
-    }
 }
 
 extension PatternCase {

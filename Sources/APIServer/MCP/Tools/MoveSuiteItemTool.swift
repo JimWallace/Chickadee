@@ -108,8 +108,8 @@ struct MoveSuiteItemTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let resolved = try await resolveSetupForSectionEdit(
-            assignmentPublicID: input.assignmentPublicID, tool: Self.name, context: context)
+        let resolved = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: resolved.setup.manifest, zipPath: resolved.setup.zipPath)
 
@@ -150,16 +150,12 @@ struct MoveSuiteItemTool: ContentTool {
             payload.items.append(moved)
         }
 
-        do {
-            try await applySuiteEdit(setup: resolved.setup, body: payload, on: context.db)
-        } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
-        } catch let error as any AbortError {
-            throw MCPToolError.from(error, tool: Self.name)
-        }
-
-        let closed = try await closeOpenAssignmentForContentEdit(resolved.assignment, on: context.db)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: resolved.assignment)
+        try await applySuiteEditMapped(
+            setup: resolved.setup, body: payload, tool: Self.name, on: context.db)
+        // Placement-only edit: close + re-validate, but no regrade (move can't
+        // change an outcome).
+        let closed = try await finalizeContentEdit(
+            assignment: resolved.assignment, setup: resolved.setup, context: context, retest: false)
 
         return Output(
             assignmentPublicID: resolved.assignment.publicID,

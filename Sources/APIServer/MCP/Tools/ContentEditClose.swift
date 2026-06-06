@@ -21,6 +21,7 @@
 
 import Core
 import Fluent
+import Vapor
 
 /// Closes `assignment` if it is currently open, persisting the change, and
 /// reports whether it did. A no-op returning `false` when not open, so a tool
@@ -54,4 +55,41 @@ func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext
         context.logger.warning("retestSubmissionsAfterContentEdit failed: \(error)")
         return 0
     }
+}
+
+/// Runs `applySuiteEdit` and maps web-layer failures (`WebAssignmentError`,
+/// `AbortError`) to `MCPToolError` so the agent sees a structured, actionable
+/// error rather than an opaque protocol-level internal error.
+func applySuiteEditMapped(
+    setup: APITestSetup, body: SuitePayload, tool: String, on db: any Database
+) async throws {
+    do {
+        try await applySuiteEdit(setup: setup, body: body, on: db)
+    } catch let error as WebAssignmentError {
+        throw MCPToolError.from(error, tool: tool)
+    } catch let error as any AbortError {
+        throw MCPToolError.from(error, tool: tool)
+    }
+}
+
+/// The standard finalize step shared by content-edit tools: close a
+/// currently-open assignment (so students can't submit against a
+/// not-yet-revalidated suite), optionally re-grade existing submissions, then
+/// re-kick (debounced) validation. Returns whether the assignment was closed.
+///
+/// `retest: true` for edits that can change a grade (scripts, families, checks,
+/// solution); `retest: false` for placement/metadata-only edits (e.g.
+/// `move_suite_item`) that only reorder or re-tag and never change an outcome.
+/// The close→retest→revalidate ordering is the invariant documented on
+/// `closeOpenAssignmentForContentEdit` / `retestSubmissionsAfterContentEdit`.
+@discardableResult
+func finalizeContentEdit(
+    assignment: APIAssignment, setup: APITestSetup, context: ToolContext, retest: Bool
+) async throws -> Bool {
+    let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
+    if retest {
+        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
+    }
+    await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+    return closed
 }

@@ -742,22 +742,11 @@ extension DraftAssignmentRoutes {
             return req.redirect(to: "/instructor")
         }
 
-        let due: Date?
-        if let raw = body.dueAt, !raw.isEmpty {
-            // datetime-local sends "2026-04-01T14:00" — try ISO8601 with and without seconds.
-            let iso = ISO8601DateFormatter()
-            if let d = iso.date(from: raw) {
-                due = d
-            } else {
-                // Try without timezone (datetime-local format)
-                let fmt = DateFormatter()
-                fmt.locale = Locale(identifier: "en_US_POSIX")
-                fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
-                due = fmt.date(from: raw)
-            }
-        } else {
-            due = nil
-        }
+        // datetime-local sends Toronto wall-clock ("2026-04-01T14:00"); parseDueDate
+        // interprets a no-timezone value in America/Toronto, matching the edit
+        // form's save path (previously this inline parser used the server's
+        // default zone, shifting the due date by the UTC offset on publish).
+        let due = parseDueDate(body.dueAt)
 
         guard let courseID = courseState.activeCourseUUID else {
             throw WebAssignmentError.noActiveCourse(action: "publishing an assignment")

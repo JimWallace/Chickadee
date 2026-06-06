@@ -191,15 +191,8 @@ struct AuthorScriptTool: ContentTool {
                 detail: "filename must be a bare filename with no path separators (got \"\(input.filename)\").")
         }
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         // Never clobber a pattern-family / notebook-check generated script —
         // those are owned by the family/check, mirroring the web 409.
@@ -247,15 +240,9 @@ struct AuthorScriptTool: ContentTool {
                 setup: setup, context: context)
         }
 
-        // Close a currently-open assignment (matching the web Save button) so
-        // students can't submit against the not-yet-revalidated suite, then
-        // re-kick validation against the new manifest/zip (debounced), mirroring
-        // the web suite/script edit handlers.
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-        // Re-grade existing submissions against the edited suite (gated on a real
-        // manifest change), the automatic equivalent of the "Retest all" button.
-        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,
@@ -308,13 +295,7 @@ struct AuthorScriptTool: ContentTool {
             }
         }
 
-        do {
-            try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
-        } catch let error as any AbortError {
-            throw MCPToolError.from(error, tool: Self.name)
-        }
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
     }
 
     // MARK: - Support-file authoring (direct zip write)

@@ -151,10 +151,7 @@ actor BrightSpaceAPIClient {
     private func hmacSHA256Base64URL(key: String, message: String) -> String {
         let symmetricKey = SymmetricKey(data: Data(key.utf8))
         let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: symmetricKey)
-        return Data(mac).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
+        return Data(mac).base64URLEncodedString()
     }
 
     // MARK: - Push grade

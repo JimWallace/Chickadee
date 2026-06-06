@@ -92,15 +92,8 @@ struct CloneAssignmentTool: ContentTool {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "newTitle must not be empty.")
         }
 
-        guard
-            let source = try await assignmentByPublicID(
-                input.sourceAssignmentPublicID, on: context.db)
-        else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "No assignment found with public ID \"\(input.sourceAssignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(source.courseID, tool: Self.name)
+        let source = try await context.authorizedAssignment(
+            publicID: input.sourceAssignmentPublicID, tool: Self.name)
 
         guard let sourceSetup = try await APITestSetup.find(source.testSetupID, on: context.db) else {
             throw MCPToolError.invalidArguments(

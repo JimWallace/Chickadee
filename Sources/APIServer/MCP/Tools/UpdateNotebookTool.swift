@@ -77,20 +77,10 @@ struct UpdateNotebookTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        try Self.validateNotebookShape(input.notebook)
+        try validateNotebookShape(input.notebook, tool: Self.name)
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db)
-        else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         let data: Data
         do {
@@ -112,37 +102,15 @@ struct UpdateNotebookTool: ContentTool {
             throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
         }
 
-        // Close a currently-open assignment (matching the web Save button) so
-        // students can't submit against the not-yet-revalidated suite, then
-        // re-kick validation (debounced).
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        // Starter-notebook edit: close + re-validate, no regrade of submissions.
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: false)
 
         return Output(
             assignmentPublicID: assignment.publicID,
-            cellCount: Self.cellCount(of: input.notebook),
+            cellCount: notebookCellCount(input.notebook),
             validationStatus: assignment.validationStatus,
             assignmentClosed: closed)
     }
 
-    /// A notebook must be a JSON object carrying a `cells` array — the minimal
-    /// shape every Jupyter notebook has. Stricter nbformat checks are left to
-    /// the runner, matching the web save path's lenient JSON-only validation.
-    private static func validateNotebookShape(_ notebook: JSONValue) throws {
-        guard case .object(let root) = notebook else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "notebook must be a JSON object.")
-        }
-        guard case .array? = root["cells"] else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "notebook must contain a \"cells\" array.")
-        }
-    }
-
-    private static func cellCount(of notebook: JSONValue) -> Int {
-        guard case .object(let root) = notebook, case .array(let cells)? = root["cells"] else {
-            return 0
-        }
-        return cells.count
-    }
 }
