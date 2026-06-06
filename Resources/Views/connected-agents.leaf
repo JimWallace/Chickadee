@@ -4,8 +4,8 @@ Connected agents
 #endexport
 #export("content"):
 <section class="admin-section">
-    <h2 style="margin-top:0">Connected agents</h2>
-    <p style="color:var(--gray-600);font-size:.85rem;max-width:60ch">
+    <h2 class="agents-heading">Connected agents</h2>
+    <p class="agents-intro">
         AI agents authorized to author course content on
         #if(isAdmin):a user's#else:your#endif behalf over the Model Context Protocol.
         Revoking stops the agent immediately; any access token it holds lapses within minutes.
@@ -33,9 +33,9 @@ Connected agents
                 <td class="time">#(row.expiresAt)</td>
                 <td>
                     #if(row.revoked):
-                    <span style="color:var(--gray-600)">Revoked</span>
+                    <span class="text-muted">Revoked</span>
                     #else:
-                    <form method="post" action="/agents/#(row.id)/revoke" style="display:inline">
+                    <form method="post" action="/agents/#(row.id)/revoke" class="agents-revoke-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Revoke this agent? It will lose access immediately.')">Revoke</button>
@@ -45,10 +45,15 @@ Connected agents
             </tr>
         #endfor
         #if(rows.isEmpty):
-            <tr><td colspan="7" style="color:var(--gray-600)">No connected agents.</td></tr>
+            <tr><td colspan="7" class="text-muted">No connected agents.</td></tr>
         #endif
         </tbody>
     </table>
 </section>
+<style>
+.agents-heading { margin-top: 0; }
+.agents-intro { color: var(--gray-600); font-size: .85rem; max-width: 60ch; }
+.agents-revoke-form { display: inline; }
+</style>
 #endexport
 #endextend

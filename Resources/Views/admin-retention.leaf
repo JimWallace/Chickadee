@@ -15,33 +15,33 @@ Retention
 </nav>
 <section class="admin-section">
     #if(flashSuccess):
-    <div class="flash flash-success" role="status" style="margin-bottom:1rem;padding:.6rem .8rem;border-radius:.4rem;background:#d4edda;color:#155724">#(flashSuccess)</div>
+    <div class="flash flash-success retention-flash retention-flash--success" role="status">#(flashSuccess)</div>
     #endif
     #if(flashError):
-    <div class="flash flash-error" role="alert" style="margin-bottom:1rem;padding:.6rem .8rem;border-radius:.4rem;background:#f8d7da;color:#721c24">#(flashError)</div>
+    <div class="flash flash-error retention-flash retention-flash--error" role="alert">#(flashError)</div>
     #endif
 
-    <p style="color:var(--muted);margin-top:0">
+    <p class="retention-intro">
         Archived courses can be restored at any time. #(retentionDays) days
         after a course is archived, an admin may permanently delete it and all
         its data. <strong>Deletion cannot be undone.</strong>
     </p>
 
     #if(rows.isEmpty):
-    <p style="color:var(--muted)">No archived courses. The retention clock starts when a course is archived.</p>
+    <p class="retention-muted">No archived courses. The retention clock starts when a course is archived.</p>
     #else:
     #if(deletableCount > 0):
-    <p style="color:var(--muted)">#(deletableCount) course(s) past retention and eligible to delete.</p>
+    <p class="retention-muted">#(deletableCount) course(s) past retention and eligible to delete.</p>
     #endif
     <table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Code</button></th>
                 <th data-sort-type="text"><button class="sort-header" type="button">Name</button></th>
-                <th data-sort-type="date" style="width:11rem"><button class="sort-header" type="button">Archived</button></th>
-                <th data-sort-type="number" style="width:7rem"><button class="sort-header" type="button">Submissions</button></th>
-                <th data-sort-type="date" style="width:11rem"><button class="sort-header" type="button">Delete eligible</button></th>
-                <th style="width:11rem">Action</th>
+                <th data-sort-type="date" class="retention-col-date"><button class="sort-header" type="button">Archived</button></th>
+                <th data-sort-type="number" class="retention-col-subs"><button class="sort-header" type="button">Submissions</button></th>
+                <th data-sort-type="date" class="retention-col-date"><button class="sort-header" type="button">Delete eligible</button></th>
+                <th class="retention-col-action">Action</th>
             </tr>
         </thead>
         <tbody>
@@ -49,9 +49,9 @@ Retention
             <tr class="#if(row.isDeletable):status-closed#else:status-open#endif">
                 <td><a href="/admin/courses/#(row.id)"><strong>#(row.code)</strong></a></td>
                 <td>#(row.name)</td>
-                <td style="font-size:.85rem" data-sort-value="#(row.archivedAtISO)">#(row.archivedAt)</td>
+                <td class="retention-date-cell" data-sort-value="#(row.archivedAtISO)">#(row.archivedAt)</td>
                 <td>#(row.submissionCount)</td>
-                <td style="font-size:.85rem" data-sort-value="#(row.purgeEligibleAtISO)">
+                <td class="retention-date-cell" data-sort-value="#(row.purgeEligibleAtISO)">
                     #if(row.isDeletable):
                     <span class="tier tier-closed">eligible</span>
                     #else:
@@ -59,24 +59,24 @@ Retention
                     #endif
                 </td>
                 <td>
-                    <div style="display:flex;gap:.4rem;flex-wrap:nowrap">
-                        <form method="post" action="/admin/courses/#(row.id)/archive" style="display:inline;margin:0">
+                    <div class="retention-actions">
+                        <form method="post" action="/admin/courses/#(row.id)/archive" class="inline-form">
                             #csrfFormField()
-                            <button class="btn action-btn" type="submit"
-                                    title="Restore course" aria-label="Restore course" style="padding:.3rem .45rem"
+                            <button class="btn action-btn action-btn-icon" type="submit"
+                                    title="Restore course" aria-label="Restore course"
                                     onclick="return confirm('Restore #(row.code)? Students will be able to see it again and its retention clock resets.')">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                             </button>
                         </form>
-                        <a class="btn action-btn" href="/admin/courses/#(row.id)/export"
-                           title="Export course bundle" aria-label="Export course bundle" style="padding:.3rem .45rem">
+                        <a class="btn action-btn action-btn-icon" href="/admin/courses/#(row.id)/export"
+                           title="Export course bundle" aria-label="Export course bundle">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         </a>
                         #if(row.isDeletable):
-                        <form method="post" action="/admin/courses/#(row.id)/delete" style="display:inline;margin:0">
+                        <form method="post" action="/admin/courses/#(row.id)/delete" class="inline-form">
                             #csrfFormField()
-                            <button class="btn action-btn action-danger" type="submit"
-                                    title="Delete course" aria-label="Delete course" style="padding:.3rem .45rem"
+                            <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                                    title="Delete course" aria-label="Delete course"
                                     onclick="return confirm('Permanently delete #(row.code) and ALL its data — course, assignments, test suites, and submissions? This cannot be undone.')">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
@@ -90,6 +90,45 @@ Retention
     </table>
     #endif
 </section>
+<style>
+.retention-flash {
+    margin-bottom: 1rem;
+    padding: .6rem .8rem;
+    border-radius: .4rem;
+}
+.retention-flash--success {
+    background: #d4edda;
+    color: #155724;
+}
+.retention-flash--error {
+    background: #f8d7da;
+    color: #721c24;
+}
+.retention-intro {
+    color: var(--muted);
+    margin-top: 0;
+}
+.retention-muted {
+    color: var(--muted);
+}
+.retention-col-date {
+    width: 11rem;
+}
+.retention-col-subs {
+    width: 7rem;
+}
+.retention-col-action {
+    width: 11rem;
+}
+.retention-date-cell {
+    font-size: .85rem;
+}
+.retention-actions {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: nowrap;
+}
+</style>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

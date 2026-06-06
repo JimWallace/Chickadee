@@ -14,7 +14,7 @@ Users
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
 </nav>
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+    <div class="toolbar toolbar--end section-gap">
         <input id="users-filter" class="form-input filter-input" type="search" autocomplete="off"
                placeholder="Filter by name, username or role…"
                style="--filter-width:280px" aria-label="Filter users"
@@ -44,10 +44,10 @@ Users
                 <td><code>#(user.username)</code></td>
                 <td>
                     <form method="post" action="/admin/users/#(user.id)/role"
-                          style="display:flex;gap:.4rem;align-items:center">
+                          class="role-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
-                        <select id="role-#(user.id)" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
+                        <select id="role-#(user.id)" name="role" class="form-input role-select">
                             <option value="student"    #if(user.role == "student"):selected#endif>student</option>
                             <option value="instructor" #if(user.role == "instructor"):selected#endif>instructor</option>
                             <option value="admin"      #if(user.role == "admin"):selected#endif>admin</option>
@@ -64,15 +64,15 @@ Users
                 </td>
                 <td class="time js-relative-time col-hide-phone" data-iso="#(user.createdAt)">#(user.createdAt)</td>
                 <td>
-                    <div style="display:flex;align-items:center;gap:.35rem">
+                    <div class="user-actions">
                         <a href="/admin/users/#(user.id)"
-                           class="btn action-btn" title="Manage user" aria-label="Manage user" style="padding:.3rem .45rem">
+                           class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
-                        <form method="post" action="/admin/users/#(user.id)/delete" style="display:inline">
+                        <form method="post" action="/admin/users/#(user.id)/delete" class="user-delete-form">
                             #csrfFormField()
-                            <button class="btn action-btn action-danger" type="submit"
-                                    title="Delete user" aria-label="Delete user" style="padding:.3rem .45rem"
+                            <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                                    title="Delete user" aria-label="Delete user"
                                     onclick="return confirm('Delete this user? Their enrollments will be removed. They can log in again to restore their account.')">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
@@ -100,6 +100,23 @@ Users
 }
 #users-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
+}
+.role-form {
+    display: flex;
+    gap: .4rem;
+    align-items: center;
+}
+.role-select {
+    padding: .25rem .5rem;
+    font-size: .8rem;
+}
+.user-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+}
+.user-delete-form {
+    display: inline;
 }
 </style>
 <script>
@@ -276,10 +293,10 @@ Users
             + '<td>' + displayName + '</td>'
             + '<td><code>' + username + '</code></td>'
             + '<td>'
-                + '<form method="post" action="/admin/users/' + id + '/role" style="display:flex;gap:.4rem;align-items:center">'
+                + '<form method="post" action="/admin/users/' + id + '/role" class="role-form">'
                     + csrfField
                     + '<label class="visually-hidden" for="role-' + id + '">Role for ' + username + '</label>'
-                    + '<select id="role-' + id + '" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">'
+                    + '<select id="role-' + id + '" name="role" class="form-input role-select">'
                         + roleOption('student') + roleOption('instructor') + roleOption('admin')
                     + '</select>'
                     + '<button class="btn action-btn" type="submit">Save</button>'
@@ -288,11 +305,11 @@ Users
             + '<td class="time js-relative-time col-hide-phone" data-iso="' + lastSeen + '">' + (user.lastSeenAt ? lastSeen : '—') + '</td>'
             + '<td class="time js-relative-time col-hide-phone" data-iso="' + created + '">' + created + '</td>'
             + '<td>'
-                + '<div style="display:flex;align-items:center;gap:.35rem">'
-                    + '<a href="/admin/users/' + id + '" class="btn action-btn" title="Manage user" aria-label="Manage user" style="padding:.3rem .45rem">' + editIcon + '</a>'
-                    + '<form method="post" action="/admin/users/' + id + '/delete" style="display:inline">'
+                + '<div class="user-actions">'
+                    + '<a href="/admin/users/' + id + '" class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">' + editIcon + '</a>'
+                    + '<form method="post" action="/admin/users/' + id + '/delete" class="user-delete-form">'
                         + csrfField
-                        + '<button class="btn action-btn action-danger" type="submit" title="Delete user" aria-label="Delete user" style="padding:.3rem .45rem"'
+                        + '<button class="btn action-btn action-danger action-btn-icon" type="submit" title="Delete user" aria-label="Delete user"'
                             + ' onclick="return confirm(\'Delete this user? Their enrollments will be removed. They can log in again to restore their account.\')">' + deleteIcon + '</button>'
                     + '</form>'
                 + '</div>'

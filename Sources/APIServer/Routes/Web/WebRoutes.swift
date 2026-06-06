@@ -172,9 +172,7 @@ struct WebRoutes: RouteCollection {
             guard !visibleSetupIDs.isEmpty else {
                 return try await req.view.render(
                     "index",
-                    IndexContext(
-                        sections: [], ungroupedSetups: [], hasSections: false, hasUngrouped: false,
-                        currentUser: userContext)
+                    IndexContext(displayGroups: [], hasAny: false, currentUser: userContext)
                 ).encodeResponse(for: req)
             }
             setups = try await APITestSetup.query(on: req.db)
@@ -464,21 +462,23 @@ struct WebRoutes: RouteCollection {
             }
         }
 
-        // Build per-section contexts, skipping sections with no visible items.
-        let sectionContexts: [IndexSectionContext] = allSections.compactMap { section in
+        // Build the ordered display groups: named sections (skipping any with no
+        // visible items) first, then a trailing unnamed bucket for ungrouped items.
+        var displayGroups: [IndexDisplayGroup] = allSections.compactMap { section in
             guard let sID = section.id else { return nil }
             let sectionRows = rowsBySectionID[sID] ?? []
             guard !sectionRows.isEmpty else { return nil }
-            return IndexSectionContext(sectionID: sID.uuidString, name: section.name, setups: sectionRows)
+            return IndexDisplayGroup(name: section.name, setups: sectionRows)
+        }
+        if !ungroupedSetups.isEmpty {
+            displayGroups.append(IndexDisplayGroup(name: nil, setups: ungroupedSetups))
         }
 
         return try await req.view.render(
             "index",
             IndexContext(
-                sections: sectionContexts,
-                ungroupedSetups: ungroupedSetups,
-                hasSections: !allSections.isEmpty,
-                hasUngrouped: !ungroupedSetups.isEmpty,
+                displayGroups: displayGroups,
+                hasAny: !displayGroups.isEmpty,
                 currentUser: userContext
             )
         ).encodeResponse(for: req)

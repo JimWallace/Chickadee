@@ -1,0 +1,96 @@
+<!--
+    One student-dashboard assignment row.  Expects a "setup" variable in
+    scope (the loop element of a display group), so it is included with a
+    bare extend inside the row loop in index.leaf — the same scope-sharing
+    pattern as _diagnostic-cards.leaf.  Kept in one place so the row markup
+    is not duplicated per layout.  NOTE: Leaf parses tag syntax even inside
+    HTML comments, so this comment avoids the leading-hash tag forms.
+-->
+<tr>
+    <td>
+        #if(setup.title):
+            <div class="assignment-title-cell">
+                <strong>#(setup.title)</strong>
+                #if(!setup.badges.isEmpty):
+                <span class="achievement-badges achievement-badges-compact">
+                    #for(badge in setup.badges):
+                    <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
+                    #endfor
+                </span>
+                #endif
+            </div>
+        #else:
+        <span class="text-muted">Unpublished</span>
+        #endif
+    </td>
+    <td>
+        #if(setup.staffOnly):
+        <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>
+        #else:
+        <span class="tier
+            #if(setup.status == "open"):tier-open
+            #elseif(setup.status == "closed"):tier-closed
+            #elseif(setup.status == "unpublished"):tier-unpublished
+            #endif">#(setup.status)</span>
+        #endif
+    </td>
+    <td class="due-col col-hide-phone">
+        #if(setup.opensAtText):
+            <span title="This assignment opens automatically at this time.">Opens #(setup.opensAtText)</span>
+        #elseif(setup.hasActiveExtension):
+            <span title="Personal deadline extension granted by your instructor.">#(setup.effectiveDueAtText)<br><span class="due-extension-note">(extension)</span></span>
+        #elseif(setup.dueAt):
+            #(setup.dueAt)
+        #else:
+            —
+        #endif
+    </td>
+    <td>
+        #if(setup.bestGradeText):
+            <strong>#(setup.bestGradeText)</strong>
+            #if(setup.gradeIsOverridden):
+            <span class="grade-override-tag" title="Your grade was set by your instructor">adjusted</span>
+            #endif
+        #else:
+            <span class="empty">—</span>
+        #endif
+    </td>
+    <td class="col-hide-phone">
+        #if(setup.submissionCount > 0):
+            <div class="submission-history-cell">
+                #if(setup.hasLatestSubmission):
+                    <a href="/submissions/#(setup.latestSubmissionID)" class="submission-history-latest">#(setup.latestSubmittedAtText)</a>
+                #endif
+                #if(setup.additionalSubmissionCount > 0):
+                    <a href="#(setup.historyURL)" class="submission-history-more">+#(setup.additionalSubmissionCount) more</a>
+                #endif
+            </div>
+        #else:
+            <span class="empty">No submissions yet</span>
+        #endif
+    </td>
+    <td>
+        <div class="assignment-actions-cell">
+            #if(setup.canEdit && (setup.gradingMode == "browser" || setup.hasNotebook)):
+            <a class="btn action-btn action-btn-icon" href="#(setup.notebookURL)" title="Edit" aria-label="Edit">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            </a>
+            #endif
+            #if(setup.isOpen && setup.gradingMode != "browser"):
+            <a class="btn action-btn action-btn-icon" href="#(setup.submitURL)" title="Upload" aria-label="Upload">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="21" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/><path d="M4 21h16"/></svg>
+            </a>
+            #endif
+            #if(setup.isOpen && setup.hasNotebook):
+            <form method="post" action="/testsetups/#(setup.id)/reset-notebook" onsubmit="return confirm('Reset your notebook back to the original starter? This discards your current edits for this assignment. Your past submissions are not affected.')" class="inline-form">
+                #csrfFormField()
+                <button class="btn action-btn action-btn-icon action-danger" type="submit"
+                        title="Reset notebook to starter (discards current edits; past submissions unaffected)"
+                        aria-label="Reset notebook to starter">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                </button>
+            </form>
+            #endif
+        </div>
+    </td>
+</tr>

@@ -14,15 +14,15 @@ Choose Your Courses
 #else:
 <form method="post" action="/enroll">
     #csrfFormField()
-    <p style="margin-bottom:1.25rem;color:var(--gray-600)">
+    <p class="enroll-intro">
         Select the courses you are enrolled in. You can change your enrollment later on your
         <a href="/account">account page</a>.
     </p>
-    <fieldset style="border:none;padding:0;margin:0 0 1.5rem">
-        <legend class="form-label" style="margin-bottom:.75rem;font-weight:600">Available courses</legend>
-        <div style="display:flex;flex-direction:column;gap:.6rem">
+    <fieldset class="fieldset-plain">
+        <legend class="form-label">Available courses</legend>
+        <div class="checkbox-list">
         #for(course in courses):
-            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
+            <label class="checkbox-row">
                 <input type="checkbox"
                        name="courseIDs[]"
                        value="#(course.id)"

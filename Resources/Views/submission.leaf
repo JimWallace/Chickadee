@@ -24,7 +24,7 @@ Submission #(submissionID)
     <div class="submission-score-row">
         #if(gradeIsOverridden):
         <p class="score score-header">Grade: <span class="grade-pill grade-override-active">#(overrideGradeText)</span> <span class="grade-override-tag" title="Your instructor set this grade for the assignment">overridden</span></p>
-        <p class="score" style="font-size:.9rem;color:var(--gray-600)">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
+        <p class="score score-autograded">Autograded: #(gradePercent)% · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
         #else:
         <p class="score score-header">Grade: <span class="grade-pill">#(gradePercent)%</span> · #if(isWeighted):#(earnedPoints) / #(totalPoints) points#else:#(passCount) / #(totalTests) tests passed#endif#if(deltaHeaderText): · <span class="delta-summary">#(deltaHeaderText)</span>#endif</p>
         #endif
@@ -148,110 +148,5 @@ Submission #(submissionID)
 #endif
 
 </div>
-<style>
-.submission-score-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-    flex-wrap: wrap;
-}
-.achievement-badges {
-    display: flex;
-    gap: .45rem;
-    flex-wrap: wrap;
-    align-items: center;
-}
-.achievement-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: .3rem .7rem;
-    border-radius: 9999px;
-    background: var(--accent-bg);
-    border: 1px solid var(--accent-border);
-    color: var(--accent-fg);
-    font-size: .78rem;
-    font-weight: 600;
-    line-height: 1.2;
-    white-space: nowrap;
-}
-.achievement-badges-full .achievement-badge {
-    font-size: .82rem;
-}
-.test-cell-main {
-    display: flex;
-    flex-direction: column;
-    gap: .3rem;
-}
-.test-short-result {
-    color: var(--gray-600, #4b5563);
-    font-size: .88rem;
-    line-height: 1.4;
-}
-.test-hint {
-    margin-top: .4rem;
-    padding: .35rem .55rem;
-    border-left: 3px solid var(--amber, #d97706);
-    background: var(--amber-bg, #fffbeb);
-    border-radius: .25rem;
-    font-size: .85rem;
-    line-height: 1.4;
-    color: var(--gray-800, #1f2937);
-}
-.test-output-details {
-    margin-top: .4rem;
-}
-.test-output-details summary {
-    cursor: pointer;
-    color: var(--blue, #0b63ce);
-    font-size: .9rem;
-}
-.test-output-pre {
-    margin-top: .5rem;
-    padding: .85rem 1rem;
-    border-radius: .5rem;
-    background: var(--gray-50, #f7f8fa);
-    border: 1px solid var(--border, #d9dce1);
-    color: var(--gray-900, #1f2937);
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow-x: auto;
-    line-height: 1.45;
-}
-.test-output-row td {
-    padding-top: 0;
-}
-.test-output-panel {
-    padding: .35rem 0 .2rem;
-}
-.test-output-heading {
-    font-size: .74rem;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--gray-500, #6b7280);
-    font-weight: 700;
-}
-.test-output-pre-wide {
-    margin-top: .35rem;
-}
-/* .submission-section-block / .submission-section-heading now live in the
-   global Public/styles.css so the browser runner's inline results
-   (notebook.js, assignment-validate.js) share the same section styling. */
-.warning-box {
-    margin-bottom: 1rem;
-    padding: .85rem 1rem;
-    border-radius: .5rem;
-    background: #fff8e1;
-    border: 1px solid #f1c96b;
-}
-.warning-box h2 {
-    margin: 0 0 .5rem 0;
-    font-size: 1rem;
-}
-.warning-list {
-    margin: 0;
-    padding-left: 1.25rem;
-}
-</style>
 #endexport
 #endextend

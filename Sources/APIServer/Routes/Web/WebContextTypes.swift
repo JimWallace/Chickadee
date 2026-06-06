@@ -66,17 +66,21 @@ struct LatestSubmissionItem: Encodable {
     let submittedAtText: String
 }
 
-struct IndexSectionContext: Encodable {
-    let sectionID: String
-    let name: String
+/// One rendered group of assignment rows on the student dashboard.  A named
+/// section renders an `<h2>` heading; the trailing "ungrouped" bucket carries
+/// `name == nil` so it renders no heading.  Folding both kinds into one list
+/// lets `index.leaf` render every group with a single shared `#extend`'d row
+/// partial (LeafKit 1.x raises a false "cyclically referenced" error if the
+/// same partial is extended from more than one site in a template, so the
+/// single-loop shape is load-bearing, not just tidier).
+struct IndexDisplayGroup: Encodable {
+    let name: String?  // nil → ungrouped bucket (no heading)
     let setups: [TestSetupRow]
 }
 
 struct IndexContext: Encodable {
-    let sections: [IndexSectionContext]  // named sections with their visible items
-    let ungroupedSetups: [TestSetupRow]  // items not assigned to any section
-    let hasSections: Bool  // true if the course has any defined sections
-    let hasUngrouped: Bool  // true if there are items not in any section
+    let displayGroups: [IndexDisplayGroup]  // sections (named) then the ungrouped bucket
+    let hasAny: Bool  // true if any group has visible items
     let currentUser: CurrentUserContext?
 }
 
