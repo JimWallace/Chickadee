@@ -294,15 +294,8 @@ struct AuthorNotebookCheckTool: ContentTool {
         let tier = try Self.parseTier(input.tier)
         let columnMatch = try Self.parseColumnMatch(input.columnMatch)
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         let existingIndex = payload.items.firstIndex { $0.kind == "check" && $0.check?.id == checkID }
@@ -334,18 +327,10 @@ struct AuthorNotebookCheckTool: ContentTool {
             created = true
         }
 
-        do {
-            try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
-        } catch let error as any AbortError {
-            throw MCPToolError.from(error, tool: Self.name)
-        }
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-        // Re-grade existing submissions against the edited suite (gated on a real
-        // manifest change), the automatic equivalent of the "Retest all" button.
-        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,

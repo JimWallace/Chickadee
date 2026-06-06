@@ -133,11 +133,8 @@ struct UpdateAssignmentTool: ContentTool {
                 tool: Self.name, detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility.")
         }
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
+        let assignment = try await context.authorizedAssignment(
+            publicID: input.assignmentPublicID, tool: Self.name)
         do {
             // Title/date metadata first. The legacy `isOpen` is applied here only
             // when `visibility` was not given (visibility is the richer form and

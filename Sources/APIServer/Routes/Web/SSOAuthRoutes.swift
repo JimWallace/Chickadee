@@ -40,12 +40,12 @@ struct SSOAuthRoutes: RouteCollection {
         // PKCE: generate random 32-byte code_verifier, then SHA-256 → base64url code_challenge
         var rng = SystemRandomNumberGenerator()
         let codeVerifierBytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        let codeVerifier = Data(codeVerifierBytes).base64URLEncoded()
-        let codeChallenge = Data(SHA256.hash(data: Data(codeVerifier.utf8))).base64URLEncoded()
+        let codeVerifier = Data(codeVerifierBytes).base64URLEncodedString()
+        let codeChallenge = Data(SHA256.hash(data: Data(codeVerifier.utf8))).base64URLEncodedString()
 
         // State token for CSRF protection
         let stateBytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        let state = Data(stateBytes).base64URLEncoded()
+        let state = Data(stateBytes).base64URLEncodedString()
 
         // Persist in session so callback can validate
         req.session.data["oidc_state"] = state
@@ -461,15 +461,5 @@ private extension String {
 
     func normalizedIdentityKey() -> String? {
         nilIfBlank()?.lowercased()
-    }
-}
-
-private extension Data {
-    /// Base64url encoding (RFC 4648 §5): replaces +/→-_, strips padding.
-    func base64URLEncoded() -> String {
-        base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
     }
 }

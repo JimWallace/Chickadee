@@ -305,15 +305,8 @@ struct CreatePatternFamilyTool: ContentTool {
         }
         try Self.assertUniqueCaseKeys(input.cases)
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
@@ -333,21 +326,10 @@ struct CreatePatternFamilyTool: ContentTool {
         // applySuiteEdit -> applyPatternFamilies -> validatePatternFamilies runs
         // the structural + per-kind checks synchronously; surface those as clean
         // MCP errors rather than opaque protocol failures.
-        do {
-            try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
-        } catch let error as any AbortError {
-            throw MCPToolError.from(error, tool: Self.name)
-        }
-        // A new family adds graded cases, so close a currently-open assignment
-        // (matching update_pattern_family and the web Save button) before the
-        // debounced re-validation.
-        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
-        // Re-grade existing submissions against the edited suite (gated on a real
-        // manifest change), the automatic equivalent of the "Retest all" button.
-        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,
@@ -377,7 +359,7 @@ struct CreatePatternFamilyTool: ContentTool {
     /// that runs inside applySuiteEdit.
     private static func buildFamily(_ input: Input, id: String, kind: PatternKind) throws -> PatternFamily {
         let defaults = PatternDefaults(
-            tier: try parseTier(input.defaultTier) ?? .pub,
+            tier: try parseOptionalTier(input.defaultTier, tool: Self.name) ?? .pub,
             points: input.defaultPoints ?? 1,
             hint: normalizedHint(input.defaultHint),
             tolerance: input.tolerance)
@@ -393,7 +375,8 @@ struct CreatePatternFamilyTool: ContentTool {
             return PatternCase(
                 key: c.key, label: c.label ?? c.key, args: args, expected: c.expected ?? .null,
                 argsProvided: provided, argVarRefs: refs, expectedVarRef: ref,
-                hint: normalizedHint(c.hint), tier: try parseTier(c.tier), points: c.points,
+                hint: normalizedHint(c.hint), tier: try parseOptionalTier(c.tier, tool: Self.name),
+                points: c.points,
                 enabled: c.enabled ?? true)
         }
         return PatternFamily(
@@ -431,15 +414,6 @@ struct CreatePatternFamilyTool: ContentTool {
             result.append(row)
         }
         return result
-    }
-
-    private static func parseTier(_ raw: String?) throws -> TestTier? {
-        guard let raw else { return nil }
-        guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: public, release, secret, student.")
-        }
-        return tier
     }
 
     /// Trims an empty hint to nil so an omitted/blank cell doesn't store an

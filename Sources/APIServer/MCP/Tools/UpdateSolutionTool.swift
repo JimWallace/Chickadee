@@ -80,15 +80,10 @@ struct UpdateSolutionTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        try Self.validateNotebookShape(input.notebook)
+        try validateNotebookShape(input.notebook, tool: Self.name)
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db)
-        else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
+        let assignment = try await context.authorizedAssignment(
+            publicID: input.assignmentPublicID, tool: Self.name)
         // The bearer context has no `Request.auth` APIUser; resolve the subject
         // so the validation submission is attributed to the acting account.
         let subject = try await context.requireEligibleSubject(tool: Self.name)
@@ -129,29 +124,9 @@ struct UpdateSolutionTool: ContentTool {
 
         return Output(
             assignmentPublicID: assignment.publicID,
-            cellCount: Self.cellCount(of: input.notebook),
+            cellCount: notebookCellCount(input.notebook),
             validationStatus: assignment.validationStatus,
             assignmentClosed: closed)
     }
 
-    /// A notebook must be a JSON object carrying a `cells` array — the minimal
-    /// shape every Jupyter notebook has. Matches update_notebook's lenient,
-    /// JSON-only validation; stricter nbformat checks are left to the runner.
-    private static func validateNotebookShape(_ notebook: JSONValue) throws {
-        guard case .object(let root) = notebook else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "notebook must be a JSON object.")
-        }
-        guard case .array? = root["cells"] else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "notebook must contain a \"cells\" array.")
-        }
-    }
-
-    private static func cellCount(of notebook: JSONValue) -> Int {
-        guard case .object(let root) = notebook, case .array(let cells)? = root["cells"] else {
-            return 0
-        }
-        return cells.count
-    }
 }

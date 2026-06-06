@@ -81,8 +81,8 @@ struct CreateSuiteSectionTool: ContentTool {
         guard !name.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Section name must not be empty.")
         }
-        let resolved = try await resolveSetupForSectionEdit(
-            assignmentPublicID: input.assignmentPublicID, tool: Self.name, context: context)
+        let resolved = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
         let newID = UUID().uuidString
         do {
             try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
@@ -161,8 +161,8 @@ struct RenameSuiteSectionTool: ContentTool {
         guard !input.sectionID.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
         }
-        let resolved = try await resolveSetupForSectionEdit(
-            assignmentPublicID: input.assignmentPublicID, tool: Self.name, context: context)
+        let resolved = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
         do {
             try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
                 guard var sections = dict["sections"] as? [[String: Any]],
@@ -241,8 +241,8 @@ struct DeleteSuiteSectionTool: ContentTool {
         guard !input.sectionID.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
         }
-        let resolved = try await resolveSetupForSectionEdit(
-            assignmentPublicID: input.assignmentPublicID, tool: Self.name, context: context)
+        let resolved = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
         // Captured inside the mutation closure so the response reflects what
         // actually changed.
         var removed = false
@@ -275,24 +275,4 @@ struct DeleteSuiteSectionTool: ContentTool {
             removed: removed,
             ungroupedItemCount: ungrouped)
     }
-}
-
-// MARK: - Shared resolution
-
-/// Resolves the (assignment, setup) pair for a section-edit tool, enforcing
-/// course access.  Factored out so the three section-CRUD tools share one
-/// lookup + authorization path.
-func resolveSetupForSectionEdit(
-    assignmentPublicID: String, tool: String, context: ToolContext
-) async throws -> (assignment: APIAssignment, setup: APITestSetup) {
-    guard let assignment = try await assignmentByPublicID(assignmentPublicID, on: context.db) else {
-        throw MCPToolError.invalidArguments(
-            tool: tool, detail: "No assignment found with public ID \"\(assignmentPublicID)\".")
-    }
-    try await context.authorizeCourseAccess(assignment.courseID, tool: tool)
-    guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-        throw MCPToolError.invalidArguments(
-            tool: tool, detail: "The assignment's test setup could not be found.")
-    }
-    return (assignment, setup)
 }

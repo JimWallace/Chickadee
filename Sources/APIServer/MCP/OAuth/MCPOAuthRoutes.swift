@@ -600,7 +600,7 @@ struct MCPOAuthRoutes: Sendable {
     }
 
     private static func pkceMatches(verifier: String, challenge: String) -> Bool {
-        base64url(Data(SHA256.hash(data: Data(verifier.utf8)))) == challenge
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncodedString() == challenge
     }
 
     /// Atomically flips a single-use `consumed` flag from false→true for the row
@@ -639,15 +639,9 @@ struct MCPOAuthRoutes: Sendable {
     private static func randomToken() -> String {
         var rng = SystemRandomNumberGenerator()
         let bytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        return base64url(Data(bytes))
+        return Data(bytes).base64URLEncodedString()
     }
 
-    private static func base64url(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 }
 
 // MARK: - Request / response shapes

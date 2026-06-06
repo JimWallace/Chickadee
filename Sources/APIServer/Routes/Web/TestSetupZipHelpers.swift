@@ -392,7 +392,7 @@ func createRunnerSetupZip(
     )
 
     if storedNameByIndex.isEmpty {
-        try writeEmptyZip(to: zipPath)
+        try writeEmptyZip(at: zipPath)
     } else {
         // Rebuilding an existing setup zip must start from a clean archive.
         // `zip -r existing.zip .` updates/adds entries but does not remove files
@@ -410,18 +410,6 @@ func createRunnerSetupZip(
         return n == "makefile" || n == "gnumakefile"
     }
     return RunnerSetupPackage(testSuites: testSuites, hasMakefile: hasMakefile)
-}
-
-private func writeEmptyZip(to path: String) throws {
-    let emptyZip = Data([
-        0x50, 0x4b, 0x05, 0x06,
-        0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00,
-    ])
-    try emptyZip.write(to: URL(fileURLWithPath: path))
 }
 
 // MARK: - Support file extraction
