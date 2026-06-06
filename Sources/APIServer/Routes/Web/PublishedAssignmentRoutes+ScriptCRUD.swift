@@ -102,75 +102,24 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func createScript(req: Request) async throws -> Response {
         let idStr = try assignmentPublicIDParameter(from: req)
-
-        struct CreateBody: Content {
-            var filename: String
-            var content: String
-            var tier: String?
-            var points: Int?
-            var isTest: Bool?
-        }
-        let body = try req.content.decode(CreateBody.self)
-
-        // Validate filename: must be a simple filename (no path separators).
-        let cleaned = sanitizeSuiteFilename(body.filename)
-        guard !cleaned.isEmpty, cleaned == body.filename else {
-            throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
-        }
+        let body = try req.content.decode(CreateScriptBody.self)
 
         guard
             let assignment = try await assignmentByPublicID(idStr, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
-        // Reject duplicate filenames.
-        if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-            throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
-        }
+        let result = try await createScriptInSetup(setup: setup, body: body, on: req.db)
 
-        // Slice 1: prepend assignment-scope variables.  Section variables
-        // aren't applied here (the suite entry — and thus its sectionID —
-        // is created below); the next applyPatternFamilies / suite-edit
-        // save will re-prepend with the correct section scope.
-        let createInlined: String = {
-            guard let manifest = setup.decodedManifest()
-
-            else { return body.content }
-            return TestScriptVariablePrepender.applyForRawScript(
-                filename: cleaned,
-                content: body.content,
-                manifest: manifest
-            )
-        }()
-        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: createInlined)
-
-        let tier = normalizeTier(body.tier, isTest: body.isTest)
-        // v0.4.105: allow 0-mark tests (e.g. function-existence guards
-        // that exist purely to short-circuit downstream tests, not to
-        // contribute to the grade).  Negative values still clamp to 0.
-        let points = max(0, body.points ?? 1)
-        let shouldTest = tier != "support"
-
-        if shouldTest {
-            let entry = ConfiguredSuiteEntry(
-                script: cleaned, tier: tier, order: 0,
-                dependsOn: [], points: points, displayName: nil
-            )
-            if let updated = updateManifestAddingScript(manifestJSON: setup.manifest, entry: entry) {
-                setup.manifest = updated
-                try await setup.save(on: req.db)
-            }
-        } else {
+        if !result.isTest {
             // Support files (tier=="support") aren't entries in `testSuites`,
             // but they still need to land in the shared extraction dir so
             // student JupyterLite working copies pick them up via the symlinks
-            // created in `createSupportFileSymlinks`.  v0.4.116+: keep the
+            // created in `createSupportFileSymlinks`. v0.4.116+: keep the
             // shared dir in sync after every POST /scripts upload, not just
             // the bigger /edit/save flow.
             let activeTestSuiteScripts: Set<String> = {
-                guard let props = setup.decodedManifest()
-
-                else { return [] }
+                guard let props = setup.decodedManifest() else { return [] }
                 return Set(props.testSuites.map(\.script))
             }()
             extractSupportFilesToSharedDirectory(
@@ -189,11 +138,11 @@ extension PublishedAssignmentRoutes {
             var editURL: String
         }
         let resp = CreatedResponse(
-            filename: cleaned,
-            tier: tier,
-            points: points,
-            isTest: shouldTest,
-            editURL: "/instructor/\(idStr)/scripts/\(urlEncode(cleaned))"
+            filename: result.filename,
+            tier: result.tier,
+            points: result.points,
+            isTest: result.isTest,
+            editURL: "/instructor/\(idStr)/scripts/\(urlEncode(result.filename))"
         )
         return try await resp.encodeResponse(status: .created, for: req)
     }
@@ -213,35 +162,7 @@ extension PublishedAssignmentRoutes {
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
-        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
-        }
-
-        if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-            throw WebAssignmentError.conflict(
-                reason:
-                    "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor (delete the case, or delete the whole family)."
-            )
-        }
-
-        let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
-        guard dependents.isEmpty else {
-            throw WebAssignmentError.conflict(
-                reason:
-                    "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
-            )
-        }
-
-        do {
-            try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
-        } catch ScriptZipError.zipFailed {
-            throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
-        }
-
-        if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
-            setup.manifest = updated
-            try await setup.save(on: req.db)
-        }
+        try await deleteScriptFromSetup(setup: setup, filename: filename, on: req.db)
 
         // Re-extract support files to the shared dir (parallels the
         // create-script path).  Idempotent and cheap; the shared dir
