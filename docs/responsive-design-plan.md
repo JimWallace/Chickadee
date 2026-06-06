@@ -48,6 +48,29 @@ The three real problems:
    screens; per-row action buttons and `.action-btn` icon buttons
    (`styles.css:276`, ~0.8rem) are below comfortable tap-target size (44px).
 
+## Hard constraint: zero desktop changes
+
+**Nothing about the desktop (>1024px) rendering may change — visually or in the
+cascade.** This is the governing rule and overrides convenience anywhere it
+conflicts:
+
+- **Every new rule lives inside an `@media (max-width: …)` block.** No new
+  selector or property is added to the default (unguarded) cascade. If a change
+  can't be expressed inside a media query, it doesn't ship in this effort.
+- **No global property additions** (e.g. a bare `min-width: 0` on a shared flex
+  container) — those leak into desktop. Such guards go *inside* the phone/tablet
+  media blocks only.
+- **Markup refactors must be visually inert at desktop.** Where an inline
+  `style="width:220px"` is moved to a class so a media query can override it,
+  the class reproduces the exact desktop value (`width: 220px`), so desktop
+  renders identically; only the phone block changes it.
+- **Structural wrappers must be inert at desktop.** `.table-wrap` uses
+  `overflow-x: auto`, which shows a scrollbar *only when content overflows* —
+  desktop tables fit within `.main` today, so no scrollbar and no visual change.
+- **Enforcement:** the 1440px (and 1280px) row of the test matrix is a
+  regression gate, checked against `main` — desktop must be pixel-identical. Any
+  diff at desktop width is a bug in the change, not an accepted trade-off.
+
 ## Approach decisions (locked)
 
 - **Table strategy: hide non-essential columns** below the breakpoint (chosen
@@ -93,9 +116,12 @@ unconditional width traps. Nothing should change at >1024px.
       `admin-users.leaf`, `style="width:280px"` in `assignment-submissions.leaf`)
       with a `.filter-input` class that is a fixed width on desktop and
       `width: 100%` on phone. (Keeps markup honest; avoids `!important`.)
-- [ ] Add `min-width: 0` to flex containers that hold long text (nav username,
-      `.assignment-title-cell`, `.submission-header-row`) so long names/emails
-      wrap instead of forcing horizontal overflow.
+- [ ] **Inside the phone/tablet blocks only**, add `min-width: 0` to flex
+      containers that hold long text (nav username, `.assignment-title-cell`,
+      `.submission-header-row`) so long names/emails wrap instead of forcing
+      horizontal overflow. This must **not** be added to the default cascade —
+      a global `min-width: 0` would change desktop wrap behavior for long
+      strings.
 - [ ] Wrap every `.results-table` in a `.table-wrap { overflow-x: auto; }` —
       this is the **safety net** so that even before per-table column hiding
       lands, no table can blow out the viewport. (The column-hiding work in
@@ -203,7 +229,13 @@ Manual, devtools-based (no automated visual regression in this pass):
 | 414px | larger phone | Same |
 | 768px | iPad portrait | Notebook editor usable; tables comfortable |
 | 1024px | iPad landscape | Boundary — should look near-desktop |
-| 1440px | desktop | **Pixel-identical to today** (regression guard) |
+| 1280px | small desktop | **Pixel-identical to `main`** (regression gate) |
+| 1440px | desktop | **Pixel-identical to `main`** (regression gate) |
+
+The two desktop rows are the enforcement mechanism for the
+[zero-desktop-changes constraint](#hard-constraint-zero-desktop-changes):
+diff each touched page against `main` at these widths; any visual difference
+means a rule escaped its media query and must be fixed before merge.
 
 Each phase's PR description should include before/after screenshots at 375px and
 1440px for the pages it touches.
