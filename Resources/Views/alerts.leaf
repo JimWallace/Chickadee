@@ -123,7 +123,7 @@ Server Health Alerts
                     #if(firing.delivered):
                         delivered
                     #else:
-                        <span style="color:var(--danger,#a8272c)">failed</span>
+                        <span style="color:var(--red)">failed</span>
                         #if(firing.deliveryError):<br><code style="font-size:.75em;color:var(--muted)">#(firing.deliveryError)</code>#endif
                     #endif
                 </td>

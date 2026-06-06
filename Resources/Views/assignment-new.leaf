@@ -29,7 +29,7 @@ Create Assignment
             <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
                    value="#(assignmentName)"
                    placeholder="Assignment name"
-                   style="font-size:1.4rem;font-weight:600;border:none;border-bottom:2px solid var(--border,#ddd);border-radius:0;padding:.15rem 0;background:transparent;width:100%">
+                   style="font-size:1.4rem;font-weight:600;border:none;border-bottom:2px solid var(--border);border-radius:0;padding:.15rem 0;background:transparent;width:100%">
             <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:.6rem;align-items:center">
                 <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
                     Opens
@@ -244,11 +244,11 @@ Create Assignment
     </div>
 
     <!-- Generate Tests from Solution (hidden; shown when solution notebook present) -->
-    <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
+    <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border);border-radius:.5rem;background:var(--gray-50)">
         <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
             <span style="font-size:.875rem;font-weight:600">Generate Starter Tests</span>
             <button class="btn" type="button" id="scan-solution-btn" style="padding:.2rem .6rem;font-size:.8rem">Scan Solution for Functions</button>
-            <span id="scan-status" style="font-size:.8rem;color:var(--meta)"></span>
+            <span id="scan-status" style="font-size:.8rem;color:var(--gray-500)"></span>
         </div>
         <div id="scan-results" style="display:none">
             <p class="card-meta" style="margin-bottom:.4rem">Select the functions to generate starter tests for:</p>
@@ -284,7 +284,7 @@ Create Assignment
         <div class="section-block" data-section-id="#(sec.sectionID)" style="margin-bottom:1.25rem">
         #if(!sec.isUngrouped):
             <div class="section-header" draggable="true"
-                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
+                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100);border-radius:.4rem">
                 <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
                       style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
 
@@ -338,7 +338,7 @@ Create Assignment
                         #for(v in sec.variables):
                         <tr class="section-var-row">
                             <td style="width:14rem;white-space:nowrap">
-                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
+                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>
                                 <input type="text" class="form-input section-var-name" value="#(v.name)" placeholder="Input Name"
                                        style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
                             </td>
@@ -377,7 +377,7 @@ Create Assignment
 <!-- Pre-draft state: nothing to author yet.  The notebook upload above
      creates the draft setup, after which the page reloads with the
      suite editor visible. -->
-<div style="margin-top:1.25rem;padding:1rem 1.25rem;border:1px dashed var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa);color:var(--gray-500);font-size:.875rem">
+<div style="margin-top:1.25rem;padding:1rem 1.25rem;border:1px dashed var(--border);border-radius:.5rem;background:var(--gray-50);color:var(--gray-500);font-size:.875rem">
     <strong>Test Suite</strong> — upload an assignment notebook above to begin authoring tests.
 </div>
 #endif
@@ -464,7 +464,7 @@ Create Assignment
                     </thead>
                     <tbody id="family-variables-body"></tbody>
                 </table>
-                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--meta)">
+                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--gray-500)">
                     Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.
                 </p>
             </div>
@@ -487,7 +487,7 @@ Create Assignment
                     </thead>
                     <tbody id="family-cases-body"></tbody>
                 </table>
-                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--meta)">
+                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--gray-500)">
                     No cases yet.  Add at least one to save this family.
                 </p>
             </div>
@@ -525,18 +525,18 @@ Create Assignment
 
 
 <style>
-.suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
+.suite-drag-handle { cursor: grab; user-select: none; color: var(--gray-500); padding: 0 .3rem; }
 .suite-drag-handle:active { cursor: grabbing; }
 .suite-row-dragging { opacity: .35; }
-tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
-tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
-tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
+tr.drop-before td:first-child { border-top: 2px solid var(--blue); }
+tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue); }
+tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .suite-name-cell { display: flex; align-items: center; gap: .4rem; }
-.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
-.suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
+.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--gray-500); cursor: default; }
+.suite-root-drop.drop-hover { background: var(--hover-bg); }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
-.suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
-.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
+.suite-child-connector { color: var(--gray-500); margin-right: .25rem; font-size: .85em; }
+.suite-upload-error { font-size: .78rem; color: var(--red); margin-top: .2rem; }
 </style>
 <!-- ── Unified Suite Table ─────────────────────────────────────────────────
      v0.4.132: the create page now shares `suite-table.js` with the edit
@@ -618,19 +618,19 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         name = name.trim();
         var nameOk = name && isValidPyIdent(name);
         var nameEl = tr.querySelector('.section-var-name');
-        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red,#c0392b)';
+        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
         if (nameOk) {
             var others = Array.from(tr.parentNode.querySelectorAll('.section-var-name'))
                 .map(function (el) { return el.value.trim(); });
             if (others.filter(function (n) { return n === name; }).length > 1) {
-                nameEl.style.borderColor = 'var(--red,#c0392b)';
+                nameEl.style.borderColor = 'var(--red)';
                 nameOk = false;
             }
         }
         var parsed = tryParseValue(rawVal);
         var valueEl = tr.querySelector('.section-var-value');
         var valueOk = parsed.ok && !parsed.empty && parsed.strict;
-        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber,#b38600)';
+        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber)';
         valueEl.title = (parsed.ok && !parsed.empty && !parsed.strict)
             ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.' : '';
         var check = tr.querySelector('.section-var-row-valid');
@@ -646,7 +646,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         tr.className = 'section-var-row';
         tr.innerHTML =
             '<td style="width:14rem;white-space:nowrap">'
-          +   '<span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>'
+          +   '<span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>'
           +   '<input type="text" class="form-input section-var-name" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">'
           + '</td>'
           + '<td><input type="text" class="form-input section-var-value" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}" style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
@@ -904,7 +904,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         function setStatus(msg, isError) {
             if (!statusEl) return;
             statusEl.textContent = msg;
-            statusEl.style.color = isError ? 'var(--red,#c0392b)' : 'var(--gray-500)';
+            statusEl.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
         }
 
         function readAsText(file) {

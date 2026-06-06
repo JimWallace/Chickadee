@@ -51,7 +51,7 @@
 <div id="sections-container">
 #for(section in sections):
 <div class="section-block" data-section-id="#(section.sectionID)" style="margin-bottom:1.5rem">
-    <div class="section-header" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
+    <div class="section-header" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100);border-radius:.4rem">
         <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
               style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
 
@@ -578,28 +578,11 @@ tr.assignment-draggable.dragging {
 tr.assignment-draggable td {
     cursor: grab;
 }
-.section-block.section-dragging {
-    opacity: .55;
-}
 .section-empty-row td {
     cursor: default !important;
 }
-.add-section-details {
-    margin: 0;
-    padding: 0;
-}
-.add-section-details > summary {
-    margin: 0;
-}
-.add-section-details > summary::-webkit-details-marker {
-    display: none;
-}
-.add-section-details > summary::marker {
-    content: "";
-}
-.add-section-details[open] .add-section-popup {
-    display: block;
-}
+/* .add-section-details* and .section-block.section-dragging now live in the
+   global stylesheet (shared with assignment-edit.leaf). */
 </style>
 <script>
 (function () {

@@ -146,16 +146,6 @@
 #assignment-submissions-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
 }
-/* Render the override <summary> as a clean icon button (no disclosure
-   triangle) aligned with the Retest / Reset icon buttons in the same row. */
-.ext-summary { margin-top: 0; list-style: none; }
-.ext-summary::-webkit-details-marker { display: none; }
-.ext-details[open] > .ext-summary { background: var(--gray-100); }
-/* Desktop keeps the comfortable 14rem override form; on a phone it fills the
-   available width instead of forcing the submissions table wider than the
-   screen. */
-.ext-details form { min-width: 14rem; }
-@media (max-width: 640px) { .ext-details form { min-width: 0; } }
 </style>
 <script>
 (function () {

@@ -32,7 +32,7 @@
             </div>
 
             <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
-            <div id="assign-header-edit" style="display:none;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
+            <div id="assign-header-edit" style="display:none;padding:.75rem 1rem;border:1px solid var(--border);border-radius:.5rem;background:var(--gray-50)">
                 <div style="display:flex;align-items:center;margin-bottom:.6rem">
                     <strong style="font-size:.875rem">Name &amp; Due Date</strong>
                     <button class="btn-link" id="assign-edit-cancel" type="button"
@@ -154,7 +154,7 @@
                 <td><strong>Global input</strong></td>
                 <td style="width:14rem;white-space:nowrap">
                     <span class="global-input-row-valid"
-                          style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
+                          style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>
                     <input type="text" class="form-input global-input-name"
                            value="#(v.name)" placeholder="Input Name"
                            style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-family:monospace">
@@ -273,7 +273,7 @@
         <div class="section-block" data-section-id="#(sec.sectionID)" style="margin-bottom:1.25rem">
         #if(!sec.isUngrouped):
             <div class="section-header" draggable="true"
-                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
+                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100);border-radius:.4rem">
                 <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
                       style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
 
@@ -335,7 +335,7 @@
                         #for(v in sec.variables):
                         <tr class="section-var-row">
                             <td style="width:14rem;white-space:nowrap">
-                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
+                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>
                                 <input type="text" class="form-input section-var-name" value="#(v.name)" placeholder="Input Name"
                                        style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
                             </td>
@@ -462,7 +462,7 @@
                     </thead>
                     <tbody id="family-variables-body"></tbody>
                 </table>
-                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--meta)">
+                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--gray-500)">
                     Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.  Locked rows come from the section's shared inputs (edit in the section's Inputs table).
                 </p>
             </div>
@@ -487,7 +487,7 @@
                     </thead>
                     <tbody id="family-cases-body"></tbody>
                 </table>
-                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--meta)">
+                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--gray-500)">
                     No cases yet.  Add at least one to save this family.
                 </p>
             </div>
@@ -495,28 +495,23 @@
 </div>
 
 <style>
-.suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
+.suite-drag-handle { cursor: grab; user-select: none; color: var(--gray-500); padding: 0 .3rem; }
 .suite-drag-handle:active { cursor: grabbing; }
 .suite-row-dragging { opacity: .35; }
-tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
-tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
-tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
+tr.drop-before td:first-child { border-top: 2px solid var(--blue); }
+tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue); }
+tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 .suite-name-cell { display: flex; align-items: center; gap: .4rem; }
-.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
-.suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
+.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--gray-500); cursor: default; }
+.suite-root-drop.drop-hover { background: var(--hover-bg); }
 .suite-child-indent { padding-left: 2rem; white-space: nowrap; }
-.suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
-.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
-.suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
+.suite-child-connector { color: var(--gray-500); margin-right: .25rem; font-size: .85em; }
+.suite-upload-error { font-size: .78rem; color: var(--red); margin-top: .2rem; }
+.suite-file-hint { font-size: .75rem; color: var(--gray-500); margin-top: .2rem; }
 .suite-file-hint a { color: inherit; }
 #suite-config-table td { vertical-align: top; }
-/* v0.4.98 — suite sections (mirrors assignments.leaf) */
-.add-section-details { margin: 0; padding: 0; }
-.add-section-details > summary { margin: 0; }
-.add-section-details > summary::-webkit-details-marker { display: none; }
-.add-section-details > summary::marker { content: ""; }
-.add-section-details[open] .add-section-popup { display: block; }
-.section-block.section-dragging { opacity: .55; }
+/* .add-section-details* and .section-block.section-dragging now live in the
+   global stylesheet (shared with assignments.leaf). */
 </style>
 <script src="/suite-list.js?v=#appVersion()"></script>
 <script>
@@ -826,7 +821,7 @@ function checkUWDates(dateTimeValue, warningEl) {
     function setStatus(msg, isError) {
         if (!status) return;
         status.textContent = msg;
-        status.style.color = isError ? 'var(--red,#c0392b)' : 'var(--gray-500)';
+        status.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
     }
 
     function readAsText(file) {

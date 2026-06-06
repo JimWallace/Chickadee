@@ -22,6 +22,7 @@
     --gray-500: #6B7280;
     --gray-600: #4B5563;
     --gray-700: #374151;
+    --gray-800: #1F2937;
     --gray-900: #111827;
     --surface: #FFFFFF;
     --surface-muted: #F8FAFC;
@@ -37,7 +38,18 @@
     --closed-fg: #4B5563;
     --preview-bg: #FEF3C7;  /* amber tint — staff-only preview/beta state */
     --preview-fg: #92400E;  /* dark amber */
+    --amber-bg: #FFFBEB;    /* pale amber — hint / warning callouts */
+    --warning-bg: #FFF8E1;  /* warm amber tint — submission warning callout */
+    --warning-border: #F1C96B;
     --border: var(--gray-200);
+    /* Semantic aliases.  These reference the grays above, so they pick up the
+       dark-mode palette automatically — no per-scheme override needed.  Added
+       in the UI audit: --muted / --text-secondary / --font-mono were referenced
+       across the admin, alerts, and import views but never defined, so muted
+       text was silently rendering in full-strength body colour. */
+    --muted: var(--gray-500);
+    --text-secondary: var(--gray-600);
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --success-bg: #E0F7FA;  /* teal-light tint — success state */
 }
 
@@ -59,6 +71,7 @@
         --gray-500: #9CA3AF;
         --gray-600: #CBD5E1;
         --gray-700: #D1D5DB;
+        --gray-800: #E2E8F0;
         --gray-900: #E5E7EB;
         --surface: #111827;
         --surface-muted: #0F172A;
@@ -74,6 +87,9 @@
         --closed-fg: #9CA3AF;
         --preview-bg: #422006;  /* dark amber — staff-only preview/beta */
         --preview-fg: #FCD34D;  /* bright amber — readable on dark */
+        --amber-bg: #422006;    /* dark amber — hint / warning callouts */
+        --warning-bg: #3A2A06;  /* dark warm amber — submission warning callout */
+        --warning-border: #7A4800;
         --success-bg: #072D35;
         /* --border inherits dark-mode --gray-200 automatically */
     }
@@ -1017,6 +1033,118 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     font-size: .875rem;
 }
 
+/* ── Inline "+ Section" popup (assignments.leaf + assignment-edit.leaf) ──
+   Identical rules formerly duplicated in both views' embedded <style>
+   blocks; consolidated here (v0.4.x UI audit). */
+.add-section-details { margin: 0; padding: 0; }
+.add-section-details > summary { margin: 0; }
+.add-section-details > summary::-webkit-details-marker { display: none; }
+.add-section-details > summary::marker { content: ""; }
+.add-section-details[open] .add-section-popup { display: block; }
+.section-block.section-dragging { opacity: .55; }
+
+/* ── Inline extension/override <details> (assignment-submissions.leaf +
+   course-student-submissions.leaf) — render the <summary> as a clean icon
+   button aligned with the Retest/Reset buttons.  Consolidated from two
+   identical embedded blocks (v0.4.x UI audit). */
+.ext-summary { margin-top: 0; list-style: none; }
+.ext-summary::-webkit-details-marker { display: none; }
+.ext-details[open] > .ext-summary { background: var(--gray-100); }
+.ext-details form { min-width: 14rem; }
+@media (max-width: 640px) { .ext-details form { min-width: 0; } }
+
+/* ── Submission view (submission.leaf) ───────────────── */
+/* Migrated out of submission.leaf's embedded <style> block (v0.4.x UI audit)
+   so the page-level CSS lives in one cacheable sheet.  The base
+   .achievement-badge / .achievement-badges rules are NOT redefined here —
+   they're the global ones above; only the "full" size modifier is page-local. */
+
+.submission-score-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
+.achievement-badges-full .achievement-badge { font-size: .82rem; }
+
+.test-cell-main {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.test-short-result {
+    color: var(--gray-600);
+    font-size: .88rem;
+    line-height: 1.4;
+}
+
+.test-hint {
+    margin-top: .4rem;
+    padding: .35rem .55rem;
+    border-left: 3px solid var(--amber);
+    background: var(--amber-bg);
+    border-radius: .25rem;
+    font-size: .85rem;
+    line-height: 1.4;
+    color: var(--gray-800);
+}
+
+.test-output-details { margin-top: .4rem; }
+
+.test-output-details summary {
+    cursor: pointer;
+    color: var(--blue);
+    font-size: .9rem;
+}
+
+.test-output-pre {
+    margin-top: .5rem;
+    padding: .85rem 1rem;
+    border-radius: .5rem;
+    background: var(--gray-50);
+    border: 1px solid var(--border);
+    color: var(--gray-900);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+    line-height: 1.45;
+}
+
+.test-output-row td { padding-top: 0; }
+
+.test-output-panel { padding: .35rem 0 .2rem; }
+
+.test-output-heading {
+    font-size: .74rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--gray-500);
+    font-weight: 700;
+}
+
+.test-output-pre-wide { margin-top: .35rem; }
+
+.warning-box {
+    margin-bottom: 1rem;
+    padding: .85rem 1rem;
+    border-radius: .5rem;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+}
+
+.warning-box h2 {
+    margin: 0 0 .5rem 0;
+    font-size: 1rem;
+}
+
+.warning-list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
 /* Tag shown next to a grade that an instructor has manually overridden.
    Used on the student dashboard, the submission page, and the instructor
    roster / per-student views. */
@@ -1035,6 +1163,43 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     vertical-align: middle;
 }
 .grade-override-active { border-color: var(--gray-500); background: var(--gray-100); }
+
+/* ── Student dashboard (index.leaf + _assignment-row.leaf) ───────────── */
+
+.assignment-section-heading {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: .4rem;
+}
+
+.assignment-table { margin-bottom: .5rem; }
+.assignment-table--ungrouped { margin-top: 1rem; }
+
+.text-muted { color: var(--gray-600); }
+
+.due-extension-note { font-size: .75rem; color: var(--gray-600); }
+
+.submission-history-cell {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
+.submission-history-latest { font-size: .82rem; }
+.submission-history-more { font-size: .78rem; color: var(--gray-600); }
+
+.assignment-actions-cell {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+/* Square-ish icon-only action button (edit / upload / reset glyphs). */
+.action-btn-icon { padding: .3rem .45rem; }
+
+/* Wrapper form that should not introduce vertical rhythm (inline action). */
+.inline-form { margin: 0; }
 
 /* ════════════════════════════════════════════════════════════════════
    Responsive design  —  see docs/responsive-design-plan.md
