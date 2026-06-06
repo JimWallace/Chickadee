@@ -48,36 +48,65 @@ The three real problems:
    screens; per-row action buttons and `.action-btn` icon buttons
    (`styles.css:276`, ~0.8rem) are below comfortable tap-target size (44px).
 
-## Hard constraint: zero desktop changes
+## Hard constraint: desktop renders identically
 
-**Nothing about the desktop (>1024px) rendering may change — visually or in the
-cascade.** This is the governing rule and overrides convenience anywhere it
-conflicts:
+**The desktop (>1024px) rendering must not change — verified by diffing each
+touched page against `main`.** This is an *outcome* guarantee and the governing
+rule. *How* we get there is a means, not the rule — and the means matters for
+long-term maintainability, so prefer them in this order:
 
-- **Every new rule lives inside an `@media (max-width: …)` block.** No new
-  selector or property is added to the default (unguarded) cascade. If a change
-  can't be expressed inside a media query, it doesn't ship in this effort.
-- **No global property additions** (e.g. a bare `min-width: 0` on a shared flex
-  container) — those leak into desktop. Such guards go *inside* the phone/tablet
-  media blocks only.
-- **Markup refactors must be visually inert at desktop.** Where an inline
-  `style="width:220px"` is moved to a class so a media query can override it,
-  the class reproduces the exact desktop value (`width: 220px`), so desktop
-  renders identically; only the phone block changes it.
-- **Structural wrappers must be inert at desktop.** `.table-wrap` uses
-  `overflow-x: auto`, which shows a scrollbar *only when content overflows* —
-  desktop tables fit within `.main` today, so no scrollbar and no visual change.
-- **Enforcement:** the 1440px (and 1280px) row of the test matrix is a
-  regression gate, checked against `main` — desktop must be pixel-identical. Any
+1. **Width-agnostic intrinsic CSS that is identical at desktop by construction**
+   — preferred over `max-width` overrides. e.g. `.main { max-width: min(900px,
+   100%) }` is byte-for-byte the same as `max-width: 900px` at any viewport ≥
+   ~900px, so it satisfies the constraint *without* a media query and *without*
+   an override pile, while also never overflowing a phone. Same idea with
+   `clamp()` for fluid spacing/type and `grid-template-columns: repeat(auto-fit,
+   minmax(…))` for card flows that wrap themselves.
+2. **Container queries (`@container`) for self-contained components** — reach for
+   these when a component should adapt to *its own* available width rather than
+   the viewport. This is the right home for table column-hiding: a table that
+   responds to its container is more reusable than one keyed to the global
+   viewport.
+3. **Viewport `@media` only for genuinely page-level/global concerns** — in
+   practice just the nav collapse. New components may be written mobile-first
+   (`min-width`, additive cascade); the legacy base stays as-is.
+
+Why not "everything is a `max-width` override": a desktop-first override pile
+makes the cascade *subtractive* (every breakpoint undoes desktop rules), invites
+specificity/`!important` creep when overriding inline widths, and freezes mobile
+as a degraded desktop. The intrinsic-first order above avoids all three while
+still guaranteeing desktop is untouched.
+
+Supporting rules (unchanged in intent):
+
+- **No global property additions that alter desktop** (e.g. a bare `min-width:
+  0` on a shared flex container). Where such a guard is only needed below a
+  breakpoint, scope it to that breakpoint/container.
+- **Markup refactors and structural wrappers must be visually inert at
+  desktop.** A `.table-wrap { overflow-x: auto }` shows a scrollbar only when
+  content overflows — desktop tables fit within `.main` today, so no visual
+  change. (Prefer not to need the wrapper at all once container-query column
+  hiding lands; keep it only as a backstop for the dense admin tables.)
+- **Enforcement:** the 1280px and 1440px rows of the test matrix are a
+  regression gate, diffed against `main` — desktop must be pixel-identical. Any
   diff at desktop width is a bug in the change, not an accepted trade-off.
+
+Pragmatism note: this is a CSS layer on an autograding tool, not a design
+system. `min()`/`clamp()` are universally supported and `@container` is in every
+evergreen browser since 2023, so the intrinsic path is low-risk — but introduce
+it incrementally, not as a big-bang refactor.
 
 ## Approach decisions (locked)
 
-- **Table strategy: hide non-essential columns** below the breakpoint (chosen
-  over horizontal-scroll and card/stack). Each table gets a per-column priority;
-  low-priority columns are `display: none` on phones. Essentials stay; the row's
-  detail link still leads to the full record. See
+- **Table strategy: hide non-essential columns** on small screens (chosen over
+  horizontal-scroll and card/stack). Each table gets a per-column priority;
+  low-priority columns are hidden when space is tight. Essentials stay; the
+  row's detail link still leads to the full record. See
   [Column priorities](#table-column-priorities) below.
+  **Mechanism: prefer a container query** (`@container`) on the table's wrapper
+  so the table hides columns based on its *own* width, falling back to a
+  viewport `@media` only if a container context proves awkward. Either way the
+  desktop rendering is unchanged.
 - **Mobile-first additive, not a rewrite.** Desktop rules stay as the default;
   we add `@media (max-width: …)` blocks that override. No existing selector is
   deleted.
@@ -109,9 +138,11 @@ unconditional width traps. Nothing should change at >1024px.
 
 - [ ] Add a documented "Responsive breakpoints" banner comment + the two
       `@media` blocks (initially near-empty) at the end of `styles.css`.
-- [ ] In the phone block: `.main { max-width: 100%; padding: 0 1rem; margin: 1rem auto; }`.
-- [ ] In the tablet block: relax `.form { max-width: 100%; }` and
-      `.form--wide` already has none.
+- [ ] Make containers intrinsically fluid instead of media-query-relaxed:
+      `.main { max-width: min(900px, 100%) }` and `.form { max-width: min(620px,
+      100%) }` — identical at desktop, never overflow on a phone, no breakpoint
+      needed. Optionally tighten `.main` padding with `clamp()`.
+      (`.form--wide` already has no cap.)
 - [ ] Replace inline fixed-width filter inputs (`style="width:220px"` in
       `admin-users.leaf`, `style="width:280px"` in `assignment-submissions.leaf`)
       with a `.filter-input` class that is a fixed width on desktop and
