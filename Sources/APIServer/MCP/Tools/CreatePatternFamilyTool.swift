@@ -136,7 +136,8 @@ struct CreatePatternFamilyTool: ContentTool {
         + "Create a NEW pattern family on an assignment, by public ID. Provide the family `id` "
         + "(unique; not an existing family), `name`, `kind` (boundary_equality / approximate_equality "
         + "/ variable_equality / return_type_check / exception_expected / performance_threshold / "
-        + "stdout_equality), the `function` it tests, `paramNames`, and a non-empty `cases` list — each "
+        + "stdout_equality / unordered_equality), the `function` it tests, `paramNames`, and a "
+        + "non-empty `cases` list — each "
         + "case a { key, args, expected } with raw-JSON args (in parameter order) and expected return. "
         + "Cases may personalize via argVarRefs / expectedVarRef (names of global/section = expressions). "
         + "Set a `defaultHint` (family-wide) and/or per-case `hint` to give the student a \"💡 Hint\" "
@@ -165,7 +166,7 @@ struct CreatePatternFamilyTool: ContentTool {
                     .string("boundary_equality"), .string("approximate_equality"),
                     .string("variable_equality"), .string("return_type_check"),
                     .string("exception_expected"), .string("performance_threshold"),
-                    .string("stdout_equality"),
+                    .string("stdout_equality"), .string("unordered_equality"),
                 ]),
             ]),
             "function": .object([

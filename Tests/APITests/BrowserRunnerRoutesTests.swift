@@ -389,6 +389,65 @@ import XCTVapor
         }
     }
 
+    // MARK: - Effective-open gate (hidden-assignment leak)
+
+    /// Security regression: an enrolled student must NOT be able to fetch a
+    /// closed (or not-yet-opened / preview) assignment's test scripts, manifest,
+    /// or per-student seed by guessing its testSetupID. The seed in particular
+    /// can encode solution-derived `expected` answers, so all three
+    /// browser-runner GETs are gated on effective-open for students.
+    @Test func closedAssignmentHidesBrowserEndpointsFromStudents() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: false)
+            // loginAsStudent auto-enrolls in the .auto course, so a 403 here is
+            // the effective-open gate firing, not a missing-enrollment 403.
+            let cookie = try await loginAsStudent()
+
+            for endpoint in ["manifest", "download", "seed"] {
+                try await app.asyncTest(
+                    .GET, "/api/v1/browser-runner/testsetups/\(setupID)/\(endpoint)",
+                    beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                    afterResponse: { res in
+                        #expect(
+                            res.status == .forbidden,
+                            "enrolled student must be blocked from \(endpoint) of a closed assignment, got \(res.status)"
+                        )
+                    })
+            }
+        }
+    }
+
+    /// A `.preview` (staff-only) assignment is the sharp case: hidden from
+    /// students but usable by staff. The student must be blocked from the
+    /// manifest while the instructor — who bypasses the effective-open gate for
+    /// preview — gets it.
+    @Test func previewAssignmentVisibleToStaffHiddenFromStudents() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            assignment.visibility = .preview
+            try await assignment.save(on: app.db)
+
+            let studentCookie = try await loginAsStudent()
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: studentCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden, "student must not see a preview assignment's manifest")
+                })
+
+            let staffCookie = try await loginUser(
+                username: "prof1", password: "pass", role: "instructor", on: app)
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "staff must still access a preview assignment's manifest")
+                })
+        }
+    }
+
     // MARK: - Full round-trip: dependency-skipped outcomes stored correctly
 
     /// Regression for #105: when the browser runner skips a test because its
