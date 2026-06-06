@@ -477,7 +477,7 @@
                     var hd = currentParamHasDefault && currentParamHasDefault[i];
                     var labelBase = t ? (escHtml(p) + ': ' + escHtml(t)) : escHtml(p);
                     var labelFull = hd
-                        ? (labelBase + '<span style="color:var(--meta);font-weight:normal"> ?</span>')
+                        ? (labelBase + '<span style="color:var(--gray-500);font-weight:normal"> ?</span>')
                         : labelBase;
                     th.push('<th><code style="font-size:.7rem">' + labelFull + '</code></th>');
                 });
@@ -486,7 +486,7 @@
                 ? 'Expected <code style="font-size:.7rem;font-weight:normal">: ' + escHtml(currentReturnType) + '</code>'
                 : 'Expected';
             th.push('<th>' + expectedHeader + '</th>');
-            th.push('<th>Hint <span style="color:var(--meta);font-weight:normal">(optional)</span></th>');
+            th.push('<th>Hint <span style="color:var(--gray-500);font-weight:normal">(optional)</span></th>');
             th.push('<th style="width:4rem"></th>');
             casesHeader.innerHTML = th.join('');
         }
@@ -504,7 +504,7 @@
             var argVarRefs   = Array.isArray(c.argVarRefs)   ? c.argVarRefs   : [];
             var tds = [];
             // Column 1: auto-numbered sequence (readonly, regenerated on reorder).
-            tds.push('<td class="pf-case-num" style="text-align:center;color:var(--meta);font-size:.75rem"></td>');
+            tds.push('<td class="pf-case-num" style="text-align:center;color:var(--gray-500);font-size:.75rem"></td>');
             tds.push('<td><input type="text" class="form-input pf-case-label" value="' + escHtml(c.label) + '" placeholder="e.g. bmi < 18.5 is underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
 
             if (!paramNames.length) {
@@ -669,7 +669,7 @@
                 catch (_) { preview = String(v.value); }
                 var textDeco = familyShadow ? 'line-through' : 'none';
                 var shadowNote = familyShadow
-                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber,#b38600);margin-left:.4rem">shadowed by family variable below</span>'
+                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber);margin-left:.4rem">shadowed by family variable below</span>'
                     : '';
                 tr.innerHTML =
                     '<td></td>'
@@ -686,7 +686,7 @@
                     // and value pass their checks.  Replaces the v0.4.94
                     // "✓ referenced as $name" / "✓ parsed as dict" text
                     // lines beneath each input.
-                    '<td class="pf-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green,#2d8f47);font-size:1rem"></td>'
+                    '<td class="pf-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green);font-size:1rem"></td>'
                   + '<td style="vertical-align:top">'
                   +   '<input type="text" class="form-input pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace">'
                   + '</td>'
@@ -739,7 +739,7 @@
                     nameOk = true;
                 }
             }
-            nameEl.style.borderColor = nameError ? 'var(--red,#c0392b)' : '';
+            nameEl.style.borderColor = nameError ? 'var(--red)' : '';
             nameEl.title = nameError || '';
 
             // Value validity.
@@ -754,7 +754,7 @@
             } else {
                 // Bare-string fallback — almost always a typo in dict/list JSON.
                 valueError = 'Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict.';
-                valueEl.style.borderColor = 'var(--amber,#b38600)';
+                valueEl.style.borderColor = 'var(--amber)';
             }
             valueEl.title = valueError || (valueOk ? 'Parsed as ' + parsed.kind : '');
 
@@ -811,11 +811,11 @@
             var name = match[1];
             if (declaredNames && declaredNames.has(name)) {
                 cell.style.fontStyle = 'italic';
-                cell.style.color = 'var(--green,#2d8f47)';
+                cell.style.color = 'var(--green)';
                 cell.title = 'Bound to input $' + name;
             } else {
-                cell.style.color = 'var(--red,#c0392b)';
-                cell.style.borderColor = 'var(--red,#c0392b)';
+                cell.style.color = 'var(--red)';
+                cell.style.borderColor = 'var(--red)';
                 cell.title = 'No input named $' + name + ' is declared (Variables table or Global Inputs).';
             }
         }
@@ -835,12 +835,12 @@
             var name = match[1];
             cell.style.fontStyle = 'italic';
             if (declaredNames && declaredNames.has(name)) {
-                cell.style.color = 'var(--green,#2d8f47)';
+                cell.style.color = 'var(--green)';
                 cell.style.borderColor = '';
                 cell.title = '$' + name + ' — per-student expected (resolved at grading time)';
             } else {
-                cell.style.color = 'var(--red,#c0392b)';
-                cell.style.borderColor = 'var(--red,#c0392b)';
+                cell.style.color = 'var(--red)';
+                cell.style.borderColor = 'var(--red)';
                 cell.title = 'No input named $' + name + ' is declared (Variables table or Global Inputs).';
             }
         }
@@ -1972,7 +1972,7 @@
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ solution returned None';
                     expectedEl.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
-                    expectedEl.style.borderColor = 'var(--orange,#d80)';
+                    expectedEl.style.borderColor = 'var(--amber)';
                     expectedEl.style.color = '';
                     delete expectedEl.dataset.autoComputed;
                 } else if (res.ok) {
@@ -1994,7 +1994,7 @@
                     expectedEl.title = res.error.indexOf('notebook load') >= 0
                         ? 'A top-level cell in the solution notebook ran longer than ' + (LOAD_TIMEOUT_MS / 1000) + ' seconds. Look for an infinite loop, a slow I/O call, or a blocking input() OUTSIDE the function under test (e.g. in a setup cell that runs at notebook open).'
                         : 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
-                    expectedEl.style.borderColor = 'var(--red,#c00)';
+                    expectedEl.style.borderColor = 'var(--red)';
                 } else if (res.unsupported) {
                     // The solution returned a value of a type that
                     // doesn't round-trip through JSON in a way the
@@ -2013,7 +2013,7 @@
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ solution returned ' + reasonText;
                     expectedEl.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
-                    expectedEl.style.borderColor = 'var(--orange,#d80)';
+                    expectedEl.style.borderColor = 'var(--amber)';
                     expectedEl.style.color = '';
                     delete expectedEl.dataset.autoComputed;
                 } else {
@@ -2024,7 +2024,7 @@
                     // function / etc.
                     expectedEl.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
                     expectedEl.title = 'Solution raised: ' + res.error;
-                    expectedEl.style.borderColor = 'var(--red,#c00)';
+                    expectedEl.style.borderColor = 'var(--red)';
                 }
             });
         }

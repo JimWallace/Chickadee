@@ -53,7 +53,7 @@ Create Assignment
                 #endif
             </div>
             <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
-            <p id="grading-mode-hint" class="card-meta" style="margin-top:.3rem;display:none"></p>
+            <p id="grading-mode-hint" class="card-meta grading-mode-hint" style="display:none"></p>
         </div>
         <div class="editor-actions">
             <button class="btn btn-primary" type="submit">Create &amp; Validate</button>

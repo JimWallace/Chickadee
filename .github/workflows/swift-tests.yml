@@ -46,6 +46,9 @@ jobs:
       - name: Block new XCTest imports
         run: scripts/no-new-xctest.sh
 
+      - name: Check view / stylesheet hygiene
+        run: scripts/check-styles.sh
+
       - name: Check runner wasm size budget
         run: scripts/check-runner-wasm-size.sh
 

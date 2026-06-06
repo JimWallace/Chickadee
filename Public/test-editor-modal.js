@@ -100,8 +100,8 @@
     var STATUS_COLORS = {
         info:    'var(--gray-500)',
         working: 'var(--gray-500)',
-        success: 'var(--green,#2e7d32)',
-        error:   'var(--red,#c0392b)'
+        success: 'var(--green)',
+        error:   'var(--red)'
     };
 
     // One deduped error-message extractor (renderers reuse via ctx).
@@ -175,7 +175,7 @@
         }).join('');
 
         card.innerHTML =
-            '<div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">' +
+            '<div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0">' +
             '  <div id="test-editor-title" style="font-weight:600;flex:1">Add Test</div>' +
             '  <button type="button" id="test-editor-close" class="btn-link" aria-label="Close" title="Close" style="font-size:1.1rem;color:var(--gray-500);padding:.1rem .3rem">✕</button>' +
             '</div>' +
@@ -187,7 +187,7 @@
             '  </label>' +
             '  <div id="test-editor-body" style="display:flex;flex-direction:column;gap:.6rem"></div>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd);flex-shrink:0">' +
+            '<div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border);flex-shrink:0">' +
             '  <button class="btn btn-primary" id="test-editor-save" type="button">Save</button>' +
             '  <button class="btn" id="test-editor-cancel" type="button">Cancel</button>' +
             '  <span id="test-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>' +
