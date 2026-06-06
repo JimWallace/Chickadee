@@ -197,9 +197,14 @@ a { color: var(--blue); }
 /* ── Main container ──────────────────────────────────── */
 
 .main {
-    max-width: 900px;
+    /* min(900px, 100%) is identical to a flat 900px at any viewport wide
+       enough to reach the cap, so desktop is unchanged; on a phone it simply
+       tracks the viewport instead of needing a media query to "relax".  The
+       fluid padding clamps to the same 1.5rem on desktop and only tightens
+       below ~600px. */
+    max-width: min(900px, 100%);
     margin: 2rem auto;
-    padding: 0 1.5rem;
+    padding: 0 clamp(1rem, 4vw, 1.5rem);
 }
 
 h1 { font-size: 1.4rem; margin-bottom: 1.25rem; }
@@ -295,7 +300,7 @@ h2 { font-size: 1rem;   margin-bottom: .4rem; }
     display: flex;
     flex-direction: column;
     gap: 1.1rem;
-    max-width: 620px;
+    max-width: min(620px, 100%);
 }
 
 .form--wide {
@@ -782,7 +787,7 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 /* ── Auth pages ──────────────────────────────────────── */
 
 .auth-box {
-    max-width: 420px;
+    max-width: min(420px, 100%);
     margin: 3rem auto;
 }
 
@@ -1030,3 +1035,50 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     vertical-align: middle;
 }
 .grade-override-active { border-color: var(--gray-500); background: var(--gray-100); }
+
+/* ════════════════════════════════════════════════════════════════════
+   Responsive design  —  see docs/responsive-design-plan.md
+   --------------------------------------------------------------------
+   Hard constraint: the desktop (>1024px) rendering is unchanged.  Every
+   rule below is either width-agnostic intrinsic CSS that is identical at
+   desktop by construction (see .main / .form / .auth-box above), or lives
+   inside a (max-width) media query so it can only take effect on smaller
+   screens.
+   Breakpoints:   phone ≤640px      tablet ≤1024px      desktop >1024px
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Column-hiding utilities for tables.  Tag a <th> and the matching <td>s in
+   every row with one of these to drop that column on small screens.  Outside
+   the media queries the classes carry no rule, so applying them in markup can
+   never change the desktop layout. */
+@media (max-width: 1024px) { .col-hide-tablet { display: none; } }
+@media (max-width: 640px)  { .col-hide-phone  { display: none; } }
+
+/* Horizontal-scroll wrapper for dense, desktop-first tables (admin runner /
+   audit log).  Width-agnostic: no scrollbar at desktop when the table fits;
+   on a narrow screen it confines the overflow to the table instead of letting
+   it push the whole page wider. */
+.table-scroll { overflow-x: auto; }
+
+/* Filter/search inputs keep their authored desktop width via the
+   --filter-width custom property (so desktop is unchanged) and span the full
+   row on phones. */
+.filter-input { width: var(--filter-width, 16rem); max-width: 100%; }
+
+@media (max-width: 640px) {
+    /* Let the top nav wrap onto multiple lines instead of overflowing the
+       viewport; the account/username link sits inline rather than being
+       pushed to the far right. */
+    .nav { flex-wrap: wrap; row-gap: .35rem; column-gap: 1.1rem; }
+    .nav-username { margin-left: 0; }
+
+    /* Allow long assignment titles to wrap inside their flex cell rather than
+       forcing the table (and page) wider than the screen. */
+    .assignment-title-cell { min-width: 0; }
+
+    /* Comfortable tap targets for the icon/action buttons. */
+    .action-btn { min-height: 2.4rem; }
+
+    /* Filter/search inputs span the row. */
+    .filter-input { width: 100%; }
+}

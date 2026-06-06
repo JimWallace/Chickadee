@@ -26,9 +26,9 @@
         <tr>
             <th>Name</th>
             <th>Status</th>
-            <th class="due-col">Due</th>
+            <th class="due-col col-hide-phone">Due</th>
             <th>Grade</th>
-            <th>History</th>
+            <th class="col-hide-phone">History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -53,7 +53,7 @@
                     #elseif(row.status == "closed"):tier-closed
                     #endif">#(row.status)</span>
             </td>
-            <td class="due-col">
+            <td class="due-col col-hide-phone">
                 #if(row.effectiveDueAtText):
                     <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">+ extension</span></span>
                 #elseif(row.dueAtText):
@@ -72,7 +72,7 @@
                     <span class="empty">—</span>
                 #endif
             </td>
-            <td>
+            <td class="col-hide-phone">
                 #if(row.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">
                         #if(row.hasLatestSubmission):
@@ -104,7 +104,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                             #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
                             #csrfFormField()
                             <label style="font-size:.78rem;color:var(--gray-700)">
                                 New deadline for this student
@@ -126,7 +126,7 @@
                         <summary class="btn action-btn ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif" style="padding:.25rem .35rem">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
                         </summary>
-                        <form method="post" action="#(row.gradeOverrideSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                        <form method="post" action="#(row.gradeOverrideSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
                             #csrfFormField()
                             <label style="font-size:.78rem;color:var(--gray-700)">
                                 Override grade (%)
@@ -169,9 +169,9 @@
         <tr>
             <th>Name</th>
             <th>Status</th>
-            <th class="due-col">Due</th>
+            <th class="due-col col-hide-phone">Due</th>
             <th>Grade</th>
-            <th>History</th>
+            <th class="col-hide-phone">History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -196,7 +196,7 @@
                     #elseif(row.status == "closed"):tier-closed
                     #endif">#(row.status)</span>
             </td>
-            <td class="due-col">
+            <td class="due-col col-hide-phone">
                 #if(row.effectiveDueAtText):
                     <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">+ extension</span></span>
                 #elseif(row.dueAtText):
@@ -215,7 +215,7 @@
                     <span class="empty">—</span>
                 #endif
             </td>
-            <td>
+            <td class="col-hide-phone">
                 #if(row.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">
                         #if(row.hasLatestSubmission):
@@ -247,7 +247,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                             #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
                             #csrfFormField()
                             <label style="font-size:.78rem;color:var(--gray-700)">
                                 New deadline for this student
@@ -269,7 +269,7 @@
                         <summary class="btn action-btn ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif" style="padding:.25rem .35rem">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
                         </summary>
-                        <form method="post" action="#(row.gradeOverrideSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                        <form method="post" action="#(row.gradeOverrideSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
                             #csrfFormField()
                             <label style="font-size:.78rem;color:var(--gray-700)">
                                 Override grade (%)
@@ -309,6 +309,10 @@
 .ext-summary { margin-top: 0; list-style: none; }
 .ext-summary::-webkit-details-marker { display: none; }
 .ext-details[open] > .ext-summary { background: var(--gray-100); }
+/* Desktop keeps the comfortable 14rem extension/override forms; on a phone
+   they fill the available width instead of forcing the table wider. */
+.ext-details form { min-width: 14rem; }
+@media (max-width: 640px) { .ext-details form { min-width: 0; } }
 </style>
 #endexport
 #endextend

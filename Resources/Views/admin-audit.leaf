@@ -51,7 +51,7 @@ Audit Log
     <p style="color:var(--muted);font-size:.85rem;margin-top:0">
         Showing #count(rows) of #(matchCount) matching #if(matchCount == 1):entry#else:entries#endif.
     </p>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th style="width:11rem">Time</th>
@@ -76,7 +76,7 @@ Audit Log
             </tr>
             #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 #endexport

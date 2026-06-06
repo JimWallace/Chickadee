@@ -15,9 +15,9 @@ Users
 </nav>
 <section class="admin-section">
     <div style="display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <input id="users-filter" class="form-input" type="search" autocomplete="off"
+        <input id="users-filter" class="form-input filter-input" type="search" autocomplete="off"
                placeholder="Filter by name, username or role…"
-               style="width:280px" aria-label="Filter users"
+               style="--filter-width:280px" aria-label="Filter users"
                readonly onfocus="this.removeAttribute('readonly')">
     </div>
     <table class="results-table" id="users-table">
@@ -26,8 +26,8 @@ Users
                 <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
                 <th data-sort-key="username" data-sort-type="text" tabindex="0" aria-sort="none">Username</th>
                 <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
-                <th class="time" data-sort-key="last-seen" data-sort-type="date" tabindex="0" aria-sort="none">Last Seen</th>
-                <th class="time" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
+                <th class="time col-hide-phone" data-sort-key="last-seen" data-sort-type="date" tabindex="0" aria-sort="none">Last Seen</th>
+                <th class="time col-hide-phone" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -55,14 +55,14 @@ Users
                         <button class="btn action-btn" type="submit">Save</button>
                     </form>
                 </td>
-                <td class="time js-relative-time" data-iso="#(user.lastSeenAt)">
+                <td class="time js-relative-time col-hide-phone" data-iso="#(user.lastSeenAt)">
                     #if(user.lastSeenAt):
                         #(user.lastSeenAt)
                     #else:
                         —
                     #endif
                 </td>
-                <td class="time js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</td>
+                <td class="time js-relative-time col-hide-phone" data-iso="#(user.createdAt)">#(user.createdAt)</td>
                 <td>
                     <div style="display:flex;align-items:center;gap:.35rem">
                         <a href="/admin/users/#(user.id)"
@@ -285,8 +285,8 @@ Users
                     + '<button class="btn action-btn" type="submit">Save</button>'
                 + '</form>'
             + '</td>'
-            + '<td class="time js-relative-time" data-iso="' + lastSeen + '">' + (user.lastSeenAt ? lastSeen : '—') + '</td>'
-            + '<td class="time js-relative-time" data-iso="' + created + '">' + created + '</td>'
+            + '<td class="time js-relative-time col-hide-phone" data-iso="' + lastSeen + '">' + (user.lastSeenAt ? lastSeen : '—') + '</td>'
+            + '<td class="time js-relative-time col-hide-phone" data-iso="' + created + '">' + created + '</td>'
             + '<td>'
                 + '<div style="display:flex;align-items:center;gap:.35rem">'
                     + '<a href="/admin/users/' + id + '" class="btn action-btn" title="Manage user" aria-label="Manage user" style="padding:.3rem .45rem">' + editIcon + '</a>'

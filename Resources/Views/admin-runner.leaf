@@ -48,7 +48,7 @@ Runner #(runner.workerID)
     #if(recentJobs.isEmpty):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Submission</button></th>
@@ -77,7 +77,7 @@ Runner #(runner.workerID)
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 
@@ -86,7 +86,7 @@ Runner #(runner.workerID)
     #if(snapshots.isEmpty):
     <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
     #else:
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th class="time" data-sort-type="date"><button class="sort-header" type="button">Recorded</button></th>
@@ -107,7 +107,7 @@ Runner #(runner.workerID)
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 
