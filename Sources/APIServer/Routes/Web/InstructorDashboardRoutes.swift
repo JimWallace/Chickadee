@@ -6,8 +6,7 @@
 //   GET  /instructor                               → assignments.leaf (all setups + status)
 //   GET  /instructor/new                           → assignment-new.leaf
 //   POST /instructor/new/save                      → save draft assignment, redirect to /instructor
-//   POST /instructor                               → create draft assignment → redirect to validate
-//   GET  /instructor/:assignmentID/validate        → assignment-validate.leaf
+//   POST /instructor                               → create draft assignment → redirect to edit
 //   GET  /instructor/:assignmentID/edit            → assignment-edit.leaf
 //   POST /instructor/:assignmentID/edit/save       → update assignment content + validate
 //   POST /instructor/:assignmentID/status          → set open/closed status → redirect to /instructor
@@ -62,7 +61,6 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("reorder", use: reorderAssignments)
         // Section CRUD + `:assignmentID/section` move live on
         // `CourseAdminRoutes` (registered in routes.swift).
-        r.get(":assignmentID", "validate", use: validatePage)
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
@@ -173,33 +171,6 @@ struct InstructorDashboardRoutes: RouteCollection {
             enrolledStudentCount: roster.enrolledStudentCount
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
-    }
-
-    // MARK: - GET /instructor/:assignmentID/validate
-
-    @Sendable
-    func validatePage(req: Request) async throws -> View {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
-
-        let suiteCount = setup.decodedManifest()?.testSuites.count ?? 0
-
-        let fmt = waterlooDateTimeFormatter()
-
-        let ctx = ValidateContext(
-            currentUser: req.currentUserContext,
-            assignmentID: idStr,
-            setupID: assignment.testSetupID,
-            title: assignment.title,
-            suiteCount: suiteCount,
-            dueAt: assignment.dueAt.map { fmt.string(from: $0) }
-        )
-        return try await req.view.render("assignment-validate", ctx)
     }
 
     // MARK: - POST /instructor/:assignmentID/open

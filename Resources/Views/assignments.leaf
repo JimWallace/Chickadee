@@ -287,7 +287,26 @@
                     </div>
                     #else:
                     <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
-                        <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                        <button class="btn action-btn" type="button"
+                                title="Copy student link" aria-label="Copy student link"
+                                style="padding:.25rem .35rem"
+                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                           style="padding:.25rem .35rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/retest"
+                              onsubmit="return confirm('Retest every submission for this assignment? The worker will re-grade each one against the current test suite.')">
+                            #csrfFormField()
+                            <button class="btn action-btn" type="submit"
+                                    aria-label="Retest all submissions" title="Retest all submissions"
+                                    style="padding:.25rem .35rem">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
+                            </button>
+                        </form>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
@@ -480,7 +499,11 @@
                     </div>
                     #else:
                     <div style="display:flex;gap:.2rem;flex-wrap:nowrap;align-items:center;white-space:nowrap">
-                        <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                           style="padding:.25rem .35rem">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
