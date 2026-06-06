@@ -140,24 +140,24 @@ import XCTVapor
         }
     }
 
-    @Test func closeExpiredAssignmentsKeepsAssignmentsWithActiveExtensionsOpen() async throws {
+    @Test func closeExpiredAssignmentsClosesAtDeadlineEvenWithActiveExtension() async throws {
         try await withAssignmentRoutesApp { app in
-            _ = try await arInsertSetup(id: "setup_ext_keepopen", on: app)
+            _ = try await arInsertSetup(id: "setup_ext_close", on: app)
             let extended = try await arInsertAssignment(
-                testSetupID: "setup_ext_keepopen",
+                testSetupID: "setup_ext_close",
                 title: "Extended overdue",
                 isOpen: true,
                 dueAt: Date().addingTimeInterval(-60), on: app
             )
-            let student = try await arInsertStudent(username: "keepopen_student", on: app)
-            try await arEnrollStudentInTestCourse(student, on: app)
+            let extendedStudent = try await arInsertStudent(username: "extended_student", on: app)
+            try await arEnrollStudentInTestCourse(extendedStudent, on: app)
             try await APIAssignmentExtension(
                 assignmentID: try extended.requireID(),
-                userID: try student.requireID(),
+                userID: try extendedStudent.requireID(),
                 extendedDueAt: Date().addingTimeInterval(86_400)
             ).save(on: app.db)
 
-            // A second overdue assignment with no extension must still close.
+            // A second overdue assignment with no extension also closes.
             _ = try await arInsertSetup(id: "setup_noext_close", on: app)
             let plain = try await arInsertAssignment(
                 testSetupID: "setup_noext_close",
@@ -165,14 +165,31 @@ import XCTVapor
                 isOpen: true,
                 dueAt: Date().addingTimeInterval(-60), on: app
             )
+            let regularStudent = try await arInsertStudent(username: "regular_student", on: app)
+            try await arEnrollStudentInTestCourse(regularStudent, on: app)
 
+            // Both assignments must auto-close at the deadline: an active
+            // per-student extension does NOT hold the assignment-wide window
+            // open (that's what made assignments appear never to close).
             let closedCount = try await closeExpiredAssignments(on: app.db, logger: app.logger)
-            #expect(closedCount == 1, "Only the assignment without an active extension should close")
+            #expect(closedCount == 2, "Both expired assignments close, extension or not")
 
             let extendedReloaded = try #require(try await APIAssignment.find(extended.id, on: app.db))
-            #expect(extendedReloaded.isOpen, "Assignment with an active extension must stay open")
+            #expect(
+                extendedReloaded.isOpen == false,
+                "Assignment auto-closes at its deadline even with an active extension")
             let plainReloaded = try #require(try await APIAssignment.find(plain.id, on: app.db))
-            #expect(plainReloaded.isOpen == false, "Assignment with no extension must auto-close")
+            #expect(plainReloaded.isOpen == false, "Assignment with no extension auto-closes")
+
+            // After the close, per-student gating still grants the extended
+            // student access (their effectiveDueAt is in the future) while the
+            // non-extended student is held out.
+            let extendedStillOpen = try await isAssignmentEffectivelyOpen(
+                extendedReloaded, for: extendedStudent, on: app.db)
+            #expect(extendedStillOpen, "Extended student can still submit after the auto-close")
+            let regularBlocked = try await isAssignmentEffectivelyOpen(
+                extendedReloaded, for: regularStudent, on: app.db)
+            #expect(regularBlocked == false, "Non-extended student is blocked once the deadline passes")
         }
     }
 

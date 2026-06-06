@@ -134,18 +134,17 @@ func closeAssignmentIfExpired(
     guard assignmentDeadlineHasPassed(assignment, now: now) else { return false }
     guard !assignmentDeadlineOverrideIsActive(assignment) else { return false }
 
-    // A still-active per-student extension keeps the assignment-wide window
-    // open so the extended student can still see and submit to it; per-user
-    // gating (`isAssignmentOpenForUser`) keeps everyone else out.  Once the
-    // last extension lapses, a later sweep closes the assignment normally.
-    if let assignmentID = assignment.id {
-        let activeExtensions = try await APIAssignmentExtension.query(on: db)
-            .filter(\.$assignmentID == assignmentID)
-            .filter(\.$extendedDueAt > now)
-            .count()
-        if activeExtensions > 0 { return false }
-    }
-
+    // The assignment-wide visibility closes at the deadline even when some
+    // students hold an active extension.  Per-student access after the close is
+    // handled downstream, not by keeping the whole assignment open: the
+    // submission gate (`isAssignmentOpenForUser`) treats a close *at/after* the
+    // deadline as the automatic sweep and keeps submitting open for a student
+    // whose `effectiveDueAt` is still in the future, and the student dashboard
+    // re-includes setups where the viewer holds an active extension.  Leaving
+    // the assignment-wide flag `.open` instead would make it read as "open" to
+    // everyone (instructor dashboard + every student's list) long past the
+    // deadline — the assignment would appear never to close whenever any
+    // accommodation extension exists.
     assignment.visibility = .closed
     try await assignment.save(on: db)
     logger.info("Auto-closed assignment '\(assignment.title)' (\(assignment.publicID)) at deadline")
