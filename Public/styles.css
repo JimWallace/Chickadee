@@ -1334,6 +1334,187 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     color: var(--gray-900);
 }
 
+/* ── Assignment editor: header + suite editor (new + edit pages) ─────────
+   Shared component classes replacing inline styles duplicated across
+   assignment-new.leaf and assignment-edit.leaf (UI audit).  display:* is
+   intentionally left inline on JS-toggled elements (a class display rule
+   would collide with scripts that clear style.display via ''). */
+.editor-titlebar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+.editor-title-col { flex: 1; min-width: 16rem; }
+.editor-actions {
+    display: flex;
+    gap: .6rem;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+}
+.editor-block { margin-bottom: 1.25rem; }
+/* Borderless, oversized assignment-name field at the top of the editor. */
+.assignment-name-input {
+    font-size: 1.4rem;
+    font-weight: 600;
+    border: none;
+    border-bottom: 2px solid var(--border);
+    border-radius: 0;
+    padding: .15rem 0;
+    background: transparent;
+    width: 100%;
+}
+.assignment-meta-row {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-top: .6rem;
+    align-items: center;
+}
+/* JS-shown proximity warning by the due-date field (palette amber, was a
+   hardcoded #c05000); display stays inline (toggled to '' by script). */
+.date-warning { color: var(--amber); margin-top: .4rem; }
+/* Runner-requirements row + its two grow-to-fill labelled inputs. */
+.runner-req-row { display: flex; gap: 1rem; flex-wrap: wrap; margin: .5rem 0 1.25rem; }
+.req-field { display: flex; align-items: center; gap: .4rem; font-size: .875rem; flex: 1; min-width: 12rem; }
+.input-sm { font-size: .875rem; padding: .25rem .5rem; }
+
+/* Suite editor header row + the "+ Section" pop-out menu. */
+.suite-editor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: .75rem;
+}
+.suite-section-popup {
+    position: absolute;
+    z-index: 100;
+    top: 100%;
+    right: 0;
+    margin-top: .25rem;
+    padding: 1rem;
+    min-width: 18rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+}
+.popup-anchor { position: relative; }
+
+/* A suite section block: header bar, view/edit modes, per-section toolbars. */
+.section-block { margin-bottom: 1.25rem; }
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: .4rem;
+    padding: .4rem .6rem;
+    background: var(--gray-100);
+    border-radius: .4rem;
+}
+.section-drag-handle {
+    color: var(--gray-500);
+    font-weight: 700;
+    cursor: grab;
+    user-select: none;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.section-view { display: flex; align-items: center; gap: .4rem; flex: 1; min-width: 0; flex-wrap: wrap; }
+/* .section-edit/.section-create-toolbar: display toggled by JS, left inline. */
+.section-edit { align-items: center; gap: .5rem; flex: 1; flex-wrap: wrap; }
+.section-create-toolbar { display: flex; align-items: center; gap: .4rem; justify-content: flex-end; margin: .15rem 0 .25rem; }
+.section-rename-form { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; flex: 1; }
+.section-name-input { font-size: .85rem; padding: .25rem .45rem; flex: 1; min-width: 8rem; }
+.section-spacer { flex: 1; }
+.section-vars-form { margin: .25rem 0 .5rem; }
+.section-vars-table { font-size: .78rem; width: 100%; }
+.section-var-namecell { width: 14rem; white-space: nowrap; }
+.section-var-valid { display: inline-block; width: 1rem; color: var(--green); font-size: .95rem; text-align: center; }
+.section-var-name-input { width: calc(100% - 1.5rem); padding: .2rem .4rem; font-size: .78rem; font-family: monospace; }
+.section-var-value-input { width: 100%; padding: .2rem .4rem; font-size: .78rem; font-family: monospace; }
+.section-var-removecell { width: 2.5rem; text-align: right; }
+.icon-btn-xs { padding: .2rem .4rem; display: inline-flex; align-items: center; }
+
+/* Small inline icon-button (edit/cancel pencils in section + assignment headers). */
+.icon-btn-text { display: inline-flex; align-items: center; padding: .1rem .25rem; color: var(--gray-500); }
+/* Small pill-ish buttons used in section toolbars and family editor. */
+.btn-xs { padding: .2rem .55rem; font-size: .75rem; }
+.btn-sm { padding: .2rem .6rem; font-size: .8rem; }
+
+/* Pattern-family / notebook-check editor body (modal). */
+.family-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .6rem; }
+.family-subhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: .3rem; }
+.editor-status { font-size: .8rem; color: var(--gray-500); }
+.family-editor-body { flex-direction: column; gap: .75rem; }
+
+/* Auto-detected runner-requirements note. */
+.detected-note { margin: .75rem 0 .4rem; }
+/* Error detail line under an .error-box heading. */
+.error-detail { margin-top: .5rem; }
+
+/* Suite editor container + its header heading. */
+.suite-editor-section { margin-top: 1.25rem; }
+.suite-editor-head h2 { margin: 0; }
+
+/* "Generate starter tests" panel (display toggled by JS, kept inline). */
+.gen-tests-panel {
+    margin-bottom: .75rem;
+    padding: .75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--gray-50);
+}
+
+/* <summary> rendered as a button (no disclosure marker). */
+.summary-btn { cursor: pointer; list-style: none; }
+.summary-btn::-webkit-details-marker { display: none; }
+/* Compact form inside a pop-out menu. */
+.popup-form { margin: 0; gap: .6rem; }
+/* Standard compact editor field control + compact button sizes. */
+.editor-input { font-size: .85rem; padding: .3rem .5rem; }
+.btn-compact { font-size: .85rem; padding: .3rem .6rem; }
+.btn-tiny { font-size: .8rem; padding: .25rem .5rem; }
+.select-xs { padding: .2rem .5rem; font-size: .8rem; }
+
+/* Generate-starter-tests panel internals. */
+.gen-tests-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.gen-tests-title { font-size: .875rem; font-weight: 600; }
+.fn-checklist { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin-bottom: .6rem; }
+.gen-template-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .4rem; }
+.gen-template-label { font-size: .8rem; display: flex; align-items: center; gap: .3rem; }
+.gen-tests-prompt { margin-bottom: .4rem; }
+/* Right-aligned action buttons inside a table cell (notebook files table). */
+.cell-actions { display: flex; gap: .4rem; justify-content: flex-end; flex-wrap: wrap; }
+/* Inline upload-status text (colour also set by JS on error). */
+.upload-status-inline { font-size: .78rem; color: var(--gray-500); margin-left: .5rem; }
+/* A function checkbox item in the generate-tests checklist (built in JS). */
+.fn-check-item { font-size: .8rem; display: flex; align-items: center; gap: .3rem; cursor: pointer; }
+
+/* Pattern-family editor body internals. */
+.label-note { color: var(--gray-600); font-weight: 400; }
+.subhead-label { font-size: .85rem; }
+.table-sm { font-size: .8rem; }
+.hint-xs { font-size: .72rem; }
+.family-empty-note { margin: .3rem 0 0; font-size: .72rem; color: var(--gray-500); }
+.fv-name-col { width: 12rem; }
+.fv-action-col { width: 4rem; }
+.case-num-col { width: 2.25rem; }
+
+/* Pre-draft "upload a notebook to begin" placeholder. */
+.predraft-note {
+    margin-top: 1.25rem;
+    padding: 1rem 1.25rem;
+    border: 1px dashed var(--border);
+    border-radius: .5rem;
+    background: var(--gray-50);
+    color: var(--gray-500);
+    font-size: .875rem;
+}
+
 /* ── Suite editor drag/drop (assignment-new.leaf + assignment-edit.leaf) ──
    Consolidated from two duplicated embedded <style> blocks (UI audit). */
 .suite-drag-handle { cursor: grab; user-select: none; color: var(--gray-500); padding: 0 .3rem; }

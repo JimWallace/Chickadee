@@ -39,18 +39,17 @@ Admin
 </section>
 
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <h2 style="margin:0">Runners</h2>
-        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-            <form method="post" action="/admin/runner-secret" style="display:flex;gap:.5rem;align-items:center">
+    <div class="page-titlebar admin-section-head">
+        <h2>Runners</h2>
+        <div class="toolbar">
+            <form method="post" action="/admin/runner-secret" class="toolbar toolbar--nowrap">
                 #csrfFormField()
-                <input class="form-input"
+                <input class="form-input worker-secret-input"
                        type="text"
                        name="secret"
                        value="#(workerSecret)"
                        autocomplete="new-password"
-                       placeholder="Worker shared secret"
-                       style="width:16rem">
+                       placeholder="Worker shared secret">
                 <button class="btn" type="submit">Save secret</button>
             </form>
         </div>
@@ -81,11 +80,11 @@ Admin
                     <td>
                         <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
                         #if(worker.hostname != ""):
-                            <br><span style="font-size:.8em;color:var(--muted)">#(worker.hostname)</span>
+                            <br><span class="worker-host">#(worker.hostname)</span>
                         #endif
                     </td>
                     <td>#if(worker.runnerVersion != ""):#(worker.runnerVersion)#else:—#endif</td>
-                    <td class="time" #if(worker.assignedJobs > 0):style="font-weight:600"#endif>
+                    <td class="time#if(worker.assignedJobs > 0): runner-load-busy#endif">
                         #if(worker.maxConcurrentJobs > 0):
                             #(worker.assignedJobs)&thinsp;/&thinsp;#(worker.maxConcurrentJobs)
                         #else:
@@ -104,9 +103,9 @@ Admin
 
 <!-- ── Courses ────────────────────────────────────────── -->
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <h2 style="margin:0">Courses</h2>
-        <div style="display:flex;gap:.5rem">
+    <div class="page-titlebar admin-courses-head">
+        <h2>Courses</h2>
+        <div class="admin-courses-actions">
             <a href="/admin/courses/new" class="btn">Create course</a>
             <button class="btn btn-primary" id="importCourseBtn">Import course</button>
         </div>
@@ -139,19 +138,19 @@ Admin
                 <td>#(course.name)</td>
                 <td>#(course.enrollmentCount)</td>
                 <td>#(course.submissionCount)</td>
-                <td style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
-                    <form method="post" action="/admin/courses/#(course.id)/copy" style="display:inline;margin:0">
+                <td class="action-cell">
+                    <form method="post" action="/admin/courses/#(course.id)/copy" class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn" type="submit"
-                                title="Copy course" aria-label="Copy course" style="padding:.3rem .45rem"
+                        <button class="btn action-btn action-btn-icon" type="submit"
+                                title="Copy course" aria-label="Copy course"
                                 onclick="return confirm('Copy #(course.code)? All test setups and assignments will be duplicated into a new course.')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                         </button>
                     </form>
-                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
+                    <form method="post" action="/admin/courses/#(course.id)/archive" class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit"
-                                title="Archive course" aria-label="Archive course" style="padding:.3rem .45rem"
+                        <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                                title="Archive course" aria-label="Archive course"
                                 onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
                         </button>
@@ -168,6 +167,36 @@ Admin
 <style>
 .admin-diagnostics {
     padding-bottom: 1rem;
+}
+.admin-section-head {
+    gap: .5rem;
+}
+.toolbar--nowrap {
+    flex-wrap: nowrap;
+}
+.worker-secret-input {
+    width: 16rem;
+}
+.worker-host {
+    font-size: .8em;
+    color: var(--muted);
+}
+.runner-load-busy {
+    font-weight: 600;
+}
+.admin-courses-head {
+    gap: 0;
+    flex-wrap: nowrap;
+}
+.admin-courses-actions {
+    display: flex;
+    gap: .5rem;
+}
+.action-cell {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    align-items: center;
 }
 #workers-table th[data-sort-key],
 #courses-table th[data-sort-key] {

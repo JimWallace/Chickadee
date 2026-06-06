@@ -6,7 +6,7 @@
 #if(error):
 <div class="error-box">
     <h2>Could not update assignment</h2>
-    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+    <p class="card-meta error-detail">#(error)</p>
 </div>
 #endif
 

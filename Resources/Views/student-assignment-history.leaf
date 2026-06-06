@@ -3,10 +3,10 @@
 #(studentName) — #(assignmentTitle)
 #endexport
 #export("content"):
-<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+<div class="page-titlebar page-titlebar--baseline">
     <div>
-        <h1 style="margin:0">#(assignmentTitle)</h1>
-        <p style="margin:.35rem 0 0;color:var(--gray-700)">
+        <h1>#(assignmentTitle)</h1>
+        <p class="history-subtitle">
             <strong>#(studentName)</strong> (#(studentUsername))
         </p>
     </div>
@@ -47,5 +47,11 @@
     </tbody>
 </table>
 #endif
+<style>
+.history-subtitle {
+    margin: .35rem 0 0;
+    color: var(--gray-700);
+}
+</style>
 #endexport
 #endextend
