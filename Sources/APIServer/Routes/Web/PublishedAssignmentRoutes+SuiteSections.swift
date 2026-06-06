@@ -36,20 +36,7 @@ extension PublishedAssignmentRoutes {
 
         let (_, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(Body.self)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
-        }
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            var sections = (dict["sections"] as? [[String: Any]]) ?? []
-            sections.append([
-                "id": UUID().uuidString,
-                "name": name,
-            ])
-            dict["sections"] = sections
-        }
-
+        try await createSuiteSectionCore(setup: setup, name: body.name, on: req.db)
         return redirectToEdit(req: req)
     }
 
@@ -64,22 +51,7 @@ extension PublishedAssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(Body.self)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
-        }
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            guard var sections = dict["sections"] as? [[String: Any]] else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
-            }
-            guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
-            }
-            sections[idx]["name"] = name
-            dict["sections"] = sections
-        }
-
+        try await renameSuiteSectionCore(setup: setup, sectionID: sectionID, name: body.name, on: req.db)
         return redirectToEdit(req: req)
     }
 
@@ -91,24 +63,7 @@ extension PublishedAssignmentRoutes {
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            // Drop the section from the list.
-            if var sections = dict["sections"] as? [[String: Any]] {
-                sections.removeAll { ($0["id"] as? String) == sectionID }
-                dict["sections"] = sections
-            }
-            // Clear matching entries' sectionID so the affected items flow
-            // into the trailing Ungrouped block — same semantics as the
-            // dashboard's onDelete: .setNull on course_sections.
-            if var testSuites = dict["testSuites"] as? [[String: Any]] {
-                for i in testSuites.indices where (testSuites[i]["sectionID"] as? String) == sectionID {
-                    testSuites[i].removeValue(forKey: "sectionID")
-                }
-                dict["testSuites"] = testSuites
-            }
-        }
-
+        try await deleteSuiteSectionCore(setup: setup, sectionID: sectionID, on: req.db)
         return redirectToEdit(req: req)
     }
 
@@ -163,25 +118,7 @@ extension PublishedAssignmentRoutes {
 
         let (_, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(Body.self)
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            let existing = (dict["sections"] as? [[String: Any]]) ?? []
-            let byID = Dictionary(
-                uniqueKeysWithValues: existing.compactMap { s -> (String, [String: Any])? in
-                    guard let id = s["id"] as? String else { return nil }
-                    return (id, s)
-                }
-            )
-            // Validate the set of ids matches exactly.
-            guard Set(body.sectionIDs) == Set(byID.keys),
-                body.sectionIDs.count == existing.count
-            else {
-                throw WebAssignmentError.invalidParameter(
-                    name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
-            }
-            dict["sections"] = body.sectionIDs.compactMap { byID[$0] }
-        }
-
+        try await reorderSuiteSectionsCore(setup: setup, sectionIDs: body.sectionIDs, on: req.db)
         return .ok
     }
 
