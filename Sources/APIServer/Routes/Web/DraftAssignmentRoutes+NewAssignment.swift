@@ -761,7 +761,10 @@ extension DraftAssignmentRoutes {
             sortOrder: try await nextAssignmentSortOrder(req: req),
             courseID: courseID
         )
-        return req.redirect(to: "/instructor/\(assignment.publicID)/validate")
+        // Open the editor to finalize the draft (notebook, solution, suite);
+        // saving there validates automatically. (Validation is always tied to
+        // a save — there is no separate validate step.)
+        return req.redirect(to: "/instructor/\(assignment.publicID)/edit")
     }
 
 }

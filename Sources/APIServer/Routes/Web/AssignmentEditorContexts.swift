@@ -1,7 +1,7 @@
 // APIServer/Routes/Web/AssignmentEditorContexts.swift
 //
-// Leaf view-context types for the assignment authoring flow (validate /
-// new / edit pages).  Split from the original `AssignmentContextTypes.swift`
+// Leaf view-context types for the assignment authoring flow (new / edit
+// pages).  Split from the original `AssignmentContextTypes.swift`
 // so each `Encodable` synthesis lives in its own translation unit.
 //
 // `NewAssignmentContext` (26 fields) and `EditAssignmentContext` (23) are
@@ -11,15 +11,6 @@
 // flat via `#(field)`, so nesting would force a template-side rewrite.
 
 import Foundation
-
-struct ValidateContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let setupID: String
-    let title: String
-    let suiteCount: Int
-    let dueAt: String?
-}
 
 struct NewAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?

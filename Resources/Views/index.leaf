@@ -55,12 +55,15 @@
                 #endif
             </td>
             <td>
+                #if(setup.staffOnly):
+                <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>
+                #else:
                 <span class="tier
                     #if(setup.status == "open"):tier-open
                     #elseif(setup.status == "closed"):tier-closed
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
-                #if(setup.staffOnly):<span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>#endif
+                #endif
             </td>
             <td class="due-col">
                 #if(setup.opensAtText):
@@ -174,12 +177,15 @@
                 #endif
             </td>
             <td>
+                #if(setup.staffOnly):
+                <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>
+                #else:
                 <span class="tier
                     #if(setup.status == "open"):tier-open
                     #elseif(setup.status == "closed"):tier-closed
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
-                #if(setup.staffOnly):<span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>#endif
+                #endif
             </td>
             <td class="due-col">
                 #if(setup.opensAtText):
@@ -293,12 +299,15 @@
                 #endif
             </td>
             <td>
+                #if(setup.staffOnly):
+                <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>
+                #else:
                 <span class="tier
                     #if(setup.status == "open"):tier-open
                     #elseif(setup.status == "closed"):tier-closed
                     #elseif(setup.status == "unpublished"):tier-unpublished
                     #endif">#(setup.status)</span>
-                #if(setup.staffOnly):<span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>#endif
+                #endif
             </td>
             <td class="due-col">
                 #if(setup.opensAtText):
