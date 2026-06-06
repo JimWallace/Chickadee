@@ -15,9 +15,9 @@
 <p class="empty">No student users found.</p>
 #else:
 <div style="margin-bottom:.5rem">
-    <input id="submissions-filter" class="form-input" type="search" autocomplete="off"
+    <input id="submissions-filter" class="form-input filter-input" type="search" autocomplete="off"
            placeholder="Filter by name or ID…"
-           style="width:220px" aria-label="Filter students"
+           style="--filter-width:220px" aria-label="Filter students"
            readonly onfocus="this.removeAttribute('readonly')">
 </div>
 <table class="results-table" id="assignment-submissions-table">

@@ -1,6 +1,27 @@
 # Responsive Design Plan
 
-Status: **proposed** (planning only — no CSS/markup changes yet)
+Status: **in progress** — Phase 0 (foundation) landed; Phase 1 started with the
+student dashboard (`index.leaf`).
+
+## Implementation status
+
+- **Phase 0 (foundation) — done.** Intrinsic containers (`.main` / `.form` /
+  `.auth-box` now use `min(…, 100%)`, `.main` padding fluid via `clamp()`),
+  documented breakpoint block + `.col-hide-phone` / `.col-hide-tablet`
+  utilities, phone nav wrapping, `.action-btn` tap targets, and a
+  `.filter-input` class (authored width via `--filter-width`, full-width on
+  phone) wired into the two search inputs.
+- **Phase 1 — in progress.** `index.leaf` (student dashboard) hides the Due and
+  History columns on phones across all three table variants.
+- **Key finding (changes the table mechanism):** the plan preferred
+  `@container` for table column-hiding, but `container-type: inline-size` (and
+  an `overflow` wrapper) establishes a new containing block / clips, which
+  **moves or clips the absolutely-positioned popups** that live inside some
+  tables (grade-override on the submissions page, add-section/publish popups on
+  the instructor dashboard) — a desktop regression. So column-hiding uses
+  plain **viewport `@media` + `.col-hide-phone` utility classes on the `<th>`
+  and matching `<td>`s** (no wrapper, provably desktop-inert). `overflow-x`
+  wrappers are reserved for the popup-free dense admin tables in Phase 3.
 
 ## Goal
 

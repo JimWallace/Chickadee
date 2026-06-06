@@ -29,9 +29,9 @@
         <tr>
             <th>Name</th>
             <th>Status</th>
-            <th class="due-col">Due</th>
+            <th class="due-col col-hide-phone">Due</th>
             <th>Grade</th>
-            <th>History</th>
+            <th class="col-hide-phone">History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -65,7 +65,7 @@
                     #endif">#(setup.status)</span>
                 #endif
             </td>
-            <td class="due-col">
+            <td class="due-col col-hide-phone">
                 #if(setup.opensAtText):
                     <span title="This assignment opens automatically at this time.">Opens #(setup.opensAtText)</span>
                 #elseif(setup.hasActiveExtension):
@@ -86,7 +86,7 @@
                     <span class="empty">—</span>
                 #endif
             </td>
-            <td>
+            <td class="col-hide-phone">
                 #if(setup.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">
                         #if(setup.hasLatestSubmission):
@@ -151,9 +151,9 @@
         <tr>
             <th>Name</th>
             <th>Status</th>
-            <th class="due-col">Due</th>
+            <th class="due-col col-hide-phone">Due</th>
             <th>Grade</th>
-            <th>History</th>
+            <th class="col-hide-phone">History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -187,7 +187,7 @@
                     #endif">#(setup.status)</span>
                 #endif
             </td>
-            <td class="due-col">
+            <td class="due-col col-hide-phone">
                 #if(setup.opensAtText):
                     <span title="This assignment opens automatically at this time.">Opens #(setup.opensAtText)</span>
                 #elseif(setup.hasActiveExtension):
@@ -208,7 +208,7 @@
                     <span class="empty">—</span>
                 #endif
             </td>
-            <td>
+            <td class="col-hide-phone">
                 #if(setup.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">
                         #if(setup.hasLatestSubmission):
@@ -273,9 +273,9 @@
         <tr>
             <th>Name</th>
             <th>Status</th>
-            <th class="due-col">Due</th>
+            <th class="due-col col-hide-phone">Due</th>
             <th>Grade</th>
-            <th>History</th>
+            <th class="col-hide-phone">History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -309,7 +309,7 @@
                     #endif">#(setup.status)</span>
                 #endif
             </td>
-            <td class="due-col">
+            <td class="due-col col-hide-phone">
                 #if(setup.opensAtText):
                     <span title="This assignment opens automatically at this time.">Opens #(setup.opensAtText)</span>
                 #elseif(setup.hasActiveExtension):
@@ -330,7 +330,7 @@
                     <span class="empty">—</span>
                 #endif
             </td>
-            <td>
+            <td class="col-hide-phone">
                 #if(setup.submissionCount > 0):
                     <div style="display:flex;flex-direction:column;gap:.2rem">
                         #if(setup.hasLatestSubmission):
