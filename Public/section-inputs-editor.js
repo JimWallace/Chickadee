@@ -91,7 +91,7 @@
                 nameOk = false;
             }
         }
-        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red,#c0392b)';
+        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
         nameEl.title = (name && RESERVED_NAMES[name])
             ? "'" + name + "' is reserved for Chickadee's personalization seed."
             : '';
@@ -119,9 +119,9 @@
         valueEl.title = hint;
         if (classified.kind === 'expression') {
             valueEl.style.backgroundColor = 'rgba(45, 143, 71, .07)';
-            if (!valueOk) valueEl.style.borderColor = 'var(--amber,#b38600)';
+            if (!valueOk) valueEl.style.borderColor = 'var(--amber)';
         } else if (rawVal && !valueOk) {
-            valueEl.style.borderColor = 'var(--amber,#b38600)';
+            valueEl.style.borderColor = 'var(--amber)';
         }
 
         if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
@@ -138,7 +138,7 @@
         tr.className = 'section-var-row';
         tr.innerHTML =
             '<td style="width:14rem;white-space:nowrap">'
-          +   '<span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>'
+          +   '<span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>'
           +   '<input type="text" class="form-input section-var-name" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">'
           + '</td>'
           + '<td><input type="text" class="form-input section-var-value" value="" placeholder=\'12, "hello", [1, 2, 3], or = seed % 26\' style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'

@@ -465,6 +465,32 @@ surprise.
 
 ---
 
+## UI / Stylesheet Conventions
+
+The web UI is Leaf templates + one stylesheet (`Public/styles.css`). The
+render tests assert pages *render*, not how they look, so the following
+invariants are enforced statically by `scripts/check-styles.sh` (wired into
+the `format-lint` CI job) — keep them green:
+
+- **No inline `style=""` in templates** except a JS-toggled `display:none`
+  initial state, or a CSS custom-property assignment (e.g.
+  `style="--filter-width:220px"`). Everything else belongs in a class.
+- **Shared styling lives in `Public/styles.css`;** page-unique styling lives
+  in a page-local `<style>` block with **role-named** classes (e.g.
+  `.section-header`, not `.mt-1`). Don't paste the same rule into multiple
+  templates — hoist it to the global sheet.
+- **Every `var(--x)` must resolve.** Declare new custom properties in
+  `styles.css` (with a `prefers-color-scheme: dark` value if it's a colour).
+  Never reference an undeclared var, and never use a hardcoded colour
+  fallback `var(--x, #hex)` — define the var so it routes through the palette
+  and adapts to dark mode. (`scripts/check-css-vars.sh` enforces both.)
+- **No native `alert()` in templates** — surface errors with the inline
+  `.form-error` banner pattern. The guard ratchets a baseline down only.
+
+Run `scripts/check-styles.sh` locally before pushing UI changes.
+
+---
+
 ## Testing Conventions
 
 - **Framework: Swift Testing only.** All ~107 test files are on Swift

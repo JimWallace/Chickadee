@@ -546,7 +546,7 @@ textarea.form-input {
     font-size: 1rem;
     font-weight: 600;
     margin: 1.25rem 0 .5rem 0;
-    color: var(--gray-700, #374151);
+    color: var(--gray-700);
     letter-spacing: .01em;
 }
 
@@ -1401,6 +1401,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 /* JS-shown proximity warning by the due-date field (palette amber, was a
    hardcoded #c05000); display stays inline (toggled to '' by script). */
 .date-warning { color: var(--amber); margin-top: .4rem; }
+/* JS-shown grading-mode hint under the section picker (display toggled inline). */
+.grading-mode-hint { margin-top: .3rem; }
 /* Runner-requirements row + its two grow-to-fill labelled inputs. */
 .runner-req-row { display: flex; gap: 1rem; flex-wrap: wrap; margin: .5rem 0 1.25rem; }
 .req-field { display: flex; align-items: center; gap: .4rem; font-size: .875rem; flex: 1; min-width: 12rem; }
