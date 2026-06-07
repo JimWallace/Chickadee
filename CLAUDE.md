@@ -478,7 +478,9 @@ the `format-lint` CI job) — keep them green:
 - **Shared styling lives in `Public/styles.css`;** page-unique styling lives
   in a page-local `<style>` block with **role-named** classes (e.g.
   `.section-header`, not `.mt-1`). Don't paste the same rule into multiple
-  templates — hoist it to the global sheet.
+  templates — hoist it to the global sheet. (`scripts/check-styles.sh` fails
+  if a page block re-defines a global selector or the same selector appears
+  in more than one page block; `.main` is an allowlisted page override.)
 - **Every `var(--x)` must resolve.** Declare new custom properties in
   `styles.css` (with a `prefers-color-scheme: dark` value if it's a colour).
   Never reference an undeclared var, and never use a hardcoded colour
