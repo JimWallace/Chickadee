@@ -140,6 +140,9 @@ enum MCPServerInstructions {
         of an expected value), variable_equality (a module-level variable equals a value), \
         return_type_check, exception_expected, performance_threshold, stdout_equality, and \
         unordered_equality (a function's return equals an expected collection ignoring order). \
+        A function-calling family auto-generates a 0-point `<function> is defined` existence guard \
+        that its cases depend on, so a missing/non-callable function fails once and the cases skip — \
+        you rarely need a standalone function_exists check alongside a family. \
         Notebook-check kinds (author_notebook_check): data_frame_shape, data_frame_columns, \
         data_frame_equality, series_equality, numeric_array_close, figure_count, cell_contains, \
         function_exists, variable_exists, and ast_structure. Native checks are validated structurally \

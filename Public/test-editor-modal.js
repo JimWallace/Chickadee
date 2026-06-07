@@ -409,10 +409,11 @@
             global.__chickadeeTargetSection = sid || null;
             var mechanism = item.getAttribute('data-mechanism');
             var kind = item.getAttribute('data-kind');
-            // Notebook checks author inline (accordion row); families and custom
-            // scripts still open the modal during the staged rollout.
-            if (mechanism === 'check' && typeof global.chickadeeAddInlineTest === 'function') {
-                global.chickadeeAddInlineTest('check', kind, sid);
+            // Families and notebook checks author inline (accordion row); only
+            // custom scripts open the modal.
+            if ((mechanism === 'check' || mechanism === 'family')
+                && typeof global.chickadeeAddInlineTest === 'function') {
+                global.chickadeeAddInlineTest(mechanism, kind, sid);
                 return;
             }
             open({ mechanism: mechanism, kind: kind, presetType: true });

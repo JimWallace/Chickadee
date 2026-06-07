@@ -116,7 +116,9 @@ struct UpdatePatternFamilyTool: ContentTool {
         + "parameter order, and the expected return). Saving regenerates the family's scripts and "
         + "re-runs validation, which rejects a wrong arg count or an expected value of the wrong shape "
         + "for the family's kind. Saving also closes the assignment if it was open (re-open with "
-        + "update_assignment once validation passes). Family ids and case keys come from get_suite."
+        + "update_assignment once validation passes). Function-calling families carry an auto-generated "
+        + "`<function> is defined` existence guard (0 points) that the cases depend on; it isn't a case "
+        + "and you don't manage it directly. Family ids and case keys come from get_suite."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([

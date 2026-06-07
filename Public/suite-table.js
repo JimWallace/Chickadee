@@ -448,6 +448,17 @@
             if (d.renderer && typeof d.renderer.cleanup === 'function') {
                 try { d.renderer.cleanup(); } catch (e) { /* ignore */ }
             }
+            // The family editor hosts the singleton #family-editor-body element;
+            // move it out (hidden) before removing the detail row, or removing
+            // the row would delete the one shared editor body for good.
+            if (d.mechanism === 'family') {
+                var fb = document.getElementById('family-editor-body');
+                if (fb) {
+                    fb.hidden = true;
+                    fb.style.display = 'none';
+                    document.body.appendChild(fb);
+                }
+            }
             if (d.detailRow && d.detailRow.parentNode) {
                 d.detailRow.parentNode.removeChild(d.detailRow);
             }
@@ -469,6 +480,13 @@
             opts = opts || {};
             var renderer = (window.ChickadeeTestRenderers || {})[opts.mechanism];
             if (!renderer) { alert('This test type is unavailable — reload the page.'); return; }
+
+            // Section: caller-supplied, else inherited from the edited item's row.
+            var sectionID = (opts.sectionID != null) ? opts.sectionID : null;
+            if (sectionID == null && opts.afterRowID) {
+                var srcItem = findByID(opts.afterRowID);
+                if (srcItem) sectionID = srcItem.sectionID || null;
+            }
 
             // Toggle off when re-clicking the row that's already open.
             if (opts.afterRowID && expandedDetail && expandedDetail.rowID === opts.afterRowID) {
@@ -509,7 +527,7 @@
                 parentRow.parentNode.insertBefore(tr, parentRow.nextSibling);
                 parentRow.classList.add('suite-row-expanded');
             } else {
-                var sidSel = cssAttrEscape(opts.sectionID || '');
+                var sidSel = cssAttrEscape(sectionID || '');
                 var tb = container.querySelector('tbody[data-section-id="' + sidSel + '"]')
                     || container.querySelector('tbody[data-section-id=""]')
                     || container.querySelector('tbody');
@@ -519,8 +537,8 @@
             }
 
             renderSuspended = true;
-            window.__chickadeeTargetSection = opts.sectionID || null;
-            var ctx = inlineCtx(opts.sectionID);
+            window.__chickadeeTargetSection = sectionID || null;
+            var ctx = inlineCtx(sectionID);
             expandedDetail = {
                 rowID: opts.afterRowID || null,
                 mechanism: opts.mechanism,
@@ -567,6 +585,9 @@
             expandInlineEditor({ mechanism: mechanism, kind: kind, sectionID: sectionID || null, afterRowID: null });
         }
         window.chickadeeAddInlineTest = addInlineTest;
+        // Edit an existing family/check inline (called by the family-edit button
+        // in pattern-family-editor.js, and the check-edit button here).
+        window.chickadeeExpandInlineEditor = expandInlineEditor;
         // Let the modal close any open inline editor before it opens, so the two
         // hosts never run simultaneously (the renderSuspended guard would
         // otherwise defer the modal's save render until the inline one closes).

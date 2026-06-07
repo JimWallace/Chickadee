@@ -96,7 +96,7 @@
         /// same way family variables already work.
         function readSectionContextForFamily(familyID) {
             var familyRow = document.querySelector(
-                'tr[data-kind="family"][data-family-id="' + String(familyID).replace(/"/g, '\\"') + '"]'
+                'tr[data-kind="family"][data-family-id="' + String(familyID).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]'
             );
             if (!familyRow) return { vars: [], sectionName: null, sectionID: null };
             var block = familyRow.closest('.section-block[data-section-id]');
@@ -132,7 +132,7 @@
         /// v0.4.106+.
         function readSectionContextBySectionID(sectionID) {
             if (!sectionID) return { vars: [], sectionName: null, sectionID: null };
-            var safe = String(sectionID).replace(/"/g, '\\"');
+            var safe = String(sectionID).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
             var block = document.querySelector('.section-block[data-section-id="' + safe + '"]');
             if (!block) return { vars: [], sectionName: null, sectionID: null };
             var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
@@ -2077,9 +2077,13 @@
                     var fid = editBtn.getAttribute('data-family-id');
                     var idx = familiesState.findIndex(function (f) { return f.id === fid; });
                     if (idx >= 0) {
-                        // Open the unified shell pre-populated; fall back to the
-                        // legacy overlay only if the shell isn't on the page.
-                        if (window.__chickadeeTestEditorModal) {
+                        // Edit inline (accordion row) when the suite table is on
+                        // the page; fall back to the modal shell, then the legacy
+                        // overlay.
+                        if (typeof window.chickadeeExpandInlineEditor === 'function') {
+                            window.chickadeeExpandInlineEditor(
+                                { mechanism: 'family', editing: { item: familiesState[idx] }, afterRowID: 'family:' + fid });
+                        } else if (window.__chickadeeTestEditorModal) {
                             window.__chickadeeTestEditorModal.open(
                                 { editing: { mechanism: 'family', id: fid, item: familiesState[idx] } });
                         } else {
