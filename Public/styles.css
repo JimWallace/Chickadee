@@ -960,6 +960,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     color: var(--gray-600);
 }
 
+/* Staff-only ("preview") badge on the student dashboard stays on one line. */
+.staff-only-tag { white-space: nowrap; }
+
 /* ── Inline publish form (inside <details>) ──────────── */
 
 .publish-details summary::-webkit-details-marker { display: none; }
@@ -1212,7 +1215,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 .assignment-actions-cell {
     display: flex;
     gap: .4rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    align-items: center;
 }
 
 /* Square-ish icon-only action button (edit / upload / reset glyphs). */

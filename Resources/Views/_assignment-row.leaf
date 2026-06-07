@@ -25,7 +25,7 @@
     </td>
     <td>
         #if(setup.staffOnly):
-        <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">staff only</span>
+        <span class="tier tier-preview staff-only-tag" title="Visible to course staff only — students can't see this assignment yet.">preview</span>
         #else:
         <span class="tier
             #if(setup.status == "open"):tier-open
