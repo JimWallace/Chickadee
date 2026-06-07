@@ -997,9 +997,18 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 
 **Near-term roadmap:**
 
-- **Vapor 5 / LeafKit 2.x investigation window** — the LeafKit 1.14.1
-  cycle-detection false positive blocking `assignment-{new,edit}.leaf`
-  decomposition is upstream and only fixed in the LeafKit 2 line.
+- **Leaf partial decomposition — UNBLOCKED (verified, not folklore).** Earlier
+  notes claimed a LeafKit 1.x "cyclically referenced" false positive blocked
+  decomposing the editor pages, pending LeafKit 2. That was re-tested on the
+  current pin (`leaf-kit 1.14.2`, the newest published — there is **no** 2.x /
+  Leaf 5 release to wait for) and could **not** be reproduced: a partial
+  `#extend`ed from two templates (new + edit), and a single template extending
+  `base` + two distinct partials, both render fine. The historical failures
+  were most likely on an older leaf-kit, or a cascade from a sibling parse
+  error surfaced through Leaf's shared AST cache. **Just decompose normally**
+  (extract a partial, `#extend` it — repeated from one template or shared across
+  pages). Caveat: render tests prove templates *resolve*; they don't exercise
+  page JS, so decomposing a JS-driven widget still wants a quick manual check.
 - **Feature backlog:** continued personalization / notebook-check
   expansion (e.g. per-student refs in pattern kinds beyond
   `boundary_equality`); pattern kinds beyond the seven shipped
