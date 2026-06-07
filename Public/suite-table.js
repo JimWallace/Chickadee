@@ -77,7 +77,7 @@
         }
         function tbodyForSection(sid) {
             var selector = sid
-                ? 'tbody[data-section-id="' + sid.replace(/"/g, '\\"') + '"]'
+                ? 'tbody[data-section-id="' + cssAttrEscape(sid) + '"]'
                 : 'tbody[data-section-id=""]';
             return container.querySelector(selector);
         }
@@ -354,7 +354,7 @@
 
         function restoreFocus(snap) {
             if (!snap) return;
-            var row = container.querySelector('tr[data-id="' + snap.dataID.replace(/"/g, '\\"') + '"]');
+            var row = container.querySelector('tr[data-id="' + cssAttrEscape(snap.dataID) + '"]');
             if (!row) return;
             var el = row.querySelector('.' + snap.cls);
             if (!el) return;
@@ -371,6 +371,13 @@
         var expandedDetail = null;   // { rowID, mechanism, renderer, detailRow }
         var renderSuspended = false;
         var renderPendingFlag = false;
+
+        /// Escape a value for safe interpolation inside a double-quoted CSS
+        /// attribute selector — backslash first, then double-quote (closes
+        /// CodeQL js/incomplete-sanitization on the [data-*="…"] lookups).
+        function cssAttrEscape(v) {
+            return String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        }
 
         /// Write rows into every server-rendered tbody.  Items without a
         /// sectionID (or with a stale one) land in the Ungrouped tbody
@@ -445,7 +452,7 @@
                 d.detailRow.parentNode.removeChild(d.detailRow);
             }
             if (d.rowID) {
-                var pr = container.querySelector('tr[data-id="' + d.rowID.replace(/"/g, '\\"') + '"]');
+                var pr = container.querySelector('tr[data-id="' + cssAttrEscape(d.rowID) + '"]');
                 if (pr) pr.classList.remove('suite-row-expanded');
             }
             renderSuspended = false;
@@ -496,13 +503,13 @@
             tr.appendChild(td);
 
             var parentRow = opts.afterRowID
-                ? container.querySelector('tr[data-id="' + opts.afterRowID.replace(/"/g, '\\"') + '"]')
+                ? container.querySelector('tr[data-id="' + cssAttrEscape(opts.afterRowID) + '"]')
                 : null;
             if (parentRow) {
                 parentRow.parentNode.insertBefore(tr, parentRow.nextSibling);
                 parentRow.classList.add('suite-row-expanded');
             } else {
-                var sidSel = (opts.sectionID || '').replace(/"/g, '\\"');
+                var sidSel = cssAttrEscape(opts.sectionID || '');
                 var tb = container.querySelector('tbody[data-section-id="' + sidSel + '"]')
                     || container.querySelector('tbody[data-section-id=""]')
                     || container.querySelector('tbody');
@@ -882,7 +889,7 @@
                 if (!overBlock) return;
                 var overSid = overBlock.getAttribute('data-section-id');
                 if (!overSid || overSid === dragSectionID) return;
-                var draggedBlock = container.querySelector('.section-block[data-section-id="' + dragSectionID.replace(/"/g, '\\"') + '"]');
+                var draggedBlock = container.querySelector('.section-block[data-section-id="' + cssAttrEscape(dragSectionID) + '"]');
                 if (!draggedBlock) return;
                 var brect = overBlock.getBoundingClientRect();
                 var afterBlock = e.clientY > brect.top + brect.height / 2;
