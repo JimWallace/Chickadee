@@ -83,6 +83,31 @@ struct CoreCodableTests {
         #expect(outcome.isFirstPassSuccess == false)
     }
 
+    @Test func testOutcomeScoreDefaultsFromStatusForOldRecords() throws {
+        // A record predating partial credit has no `score`: a pass earns full
+        // credit and a non-pass none, so existing results grade exactly as before.
+        let passJSON = Data(
+            #"{"testName":"ok","tier":"public","status":"pass","shortResult":"passed","executionTimeMs":1,"attemptNumber":1,"isFirstPassSuccess":true}"#
+                .utf8)
+        let failJSON = Data(
+            #"{"testName":"bad","tier":"public","status":"fail","shortResult":"failed","executionTimeMs":1,"attemptNumber":1,"isFirstPassSuccess":false}"#
+                .utf8)
+        #expect(try decoder.decode(TestOutcome.self, from: passJSON).score == 1)
+        #expect(try decoder.decode(TestOutcome.self, from: failJSON).score == 0)
+    }
+
+    @Test func testOutcomeExplicitScoreRoundTrips() throws {
+        let outcome = TestOutcome(
+            testName: "partial", testClass: nil, tier: .pub, status: .pass,
+            shortResult: "3/4 cases passed", longResult: nil,
+            score: 0.75, points: 4, executionTimeMs: 2,
+            memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true
+        )
+        let decoded = try decoder.decode(TestOutcome.self, from: encoder.encode(outcome))
+        #expect(decoded == outcome)
+        #expect(decoded.score == 0.75)
+    }
+
     @Test func testOutcomeRoundTrip() throws {
         let outcome = TestOutcome(
             testName: "testBaz",
@@ -156,6 +181,23 @@ struct CoreCodableTests {
         #expect(decoded.totalPoints == 4)
         #expect(decoded.earnedPoints == 4)
         #expect(decoded.warnings == ["file renamed"])
+    }
+
+    @Test func collectionFractionalEarnedPointsRoundTrips() throws {
+        // Partial credit makes earnedPoints fractional; it must survive the
+        // JSON round trip (it is the grade numerator).
+        let col = TestOutcomeCollection(
+            submissionID: "s", testSetupID: "t",
+            attemptNumber: 1, buildStatus: .passed, compilerOutput: nil,
+            outcomes: [],
+            totalTests: 4, passCount: 3, failCount: 1, errorCount: 0, timeoutCount: 0,
+            executionTimeMs: 1,
+            totalPoints: 4, earnedPoints: 2.75,
+            runnerVersion: "shell-runner/1.0",
+            timestamp: Date(timeIntervalSince1970: 0)
+        )
+        let decoded = try decoder.decode(TestOutcomeCollection.self, from: encoder.encode(col))
+        #expect(decoded.earnedPoints == 2.75)
     }
 
     @Test func collectionRoundTrip() throws {

@@ -36,7 +36,7 @@ extension TestOutcomeCollection {
             timeoutCount: filtered.filter { $0.status == .timeout }.count,
             executionTimeMs: executionTimeMs,
             totalPoints: filtered.reduce(0) { $0 + $1.points },
-            earnedPoints: filtered.filter { $0.status == .pass }.reduce(0) { $0 + $1.points },
+            earnedPoints: filtered.reduce(0.0) { $0 + Double($1.points) * $1.score },
             warnings: warnings,
             jobStartedAt: jobStartedAt,
             runnerVersion: runnerVersion,
@@ -129,5 +129,5 @@ func decodedCollection(from collectionJSON: String) -> TestOutcomeCollection? {
 
 func gradePercent(from collection: TestOutcomeCollection) -> Int? {
     guard collection.totalPoints > 0 else { return nil }
-    return Int((Double(collection.earnedPoints) / Double(collection.totalPoints) * 100).rounded())
+    return Int((collection.earnedPoints / Double(collection.totalPoints) * 100).rounded())
 }

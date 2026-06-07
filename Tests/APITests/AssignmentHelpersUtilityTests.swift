@@ -18,6 +18,13 @@ final class AssignmentHelpersUtilityTests {
                 #"{"earnedPoints":7,"totalPoints":8,"passCount":1,"totalTests":4}"#
             ) == 88)
 
+        // Fractional earnedPoints (partial credit) rounds correctly: 2.75/4 = 68.75% → 69.
+        #expect(
+            gradePercentFromCollectionJSON(
+                #"{"earnedPoints":2.75,"totalPoints":4,"passCount":3,"totalTests":4}"#
+            ) == 69)
+        #expect(gradePointsFromCollectionJSON(#"{"earnedPoints":2.75,"totalPoints":4}"#) == 2.75)
+
         #expect(
             gradePercentFromCollectionJSON(
                 #"{"passCount":3,"totalTests":4}"#
@@ -25,6 +32,14 @@ final class AssignmentHelpersUtilityTests {
 
         #expect(gradePercentFromCollectionJSON(#"{"passCount":0,"totalTests":0}"#) == nil)
         #expect(gradePercentFromCollectionJSON("not-json") == nil)
+    }
+
+    @Test func formatPointsTrimsTrailingZeros() {
+        #expect(formatPoints(3) == "3")
+        #expect(formatPoints(2.0) == "2")
+        #expect(formatPoints(2.5) == "2.5")
+        #expect(formatPoints(2.75) == "2.75")
+        #expect(formatPoints(0) == "0")
     }
 
     @Test func csvEscapedQuotesOnlyWhenNeeded() {

@@ -36,8 +36,9 @@ public struct TestOutcomeCollection: Codable, Sendable {
     // MARK: - Weighted grade stats
     /// Sum of `points` for all outcomes. Equals `totalTests` when all weights are 1.
     public let totalPoints: Int
-    /// Sum of `points` for passing outcomes. Equals `passCount` when all weights are 1.
-    public let earnedPoints: Int
+    /// Sum of `points × score` over all outcomes (partial credit included).
+    /// Equals `passCount` when every test is unweighted and fully pass/fail.
+    public let earnedPoints: Double
 
     // MARK: - Metadata
     public let warnings: [String]
@@ -59,7 +60,7 @@ public struct TestOutcomeCollection: Codable, Sendable {
         timeoutCount: Int,
         executionTimeMs: Int,
         totalPoints: Int? = nil,
-        earnedPoints: Int? = nil,
+        earnedPoints: Double? = nil,
         warnings: [String] = [],
         jobStartedAt: Date? = nil,
         runnerVersion: String,
@@ -78,7 +79,7 @@ public struct TestOutcomeCollection: Codable, Sendable {
         self.timeoutCount = timeoutCount
         self.executionTimeMs = executionTimeMs
         self.totalPoints = totalPoints ?? totalTests
-        self.earnedPoints = earnedPoints ?? passCount
+        self.earnedPoints = earnedPoints ?? Double(passCount)
         self.warnings = warnings
         self.jobStartedAt = jobStartedAt
         self.runnerVersion = runnerVersion
@@ -102,7 +103,7 @@ public struct TestOutcomeCollection: Codable, Sendable {
         timeoutCount = try c.decode(Int.self, forKey: .timeoutCount)
         executionTimeMs = try c.decode(Int.self, forKey: .executionTimeMs)
         totalPoints = try c.decodeIfPresent(Int.self, forKey: .totalPoints) ?? totalTests
-        earnedPoints = try c.decodeIfPresent(Int.self, forKey: .earnedPoints) ?? passCount
+        earnedPoints = try c.decodeIfPresent(Double.self, forKey: .earnedPoints) ?? Double(passCount)
         warnings = try c.decodeIfPresent([String].self, forKey: .warnings) ?? []
         jobStartedAt = try c.decodeIfPresent(Date.self, forKey: .jobStartedAt)
         runnerVersion = try c.decode(String.self, forKey: .runnerVersion)

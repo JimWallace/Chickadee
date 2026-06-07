@@ -223,12 +223,20 @@ struct BrowserResultRoutes: RouteCollection {
                 status: o.status,
                 shortResult: o.shortResult,
                 longResult: o.longResult,
+                score: o.score,
                 points: o.points,
                 executionTimeMs: o.executionTimeMs,
                 memoryUsageBytes: o.memoryUsageBytes,
                 attemptNumber: attemptNumber,
                 isFirstPassSuccess: attemptNumber == 1 && o.status == .pass)
         }
+        // Recompute the weighted, partial-credit grade server-side rather than
+        // trusting the browser's aggregate — older browser artifacts omit it (so
+        // it would default to the unweighted passCount), and once the wasm is
+        // re-vendored each outcome carries its own `score`.  totalPoints sums the
+        // weights; earnedPoints sums points × score.
+        let totalPoints = outcomes.reduce(0) { $0 + $1.points }
+        let earnedPoints = outcomes.reduce(0.0) { $0 + Double($1.points) * $1.score }
         return TestOutcomeCollection(
             submissionID: submissionID,
             testSetupID: collection.testSetupID,
@@ -242,8 +250,8 @@ struct BrowserResultRoutes: RouteCollection {
             errorCount: collection.errorCount,
             timeoutCount: collection.timeoutCount,
             executionTimeMs: collection.executionTimeMs,
-            totalPoints: collection.totalPoints,
-            earnedPoints: collection.earnedPoints,
+            totalPoints: totalPoints,
+            earnedPoints: earnedPoints,
             warnings: collection.warnings,
             jobStartedAt: collection.jobStartedAt,
             runnerVersion: collection.runnerVersion,

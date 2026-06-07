@@ -73,6 +73,14 @@ test('browser wasm interprets output identically to the native worker (shared fi
         `shortResult mismatch for case '${c.name}'`);
       assert.equal(outcome.longResult ?? null, c.native.longResult ?? null,
         `longResult mismatch for case '${c.name}'`);
+      // `score` is part of the contract but only emitted by a re-vendored wasm
+      // (runner-wasm-vendor.yml rebuilds on main; a PR runs against the
+      // checked-in artifact).  Assert it once present so parity is pinned after
+      // the re-vendor without going red on the not-yet-rebuilt artifact.
+      if (typeof outcome.score === 'number') {
+        assert.ok(Math.abs(outcome.score - c.native.score) < 1e-9,
+          `score mismatch for case '${c.name}': ${outcome.score} != ${c.native.score}`);
+      }
     }
 
     assert.ok(!leaksEnvelope(outcome.shortResult),

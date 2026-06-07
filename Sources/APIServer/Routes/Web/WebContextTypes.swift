@@ -317,8 +317,9 @@ struct SubmissionContext: Encodable {
     let isWeighted: Bool
     /// Sum of points across all tiers; equals totalTests when unweighted.
     let totalPoints: Int
-    /// Sum of points for passing tests across all tiers; equals passCount when unweighted.
-    let earnedPoints: Int
+    /// Sum of `points × score` across all tiers (partial credit included),
+    /// preformatted for display ("3", "2.75"); equals passCount when unweighted.
+    let earnedPoints: String
     /// True when a prior attempt exists and delta data is populated.
     let hasDelta: Bool
     /// E.g. "↑ fixed 2 tests · ↓ broke 1 test since attempt 3"; nil on first attempt.
