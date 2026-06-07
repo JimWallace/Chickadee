@@ -376,99 +376,10 @@ Create Assignment
      overlay. -->
 
 <!-- ── Pattern Family editor body ───────────────────────────────────────────
-     v0.4.238: a body renderer of the unified Test Editor modal (shell owns the
-     chrome).  Markup duplicated from assignment-edit.leaf until the LeafKit
-     partial cycle-detection false positive is resolved; the driving module
-     (Public/pattern-family-editor.js) is shared. -->
-<div id="family-editor-body" class="family-editor-body" hidden style="display:none">
-            <div class="family-editor-grid">
-                <label id="family-function-label" class="field-stack">
-                    Function
-                    <select class="form-input editor-input" id="family-function-select">
-                        <option value="">— Scanning solution notebook… —</option>
-                    </select>
-                    <span id="family-function-hint" class="card-meta hint-xs"></span>
-                </label>
-                <label class="field-stack">
-                    Family name (shown in UI)
-                    <input type="text" class="form-input editor-input" id="family-name" placeholder="BMI Category Boundaries">
-                </label>
-            </div>
-            <div class="family-editor-grid">
-                <label class="field-stack">
-                    Pattern kind
-                    <select class="form-input editor-input" id="family-kind">
-                        <option value="boundary_equality">Exact equality (== comparison)</option>
-                        <option value="approximate_equality">Approximate equality (float tolerance)</option>
-                        <option value="variable_equality">Variable equality (module-level variable)</option>
-                        <option value="return_type_check">Return type check (isinstance / class name)</option>
-                        <option value="exception_expected">Exception expected (function raises a specific class)</option>
-                        <option value="performance_threshold">Performance threshold (max milliseconds)</option>
-                        <option value="stdout_equality">Stdout equality (compare captured print output)</option>
-                        <option value="unordered_equality">Unordered equality (list compare, ignore order)</option>
-                    </select>
-                </label>
-                <label id="family-tolerance-label" class="field-stack" style="display:none">
-                    Tolerance (max |result − expected|)
-                    <input type="number" class="form-input editor-input" id="family-default-tolerance" step="any" min="0"
-                           placeholder="1e-6">
-                </label>
-            </div>
-            <label class="field-stack">
-                Default hint <span class="label-note">(optional — shown to students when a case with no hint of its own fails)</span>
-                <input type="text" class="form-input editor-input" id="family-default-hint" value=""
-                       placeholder="e.g. Re-check the boundary values in the spec.">
-            </label>
-            <input type="hidden" id="family-id">
-            <input type="hidden" id="family-function">
-            <input type="hidden" id="family-params">
-
-            <div>
-                <div class="family-subhead">
-                    <strong class="subhead-label">Variables (shared across all cases)</strong>
-                    <button class="btn action-btn btn-sm" type="button" id="add-family-variable-btn">
-                        + Add variable
-                    </button>
-                </div>
-                <table class="results-table table-sm" id="family-variables-table">
-                    <thead>
-                        <tr>
-                            <th class="fv-name-col">Name</th>
-                            <th>Value (JSON / Python literal)</th>
-                            <th class="fv-action-col"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="family-variables-body"></tbody>
-                </table>
-                <p class="card-meta family-empty-note" id="family-variables-empty">
-                    Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.
-                </p>
-            </div>
-
-            <div>
-                <div class="family-subhead">
-                    <strong class="subhead-label">Cases</strong>
-                    <button class="btn action-btn btn-sm" type="button" id="add-case-btn">
-                        + Add case
-                    </button>
-                </div>
-                <table class="results-table table-sm" id="family-cases-table">
-                    <thead>
-                        <tr id="family-cases-header">
-                            <th class="case-num-col">#</th>
-                            <th>Label</th>
-                            <th class="pf-case-expected-col">Expected</th>
-                            <th class="fv-action-col"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="family-cases-body"></tbody>
-                </table>
-                <p class="card-meta family-empty-note" id="family-cases-empty">
-                    No cases yet.  Add at least one to save this family.
-                </p>
-            </div>
-    <span id="family-editor-status" class="editor-status"></span>
-</div>
+     A body renderer of the unified Test Editor modal (the shell owns the
+     chrome).  Shared with assignment-edit via the _family-editor-body partial;
+     the driving module (Public/pattern-family-editor.js) is shared too. -->
+#extend("_family-editor-body")
 
 <!-- Pattern family editor module — same implementation as the edit page,
      wired to draft-scoped URLs.  After a save, the page reloads so the
