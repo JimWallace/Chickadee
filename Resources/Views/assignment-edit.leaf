@@ -474,10 +474,11 @@
     // ── Section inputs JS extracted to Public/section-inputs-editor.js
     //    (loaded above).
     //
-    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are wired
-    // by the unified Test Editor modal (test-editor-modal.js): a click
-    // stashes `window.__chickadeeTargetSection` and opens the modal, whose
-    // type picker morphs the body to the chosen renderer.
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
+    // in place by the unified Test Editor modal (test-editor-modal.js) into a
+    // <details> dropdown of the test-type catalog. Picking a type stashes
+    // `window.__chickadeeTargetSection` and opens the modal already in that
+    // type (no second picker inside the modal).
 })();
 </script>
 <script>

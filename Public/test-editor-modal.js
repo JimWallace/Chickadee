@@ -277,6 +277,11 @@
         // ── Open / close ─────────────────────────────────────────────────────
         function open(opts) {
             opts = opts || {};
+            // Close any open inline (accordion) editor first — only one editor
+            // host should be live at a time (the renderers are singletons).
+            if (typeof global.chickadeeCollapseInlineEditor === 'function') {
+                try { global.chickadeeCollapseInlineEditor(); } catch (e) { /* ignore */ }
+            }
             editingItem = opts.editing || null;
             // When editing, the mechanism + kind are authoritative from the
             // edit payload — the type dropdown is hidden and its leftover
@@ -294,14 +299,17 @@
                 || (editingItem && editingItem.item && editingItem.item.kind)
                 || (mechanism === 'script' ? 'script' : typeSelect.value);
 
-            // Editing fixes the type; creating lets the instructor switch it.
-            typeRow.style.display = editingItem ? 'none' : 'flex';
+            // The in-modal type picker is now only a fallback: the "+ Add Test"
+            // dropdown picks the type before opening (`presetType`), and editing
+            // fixes it. Either way the row is hidden so there's no redundant
+            // second picker.
+            typeRow.style.display = (editingItem || opts.presetType) ? 'none' : 'flex';
             setStatus('', 'info');
             if (typeSelect.value !== kind) typeSelect.value = kind;
             refreshDescription();
             enterMode(mechanism, kind);
             overlay.style.display = 'flex';
-            setTimeout(function () { if (!editingItem) typeSelect.focus(); }, 0);
+            setTimeout(function () { if (!editingItem && !opts.presetType) typeSelect.focus(); }, 0);
         }
 
         function close() {
@@ -347,15 +355,75 @@
             if (e.key === 'Escape' && overlay.style.display !== 'none') close();
         });
 
-        // Per-section "+ Add Test" buttons (body-level delegation, same flag
-        // the legacy dispatcher used so downstream placement is unchanged).
+        // ── "+ Add Test" dropdown ──────────────────────────────────────────
+        // Each server-rendered `.section-add-test-btn` is upgraded in place to a
+        // <details> dropdown whose menu is the instructor-facing catalog,
+        // grouped. Picking a type stashes the target section and opens the modal
+        // already in that type (`presetType`) — no redundant picker inside the
+        // modal. (The catalog lives here in JS, so the menu is built client-side
+        // rather than templated; sections are added via full-page reload, so a
+        // one-time upgrade at init covers every button.)
+        function addTestMenuHTML() {
+            return CATALOG.map(function (g) {
+                var items = g.items.map(function (it) {
+                    return '<button type="button" class="add-test-item" data-kind="'
+                        + escAttr(it.value) + '" data-mechanism="' + escAttr(it.mechanism)
+                        + '">' + escHtml(it.label) + '</button>';
+                }).join('');
+                return '<div class="add-test-group"><div class="add-test-group-label">'
+                    + escHtml(g.group) + '</div>' + items + '</div>';
+            }).join('');
+        }
+
+        function enhanceAddTestButtons() {
+            var btns = document.querySelectorAll('.section-add-test-btn');
+            for (var i = 0; i < btns.length; i++) {
+                var btn = btns[i];
+                if (!btn.parentNode) continue;
+                var sid = btn.getAttribute('data-section-id') || '';
+                var details = document.createElement('details');
+                details.className = 'add-section-details popup-anchor add-test-details';
+                var summary = document.createElement('summary');
+                summary.className = 'btn action-btn btn-xs summary-btn';
+                summary.textContent = '+ Add Test';
+                var menu = document.createElement('div');
+                menu.className = 'add-section-popup add-test-menu';
+                menu.setAttribute('data-section-id', sid);
+                menu.innerHTML = addTestMenuHTML();
+                details.appendChild(summary);
+                details.appendChild(menu);
+                btn.parentNode.replaceChild(details, btn);
+            }
+        }
+        enhanceAddTestButtons();
+
+        // Menu item → open the modal in the chosen type, for the menu's section.
         document.body.addEventListener('click', function (e) {
-            var btn = e.target && e.target.closest && e.target.closest('.section-add-test-btn');
-            if (!btn) return;
+            var item = e.target && e.target.closest && e.target.closest('.add-test-item');
+            if (!item) return;
             e.preventDefault();
-            var sid = btn.getAttribute('data-section-id') || '';
+            var menu = item.closest('.add-test-menu');
+            var sid = menu ? (menu.getAttribute('data-section-id') || '') : '';
+            var details = item.closest('details');
+            if (details) details.open = false;
             global.__chickadeeTargetSection = sid || null;
-            open({});
+            var mechanism = item.getAttribute('data-mechanism');
+            var kind = item.getAttribute('data-kind');
+            // Notebook checks author inline (accordion row); families and custom
+            // scripts still open the modal during the staged rollout.
+            if (mechanism === 'check' && typeof global.chickadeeAddInlineTest === 'function') {
+                global.chickadeeAddInlineTest('check', kind, sid);
+                return;
+            }
+            open({ mechanism: mechanism, kind: kind, presetType: true });
+        });
+
+        // Dismiss an open "+ Add Test" dropdown on an outside click.
+        document.addEventListener('click', function (e) {
+            var openMenus = document.querySelectorAll('.add-test-details[open]');
+            for (var i = 0; i < openMenus.length; i++) {
+                if (!openMenus[i].contains(e.target)) openMenus[i].open = false;
+            }
         });
 
         var api = { open: open, close: close };
