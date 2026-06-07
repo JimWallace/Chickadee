@@ -615,7 +615,10 @@ extension WorkerDaemon {
         let timeoutCount = outcomes.filter { $0.status == .timeout }.count
         let totalMs = outcomes.reduce(0) { $0 + $1.executionTimeMs }
         let totalPoints = outcomes.reduce(0) { $0 + $1.points }
-        let earnedPoints = outcomes.filter { $0.status == .pass }.reduce(0) { $0 + $1.points }
+        // Weighted, partial-credit-aware: points × score per outcome (a script
+        // with no footer `score` scores 1 on a pass / 0 otherwise, so this equals
+        // the old "sum points for passing tests" for non-partial-credit suites).
+        let earnedPoints = outcomes.reduce(0.0) { $0 + Double($1.points) * $1.score }
 
         let buildStatus: BuildStatus = outcomes.isEmpty ? .failed : .passed
 

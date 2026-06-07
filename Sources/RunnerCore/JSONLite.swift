@@ -151,11 +151,11 @@ private struct JSONParser {
     /// Parse a JSON number literal to `Double` WITHOUT `Double(String)`: the
     /// latter lowers to `_swift_stdlib_strtod_clocale`, which the Embedded Swift
     /// wasm runtime does not provide (it becomes a link error the moment the
-    /// browser bridge reaches this path via `executeSuites`). The value here is
-    /// a footer's reserved `score`, which `interpretScriptOutput` never reads —
-    /// we only need a finite `Double` so the enclosing object parses. Shared by
-    /// the native and embedded builds (one implementation, no drift); precise to
-    /// full `Double` for typical inputs via an integer mantissa + decimal scale.
+    /// browser bridge reaches this path via `executeSuites`). The footer's
+    /// `score` is now read by `interpretScriptOutput` for partial credit, so the
+    /// value has to be accurate — not merely finite. Shared by the native and
+    /// embedded builds (one implementation, no drift); precise to full `Double`
+    /// for typical inputs via an integer mantissa + decimal scale.
     static func parseDoubleLiteral(_ slice: ArraySlice<Character>) -> Double? {
         let chars = Array(slice)
         let count = chars.count

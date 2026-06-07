@@ -445,7 +445,7 @@ extension WebRoutes {
         let gradePercent: Int? =
             priorCollection.totalPoints > 0
             ? Int(
-                (Double(priorCollection.earnedPoints) / Double(priorCollection.totalPoints) * 100).rounded()
+                (priorCollection.earnedPoints / Double(priorCollection.totalPoints) * 100).rounded()
             )
             : nil
         return PriorAttemptDelta(outcomeMap: outcomeMap, gradePercent: gradePercent)
@@ -530,10 +530,10 @@ extension WebRoutes {
         processed.totalTests = collection.totalTests
         processed.executionTimeMs = collection.executionTimeMs
         processed.totalPoints = collection.totalPoints
-        processed.earnedPoints = collection.earnedPoints
+        processed.earnedPoints = formatPoints(collection.earnedPoints)
         processed.gradePercent =
             collection.totalPoints > 0
-            ? Int((Double(collection.earnedPoints) / Double(collection.totalPoints) * 100).rounded())
+            ? Int((collection.earnedPoints / Double(collection.totalPoints) * 100).rounded())
             : 0
         processed.badges = AchievementBadge.forSubmission(
             BadgeContext(
@@ -751,7 +751,7 @@ private struct ProcessedCollection {
     var passCount: Int
     var totalTests: Int
     var totalPoints: Int
-    var earnedPoints: Int
+    var earnedPoints: String
     var executionTimeMs: Int
     var gradePercent: Int
     var badges: [AchievementBadge]
@@ -766,7 +766,7 @@ private struct ProcessedCollection {
         passCount: 0,
         totalTests: 0,
         totalPoints: 0,
-        earnedPoints: 0,
+        earnedPoints: "0",
         executionTimeMs: 0,
         gradePercent: 0,
         badges: [],

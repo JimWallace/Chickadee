@@ -23,6 +23,7 @@ import Testing
     }
     private struct Native: Decodable {
         let shortResult: String
+        let score: Double
         let longResult: String?
     }
 
@@ -49,6 +50,9 @@ import Testing
             #expect(result.status.rawValue == c.status, "status mismatch for case '\(c.name)'")
             #expect(result.shortResult == c.native.shortResult, "shortResult mismatch for case '\(c.name)'")
             #expect(result.longResult == c.native.longResult, "longResult mismatch for case '\(c.name)'")
+            #expect(
+                abs(result.score - c.native.score) < 1e-9,
+                "score mismatch for case '\(c.name)': \(result.score) != \(c.native.score)")
         }
     }
 }
