@@ -633,8 +633,9 @@ Create Assignment
         });
     });
 
-    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are wired by
-    // the unified Test Editor modal (test-editor-modal.js, loaded below).
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
+    // into a test-type dropdown by the unified Test Editor modal
+    // (test-editor-modal.js, loaded below); a pick opens the modal in that type.
 
     // ── Section header view/edit toggle ────────────────────────────────
     document.addEventListener('click', function (e) {

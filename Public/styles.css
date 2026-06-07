@@ -1438,6 +1438,48 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 }
 .popup-anchor { position: relative; }
 
+/* "+ Add Test" type dropdown (built from the Test Editor catalog by
+   test-editor-modal.js).  Reuses the .add-section-popup chrome; this class
+   owns the anchored position + the grouped-menu internal layout. */
+.add-test-menu {
+    position: absolute;
+    z-index: 100;
+    top: 100%;
+    right: 0;
+    margin-top: .25rem;
+    padding: .4rem;
+    min-width: 17rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+}
+.add-test-details[open] .add-test-menu { display: block; }
+.add-test-group { padding: .15rem 0; }
+.add-test-group + .add-test-group { border-top: 1px solid var(--border); margin-top: .15rem; }
+.add-test-group-label {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--gray-500);
+    padding: .3rem .5rem .15rem;
+}
+.add-test-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: .3rem;
+    padding: .35rem .5rem;
+    font-size: .85rem;
+    color: var(--gray-900);
+    cursor: pointer;
+}
+.add-test-item:hover, .add-test-item:focus {
+    background: var(--gray-100);
+    outline: none;
+}
+
 /* A suite section block: header bar, view/edit modes, per-section toolbars. */
 .section-block { margin-bottom: 1.25rem; }
 .section-header {
