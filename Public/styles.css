@@ -1415,7 +1415,10 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 .input-sm { font-size: .875rem; padding: .25rem .5rem; }
 
 /* Suite editor header row + the "+ Section" pop-out menu. */
-.suite-editor-head {
+/* Generic header bar for an editor block: a heading on the left, an
+   action toolbar on the right.  Shared by the Files, Global Inputs, and
+   Test Suite blocks on the assignment new/edit pages. */
+.editor-block-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1505,9 +1508,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 .bs-body { margin-top: .75rem; max-width: 520px; }
 .bs-note { margin: .3rem 0 .6rem; }
 
-/* Suite editor container + its header heading. */
+/* Suite editor container + editor-block header headings. */
 .suite-editor-section { margin-top: 1.25rem; }
-.suite-editor-head h2 { margin: 0; }
+.editor-block-head h2 { margin: 0; }
 
 /* "Generate starter tests" panel (display toggled by JS, kept inline). */
 .gen-tests-panel {

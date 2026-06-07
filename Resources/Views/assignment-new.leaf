@@ -77,6 +77,17 @@ Create Assignment
     <button id="js-clear-solution-notebook"     type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook"     hidden></button>
 
     <div class="editor-block">
+        <div class="editor-block-head">
+            <h2>Files</h2>
+            #if(draftID):
+            <div class="toolbar toolbar--end">
+                <button class="btn action-btn" type="button" id="add-support-file-btn"
+                        title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Add Support File</button>
+                <input type="file" id="support-file-upload-input" hidden multiple>
+                <span id="support-file-upload-status" class="upload-status-inline"></span>
+            </div>
+            #endif
+        </div>
         <table class="results-table" id="notebook-files-table">
             <thead>
                 <tr>
@@ -156,17 +167,6 @@ Create Assignment
                     </td>
                 </tr>
                 #endfor
-                #if(draftID):
-                <tr>
-                    <td><strong>Add support file</strong></td>
-                    <td colspan="2">
-                        <button class="btn action-btn" type="button" id="add-support-file-btn"
-                                title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Upload file</button>
-                        <input type="file" id="support-file-upload-input" hidden multiple>
-                        <span id="support-file-upload-status" class="upload-status-inline"></span>
-                    </td>
-                </tr>
-                #endif
             </tbody>
         </table>
     </div>
@@ -211,7 +211,7 @@ Create Assignment
 <input class="form-input" id="suite-files-input" type="file" multiple hidden>
 
 <div class="form form--wide suite-editor-section">
-    <div class="suite-editor-head">
+    <div class="editor-block-head">
         <h2>Test Suite</h2>
         <div class="toolbar toolbar--end">
             <!-- Add Section — form POST + full page reload, mirrors the
