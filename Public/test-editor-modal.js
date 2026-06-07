@@ -277,6 +277,11 @@
         // ── Open / close ─────────────────────────────────────────────────────
         function open(opts) {
             opts = opts || {};
+            // Close any open inline (accordion) editor first — only one editor
+            // host should be live at a time (the renderers are singletons).
+            if (typeof global.chickadeeCollapseInlineEditor === 'function') {
+                try { global.chickadeeCollapseInlineEditor(); } catch (e) { /* ignore */ }
+            }
             editingItem = opts.editing || null;
             // When editing, the mechanism + kind are authoritative from the
             // edit payload — the type dropdown is hidden and its leftover
@@ -402,11 +407,15 @@
             var details = item.closest('details');
             if (details) details.open = false;
             global.__chickadeeTargetSection = sid || null;
-            open({
-                mechanism: item.getAttribute('data-mechanism'),
-                kind: item.getAttribute('data-kind'),
-                presetType: true
-            });
+            var mechanism = item.getAttribute('data-mechanism');
+            var kind = item.getAttribute('data-kind');
+            // Notebook checks author inline (accordion row); families and custom
+            // scripts still open the modal during the staged rollout.
+            if (mechanism === 'check' && typeof global.chickadeeAddInlineTest === 'function') {
+                global.chickadeeAddInlineTest('check', kind, sid);
+                return;
+            }
+            open({ mechanism: mechanism, kind: kind, presetType: true });
         });
 
         // Dismiss an open "+ Add Test" dropdown on an outside click.

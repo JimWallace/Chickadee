@@ -1480,6 +1480,25 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     outline: none;
 }
 
+/* Inline test editor (accordion) hosted in a detail row under a suite row. */
+.suite-row-expanded > td { background: var(--gray-100); }
+.suite-detail-row > td {
+    padding: .75rem 1rem 1rem;
+    background: var(--gray-100);
+    border-top: none;
+}
+.suite-detail-host { display: flex; flex-direction: column; gap: .5rem; }
+.suite-detail-actions {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-top: .75rem;
+    padding-top: .6rem;
+    border-top: 1px solid var(--border);
+}
+.suite-detail-status { font-size: .8rem; }
+.suite-detail-status-error { color: var(--red); }
+
 /* A suite section block: header bar, view/edit modes, per-section toolbars. */
 .section-block { margin-bottom: 1.25rem; }
 .section-header {
