@@ -38,6 +38,9 @@ import Vapor
                     "publictest_bmi_category_01.py",
                     "publictest_bmi_category_02.py",
                     "publictest_bmi_category_03.py",
+                    // Auto-existence guard (Phase 1): one extra generated file
+                    // per function-calling family, that the cases depend on.
+                    "publictest_bmi_category_exists.py",
                 ])
             #expect(result.deletedFiles.isEmpty)
 
@@ -51,10 +54,17 @@ import Vapor
             let props = try pfDecodeManifest(fixture.setup.manifest)
             #expect(props.patternFamilies.count == 1)
             #expect(props.patternFamilies[0].id == "bmi_category")
+            // 3 cases + 1 existence guard, all tagged generatedBy the family.
             let generatedEntries = props.testSuites.filter { $0.generatedBy != nil }
-            #expect(generatedEntries.count == 3)
+            #expect(generatedEntries.count == 4)
             for entry in generatedEntries {
                 #expect(entry.generatedBy == "bmi_category")
+            }
+            // The guard is 0 points and the cases each depend on it.
+            let guardEntry = try #require(generatedEntries.first { $0.script == pfGuardFilename("bmi_category") })
+            #expect(guardEntry.points == 0)
+            for entry in generatedEntries where entry.script != guardEntry.script {
+                #expect(entry.dependsOn.contains(guardEntry.script))
             }
 
         }
@@ -131,8 +141,10 @@ import Vapor
             let props = try pfDecodeManifest(fixture.setup.manifest)
             #expect(props.patternFamilies.count == 1)
             #expect(props.patternFamilies[0].id == "bmi_category")
+            // 3 cases + the existence guard, restored by applyPatternFamilies.
             let generatedEntries = props.testSuites.filter { $0.generatedBy != nil }
-            #expect(generatedEntries.count == 3)
+            #expect(generatedEntries.count == 4)
+            #expect(afterEntries.contains(pfGuardFilename("bmi_category")), "Existence guard restored")
             // Each generated entry's display name must carry the case label so
             // the student result view shows distinct, labelled test rows.
             let names = Set(generatedEntries.compactMap(\.name))
@@ -176,7 +188,9 @@ import Vapor
 
             let result = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [], on: fixture.app.db)
-            #expect(result.deletedFiles.count == 3)
+            // 3 cases + the existence guard all removed.
+            #expect(result.deletedFiles.count == 4)
+            #expect(result.deletedFiles.contains(pfGuardFilename("bmi_category")))
 
             let props = try pfDecodeManifest(fixture.setup.manifest)
             #expect(props.patternFamilies.isEmpty)
@@ -333,10 +347,19 @@ import Vapor
 
             let props = try pfDecodeManifest(fixture.setup.manifest)
             let generated = props.testSuites.filter { $0.generatedBy != nil }
-            #expect(generated.count == 3)
-            for g in generated {
+            // 3 cases + the existence guard.
+            #expect(generated.count == 4)
+            // The guard inherits the family-level dep directly…
+            let guardName = pfGuardFilename("bmi_category")
+            let guardEntry = try #require(generated.first { $0.script == guardName })
+            #expect(
+                guardEntry.dependsOn == ["publictest_prereq.py"],
+                "The existence guard inherits the family-level dependency")
+            // …and every case depends on the guard, then inherits the dep.
+            for g in generated where g.script != guardName {
                 #expect(
-                    g.dependsOn == ["publictest_prereq.py"], "Every generated case must inherit the family-level dep")
+                    g.dependsOn == [guardName, "publictest_prereq.py"],
+                    "Every generated case gates on the guard, then inherits the family-level dep")
             }
 
         }
@@ -523,10 +546,14 @@ import Vapor
                 to: fixture.setup, nextFamilies: [family], on: fixture.app.db)
             let props = try pfDecodeManifest(fixture.setup.manifest)
             let generated = props.testSuites.filter { $0.generatedBy != nil }
-            #expect(generated.count == 3)
-            for entry in generated {
-                #expect(entry.points == 5, "family.defaults.points=5 must propagate to every generated entry")
+            #expect(generated.count == 4)  // 3 cases + existence guard
+            let guardName = pfGuardFilename("bmi_category")
+            for entry in generated where entry.script != guardName {
+                #expect(entry.points == 5, "family.defaults.points=5 must propagate to every generated case")
             }
+            // The guard gates rather than grades — always 0 points, regardless
+            // of the family's points default.
+            #expect(generated.first { $0.script == guardName }?.points == 0)
 
         }
     }
@@ -568,6 +595,8 @@ import Vapor
             #expect(
                 props.testSuites.map(\.script) == [
                     "publictest_a.py",
+                    // Existence guard sorts in just ahead of the cases it gates.
+                    "publictest_bmi_category_exists.py",
                     "publictest_bmi_category_01.py",
                     "publictest_bmi_category_02.py",
                     "publictest_bmi_category_03.py",
@@ -628,6 +657,9 @@ import Vapor
             #expect(
                 props.testSuites.map(\.script) == [
                     "publictest_prereq.py",
+                    // prereq → guard → cases: the guard sits between the
+                    // family's prerequisite and its cases.
+                    "publictest_bmi_category_exists.py",
                     "publictest_bmi_category_01.py",
                     "publictest_bmi_category_02.py",
                     "publictest_bmi_category_03.py",
@@ -699,6 +731,7 @@ import Vapor
             #expect(
                 props.testSuites.map(\.script) == [
                     "publictest_a.py",
+                    "publictest_bmi_category_exists.py",
                     "publictest_bmi_category_01.py",
                     "publictest_bmi_category_02.py",
                     "publictest_bmi_category_03.py",
@@ -780,6 +813,7 @@ import Vapor
             #expect(
                 props.testSuites.map(\.script) == [
                     "publictest_a.py",
+                    "publictest_bmi_category_exists.py",
                     "publictest_bmi_category_01.py",
                     "publictest_bmi_category_02.py",
                     "publictest_bmi_category_03.py",

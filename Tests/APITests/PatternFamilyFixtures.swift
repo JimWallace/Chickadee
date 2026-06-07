@@ -182,6 +182,14 @@ func pfDecodeManifest(_ json: String) throws -> TestProperties {
     try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
 }
 
+/// Deterministic filename of a function-calling family's auto-existence
+/// guard (Phase 1).  Mirrors `existenceGuard` / `generatedScriptFilename`,
+/// so order/diff assertions can reference the guard without hard-coding the
+/// `_exists` convention in every test.
+func pfGuardFilename(_ familyID: String, tier: TestTier = .pub) -> String {
+    generatedScriptFilename(familyID: familyID, caseKey: patternExistenceGuardCaseKey, tier: tier)
+}
+
 func pfAssertValidPythonSyntax(_ source: String, label: String) throws {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/env")

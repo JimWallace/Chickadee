@@ -60,13 +60,92 @@ func renderPatternFamily(
 /// Used when diffing old/new specs so we can detect stale files that need
 /// deleting, even for cases that were previously disabled.
 func patternFamilyAllGeneratedFilenames(_ family: PatternFamily) -> [String] {
-    family.cases.map { c in
+    var names = family.cases.map { c in
         generatedScriptFilename(
             familyID: family.id,
             caseKey: c.key,
             tier: c.resolvedTier(defaults: family.defaults)
         )
     }
+    // The auto-existence guard isn't a `case`, but its file is generated for
+    // function-calling kinds — list it here so the diff in
+    // `applyPatternFamilies` deletes a stale guard when the family's default
+    // tier changes, the kind switches to one that doesn't call a function, or
+    // the family is removed, and so the filename-collision checks see it.
+    if patternKindHandler(for: family.kind).requiresFunctionName {
+        names.append(
+            generatedScriptFilename(
+                familyID: family.id,
+                caseKey: patternExistenceGuardCaseKey,
+                tier: family.defaults.tier
+            ))
+    }
+    return names
+}
+
+// MARK: - Existence guard
+
+/// Reserved case key for a family's auto-generated existence guard.  A real
+/// case may not use this key for a function-calling kind (the validator
+/// rejects it), so the guard's deterministic filename
+/// (`{tier}test_{familyID}_exists.py`) can never collide with a case file.
+let patternExistenceGuardCaseKey = "exists"
+
+/// The existence-guard script for `family`, or nil when the family doesn't
+/// call a function (`.variableEquality` already self-guards each case's
+/// variable) or has no enabled cases (nothing to gate).
+///
+/// The guard is a 0-point test that checks the target function is defined and
+/// callable.  Every generated case `dependsOn` it (wired in
+/// `applyPatternFamilies`), so a missing/!callable function produces one clear
+/// "`fn` is not defined" failure and the cases auto-skip through the runner's
+/// dependency gate — instead of N opaque AttributeError tracebacks.  Its tier
+/// follows the family default so the failure is visible at the same level as
+/// the cases it protects.
+func existenceGuard(
+    for family: PatternFamily,
+    sectionVariables: [FamilyVariable] = [],
+    globalVariables: [FamilyVariable] = []
+) -> GeneratedScript? {
+    guard patternKindHandler(for: family.kind).requiresFunctionName,
+        family.cases.contains(where: \.enabled)
+    else { return nil }
+    let hash = patternFamilySpecHash(
+        family, sectionVariables: sectionVariables, globalVariables: globalVariables)
+    let tier = family.defaults.tier
+    let label = "\(family.functionName) is defined"
+    let nameLiteral = "\"" + escapeForPythonStringLiteral(family.functionName) + "\""
+    // Mirrors the `getattr(..., _MISSING)` sentinel that `variableEquality`
+    // (and the function_exists notebook check) already use — `_MISSING`
+    // distinguishes "not defined" from "defined as None"; `callable` catches a
+    // student who shadowed the name with a non-function value.
+    let source = """
+        # Test: \(label)
+        # Generated from pattern family \"\(escapeForPythonStringLiteral(family.name))\" [\(family.id)] spec_hash=\(hash) — edit the family, not this file.
+        # Existence guard: the family's cases depend on this test, so a missing
+        # or non-callable target fails once here and the cases skip instead of
+        # raising N AttributeErrors.
+
+        function_name = \(nameLiteral)
+
+        _MISSING = object()
+        target = getattr(student_module, function_name, _MISSING)
+        if target is _MISSING:
+            failed(f"`{function_name}` is not defined — define a function named `{function_name}` in your submission.")
+        if not callable(target):
+            failed(f"`{function_name}` is defined but is not a function (got {type(target).__name__}).")
+        passed(f"`{function_name}` is defined")
+        """
+    return GeneratedScript(
+        filename: generatedScriptFilename(
+            familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier),
+        source: source,
+        tier: tier,
+        points: 0,
+        displayName: label,
+        caseKey: patternExistenceGuardCaseKey,
+        familyID: family.id
+    )
 }
 
 /// Stable filename for one case.  Format: `{tier}test_{familyID}_{caseKey}.py`.

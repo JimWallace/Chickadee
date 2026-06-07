@@ -21,6 +21,18 @@ private func validatePatternCaseHeader(
                 "Pattern family '\(family.id)': case key '\(c.key)' must contain only letters, digits, and underscore"
         )
     }
+    // A function-calling family auto-generates an existence guard whose
+    // filename uses `patternExistenceGuardCaseKey`; forbid a real case from
+    // claiming that key so the two can never produce the same filename.
+    if patternKindHandler(for: family.kind).requiresFunctionName,
+        c.key == patternExistenceGuardCaseKey
+    {
+        throw Abort(
+            .unprocessableEntity,
+            reason:
+                "Pattern family '\(family.id)': case key '\(c.key)' is reserved for the auto-generated existence guard; choose a different key."
+        )
+    }
     guard seenCaseKeys.insert(c.key).inserted else {
         throw Abort(
             .unprocessableEntity,
