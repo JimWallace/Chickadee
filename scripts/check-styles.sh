@@ -72,8 +72,73 @@ elif [ "$alert_count" -lt "$ALERT_BASELINE" ]; then
   echo "note: alert() count dropped to ${alert_count}; lower ALERT_BASELINE in scripts/check-styles.sh."
 fi
 
+# ── 4. No duplicated / shadowed selectors in page <style> blocks ─────────────
+# Page-local <style> blocks should only define page-unique classes.  Two
+# regressions the cleanup removed (and that render fine, so no test catches):
+#   A. a page block re-defines a selector that already lives in the global
+#      sheet (e.g. submission.leaf shadowing the global .achievement-badge);
+#   B. the same selector is defined in more than one page block (cross-page
+#      duplication that should be hoisted to styles.css).
+# `.main` is an allowlisted intentional global override (notebook.leaf narrows
+# the page container).  Heuristic extractor: selector = text before each `{`
+# (one selector per line, as authored here), skipping at-rules and comments —
+# errs toward false negatives, never false positives.
+ALLOW_GLOBAL_OVERRIDE="^\.main$"
+
+extract_selectors() {
+  # `|| true` on the greps so no-match (e.g. a file with no <style> block)
+  # doesn't trip pipefail.
+  sed -E 's#/\*.*\*/##g' \
+    | { grep '{' || true; } \
+    | sed -E 's/\{.*//; s/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | { grep -vE '^$|^@|^/\*' || true; }
+}
+
+global_sel="$(extract_selectors < Public/styles.css | sort -u)"
+
+# Build "selector<TAB>file" pairs from every page <style> block.
+pairs="$(
+  for f in "${views[@]}"; do
+    base="$(basename "$f")"
+    sed -n '/<style>/,/<\/style>/p' "$f" | extract_selectors \
+      | while IFS= read -r sel; do [ -n "$sel" ] && printf '%s\t%s\n' "$sel" "$base"; done
+  done | sort -u
+)"
+
+# A. page selector also declared globally (excluding the allowlist).
+shadowed=""
+while IFS=$'\t' read -r sel file; do
+  [ -z "$sel" ] && continue
+  if printf '%s\n' "$sel" | grep -qE "$ALLOW_GLOBAL_OVERRIDE"; then continue; fi
+  if printf '%s\n' "$global_sel" | grep -qxF -- "$sel"; then
+    shadowed+="  ${file}: ${sel}"$'\n'
+  fi
+done <<< "$pairs"
+
+if [ -n "$shadowed" ]; then
+  status=1
+  echo "ERROR: a page <style> block re-defines a selector from the global sheet."
+  echo "       Use the global rule, or rename the page-local class."
+  printf '%s' "$shadowed"
+  echo
+fi
+
+# B. same selector defined in more than one page block.
+cross="$(printf '%s\n' "$pairs" | cut -f1 | sort | uniq -d)"
+if [ -n "$cross" ]; then
+  status=1
+  echo "ERROR: the same selector is defined in more than one page <style> block."
+  echo "       Hoist the shared rule into Public/styles.css (or rename if they differ)."
+  while IFS= read -r sel; do
+    [ -z "$sel" ] && continue
+    files="$(printf '%s\n' "$pairs" | awk -F'\t' -v s="$sel" '$1==s{printf " %s", $2}')"
+    echo "  ${sel} →${files}"
+  done <<< "$cross"
+  echo
+fi
+
 if [ "$status" -eq 0 ]; then
-  echo "check-styles: OK (no disallowed inline styles; alert()s within baseline)"
+  echo "check-styles: OK (no disallowed inline styles; alert()s within baseline; no duplicated selectors)"
 fi
 
 exit "$status"

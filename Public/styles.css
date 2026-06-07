@@ -1217,6 +1217,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 
 /* Square-ish icon-only action button (edit / upload / reset glyphs). */
 .action-btn-icon { padding: .3rem .45rem; }
+/* Compact action button used in dense submission/roster table rows. */
+.action-btn-tight { padding: .25rem .35rem; }
 
 /* Wrapper form that should not introduce vertical rhythm (inline action).
    display:inline is a no-op for flex-item forms (flex blockifies children),

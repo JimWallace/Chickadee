@@ -87,7 +87,7 @@
                 #endif
             </td>
             <td>
-                <div class="row-actions">
+                <div class="student-row-actions">
                     #if(row.submissionCount > 0):
                     <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
                         #csrfFormField()
@@ -230,7 +230,7 @@
                 #endif
             </td>
             <td>
-                <div class="row-actions">
+                <div class="student-row-actions">
                     #if(row.submissionCount > 0):
                     <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
                         #csrfFormField()
@@ -320,7 +320,7 @@
     font-size: .75rem;
     color: var(--gray-600);
 }
-.row-actions {
+.student-row-actions {
     display: flex;
     gap: .3rem;
     flex-wrap: wrap;
@@ -328,9 +328,6 @@
 }
 .action-form-flush {
     margin: 0;
-}
-.action-btn-tight {
-    padding: .25rem .35rem;
 }
 .action-panel {
     margin-top: .4rem;
