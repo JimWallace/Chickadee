@@ -468,11 +468,20 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
 
     var renderedByFilename: [String: GeneratedScript] = [:]
     for family in nextFamilies {
+        let sv = sectionVars(forFamily: family.id)
         for generated in renderPatternFamily(
-            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables,
+            family, sectionVariables: sv, globalVariables: resolvedGlobalVariables,
             perStudentNames: perStudentExpressionNames)
         {
             renderedByFilename[generated.filename] = generated
+        }
+        // Auto-existence guard (function-calling kinds): one extra generated
+        // file per family that every case depends on.  nil for
+        // `.variableEquality` / no-enabled-cases families.
+        if let guardScript = existenceGuard(
+            for: family, sectionVariables: sv, globalVariables: resolvedGlobalVariables)
+        {
+            renderedByFilename[guardScript.filename] = guardScript
         }
     }
     // Render notebook checks alongside pattern families so a single zip
@@ -607,6 +616,65 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     var emittedFamilyIDs: Set<String> = []
     var emittedCheckIDs: Set<String> = []
 
+    /// Emits a family's generated entries: the existence guard first (for
+    /// function-calling kinds), then one entry per enabled case wired to
+    /// `dependsOn` the guard — so a missing function fails once on the guard
+    /// and the cases auto-skip through the runner's dependency gate.  Shared
+    /// by the authored-order loop and the defensive pass below so the two
+    /// can't drift on the guard wiring.
+    func appendFamilyConfigured(_ family: PatternFamily, familySection: String?) {
+        let inherited = expandDeps(family.dependsOn)
+        let sv = sectionVars(forFamily: family.id)
+        var guardFilename: String?
+        if let guardScript = existenceGuard(
+            for: family, sectionVariables: sv, globalVariables: resolvedGlobalVariables)
+        {
+            order += 1
+            guardFilename = guardScript.filename
+            // The guard inherits the family's own prerequisites; the cases
+            // chain off the guard, so prereqs → guard → cases.
+            newConfigured.append(
+                ConfiguredSuiteEntry(
+                    script: guardScript.filename,
+                    tier: guardScript.tier.rawValue,
+                    order: order,
+                    dependsOn: inherited,
+                    points: guardScript.points,
+                    displayName: guardScript.displayName,
+                    generatedBy: guardScript.familyID,
+                    sectionID: familySection
+                ))
+        }
+        for generated in renderPatternFamily(
+            family, sectionVariables: sv, globalVariables: resolvedGlobalVariables,
+            perStudentNames: perStudentExpressionNames)
+        {
+            order += 1
+            let prior = oldEntryByScript[generated.filename]
+            let perCase = expandDeps(prior?.dependsOn ?? [])
+            var combined: [String] = []
+            var seen = Set<String>()
+            // Guard first so a missing function reports the guard as the
+            // unmet prerequisite; inherited family deps and any preserved
+            // per-case deps follow (deduped).
+            for d in (guardFilename.map { [$0] } ?? []) + inherited + perCase {
+                guard seen.insert(d).inserted else { continue }
+                combined.append(d)
+            }
+            newConfigured.append(
+                ConfiguredSuiteEntry(
+                    script: generated.filename,
+                    tier: generated.tier.rawValue,
+                    order: order,
+                    dependsOn: combined,
+                    points: generated.points,
+                    displayName: generated.displayName,
+                    generatedBy: generated.familyID,
+                    sectionID: familySection
+                ))
+        }
+    }
+
     for item in itemsForOrdering {
         switch item {
         case .script(let s):
@@ -627,32 +695,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         case .family(let fid, let familySection):
             guard let family = familyByID[fid], !emittedFamilyIDs.contains(fid) else { continue }
             emittedFamilyIDs.insert(fid)
-            let inherited = expandDeps(family.dependsOn)
-            for generated in renderPatternFamily(
-                family, sectionVariables: sectionVars(forFamily: fid), globalVariables: resolvedGlobalVariables,
-                perStudentNames: perStudentExpressionNames)
-            {
-                order += 1
-                let prior = oldEntryByScript[generated.filename]
-                let perCase = expandDeps(prior?.dependsOn ?? [])
-                var combined: [String] = []
-                var seen = Set<String>()
-                for d in inherited + perCase {
-                    guard seen.insert(d).inserted else { continue }
-                    combined.append(d)
-                }
-                newConfigured.append(
-                    ConfiguredSuiteEntry(
-                        script: generated.filename,
-                        tier: generated.tier.rawValue,
-                        order: order,
-                        dependsOn: combined,
-                        points: generated.points,
-                        displayName: generated.displayName,
-                        generatedBy: generated.familyID,
-                        sectionID: familySection
-                    ))
-            }
+            appendFamilyConfigured(family, familySection: familySection)
 
         case .check(let cid, let checkSection):
             guard let check = checkByID[cid],
@@ -681,32 +724,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // `authoredItems` still needs its generated scripts emitted (e.g. if
     // the caller forgot to include a newly added family).
     for family in nextFamilies where !emittedFamilyIDs.contains(family.id) {
-        let inherited = expandDeps(family.dependsOn)
-        for generated in renderPatternFamily(
-            family, sectionVariables: sectionVars(forFamily: family.id), globalVariables: resolvedGlobalVariables,
-            perStudentNames: perStudentExpressionNames)
-        {
-            order += 1
-            let prior = oldEntryByScript[generated.filename]
-            let perCase = expandDeps(prior?.dependsOn ?? [])
-            var combined: [String] = []
-            var seen = Set<String>()
-            for d in inherited + perCase {
-                guard seen.insert(d).inserted else { continue }
-                combined.append(d)
-            }
-            newConfigured.append(
-                ConfiguredSuiteEntry(
-                    script: generated.filename,
-                    tier: generated.tier.rawValue,
-                    order: order,
-                    dependsOn: combined,
-                    points: generated.points,
-                    displayName: generated.displayName,
-                    generatedBy: generated.familyID,
-                    sectionID: nil
-                ))
-        }
+        emittedFamilyIDs.insert(family.id)
+        appendFamilyConfigured(family, familySection: nil)
     }
 
     // Same defensive pass for checks: any check not referenced by
