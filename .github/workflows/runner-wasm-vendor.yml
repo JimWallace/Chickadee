@@ -125,4 +125,23 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Public/runner-wasm runner-size-baseline.txt
           git commit -m "chore(wasm): re-vendor RunnerCore browser artifact [skip ci]"
-          git push origin HEAD:main
+          # main can advance between checkout and here: auto-release.yml pushes a
+          # `chore(release)` commit in the same post-merge window, and this job —
+          # the slower of the two (it installs the wasm SDK and rebuilds) — loses
+          # a plain push every time, so the re-vendor silently never lands until
+          # someone re-triggers it by hand. Rebase our artifact-only commit onto
+          # the latest main and retry; the commit touches only Public/runner-wasm
+          # and runner-size-baseline.txt, which nothing else writes, so the
+          # rebase never conflicts (abort + fail loudly if it somehow does rather
+          # than force-push over main).
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "::notice::Pushed re-vendored artifact (attempt $attempt)."
+              exit 0
+            fi
+            echo "::warning::push rejected (attempt $attempt) — rebasing onto origin/main and retrying"
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; echo "::error::unexpected rebase conflict re-vendoring wasm"; exit 1; }
+          done
+          echo "::error::could not push re-vendored artifact after 5 attempts"
+          exit 1
