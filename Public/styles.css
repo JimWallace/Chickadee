@@ -607,31 +607,14 @@ th.sort-desc .sort-header::after { content: "↓"; }
     font-weight: 500;
 }
 
-/* Hidden-tier summary (release before deadline, secret always) */
-.hidden-tiers-summary {
-    margin-top: 1.25rem;
-    border: 1px solid var(--gray-100);
-    border-radius: .5rem;
-    padding: .75rem 1rem;
-    background: var(--gray-100);
-}
-
-.hidden-tiers-heading {
-    font-size: .8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--gray-600);
-    margin: 0 0 .5rem;
-}
-
+/* Per-section secret-tier aggregate (never itemized for students) */
 .tier-summary-row {
     display: flex;
     align-items: center;
     gap: .6rem;
     border-left: 3px solid var(--gray-400);
     padding: .35rem 0 .35rem .6rem;
-    margin-bottom: .3rem;
+    margin: .25rem 0 .3rem;
     font-size: .9rem;
 }
 

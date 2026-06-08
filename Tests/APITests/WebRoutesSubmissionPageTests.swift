@@ -688,6 +688,77 @@ import XCTVapor
         }
     }
 
+    /// With sections, secret tests are aggregated under the section they
+    /// belong to (one summary per section), not in a single bottom block —
+    /// the student can see which question's hidden tests failed.
+    @Test func studentSeesSecretCountsGroupedBySection() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            // Two sections, each with a public test + a secret test. Worker
+            // emits one outcome per testSuites entry, in order.
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"sections":[\
+                {"id":"q1","name":"Question One"},{"id":"q2","name":"Question Two"}\
+                ],"testSuites":[\
+                {"tier":"public","script":"pub_q1.sh","sectionID":"q1"},\
+                {"tier":"secret","script":"sec_q1.sh","sectionID":"q1"},\
+                {"tier":"public","script":"pub_q2.sh","sectionID":"q2"},\
+                {"tier":"secret","script":"sec_q2.sh","sectionID":"q2"}\
+                ],"timeLimitSeconds":10}
+                """
+            let course = try await wrMakeCourse(on: app)
+            let courseID = try course.requireID()
+            let setup = APITestSetup(
+                id: "setup_secret_sec",
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "setup_secret_sec.zip",
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            try await wrInsertAssignment(
+                testSetupID: "setup_secret_sec", title: "Secret Sections", isOpen: true,
+                dueAt: Date().addingTimeInterval(-3600), on: app
+            )
+            try await wrInsertSubmission(
+                id: "sub_secret_sec", testSetupID: "setup_secret_sec", userID: userID, on: app)
+            // Outcomes in testSuites order: q1 public pass, q1 secret fail,
+            // q2 public pass, q2 secret pass.
+            try await wrInsertResult(
+                submissionID: "sub_secret_sec",
+                outcomes: [
+                    wrMakeOutcome(name: "pub_q1", tier: .pub, status: .pass),
+                    wrMakeOutcome(name: "sec_q1", tier: .secret, status: .fail),
+                    wrMakeOutcome(name: "pub_q2", tier: .pub, status: .pass),
+                    wrMakeOutcome(name: "sec_q2", tier: .secret, status: .pass),
+                ], on: app)
+
+            try await app.asyncTest(
+                .GET, "/submissions/sub_secret_sec",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("Question One"), "Section headings should render")
+                    #expect(html.contains("Question Two"), "Section headings should render")
+                    // Q1's secret test failed; Q2's passed.
+                    #expect(
+                        html.contains("0 passed, 1 failed"),
+                        "Question One's secret aggregate should show its failure")
+                    #expect(
+                        html.contains("1 passed, 0 failed"),
+                        "Question Two's secret aggregate should show its pass")
+                    #expect(
+                        html.contains("sec_q1") == false && html.contains("sec_q2") == false,
+                        "Secret test names must never be shown")
+                })
+
+        }
+    }
+
     /// A failing release test shows its instructor hint before the deadline
     /// (guidance without the answer), while its output stays hidden.
     @Test func releaseHintShownBeforeDeadlineWithoutOutput() async throws {

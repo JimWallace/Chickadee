@@ -23,10 +23,22 @@ import Vapor
 /// share a case label (e.g. both `bmi` and `age` having a "Test 1"
 /// case), and a name-keyed dict silently collapsed them onto the
 /// last-written section (v0.4.105 fix).
+///
+/// `secretOutcomes` / `sectionIDPerSecretOutcome` carry the secret-tier
+/// outcomes (never itemized for students) plus their per-outcome section
+/// ids, correlated the same way.  They are aggregated into a per-section
+/// `secretSummary` so a student can see *where* hidden tests are failing
+/// without revealing which.  A section that contains only secret tests is
+/// still emitted (with empty `outcomes` and a non-nil `secretSummary`) so
+/// the student gets a signal for that question; secret outcomes with no
+/// (or a stale) section fall into the trailing/ungrouped bucket alongside
+/// any ungrouped visible rows.
 func groupOutcomesBySection(
     _ outcomes: [OutcomeRow],
     sections: [TestSuiteSection],
-    sectionIDPerOutcome: [String?]
+    sectionIDPerOutcome: [String?],
+    secretOutcomes: [TestOutcome] = [],
+    sectionIDPerSecretOutcome: [String?] = []
 ) -> [SectionedOutcomes] {
     let knownSectionIDs = Set(sections.map(\.id))
     var bucketsByID: [String: [OutcomeRow]] = [:]
@@ -39,26 +51,46 @@ func groupOutcomesBySection(
             ungrouped.append(row)
         }
     }
-    var result: [SectionedOutcomes] = []
-    for section in sections {
-        if let rows = bucketsByID[section.id], !rows.isEmpty {
-            result.append(SectionedOutcomes(sectionName: section.name, outcomes: rows))
+    // Secret outcomes are counted, never itemized: bucket them by section the
+    // same way, then fold each bucket into an aggregate `TierSummary`.
+    var secretByID: [String: [TestOutcome]] = [:]
+    var secretUngrouped: [TestOutcome] = []
+    for (i, outcome) in secretOutcomes.enumerated() {
+        let sid: String? = (i < sectionIDPerSecretOutcome.count) ? sectionIDPerSecretOutcome[i] : nil
+        if let sid, knownSectionIDs.contains(sid) {
+            secretByID[sid, default: []].append(outcome)
+        } else {
+            secretUngrouped.append(outcome)
         }
     }
-    if !ungrouped.isEmpty {
+    func summary(_ list: [TestOutcome]) -> TierSummary? {
+        list.isEmpty ? nil : TierSummary(outcomes: list, isRelease: false)
+    }
+    var result: [SectionedOutcomes] = []
+    for section in sections {
+        let rows = bucketsByID[section.id] ?? []
+        let secret = secretByID[section.id] ?? []
+        if rows.isEmpty && secret.isEmpty { continue }
+        result.append(
+            SectionedOutcomes(
+                sectionName: section.name, outcomes: rows, secretSummary: summary(secret)))
+    }
+    if !ungrouped.isEmpty || !secretUngrouped.isEmpty {
         // Trailing bucket label: when sections exist, call it "Ungrouped"
         // so students see why this block appears separately.  When no
         // sections exist at all, emit it unlabelled to preserve the
         // legacy single-table look.
         let label: String? = sections.isEmpty ? nil : "Ungrouped"
-        result.append(SectionedOutcomes(sectionName: label, outcomes: ungrouped))
+        result.append(
+            SectionedOutcomes(
+                sectionName: label, outcomes: ungrouped, secretSummary: summary(secretUngrouped)))
     }
     if result.isEmpty {
         // Empty outcome list still needs one bucket so the template's
         // `#for(sec in sectionedOutcomes)` has something to skip over
         // gracefully.  An empty `outcomes` array renders as an empty
         // tbody, just like today.
-        result.append(SectionedOutcomes(sectionName: nil, outcomes: []))
+        result.append(SectionedOutcomes(sectionName: nil, outcomes: [], secretSummary: nil))
     }
     return result
 }
@@ -376,6 +408,7 @@ extension WebRoutes {
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
+            secretOutcomes: processed.secretOutcomes,
             manifestEntries: manifestDisplay.entries,
             manifestSections: manifestDisplay.sections,
             allowedTiers: itemized
@@ -540,12 +573,11 @@ extension WebRoutes {
         }
 
         // Secret tests count toward the grade but are never itemized for
-        // students; surface them as an aggregate pass/fail summary.
+        // students; they are bucketed into per-section aggregate pass/fail
+        // summaries by `buildSectionedOutcomes`.  Kept in collection order so
+        // the section correlation lines up with the secret manifest entries.
         if !viewer.user.isInstructor {
-            let secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
-            if !secretOutcomes.isEmpty {
-                processed.secretSummary = TierSummary(outcomes: secretOutcomes, isRelease: false)
-            }
+            processed.secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
         }
 
         // Grade spans every tier (matches `gradePercentFromCollectionJSON` on
@@ -674,24 +706,39 @@ extension WebRoutes {
     /// misattributing outcomes.
     private func buildSectionedOutcomes(
         outcomes: [OutcomeRow],
+        secretOutcomes: [TestOutcome],
         manifestEntries: [TestSuiteEntry],
         manifestSections: [TestSuiteSection],
         allowedTiers: Set<String>
     ) -> [SectionedOutcomes] {
         let visibleEntries = manifestEntries.filter { allowedTiers.contains($0.tier.rawValue) }
-        var sectionIDPerOutcome: [String?] = visibleEntries.map { $0.sectionID }
-        if sectionIDPerOutcome.count < outcomes.count {
-            sectionIDPerOutcome.append(
-                contentsOf:
-                    Array(repeating: String?.none, count: outcomes.count - sectionIDPerOutcome.count))
-        } else if sectionIDPerOutcome.count > outcomes.count {
-            sectionIDPerOutcome = Array(sectionIDPerOutcome.prefix(outcomes.count))
-        }
+        let sectionIDPerOutcome = alignSectionIDs(
+            visibleEntries.map { $0.sectionID }, toCount: outcomes.count)
+        // Secret outcomes never appear in `allowedTiers` for students, so they
+        // correlate against the secret-tier manifest entries on their own.
+        let secretEntries = manifestEntries.filter { $0.tier == .secret }
+        let sectionIDPerSecret = alignSectionIDs(
+            secretEntries.map { $0.sectionID }, toCount: secretOutcomes.count)
         return groupOutcomesBySection(
             outcomes,
             sections: manifestSections,
-            sectionIDPerOutcome: sectionIDPerOutcome
+            sectionIDPerOutcome: sectionIDPerOutcome,
+            secretOutcomes: secretOutcomes,
+            sectionIDPerSecretOutcome: sectionIDPerSecret
         )
+    }
+
+    /// Pads with nil / truncates a section-id array so it matches the outcome
+    /// count exactly.  Browser-mode submissions or a manifest churn mid-flight
+    /// can yield a slightly different shape; misaligned entries fall into
+    /// Ungrouped rather than misattributing an outcome to the wrong section.
+    private func alignSectionIDs(_ ids: [String?], toCount count: Int) -> [String?] {
+        if ids.count < count {
+            return ids + Array(repeating: String?.none, count: count - ids.count)
+        } else if ids.count > count {
+            return Array(ids.prefix(count))
+        }
+        return ids
     }
 
     /// Composes the human-readable banner text shown above the outcomes table
@@ -758,7 +805,6 @@ extension WebRoutes {
             earnedPoints: processed.earnedPoints,
             hasDelta: delta.hasDelta,
             deltaHeaderText: delta.headerText,
-            secretSummary: processed.secretSummary,
             badges: badges,
             currentUser: currentUser,
             classGoals: decorations.classGoals
@@ -824,7 +870,10 @@ private struct ProcessedCollection {
     var executionTimeMs: Int
     var gradePercent: Int
     var badges: [AchievementBadge]
-    var secretSummary: TierSummary?
+    /// Secret-tier outcomes (students only) in collection order; aggregated
+    /// into per-section summaries by `buildSectionedOutcomes`.  Empty for
+    /// instructors, who see secret tests itemized as ordinary rows.
+    var secretOutcomes: [TestOutcome]
 
     static let empty = ProcessedCollection(
         resultSource: "",
@@ -840,7 +889,7 @@ private struct ProcessedCollection {
         executionTimeMs: 0,
         gradePercent: 0,
         badges: [],
-        secretSummary: nil
+        secretOutcomes: []
     )
 }
 
