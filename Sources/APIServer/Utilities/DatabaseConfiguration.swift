@@ -212,6 +212,7 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateRunnerProfiles())
     app.migrations.add(CreateAssignmentRequirements())
     app.migrations.add(CreateClassAchievements())
+    app.migrations.add(CreateAchievementResults())
     app.migrations.add(CreatePreEnrollments())
     app.migrations.add(SessionRecord.migration)
     app.migrations.add(CreateClientDiagnostics())
