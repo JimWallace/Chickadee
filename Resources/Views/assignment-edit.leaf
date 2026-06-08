@@ -186,6 +186,32 @@
     </table>
 </section>
 
+<section id="class-goals-block"
+         data-assignment-id="#(assignmentID)"
+         class="editor-block">
+    <div class="editor-block-head">
+        <h2>Class Goals</h2>
+        <div class="toolbar toolbar--end">
+            <button type="button" class="btn action-btn" id="class-goal-add">+ Add Goal</button>
+            <button type="button" class="btn action-btn" id="class-goals-save">Save Goals</button>
+            <span id="class-goals-status" class="upload-status-inline"></span>
+        </div>
+    </div>
+    <table class="results-table" id="class-goals-table">
+        <thead>
+            <tr>
+                <th>Goal</th>
+                <th>Grade ≥ (%)</th>
+                <th>Class ≥ (%)</th>
+                <th>Bonus (pts)</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody class="class-goals-body"></tbody>
+    </table>
+    <p class="class-goals-hint">When at least the chosen share of the class reaches the grade threshold, everyone who submitted earns the bonus as extra credit (capped at 100%), scaled by how far the class gets — students see it as a live progress bar.</p>
+</section>
+
 #if(brightspaceSyncEnabled):
 <!-- ── BrightSpace grade sync ─────────────────────────── -->
 <div class="editor-block">
@@ -539,6 +565,7 @@ function checkUWDates(dateTimeValue, warningEl) {
 </script>
 
 <script src="/global-inputs-editor.js?v=#appVersion()"></script>
+<script src="/class-goals-editor.js?v=#appVersion()"></script>
 
 <!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
      The "+ Add Test" button opens one modal; picking a type morphs the body
