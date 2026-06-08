@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.376] - 2026-06-08
+
+### Changed
+
+- UI consistency: the three submission-history tables now use icon action
+  buttons (view-results / download / open-in-notebook for students; view /
+  re-test for the instructor per-student drilldowns), matching the assignment
+  list, roster, and student-dashboard rows that were already iconified. Each
+  glyph keeps a `title` + `aria-label` for accessibility.
+
+
 ## [0.4.375] - 2026-06-07
 
 ### Added
