@@ -620,6 +620,72 @@ import XCTVapor
         }
     }
 
+    // A reference-solution (validation) notebook carrying `{{name}}`
+    // personalization placeholders is substituted at worker download, so the
+    // answer key can derive per-student values the same way the student does.
+    private let substManifestJSON = """
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,\
+        "globalVariables":[{"name":"answer","value":"ck_subst_marker"}]}
+        """
+
+    private func makeNotebookSubmission(
+        id: String, setupID: String, kind: String, source: String
+    ) async throws -> APISubmission {
+        let nbURL = URL(fileURLWithPath: app.submissionsDirectory)
+            .appendingPathComponent("\(id).ipynb")
+        let notebook = """
+            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[\
+            {"cell_type":"code","metadata":{},"execution_count":null,"outputs":[],"source":\(
+                String(data: try JSONEncoder().encode(source), encoding: .utf8) ?? "\"\"")}]}
+            """
+        try Data(notebook.utf8).write(to: nbURL)
+        let sub = APISubmission(
+            id: id, testSetupID: setupID, zipPath: nbURL.path,
+            attemptNumber: 1, status: "pending",
+            filename: "solution.ipynb", userID: nil, kind: kind)
+        try await sub.save(on: app.db)
+        return sub
+    }
+
+    @Test func downloadSubmission_validationNotebook_substitutesPlaceholders() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "subst_setup_01", manifest: substManifestJSON)
+            _ = try await makeNotebookSubmission(
+                id: "subst_val_01", setupID: (try setup.requireID()),
+                kind: APISubmission.Kind.validation, source: "x = {{answer}}")
+
+            let path = "/api/v1/worker/submissions/subst_val_01/download"
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers = workerHeaders(method: .GET, path: path) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("ck_subst_marker"))
+                    #expect(!res.body.string.contains("{{answer}}"))
+                })
+        }
+    }
+
+    @Test func downloadSubmission_studentNotebook_leavesPlaceholdersVerbatim() async throws {
+        // Student submissions are already-substituted working copies, so the
+        // download path must NOT re-process them.
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "subst_setup_02", manifest: substManifestJSON)
+            _ = try await makeNotebookSubmission(
+                id: "subst_stu_01", setupID: (try setup.requireID()),
+                kind: APISubmission.Kind.student, source: "x = {{answer}}")
+
+            let path = "/api/v1/worker/submissions/subst_stu_01/download"
+            try await app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers = workerHeaders(method: .GET, path: path) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("{{answer}}"))
+                })
+        }
+    }
+
     // MARK: - GET /api/v1/worker/testsetups/:id/download
 
     @Test func downloadTestSetup_existingFile_returns200() async throws {
