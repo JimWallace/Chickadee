@@ -76,6 +76,10 @@ import XCTVapor
         app.get("bare-404") { _ async throws -> Response in throw Abort(.notFound) }
         app.get("bare-403") { _ async throws -> Response in throw Abort(.forbidden) }
         app.get("bare-400") { _ async throws -> Response in throw Abort(.badRequest) }
+        // Mirrors how the vendored CSRF middleware aborts on a token mismatch.
+        app.get("csrf-fail") { _ async throws -> Response in
+            throw Abort(.forbidden, reason: "Invalid CSRF token.")
+        }
         app.get("api", "bare-500") { _ async throws -> Response in
             throw Abort(.internalServerError)
         }
@@ -307,6 +311,26 @@ import XCTVapor
                 #expect(
                     res.body.string.contains("page missing"),
                     "Explicit Abort reason should render verbatim: \(res.body.string.prefix(400))"
+                )
+            }
+        }
+    }
+
+    @Test func leafErrorMiddlewareRendersRecoverableMessageForCSRFFailures() async throws {
+        // A CSRF rejection means the page's token no longer matches the live
+        // session (a stale page after a session change). The bare "Invalid CSRF
+        // token." 403 is a confusing dead-end, so browser users get an
+        // actionable, recoverable message — and never the raw library reason.
+        try await withApp(try await makeLeafErrorApp(configureViews: true)) { app in
+            try await app.asyncTest(.GET, "/csrf-fail") { res in
+                #expect(res.status == .forbidden)
+                #expect(
+                    res.body.string.lowercased().contains("session was refreshed"),
+                    "CSRF 403 should render the recoverable message: \(res.body.string.prefix(400))"
+                )
+                #expect(
+                    res.body.string.contains("Invalid CSRF token") == false,
+                    "The raw CSRF library reason must not leak to browser users"
                 )
             }
         }
