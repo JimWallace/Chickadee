@@ -5,7 +5,7 @@ import Vapor
 
 func routes(_ app: Application) throws {
     let sessionAuth = UserSessionAuthenticator()
-    let csrf = CSRF()
+    let csrf = CSRF(tokenRetrieval: chickadeeCSRFTokenRetrieval)
 
     // MARK: - Public routes (no auth required)
 
