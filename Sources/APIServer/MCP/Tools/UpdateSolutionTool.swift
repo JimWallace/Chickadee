@@ -45,7 +45,12 @@ struct UpdateSolutionTool: ContentTool {
         + "validate_assignment), closing the assignment if it was open (re-open with update_assignment "
         + "once validation passes). This is instructor-authored content — it never touches student "
         + "submissions, and never the starter notebook (use update_notebook for that). Use get_solution "
-        + "first to fetch the current solution to edit."
+        + "first to fetch the current solution to edit. The solution may use `{{name}}` personalization "
+        + "placeholders just like the starter notebook (declare `name` in global inputs); they are "
+        + "substituted per validation-seed at grading, which is the supported way to give a seed-agnostic "
+        + "answer key a per-student VARIABLE value (a module-level assignment that COMPUTES the value via "
+        + "a function call, e.g. reading CHICKADEE_ASSIGNMENT_SEED, is quarantined at import and won't "
+        + "define the variable — see docs/personalization-solution-notebooks.md)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([

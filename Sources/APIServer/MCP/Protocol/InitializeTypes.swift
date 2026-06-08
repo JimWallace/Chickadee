@@ -185,6 +185,22 @@ enum MCPServerInstructions {
         non-graded helper file (e.g. a data generator) that tests and personalization expressions can \
         import by stem. Generated pattern-family / notebook-check scripts are not editable via \
         author_script — edit the family/check instead.
+        - Per-student answers (notebooks). A student's answer can be a module-level VARIABLE \
+        (e.g. `answer = ...`) or a FUNCTION. Watch the notebook extractor's import rule: a code cell's \
+        top-level statement runs at grading-import time ONLY if it is a def/class/import or an \
+        assignment whose right-hand side has NO function call — anything else (e.g. \
+        `x = int(os.environ["CHICKADEE_ASSIGNMENT_SEED"], 16)`) is quarantined into \
+        `if __name__ == "__main__":` and does NOT run at import, so the name is undefined to the \
+        grader. Consequences: (1) a per-student answer that must be COMPUTED at module level can't be \
+        — have the student write the discovered value as a literal, or use a function (function bodies \
+        run at call time and may read CHICKADEE_ASSIGNMENT_SEED). (2) The reference solution must \
+        produce the same per-student value, and a seed-agnostic solution can't compute it as a plain \
+        module-level variable. Two supported ways: write the answer cell with a `{{name}}` placeholder \
+        (declare `name` as a global-inputs expression, e.g. `1 + seed % 25`) — the SOLUTION notebook is \
+        substituted per validation-seed just like the starter, so `shift = {{shift}}` becomes a literal \
+        that survives import — or make the solution answer a function that reads \
+        CHICKADEE_ASSIGNMENT_SEED at call time. Use preview_personalization to confirm what a \
+        placeholder resolves to. Full recipe: docs/personalization-solution-notebooks.md. \
         - Resources: each accessible assignment's raw test.properties.json manifest is also exposed \
         as an MCP resource (resources/list, then resources/read on \
         chickadee://assignment/<publicID>/manifest). get_suite is the structured view; the resource \
