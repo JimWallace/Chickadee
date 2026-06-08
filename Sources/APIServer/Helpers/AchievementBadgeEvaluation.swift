@@ -34,14 +34,8 @@ func earnedIndividualBadges(
     guard !authored.isEmpty else { return [] }
 
     return authored.compactMap { ach in
-        guard individualBadgeEarned(ach, gradePercent: gradePercent, outcomes: outcomes) else {
-            return nil
-        }
-        let icon = ach.reward.icon.map { "\($0) " } ?? ""
-        return AchievementBadge(
-            id: ach.id,
-            label: "\(icon)\(ach.reward.label)",
-            tooltip: ach.detail ?? ach.reward.label)
+        individualBadgeEarned(ach, gradePercent: gradePercent, outcomes: outcomes)
+            ? AchievementBadge(from: ach) : nil
     }
 }
 

@@ -180,82 +180,60 @@ struct AchievementBadge: Encodable {
     let label: String
     let tooltip: String
 
-    // MARK: Per-submission badges
+    /// Derives the display badge from an `Achievement` — the single place a
+    /// badge's caption + tooltip come from, whether the award is built-in
+    /// (`BuiltInAchievements`) or instructor-authored.  An emoji icon, when the
+    /// reward carries one, is prefixed to the caption.
+    init(from achievement: Achievement) {
+        let icon = achievement.reward.icon.map { "\($0) " } ?? ""
+        id = achievement.id
+        label = "\(icon)\(achievement.reward.label)"
+        tooltip = achievement.detail ?? achievement.reward.label
+    }
 
-    static let firstTryPerfect = AchievementBadge(
-        id: "first_try_perfect",
-        label: "Ace",
-        tooltip: "Scored 100% on your very first submission — no warm-up needed."
-    )
-    static let comebackKid = AchievementBadge(
-        id: "comeback_kid",
-        label: "Rally",
-        tooltip: "Jumped 50 or more percentage points in a single submission."
-    )
-    static let tenacious = AchievementBadge(
-        id: "tenacious",
-        label: "Tenacious",
-        tooltip: "Reached 100% after 5 or more attempts — persistence pays off."
-    )
-    static let speedDemon = AchievementBadge(
-        id: "speed_demon",
-        label: "Swift",
-        tooltip: "Scored 100% with every test completing in under 2 seconds total."
-    )
-
-    // MARK: Class-wide badges
-
-    static let pathfinder = AchievementBadge(
-        id: "pathfinder",
-        label: "Pathfinder",
-        tooltip: "Submitted before anyone else in the class."
-    )
-    static let trailblazer = AchievementBadge(
-        id: "trailblazer",
-        label: "Trailblazer",
-        tooltip: "First student in the class to reach 100% on this assignment."
-    )
-    static let speedChampion = AchievementBadge(
-        id: "speed_champion",
-        label: "Fastest",
-        tooltip: "Holds the class record for fastest 100% execution time."
-    )
-    static let minimalist = AchievementBadge(
-        id: "minimalist",
-        label: "Minimalist",
-        tooltip: "Reached 100% in fewer attempts than any other student in the class."
-    )
+    /// Direct memberwise init, retained for tests and any non-Achievement caller.
+    init(id: String, label: String, tooltip: String) {
+        self.id = id
+        self.label = label
+        self.tooltip = tooltip
+    }
 
     // MARK: Computation
 
-    /// Returns all per-submission badges earned for the given context.
-    /// Class-wide badges are appended separately after a DB query.
+    /// All per-submission built-in badges earned for the given context.  The
+    /// award *conditions* live here (keyed by kind); each badge's identity —
+    /// caption + tooltip — comes from `BuiltInAchievements`.  Class-wide badges
+    /// are appended separately after a DB query (see `forClassAchievement`).
     static func forSubmission(_ ctx: BadgeContext) -> [AchievementBadge] {
-        var badges: [AchievementBadge] = []
-        if ctx.attemptNumber == 1, ctx.gradePercent == 100 {
-            badges.append(.firstTryPerfect)
+        BuiltInAchievements.perSubmission
+            .filter { perSubmissionEarned($0.kind, ctx: ctx) }
+            .map(AchievementBadge.init(from:))
+    }
+
+    /// Whether a built-in per-submission award's condition is met for `ctx`.
+    /// These thresholds (50 points, 5 attempts, 2 s) match the legacy badges
+    /// exactly — the fold-in changed where identity lives, not the conditions.
+    private static func perSubmissionEarned(_ kind: AchievementKind, ctx: BadgeContext) -> Bool {
+        switch kind {
+        case .firstTryPerfect:
+            return ctx.attemptNumber == 1 && ctx.gradePercent == 100
+        case .comeback:
+            guard let prior = ctx.priorGradePercent else { return false }
+            return ctx.gradePercent - prior >= 50
+        case .persistence:
+            return ctx.attemptNumber >= 5 && ctx.gradePercent == 100
+        case .speedRun:
+            return ctx.gradePercent == 100 && ctx.executionTimeMs < 2_000
+        default:
+            return false
         }
-        if let prior = ctx.priorGradePercent, ctx.gradePercent - prior >= 50 {
-            badges.append(.comebackKid)
-        }
-        if ctx.attemptNumber >= 5, ctx.gradePercent == 100 {
-            badges.append(.tenacious)
-        }
-        if ctx.gradePercent == 100, ctx.executionTimeMs < 2_000 {
-            badges.append(.speedDemon)
-        }
-        return badges
     }
 
     /// Maps a class-achievement ID string to its badge, returning nil for unknown IDs.
     static func forClassAchievement(_ achievementID: String) -> AchievementBadge? {
-        switch achievementID {
-        case "pathfinder": return .pathfinder
-        case "trailblazer": return .trailblazer
-        case "speed_champion": return .speedChampion
-        case "minimalist": return .minimalist
-        default: return nil
-        }
+        BuiltInAchievements.classRecords
+            .first { $0.id == achievementID }
+            .map(AchievementBadge.init(from:))
     }
 }
 

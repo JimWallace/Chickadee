@@ -80,8 +80,17 @@ public enum AchievementKind: String, Codable, Sendable {
     /// logic lives in the instructor's test; this just maps the pass to a badge.
     case testBadge
     /// Individual: 100% on the first attempt.  Subsumes the legacy First-Try
-    /// Perfect badge.
+    /// Perfect ("Ace") badge.
     case firstTryPerfect
+    /// Individual: jumped a large margin (≥50 percentage points) between
+    /// submissions.  Subsumes the legacy "Rally" comeback badge.
+    case comeback
+    /// Individual: reached 100% only after several attempts (≥5).  Subsumes the
+    /// legacy "Tenacious" persistence badge.
+    case persistence
+    /// Individual: scored 100% with a fast total execution (<2 s).  Subsumes
+    /// the legacy "Swift" speed badge.
+    case speedRun
     /// Competitive, one holder per assignment, ranked on `recordDimension`.
     /// Subsumes the legacy pathfinder / speed-champion / minimalist records.
     /// Kept for back-compat; new assignments lean on the collaborative kinds.
