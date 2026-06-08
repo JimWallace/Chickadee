@@ -164,6 +164,13 @@ struct OutcomeRow: Encodable {
 struct SectionedOutcomes: Encodable {
     let sectionName: String?
     let outcomes: [OutcomeRow]
+    /// Aggregate pass/fail counts for the secret-tier tests that belong to
+    /// this section (students only; nil when the section has no secret tests
+    /// or the viewer is an instructor, who sees secret tests itemized as
+    /// ordinary rows instead).  Secret tests are never named or itemized for
+    /// students — surfacing the per-section count lets a student see *where*
+    /// hidden tests are failing without revealing which.
+    let secretSummary: TierSummary?
 }
 
 /// Input data used to compute per-submission achievement badges.
@@ -302,11 +309,6 @@ struct SubmissionContext: Encodable {
     let hasDelta: Bool
     /// E.g. "↑ fixed 2 tests · ↓ broke 1 test since attempt 3"; nil on first attempt.
     let deltaHeaderText: String?
-    /// Non-nil for students when secret tests exist.  Secret tests count toward
-    /// the grade but are never itemized — only their aggregate pass/fail counts
-    /// are shown.  (Release tests are itemized as ordinary rows, even before the
-    /// deadline, so they no longer need a separate summary.)
-    let secretSummary: TierSummary?
     let badges: [AchievementBadge]
     let currentUser: CurrentUserContext?
     /// Class-wide goals for this assignment with their current progress, shown
