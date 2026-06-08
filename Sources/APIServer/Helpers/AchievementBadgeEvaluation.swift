@@ -45,6 +45,28 @@ func earnedIndividualBadges(
     }
 }
 
+/// The individual badges to show for a submission's display result: decodes the
+/// stored collection (reusing the handler's date-aware decoder) and evaluates
+/// the authored individual badges.  Returns [] when there is no result.  Lifted
+/// out of the submission handler to keep that function within its length budget.
+func earnedIndividualBadgesForDisplay(
+    displayResult: APIResult?,
+    submission: APISubmission,
+    gradePercent: Int,
+    decoder: JSONDecoder,
+    on db: Database
+) async throws -> [AchievementBadge] {
+    guard let result = displayResult,
+        let collection = try? decoder.decode(
+            TestOutcomeCollection.self, from: Data(result.collectionJSON.utf8))
+    else { return [] }
+    return try await earnedIndividualBadges(
+        testSetupID: submission.testSetupID,
+        gradePercent: gradePercent,
+        outcomes: collection.outcomes,
+        on: db)
+}
+
 private func individualBadgeEarned(
     _ a: Achievement, gradePercent: Int, outcomes: [TestOutcome]
 ) -> Bool {
