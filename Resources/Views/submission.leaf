@@ -3,6 +3,17 @@
 Submission #(submissionID)
 #endexport
 #export("content"):
+<style>
+.class-goals-block { margin: 1rem 0; }
+.class-goals-heading { font-size: 1.1rem; margin: 0 0 0.5rem; }
+.class-goal { margin: 0.5rem 0; }
+.class-goal-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.class-goal-name { font-weight: 600; }
+.class-goal-reward { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.class-goal-progress { width: 100%; height: 0.6rem; }
+.class-goal-status { font-size: 0.85rem; margin-top: 0.15rem; }
+.class-goal-detail { font-size: 0.85rem; margin: 0.15rem 0 0; }
+</style>
 <div id="submission-root"
      data-submission-id="#(submissionID)"
      data-pending="#(isPending)">
@@ -39,6 +50,23 @@ Submission #(submissionID)
     #endif
     #endif
 </div>
+
+#if(!classGoals.isEmpty):
+<section class="class-goals-block">
+    <h2 class="class-goals-heading">Class goals</h2>
+    #for(goal in classGoals):
+    <div class="class-goal">
+        <div class="class-goal-row">
+            <span class="class-goal-name">#(goal.name)</span>
+            <span class="class-goal-reward">#(goal.rewardLabel)</span>
+        </div>
+        <progress class="class-goal-progress" max="100" value="#(goal.progressPercent)">#(goal.progressPercent)%</progress>
+        <div class="class-goal-status">#if(goal.met):✅ Reached!#else:#(goal.progressPercent)% of the way#endif · #(goal.studentsMeeting) / #(goal.denominator) students#if(goal.locked): · final#endif</div>
+        #if(goal.detail):<p class="class-goal-detail">#(goal.detail)</p>#endif
+    </div>
+    #endfor
+</section>
+#endif
 
 #if(isPending):
 <div class="pending-box">
