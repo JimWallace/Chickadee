@@ -22,6 +22,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(ObservabilityLifecycleHandler())
     app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
     app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
+    app.lifecycle.use(AchievementEvaluationLifecycleHandler())
     app.lifecycle.use(SessionReaperLifecycleHandler())
     app.lifecycle.use(
         AuditLogReaperLifecycleHandler(
