@@ -52,12 +52,29 @@ extension InstructorDashboardRoutes {
         // map rather than filtering within it. The override percent is
         // converted to points against the setup's total possible points.
         let overrideMap = try await loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
+        var overrideKeys: Set<String> = []
         for (key, pct) in overrideMap {
             guard let setup = setupByID[key.setupID],
                 let points = gradeOverridePoints(percent: pct, setup: setup)
             else { continue }
             let mapKey = "\(key.userID.uuidString.lowercased())::\(key.setupID)"
             bestPointsByUserAndSetup[mapKey] = points
+            overrideKeys.insert(mapKey)
+        }
+
+        // Class-goal bonus: extra credit (capped at 100%) for every graded
+        // submission on a setup with class goals.  Overrides are authoritative,
+        // so a key an override already set is left untouched.
+        for setupID in setupIDs {
+            let bonus = try await classGoalBonusPoints(testSetupID: setupID, on: req.db)
+            guard bonus > 0, let setup = setupByID[setupID],
+                let total = suiteTotalPoints(setup: setup)
+            else { continue }
+            let suffix = "::\(setupID)"
+            for (mapKey, points) in bestPointsByUserAndSetup
+            where mapKey.hasSuffix(suffix) && !overrideKeys.contains(mapKey) {
+                bestPointsByUserAndSetup[mapKey] = min(total, points + bonus)
+            }
         }
 
         let csv = renderGradesCSV(

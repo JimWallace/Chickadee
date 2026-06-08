@@ -343,6 +343,22 @@ extension WebRoutes {
             )
         }
 
+        // Class-goal bonus: extra credit on the autograded grade, capped at 100%
+        // (no-op unless the assignment has a points-rewarded class goal).
+        if processed.totalPoints > 0 {
+            let bonus = try await classGoalBonusPoints(
+                testSetupID: submission.testSetupID, on: req.db)
+            if bonus > 0 {
+                let bonused = earnedWithClassGoalBonus(
+                    earned: processed.rawEarnedPoints,
+                    total: Double(processed.totalPoints),
+                    bonus: bonus)
+                processed.gradePercent = Int(
+                    (bonused / Double(processed.totalPoints) * 100).rounded())
+                processed.earnedPoints = formatPoints(bonused)
+            }
+        }
+
         // Append class-wide achievement badges held by this specific submission.
         let classAchievements = try await APIClassAchievement.query(on: req.db)
             .filter(\.$submissionID == subID)
@@ -534,6 +550,7 @@ extension WebRoutes {
         processed.totalTests = collection.totalTests
         processed.executionTimeMs = collection.executionTimeMs
         processed.totalPoints = collection.totalPoints
+        processed.rawEarnedPoints = collection.earnedPoints
         processed.earnedPoints = formatPoints(collection.earnedPoints)
         processed.gradePercent =
             collection.totalPoints > 0
@@ -794,6 +811,9 @@ private struct ProcessedCollection {
     var totalTests: Int
     var totalPoints: Int
     var earnedPoints: String
+    /// Raw earned points before display formatting and before any class-goal
+    /// bonus — used to recompute the grade when a bonus applies.
+    var rawEarnedPoints: Double
     var executionTimeMs: Int
     var gradePercent: Int
     var badges: [AchievementBadge]
@@ -809,6 +829,7 @@ private struct ProcessedCollection {
         totalTests: 0,
         totalPoints: 0,
         earnedPoints: "0",
+        rawEarnedPoints: 0,
         executionTimeMs: 0,
         gradePercent: 0,
         badges: [],
