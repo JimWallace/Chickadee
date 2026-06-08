@@ -374,6 +374,9 @@ extension WebRoutes {
                 setupID: submission.testSetupID, userID: submissionUserID, on: req.db)
         }
 
+        let classGoals = try await loadClassGoalViews(
+            testSetupID: submission.testSetupID, on: req.db)
+
         let ctx = buildSubmissionContext(
             subID: subID,
             submission: submission,
@@ -382,7 +385,8 @@ extension WebRoutes {
             decorations: SubmissionDecorations(
                 badges: badges,
                 currentUser: req.currentUserContext,
-                overrideGradePercent: overrideGradePercent
+                overrideGradePercent: overrideGradePercent,
+                classGoals: classGoals
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
@@ -732,8 +736,46 @@ extension WebRoutes {
             deltaHeaderText: delta.headerText,
             secretSummary: processed.secretSummary,
             badges: badges,
-            currentUser: currentUser
+            currentUser: currentUser,
+            classGoals: decorations.classGoals
         )
+    }
+}
+
+/// Loads an assignment's class-goal achievements joined with their latest
+/// `APIAchievementResult` snapshot, for the student-facing "Achievements"
+/// section.  Returns `[]` when the manifest carries no class goals.
+func loadClassGoalViews(testSetupID: String, on db: Database) async throws -> [ClassGoalView] {
+    guard let setup = try await APITestSetup.find(testSetupID, on: db),
+        let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+    else { return [] }
+    let goals = props.achievements.filter { $0.kind == .classGoal }
+    guard !goals.isEmpty else { return [] }
+
+    let rows = try await APIAchievementResult.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .all()
+    var rowByAchievement: [String: APIAchievementResult] = [:]
+    for row in rows { rowByAchievement[row.achievementID] = row }
+
+    return goals.map { goal in
+        let row = rowByAchievement[goal.id]
+        let progress = row?.progress ?? 0
+        let rewardLabel: String
+        if goal.reward.type == .points, let points = goal.reward.points {
+            rewardLabel = "+\(points) pts"
+        } else {
+            rewardLabel = goal.reward.label
+        }
+        return ClassGoalView(
+            name: goal.name,
+            detail: goal.detail,
+            rewardLabel: rewardLabel,
+            progressPercent: Int((progress * 100).rounded()),
+            studentsMeeting: row?.studentsMeeting ?? 0,
+            denominator: row?.denominator ?? 0,
+            met: progress >= 1,
+            locked: row?.locked ?? false)
     }
 }
 
@@ -854,6 +896,8 @@ private struct SubmissionDecorations {
     /// Instructor override percent for this student × assignment, nil when
     /// none.  The effective grade shown above the autograded breakdown.
     let overrideGradePercent: Int?
+    /// Class-goal progress views for the "Achievements" section.
+    let classGoals: [ClassGoalView]
 }
 
 // `SubmitFormBody` and the submission-output formatting helpers live in

@@ -331,4 +331,24 @@ struct SubmissionContext: Encodable {
     let secretSummary: TierSummary?
     let badges: [AchievementBadge]
     let currentUser: CurrentUserContext?
+    /// Class-wide goals for this assignment with their current progress, shown
+    /// as an "Achievements" section.  Empty when the assignment has no class
+    /// goals (or the sweep hasn't produced a snapshot yet).
+    let classGoals: [ClassGoalView]
+}
+
+/// One class-goal achievement's display state for the submission page.
+struct ClassGoalView: Encodable {
+    let name: String
+    let detail: String?
+    /// e.g. "+5 pts", or the reward label for non-points rewards.
+    let rewardLabel: String
+    /// 0–100 — the share of the goal reached (the progress-bar fill).
+    let progressPercent: Int
+    let studentsMeeting: Int
+    let denominator: Int
+    /// True once the class has fully reached the goal.
+    let met: Bool
+    /// True once the deadline has passed and the snapshot is final.
+    let locked: Bool
 }
