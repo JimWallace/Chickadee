@@ -32,6 +32,25 @@ struct LeafErrorMiddleware: AsyncMiddleware {
                 request.logger.report(error: error)
             }
 
+            // A CSRF rejection (the CSRF middleware aborts with a reason that
+            // names the token) means the page's token no longer matches the
+            // live session. Because tokens are derived from the session secret
+            // and don't expire while the session is alive, this only happens
+            // when the session was replaced under a still-open page (an
+            // idle-timeout re-auth, or a re-login in another tab). The bare
+            // "Invalid CSRF token." 403 is a confusing dead-end that discards
+            // the user's input, so give browser users an actionable,
+            // recoverable message instead.
+            let isCSRFFailure =
+                status == .forbidden
+                && reason.range(of: "csrf", options: .caseInsensitive) != nil
+            let title = isCSRFFailure ? "Session refreshed" : status.reasonPhrase
+            let message =
+                isCSRFFailure
+                ? "Your session was refreshed since this page was opened, so your "
+                    + "change wasn't saved. Please go back, reload the page, and try again."
+                : reason
+
             // Machine clients (API / runner) get a compact JSON error.
             let path = request.url.path
             if path.hasPrefix("/api/") || path.hasPrefix("/worker/") {
@@ -54,8 +73,8 @@ struct LeafErrorMiddleware: AsyncMiddleware {
             let ctx = ErrorPageContext(
                 currentUser: request.currentUserContext,
                 status: Int(status.code),
-                title: status.reasonPhrase,
-                message: reason
+                title: title,
+                message: message
             )
 
             do {
