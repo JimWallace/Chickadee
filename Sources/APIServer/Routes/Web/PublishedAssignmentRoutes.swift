@@ -72,5 +72,9 @@ struct PublishedAssignmentRoutes: RouteCollection {
         // retest/validation on edit.
         r.get(":assignmentID", "achievements", use: getAchievements)
         r.put(":assignmentID", "achievements", use: putAchievements)
+
+        // Assignment-scope individual badges (threshold / test) — display-only.
+        r.get(":assignmentID", "badges", use: getBadges)
+        r.put(":assignmentID", "badges", use: putBadges)
     }
 }

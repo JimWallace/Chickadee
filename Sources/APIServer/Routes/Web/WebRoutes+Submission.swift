@@ -363,9 +363,16 @@ extension WebRoutes {
         let classAchievements = try await APIClassAchievement.query(on: req.db)
             .filter(\.$submissionID == subID)
             .all()
+        // Authorable individual badges (threshold / test), earned per-student
+        // from this submission's result (evaluated over all tiers so a
+        // secret-test badge works without revealing the test).
+        let individualBadges = try await earnedIndividualBadgesForDisplay(
+            displayResult: displayResult, submission: submission,
+            gradePercent: processed.gradePercent, decoder: decoder, on: req.db)
         let badges =
             processed.badges
             + classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
+            + individualBadges
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
