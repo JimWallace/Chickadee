@@ -245,6 +245,13 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `seed`.
     public let globalExpressions: [PersonalizationExpression]
 
+    /// Instructor-authored achievements / goals / awards for this assignment —
+    /// the generalized form of the hardcoded badge + class-achievement system.
+    /// Server-evaluated and display-only; `runnerSanitized()` strips them so a
+    /// runner never decodes an `AchievementKind` it doesn't know (same rationale
+    /// as `patternFamilies` / `notebookChecks`).
+    public let achievements: [Achievement]
+
     public init(
         schemaVersion: Int = 1,
         gradingMode: GradingMode = .worker,
@@ -258,6 +265,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         sections: [TestSuiteSection] = [],
         globalVariables: [FamilyVariable] = [],
         globalExpressions: [PersonalizationExpression] = [],
+        achievements: [Achievement] = [],
         testItems: [TestItem]? = nil
     ) {
         self.schemaVersion = schemaVersion
@@ -277,6 +285,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.sections = sections
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
+        self.achievements = achievements
     }
 
     public init(from decoder: Decoder) throws {
@@ -307,6 +316,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
             try c.decodeIfPresent(
                 [PersonalizationExpression].self,
                 forKey: .globalExpressions) ?? []
+        achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
     }
 
     // `patternFamilies` / `notebookChecks` are computed (derived from
@@ -327,6 +337,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case sections
         case globalVariables
         case globalExpressions
+        case achievements
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -346,6 +357,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(sections, forKey: .sections)
         try c.encode(globalVariables, forKey: .globalVariables)
         try c.encode(globalExpressions, forKey: .globalExpressions)
+        try c.encode(achievements, forKey: .achievements)
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook
@@ -383,7 +395,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
                     variables: section.variables, expressions: [])
             },
             globalVariables: globalVariables,
-            globalExpressions: []
+            globalExpressions: [],
+            achievements: []
         )
     }
 }
