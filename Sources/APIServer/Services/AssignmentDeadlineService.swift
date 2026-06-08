@@ -105,20 +105,16 @@ func isAssignmentEffectivelyOpen(
 ) async throws -> Bool {
     // Preview is a staff-only "open": course staff see and use it exactly like an
     // open assignment, while students are held out as if it were closed. For
-    // .open / .closed the stored visibility applies to everyone.
-    let treatAsOpen: Bool
-    switch assignment.visibility {
-    case .open: treatAsOpen = true
-    case .closed: treatAsOpen = false
-    case .preview: treatAsOpen = user.isInstructor
-    }
+    // .open / .closed the stored visibility applies to everyone. Staff testing a
+    // preview also bypass the future-open-date gate — see `submissionGate`.
+    let gate = assignment.visibility.submissionGate(isStaff: user.isInstructor)
     let effective = try await effectiveDueAt(for: assignment, user: user, on: db)
     return isAssignmentOpenForUser(
-        isOpen: treatAsOpen,
+        isOpen: gate.treatAsOpen,
         overrideActive: assignmentDeadlineOverrideIsActive(assignment),
         baselineDueAt: assignment.dueAt,
         effectiveDueAt: effective,
-        startsAt: assignment.startsAt,
+        startsAt: gate.honorsStartDate ? assignment.startsAt : nil,
         now: now
     )
 }

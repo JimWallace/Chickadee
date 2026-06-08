@@ -448,6 +448,42 @@ import XCTVapor
         }
     }
 
+    /// Regression: a `.preview` assignment that *also* carries a future open
+    /// date (`startsAt`) must still be testable by staff. The open date is when
+    /// the assignment auto-publishes to students; it must not hold the preview
+    /// closed for the very staff who put it in preview to exercise grading.
+    /// Students stay blocked (preview is staff-only regardless of the date).
+    @Test func previewWithFutureOpenDateStillReachableByStaff() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            assignment.visibility = .preview
+            assignment.startsAt = Date().addingTimeInterval(7 * 24 * 3_600)  // a week out
+            try await assignment.save(on: app.db)
+
+            let studentCookie = try await loginAsStudent()
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: studentCookie) },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .forbidden,
+                        "student must not reach a preview assignment, even before its open date")
+                })
+
+            let staffCookie = try await loginUser(
+                username: "prof1", password: "pass", role: "instructor", on: app)
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .ok,
+                        "staff must reach a preview assignment to test it before its scheduled open date")
+                })
+        }
+    }
+
     // MARK: - Full round-trip: dependency-skipped outcomes stored correctly
 
     /// Regression for #105: when the browser runner skips a test because its

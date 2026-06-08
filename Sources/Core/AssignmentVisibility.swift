@@ -34,4 +34,28 @@ public enum AssignmentVisibility: String, Codable, Sendable, CaseIterable {
     public init(legacyIsOpen: Bool) {
         self = legacyIsOpen ? .open : .closed
     }
+
+    /// How this visibility maps onto the per-viewer submission / access gate.
+    ///
+    /// - `treatAsOpen`: whether the assignment behaves as "open" for this viewer.
+    ///   `.preview` is open only for staff; `.closed` is closed for everyone.
+    /// - `honorsStartDate`: whether a future open date (`startsAt`) should hold
+    ///   the assignment closed for this viewer.
+    ///
+    /// Staff testing a `.preview` assignment deliberately *bypass* the start-date
+    /// gate: the open date governs when the assignment auto-publishes to
+    /// *students*, not whether staff may exercise the grading path before then.
+    /// Without this, a `.preview` assignment that also carries a scheduled open
+    /// date is unreachable by the very staff who put it in preview to test it —
+    /// the front gate in `isAssignmentOpenForUser` would hold it closed for
+    /// everyone. (`.preview` is the only state where this matters: `.open`
+    /// consumes `startsAt`, and `.closed`/`.preview`-for-students are already
+    /// held closed by `treatAsOpen == false`.)
+    public func submissionGate(isStaff: Bool) -> (treatAsOpen: Bool, honorsStartDate: Bool) {
+        switch self {
+        case .open: return (treatAsOpen: true, honorsStartDate: true)
+        case .closed: return (treatAsOpen: false, honorsStartDate: true)
+        case .preview: return (treatAsOpen: isStaff, honorsStartDate: !isStaff)
+        }
+    }
 }
