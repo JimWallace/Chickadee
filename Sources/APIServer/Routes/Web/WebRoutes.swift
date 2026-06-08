@@ -385,19 +385,15 @@ struct WebRoutes: RouteCollection {
             }()
             let isOpenForThisUser: Bool = {
                 guard let assignment else { return false }
-                // Preview is open for staff, closed for students.
-                let treatAsOpen: Bool
-                switch assignment.visibility {
-                case .open: treatAsOpen = true
-                case .closed: treatAsOpen = false
-                case .preview: treatAsOpen = user.isInstructor
-                }
+                // Preview is open for staff, closed for students; staff testing a
+                // preview also bypass the future-open-date gate (see submissionGate).
+                let gate = assignment.visibility.submissionGate(isStaff: user.isInstructor)
                 return isAssignmentOpenForUser(
-                    isOpen: treatAsOpen,
+                    isOpen: gate.treatAsOpen,
                     overrideActive: assignment.deadlineOverrideActive ?? false,
                     baselineDueAt: baselineDueAt,
                     effectiveDueAt: effectiveDueAt,
-                    startsAt: assignment.startsAt
+                    startsAt: gate.honorsStartDate ? assignment.startsAt : nil
                 )
             }()
             let canEdit = isOpenForThisUser || previouslyOpenedSetupIDs.contains(setupID)
