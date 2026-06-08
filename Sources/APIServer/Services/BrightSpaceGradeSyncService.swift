@@ -236,6 +236,11 @@ private func bestPointsForStudent(
     else {
         throw BrightSpaceSyncError.missingPoints
     }
+    // Class-goal bonus: extra credit, capped at the suite total (100%).
+    let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, on: db)
+    if bonus > 0, let total = try await suiteTotalPoints(testSetupID: testSetupID, db: db) {
+        return min(total, points + bonus)
+    }
     return points
 }
 
