@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.393] - 2026-06-09
+
+### Changed
+
+- **Achievements unification (A3): class-record awards are manifest-driven.**
+  `awardClassBadgesFor100Percent` and the Pathfinder award iterate the assignment
+  manifest's authored `classRecord` achievements by `recordDimension`
+  (firstToSolve / fastest / shortest / new firstToSubmit), falling back to the
+  built-in registry. Behavior-identical until a manifest authors class records.
+  The new `firstToSubmit` dimension distinguishes Pathfinder (first to submit)
+  from Trailblazer (first to solve).
+
+
 ## [0.4.392] - 2026-06-09
 
 ### Changed
