@@ -3,6 +3,7 @@
 // Logic for awarding class-wide achievement badges when a 100% result arrives.
 // Called from ResultRoutes after the result is persisted.
 
+import Core
 import Fluent
 import Foundation
 
@@ -27,23 +28,29 @@ func awardClassBadgesFor100Percent(
         user.role == "student"
     else { return }
 
-    // Skip any record the instructor disabled for this assignment.
-    if !disabled.contains("trailblazer") {
-        try await awardImmutableBadge(
-            achievementID: "trailblazer",
-            testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
-    }
-    if !disabled.contains("speed_champion") {
-        try await updateRecordBadge(
-            achievementID: "speed_champion",
-            testSetupID: testSetupID, userID: userID, submissionID: submissionID,
-            newValue: Double(executionTimeMs), on: db)
-    }
-    if !disabled.contains("minimalist") {
-        try await updateRecordBadge(
-            achievementID: "minimalist",
-            testSetupID: testSetupID, userID: userID, submissionID: submissionID,
-            newValue: Double(attemptNumber), on: db)
+    // The class records to award — the manifest's authored ones (or the registry
+    // default), minus disabled.  Each is awarded by its dimension; firstToSubmit
+    // (Pathfinder) is awarded at submission time, not on reaching 100%.
+    let setup = try await APITestSetup.find(testSetupID, on: db)
+    for record in BuiltInAchievements.classRecordsForAward(in: setup, disabled: disabled) {
+        switch record.recordDimension {
+        case .firstToSolve:
+            try await awardImmutableBadge(
+                achievementID: record.id,
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
+        case .fastest:
+            try await updateRecordBadge(
+                achievementID: record.id,
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                newValue: Double(executionTimeMs), on: db)
+        case .shortest:
+            try await updateRecordBadge(
+                achievementID: record.id,
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                newValue: Double(attemptNumber), on: db)
+        case .firstToSubmit, .none:
+            continue
+        }
     }
 }
 

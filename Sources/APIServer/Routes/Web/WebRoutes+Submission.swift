@@ -233,19 +233,23 @@ extension WebRoutes {
         // checks the submitter's role and uses the existence of a
         // pathfinder row directly (the unique constraint on
         // (test_setup_id, achievement_id) makes this the natural query).
-        if user.role == "student", let uid = user.id,
-            !BuiltInAchievements.disabled(in: setup).contains("pathfinder")
-        {
-            let pathfinderExists =
-                try await APIClassAchievement.query(on: req.db)
-                .filter(\.$testSetupID == setupID)
-                .filter(\.$achievementID == "pathfinder")
-                .first() != nil
-            if !pathfinderExists {
-                let badge = APIClassAchievement(
-                    testSetupID: setupID, achievementID: "pathfinder",
-                    userID: uid, submissionID: subID)
-                try? await badge.save(on: req.db)
+        if user.role == "student", let uid = user.id {
+            // First-to-submit records (Pathfinder) — the manifest's authored
+            // ones, or the registry default, minus any the instructor disabled.
+            let records = BuiltInAchievements.classRecordsForAward(
+                in: setup, disabled: BuiltInAchievements.disabled(in: setup))
+            for record in records where record.recordDimension == .firstToSubmit {
+                let exists =
+                    try await APIClassAchievement.query(on: req.db)
+                    .filter(\.$testSetupID == setupID)
+                    .filter(\.$achievementID == record.id)
+                    .first() != nil
+                if !exists {
+                    try? await APIClassAchievement(
+                        testSetupID: setupID, achievementID: record.id,
+                        userID: uid, submissionID: subID
+                    ).save(on: req.db)
+                }
             }
         }
 
