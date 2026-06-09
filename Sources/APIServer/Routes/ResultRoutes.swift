@@ -81,12 +81,16 @@ struct ResultRoutes: RouteCollection {
             {
                 let grade = gradePercent(from: collection) ?? 0
                 if grade == 100 {
+                    let disabled =
+                        (try? await APITestSetup.find(submission.testSetupID, on: req.db))
+                        .map { BuiltInAchievements.disabled(in: $0) } ?? []
                     try await awardClassBadgesFor100Percent(
                         testSetupID: submission.testSetupID,
                         userID: userID,
                         submissionID: subID,
                         executionTimeMs: collection.executionTimeMs,
                         attemptNumber: submission.attemptNumber ?? 1,
+                        disabled: disabled,
                         on: req.db
                     )
                 }

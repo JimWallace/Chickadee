@@ -15,6 +15,7 @@
 // "Trailblazer" is.
 
 import Core
+import Fluent
 
 enum BuiltInAchievements {
 
@@ -106,5 +107,30 @@ enum BuiltInAchievements {
     /// The built-in award with this id, if any.
     static func byID(_ id: String) -> Achievement? {
         all.first { $0.id == id }
+    }
+
+    /// The set of built-in award ids this assignment has disabled (empty when
+    /// the manifest can't be decoded or disables nothing — the common case).
+    static func disabled(in setup: APITestSetup) -> Set<String> {
+        Set(setup.decodedManifest()?.disabledBuiltInAwardIDs ?? [])
+    }
+
+    /// Batch `[setupID: disabled-ids]` for several setups in one query; only
+    /// setups that disable something appear.  For the multi-assignment pages
+    /// (dashboard) that don't already have the setups loaded.
+    static func disabledBySetup(
+        setupIDs: [String], on db: Database
+    ) async throws -> [String: Set<String>] {
+        guard !setupIDs.isEmpty else { return [:] }
+        let setups = try await APITestSetup.query(on: db)
+            .filter(\.$id ~~ Set(setupIDs))
+            .all()
+        var map: [String: Set<String>] = [:]
+        for setup in setups {
+            guard let id = setup.id else { continue }
+            let d = disabled(in: setup)
+            if !d.isEmpty { map[id] = d }
+        }
+        return map
     }
 }

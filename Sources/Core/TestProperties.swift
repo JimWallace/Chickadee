@@ -252,6 +252,12 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// as `patternFamilies` / `notebookChecks`).
     public let achievements: [Achievement]
 
+    /// IDs of built-in awards (`BuiltInAchievements`) the instructor has disabled
+    /// for this assignment.  Empty = all built-ins active (the default).  The
+    /// award + display paths skip any id listed here.  Stripped from the
+    /// runner-facing manifest (awards are server-side) via the memberwise default.
+    public let disabledBuiltInAwardIDs: [String]
+
     public init(
         schemaVersion: Int = 1,
         gradingMode: GradingMode = .worker,
@@ -266,6 +272,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         globalVariables: [FamilyVariable] = [],
         globalExpressions: [PersonalizationExpression] = [],
         achievements: [Achievement] = [],
+        disabledBuiltInAwardIDs: [String] = [],
         testItems: [TestItem]? = nil
     ) {
         self.schemaVersion = schemaVersion
@@ -286,6 +293,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
         self.achievements = achievements
+        self.disabledBuiltInAwardIDs = disabledBuiltInAwardIDs
     }
 
     public init(from decoder: Decoder) throws {
@@ -317,6 +325,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
                 [PersonalizationExpression].self,
                 forKey: .globalExpressions) ?? []
         achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
+        disabledBuiltInAwardIDs =
+            try c.decodeIfPresent([String].self, forKey: .disabledBuiltInAwardIDs) ?? []
     }
 
     // `patternFamilies` / `notebookChecks` are computed (derived from
@@ -338,6 +348,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case globalVariables
         case globalExpressions
         case achievements
+        case disabledBuiltInAwardIDs
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -358,6 +369,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(globalVariables, forKey: .globalVariables)
         try c.encode(globalExpressions, forKey: .globalExpressions)
         try c.encode(achievements, forKey: .achievements)
+        try c.encode(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs)
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook
