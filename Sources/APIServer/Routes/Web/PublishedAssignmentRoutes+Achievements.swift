@@ -29,11 +29,15 @@ extension PublishedAssignmentRoutes {
     }
 
     struct AchievementsBody: Content {
-        var goals: [ClassGoalInput]
+        /// Legacy class-goals-card shape (replaces only the class-goal subset).
+        var goals: [ClassGoalInput]?
+        /// Unified shape (replaces the entire achievements list).  Wins when present.
+        var achievements: [AchievementInput]?
     }
 
     struct AchievementsResponse: Content {
         var goals: [ClassGoalInput]
+        var achievements: [AchievementInput]
     }
 
     // MARK: - GET /instructor/:assignmentID/achievements
@@ -41,7 +45,13 @@ extension PublishedAssignmentRoutes {
     @Sendable
     func getAchievements(req: Request) async throws -> AchievementsResponse {
         let (_, setup) = try await loadAssignmentAndSetup(req)
-        return AchievementsResponse(goals: classGoalRows(fromManifest: setup.manifest))
+        return makeAchievementsResponse(fromManifest: setup.manifest)
+    }
+
+    private func makeAchievementsResponse(fromManifest manifest: String) -> AchievementsResponse {
+        AchievementsResponse(
+            goals: classGoalRows(fromManifest: manifest),
+            achievements: unifiedAchievementRows(fromManifest: manifest))
     }
 
     // MARK: - PUT /instructor/:assignmentID/achievements
@@ -51,20 +61,25 @@ extension PublishedAssignmentRoutes {
         let (_, setup) = try await loadAssignmentAndSetup(req)
         let body = try req.content.decode(AchievementsBody.self)
 
-        let newGoals = try body.goals.map { try achievement(from: $0) }
-
-        // Preserve any non-class-goal achievements; replace the class-goal set.
-        let existing =
-            (try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8)))?
-            .achievements ?? []
-        let merged = existing.filter { $0.kind != .classGoal } + newGoals
+        let merged: [Achievement]
+        if let unified = body.achievements {
+            // Unified shape: replace the entire achievements list.
+            merged = try unified.map { try achievement(fromUnified: $0) }
+        } else {
+            // Legacy class-goals shape: replace only the class-goal subset.
+            let newGoals = try (body.goals ?? []).map { try achievement(from: $0) }
+            let existing =
+                (try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8)))?
+                .achievements ?? []
+            merged = existing.filter { $0.kind != .classGoal } + newGoals
+        }
 
         try await mutateManifest(setup: setup, on: req.db) { dict in
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(merged))
         }
-        return AchievementsResponse(goals: classGoalRows(fromManifest: setup.manifest))
+        return makeAchievementsResponse(fromManifest: setup.manifest)
     }
 
     // MARK: - Conversions
