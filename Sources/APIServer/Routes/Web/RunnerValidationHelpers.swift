@@ -60,7 +60,109 @@ func enqueueRunnerValidationSubmission(
         kind: APISubmission.Kind.validation
     )
     try await submission.save(on: req.db)
+
+    // Resolve personalization ONCE here (at enqueue — an instructor save, which
+    // is latency-tolerant) and cache it, so the worker poll + download paths
+    // never run the personalization evaluator. See `materializeValidationGrading`.
+    await materializeValidationGrading(
+        submission: submission,
+        setupID: setupID,
+        templateNotebookData: solutionNotebookData,
+        testSetupsDirectory: req.application.testSetupsDirectory,
+        on: req.db)
+
     return subID
+}
+
+/// Resolve a validation submission's personalization ONCE and persist it, so
+/// the worker poll + download paths never run `python3` (which the runner times
+/// out against on its 5 s artifact download — the `#869` regression). Writes:
+///
+///   * `submission.materializationJSON` — the resolved `=` expression value map
+///     plus the seed everything was resolved against. `buildJobPayload` reads
+///     this instead of re-evaluating; the values become `_ck_inputs.py`.
+///   * `<submission.zipPath>.grading` — the solution notebook with `{{name}}`
+///     placeholders substituted. `WorkerArtifactRoutes.downloadSubmission`
+///     streams it verbatim (pure I/O).
+///
+/// The stored `zipPath` keeps its `{{...}}` template, so `get_solution`, the
+/// editor, and re-validation by another user are unaffected.
+///
+/// Best-effort: never throws out. On any failure the submission is left
+/// un-materialized — the download route then streams the template (grading
+/// fails clearly, but the worker never times out), and `buildJobPayload` falls
+/// back to live resolution.
+func materializeValidationGrading(
+    submission: APISubmission,
+    setupID: String,
+    templateNotebookData: Data,
+    testSetupsDirectory: String,
+    on db: any Database
+) async {
+    do {
+        guard let setup = try await APITestSetup.find(setupID, on: db),
+            let manifestData = setup.manifest.data(using: .utf8),
+            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+        else { return }
+
+        // Non-personalized assignments: nothing to resolve or cache — the
+        // download route streams the stored zip exactly as before.
+        let hasPersonalization =
+            !manifest.globalVariables.isEmpty
+            || !manifest.globalExpressions.isEmpty
+            || manifest.sections.contains { !$0.variables.isEmpty || !$0.expressions.isEmpty }
+        guard hasPersonalization else { return }
+
+        // Resolve the per-(user, assignment) seed when we can. Literal variables
+        // substitute without a seed; only `=` expressions need one.
+        var seedHex: String?
+        if let userID = submission.userID,
+            let assignment = try await APIAssignment.query(on: db)
+                .filter(\.$testSetupID == setupID)
+                .first(),
+            let assignmentID = assignment.id
+        {
+            seedHex = try? await AssignmentSeedStore.ensureSeed(
+                userID: userID, assignmentID: assignmentID, on: db)
+        }
+
+        let supportDir = testSetupsDirectory + "shared/\(setupID)/"
+        let resolution = await PersonalizationSubstitution.resolve(
+            manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir)
+
+        // Expression-only value map (identical to `gradingInputs`) → _ck_inputs.py.
+        let exprNames = Set(resolution.evaluatedExpressionNames)
+        let inputs = resolution.substitutions.filter { exprNames.contains($0.key) }
+
+        // Substitute the solution notebook once and write the grading sidecar.
+        // Soft-fail substitution: the editor's save-time scan is the
+        // authoritative gate for unknown placeholders.
+        let filename = submission.filename ?? "solution.ipynb"
+        if filename.lowercased().hasSuffix(".ipynb"),
+            !resolution.substitutions.isEmpty,
+            !templateNotebookData.isEmpty,
+            let substituted = try? NotebookSubstitution.apply(
+                notebookData: templateNotebookData,
+                substitutions: resolution.substitutions,
+                strict: false)
+        {
+            try? substituted.write(to: URL(fileURLWithPath: submission.zipPath + ".grading"))
+        }
+
+        let materialization = SubmissionMaterialization(
+            key: manifestHash((seedHex ?? "") + "|" + setup.manifest),
+            seedHex: seedHex,
+            inputs: inputs)
+        if let encoded = try? JSONEncoder().encode(materialization),
+            let json = String(data: encoded, encoding: .utf8)
+        {
+            submission.materializationJSON = json
+            try await submission.save(on: db)
+        }
+    } catch {
+        // Best-effort: leave the submission un-materialized; the download route
+        // falls back to streaming the template and buildJobPayload to live eval.
+    }
 }
 
 /// Schedule a validation submission after a suite edit, best-effort.
