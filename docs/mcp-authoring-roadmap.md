@@ -45,7 +45,7 @@ course-scoped:
 | `create_suite_section` / `rename_suite_section` / `delete_suite_section` | `content:write` | Manage an assignment's test-suite sections (display groups) |
 | `move_suite_item` | `content:write` | Move a script/family/check into a suite section, or ungroup it |
 | `create_pattern_family` | `content:write` | Create a new pattern family: kind, function, cases (args/expected/hint), defaults (tier/points/`defaultHint`) |
-| `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable |
+| `update_pattern_family` | `content:write` | Family defaults (tier/points/`defaultHint`) + per-case args/expected/hint (incl. per-student `$ref`s), enable/disable, append new cases (`addCases`), replace prerequisites (`dependsOn`) |
 | `delete_suite_item` | `content:write` | Remove a script, family (+ its cases), or notebook check from the suite |
 | `author_notebook_check` | `content:write` | Create/replace a notebook check (DataFrame shape/columns/equality, figures, AST, …) |
 | `author_script` | `content:write` | Escape hatch: create/replace a hand-written test (prefer a pattern family / notebook check) or a non-graded support file |
