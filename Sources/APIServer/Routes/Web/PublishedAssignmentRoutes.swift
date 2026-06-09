@@ -76,5 +76,9 @@ struct PublishedAssignmentRoutes: RouteCollection {
         // Assignment-scope individual badges (threshold / test) — display-only.
         r.get(":assignmentID", "badges", use: getBadges)
         r.put(":assignmentID", "badges", use: putBadges)
+
+        // Per-assignment built-in award on/off toggles — metadata-only.
+        r.get(":assignmentID", "built-in-awards", use: getBuiltInAwards)
+        r.put(":assignmentID", "built-in-awards", use: putBuiltInAwards)
     }
 }

@@ -211,9 +211,11 @@ struct AchievementBadge: Encodable {
     /// award *conditions* live here (keyed by kind); each badge's identity —
     /// caption + tooltip — comes from `BuiltInAchievements`.  Class-wide badges
     /// are appended separately after a DB query (see `forClassAchievement`).
-    static func forSubmission(_ ctx: BadgeContext) -> [AchievementBadge] {
+    static func forSubmission(
+        _ ctx: BadgeContext, disabled: Set<String> = []
+    ) -> [AchievementBadge] {
         BuiltInAchievements.perSubmission
-            .filter { perSubmissionEarned($0.kind, ctx: ctx) }
+            .filter { !disabled.contains($0.id) && perSubmissionEarned($0.kind, ctx: ctx) }
             .map(AchievementBadge.init(from:))
     }
 
@@ -237,8 +239,11 @@ struct AchievementBadge: Encodable {
     }
 
     /// Maps a class-achievement ID string to its badge, returning nil for unknown IDs.
-    static func forClassAchievement(_ achievementID: String) -> AchievementBadge? {
-        BuiltInAchievements.classRecords
+    static func forClassAchievement(
+        _ achievementID: String, disabled: Set<String> = []
+    ) -> AchievementBadge? {
+        guard !disabled.contains(achievementID) else { return nil }
+        return BuiltInAchievements.classRecords
             .first { $0.id == achievementID }
             .map(AchievementBadge.init(from:))
     }

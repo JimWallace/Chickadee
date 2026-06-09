@@ -153,7 +153,9 @@ func makeWorkerManifestJSON(
     notebookChecks: [NotebookCheck] = [],
     sections: [TestSuiteSection] = [],
     globalVariables: [FamilyVariable] = [],
-    globalExpressions: [PersonalizationExpression] = []
+    globalExpressions: [PersonalizationExpression] = [],
+    achievements: [Achievement] = [],
+    disabledBuiltInAwardIDs: [String] = []
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -193,6 +195,14 @@ func makeWorkerManifestJSON(
     // Slice 2 — assignment-scope expressions (notebook only). Each
     // entry is `{ name, expression }`.
     try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
+    // Display/award-only fields (server-side; `runnerSanitized()` strips them).
+    // Spliced here so a suite rebuild doesn't wipe authored achievements or the
+    // instructor's built-in-award toggles — `makeWorkerManifestJSON` builds a
+    // fresh dict, so anything absent here is lost on the next suite edit.
+    try spliceEncodedArray(into: &manifest, key: "achievements", values: achievements)
+    if !disabledBuiltInAwardIDs.isEmpty {
+        manifest["disabledBuiltInAwardIDs"] = disabledBuiltInAwardIDs
+    }
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"

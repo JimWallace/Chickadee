@@ -70,8 +70,19 @@ extension StudentCourseRoutes {
         let setupsByID = try await setupsByIDFuture
         let submissions = try await submissionsFuture
         let extensionByAssignmentID = try await extensionByAssignmentIDFuture
-        let classBadgesBySetupID = try await classBadgesBySetupIDFuture
+        let classBadgesBySetupIDRaw = try await classBadgesBySetupIDFuture
         let overrideBySetupID = try await overrideBySetupIDFuture
+
+        // Honor per-assignment disabled built-in awards across the page (reuses
+        // the setups already loaded above, so no extra query).
+        let disabledBySetup = setupsByID.mapValues { BuiltInAchievements.disabled(in: $0) }
+        let classBadgesBySetupID = classBadgesBySetupIDRaw.reduce(
+            into: [String: [AchievementBadge]]()
+        ) { acc, entry in
+            let disabled = disabledBySetup[entry.key] ?? []
+            let kept = disabled.isEmpty ? entry.value : entry.value.filter { !disabled.contains($0.id) }
+            if !kept.isEmpty { acc[entry.key] = kept }
+        }
 
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
         // preferredResults must wait until submissions resolves (it needs
@@ -89,7 +100,8 @@ extension StudentCourseRoutes {
             urlToken: try student.requireURLToken(),
             preferredResultBySubmissionID: preferredResultBySubmissionID,
             student: student,
-            fmt: fmt
+            fmt: fmt,
+            disabledBySetup: disabledBySetup
         )
         let rows = sortedAssignments.map { assignment in
             buildStudentAssignmentRow(
@@ -732,6 +744,8 @@ extension StudentCourseRoutes {
         let preferredResultBySubmissionID: [String: APIResult]
         let student: APIUser
         let fmt: DateFormatter
+        /// `[setupID: disabled built-in award ids]` — the same map for every row.
+        let disabledBySetup: [String: Set<String>]
     }
 
     fileprivate func buildStudentAssignmentRow(
@@ -761,10 +775,11 @@ extension StudentCourseRoutes {
             return best >= 0 ? best : nil
         }()
 
+        let disabledHere = context.disabledBySetup[assignment.testSetupID] ?? []
         var badges = submissionBadges(
             history: history,
             preferredResultBySubmissionID: preferredResultBySubmissionID
-        )
+        ).filter { !disabledHere.contains($0.id) }
         badges.append(contentsOf: classBadges)
 
         let dueAtText = assignment.dueAt.map { fmt.string(from: $0) }

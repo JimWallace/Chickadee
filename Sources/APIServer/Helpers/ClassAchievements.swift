@@ -20,24 +20,31 @@ func awardClassBadgesFor100Percent(
     submissionID: String,
     executionTimeMs: Int,
     attemptNumber: Int,
+    disabled: Set<String> = [],
     on db: Database
 ) async throws {
     guard let user = try await APIUser.find(userID, on: db),
         user.role == "student"
     else { return }
 
-    async let trail: Void = awardImmutableBadge(
-        achievementID: "trailblazer",
-        testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
-    async let speed: Void = updateRecordBadge(
-        achievementID: "speed_champion",
-        testSetupID: testSetupID, userID: userID, submissionID: submissionID,
-        newValue: Double(executionTimeMs), on: db)
-    async let mini: Void = updateRecordBadge(
-        achievementID: "minimalist",
-        testSetupID: testSetupID, userID: userID, submissionID: submissionID,
-        newValue: Double(attemptNumber), on: db)
-    _ = try await (trail, speed, mini)
+    // Skip any record the instructor disabled for this assignment.
+    if !disabled.contains("trailblazer") {
+        try await awardImmutableBadge(
+            achievementID: "trailblazer",
+            testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
+    }
+    if !disabled.contains("speed_champion") {
+        try await updateRecordBadge(
+            achievementID: "speed_champion",
+            testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+            newValue: Double(executionTimeMs), on: db)
+    }
+    if !disabled.contains("minimalist") {
+        try await updateRecordBadge(
+            achievementID: "minimalist",
+            testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+            newValue: Double(attemptNumber), on: db)
+    }
 }
 
 /// Inserts the badge record only if no holder exists yet (first-to wins).

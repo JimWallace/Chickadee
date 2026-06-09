@@ -215,7 +215,9 @@ extension WebRoutes {
         // checks the submitter's role and uses the existence of a
         // pathfinder row directly (the unique constraint on
         // (test_setup_id, achievement_id) makes this the natural query).
-        if user.role == "student", let uid = user.id {
+        if user.role == "student", let uid = user.id,
+            !BuiltInAchievements.disabled(in: setup).contains("pathfinder")
+        {
             let pathfinderExists =
                 try await APIClassAchievement.query(on: req.db)
                 .filter(\.$testSetupID == setupID)
@@ -401,9 +403,14 @@ extension WebRoutes {
         let individualBadges = try await earnedIndividualBadgesForDisplay(
             displayResult: displayResult, submission: submission,
             gradePercent: processed.gradePercent, decoder: decoder, on: req.db)
+        let disabledAwards =
+            (try? await APITestSetup.find(submission.testSetupID, on: req.db))
+            .map { BuiltInAchievements.disabled(in: $0) } ?? []
         let badges =
-            processed.badges
-            + classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
+            processed.badges.filter { !disabledAwards.contains($0.id) }
+            + classAchievements.compactMap {
+                AchievementBadge.forClassAchievement($0.achievementID, disabled: disabledAwards)
+            }
             + individualBadges
 
         let sectionedOutcomes = buildSectionedOutcomes(

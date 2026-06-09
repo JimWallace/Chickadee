@@ -236,6 +236,28 @@
     </table>
 </section>
 
+<section id="builtin-awards-block"
+         data-assignment-id="#(assignmentID)"
+         class="editor-block">
+    <div class="editor-block-head">
+        <h2>Built-in Awards</h2>
+        <div class="toolbar toolbar--end">
+            <button type="button" class="btn action-btn" id="builtin-awards-save">Save</button>
+            <span id="builtin-awards-status" class="upload-status-inline"></span>
+        </div>
+    </div>
+    <table class="results-table" id="builtin-awards-table">
+        <thead>
+            <tr>
+                <th>Award</th>
+                <th>Earned for</th>
+                <th class="time">Active</th>
+            </tr>
+        </thead>
+        <tbody class="builtin-awards-body"></tbody>
+    </table>
+</section>
+
 #if(brightspaceSyncEnabled):
 <!-- ── BrightSpace grade sync ─────────────────────────── -->
 <div class="editor-block">
@@ -591,6 +613,7 @@ function checkUWDates(dateTimeValue, warningEl) {
 <script src="/global-inputs-editor.js?v=#appVersion()"></script>
 <script src="/class-goals-editor.js?v=#appVersion()"></script>
 <script src="/badges-editor.js?v=#appVersion()"></script>
+<script src="/builtin-awards-editor.js?v=#appVersion()"></script>
 
 <!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
      The "+ Add Test" button opens one modal; picking a type morphs the body
