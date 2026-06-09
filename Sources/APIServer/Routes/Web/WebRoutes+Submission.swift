@@ -95,6 +95,24 @@ func groupOutcomesBySection(
     return result
 }
 
+/// The built-in badges (per-submission + class records) for one submission,
+/// sourced from the manifest when seeded, else the registry minus any disabled.
+/// Lifted out of `submissionPage` to keep that handler within its length budget.
+func builtInBadgesForSubmission(
+    submission: APISubmission, badgeContext: BadgeContext,
+    classAchievements: [APIClassAchievement], on db: Database
+) async throws -> [AchievementBadge] {
+    let setup = try? await APITestSetup.find(submission.testSetupID, on: db)
+    let disabled = setup.map { BuiltInAchievements.disabled(in: $0) } ?? []
+    return AchievementBadge.forSubmission(
+        badgeContext,
+        achievements: BuiltInAchievements.manifestPerSubmission(in: setup),
+        disabled: disabled)
+        + classAchievements.compactMap {
+            AchievementBadge.forClassAchievement($0.achievementID, disabled: disabled)
+        }
+}
+
 extension WebRoutes {
 
     // MARK: - GET /testsetups/:id/submit
@@ -403,14 +421,10 @@ extension WebRoutes {
         let individualBadges = try await earnedIndividualBadgesForDisplay(
             displayResult: displayResult, submission: submission,
             gradePercent: processed.gradePercent, decoder: decoder, on: req.db)
-        let disabledAwards =
-            (try? await APITestSetup.find(submission.testSetupID, on: req.db))
-            .map { BuiltInAchievements.disabled(in: $0) } ?? []
         let badges =
-            processed.badges.filter { !disabledAwards.contains($0.id) }
-            + classAchievements.compactMap {
-                AchievementBadge.forClassAchievement($0.achievementID, disabled: disabledAwards)
-            }
+            try await builtInBadgesForSubmission(
+                submission: submission, badgeContext: processed.badgeContext,
+                classAchievements: classAchievements, on: req.db)
             + individualBadges
 
         let sectionedOutcomes = buildSectionedOutcomes(
@@ -602,13 +616,12 @@ extension WebRoutes {
             collection.totalPoints > 0
             ? Int((collection.earnedPoints / Double(collection.totalPoints) * 100).rounded())
             : 0
-        processed.badges = AchievementBadge.forSubmission(
-            BadgeContext(
-                attemptNumber: submission.attemptNumber ?? 1,
-                gradePercent: processed.gradePercent,
-                executionTimeMs: collection.executionTimeMs,
-                priorGradePercent: priorAttempt.gradePercent
-            ))
+        processed.badgeContext = BadgeContext(
+            attemptNumber: submission.attemptNumber ?? 1,
+            gradePercent: processed.gradePercent,
+            executionTimeMs: collection.executionTimeMs,
+            priorGradePercent: priorAttempt.gradePercent
+        )
         let weighted = collection.totalPoints != collection.totalTests
         let itemized = collection.filtering(tiers: viewer.itemizedTiers)
         processed.outcomes = itemized.outcomes.map { outcome in
@@ -876,7 +889,9 @@ private struct ProcessedCollection {
     var rawEarnedPoints: Double
     var executionTimeMs: Int
     var gradePercent: Int
-    var badges: [AchievementBadge]
+    /// Inputs for the per-submission badges; the badges themselves are resolved
+    /// at the call site (manifest-sourced when seeded, else the registry).
+    var badgeContext: BadgeContext
     /// Secret-tier outcomes (students only) in collection order; aggregated
     /// into per-section summaries by `buildSectionedOutcomes`.  Empty for
     /// instructors, who see secret tests itemized as ordinary rows.
@@ -895,7 +910,8 @@ private struct ProcessedCollection {
         rawEarnedPoints: 0,
         executionTimeMs: 0,
         gradePercent: 0,
-        badges: [],
+        badgeContext: BadgeContext(
+            attemptNumber: 1, gradePercent: 0, executionTimeMs: 0, priorGradePercent: nil),
         secretOutcomes: []
     )
 }

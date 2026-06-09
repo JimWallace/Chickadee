@@ -260,6 +260,8 @@ struct WebRoutes: RouteCollection {
 
                     let disabledBySetup = try await BuiltInAchievements.disabledBySetup(
                         setupIDs: Array(setupIDs), on: req.db)
+                    let perSubBySetup = try await BuiltInAchievements.manifestPerSubmissionBySetup(
+                        setupIDs: Array(setupIDs), on: req.db)
                     for (setupID, latest) in latestSubmissionBySetupID {
                         guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
                             let result = preferredResultBySubmissionID[latest.submissionID],
@@ -282,7 +284,9 @@ struct WebRoutes: RouteCollection {
                                 gradePercent: gradePercent,
                                 executionTimeMs: collection.executionTimeMs,
                                 priorGradePercent: priorGradePercent
-                            ), disabled: disabledBySetup[setupID] ?? [])
+                            ),
+                            achievements: perSubBySetup[setupID],
+                            disabled: disabledBySetup[setupID] ?? [])
                     }
 
                     // Batch-query class-wide badges this user currently holds across all setups.
