@@ -172,8 +172,11 @@ public enum RewardType: String, Codable, Sendable {
 
 /// The dimension a `classRecord` ranks students on.
 public enum RecordDimension: String, Codable, Sendable {
-    /// Earliest correct submission.
+    /// Earliest correct (100%) submission — the "Trailblazer" record.
     case firstToSolve
+    /// Earliest submission of any kind — the "Pathfinder" record (awarded at
+    /// submission time, not on reaching 100%).
+    case firstToSubmit
     /// Fastest execution time.
     case fastest
     /// Shortest solution.

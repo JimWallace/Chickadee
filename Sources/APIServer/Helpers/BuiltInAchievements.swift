@@ -76,7 +76,7 @@ enum BuiltInAchievements {
         kind: .classRecord,
         scope: .classWide,
         reward: AchievementReward(type: .title, label: "Pathfinder"),
-        recordDimension: .firstToSolve)
+        recordDimension: .firstToSubmit)
 
     static let trailblazer = Achievement(
         id: "trailblazer",
@@ -171,5 +171,17 @@ enum BuiltInAchievements {
             map[id] = perSub
         }
         return map
+    }
+
+    /// The class records to award for a setup: the manifest's authored
+    /// `classRecord` achievements (or the registry default when none), minus
+    /// any the instructor disabled.  Callers award each by its `recordDimension`.
+    static func classRecordsForAward(
+        in setup: APITestSetup?, disabled: Set<String>
+    ) -> [Achievement] {
+        let manifest = (setup?.decodedManifest()?.achievements ?? [])
+            .filter { $0.kind == .classRecord }
+        let source = manifest.isEmpty ? classRecords : manifest
+        return source.filter { !disabled.contains($0.id) }
     }
 }
