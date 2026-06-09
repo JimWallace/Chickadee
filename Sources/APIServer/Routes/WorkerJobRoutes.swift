@@ -154,12 +154,22 @@ struct WorkerJobRoutes: RouteCollection {
         let setup = claimed.setup
         let base = resolvedWorkerBaseURL(req: req)
 
+        // Validation submissions are pre-materialized at enqueue
+        // (`materializeValidationGrading`): the seed + resolved expression values
+        // are cached on the row, so we read them here instead of re-running the
+        // personalization evaluator on this hot (poll) path — and the answer-key
+        // notebook, `_ck_inputs.py`, and `CHICKADEE_ASSIGNMENT_SEED` all derive
+        // from one seed. Student submissions have no cache and resolve live.
+        let materialization = submission.decodedMaterialization()
+
         // Per-(student, assignment) seed for personalized inputs (issue #461, Phase 1).
         // Generated lazily on first grading attempt; stable for the lifetime of the
         // (user, assignment) pair. Nil when the submission has no associated user
         // (legacy / unauthenticated path) or no assignment row was matched.
         var assignmentSeed: String?
-        if let userID = submission.userID, let resolvedAssignmentID = claimed.assignmentID {
+        if let materialization {
+            assignmentSeed = materialization.seedHex
+        } else if let userID = submission.userID, let resolvedAssignmentID = claimed.assignmentID {
             do {
                 assignmentSeed = try await AssignmentSeedStore.ensureSeed(
                     userID: userID,
@@ -187,10 +197,17 @@ struct WorkerJobRoutes: RouteCollection {
         // Resolve per-student personalization inputs (issue #461) for this seed,
         // server-side, so the worker can bind them in generated scripts via
         // `_ck_inputs.py`. Shared with the browser seed endpoint via
-        // `gradingInputs` so the two grading paths resolve identically.
-        let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
-        let personalizedInputs = await PersonalizationSubstitution.gradingInputs(
-            manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir)
+        // `gradingInputs` so the two grading paths resolve identically. For a
+        // pre-materialized validation submission we use the cached values
+        // (no re-eval on this hot path); otherwise we resolve live.
+        let personalizedInputs: [String: String]?
+        if let materialization {
+            personalizedInputs = materialization.inputs.isEmpty ? nil : materialization.inputs
+        } else {
+            let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+            personalizedInputs = await PersonalizationSubstitution.gradingInputs(
+                manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir)
+        }
 
         return Job(
             submissionID: submissionID,

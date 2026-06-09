@@ -243,4 +243,9 @@ func registerMigrations(on app: Application) {
     // Replaces assignments.is_open (bool) with assignments.visibility (enum
     // string). Runs after CreateAssignments on every deploy.
     app.migrations.add(ChangeAssignmentIsOpenToVisibility())
+
+    // Adds submissions.materialization_json — cached once-at-enqueue
+    // personalization for validation submissions, so worker poll + download
+    // stay eval-free.
+    app.migrations.add(AddSubmissionMaterialization())
 }

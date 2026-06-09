@@ -63,6 +63,13 @@ final class APISubmission: Model, Content, @unchecked Sendable {
     @Field(key: "kind")
     var kind: String
 
+    /// Cached per-student personalization for a validation submission, resolved
+    /// once at enqueue (`materializeValidationGrading`) so the worker poll +
+    /// download paths stay eval-free. JSON-encoded `SubmissionMaterialization`;
+    /// nil for student submissions, non-personalized assignments, and pre-fix rows.
+    @OptionalField(key: "materialization_json")
+    var materializationJSON: String?
+
     init() {}
 
     init(
