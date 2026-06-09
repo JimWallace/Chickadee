@@ -211,11 +211,18 @@ struct AchievementBadge: Encodable {
     /// award *conditions* live here (keyed by kind); each badge's identity —
     /// caption + tooltip — comes from `BuiltInAchievements`.  Class-wide badges
     /// are appended separately after a DB query (see `forClassAchievement`).
+    /// Per-submission badges earned for `ctx`.  Source precedence: the explicit
+    /// `achievements` list (the manifest's authored per-submission achievements,
+    /// once seeded) → otherwise the built-in registry minus `disabled`.  Keeping
+    /// `achievements` optional means existing callers stay on the registry path
+    /// unchanged; manifest-sourced callers pass the list.
     static func forSubmission(
-        _ ctx: BadgeContext, disabled: Set<String> = []
+        _ ctx: BadgeContext, achievements: [Achievement]? = nil, disabled: Set<String> = []
     ) -> [AchievementBadge] {
-        BuiltInAchievements.perSubmission
-            .filter { !disabled.contains($0.id) && perSubmissionEarned($0, ctx: ctx) }
+        let source = achievements ?? BuiltInAchievements.perSubmission.filter { !disabled.contains($0.id) }
+        return
+            source
+            .filter { BuiltInAchievements.perSubmissionKinds.contains($0.kind) && perSubmissionEarned($0, ctx: ctx) }
             .map(AchievementBadge.init(from:))
     }
 

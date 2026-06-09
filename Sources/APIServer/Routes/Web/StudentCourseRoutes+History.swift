@@ -76,6 +76,7 @@ extension StudentCourseRoutes {
         // Honor per-assignment disabled built-in awards across the page (reuses
         // the setups already loaded above, so no extra query).
         let disabledBySetup = setupsByID.mapValues { BuiltInAchievements.disabled(in: $0) }
+        let perSubBySetup = setupsByID.compactMapValues { BuiltInAchievements.manifestPerSubmission(in: $0) }
         let classBadgesBySetupID = classBadgesBySetupIDRaw.reduce(
             into: [String: [AchievementBadge]]()
         ) { acc, entry in
@@ -101,7 +102,8 @@ extension StudentCourseRoutes {
             preferredResultBySubmissionID: preferredResultBySubmissionID,
             student: student,
             fmt: fmt,
-            disabledBySetup: disabledBySetup
+            disabledBySetup: disabledBySetup,
+            perSubBySetup: perSubBySetup
         )
         let rows = sortedAssignments.map { assignment in
             buildStudentAssignmentRow(
@@ -746,6 +748,9 @@ extension StudentCourseRoutes {
         let fmt: DateFormatter
         /// `[setupID: disabled built-in award ids]` — the same map for every row.
         let disabledBySetup: [String: Set<String>]
+        /// `[setupID: manifest per-submission achievements]` — same map every
+        /// row; absent setups fall back to the registry.
+        let perSubBySetup: [String: [Achievement]]
     }
 
     fileprivate func buildStudentAssignmentRow(
@@ -778,7 +783,8 @@ extension StudentCourseRoutes {
         let disabledHere = context.disabledBySetup[assignment.testSetupID] ?? []
         var badges = submissionBadges(
             history: history,
-            preferredResultBySubmissionID: preferredResultBySubmissionID
+            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            achievements: context.perSubBySetup[assignment.testSetupID]
         ).filter { !disabledHere.contains($0.id) }
         badges.append(contentsOf: classBadges)
 
@@ -852,7 +858,8 @@ extension StudentCourseRoutes {
     /// improvement).  Class-wide badges are appended by the caller.
     fileprivate func submissionBadges(
         history: [APISubmission],
-        preferredResultBySubmissionID: [String: APIResult]
+        preferredResultBySubmissionID: [String: APIResult],
+        achievements: [Achievement]?
     ) -> [AchievementBadge] {
         guard let latestSubmission = history.first,
             let latestSubID = latestSubmission.id,
@@ -876,7 +883,8 @@ extension StudentCourseRoutes {
                 gradePercent: gradePct,
                 executionTimeMs: collection.executionTimeMs,
                 priorGradePercent: priorPct
-            )
+            ),
+            achievements: achievements
         )
     }
 }

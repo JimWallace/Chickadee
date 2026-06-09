@@ -140,4 +140,36 @@ enum BuiltInAchievements {
         }
         return map
     }
+
+    /// The kinds evaluated per-submission via `forSubmission`.
+    static let perSubmissionKinds: Set<AchievementKind> = [
+        .firstTryPerfect, .comeback, .persistence, .speedRun,
+    ]
+
+    /// The manifest's authored per-submission achievements, or nil to fall back
+    /// to the registry.  `forSubmission` uses this so seeded / edited
+    /// per-submission badges take effect once a manifest carries any.
+    static func manifestPerSubmission(in setup: APITestSetup?) -> [Achievement]? {
+        let perSub = (setup?.decodedManifest()?.achievements ?? [])
+            .filter { perSubmissionKinds.contains($0.kind) }
+        return perSub.isEmpty ? nil : perSub
+    }
+
+    /// Batch `[setupID: per-submission achievements]` for the multi-assignment
+    /// pages; only setups whose manifest authors per-submission achievements
+    /// appear (others fall back to the registry).
+    static func manifestPerSubmissionBySetup(
+        setupIDs: [String], on db: Database
+    ) async throws -> [String: [Achievement]] {
+        guard !setupIDs.isEmpty else { return [:] }
+        let setups = try await APITestSetup.query(on: db)
+            .filter(\.$id ~~ Set(setupIDs))
+            .all()
+        var map: [String: [Achievement]] = [:]
+        for setup in setups {
+            guard let id = setup.id, let perSub = manifestPerSubmission(in: setup) else { continue }
+            map[id] = perSub
+        }
+        return map
+    }
 }
