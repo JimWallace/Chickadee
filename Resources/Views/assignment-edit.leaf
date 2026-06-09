@@ -209,7 +209,6 @@
         </thead>
         <tbody class="class-goals-body"></tbody>
     </table>
-    <p class="class-goals-hint">When at least the chosen share of the class reaches the grade threshold, everyone who submitted earns the bonus as extra credit (capped at 100%), scaled by how far the class gets — students see it as a live progress bar.</p>
 </section>
 
 <section id="badges-block"
@@ -235,7 +234,6 @@
         </thead>
         <tbody class="badges-body"></tbody>
     </table>
-    <p class="class-goals-hint">Individual badges appear on a student's submission when they earn it — either a score threshold ("Score ≥ 90%") or a specific (even secret) test passing. Cosmetic; no grade effect.</p>
 </section>
 
 #if(brightspaceSyncEnabled):
