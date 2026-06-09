@@ -35,6 +35,15 @@ public struct Achievement: Codable, Equatable, Sendable {
     public let classFraction: Double?
     /// Which dimension a `classRecord` ranks students on.
     public let recordDimension: RecordDimension?
+    /// Attempt-count cutoff: the *max* attempt for `firstTryPerfect` (def 1)
+    /// and the *min* attempt for `persistence` (def 5).  The ≤/≥ sense is
+    /// intrinsic to the kind.
+    public let attemptThreshold: Int?
+    /// Total-execution cutoff in ms for `speedRun` (def 2000).
+    public let timeThresholdMs: Int?
+    /// Minimum grade jump (percentage points) between submissions for
+    /// `comeback` (def 50).
+    public let jumpThresholdPercent: Int?
     /// Suite section this achievement renders under; nil = the trailing
     /// "Achievements" block.
     public let sectionID: String?
@@ -50,6 +59,9 @@ public struct Achievement: Codable, Equatable, Sendable {
         threshold: Double? = nil,
         classFraction: Double? = nil,
         recordDimension: RecordDimension? = nil,
+        attemptThreshold: Int? = nil,
+        timeThresholdMs: Int? = nil,
+        jumpThresholdPercent: Int? = nil,
         sectionID: String? = nil
     ) {
         self.id = id
@@ -62,6 +74,9 @@ public struct Achievement: Codable, Equatable, Sendable {
         self.threshold = threshold
         self.classFraction = classFraction
         self.recordDimension = recordDimension
+        self.attemptThreshold = attemptThreshold
+        self.timeThresholdMs = timeThresholdMs
+        self.jumpThresholdPercent = jumpThresholdPercent
         self.sectionID = sectionID
     }
 }

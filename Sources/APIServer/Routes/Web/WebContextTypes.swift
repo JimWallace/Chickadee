@@ -215,24 +215,28 @@ struct AchievementBadge: Encodable {
         _ ctx: BadgeContext, disabled: Set<String> = []
     ) -> [AchievementBadge] {
         BuiltInAchievements.perSubmission
-            .filter { !disabled.contains($0.id) && perSubmissionEarned($0.kind, ctx: ctx) }
+            .filter { !disabled.contains($0.id) && perSubmissionEarned($0, ctx: ctx) }
             .map(AchievementBadge.init(from:))
     }
 
-    /// Whether a built-in per-submission award's condition is met for `ctx`.
-    /// These thresholds (50 points, 5 attempts, 2 s) match the legacy badges
-    /// exactly — the fold-in changed where identity lives, not the conditions.
-    private static func perSubmissionEarned(_ kind: AchievementKind, ctx: BadgeContext) -> Bool {
-        switch kind {
+    /// Whether a per-submission award's (now parameterized) condition is met for
+    /// `ctx`.  Reads the thresholds off the achievement, defaulting to the
+    /// legacy constants (attempt 1 / +50 pts / 5 attempts / 2 s @ 100%) so the
+    /// built-in defaults behave exactly as before.
+    private static func perSubmissionEarned(_ a: Achievement, ctx: BadgeContext) -> Bool {
+        // `threshold` is a 0…1 grade fraction; default 100%.  gradePercent never
+        // exceeds 100, so `>=` collapses to `==` at the default.
+        let gradeCutoff = Int(((a.threshold ?? 1.0) * 100).rounded())
+        switch a.kind {
         case .firstTryPerfect:
-            return ctx.attemptNumber == 1 && ctx.gradePercent == 100
+            return ctx.attemptNumber <= (a.attemptThreshold ?? 1) && ctx.gradePercent >= gradeCutoff
         case .comeback:
             guard let prior = ctx.priorGradePercent else { return false }
-            return ctx.gradePercent - prior >= 50
+            return ctx.gradePercent - prior >= (a.jumpThresholdPercent ?? 50)
         case .persistence:
-            return ctx.attemptNumber >= 5 && ctx.gradePercent == 100
+            return ctx.attemptNumber >= (a.attemptThreshold ?? 5) && ctx.gradePercent >= gradeCutoff
         case .speedRun:
-            return ctx.gradePercent == 100 && ctx.executionTimeMs < 2_000
+            return ctx.gradePercent >= gradeCutoff && ctx.executionTimeMs < (a.timeThresholdMs ?? 2_000)
         default:
             return false
         }

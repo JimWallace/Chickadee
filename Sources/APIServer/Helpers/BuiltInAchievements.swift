@@ -28,7 +28,9 @@ enum BuiltInAchievements {
         detail: "Scored 100% on your very first submission — no warm-up needed.",
         kind: .firstTryPerfect,
         scope: .individual,
-        reward: AchievementReward(type: .badge, label: "Ace"))
+        reward: AchievementReward(type: .badge, label: "Ace"),
+        threshold: 1.0,
+        attemptThreshold: 1)
 
     /// Jumped ≥50 percentage points in one submission.
     static let rally = Achievement(
@@ -37,7 +39,8 @@ enum BuiltInAchievements {
         detail: "Jumped 50 or more percentage points in a single submission.",
         kind: .comeback,
         scope: .individual,
-        reward: AchievementReward(type: .badge, label: "Rally"))
+        reward: AchievementReward(type: .badge, label: "Rally"),
+        jumpThresholdPercent: 50)
 
     /// 100% after ≥5 attempts.
     static let tenacious = Achievement(
@@ -46,7 +49,9 @@ enum BuiltInAchievements {
         detail: "Reached 100% after 5 or more attempts — persistence pays off.",
         kind: .persistence,
         scope: .individual,
-        reward: AchievementReward(type: .badge, label: "Tenacious"))
+        reward: AchievementReward(type: .badge, label: "Tenacious"),
+        threshold: 1.0,
+        attemptThreshold: 5)
 
     /// 100% with total execution under 2 s.
     static let swift = Achievement(
@@ -55,7 +60,9 @@ enum BuiltInAchievements {
         detail: "Scored 100% with every test completing in under 2 seconds total.",
         kind: .speedRun,
         scope: .individual,
-        reward: AchievementReward(type: .badge, label: "Swift"))
+        reward: AchievementReward(type: .badge, label: "Swift"),
+        threshold: 1.0,
+        timeThresholdMs: 2000)
 
     /// In display order — `forSubmission` walks this list.
     static let perSubmission = [ace, rally, tenacious, swift]
