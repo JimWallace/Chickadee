@@ -59,11 +59,16 @@ func enqueueRunnerValidationSubmission(
         userID: resolvedSubmitterID,
         kind: APISubmission.Kind.validation
     )
-    try await submission.save(on: req.db)
 
-    // Resolve personalization ONCE here (at enqueue — an instructor save, which
-    // is latency-tolerant) and cache it, so the worker poll + download paths
-    // never run the personalization evaluator. See `materializeValidationGrading`.
+    // Resolve personalization and write the grading sidecar BEFORE the
+    // submission is saved. Saving makes it `pending` — a polling worker can
+    // claim and download it immediately — so the substituted `.grading` sidecar
+    // and the cached `materializationJSON` MUST already be in place, or the
+    // worker races in and grades the un-substituted template. Materialize first,
+    // then a single save flips the row to claimable with everything ready.
+    // (This resolves personalization once, at enqueue — an instructor save,
+    // which is latency-tolerant — so the worker poll + download paths never run
+    // the personalization evaluator. See `materializeValidationGrading`.)
     await materializeValidationGrading(
         submission: submission,
         setupID: setupID,
@@ -71,19 +76,27 @@ func enqueueRunnerValidationSubmission(
         testSetupsDirectory: req.application.testSetupsDirectory,
         on: req.db)
 
+    try await submission.save(on: req.db)
     return subID
 }
 
-/// Resolve a validation submission's personalization ONCE and persist it, so
-/// the worker poll + download paths never run `python3` (which the runner times
-/// out against on its 5 s artifact download — the `#869` regression). Writes:
+/// Resolve a validation submission's personalization ONCE, so the worker poll +
+/// download paths never run `python3` (which the runner times out against on its
+/// 5 s artifact download — the `#869` regression). Produces:
 ///
-///   * `submission.materializationJSON` — the resolved `=` expression value map
-///     plus the seed everything was resolved against. `buildJobPayload` reads
-///     this instead of re-evaluating; the values become `_ck_inputs.py`.
 ///   * `<submission.zipPath>.grading` — the solution notebook with `{{name}}`
-///     placeholders substituted. `WorkerArtifactRoutes.downloadSubmission`
+///     placeholders substituted, written to disk. `WorkerArtifactRoutes`
 ///     streams it verbatim (pure I/O).
+///   * `submission.materializationJSON` set **in memory** — the resolved `=`
+///     expression value map plus the seed everything was resolved against.
+///     `buildJobPayload` reads it instead of re-evaluating; the values become
+///     `_ck_inputs.py`.
+///
+/// IMPORTANT — call this BEFORE saving the submission. It deliberately does NOT
+/// save: the caller persists the row exactly once afterwards, so the submission
+/// only becomes `pending` (claimable by a polling worker) once the sidecar and
+/// cache are already in place. Saving first opens a race where the worker
+/// downloads the un-substituted template before this finishes.
 ///
 /// The stored `zipPath` keeps its `{{...}}` template, so `get_solution`, the
 /// editor, and re-validation by another user are unaffected.
@@ -156,8 +169,10 @@ func materializeValidationGrading(
         if let encoded = try? JSONEncoder().encode(materialization),
             let json = String(data: encoded, encoding: .utf8)
         {
+            // Set in-memory only; the caller saves the submission exactly once,
+            // AFTER this returns, so the row never becomes claimable before the
+            // sidecar + cache are ready.
             submission.materializationJSON = json
-            try await submission.save(on: db)
         }
     } catch {
         // Best-effort: leave the submission un-materialized; the download route
