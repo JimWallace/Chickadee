@@ -17,29 +17,6 @@ import XCTVapor
 
 @Suite struct SSOAuthFlowTests {
 
-    private struct EnvironmentOverride {
-        let key: String
-        let previousValue: String?
-
-        init(key: String, value: String?) {
-            self.key = key
-            self.previousValue = Environment.get(key)
-            if let value {
-                setenv(key, value, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-
-        func restore() {
-            if let previousValue {
-                setenv(key, previousValue, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-    }
-
     private actor MockTokenEndpoint {
         enum Mode {
             case alwaysFail
@@ -123,19 +100,6 @@ import XCTVapor
 
             try routes(app)
         }
-    }
-
-    private func withEnvironment(
-        _ values: [String: String?],
-        perform operation: () async throws -> Void
-    ) async rethrows {
-        let overrides = values.map { EnvironmentOverride(key: $0.key, value: $0.value) }
-        defer {
-            for override in overrides.reversed() {
-                override.restore()
-            }
-        }
-        try await operation()
     }
 
     private func signedToken(
@@ -850,7 +814,7 @@ import XCTVapor
     }
 
     @Test func customOIDCCallbackRouteUsesConfiguredPath() async throws {
-        try await withEnvironment(["OIDC_CALLBACK": "oidc/custom/callback"]) {
+        try await withTestEnvironment(["OIDC_CALLBACK": "oidc/custom/callback"]) {
             try await withApp(try await makeApp()) { app in
                 try await app.asyncTest(
                     .GET, "/oidc/custom/callback?error=access_denied",
