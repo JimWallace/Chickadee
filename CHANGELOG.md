@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.405] - 2026-06-10
+
+### Added
+
+- **MCP instructions/catalog drift guard.** New tests assert every tool in the
+  live MCP catalog is mentioned in the server-level `initialize` instructions
+  and declares a description, an object `inputSchema`, an `outputSchema`, and
+  annotations consistent with its required scopes — turning the "keep the
+  agent-facing copy in sync with the catalog" convention into a build failure.
+
+### Fixed
+
+- **MCP transport now validates the `MCP-Protocol-Version` header.** A request
+  declaring a protocol revision the server does not speak (anything other than
+  2025-11-25 or 2025-06-18) is rejected with HTTP 400 per the Streamable HTTP
+  transport spec, instead of being silently served. Requests without the
+  header remain accepted — `initialize` is sent before negotiation, and older
+  clients never send it.
+
+
 ## [0.4.404] - 2026-06-10
 
 ### Fixed
