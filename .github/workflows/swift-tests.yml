@@ -326,6 +326,15 @@ jobs:
         run: apt-get update -qq && apt-get install -y --no-install-recommends file python3
 
       - name: Run WorkerTests
+        # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
+        # Testing's in-process parallelism, matching the APITests jobs and
+        # the nightly coverage run.  WorkerTests spawn real subprocesses
+        # (/bin/sh scripts, python3 HTTP servers) and daemon Tasks that get
+        # starved when every test fires at once on a 2-core runner; the cap
+        # bounds that contention at the scheduler instead of relying solely
+        # on the in-suite throttles.
+        env:
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
           if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
             swift test --skip-build --filter WorkerTests

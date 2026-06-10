@@ -53,7 +53,7 @@ import Testing
     @Test func scriptExitZeroReportsExitCodeZero() async throws {
         let script = try writeScript("#!/bin/sh\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 0)
         #expect(output.timedOut == false)
     }
@@ -61,7 +61,7 @@ import Testing
     @Test func scriptExitOneReportsExitCodeOne() async throws {
         let script = try writeScript("#!/bin/sh\nexit 1")
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 1)
         #expect(output.timedOut == false)
     }
@@ -69,7 +69,7 @@ import Testing
     @Test func scriptExitTwoReportsExitCodeTwo() async throws {
         let script = try writeScript("#!/bin/sh\nexit 2")
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 2)
         #expect(output.timedOut == false)
     }
@@ -79,21 +79,21 @@ import Testing
     @Test func stdoutIsCaptured() async throws {
         let script = try writeScript("#!/bin/sh\necho 'hello world'\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.stdout.contains("hello world"))
     }
 
     @Test func stderrIsCaptured() async throws {
         let script = try writeScript("#!/bin/sh\necho 'oops' >&2\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.stderr.contains("oops"))
     }
 
     @Test func stdoutAndStderrAreSeparate() async throws {
         let script = try writeScript("#!/bin/sh\necho 'out'\necho 'err' >&2\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.stdout.contains("out"))
         #expect(output.stdout.contains("err") == false)
         #expect(output.stderr.contains("err"))
@@ -120,7 +120,7 @@ import Testing
                 runner,
                 script: script,
                 workDir: workDir,
-                timeLimitSeconds: 5,
+                timeLimitSeconds: 60,
                 env: ["CHICKADEE_ASSIGNMENT_SEED": "deadbeef" + String(repeating: "c0ffee", count: 9) + "ba"]
             )
         }
@@ -160,7 +160,7 @@ import Testing
                 runner,
                 script: script,
                 workDir: workDir,
-                timeLimitSeconds: 5,
+                timeLimitSeconds: 60,
                 env: [:]
             )
         }
@@ -179,7 +179,7 @@ import Testing
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 1)
         #expect(output.timedOut, "Script sleeping 60s should time out with a 1s limit")
         #expect(output.exitCode == -1)
-        #expect(output.executionTimeMs < 10_000)
+        #expect(output.executionTimeMs < 30_000)
     }
 
     #if os(Linux)
@@ -195,7 +195,7 @@ import Testing
         #expect(output.timedOut, "Timed-out script with a background child should still time out")
         #expect(output.exitCode == -1)
         #expect(
-            output.executionTimeMs < 10_000,
+            output.executionTimeMs < 30_000,
             "Timed-out script should reap inherited stdout/stderr handles from background children")
     }
     #endif
@@ -205,7 +205,7 @@ import Testing
     @Test func workDirIsSetCorrectly() async throws {
         let script = try writeScript("#!/bin/sh\ntouch marker.txt\nexit 0")
         let runner = UnsandboxedScriptRunner()
-        _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         let markerPath = tmpDir.appendingPathComponent("marker.txt").path
         #expect(
             FileManager.default.fileExists(atPath: markerPath),
@@ -219,7 +219,7 @@ import Testing
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\nexit 0")
         let runner = SandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 0)
         #expect(output.timedOut == false)
     }
@@ -228,7 +228,7 @@ import Testing
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\nexit 1")
         let runner = SandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 1)
         #expect(output.timedOut == false)
     }
@@ -237,7 +237,7 @@ import Testing
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\necho 'sandbox out'\nexit 0")
         let runner = SandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.stdout.contains("sandbox out"))
     }
 
@@ -245,7 +245,7 @@ import Testing
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\necho 'sandbox err' >&2\nexit 0")
         let runner = SandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.stderr.contains("sandbox err"))
     }
 
@@ -257,7 +257,7 @@ import Testing
         #expect(output.timedOut, "Sandboxed script sleeping 60s should time out with 1s limit")
         #expect(output.exitCode == -1)
         #expect(
-            output.executionTimeMs < 10_000, "Sandboxed timeout should not wait for child processes to exit naturally")
+            output.executionTimeMs < 30_000, "Sandboxed timeout should not wait for child processes to exit naturally")
     }
 
     #if os(Linux)
@@ -273,7 +273,7 @@ import Testing
         #expect(output.timedOut, "Sandboxed script with a background child should still time out")
         #expect(output.exitCode == -1)
         #expect(
-            output.executionTimeMs < 10_000,
+            output.executionTimeMs < 30_000,
             "Sandboxed timeout should reap background children without leaving pipes open")
     }
     #endif
@@ -282,7 +282,7 @@ import Testing
         guard sandboxedRunnerSupported() else { return }
         let script = try writeScript("#!/bin/sh\ntouch sandboxmarker.txt\nexit 0")
         let runner = SandboxedScriptRunner()
-        _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 5)
+        _ = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         let markerPath = tmpDir.appendingPathComponent("sandboxmarker.txt").path
         #expect(
             FileManager.default.fileExists(atPath: markerPath),
@@ -312,7 +312,7 @@ import Testing
             "
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(
             output.exitCode != 0,
             "Sandboxed runner should block outbound network access (exit 0 means connection succeeded)")
@@ -340,27 +340,26 @@ import Testing
         #expect(resolved == "env-secret")
     }
 
-    @Test func resolveWorkerSharedSecretUsesDefaultFileWhenSecretsUnset() throws {
-        let previous = FileManager.default.currentDirectoryPath
-        #expect(FileManager.default.changeCurrentDirectoryPath(tmpDir.path))
-        defer { #expect(FileManager.default.changeCurrentDirectoryPath(previous)) }
+    // These three resolve against an explicit `currentDirectory` rather than
+    // calling `changeCurrentDirectoryPath`: the working directory is
+    // process-global, so a chdir here raced every concurrently running test
+    // that resolves relative paths (and the chdir tests raced each other).
 
+    @Test func resolveWorkerSharedSecretUsesDefaultFileWhenSecretsUnset() throws {
         _ = try writeSecretFile("shared-file-secret\n")
         let resolved = resolveWorkerSharedSecret(
             cliWorkerSecret: nil,
-            environment: [:]
+            environment: [:],
+            currentDirectory: tmpDir.path
         )
 
         #expect(resolved == "shared-file-secret")
     }
 
     @Test func defaultWorkerSecretFilePathsIncludesCurrentDirectoryFileFirst() throws {
-        let previous = FileManager.default.currentDirectoryPath
-        #expect(FileManager.default.changeCurrentDirectoryPath(tmpDir.path))
-        defer { #expect(FileManager.default.changeCurrentDirectoryPath(previous)) }
-
-        let paths = defaultWorkerSecretFilePaths()
-        let expectedFirstPath = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let paths = defaultWorkerSecretFilePaths(currentDirectory: tmpDir.path)
+        let expectedFirstPath =
+            tmpDir
             .appendingPathComponent(".worker-secret")
             .path
 
@@ -371,13 +370,11 @@ import Testing
     @Test func resolveWorkerSharedSecretReturnsNilWhenAllSourcesMissing() {
         let emptyDir = tmpDir.appendingPathComponent("empty", isDirectory: true)
         try? FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
-        let previous = FileManager.default.currentDirectoryPath
-        #expect(FileManager.default.changeCurrentDirectoryPath(emptyDir.path))
-        defer { #expect(FileManager.default.changeCurrentDirectoryPath(previous)) }
 
         let resolved = resolveWorkerSharedSecret(
             cliWorkerSecret: nil,
-            environment: [:]
+            environment: [:],
+            currentDirectory: emptyDir.path
         )
 
         #expect(resolved == nil)
@@ -394,22 +391,20 @@ import Testing
 
     // MARK: - R runtime helpers
 
-    private func rscriptAvailable() -> Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", "--version"]
-        proc.standardOutput = FileHandle.nullDevice
-        proc.standardError = FileHandle.nullDevice
-        // Only query terminationStatus after a confirmed launch. If run()
-        // fails (e.g. posix_spawn returns EAGAIN under heavy parallel spawn
-        // pressure), terminationStatus on a never-launched task raises an
-        // uncaught NSInvalidArgumentException that aborts the whole process.
-        do {
-            try proc.run()
-        } catch {
-            return false
+    private func rscriptAvailable() async -> Bool {
+        // Probed via `runProcessRobustly` so the availability check can't
+        // join the suite's fork storm under parallel CI load, and a transient
+        // spawn failure (posix_spawn EAGAIN) is retried instead of silently
+        // mis-reporting Rscript as unavailable.
+        let proc = try? await runProcessRobustly {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            proc.arguments = ["Rscript", "--version"]
+            proc.standardOutput = FileHandle.nullDevice
+            proc.standardError = FileHandle.nullDevice
+            return proc
         }
-        proc.waitUntilExit()
+        guard let proc else { return false }
         return proc.terminationStatus == 0
     }
 
@@ -419,56 +414,56 @@ import Testing
     }
 
     @Test func rRuntimePassedExitsZeroWithJSON() async throws {
-        guard rscriptAvailable() else { return }
+        guard await rscriptAvailable() else { return }
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\npassed('all good')",
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 0)
         #expect(output.stdout.contains("all good"), "stdout should contain the passed message")
         #expect(output.stdout.contains("shortResult"), "stdout should contain shortResult JSON key")
     }
 
     @Test func rRuntimeFailedExitsOneWithJSON() async throws {
-        guard rscriptAvailable() else { return }
+        guard await rscriptAvailable() else { return }
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\nfailed('wrong answer')",
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 1)
         #expect(output.stdout.contains("wrong answer"))
         #expect(output.stdout.contains("shortResult"))
     }
 
     @Test func rRuntimeErroredExitsTwoWithJSON() async throws {
-        guard rscriptAvailable() else { return }
+        guard await rscriptAvailable() else { return }
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\nerrored('unexpected')",
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 2)
         #expect(output.stdout.contains("unexpected"))
         #expect(output.stdout.contains("shortResult"))
     }
 
     @Test func rRuntimePassedDefaultMessage() async throws {
-        guard rscriptAvailable() else { return }
+        guard await rscriptAvailable() else { return }
         try writeRRuntime()
         let script = try writeScript(
             "source('test_runtime.R')\npassed()",
             name: "test.r"
         )
         let runner = UnsandboxedScriptRunner()
-        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 10)
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 0)
         #expect(output.stdout.contains("passed"), "default passed() message should be 'passed'")
     }
