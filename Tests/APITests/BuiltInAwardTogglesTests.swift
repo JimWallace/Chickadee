@@ -1,9 +1,9 @@
 // Tests/APITests/BuiltInAwardTogglesTests.swift
 //
-// Per-assignment built-in award on/off toggles: the editor endpoint round-trips
-// the disabled set into the manifest; the award + display paths honor it; and a
-// suite rebuild preserves both the toggles and authored achievements (the
-// previously-latent wipe-on-suite-edit bug).
+// The disabled-built-in honoring (toggles are now managed via the unified
+// Achievements table; the /built-in-awards endpoint was retired): forSubmission
+// + forClassAchievement + awardClassBadgesFor100Percent skip a disabled award,
+// and a suite rebuild preserves both the disabled set and authored achievements.
 
 import Core
 import Fluent
@@ -42,43 +42,6 @@ import XCTVapor
         let props = try JSONDecoder().decode(TestProperties.self, from: Data(json.utf8))
         #expect(props.achievements.map(\.id) == ["g1"])
         #expect(Set(props.disabledBuiltInAwardIDs) == ["trailblazer", "speed_champion"])
-    }
-
-    @Test func putAndGetBuiltInAwardToggles() async throws {
-        try await withAssignmentRoutesApp { app in
-            let cookie = try await arLoginAsInstructor(on: app)
-            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
-            try await arInsertSetup(id: "ba_setup", on: app)
-            let assignment = try await arInsertAssignment(
-                testSetupID: "ba_setup", title: "BA", isOpen: true, on: app)
-
-            try await app.asyncTest(
-                .GET, "/instructor/\(assignment.publicID)/built-in-awards",
-                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let body = try res.content.decode(PublishedAssignmentRoutes.BuiltInAwardsResponse.self)
-                    #expect(body.awards.count == 8)
-                    #expect(body.awards.allSatisfy { $0.enabled }, "All enabled by default")
-                })
-
-            try await app.asyncTest(
-                .PUT, "/instructor/\(assignment.publicID)/built-in-awards",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: sessionCookie)
-                    req.headers.add(name: "x-csrf-token", value: csrf)
-                    try req.content.encode(
-                        PublishedAssignmentRoutes.BuiltInAwardsBody(
-                            disabled: ["trailblazer", "speed_champion", "minimalist", "pathfinder"]),
-                        as: .json)
-                },
-                afterResponse: { res in #expect(res.status == .ok) })
-
-            let setup = try #require(try await APITestSetup.find("ba_setup", on: app.db))
-            #expect(
-                BuiltInAchievements.disabled(in: setup)
-                    == ["trailblazer", "speed_champion", "minimalist", "pathfinder"])
-        }
     }
 
     @Test func awardClassBadgesSkipsDisabledRecords() async throws {
