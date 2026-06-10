@@ -1,0 +1,66 @@
+name: Mirror CI images
+
+# Mirrors the Docker Hub images our CI jobs run in (swift:6.3-jammy /
+# swift:6.3-noble job containers, postgres:16 service) into GHCR, so the
+# test workflows never pull from registry-1.docker.io at job time.
+# Unauthenticated Docker Hub pulls from shared Actions runner IPs are
+# rate-limited and were the single largest source of red CI on main
+# (6 "Initialize containers" / docker-pull timeout failures in the
+# three-week window audited for #890).  GHCR pulls from Actions runners
+# are same-infrastructure and not rate-limited.
+#
+# Runs weekly (Docker Hub tags like swift:6.3-jammy are re-pushed with
+# fixes) and on demand.  `docker buildx imagetools create` copies the
+# full multi-arch manifest registry-to-registry without a local pull.
+#
+# When the toolchain pin changes (e.g. swift:6.4), add the new tag here
+# FIRST, run this workflow, and only then point swift-tests.yml /
+# test-coverage.yml / docker-build.yml at the new mirrored tag.
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: mirror-ci-images
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror images
+        run: |
+          set -euo pipefail
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          mirror() {
+            src="$1"
+            dst="ghcr.io/${owner}/chickadee/$2"
+            echo "Mirroring ${src} -> ${dst}"
+            for attempt in 1 2 3 4 5; do
+              if docker buildx imagetools create --tag "${dst}" "${src}"; then
+                return 0
+              fi
+              echo "attempt ${attempt} failed; retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            done
+            echo "Failed to mirror ${src} after 5 attempts" >&2
+            return 1
+          }
+          mirror docker.io/library/swift:6.3-jammy swift:6.3-jammy
+          mirror docker.io/library/swift:6.3-noble swift:6.3-noble
+          mirror docker.io/library/postgres:16 postgres:16

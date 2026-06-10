@@ -10,6 +10,14 @@ on:
   # docs/release-process.md.
   merge_group:
 
+# Cancel superseded runs when new commits land on a PR branch (one branch
+# racked up four full CI runs in 70 minutes during the #890 audit).  Pushes
+# to main and merge-queue runs are never cancelled — their group key is the
+# unique ref/SHA and cancel-in-progress is false outside pull_request.
+concurrency:
+  group: swift-tests-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   format-lint:
     runs-on: ubuntu-latest
