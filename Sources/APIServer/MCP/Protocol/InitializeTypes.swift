@@ -219,10 +219,13 @@ enum MCPServerInstructions {
         substituted per validation-seed just like the starter, so `shift = {{shift}}` becomes a literal \
         that survives import — or make the solution answer a function that reads \
         CHICKADEE_ASSIGNMENT_SEED at call time. Use preview_personalization to confirm what a \
-        placeholder resolves to. Full recipe: docs/personalization-solution-notebooks.md. \
+        placeholder resolves to. Full recipe: read the \
+        chickadee://docs/personalization-solution-notebooks resource. \
         - Resources: each accessible assignment's raw test.properties.json manifest is also exposed \
         as an MCP resource (resources/list, then resources/read on \
         chickadee://assignment/<publicID>/manifest). get_suite is the structured view; the resource \
-        is the verbatim canonical JSON, useful to read the full authoring spec into context.
+        is the verbatim canonical JSON, useful to read the full authoring spec into context. \
+        Authoring guides are exposed the same way under chickadee://docs/* — e.g. the per-student \
+        solution-notebook recipe above.
         """
 }

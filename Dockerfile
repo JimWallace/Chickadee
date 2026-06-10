@@ -111,6 +111,8 @@ COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 # so updates to templates or JupyterLite are always picked up on redeploy.
 COPY Public     ./Public
 COPY Resources  ./Resources
+# Authoring guides served as MCP resources (see MCPResourceProvider).
+COPY docs       ./docs
 
 # Startup script (server only; runner uses its binary directly).
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
