@@ -18,6 +18,23 @@ struct MCPInitializeResult: Encodable, Sendable {
     let instructions: String?
 }
 
+/// The client-supplied params of an `initialize` request.  Only the fields the
+/// server reacts to are modelled — the requested protocol revision (echoed
+/// back when supported) and the client's self-identification (logged for
+/// operational visibility, never trusted for anything).  Unknown fields and
+/// malformed params are ignored rather than rejected: a lenient initialize
+/// maximises client compatibility, and the server-chosen version is the
+/// correct answer to an unreadable request anyway.
+struct MCPInitializeParams: Decodable, Sendable {
+    let protocolVersion: String?
+    let clientInfo: ClientInfo?
+
+    struct ClientInfo: Decodable, Sendable {
+        let name: String?
+        let version: String?
+    }
+}
+
 /// Capabilities this server advertises at initialization.  `tools` and
 /// `resources` are advertised; `prompts` is not.  `listChanged` is false on
 /// both (no server-initiated list-change notifications), and resources are not
