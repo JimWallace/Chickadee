@@ -307,7 +307,7 @@ struct CreatePatternFamilyTool: ContentTool {
         guard !input.cases.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Provide at least one case.")
         }
-        try Self.assertUniqueCaseKeys(input.cases)
+        try Self.assertUniqueCaseKeys(input.cases, tool: Self.name)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
             publicID: input.assignmentPublicID, tool: Self.name)
@@ -344,16 +344,19 @@ struct CreatePatternFamilyTool: ContentTool {
             assignmentClosed: closed)
     }
 
-    private static func assertUniqueCaseKeys(_ cases: [CaseInput]) throws {
+    /// Rejects empty or duplicate case keys.  Shared with
+    /// update_pattern_family's `addCases` path, so it takes the calling tool's
+    /// name for the error.
+    static func assertUniqueCaseKeys(_ cases: [CaseInput], tool: String) throws {
         var seen = Set<String>()
         for c in cases {
             let key = c.key.trimmingCharacters(in: .whitespaces)
             guard !key.isEmpty else {
-                throw MCPToolError.invalidArguments(tool: name, detail: "A case key must not be empty.")
+                throw MCPToolError.invalidArguments(tool: tool, detail: "A case key must not be empty.")
             }
             guard seen.insert(key).inserted else {
                 throw MCPToolError.invalidArguments(
-                    tool: name, detail: "Duplicate case key \"\(key)\".")
+                    tool: tool, detail: "Duplicate case key \"\(key)\".")
             }
         }
     }
@@ -367,22 +370,7 @@ struct CreatePatternFamilyTool: ContentTool {
             points: input.defaultPoints ?? 1,
             hint: normalizedHint(input.defaultHint),
             tolerance: input.tolerance)
-        let cases = try input.cases.map { c -> PatternCase in
-            let args = c.args ?? []
-            let provided =
-                try aligned(c.argsProvided, count: args.count, field: "argsProvided", key: c.key)
-                ?? [Bool](repeating: true, count: args.count)
-            let refs =
-                try aligned(c.argVarRefs, count: args.count, field: "argVarRefs", key: c.key)
-                ?? [String?](repeating: nil, count: args.count)
-            let ref = c.expectedVarRef.flatMap { $0.isEmpty ? nil : $0 }
-            return PatternCase(
-                key: c.key, label: c.label ?? c.key, args: args, expected: c.expected ?? .null,
-                argsProvided: provided, argVarRefs: refs, expectedVarRef: ref,
-                hint: normalizedHint(c.hint), tier: try parseOptionalTier(c.tier, tool: Self.name),
-                points: c.points,
-                enabled: c.enabled ?? true)
-        }
+        let cases = try input.cases.map { try patternCase(from: $0, tool: Self.name) }
         return PatternFamily(
             id: id, name: input.name, kind: kind, functionName: input.function ?? "",
             paramNames: input.paramNames ?? [], defaults: defaults, cases: cases,
@@ -390,13 +378,39 @@ struct CreatePatternFamilyTool: ContentTool {
             dependsOn: input.dependsOn ?? [])
     }
 
+    /// Builds one `PatternCase` from a case input, filling the parallel
+    /// `argsProvided` / `argVarRefs` arrays and normalising the hint and
+    /// per-student ref.  Shared with update_pattern_family's `addCases` path so a
+    /// new case is constructed identically however it is authored; all per-kind /
+    /// arity / ref legality is left to the validator that runs inside
+    /// applySuiteEdit.
+    static func patternCase(from c: CaseInput, tool: String) throws -> PatternCase {
+        let args = c.args ?? []
+        let provided =
+            try aligned(c.argsProvided, count: args.count, field: "argsProvided", key: c.key, tool: tool)
+            ?? [Bool](repeating: true, count: args.count)
+        let refs =
+            try aligned(c.argVarRefs, count: args.count, field: "argVarRefs", key: c.key, tool: tool)
+            ?? [String?](repeating: nil, count: args.count)
+        let ref = c.expectedVarRef.flatMap { $0.isEmpty ? nil : $0 }
+        return PatternCase(
+            key: c.key, label: c.label ?? c.key, args: args, expected: c.expected ?? .null,
+            argsProvided: provided, argVarRefs: refs, expectedVarRef: ref,
+            hint: normalizedHint(c.hint), tier: try parseOptionalTier(c.tier, tool: tool),
+            points: c.points,
+            enabled: c.enabled ?? true)
+    }
+
     /// Validates a parallel array's length against the args length, returning it
-    /// (or nil when the caller omitted it).
-    private static func aligned<T>(_ value: [T]?, count: Int, field: String, key: String) throws -> [T]? {
+    /// (or nil when the caller omitted it).  Shared with update_pattern_family's
+    /// `addCases` path, so it takes the calling tool's name for the error.
+    static func aligned<T>(
+        _ value: [T]?, count: Int, field: String, key: String, tool: String
+    ) throws -> [T]? {
         guard let value else { return nil }
         guard value.count == count else {
             throw MCPToolError.invalidArguments(
-                tool: name,
+                tool: tool,
                 detail: "case '\(key)': \(field) length (\(value.count)) must match args length (\(count)).")
         }
         return value
@@ -423,7 +437,7 @@ struct CreatePatternFamilyTool: ContentTool {
     /// Trims an empty hint to nil so an omitted/blank cell doesn't store an
     /// empty "💡 Hint" callout.  Matches the empty-string handling used for
     /// per-student refs.
-    private static func normalizedHint(_ raw: String?) -> String? {
+    static func normalizedHint(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
         return raw
     }

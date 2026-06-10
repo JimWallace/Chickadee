@@ -386,4 +386,113 @@ import Vapor
             }
         }
     }
+
+    @Test func addsNewCases() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let output = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    addCases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "04", label: "BMI 40.5 is obese",
+                            args: [.double(40.5)], expected: .string("obese")),
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "05", label: "BMI 17.5 is underweight",
+                            args: [.double(17.5)], expected: .string("underweight")),
+                    ]),
+                context(app))
+            #expect(output.addedCaseKeys == ["04", "05"])
+            #expect(output.enabledCaseKeys == ["01", "02", "03", "04", "05"])
+
+            let family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.cases.count == 5)
+            let added = try #require(family.cases.first { $0.key == "04" })
+            #expect(added.args == [.double(40.5)])
+            #expect(added.expected == .string("obese"))
+            #expect(added.enabled == true)
+            // Existing cases are preserved.
+            #expect(family.cases.first { $0.key == "01" }?.expected == .string("underweight"))
+        }
+    }
+
+    @Test func addCaseWithExistingKeyThrows() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // Key "01" already exists — adding it is a collision; the caller
+            // should edit via `cases` instead.
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        addCases: [
+                            CreatePatternFamilyTool.CaseInput(
+                                key: "01", args: [.double(19.0)], expected: .string("normal"))
+                        ]),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func addCaseWrongArgCountThrows() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // BMI declares one parameter; a new case with two args must be
+            // rejected by the kind validation that runs on save.
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        addCases: [
+                            CreatePatternFamilyTool.CaseInput(
+                                key: "99", args: [.double(1.0), .double(2.0)],
+                                expected: .string("x"))
+                        ]),
+                    context(app))
+            }
+        }
+    }
+
+    @Test func editsAndClearsDependsOn() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // Seed two families so one can depend on the other.
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            let setup = try await makeTestSetup(
+                on: app, id: "setup_pf", courseID: courseID, manifest: emptyManifest)
+            try pfWriteEmptyZip(at: app.testSetupsDirectory + "setup_pf.zip")
+            try await applyPatternFamilies(
+                to: setup, nextFamilies: [pfBMIFamily(), pfApproxFamily()],
+                authoredItems: [
+                    .family(id: "bmi_category", sectionID: nil),
+                    .family(id: "bmi_kg_m2", sectionID: nil),
+                ], on: app.db)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_pf", courseID: courseID, title: "Lab")
+
+            // Add a prerequisite via a family:<id> token.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    dependsOn: ["family:bmi_kg_m2"]),
+                context(app))
+            var family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.dependsOn == ["family:bmi_kg_m2"])
+
+            // Clearing with [] drops the prerequisite again.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    dependsOn: []),
+                context(app))
+            family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.dependsOn.isEmpty)
+        }
+    }
 }

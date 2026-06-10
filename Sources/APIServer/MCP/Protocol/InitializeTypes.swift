@@ -176,7 +176,9 @@ enum MCPServerInstructions {
         - get_suite returns the full source of truth for reading: hand-written script bodies, \
         complete pattern-family specs, and notebook-check specs. For authoring, update_pattern_family \
         edits a generated case's args/expected and its hint — per-case `hint` or the family-wide \
-        `defaultHint` (create_pattern_family takes the same), validated on save — and author_script \
+        `defaultHint` (create_pattern_family takes the same), validated on save — and can also append \
+        new cases (`addCases`) or replace the family's prerequisites (`dependsOn`) in place, so you \
+        rarely need to recreate a family to grow its coverage or drop a dependency. author_script \
         writes a single \
         hand-written file into the test setup. A test tier (public/release/secret/student) creates or \
         replaces the script AND its suite entry — set points/displayName/dependsOn/sectionID alongside \
