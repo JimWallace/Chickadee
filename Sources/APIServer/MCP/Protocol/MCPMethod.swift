@@ -8,6 +8,14 @@
 /// The MCP protocol revision this server advertises in `initialize`.
 enum MCPProtocol {
     static let version = "2025-11-25"
+
+    /// Revisions accepted in the `MCP-Protocol-Version` transport header.
+    /// 2025-06-18 is wire-compatible with everything this server implements
+    /// (single-message POSTs, the same tools/resources shapes).  2025-03-26 is
+    /// deliberately absent: that revision allows JSON-RPC batching, which this
+    /// transport does not parse — and clients of that era predate the header
+    /// anyway (an absent header is accepted, see MCPRoutes).
+    static let supportedVersions: Set<String> = [version, "2025-06-18"]
 }
 
 /// MCP JSON-RPC methods recognised by the dispatcher.  Unknown methods yield a
