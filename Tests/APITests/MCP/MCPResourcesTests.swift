@@ -49,12 +49,16 @@ import Vapor
         }
     }
 
-    @Test func listForAdminIncludesEveryCourse() async throws {
+    @Test func listForAdminIsEnrollmentScoped() async throws {
+        // Admins are enrollment-scoped like everyone else: the agent's listing
+        // covers exactly the courses the admin is enrolled in.
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let courseA = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let courseB = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            _ = try await makeTestUser(on: app, username: "boss", role: "admin")
+            let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
+            try await makeTestEnrollment(
+                on: app, userID: boss.requireID(), courseID: courseA.requireID())
             try await makeTestSetup(on: app, id: "setup_a", courseID: courseA.requireID())
             try await makeTestSetup(on: app, id: "setup_b", courseID: courseB.requireID())
             let a = try await makeTestAssignment(
@@ -65,7 +69,7 @@ import Vapor
             let result = try await MCPResourceProvider().list(context: context(app, subject: "boss"))
             let uris = Self.resourceURIs(result)
             #expect(uris.contains(MCPResourceProvider.manifestURI(publicID: a.publicID)))
-            #expect(uris.contains(MCPResourceProvider.manifestURI(publicID: b.publicID)))
+            #expect(!uris.contains(MCPResourceProvider.manifestURI(publicID: b.publicID)))
         }
     }
 

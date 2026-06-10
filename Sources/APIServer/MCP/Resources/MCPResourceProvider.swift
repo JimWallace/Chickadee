@@ -10,10 +10,11 @@
 // the server-level instructions can reference a recipe by URI instead of a
 // repo path a connected agent cannot fetch.
 //
-// Course-scoped exactly like the tools: the listing is confined to courses the
-// subject can act on (admins: all non-archived; everyone else: their
-// enrolments), and a read re-checks `authorizeCourseAccess`. Nothing here
-// touches student data, grades, or submissions — only authoring content.
+// Course-scoped exactly like the tools: the listing is confined to the
+// subject's non-archived enrolments (admins included — the shared
+// `enrolledCourses` resolver carries no role bypass), and a read re-checks
+// `authorizeCourseAccess`. Nothing here touches student data, grades, or
+// submissions — only authoring content.
 
 import Core
 import Fluent
@@ -69,20 +70,11 @@ struct MCPResourceProvider: Sendable {
     func list(context: ToolContext) async throws -> JSONValue {
         let user = try await context.requireEligibleSubject(tool: "resources/list")
 
+        // The shared visibility resolver: non-archived enrolled courses, for
+        // every role — an admin's agent sees its enrolments, not the world.
         let courses: [APICourse]
-        if user.isAdmin {
-            courses = try await APICourse.query(on: context.db)
-                .filter(\.$isArchived == false)
-                .all()
-        } else if let userID = user.id {
-            let enrollments = try await APICourseEnrollment.query(on: context.db)
-                .filter(\.$userID == userID)
-                .all()
-            let courseIDs = Array(Set(enrollments.map { $0.$course.id }))
-            courses =
-                courseIDs.isEmpty
-                ? []
-                : try await APICourse.query(on: context.db).filter(\.$id ~~ courseIDs).all()
+        if let userID = user.id {
+            courses = try await enrolledCourses(for: userID, on: context.db)
         } else {
             courses = []
         }

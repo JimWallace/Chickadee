@@ -268,18 +268,12 @@ extension Request {
     }
 
     private func loadEnrolledCourseContexts(userID: UUID) async throws -> [CourseContext] {
-        let enrollments = try await APICourseEnrollment.query(on: db)
-            .filter(\.$userID == userID)
-            .with(\.$course)
-            .all()
-        return
-            enrollments
-            .compactMap { e -> CourseContext? in
-                guard let id = e.course.id else { return nil }
-                guard !e.course.isArchived else { return nil }  // hide archived courses everywhere
-                return CourseContext(id: id.uuidString, code: e.course.code, name: e.course.name, isActive: false)
-            }
-            .sorted { $0.code < $1.code }
+        // Delegates to the shared visibility resolver so the tab strip and the
+        // MCP listing surface stay in lockstep by construction.
+        try await enrolledCourses(for: userID, on: db).compactMap { course in
+            guard let id = course.id else { return nil }
+            return CourseContext(id: id.uuidString, code: course.code, name: course.name, isActive: false)
+        }
     }
 }
 

@@ -85,9 +85,10 @@ enum MCPServerInstructions {
         test suites, starter notebooks, and reference solutions. It never exposes student data, \
         grades, student submissions, or enrollment management.
 
-        Access scope: you may only act on courses the authenticated account is enrolled in (an admin \
-        account may act on every course); students cannot use this interface. Read tools require the \
-        content:read scope; write tools require content:write.
+        Access scope: you may only act on courses the authenticated account is enrolled in — for \
+        every role, admins included. Enrolling the account in a course widens this agent's reach; \
+        unenrolling revokes it immediately. Students cannot use this interface. Read tools require \
+        the content:read scope; write tools require content:write.
 
         Key concepts:
         - Course — identified by a short code (e.g. "CS136").
