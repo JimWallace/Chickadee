@@ -245,6 +245,23 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `seed`.
     public let globalExpressions: [PersonalizationExpression]
 
+    /// True when the manifest declares any per-student `=` expression, global
+    /// or section-scoped.  Expressions are the only personalization inputs
+    /// that need a per-(student, assignment) seed to resolve — use this to
+    /// decide whether a seed must be looked up.  Ask `hasPersonalization`
+    /// instead when the question is "is there anything to substitute at all".
+    public var hasExpressions: Bool {
+        !globalExpressions.isEmpty || sections.contains { !$0.expressions.isEmpty }
+    }
+
+    /// True when the manifest declares anything personalization substitutes —
+    /// literal variables or per-student expressions, global or section-scoped.
+    /// Strictly broader than `hasExpressions`: a literal-only assignment still
+    /// substitutes `{{name}}` placeholders, it just needs no seed.
+    public var hasPersonalization: Bool {
+        hasExpressions || !globalVariables.isEmpty || sections.contains { !$0.variables.isEmpty }
+    }
+
     /// Instructor-authored achievements / goals / awards for this assignment —
     /// the generalized form of the hardcoded badge + class-achievement system.
     /// Server-evaluated and display-only; `runnerSanitized()` strips them so a

@@ -98,10 +98,7 @@ enum PersonalizationSubstitution {
         manifest: TestProperties, seedHex: String?, supportFilesDirectory: String?
     ) async -> [String: String]? {
         guard let seedHex, !seedHex.isEmpty else { return nil }
-        let hasExpressions =
-            !manifest.globalExpressions.isEmpty
-            || manifest.sections.contains { !$0.expressions.isEmpty }
-        guard hasExpressions else { return nil }
+        guard manifest.hasExpressions else { return nil }
         let resolution = await resolve(
             manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportFilesDirectory)
         let exprNames = Set(resolution.evaluatedExpressionNames)
