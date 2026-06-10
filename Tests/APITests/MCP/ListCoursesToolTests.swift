@@ -43,16 +43,38 @@ import Vapor
         }
     }
 
-    @Test func adminSeesAllCourses() async throws {
+    @Test func adminSeesOnlyEnrolledCourses() async throws {
+        // Admins are enrollment-scoped like everyone else: an agent token never
+        // reaches further than the courses its human is enrolled in.
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            _ = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
+            let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
             _ = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            _ = try await makeTestUser(on: app, username: "boss", role: "admin")
+            let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
+            try await makeTestEnrollment(on: app, userID: boss.requireID(), courseID: try cs136.requireID())
 
             let output = try await ListCoursesTool().execute(
                 ListCoursesTool.Input(), context(app, subject: "boss"))
-            #expect(output.courses.map(\.code) == ["CS136", "CS246"])
+            #expect(output.courses.map(\.code) == ["CS136"])
+        }
+    }
+
+    @Test func archivedCoursesAreHidden() async throws {
+        // Mirrors the dashboard tab strip: archiving a course drops it from the
+        // agent's view even while the enrollment row remains.
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let cs136 = try await makeTestCourse(on: app, code: "CS136", name: "Systems")
+            let old = try await makeTestCourse(on: app, code: "CS001", name: "Retired")
+            old.isArchived = true
+            try await old.save(on: app.db)
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: try cs136.requireID())
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: try old.requireID())
+
+            let output = try await ListCoursesTool().execute(
+                ListCoursesTool.Input(), context(app, subject: "tester"))
+            #expect(output.courses.map(\.code) == ["CS136"])
         }
     }
 
