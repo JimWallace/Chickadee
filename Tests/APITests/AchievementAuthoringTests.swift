@@ -1,9 +1,9 @@
 // Tests/APITests/AchievementAuthoringTests.swift
 //
-// Phase 5 authoring: the instructor edit page's "Class Goals" card persists
-// class goals into the assignment manifest via PUT /instructor/:id/achievements
-// (and reads them back via GET). Display-only, so the save does not retest or
-// re-validate.
+// Class-goal authoring through the unified Achievements editor: PUT
+// /instructor/:id/achievements persists class goals into the assignment
+// manifest (and GET reads them back as editable rows). Display-only, so the
+// save does not retest or re-validate.
 
 import Core
 import Fluent
@@ -14,6 +14,16 @@ import XCTVapor
 @testable import APIServer
 
 @Suite struct AchievementAuthoringTests {
+
+    private func classGoalRow(
+        name: String, thresholdPercent: Double, classPercent: Double, points: Int
+    ) -> PublishedAssignmentRoutes.AchievementInput {
+        .init(
+            id: nil, name: name, kind: "classGoal", detail: nil,
+            thresholdPercent: thresholdPercent, classPercent: classPercent, points: points,
+            testName: nil, recordDimension: nil, attemptThreshold: nil,
+            timeThresholdMs: nil, jumpThresholdPercent: nil)
+    }
 
     @Test func putAndGetClassGoalsRoundTrip() async throws {
         try await withAssignmentRoutesApp { app in
@@ -29,10 +39,9 @@ import XCTVapor
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     try req.content.encode(
-                        PublishedAssignmentRoutes.AchievementsBody(goals: [
-                            .init(
-                                id: nil, name: "80% Mastery",
-                                thresholdPercent: 80, classPercent: 80, bonusPoints: 5)
+                        PublishedAssignmentRoutes.AchievementsBody(achievements: [
+                            classGoalRow(
+                                name: "80% Mastery", thresholdPercent: 80, classPercent: 80, points: 5)
                         ]), as: .json)
                 },
                 afterResponse: { res in
@@ -78,10 +87,9 @@ import XCTVapor
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     try req.content.encode(
-                        PublishedAssignmentRoutes.AchievementsBody(goals: [
-                            .init(
-                                id: nil, name: "Impossible",
-                                thresholdPercent: 150, classPercent: 80, bonusPoints: 5)
+                        PublishedAssignmentRoutes.AchievementsBody(achievements: [
+                            classGoalRow(
+                                name: "Impossible", thresholdPercent: 150, classPercent: 80, points: 5)
                         ]), as: .json)
                 },
                 afterResponse: { res in
