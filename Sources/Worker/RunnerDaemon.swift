@@ -214,7 +214,8 @@ struct WorkerCommand: AsyncParsableCommand {
 
 func resolveWorkerSharedSecret(
     cliWorkerSecret: String?,
-    environment: [String: String]
+    environment: [String: String],
+    currentDirectory: String = FileManager.default.currentDirectoryPath
 ) -> String? {
     let cliSecret = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !cliSecret.isEmpty { return cliSecret }
@@ -223,7 +224,7 @@ func resolveWorkerSharedSecret(
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !envSecret.isEmpty { return envSecret }
 
-    for path in defaultWorkerSecretFilePaths() {
+    for path in defaultWorkerSecretFilePaths(currentDirectory: currentDirectory) {
         if let fileSecret = readWorkerSecretFromFile(path: path) {
             return fileSecret
         }
@@ -232,10 +233,14 @@ func resolveWorkerSharedSecret(
     return nil
 }
 
-func defaultWorkerSecretFilePaths() -> [String] {
+// `currentDirectory` is injectable so tests can point at a scratch directory
+// instead of mutating the process-global working directory with `chdir`.
+func defaultWorkerSecretFilePaths(
+    currentDirectory: String = FileManager.default.currentDirectoryPath
+) -> [String] {
     var paths: [String] = []
 
-    let cwd = FileManager.default.currentDirectoryPath
+    let cwd = currentDirectory
     if !cwd.isEmpty {
         paths.append(URL(fileURLWithPath: cwd).appendingPathComponent(".worker-secret").path)
     }

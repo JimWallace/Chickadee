@@ -383,7 +383,7 @@ import Testing
 
     // MARK: - End-to-end: run the generated module through a real python3
 
-    @Test func generatedModuleLoadsUnderRealPython3() throws {
+    @Test func generatedModuleLoadsUnderRealPython3() async throws {
         // The shape-level tests above can't catch an emitted-Python bug that
         // still *looks* plausible — the v0.4.220 `\/` regression compiled fine
         // as a Swift string but made the inner compile() throw. Only a real
@@ -426,15 +426,16 @@ import Testing
             print(json.dumps({n: hasattr(m, n) for n in names}))
             """
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["python3", "-c", probe]
-        let outPipe = Pipe()
-        proc.standardOutput = outPipe
-        proc.standardError = Pipe()
-        try proc.run()
-        proc.waitUntilExit()
+        let proc = try await runProcessRobustly {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            proc.arguments = ["python3", "-c", probe]
+            proc.standardOutput = Pipe()
+            proc.standardError = Pipe()
+            return proc
+        }
 
+        let outPipe = try #require(proc.standardOutput as? Pipe)
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let out = (String(bytes: outData, encoding: .utf8) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)

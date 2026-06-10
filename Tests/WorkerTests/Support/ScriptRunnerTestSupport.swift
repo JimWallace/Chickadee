@@ -53,3 +53,32 @@ func runScriptRobustly(
         return output
     }
 }
+
+/// Builds, launches, and reaps a bare `Process` under the shared
+/// subprocess-launch throttle, retrying the *launch* when `Process.run()`
+/// throws.  Under parallel CI load `posix_spawn` can transiently fail
+/// (EAGAIN), which Foundation surfaces as a misleading "file doesn't exist"
+/// CocoaError — the cause of intermittent CI failures in tests that spawn
+/// `/usr/bin/env` directly.  Each attempt gets a fresh `Process` from
+/// `makeProcess` because a failed `run()` leaves the instance unusable.
+/// Returns the exited process; read `terminationStatus` and any attached
+/// pipes off it.
+func runProcessRobustly(
+    attempts: Int = 5,
+    makeProcess: @Sendable () throws -> Process
+) async throws -> Process {
+    try await withSubprocessSlot {
+        for _ in 0..<(attempts - 1) {
+            let process = try makeProcess()
+            if (try? process.run()) != nil {
+                process.waitUntilExit()
+                return process
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let process = try makeProcess()
+        try process.run()
+        process.waitUntilExit()
+        return process
+    }
+}

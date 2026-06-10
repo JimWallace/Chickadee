@@ -206,7 +206,7 @@ import Testing
         return path
     }
 
-    private func makeZip(at zipPath: String, files: [(path: String, contents: String)]) throws {
+    private func makeZip(at zipPath: String, files: [(path: String, contents: String)]) async throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-zip-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -221,32 +221,37 @@ import Testing
             try Data(file.contents.utf8).write(to: path)
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.currentDirectoryURL = tempDir
-        process.arguments = [
-            "python3",
-            "-c",
-            #"""
-            import os
-            import sys
-            import zipfile
+        // Launched via `runProcessRobustly` so concurrent tests can't pile
+        // python3 forks on top of the suite's other real subprocesses, and a
+        // transient spawn failure under load is retried instead of failing
+        // the test.
+        let process = try await runProcessRobustly {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.currentDirectoryURL = tempDir
+            process.arguments = [
+                "python3",
+                "-c",
+                #"""
+                import os
+                import sys
+                import zipfile
 
-            zip_path = sys.argv[1]
-            root = sys.argv[2]
+                zip_path = sys.argv[1]
+                root = sys.argv[2]
 
-            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                for current_root, _, filenames in os.walk(root):
-                    for filename in filenames:
-                        full_path = os.path.join(current_root, filename)
-                        archive_name = os.path.relpath(full_path, root)
-                        archive.write(full_path, archive_name)
-            """#,
-            zipPath,
-            tempDir.path,
-        ]
-        try process.run()
-        process.waitUntilExit()
+                with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    for current_root, _, filenames in os.walk(root):
+                        for filename in filenames:
+                            full_path = os.path.join(current_root, filename)
+                            archive_name = os.path.relpath(full_path, root)
+                            archive.write(full_path, archive_name)
+                """#,
+                zipPath,
+                tempDir.path,
+            ]
+            return process
+        }
         #expect(process.terminationStatus == 0)
     }
 
@@ -254,12 +259,12 @@ import Testing
         root: URL,
         serverPort: Int,
         submissionID: String
-    ) throws -> Job {
+    ) async throws -> Job {
         let submissionPath = root.appendingPathComponent("\(submissionID).ipynb")
         try Data(notebookJSON(code: "print(\(submissionID.debugDescription))\n").utf8).write(to: submissionPath)
 
         let setupZipPath = root.appendingPathComponent("\(submissionID)-setup.zip").path
-        try makeZip(
+        try await makeZip(
             at: setupZipPath,
             files: [
                 ("test.sh", "#!/bin/sh\necho passed\n")
@@ -430,10 +435,10 @@ import Testing
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-report-failure-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try LocalHTTPTestServer.staticFiles(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let job = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_report_fail")
+        let job = try await makeServedJob(root: root, serverPort: server.port, submissionID: "sub_report_fail")
         let poller = MockPoller(jobs: [job, nil, nil, nil])
         let reporter = FlakyReporter(failuresRemaining: 1)
         let runner = MockRunner(
@@ -505,10 +510,10 @@ import Testing
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-next-job-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try LocalHTTPTestServer.staticFiles(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let goodJob = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_good_job")
+        let goodJob = try await makeServedJob(root: root, serverPort: server.port, submissionID: "sub_good_job")
         let badJob = try makeJob(submissionID: "sub_bad_job")
         let poller = MockPoller(jobs: [badJob, goodJob, nil, nil, nil])
         let reporter = MockReporter()
@@ -573,10 +578,10 @@ import Testing
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-json-footer-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try LocalHTTPTestServer.staticFiles(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let job = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_json_footer")
+        let job = try await makeServedJob(root: root, serverPort: server.port, submissionID: "sub_json_footer")
 
         let stdoutWithFooter = """
             Hello, World!
@@ -674,7 +679,7 @@ import Testing
     }
 
     @Test func downloadRetriesThroughShortServerInterruption() async throws {
-        let flakyServer = try LocalHTTPTestServer.flaky(failuresBeforeSuccess: 2, responseBody: "PK\0\0")
+        let flakyServer = try await LocalHTTPTestServer.flaky(failuresBeforeSuccess: 2, responseBody: "PK\0\0")
         defer { flakyServer.stop() }
 
         let poller = MockPoller(jobs: [])
@@ -860,11 +865,13 @@ import Testing
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-concurrent-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try LocalHTTPTestServer.staticFiles(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let jobs = try (0..<5).map { i in
-            try makeServedJob(root: root, serverPort: server.port, submissionID: "concurrent_\(i)")
+        var jobs: [Job] = []
+        for i in 0..<5 {
+            jobs.append(
+                try await makeServedJob(root: root, serverPort: server.port, submissionID: "concurrent_\(i)"))
         }
         let poller = MockPoller(jobs: jobs.map(Optional.some) + [nil])
         let reporter = MockReporter()
@@ -907,7 +914,7 @@ import Testing
     @Test func workerDaemonReportsSyntheticFailureWhenSubmissionDownloadTerminallyFails() async throws {
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-dl-terminal-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
-        let failServer = try LocalHTTPTestServer.alwaysNotFound()
+        let failServer = try await LocalHTTPTestServer.alwaysNotFound()
         defer { failServer.stop() }
 
         let job = Job(
