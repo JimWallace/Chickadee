@@ -33,7 +33,7 @@ struct MCPDispatcher: Sendable {
 
         switch method {
         case .initialize:
-            return initializeResponse(id: id)
+            return initializeResponse(id: id, params: request.params, context: context)
         case .ping:
             return .success(id: id, result: .object([:]))
         case .initialized:
@@ -256,9 +256,29 @@ struct MCPDispatcher: Sendable {
         ])
     }
 
-    private func initializeResponse(id: JSONRPCID) -> JSONRPCResponse {
+    private func initializeResponse(
+        id: JSONRPCID, params: JSONValue?, context: ToolContext?
+    ) -> JSONRPCResponse {
+        let client = try? (params ?? .object([:])).decoded(as: MCPInitializeParams.self)
+        // Version negotiation (lifecycle spec): echo the requested revision
+        // when this server supports it; otherwise answer with the latest we
+        // speak and let the client decide whether to continue.
+        let negotiated =
+            client?.protocolVersion.flatMap { requested in
+                MCPProtocol.supportedVersions.contains(requested) ? requested : nil
+            } ?? MCPProtocol.version
+        // Surface who connected in the logs — operational visibility into
+        // which agents/libraries speak to this server, nothing more.
+        if let context {
+            let name = client?.clientInfo?.name ?? "unknown"
+            let clientVersion = client?.clientInfo?.version ?? "unknown"
+            let requested = client?.protocolVersion ?? "none"
+            context.logger.info(
+                "MCP initialize: client=\(name)/\(clientVersion) requestedProtocolVersion=\(requested) negotiated=\(negotiated)"
+            )
+        }
         let result = MCPInitializeResult(
-            protocolVersion: MCPProtocol.version,
+            protocolVersion: negotiated,
             capabilities: .v1,
             serverInfo: serverInfo,
             instructions: MCPServerInstructions.text
