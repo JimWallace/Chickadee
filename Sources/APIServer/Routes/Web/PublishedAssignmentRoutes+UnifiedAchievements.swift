@@ -152,9 +152,20 @@ extension PublishedAssignmentRoutes {
             jumpThresholdPercent: a.jumpThresholdPercent)
     }
 
+    /// The rows shown in the unified editor table.  Until the instructor first
+    /// saves the table (`builtInAchievementsSeeded`), the built-in defaults the
+    /// manifest hasn't authored yet are merged in so they appear as editable
+    /// rows; after seeding, the manifest is authoritative (a removed built-in
+    /// stays removed).
     func unifiedAchievementRows(fromManifest manifest: String) -> [AchievementInput] {
         guard let props = try? JSONDecoder().decode(TestProperties.self, from: Data(manifest.utf8))
-        else { return [] }
-        return props.achievements.map(achievementInput(from:))
+        else { return BuiltInAchievements.all.map(achievementInput(from:)) }
+        let authored = props.achievements
+        guard !props.builtInAchievementsSeeded else {
+            return authored.map(achievementInput(from:))
+        }
+        let authoredIDs = Set(authored.map(\.id))
+        let defaults = BuiltInAchievements.all.filter { !authoredIDs.contains($0.id) }
+        return (authored + defaults).map(achievementInput(from:))
     }
 }

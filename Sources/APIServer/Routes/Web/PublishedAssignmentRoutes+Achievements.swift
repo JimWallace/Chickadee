@@ -62,6 +62,7 @@ extension PublishedAssignmentRoutes {
         let body = try req.content.decode(AchievementsBody.self)
 
         let merged: [Achievement]
+        let isUnified = body.achievements != nil
         if let unified = body.achievements {
             // Unified shape: replace the entire achievements list.
             merged = try unified.map { try achievement(fromUnified: $0) }
@@ -78,6 +79,9 @@ extension PublishedAssignmentRoutes {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             dict["achievements"] = try JSONSerialization.jsonObject(with: encoder.encode(merged))
+            // A unified save means the instructor curated the full list — the
+            // manifest is now authoritative (built-in defaults no longer merge in).
+            if isUnified { dict["builtInAchievementsSeeded"] = true }
         }
         return makeAchievementsResponse(fromManifest: setup.manifest)
     }

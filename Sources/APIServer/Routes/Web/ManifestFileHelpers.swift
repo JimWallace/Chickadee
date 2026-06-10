@@ -155,7 +155,8 @@ func makeWorkerManifestJSON(
     globalVariables: [FamilyVariable] = [],
     globalExpressions: [PersonalizationExpression] = [],
     achievements: [Achievement] = [],
-    disabledBuiltInAwardIDs: [String] = []
+    disabledBuiltInAwardIDs: [String] = [],
+    builtInAchievementsSeeded: Bool = false
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -202,6 +203,9 @@ func makeWorkerManifestJSON(
     try spliceEncodedArray(into: &manifest, key: "achievements", values: achievements)
     if !disabledBuiltInAwardIDs.isEmpty {
         manifest["disabledBuiltInAwardIDs"] = disabledBuiltInAwardIDs
+    }
+    if builtInAchievementsSeeded {
+        manifest["builtInAchievementsSeeded"] = true
     }
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
