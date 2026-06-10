@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.408] - 2026-06-10
+
+### Added
+
+- **MCP tools advertise display titles.** Every entry in `tools/list` now
+  carries a human-friendly `title` (derived from the tool name, e.g.
+  `get_server_info` → "Get Server Info") so MCP clients can render readable
+  names instead of snake_case identifiers.
+
+
 ## [0.4.407] - 2026-06-10
 
 ### Added
