@@ -383,7 +383,7 @@ Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
 `/pyodide`, and *both* consumers load it: the JupyterLite editor kernel (via
 `pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's own
 browser paths (`browser-runner.js`, `assignment-validate.js`,
-`pyodide-worker.js`, `setup-edit.js`, `notebook.js`).  The editor and grader
+`pyodide-worker.js`, `notebook.js`).  The editor and grader
 therefore run the identical Python environment.  (Historically the editor
 loaded a *second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped
 that allowance and broke the editor — see `SecurityHeadersMiddleware`.)

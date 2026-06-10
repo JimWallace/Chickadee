@@ -112,7 +112,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// `scripts/setup-vendor.sh`).  There is ONE canonical Pyodide, served at
     /// `/pyodide`, loaded by both the JupyterLite editor kernel (via
     /// `pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's
-    /// own browser paths (browser-runner grading, `/validate`, setup-edit).
+    /// own browser paths (browser-runner grading, `/validate`).
     /// Every browser asset is therefore same-origin, so NO third-party origin
     /// appears in the policy.
     ///
