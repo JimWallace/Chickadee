@@ -10,6 +10,14 @@ on:
   # docs/release-process.md.
   merge_group:
 
+# Cancel superseded runs when new commits land on a PR branch (one branch
+# racked up four full CI runs in 70 minutes during the #890 audit).  Pushes
+# to main and merge-queue runs are never cancelled — their group key is the
+# unique ref/SHA and cancel-in-progress is false outside pull_request.
+concurrency:
+  group: swift-tests-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   format-lint:
     runs-on: ubuntu-latest
@@ -21,7 +29,10 @@ jobs:
     # invoke the swiftlint plugin.  Re-unify when SwiftLintBinary publishes
     # a jammy-compatible release or when the project moves all jobs to noble.
     container:
-      image: swift:6.3-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
@@ -68,7 +79,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       # Full (blobless) history so `git restore-mtime` can read each file's
@@ -134,7 +148,10 @@ jobs:
     needs: build
     timeout-minutes: 20
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
 
     steps:
@@ -164,7 +181,10 @@ jobs:
     needs: build
     timeout-minutes: 20
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
 
     steps:
@@ -213,11 +233,17 @@ jobs:
     needs: build
     timeout-minutes: 25
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
     services:
       postgres:
-        image: postgres:16
+        image: ghcr.io/jimwallace/chickadee/postgres:16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_DB: chickadee_test
           POSTGRES_USER: postgres
@@ -301,7 +327,10 @@ jobs:
     # the test process; --parallel would just have the runner schedule
     # them across multiple xctest binaries that don't share the lock.
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
 
     steps:

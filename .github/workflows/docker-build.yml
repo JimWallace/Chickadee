@@ -42,7 +42,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       # Full (blobless) history so `git restore-mtime` can read commit times.
