@@ -382,15 +382,13 @@
             </label>
             <label class="form-label field-gap">
                 Kind
+                <!-- Options render from AchievementKindPresentation (the one
+                     source of truth for kinds); achievements-editor.js reads
+                     each option's data-label for its table Kind column. -->
                 <select class="form-input" id="am-kind">
-                    <option value="classGoal">Class Goal — collaborative grade bonus</option>
-                    <option value="thresholdBadge">Score Badge — grade threshold</option>
-                    <option value="testBadge">Test Badge — a test passes</option>
-                    <option value="firstTryPerfect">First-Try — perfect on attempt 1</option>
-                    <option value="comeback">Comeback — big grade jump</option>
-                    <option value="persistence">Persistence — perfect after many tries</option>
-                    <option value="speedRun">Speed — fast perfect run</option>
-                    <option value="classRecord">Class Record — one holder</option>
+                    #for(opt in achievementKindOptions):
+                    <option value="#(opt.value)" data-label="#(opt.label)">#(opt.label) — #(opt.detail)</option>
+                    #endfor
                 </select>
             </label>
             <label class="form-label field-gap am-field" data-field="thresholdPercent" style="display:none">
