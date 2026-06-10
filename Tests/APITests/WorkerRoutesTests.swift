@@ -660,7 +660,7 @@ import XCTVapor
 
             // Substitution happens at enqueue, NOT on the download hot path.
             let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
-            await materializeValidationGrading(
+            _ = await materializeValidationGrading(
                 submission: sub, setupID: setupID, templateNotebookData: template,
                 testSetupsDirectory: self.app.testSetupsDirectory, on: self.app.db)
 
@@ -747,7 +747,7 @@ import XCTVapor
                 userID: try user.requireID())
 
             let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
-            await materializeValidationGrading(
+            _ = await materializeValidationGrading(
                 submission: sub, setupID: setupID, templateNotebookData: template,
                 testSetupsDirectory: self.app.testSetupsDirectory, on: self.app.db)
 
