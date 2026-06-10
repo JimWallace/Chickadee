@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.410] - 2026-06-10
+
+### Fixed
+
+- **Extension/override popover no longer cut off at the screen edge.** On the
+  instructor's per-student submissions page, the deadline-extension and
+  grade-override panels were anchored to the left edge of their toolbar button
+  and opened rightward — after more action buttons were added, the panel
+  extended past the viewport and the date field and Save button were clipped.
+  The panel now opens leftward from the button's right edge and is capped to
+  the viewport width.
+
+
 ## [0.4.409] - 2026-06-10
 
 ### Added
