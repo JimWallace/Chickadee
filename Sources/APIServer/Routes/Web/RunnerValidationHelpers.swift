@@ -120,11 +120,7 @@ func materializeValidationGrading(
 
         // Non-personalized assignments: nothing to resolve or cache — the
         // download route streams the stored zip exactly as before.
-        let hasPersonalization =
-            !manifest.globalVariables.isEmpty
-            || !manifest.globalExpressions.isEmpty
-            || manifest.sections.contains { !$0.variables.isEmpty || !$0.expressions.isEmpty }
-        guard hasPersonalization else { return }
+        guard manifest.hasPersonalization else { return }
 
         // Resolve the per-(user, assignment) seed when we can. Literal variables
         // substitute without a seed; only `=` expressions need one.

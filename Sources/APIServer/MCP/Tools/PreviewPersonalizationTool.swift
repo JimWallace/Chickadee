@@ -157,10 +157,7 @@ struct PreviewPersonalizationTool: ContentTool {
             return trimmed.lowercased()
         }
         // No seed is needed for a literal-only assignment.
-        let hasExpressions =
-            !manifest.globalExpressions.isEmpty
-            || manifest.sections.contains { !$0.expressions.isEmpty }
-        guard hasExpressions else { return nil }
+        guard manifest.hasExpressions else { return nil }
         let actingUser = try await context.requireEligibleSubject(tool: Self.name)
         guard let userID = actingUser.id, let assignmentID = assignment.id else { return nil }
         return try await AssignmentSeedStore.ensureSeed(

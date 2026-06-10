@@ -569,11 +569,8 @@ private func applyNotebookSubstitutionsIfNeeded(
 
     // A seed is only needed to evaluate per-student expressions; literal-only
     // assignments substitute without one (and without an assignment lookup).
-    let hasExpressions =
-        !manifest.globalExpressions.isEmpty
-        || manifest.sections.contains { !$0.expressions.isEmpty }
     var seedHex: String?
-    if hasExpressions, let setupID = setup.id {
+    if manifest.hasExpressions, let setupID = setup.id {
         if let assignment = try? await APIAssignment.query(on: db)
             .filter(\.$testSetupID == setupID)
             .first(),
