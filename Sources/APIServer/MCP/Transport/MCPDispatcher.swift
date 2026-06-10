@@ -131,6 +131,7 @@ struct MCPDispatcher: Sendable {
         let entries = visible.map { tool -> JSONValue in
             var fields: [String: JSONValue] = [
                 "name": .string(tool.name),
+                "title": .string(tool.title),
                 "description": .string(tool.description),
                 "inputSchema": tool.inputSchema,
             ]

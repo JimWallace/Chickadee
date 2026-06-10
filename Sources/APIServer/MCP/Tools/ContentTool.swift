@@ -15,6 +15,11 @@ protocol ContentTool: Sendable {
 
     /// Stable tool name: the `tools/list` identifier and the registry key.
     static var name: String { get }
+    /// Human-friendly display name surfaced as the tool's `title` in
+    /// `tools/list`, so clients render "Get Server Info" rather than
+    /// `get_server_info`.  Defaults to a Title-Case derivation of `name`;
+    /// override only when the derivation reads badly.
+    static var title: String { get }
     /// Human-readable description surfaced in `tools/list`.
     static var description: String { get }
     /// JSON Schema (draft 2020-12) describing `Input`, surfaced in `tools/list`.
@@ -66,6 +71,11 @@ struct MCPToolAnnotations: Encodable, Sendable {
 }
 
 extension ContentTool {
+    /// Title-Case derivation of the snake_case `name`
+    /// ("get_server_info" → "Get Server Info").
+    static var title: String {
+        name.split(separator: "_").map { String($0).capitalized }.joined(separator: " ")
+    }
     /// Tools declare no output schema unless they override this.
     static var outputSchema: JSONValue? { nil }
     /// By default a tool is annotated read-only iff its only required scope is
@@ -100,6 +110,7 @@ enum MCPToolError: Error, Sendable, Equatable {
 /// `JSONValue`.
 struct AnyContentTool: Sendable {
     let name: String
+    let title: String
     let description: String
     let inputSchema: JSONValue
     let outputSchema: JSONValue?
@@ -113,6 +124,7 @@ extension ContentTool {
     func erased() -> AnyContentTool {
         AnyContentTool(
             name: Self.name,
+            title: Self.title,
             description: Self.description,
             inputSchema: Self.inputSchema,
             outputSchema: Self.outputSchema,

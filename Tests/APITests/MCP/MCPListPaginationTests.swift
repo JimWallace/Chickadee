@@ -54,6 +54,7 @@ import Testing
     private static func stubTool(named name: String) -> AnyContentTool {
         AnyContentTool(
             name: name,
+            title: name,
             description: "Stub tool \(name).",
             inputSchema: .object(["type": .string("object")]),
             outputSchema: nil,
@@ -88,6 +89,20 @@ import Testing
         #expect(secondNames.first == "stub_101")
         #expect(secondCursor == nil)
         #expect(Set(firstNames).isDisjoint(with: secondNames))
+    }
+
+    @Test func toolsListEntriesCarryTitles() async throws {
+        // Wire-level check that the dispatcher surfaces each tool's display
+        // title (this suite's stub registry is the convenient place to see a
+        // full entry).
+        let response = try await toolsList(params: nil)
+        guard case .object(let fields)? = response.result,
+            case .array(let tools)? = fields["tools"],
+            case .object(let first)? = tools.first
+        else {
+            throw IssueRecorded("tools/list result has no first entry")
+        }
+        #expect(first["title"] == .string("stub_001"))
     }
 
     @Test func toolsListRejectsInvalidCursor() async throws {
