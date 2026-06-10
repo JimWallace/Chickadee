@@ -83,7 +83,7 @@ public struct Achievement: Codable, Equatable, Sendable {
 
 /// The variety of achievement — the discriminator that says which optional
 /// parameters apply and how it is evaluated.
-public enum AchievementKind: String, Codable, Sendable {
+public enum AchievementKind: String, CaseIterable, Codable, Sendable {
     /// Collaborative: at least `classFraction` of the class reaches `threshold`
     /// on `target`.  Awards a positive, fractional `points` bonus to everyone
     /// who submitted, scaled by class progress.  Evaluated by the periodic

@@ -136,6 +136,10 @@ struct EditAssignmentContext: Encodable {
     /// "Global Inputs" panel at the top of the edit page iterates this
     /// list to seed its initial rows.  Empty when no globals declared.
     let globalVariableRows: [SuiteSectionVariableShellRow]
+    /// The authorable achievement kinds, in declaration order.  The kind
+    /// dropdown renders from this list and the editor JS derives its table
+    /// labels from the rendered options — see `AchievementKindPresentation`.
+    let achievementKindOptions: [AchievementKindOption]
     let brightspaceSyncEnabled: Bool
     let brightspaceGradeObjectID: String?
     let notice: String?

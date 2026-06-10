@@ -10,11 +10,10 @@
 (function () {
     'use strict';
 
-    var KIND_LABEL = {
-        classGoal: 'Class Goal', thresholdBadge: 'Score Badge', testBadge: 'Test Badge',
-        firstTryPerfect: 'First-Try', comeback: 'Comeback', persistence: 'Persistence',
-        speedRun: 'Speed', classRecord: 'Class Record'
-    };
+    // Kind labels come from the server-rendered #am-kind options (their
+    // data-label attributes), so the Swift AchievementKindPresentation
+    // registry is the single source of truth; populated in init().
+    var KIND_LABEL = {};
     // Which modal fields apply to each kind.
     var KIND_FIELDS = {
         classGoal: ['thresholdPercent', 'classPercent', 'points'],
@@ -75,6 +74,11 @@
         var status = document.getElementById('achievements-status');
         var modal = document.getElementById('achievement-modal');
         var kindSel = document.getElementById('am-kind');
+        if (kindSel) {
+            Array.prototype.slice.call(kindSel.options).forEach(function (o) {
+                KIND_LABEL[o.value] = o.getAttribute('data-label') || o.text;
+            });
+        }
 
         var state = [];
         var editingIndex = -1;
