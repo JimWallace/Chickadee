@@ -21,6 +21,13 @@ on:
   schedule:
     - cron: "0 5 * * 1"
   workflow_dispatch:
+  # Also run when this file changes in a PR: it both validates the edit and
+  # solves the bootstrap problem (workflow_dispatch only works once the file
+  # exists on the default branch, but the test workflows can't switch to the
+  # mirrored images until a first run has published them).
+  pull_request:
+    paths:
+      - ".github/workflows/mirror-images.yml"
 
 permissions:
   contents: read
