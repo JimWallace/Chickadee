@@ -64,20 +64,35 @@ func enqueueRunnerValidationSubmission(
     // submission is saved. Saving makes it `pending` — a polling worker can
     // claim and download it immediately — so the substituted `.grading` sidecar
     // and the cached `materializationJSON` MUST already be in place, or the
-    // worker races in and grades the un-substituted template. Materialize first,
-    // then a single save flips the row to claimable with everything ready.
-    // (This resolves personalization once, at enqueue — an instructor save,
-    // which is latency-tolerant — so the worker poll + download paths never run
-    // the personalization evaluator. See `materializeValidationGrading`.)
-    await materializeValidationGrading(
+    // worker races in and grades the un-substituted template. The returned
+    // token is the only way to persist the row, so the ordering is enforced by
+    // the types, not by this comment. (This resolves personalization once, at
+    // enqueue — an instructor save, which is latency-tolerant — so the worker
+    // poll + download paths never run the personalization evaluator.)
+    let materialized = await materializeValidationGrading(
         submission: submission,
         setupID: setupID,
         templateNotebookData: solutionNotebookData,
         testSetupsDirectory: req.application.testSetupsDirectory,
         on: req.db)
 
-    try await submission.save(on: req.db)
+    try await materialized.saveClaimable(on: req.db)
     return subID
+}
+
+/// Proof that `materializeValidationGrading` ran for a validation submission:
+/// the grading sidecar and the in-memory `materializationJSON` cache are in
+/// place, so persisting the row — which flips it to `pending` and makes it
+/// claimable by a polling worker — is now safe.  Only constructible by
+/// `materializeValidationGrading`, so "materialize before save" is a compile-
+/// time guarantee at the enqueue site rather than a comment.
+struct MaterializedValidationSubmission {
+    fileprivate let submission: APISubmission
+
+    /// The single save that makes the row claimable.
+    func saveClaimable(on db: any Database) async throws {
+        try await submission.save(on: db)
+    }
 }
 
 /// Resolve a validation submission's personalization ONCE, so the worker poll +
@@ -92,10 +107,11 @@ func enqueueRunnerValidationSubmission(
 ///     `buildJobPayload` reads it instead of re-evaluating; the values become
 ///     `_ck_inputs.py`.
 ///
-/// IMPORTANT — call this BEFORE saving the submission. It deliberately does NOT
-/// save: the caller persists the row exactly once afterwards, so the submission
+/// Call this BEFORE saving the submission — enforced by the return type: it
+/// deliberately does NOT save, and the `MaterializedValidationSubmission`
+/// token it returns is the only way to persist the row. The submission then
 /// only becomes `pending` (claimable by a polling worker) once the sidecar and
-/// cache are already in place. Saving first opens a race where the worker
+/// cache are already in place; saving first would open a race where the worker
 /// downloads the un-substituted template before this finishes.
 ///
 /// The stored `zipPath` keeps its `{{...}}` template, so `get_solution`, the
@@ -106,6 +122,25 @@ func enqueueRunnerValidationSubmission(
 /// fails clearly, but the worker never times out), and `buildJobPayload` falls
 /// back to live resolution.
 func materializeValidationGrading(
+    submission: APISubmission,
+    setupID: String,
+    templateNotebookData: Data,
+    testSetupsDirectory: String,
+    on db: any Database
+) async -> MaterializedValidationSubmission {
+    await resolveAndCacheValidationMaterialization(
+        submission: submission,
+        setupID: setupID,
+        templateNotebookData: templateNotebookData,
+        testSetupsDirectory: testSetupsDirectory,
+        on: db)
+    return MaterializedValidationSubmission(submission: submission)
+}
+
+/// Best-effort body of `materializeValidationGrading`: any early exit leaves
+/// the submission un-materialized, which downstream paths handle (template
+/// streamed verbatim, live fallback in `buildJobPayload`).
+private func resolveAndCacheValidationMaterialization(
     submission: APISubmission,
     setupID: String,
     templateNotebookData: Data,
