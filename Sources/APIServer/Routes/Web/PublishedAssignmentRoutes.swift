@@ -68,17 +68,9 @@ struct PublishedAssignmentRoutes: RouteCollection {
         r.get(":assignmentID", "global-variables", use: getGlobalVariables)
         r.put(":assignmentID", "global-variables", use: putGlobalVariables)
 
-        // Assignment-scope class goals (achievements) — display-only, so no
-        // retest/validation on edit.
+        // Unified Achievements table — the whole typed achievement list (class
+        // goals, badges, built-in awards).  Display-only; no retest/validation.
         r.get(":assignmentID", "achievements", use: getAchievements)
         r.put(":assignmentID", "achievements", use: putAchievements)
-
-        // Assignment-scope individual badges (threshold / test) — display-only.
-        r.get(":assignmentID", "badges", use: getBadges)
-        r.put(":assignmentID", "badges", use: putBadges)
-
-        // Per-assignment built-in award on/off toggles — metadata-only.
-        r.get(":assignmentID", "built-in-awards", use: getBuiltInAwards)
-        r.put(":assignmentID", "built-in-awards", use: putBuiltInAwards)
     }
 }
