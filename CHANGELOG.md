@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.407] - 2026-06-10
+
+### Added
+
+- **Startup warning for an unguarded MCP transport.** Mounting `/mcp` in
+  production with `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` unset now logs a
+  warning naming the unset variable(s) — an empty allowlist disables the
+  corresponding Host/Origin DNS-rebinding guard — instead of silently
+  accepting any value. Development and testing stay quiet, where empty
+  allowlists are the normal default.
+
+### Changed
+
+- **MCP `initialize` now negotiates the protocol version and logs the
+  client's identity.** A supported requested revision (2025-06-18 or
+  2025-11-25) is echoed back per the lifecycle spec; an unsupported one gets
+  the latest the server speaks. The connecting client's `clientInfo`
+  name/version and the negotiated revision are logged for operational
+  visibility into which agents talk to the server.
+
+
 ## [0.4.406] - 2026-06-10
 
 ### Added
