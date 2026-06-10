@@ -11,6 +11,14 @@
 //                               HTTPSRedirectMiddleware
 //   LeafErrorMiddleware     — catches every downstream error
 //   HTTPSRedirectMiddleware — only when enforceHTTPS, before sessions
+//   EditorAssetFastPathMiddleware — serves the vendored editor asset trees
+//                               (/jupyterlite/build, /jupyterlite/extensions,
+//                               /pyodide, /vendor) BEFORE the session chain so
+//                               a JupyterLite boot's hundreds of asset
+//                               requests skip the per-request Fluent session
+//                               lookup.  Whitelist-only: the auth-guarded
+//                               /jupyterlite/…/files/users/ paths are not
+//                               listed and still ride the full chain below.
 //   sessions.middleware
 //   UserSessionAuthenticator
 //   SessionIdleTimeoutMiddleware — runs before UserActivityMiddleware
@@ -81,6 +89,10 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     if securityConfiguration.enforceHTTPS {
         app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
     }
+    // Vendored editor assets short-circuit here, before any session work.
+    // See EditorAssetFastPathMiddleware for the whitelist + cache policy.
+    app.middleware.use(
+        EditorAssetFastPathMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
