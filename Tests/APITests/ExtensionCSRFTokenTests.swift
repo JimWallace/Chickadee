@@ -135,10 +135,6 @@ import Glibc
             // Set-Cookie → Cookie: keep just the `name=value` pair.
             let cookiePair = pageCookie.components(separatedBy: ";")[0]
 
-            try await app.server.start(address: .hostname("127.0.0.1", port: 0))
-            defer { app.server.shutdown() }
-            let port = try #require(app.http.server.shared.localAddress?.port)
-
             let due = localInput(Date().addingTimeInterval(86_400))
                 .replacingOccurrences(of: ":", with: "%3A")
             let formBody = "_csrf=\(pageToken)&extendedDueAt=\(due)&note=streamed"
@@ -155,7 +151,18 @@ import Glibc
                 + formBody + "\r\n"
                 + "0\r\n\r\n"
 
-            let response = try rawLoopbackHTTPExchange(port: port, request: request)
+            // The sync `shutdown()` is `noasync`, and `defer` can't await —
+            // shut down explicitly on both exits instead.
+            try await app.server.start(address: .hostname("127.0.0.1", port: 0))
+            let response: String
+            do {
+                let port = try #require(app.http.server.shared.localAddress?.port)
+                response = try rawLoopbackHTTPExchange(port: port, request: request)
+            } catch {
+                await app.server.shutdown()
+                throw error
+            }
+            await app.server.shutdown()
             let statusLine = response.components(separatedBy: "\r\n")[0]
             #expect(
                 statusLine.contains("303"),
