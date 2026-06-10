@@ -101,8 +101,20 @@ import XCTVapor
                 validationStatus: "passed", on: app
             )
 
+            // Staff-only preview with a past open date → publishes to students.
+            _ = try await arInsertSetup(id: "setup_open_preview", on: app)
+            let preview = try await arInsertAssignment(
+                testSetupID: "setup_open_preview", title: "Preview ready",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400),
+                startsAt: Date().addingTimeInterval(-60),
+                validationStatus: "passed", on: app
+            )
+            preview.visibility = .preview
+            try await preview.save(on: app.db)
+
             let openedCount = try await openScheduledAssignments(on: app.db, logger: app.logger)
-            #expect(openedCount == 1)
+            #expect(openedCount == 2)
 
             let readyReloaded = try #require(try await APIAssignment.find(ready.id, on: app.db))
             #expect(readyReloaded.isOpen)
@@ -117,6 +129,10 @@ import XCTVapor
 
             let pastDueReloaded = try #require(try await APIAssignment.find(pastDue.id, on: app.db))
             #expect(pastDueReloaded.isOpen == false, "Must not open a window whose due date already passed")
+
+            let previewReloaded = try #require(try await APIAssignment.find(preview.id, on: app.db))
+            #expect(previewReloaded.visibility == .open, "Preview publishes to students at its open date")
+            #expect(previewReloaded.startsAt == nil, "Open date is consumed once it fires")
         }
     }
 
