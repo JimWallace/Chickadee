@@ -335,8 +335,9 @@
 .action-panel {
     position: absolute;
     top: calc(100% + .3rem);
-    left: 0;
+    right: 0;
     z-index: 10;
+    max-width: calc(100vw - 2rem);
     display: flex;
     flex-direction: column;
     gap: .3rem;
