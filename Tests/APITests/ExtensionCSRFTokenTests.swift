@@ -135,7 +135,7 @@ import Glibc
             // Set-Cookie → Cookie: keep just the `name=value` pair.
             let cookiePair = pageCookie.components(separatedBy: ";")[0]
 
-            try app.server.start(address: .hostname("127.0.0.1", port: 0))
+            try await app.server.start(address: .hostname("127.0.0.1", port: 0))
             defer { app.server.shutdown() }
             let port = try #require(app.http.server.shared.localAddress?.port)
 
@@ -199,7 +199,7 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
     }
     try #require(connectResult == 0, "connect() failed: errno \(errno)")
 
-    var bytes = Array(request.utf8)
+    let bytes = Array(request.utf8)
     var sent = 0
     while sent < bytes.count {
         let n = bytes.withUnsafeBytes { raw in
@@ -218,5 +218,8 @@ private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> Strin
         if n <= 0 { break }
         response.append(contentsOf: chunk[0..<n])
     }
-    return String(decoding: response, as: UTF8.self)
+    return try #require(
+        String(bytes: response, encoding: .utf8),
+        "Response was not valid UTF-8"
+    )
 }
