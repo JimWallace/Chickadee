@@ -172,18 +172,34 @@ import Vapor
         }
     }
 
-    @Test func scheduledOpenSweepSkipsPreview() async throws {
+    @Test func scheduledOpenSweepPublishesPreview() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await makeAssignment(on: app, validationStatus: "passed")
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
-            // A past open date auto-opens a *closed* assignment, but a Preview
-            // assignment must stay in its staff-only state.
+            // An open date on a Preview assignment is the staff workflow "test
+            // now, publish to students at this time" — the sweep must open it,
+            // not strand it in the staff-only state past its open date.
+            assignment.startsAt = Date().addingTimeInterval(-3600)
+            try await assignment.save(on: app.db)
+            let opened = try await openScheduledAssignment(assignment, on: app.db, logger: app.logger)
+            #expect(opened)
+            #expect(assignment.visibility == .open)
+            #expect(assignment.startsAt == nil, "Open date is consumed once it fires")
+        }
+    }
+
+    @Test func scheduledOpenSweepHoldsPreviewUntilValidationPasses() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app, validationStatus: "pending")
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
             assignment.startsAt = Date().addingTimeInterval(-3600)
             try await assignment.save(on: app.db)
             let opened = try await openScheduledAssignment(assignment, on: app.db, logger: app.logger)
             #expect(opened == false)
             #expect(assignment.visibility == .preview)
+            #expect(assignment.startsAt != nil, "Open date stays armed so the sweep retries after validation")
         }
     }
 }

@@ -186,10 +186,13 @@ func openScheduledAssignment(
     logger: Logger,
     now: Date = Date()
 ) async throws -> Bool {
-    // Only a `.closed` assignment auto-opens on its schedule. A `.preview`
-    // assignment is a deliberate staff-only beta state: it is published to
-    // students manually after testing, never by the scheduled-open sweep.
-    guard assignment.visibility == .closed else { return false }
+    // Both `.closed` and `.preview` auto-open on their schedule. An open date
+    // on a `.preview` assignment is the intended staff workflow: test in the
+    // staff-only state now, and the sweep publishes to students when the open
+    // date arrives (the same semantics `submissionGate` documents for why staff
+    // bypass the start-date gate). Only `.open` is excluded — its open date has
+    // already been consumed.
+    guard assignment.visibility == .closed || assignment.visibility == .preview else { return false }
     guard let startsAt = assignment.startsAt, startsAt <= now else { return false }
     guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else { return false }
     if let dueAt = assignment.dueAt, dueAt <= now { return false }
@@ -208,7 +211,10 @@ func openScheduledAssignments(
     now: Date = Date()
 ) async throws -> Int {
     let assignments = try await APIAssignment.query(on: db)
-        .filter(\.$visibilityRaw == AssignmentVisibility.closed.rawValue)
+        .filter(
+            \.$visibilityRaw
+                ~~ [AssignmentVisibility.closed.rawValue, AssignmentVisibility.preview.rawValue]
+        )
         .filter(\.$startsAt <= now)
         .all()
 
