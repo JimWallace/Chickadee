@@ -7,6 +7,7 @@
 // https://modelcontextprotocol.io/specification/2025-11-25
 
 import Core
+import Foundation
 
 /// Maps a JSON-RPC request to an MCP response.  Returns nil for notifications,
 /// which receive no response per the spec.
@@ -40,11 +41,11 @@ struct MCPDispatcher: Sendable {
             // with an id, ack with an empty result rather than erroring.
             return .success(id: id, result: .object([:]))
         case .toolsList:
-            return .success(id: id, result: toolsListResult(context: context))
+            return toolsListResult(id: id, params: request.params, context: context)
         case .toolsCall:
             return await toolsCallResult(id: id, params: request.params, context: context)
         case .resourcesList:
-            return await resourcesListResult(id: id, context: context)
+            return await resourcesListResult(id: id, params: request.params, context: context)
         case .resourcesRead:
             return await resourcesReadResult(id: id, params: request.params, context: context)
         }
@@ -54,7 +55,9 @@ struct MCPDispatcher: Sendable {
 
     private let resources = MCPResourceProvider()
 
-    private func resourcesListResult(id: JSONRPCID, context: ToolContext?) async -> JSONRPCResponse {
+    private func resourcesListResult(
+        id: JSONRPCID, params: JSONValue?, context: ToolContext?
+    ) async -> JSONRPCResponse {
         guard let context else {
             return .failure(id: id, error: .internalError("Resource execution context is unavailable."))
         }
@@ -62,7 +65,11 @@ struct MCPDispatcher: Sendable {
             return .failure(id: id, error: .insufficientScope(ContentScope.read.rawValue))
         }
         do {
-            return .success(id: id, result: try await resources.list(context: context))
+            let full = try await resources.list(context: context)
+            guard case .object(let fields) = full, case .array(let entries)? = fields["resources"] else {
+                return .failure(id: id, error: .internalError("Failed to list resources."))
+            }
+            return paginatedListResponse(id: id, key: "resources", entries: entries, params: params)
         } catch {
             return .failure(id: id, error: .internalError("Failed to list resources."))
         }
@@ -116,7 +123,7 @@ struct MCPDispatcher: Sendable {
     /// to {read}, so write tools drop out of the listing here rather than being
     /// advertised only to fail with 403 on call.  When no context is available
     /// (non-transport callers / tests), all tools are listed.
-    private func toolsListResult(context: ToolContext?) -> JSONValue {
+    private func toolsListResult(id: JSONRPCID, params: JSONValue?, context: ToolContext?) -> JSONRPCResponse {
         let visible =
             context.map { ctx in
                 tools.all.filter { ctx.grantedScopes.isSuperset(of: $0.requiredScopes) }
@@ -135,7 +142,36 @@ struct MCPDispatcher: Sendable {
             }
             return .object(fields)
         }
-        return .object(["tools": .array(entries)])
+        return paginatedListResponse(id: id, key: "tools", entries: entries, params: params)
+    }
+
+    // MARK: - List pagination
+
+    private struct ListParams: Decodable {
+        let cursor: String?
+    }
+
+    /// Applies spec pagination to a full list result: slices `entries` by the
+    /// caller's cursor and attaches `nextCursor` while more pages remain.  An
+    /// unparseable cursor is invalidParams, per the spec.
+    /// https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/pagination
+    private func paginatedListResponse(
+        id: JSONRPCID, key: String, entries: [JSONValue], params: JSONValue?
+    ) -> JSONRPCResponse {
+        let cursor: String?
+        do {
+            cursor = try (params ?? .object([:])).decoded(as: ListParams.self).cursor
+        } catch {
+            return .failure(id: id, error: .invalidParams("\"cursor\" must be a string."))
+        }
+        guard let result = MCPListPagination.page(entries, cursor: cursor) else {
+            return .failure(id: id, error: .invalidParams("Invalid cursor."))
+        }
+        var fields: [String: JSONValue] = [key: .array(result.page)]
+        if let next = result.nextCursor {
+            fields["nextCursor"] = .string(next)
+        }
+        return .success(id: id, result: .object(fields))
     }
 
     // MARK: - tools/call
