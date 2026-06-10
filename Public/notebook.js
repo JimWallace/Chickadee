@@ -53,7 +53,10 @@
         frame.getAttribute('src') ||
         `/jupyterlite/notebooks/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
     const lockedNotebookPath = normalizeJupyterPath(extractPathFromEditorURL(editorURL));
-    let lastForcedEditorResetMs = 0;
+    // Timestamp of a forced editor reset whose navigation has not committed
+    // yet (cleared by the iframe load event).  Guards the locked-path
+    // enforcement against aborting its own still-loading reset.
+    let forcedEditorResetAt = 0;
     let serverSyncInFlight = false;
     let serverSyncComplete = false;
 
@@ -86,7 +89,14 @@
     });
 
     function mountEditor() {
-        frame.src = editorURL;
+        // The template renders the same URL into the iframe's src, so the
+        // editor is already loading by the time the preflight resolves.
+        // Re-assigning src aborts that in-flight navigation and starts it
+        // over — only navigate when the attribute is missing or different
+        // (an older cached copy of the page).
+        if (frame.getAttribute('src') !== editorURL) {
+            frame.src = editorURL;
+        }
 
         // Quick reachability check helps explain blank/failed editor loads.
         fetch(notebookURL, { method: 'GET' }).then((res) => {
@@ -148,6 +158,9 @@
         }
 
         frame.addEventListener('load', () => {
+            // A document committed; any forced reset we were waiting on has
+            // landed, so the locked-path enforcement may act again.
+            forcedEditorResetAt = 0;
             if (!serverSyncComplete && !serverSyncInFlight) {
                 void syncNotebookFromServerSnapshot();
             }
@@ -631,15 +644,31 @@
     function enforceLockedNotebookPath() {
         if (!lockedNotebookPath || !frame.contentWindow) return;
         try {
-            const currentURL = new URL(frame.contentWindow.location.href, window.location.origin);
+            const rawHref = frame.contentWindow.location.href;
+
+            // Until the iframe commits its first document, location.href is
+            // still the initial "about:blank" — the editor is loading, not
+            // navigated away.  Resetting src in that state aborts the
+            // in-flight load; on a slow connection (or a server busy with a
+            // class-wide rush) each 1.5s tick would abort and restart the
+            // navigation forever, so a healthy-but-slow boot never commits
+            // and the shell watchdog misfires.  Wait for a real document.
+            if (rawHref === 'about:blank') return;
+
+            const currentURL = new URL(rawHref, window.location.origin);
             const currentPath = normalizeJupyterPath(currentURL.searchParams.get('path'));
             const inNotebookApp = currentURL.pathname.includes('/jupyterlite/notebooks/');
 
             if (inNotebookApp && currentPath === lockedNotebookPath) return;
 
+            // The previous document's URL stays current while a forced
+            // reset's navigation is in flight, so the path still reads as
+            // wrong here.  Give the reset a generous window to commit (the
+            // load event clears the stamp) before forcing another one,
+            // otherwise slow recoveries are aborted in the same loop.
             const now = Date.now();
-            if (now - lastForcedEditorResetMs < 1000) return;
-            lastForcedEditorResetMs = now;
+            if (forcedEditorResetAt && now - forcedEditorResetAt < 20000) return;
+            forcedEditorResetAt = now;
             frame.src = editorURL;
         } catch (_) {
             // Ignore transient cross-frame navigation states.
