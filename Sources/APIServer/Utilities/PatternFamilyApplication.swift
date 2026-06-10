@@ -759,7 +759,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         globalVariables: resolvedGlobalVariables,
         globalExpressions: resolvedGlobalExpressions,
         achievements: props.achievements,
-        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner
