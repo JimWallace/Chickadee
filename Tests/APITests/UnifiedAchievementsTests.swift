@@ -1,8 +1,8 @@
 // Tests/APITests/UnifiedAchievementsTests.swift
 //
-// Unification B: the single /achievements endpoint round-trips the whole typed
-// Achievement list (any kind) via the `achievements` field, while the legacy
-// `goals` shape still works for back-compat.
+// The single /achievements endpoint round-trips the whole typed Achievement
+// list (any kind) via the `achievements` field; every PUT replaces the list
+// wholesale.
 
 import Core
 import Fluent
@@ -48,7 +48,7 @@ import XCTVapor
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     try req.content.encode(
-                        PublishedAssignmentRoutes.AchievementsBody(goals: nil, achievements: rows),
+                        PublishedAssignmentRoutes.AchievementsBody(achievements: rows),
                         as: .json)
                 },
                 afterResponse: { res in #expect(res.status == .ok) })
@@ -66,7 +66,7 @@ import XCTVapor
             #expect(props.achievements.contains { $0.kind == .classRecord && $0.recordDimension == .fastest })
             #expect(props.achievements.contains { $0.kind == .speedRun && $0.timeThresholdMs == 500 })
 
-            // GET returns the unified rows AND the legacy class-goal projection.
+            // GET returns the unified rows.
             try await app.asyncTest(
                 .GET, "/instructor/\(assignment.publicID)/achievements",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
@@ -74,12 +74,11 @@ import XCTVapor
                     #expect(res.status == .ok)
                     let body = try res.content.decode(PublishedAssignmentRoutes.AchievementsResponse.self)
                     #expect(body.achievements.count == 5)
-                    #expect(body.goals.count == 1, "Legacy goals projection still works")
                 })
         }
     }
 
-    @Test func unifiedReplacesWholeListLegacyGoalsPreserveOthers() async throws {
+    @Test func putReplacesTheWholeList() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
@@ -87,41 +86,36 @@ import XCTVapor
             let assignment = try await arInsertAssignment(
                 testSetupID: "ur_setup", title: "UR", isOpen: true, on: app)
 
-            // Seed a badge + a goal via the unified PUT.
+            // Seed a goal + a badge.
             try await app.asyncTest(
                 .PUT, "/instructor/\(assignment.publicID)/achievements",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     try req.content.encode(
-                        PublishedAssignmentRoutes.AchievementsBody(
-                            goals: nil,
-                            achievements: [
-                                row("Goal", "classGoal", thresholdPercent: 80, classPercent: 80, points: 3),
-                                row("Badge", "thresholdBadge", thresholdPercent: 90),
-                            ]), as: .json)
+                        PublishedAssignmentRoutes.AchievementsBody(achievements: [
+                            row("Goal", "classGoal", thresholdPercent: 80, classPercent: 80, points: 3),
+                            row("Badge", "thresholdBadge", thresholdPercent: 90),
+                        ]), as: .json)
                 },
                 afterResponse: { res in #expect(res.status == .ok) })
 
-            // A legacy goals-only PUT replaces just the class goals, preserving the badge.
+            // A second PUT replaces the entire list — nothing merges in.
             try await app.asyncTest(
                 .PUT, "/instructor/\(assignment.publicID)/achievements",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     try req.content.encode(
-                        PublishedAssignmentRoutes.AchievementsBody(
-                            goals: [
-                                .init(id: nil, name: "Goal2", thresholdPercent: 70, classPercent: 60, bonusPoints: 2)
-                            ],
-                            achievements: nil), as: .json)
+                        PublishedAssignmentRoutes.AchievementsBody(achievements: [
+                            row("Goal2", "classGoal", thresholdPercent: 70, classPercent: 60, points: 2)
+                        ]), as: .json)
                 },
                 afterResponse: { res in #expect(res.status == .ok) })
 
             let setup = try #require(try await APITestSetup.find("ur_setup", on: app.db))
             let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
-            #expect(props.achievements.contains { $0.kind == .thresholdBadge }, "Badge preserved")
-            #expect(props.achievements.filter { $0.kind == .classGoal }.map(\.name) == ["Goal2"])
+            #expect(props.achievements.map(\.name) == ["Goal2"])
         }
     }
 }

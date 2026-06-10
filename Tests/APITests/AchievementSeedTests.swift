@@ -42,7 +42,6 @@ import XCTVapor
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     try req.content.encode(
                         PublishedAssignmentRoutes.AchievementsBody(
-                            goals: nil,
                             achievements: [
                                 .init(
                                     id: nil, name: "Solo", kind: "thresholdBadge", detail: nil,
