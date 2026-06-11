@@ -91,12 +91,12 @@
         var next = nonUploads.slice();
         (files || []).forEach(function (file, idx) {
             if (!file || !file.name || blocked[file.name]) return;
+            var old = previousUploads[file.name];
             var cls = (classifications && classifications[idx]) || (old ? {
                 isScript: old.isTest,
                 tier: old.tier,
                 errors: old.errors || []
             } : classify(file.name, '', file.size));
-            var old = previousUploads[file.name];
             next.push({
                 name:        file.name,
                 displayName: old ? old.displayName : '',

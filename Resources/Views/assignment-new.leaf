@@ -417,6 +417,7 @@ Create Assignment
      goes through draft-scoped endpoints — see
      AssignmentRoutes+DraftSections.swift. -->
 #if(draftID):
+<script src="/suite-list.js?v=#appVersion()"></script>
 <script src="/suite-table.js?v=#appVersion()"></script>
 <script>
 (function () {
