@@ -135,8 +135,7 @@
             // Leading-edge, then at most once per 5 minutes.
             if (now - lastNotebookKeepalive < 5 * 60 * 1000) return;
             lastNotebookKeepalive = now;
-            const meta = document.querySelector('meta[name="csrf-token"]');
-            const token = meta ? meta.getAttribute('content') : '';
+            const token = ChickadeeUI.getCsrfToken();
             fetch('/session/keepalive', {
                 method: 'POST',
                 headers: { 'x-csrf-token': token, 'accept': 'application/json' },
@@ -1120,13 +1119,11 @@
         return table;
     }
 
-    function escHtml(str) {
-        return String(str ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
+    // Shared implementation (Public/chickadee-ui.js).  Deliberately a lazy
+    // wrapper (not `ChickadeeUI.escapeHtml` directly): the node tests run
+    // this file in a vm context without ChickadeeUI, so the global must not
+    // be touched at module load time.
+    const escHtml = (str) => ChickadeeUI.escapeHtml(str);
 
     function buildOutcomeDisplayNameMap(outcomes) {
         const map = new Map();

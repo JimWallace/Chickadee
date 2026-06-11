@@ -288,11 +288,9 @@
         // variables are family-wide, not case-scoped.
         var familyVariables = [];
 
-        function escHtml(s) {
-            return String(s == null ? '' : s)
-                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
+        // Shared implementation (Public/chickadee-ui.js); local alias keeps
+        // the many call sites short.
+        var escHtml = ChickadeeUI.escapeHtml;
 
         // ── Solution-notebook scan ─────────────────────────────────────────
 

@@ -554,8 +554,8 @@ tr.assignment-draggable td {
     // Dragging to a different tbody triggers a section-move API call + reload.
     // Dragging within the same tbody triggers a reorder API call.
 
-    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var csrfToken = ChickadeeUI.getCsrfToken();
 
     var assignDragged = null;
     var assignStartTbody = null;

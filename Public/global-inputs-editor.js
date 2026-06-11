@@ -26,10 +26,8 @@
 
     var RESERVED_NAMES = { 'seed': true };
 
-    function csrf() {
-        var m = document.querySelector('meta[name="csrf-token"]');
-        return m ? m.getAttribute('content') : '';
-    }
+    // Shared implementation (Public/chickadee-ui.js).
+    var csrf = ChickadeeUI.getCsrfToken;
 
     function isValidPyIdent(s) {
         return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);

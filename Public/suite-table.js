@@ -155,12 +155,10 @@
             });
         }
 
-        function escHtml(v) {
-            return String(v == null ? '' : v)
-                .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-                .replaceAll('"','&quot;').replaceAll("'",'&#39;');
-        }
-        function escAttr(v) { return String(v == null ? '' : v).replaceAll('"','&quot;'); }
+        // Shared implementations (Public/chickadee-ui.js); local aliases keep
+        // the many call sites short.
+        var escHtml = ChickadeeUI.escapeHtml;
+        var escAttr = ChickadeeUI.escapeAttr;
 
         function findByID(id) { return items.find(function (it) { return it.id === id; }); }
         function itemsInSection(sid) {
