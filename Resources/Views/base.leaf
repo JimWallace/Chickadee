@@ -16,6 +16,12 @@
     <link rel="shortcut icon" href="/favicon.png?v=#appVersion()" type="image/png">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=#appVersion()">
     <link rel="stylesheet" href="/styles.css?v=#appVersion()">
+    <!-- Shared JS utilities (escapeHtml / escapeAttr / getCsrfToken).  Loaded
+         in <head> rather than next to app.js because inline page scripts and
+         template-loaded modules in #import("content") execute during parse,
+         before the end-of-body script tags, and they reference ChickadeeUI
+         (some at parse time, e.g. csrf-token captures). -->
+    <script src="/chickadee-ui.js?v=#appVersion()"></script>
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -114,8 +120,7 @@
         e.preventDefault();
         clearUploadError(form);
         form.dispatchEvent(new CustomEvent('chickadee:before-multipart-submit', { bubbles: false }));
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        var csrfToken = meta ? meta.getAttribute('content') : '';
+        var csrfToken = ChickadeeUI.getCsrfToken();
         var btn = e.submitter || form.querySelector('[type="submit"]');
         if (btn) btn.disabled = true;
         // Respect formaction on the activating submit button (e.g. hidden draft-action buttons).

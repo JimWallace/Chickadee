@@ -1,9 +1,9 @@
 // Returns the CSRF token from the <meta name="csrf-token"> tag in <head>.
 // Used by JS fetch calls to satisfy the CSRF middleware on POST endpoints.
+// Kept as a global for back-compat; delegates to the shared implementation
+// in Public/chickadee-ui.js.
 function getCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content
-        ?? document.querySelector('input[name="_csrf"]')?.value
-        ?? '';
+    return ChickadeeUI.getCsrfToken();
 }
 
 // Drag-drop zone on the submission form

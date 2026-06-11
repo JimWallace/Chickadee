@@ -38,14 +38,10 @@
         'recordDimension', 'attemptThreshold', 'timeThresholdMs', 'jumpThresholdPercent'
     ];
 
-    function csrf() {
-        var m = document.querySelector('meta[name="csrf-token"]');
-        return m ? m.getAttribute('content') : '';
-    }
-    function esc(s) {
-        return String(s == null ? '' : s)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+    // Shared implementations (Public/chickadee-ui.js); local aliases keep
+    // the call sites short.
+    var csrf = ChickadeeUI.getCsrfToken;
+    var esc = ChickadeeUI.escapeHtml;
     function n(v) { return v == null ? '' : v; }
 
     function summary(row) {

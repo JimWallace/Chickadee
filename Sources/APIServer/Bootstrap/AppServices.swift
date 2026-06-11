@@ -20,21 +20,24 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
 
     try app.autoMigrate().wait()
     app.lifecycle.use(ObservabilityLifecycleHandler())
-    app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
-    app.lifecycle.use(StuckSubmissionReaperLifecycleHandler())
-    app.lifecycle.use(AchievementEvaluationLifecycleHandler())
-    app.lifecycle.use(SessionReaperLifecycleHandler())
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.assignmentDeadlineMonitor })
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.stuckSubmissionReaperMonitor })
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.achievementEvaluationMonitor })
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.sessionReaperMonitor })
+    let auditLogMaxAge = TimeInterval(appConfig.diagnostics.auditLogRetentionDays) * 86_400
     app.lifecycle.use(
-        AuditLogReaperLifecycleHandler(
-            maxAge: TimeInterval(appConfig.diagnostics.auditLogRetentionDays) * 86_400
-        )
+        PeriodicSweepLifecycleHandler { $0.auditLogReaperMonitor(maxAge: auditLogMaxAge) }
     )
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
+
+    // One-time best-effort cleanup of pre-v0.4 notebook working-copy
+    // artifacts (used to run on every notebook page view).
+    app.lifecycle.use(LegacyNotebookCleanupLifecycleHandler())
 
     // MCP OAuth table cleanup (only when the MCP endpoint is mounted — grants
     // and codes exist in read_only mode too).
     if appConfig.mcp.mode.isMounted {
-        app.lifecycle.use(MCPOAuthReaperLifecycleHandler())
+        app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.mcpOAuthReaperMonitor })
     }
 
     // BrightSpace grade sync (only registered when env vars are present).

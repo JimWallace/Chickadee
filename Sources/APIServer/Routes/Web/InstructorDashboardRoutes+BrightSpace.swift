@@ -308,7 +308,7 @@ extension InstructorDashboardRoutes {
             ? []
             : try await APIUser.query(on: req.db)
                 .filter(\.$id ~~ enrolledUserIDs)
-                .filter(\.$role == "student")
+                .filter(\.$role == UserRole.student.rawValue)
                 .sort(\.$username)
                 .all()
         let noAccountUsernames = Set(

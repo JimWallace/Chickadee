@@ -172,71 +172,58 @@ extension DraftAssignmentRoutes {
     // MARK: - updateNewAssignmentDraft helpers
 
     fileprivate func parseNewAssignmentDraftPayload(req: Request) throws -> NewAssignmentDraftPayload {
-        let bodyMany = try? req.content.decode(DraftBodyMany.self)
-        let bodySingle = bodyMany == nil ? (try? req.content.decode(DraftBodySingle.self)) : nil
-        guard bodyMany != nil || bodySingle != nil else {
+        guard let body = try? req.content.decode(DraftBody.self) else {
             throw WebAssignmentError.invalidParameter(name: "request body", reason: "Invalid assignment draft payload")
         }
 
         let assignmentName =
             try multipartTextField(named: ["assignmentName"], from: req)
-            ?? bodyMany?.assignmentName
-            ?? bodySingle?.assignmentName
+            ?? body.assignmentName
             ?? ""
         let dueAt =
             try multipartTextField(named: ["dueAt"], from: req)
-            ?? bodyMany?.dueAt
-            ?? bodySingle?.dueAt
+            ?? body.dueAt
             ?? ""
         let startsAt =
             try multipartTextField(named: ["startsAt"], from: req)
-            ?? bodyMany?.startsAt
-            ?? bodySingle?.startsAt
+            ?? body.startsAt
             ?? ""
         let sectionIDRaw =
             try multipartTextField(named: ["sectionID"], from: req)
-            ?? bodyMany?.sectionID
-            ?? bodySingle?.sectionID
+            ?? body.sectionID
             ?? ""
         let draftIDRaw =
             try multipartTextField(named: ["draftID"], from: req)
-            ?? bodyMany?.draftID
-            ?? bodySingle?.draftID
+            ?? body.draftID
         let action =
             (try multipartTextField(named: ["draftAction"], from: req)
-            ?? bodyMany?.draftAction
-            ?? bodySingle?.draftAction
+            ?? body.draftAction
             ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
-        let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
+        let assignmentNotebookFile = body.assignmentNotebookFile
+        let solutionNotebookFile = body.solutionNotebookFile
         let suiteFiles =
             (try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? bodyMany?.suiteFiles
-            ?? (bodySingle?.suiteFiles.map { [$0] } ?? []))
+            ?? body.suiteFiles?.files
+            ?? [])
             .filter { $0.data.readableBytes > 0 }
         let suiteConfigRaw =
             try multipartTextField(named: ["suiteConfig"], from: req)
-            ?? bodyMany?.suiteConfig
-            ?? bodySingle?.suiteConfig
+            ?? body.suiteConfig
         let requiredPlatform =
             try multipartTextField(named: ["requiredPlatform"], from: req)
-            ?? bodyMany?.requiredPlatform
-            ?? bodySingle?.requiredPlatform
+            ?? body.requiredPlatform
             ?? ""
         let requiredArchitecture =
             try multipartTextField(named: ["requiredArchitecture"], from: req)
-            ?? bodyMany?.requiredArchitecture
-            ?? bodySingle?.requiredArchitecture
+            ?? body.requiredArchitecture
             ?? ""
         let requiredLanguagesCSV =
             try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
-            ?? bodyMany?.requiredLanguagesCSV
-            ?? bodySingle?.requiredLanguagesCSV
+            ?? body.requiredLanguagesCSV
             ?? ""
         let requiredCapabilitiesCSV =
             try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
-            ?? bodyMany?.requiredCapabilitiesCSV
-            ?? bodySingle?.requiredCapabilitiesCSV
+            ?? body.requiredCapabilitiesCSV
             ?? ""
 
         return NewAssignmentDraftPayload(
@@ -369,7 +356,9 @@ extension DraftAssignmentRoutes {
         return req.redirect(to: "/instructor")
     }
 
-    fileprivate struct DraftBodyMany: Content {
+    // `suiteFiles` decodes both the array-typed (`suiteFiles[]`) and
+    // single-bare-`File` (Safari) multipart shapes via `MultipartFileList`.
+    fileprivate struct DraftBody: Content {
         var assignmentName: String?
         var dueAt: String?
         var startsAt: String?
@@ -378,24 +367,7 @@ extension DraftAssignmentRoutes {
         var draftAction: String?
         var assignmentNotebookFile: File?
         var solutionNotebookFile: File?
-        var suiteFiles: [File]?
-        var suiteConfig: String?
-        var requiredPlatform: String?
-        var requiredArchitecture: String?
-        var requiredLanguagesCSV: String?
-        var requiredCapabilitiesCSV: String?
-    }
-
-    fileprivate struct DraftBodySingle: Content {
-        var assignmentName: String?
-        var dueAt: String?
-        var startsAt: String?
-        var sectionID: String?
-        var draftID: String?
-        var draftAction: String?
-        var assignmentNotebookFile: File?
-        var solutionNotebookFile: File?
-        var suiteFiles: File?
+        var suiteFiles: MultipartFileList?
         var suiteConfig: String?
         var requiredPlatform: String?
         var requiredArchitecture: String?

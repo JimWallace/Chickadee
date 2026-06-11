@@ -389,7 +389,7 @@ Create Assignment
 (function () {
     var draftID = #rawJSON(draftIDJSON);
     if (!draftID) return;  // No draft yet — user hasn't uploaded a solution notebook
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
     var seed = document.getElementById('pattern-families-seed');
     var initialFamilies = [];
     if (seed) {
@@ -423,7 +423,7 @@ Create Assignment
 (function () {
     var draftID = #rawJSON(draftIDJSON);
     if (!draftID) return;
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
     var suiteTable = window.initSuiteTable({
         assignmentID: 'draft:' + draftID,  // diagnostics-only; URL builders below ignore
         csrfToken: csrfToken,
@@ -458,10 +458,8 @@ Create Assignment
 (function () {
     'use strict';
 
-    function csrf() {
-        var m = document.querySelector('meta[name="csrf-token"]');
-        return m ? m.getAttribute('content') : '';
-    }
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var csrf = ChickadeeUI.getCsrfToken;
 
     function isValidPyIdent(s) {
         return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
@@ -665,8 +663,7 @@ Create Assignment
             form.method = 'post';
             form.action = action;
             form.style.display = 'none';
-            var tokenEl = document.querySelector('meta[name="csrf-token"]');
-            var token = tokenEl ? tokenEl.getAttribute('content') : '';
+            var token = ChickadeeUI.getCsrfToken();
             var inp = document.createElement('input');
             inp.type = 'hidden';
             inp.name = '_csrf';
@@ -734,12 +731,11 @@ Create Assignment
 (function () {
     'use strict';
 
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
 
-    function escHtml(v) {
-        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-    }
-    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
+    // Shared implementations (Public/chickadee-ui.js, loaded from base.leaf).
+    var escHtml = ChickadeeUI.escapeHtml;
+    var escAttr = ChickadeeUI.escapeAttr;
 
     // ── Notebook upload buttons ────────────────────────────────────────
     // Open hidden file pickers, then submit the main form to the draft
@@ -1029,7 +1025,7 @@ function checkUWDates(dateTimeValue, warningEl) {
 // scripts only (editing a saved script isn't a draft-page flow → no content
 // URL); the body persists via PUT /suite (suite-table's saveScriptViaSuite).
 window.ChickadeeScriptRendererConfig = {
-    csrfToken: (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+    csrfToken: ChickadeeUI.getCsrfToken(),
     scriptContentURL: null,
     uploadFilesInputID: null
 };
@@ -1039,7 +1035,7 @@ window.ChickadeeScriptRendererConfig = {
 <script src="/test-editor-modal.js?v=#appVersion()"></script>
 <script>
 (function () {
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
     window.initTestEditorModal({ csrfToken: csrfToken });
     var modal = window.__chickadeeTestEditorModal;
 

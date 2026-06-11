@@ -161,11 +161,8 @@ Students
     var sortCol = 3;
     var sortAsc = false;
 
-    function escapeHtml(value) {
-        return String(value == null ? '' : value)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var escapeHtml = ChickadeeUI.escapeHtml;
 
     var deleteIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 
@@ -327,8 +324,7 @@ Students
 
     function repaint(rows) {
         if (!Array.isArray(rows)) return;
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        var csrfToken = meta ? meta.getAttribute('content') : '';
+        var csrfToken = ChickadeeUI.getCsrfToken();
         tbody.innerHTML = rows.map(function (s) { return buildStudentRow(s, csrfToken); }).join('');
         if (countEl) {
             // Heading counts students + pending pre-enrolments only, matching

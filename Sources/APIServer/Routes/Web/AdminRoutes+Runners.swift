@@ -89,7 +89,7 @@ extension AdminRoutes {
         let iso = ISO8601DateFormatter()
         let processedCount = try await APISubmission.query(on: req.db)
             .filter(\.$workerID == runnerID)
-            .filter(\.$status ~~ ["complete", "failed"])
+            .filter(\.$status ~~ [SubmissionStatus.complete.rawValue, SubmissionStatus.failed.rawValue])
             .count()
         let avgData = try? await req.application.diagnostics.rollingAverages(
             for: [runnerID], sampleSize: 50, on: req.db
@@ -261,9 +261,9 @@ func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
         for row in counts {
             guard let workerID = row.workerID, !workerID.isEmpty else { continue }
             switch row.status {
-            case "assigned":
+            case SubmissionStatus.assigned.rawValue:
                 assignedByWorkerID[workerID, default: 0] += row.total
-            case "complete", "failed":
+            case SubmissionStatus.complete.rawValue, SubmissionStatus.failed.rawValue:
                 processedByWorkerID[workerID, default: 0] += row.total
             default:
                 break
@@ -273,10 +273,10 @@ func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
         let submissions = try await APISubmission.query(on: req.db).all()
         for submission in submissions {
             guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
-            if submission.status == "assigned" {
+            if submission.statusValue == .assigned {
                 assignedByWorkerID[workerID, default: 0] += 1
             }
-            if submission.status == "complete" || submission.status == "failed" {
+            if submission.statusValue == .complete || submission.statusValue == .failed {
                 processedByWorkerID[workerID, default: 0] += 1
             }
         }

@@ -239,7 +239,7 @@ func scheduleValidationAfterSuiteEdit(
         let existingPending = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.validation)
-            .filter(\.$status == "pending")
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
             .first()
         if existingPending != nil { return }
 
@@ -346,7 +346,7 @@ func bulkFlipStudentSubmissionsToPending(
         // Skip rows already in flight unless explicitly forced, mirroring
         // `flipSubmissionToPending`'s idempotency guard.
         if !force {
-            _ = query.filter(\.$status !~ ["pending", "assigned"])
+            _ = query.filter(\.$status !~ [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue])
         }
         return query
     }
@@ -355,7 +355,7 @@ func bulkFlipStudentSubmissionsToPending(
     guard touched > 0 else { return 0 }
 
     try await scoped()
-        .set(\.$status, to: "pending")
+        .set(\.$status, to: SubmissionStatus.pending.rawValue)
         .set(\.$workerID, to: nil)
         .set(\.$assignedAt, to: nil)
         .set(\.$retestedAt, to: now)
@@ -428,10 +428,10 @@ func flipSubmissionToPending(
     force: Bool = false,
     now: Date = Date()
 ) async throws -> Bool {
-    if !force && (submission.status == "pending" || submission.status == "assigned") {
+    if !force && (submission.statusValue == .pending || submission.statusValue == .assigned) {
         return false
     }
-    submission.status = "pending"
+    submission.setStatus(.pending)
     submission.workerID = nil
     submission.assignedAt = nil
     submission.retestedAt = now
@@ -456,7 +456,7 @@ func waitForRunnerValidation(
             throw WebAssignmentError.notFound(resource: "Validation submission")
         }
 
-        if submission.status == "complete" || submission.status == "failed" {
+        if submission.statusValue == .complete || submission.statusValue == .failed {
             guard
                 let result = try await APIResult.query(on: req.db)
                     .filter(\.$submissionID == submissionID)

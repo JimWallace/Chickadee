@@ -124,11 +124,10 @@
         return null;
     }
 
-    function escHtml(s) {
-        return String(s == null ? '' : s)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-    function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }
+    // Shared implementations (Public/chickadee-ui.js); local aliases keep
+    // the many call sites short.
+    var escHtml = ChickadeeUI.escapeHtml;
+    var escAttr = ChickadeeUI.escapeAttr;
 
     function initTestEditorModal(config) {
         config = config || {};

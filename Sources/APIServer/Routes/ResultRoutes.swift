@@ -43,7 +43,7 @@ struct ResultRoutes: RouteCollection {
             try await persistToDB(collection, on: req, db: tx)
             guard let submission = try await APISubmission.find(collection.submissionID, on: tx)
             else { return nil }
-            submission.status = "complete"
+            submission.setStatus(.complete)
             try await submission.save(on: tx)
             return submission
         }

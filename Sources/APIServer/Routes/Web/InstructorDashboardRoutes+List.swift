@@ -118,7 +118,7 @@ extension InstructorDashboardRoutes {
 
         let activeStudentIDs = Set(
             enrolledUsers
-                .filter { $0.role == "student" }
+                .filter { $0.roleValue == .student }
                 .compactMap(\.id)
         )
         // Pending pre-enrollments are CSV-uploaded students who haven't
@@ -173,7 +173,7 @@ extension InstructorDashboardRoutes {
                 activeCourseUUID: activeCourseUUID
             )
         )
-        let activeStudentCount = enrolledUsers.filter { $0.role == "student" }.count
+        let activeStudentCount = enrolledUsers.filter { $0.roleValue == .student }.count
         return (rows, activeStudentCount + pendingPreEnrollments.count)
     }
 
@@ -192,7 +192,7 @@ extension InstructorDashboardRoutes {
             .filter(\.$id ~~ enrolledUserIDs)
             // Exclude `mcp` service accounts: they may be enrolled to scope an
             // agent's access (admin MCP tab) but are not roster members.
-            .filter(\.$role != "mcp")
+            .filter(\.$role != UserRole.mcp.rawValue)
             .all()
             .sorted { lhs, rhs in
                 switch (lhs.lastSeenAt, rhs.lastSeenAt) {
@@ -284,7 +284,7 @@ extension InstructorDashboardRoutes {
         )
 
         let active24h = enrolledUsers.reduce(into: 0) { count, user in
-            guard user.role == "student" else { return }
+            guard user.roleValue == .student else { return }
             if let lastSeenAt = user.lastSeenAt, lastSeenAt >= windowStart {
                 count += 1
             }
@@ -304,7 +304,7 @@ extension InstructorDashboardRoutes {
             pendingNow = try await APISubmission.query(on: req.db)
                 .filter(\.$testSetupID ~~ Array(workerModeSetupIDs))
                 .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$status ~~ ["pending", "assigned"])
+                .filter(\.$status ~~ [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue])
                 .filter(\.$userID ~~ Array(activeStudentIDs))
                 .count()
         }

@@ -768,7 +768,7 @@ private func importBundledSubmissions(
             testSetupID: setupID,
             zipPath: newFilePath,
             attemptNumber: bundledSub.attemptNumber,
-            status: "complete",
+            status: SubmissionStatus.complete.rawValue,
             filename: bundledSub.filename,
             userID: userID,
             kind: APISubmission.Kind.student

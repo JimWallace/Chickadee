@@ -230,14 +230,8 @@ tr.runner-row-offline {
     var workersBody = document.getElementById('workers-body');
     if (!workersBody) return;
 
-    function escapeHtml(value) {
-        return String(value)
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#39;');
-    }
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var escapeHtml = ChickadeeUI.escapeHtml;
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
     var diagQueueDepth = document.getElementById('diag-queue-depth');

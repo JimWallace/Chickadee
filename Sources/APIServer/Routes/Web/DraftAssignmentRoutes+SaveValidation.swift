@@ -15,10 +15,10 @@ import Vapor
 // MARK: - Parsed form payload
 
 /// Raw + lightly normalised values extracted from the save-new-assignment
-/// multipart body.  Each field has been resolved across the
-/// "many" (`suiteFiles[]`) / "single" (`suiteFiles`) decode paths;
-/// validation (e.g. "title is required", "notebook must be JSON") happens
-/// later, in `validateSaveNewAssignment`.
+/// multipart body.  `suiteFiles` has been resolved across the
+/// "many" (`suiteFiles[]`) / "single" (`suiteFiles`) shapes via
+/// `MultipartFileList`; validation (e.g. "title is required", "notebook
+/// must be JSON") happens later, in `validateSaveNewAssignment`.
 struct SaveNewAssignmentForm {
     let assignmentName: String?
     let dueAtRaw: String?
@@ -73,13 +73,13 @@ extension DraftAssignmentRoutes {
 
     // MARK: - Multipart fan-in
 
-    /// Parses the save-new-assignment body across both the array-typed
-    /// (`suiteFiles[]`) and single-typed (`suiteFiles`) Vapor decode paths
-    /// and returns the fields a typed handler would expect.  Throws
-    /// `WebAssignmentError.invalidParameter` when neither decode path
-    /// recognises the body.
+    /// Parses the save-new-assignment body — `suiteFiles` decodes both the
+    /// array-typed (`suiteFiles[]`) and single-bare-`File` (Safari) shapes
+    /// via `MultipartFileList` — and returns the fields a typed handler
+    /// would expect.  Throws `WebAssignmentError.invalidParameter` when the
+    /// body isn't recognised.
     func parseSaveNewAssignmentForm(req: Request) throws -> SaveNewAssignmentForm {
-        struct SaveBodyMany: Content {
+        struct SaveBody: Content {
             var assignmentName: String?
             var dueAt: String?
             var startsAt: String?
@@ -87,22 +87,7 @@ extension DraftAssignmentRoutes {
             var draftID: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
-            var suiteFiles: [File]?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-        struct SaveBodySingle: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var startsAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: File?
+            var suiteFiles: MultipartFileList?
             var suiteConfig: String?
             var requiredPlatform: String?
             var requiredArchitecture: String?
@@ -110,9 +95,7 @@ extension DraftAssignmentRoutes {
             var requiredCapabilitiesCSV: String?
         }
 
-        let bodyMany = try? req.content.decode(SaveBodyMany.self)
-        let bodySingle = bodyMany == nil ? (try? req.content.decode(SaveBodySingle.self)) : nil
-        guard bodyMany != nil || bodySingle != nil else {
+        guard let body = try? req.content.decode(SaveBody.self) else {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid assignment upload payload"
@@ -121,33 +104,33 @@ extension DraftAssignmentRoutes {
 
         let suiteFilesRaw =
             try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? bodyMany?.suiteFiles
-            ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
+            ?? body.suiteFiles?.files
+            ?? []
 
         return SaveNewAssignmentForm(
             assignmentName: try multipartTextField(named: ["assignmentName"], from: req)
-                ?? bodyMany?.assignmentName ?? bodySingle?.assignmentName,
+                ?? body.assignmentName,
             dueAtRaw: try multipartTextField(named: ["dueAt"], from: req)
-                ?? bodyMany?.dueAt ?? bodySingle?.dueAt,
+                ?? body.dueAt,
             startsAtRaw: try multipartTextField(named: ["startsAt"], from: req)
-                ?? bodyMany?.startsAt ?? bodySingle?.startsAt,
+                ?? body.startsAt,
             sectionIDRaw: try multipartTextField(named: ["sectionID"], from: req)
-                ?? bodyMany?.sectionID ?? bodySingle?.sectionID,
+                ?? body.sectionID,
             draftIDRaw: try multipartTextField(named: ["draftID"], from: req)
-                ?? bodyMany?.draftID ?? bodySingle?.draftID,
-            assignmentNotebookFile: bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile,
-            solutionNotebookFile: bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile,
+                ?? body.draftID,
+            assignmentNotebookFile: body.assignmentNotebookFile,
+            solutionNotebookFile: body.solutionNotebookFile,
             suiteFilesRaw: suiteFilesRaw,
             suiteConfigRaw: try multipartTextField(named: ["suiteConfig"], from: req)
-                ?? bodyMany?.suiteConfig ?? bodySingle?.suiteConfig,
+                ?? body.suiteConfig,
             requiredPlatform: try multipartTextField(named: ["requiredPlatform"], from: req)
-                ?? bodyMany?.requiredPlatform ?? bodySingle?.requiredPlatform ?? "",
+                ?? body.requiredPlatform ?? "",
             requiredArchitecture: try multipartTextField(named: ["requiredArchitecture"], from: req)
-                ?? bodyMany?.requiredArchitecture ?? bodySingle?.requiredArchitecture ?? "",
+                ?? body.requiredArchitecture ?? "",
             requiredLanguagesCSV: try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
-                ?? bodyMany?.requiredLanguagesCSV ?? bodySingle?.requiredLanguagesCSV ?? "",
+                ?? body.requiredLanguagesCSV ?? "",
             requiredCapabilitiesCSV: try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
-                ?? bodyMany?.requiredCapabilitiesCSV ?? bodySingle?.requiredCapabilitiesCSV ?? ""
+                ?? body.requiredCapabilitiesCSV ?? ""
         )
     }
 

@@ -109,13 +109,13 @@ extension InstructorDashboardRoutes {
             // Filter to the enrolled IDs in SQL instead of fetching every
             // student in the system and filtering in memory.
             return try await APIUser.query(on: req.db)
-                .filter(\.$role == "student")
+                .filter(\.$role == UserRole.student.rawValue)
                 .filter(\.$id ~~ enrolledUserIDs)
                 .sort(\.$username, .ascending)
                 .all()
         }
         return try await APIUser.query(on: req.db)
-            .filter(\.$role == "student")
+            .filter(\.$role == UserRole.student.rawValue)
             .sort(\.$username, .ascending)
             .all()
     }
@@ -307,7 +307,7 @@ extension InstructorDashboardRoutes {
             .map(\.userID)
         guard !enrolledUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
-            .filter(\.$role == "student")
+            .filter(\.$role == UserRole.student.rawValue)
             .filter(\.$id ~~ enrolledUserIDs)
             .sort(\.$username, .ascending)
             .all()
@@ -401,7 +401,7 @@ extension InstructorDashboardRoutes {
         let pendingLatestCount = rows.reduce(into: 0) { count, row in
             guard row.hasLatestSubmission,
                 let latest = submissions.first(where: { $0.id == row.latestSubmissionID }),
-                ["pending", "assigned"].contains(latest.status)
+                [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue].contains(latest.status)
             else { return }
             count += 1
         }
@@ -444,7 +444,7 @@ extension InstructorDashboardRoutes {
             let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw),
             let student = try await APIUser.find(studentID, on: req.db),
-            student.role == "student"
+            student.roleValue == .student
         else {
             throw WebAssignmentError.notFound(resource: "Assignment or student")
         }
@@ -787,7 +787,7 @@ extension InstructorDashboardRoutes {
         guard let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw),
             let student = try await APIUser.find(studentID, on: req.db),
-            student.role == "student"
+            student.roleValue == .student
         else {
             throw WebAssignmentError.notFound(resource: "Student")
         }
