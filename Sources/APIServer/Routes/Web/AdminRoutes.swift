@@ -308,7 +308,10 @@ struct AdminRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(RoleBody.self)
-        guard ["student", "instructor", "admin"].contains(body.role) else {
+        guard
+            [UserRole.student.rawValue, UserRole.instructor.rawValue, UserRole.admin.rawValue]
+                .contains(body.role)
+        else {
             throw AppError.invalidParameter(
                 name: "role",
                 reason: "must be student, instructor, or admin (got '\(body.role)')")

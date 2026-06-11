@@ -59,7 +59,7 @@ struct PendingQueueState: Sendable {
 
 private func loadPendingQueueState(on application: Application, now: Date) async throws -> PendingQueueState {
     let pending = try await APISubmission.query(on: application.db)
-        .filter(\.$status == "pending")
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
         .all()
     let pendingCount = pending.count
     // Use the effective enqueue time (retestedAt ?? submittedAt) so a fresh

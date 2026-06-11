@@ -25,7 +25,7 @@ func awardClassBadgesFor100Percent(
     on db: Database
 ) async throws {
     guard let user = try await APIUser.find(userID, on: db),
-        user.role == "student"
+        user.roleValue == .student
     else { return }
 
     // The class records to award — the manifest's authored ones (or the registry

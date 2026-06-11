@@ -22,13 +22,13 @@ func reapStuckAssignedSubmissions(
 ) async throws -> Int {
     let cutoff = now.addingTimeInterval(-maxAge)
     let stuck = try await APISubmission.query(on: db)
-        .filter(\.$status == "assigned")
+        .filter(\.$status == SubmissionStatus.assigned.rawValue)
         .filter(\.$assignedAt <= cutoff)
         .all()
 
     for submission in stuck {
         let previousWorker = submission.workerID ?? "unknown"
-        submission.status = "pending"
+        submission.setStatus(.pending)
         submission.workerID = nil
         submission.assignedAt = nil
         try await submission.save(on: db)

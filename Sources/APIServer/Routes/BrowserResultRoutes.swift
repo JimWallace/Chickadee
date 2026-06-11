@@ -80,7 +80,7 @@ struct BrowserResultRoutes: RouteCollection {
             testSetupID: body.testSetupID,
             zipPath: nbPath,
             attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            status: "complete",
+            status: SubmissionStatus.complete.rawValue,
             filename: "\(subID).ipynb",
             userID: caller.id,
             kind: APISubmission.Kind.student
@@ -176,7 +176,7 @@ struct BrowserResultRoutes: RouteCollection {
             testSetupID: body.testSetupID,
             zipPath: nbPath,
             attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
-            status: "pending",
+            status: SubmissionStatus.pending.rawValue,
             filename: submittedFilename,
             userID: caller.id,
             kind: APISubmission.Kind.student

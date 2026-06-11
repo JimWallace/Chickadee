@@ -294,7 +294,7 @@ struct SSOAuthRoutes: RouteCollection {
         let newUser = APIUser(
             username: username,
             passwordHash: "",  // SSO users have no local password
-            role: mappedRole ?? "student",
+            role: mappedRole ?? UserRole.student.rawValue,
             authProvider: "duo-oidc",
             externalSubject: subject,
             email: email,
@@ -427,10 +427,10 @@ extension SSOAuthRoutes {
         )
 
         if !adminAllowlist.isDisjoint(with: candidates) {
-            return "admin"
+            return UserRole.admin.rawValue
         }
         if !instructorAllowlist.isDisjoint(with: candidates) {
-            return "instructor"
+            return UserRole.instructor.rawValue
         }
         return nil
     }

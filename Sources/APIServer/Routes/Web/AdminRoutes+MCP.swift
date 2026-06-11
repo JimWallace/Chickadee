@@ -42,7 +42,7 @@ extension AdminRoutes {
         // match, role=mcp (excluded from autoAssignableRoles, so no first-login
         // path can mint it), and no externalSubject for SSO to match either.
         let unusableHash = try Bcrypt.hash(UUID().uuidString + UUID().uuidString)
-        let user = APIUser(username: username, passwordHash: unusableHash, role: "mcp")
+        let user = APIUser(username: username, passwordHash: unusableHash, role: UserRole.mcp.rawValue)
         try await user.save(on: req.db)
         await AuditLogger.record(
             action: .mcpAccountCreated, targetType: .user, targetID: user.id?.uuidString,
@@ -123,7 +123,7 @@ extension AdminRoutes {
         let enabled = mcp.mode.isMounted && req.application.mcpTokenAuthority != nil && endpoints != nil
 
         let mcpUsers = try await APIUser.query(on: req.db)
-            .filter(\.$role == "mcp")
+            .filter(\.$role == UserRole.mcp.rawValue)
             .sort(\.$username)
             .all()
         let courses = try await APICourse.query(on: req.db).sort(\.$code).all()

@@ -316,7 +316,7 @@ private func collectClaimCandidates(
     // replaces the old full-scan + in-memory re-sort.
     let claimCandidateScanLimit = 50
     var studentSubmissions = try await APISubmission.query(on: db)
-        .filter(\.$status == "pending")
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
         .filter(\.$kind == APISubmission.Kind.student)
         .filter(\.$retestedAt == nil)
         .sort(\.$submittedAt, .ascending)
@@ -324,7 +324,7 @@ private func collectClaimCandidates(
         .all()
     if studentSubmissions.count < claimCandidateScanLimit {
         studentSubmissions += try await APISubmission.query(on: db)
-            .filter(\.$status == "pending")
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == APISubmission.Kind.student)
             .filter(\.$retestedAt != nil)
             .sort(\.$submittedAt, .ascending)
@@ -355,7 +355,7 @@ private func collectClaimCandidates(
     }
 
     let pendingValidation = try await APISubmission.query(on: db)
-        .filter(\.$status == "pending")
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
         .filter(\.$kind == APISubmission.Kind.validation)
         .sort(\.$submittedAt, .ascending)
         .limit(claimCandidateScanLimit)
@@ -438,7 +438,7 @@ private func evaluateAndClaimCandidate(
         }
 
         // Claim inside the transaction — atomic with the select above.
-        submission.status = "assigned"
+        submission.setStatus(.assigned)
         submission.workerID = body.workerID
         submission.assignedAt = Date()
         try await submission.save(on: db)

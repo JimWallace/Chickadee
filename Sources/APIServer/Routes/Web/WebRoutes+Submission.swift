@@ -231,7 +231,7 @@ extension WebRoutes {
         // checks the submitter's role and uses the existence of a
         // pathfinder row directly (the unique constraint on
         // (test_setup_id, achievement_id) makes this the natural query).
-        if user.role == "student", let uid = user.id {
+        if user.roleValue == .student, let uid = user.id {
             // First-to-submit records (Pathfinder) — the manifest's authored
             // ones, or the registry default, minus any the instructor disabled.
             let records = BuiltInAchievements.classRecordsForAward(
@@ -775,7 +775,7 @@ extension WebRoutes {
         let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
         let currentUser = decorations.currentUser
-        let isPending = submission.status == "pending" || submission.status == "assigned"
+        let isPending = submission.statusValue == .pending || submission.statusValue == .assigned
         let isBrowserComplete = false  // browser submissions now go straight to "complete"
         let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
         let nameExt = (submission.filename ?? "").lowercased()
