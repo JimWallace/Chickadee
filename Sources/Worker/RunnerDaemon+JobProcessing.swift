@@ -86,7 +86,7 @@ extension WorkerDaemon {
             paths: paths,
             stageTimings: &stageTimings
         )
-        defer { try? FileManager.default.removeItem(at: prepared.testSetupDir) }
+        defer { removeWorkspaceItem(at: prepared.testSetupDir, label: "test_setup_dir", job: job) }
 
         let testExecutionStartedAt = Date()
         let outcomes = try await executeTestSuites(
@@ -124,6 +124,26 @@ extension WorkerDaemon {
     }
 
     // MARK: - Per-job setup helpers
+
+    /// Best-effort workspace removal that leaves a structured breadcrumb on
+    /// failure — a silently leaked workdir is a disk leak ops can only find
+    /// from this log line. Quiet when the path is already gone.
+    private func removeWorkspaceItem(at url: URL, label: String, job: Job) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            writeStructuredRunnerLog(
+                event: "workspace_cleanup_failed",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "label": label,
+                    "path": url.path,
+                    "error": String(describing: error),
+                ])
+        }
+    }
 
     private func logJobAccepted(_ job: Job) {
         writeStructuredRunnerLog(
@@ -185,7 +205,7 @@ extension WorkerDaemon {
         }
 
         let cleanupStartedAt = Date()
-        try? FileManager.default.removeItem(at: paths.workDir)
+        removeWorkspaceItem(at: paths.workDir, label: "work_dir", job: job)
         stageTimings.record("cleanup", milliseconds: Int(Date().timeIntervalSince(cleanupStartedAt) * 1000))
 
         let freeDiskMBPostCleanup = freeSpaceMB(at: tempRoot)

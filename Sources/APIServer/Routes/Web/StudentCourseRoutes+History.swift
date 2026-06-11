@@ -706,12 +706,7 @@ extension StudentCourseRoutes {
         else {
             throw WebAssignmentError.notFound(resource: "Course or student")
         }
-        let courseCode = courseCodeRaw.lowercased()
-        let course =
-            try await APICourse.query(on: req.db)
-            .filter(\.$isArchived == false)
-            .all()
-            .first(where: { $0.code.lowercased() == courseCode })
+        let course = try await findActiveCourse(byCode: courseCodeRaw, on: req.db)
         guard let course, let courseUUID = course.id else {
             throw WebAssignmentError.notFound(resource: "Course '\(courseCodeRaw)'")
         }

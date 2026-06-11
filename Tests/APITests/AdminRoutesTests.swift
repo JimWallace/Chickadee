@@ -485,6 +485,35 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
+    @Test func copyCourseSkipsTakenCopyCodes() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let source = try await makeCourse(code: "CPY101", name: "Copy Source")
+            // Occupy the first two candidate codes so the copy must fall
+            // through to -COPY-3 — pins the candidate ordering of
+            // uniqueCopyCode.
+            try await makeCourse(code: "CPY101-COPY", name: "Existing Copy")
+            try await makeCourse(code: "CPY101-COPY-2", name: "Existing Copy 2")
+            let courseID = try source.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(
+                cookie, path: "/admin/courses/\(courseID.uuidString)")
+
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/copy",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            let copied = try #require(
+                try await APICourse.query(on: app.db).filter(\.$code == "CPY101-COPY-3").first())
+            #expect(copied.name == "Copy Source (Copy)")
+        }
+    }
+
     @Test func toggleCourseArchiveFlipsArchivedState() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()

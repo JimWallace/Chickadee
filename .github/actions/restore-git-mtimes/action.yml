@@ -1,0 +1,26 @@
+name: Restore git mtimes
+description: >
+  Install git-restore-mtime and reset each source file's mtime to its
+  last-commit time, so a restored .build/ cache stays valid for unchanged
+  files and llbuild recompiles only what new commits touched. Requires a
+  fetch-depth: 0 checkout (filter: blob:none is fine) and an apt-based
+  container image.
+runs:
+  using: composite
+  steps:
+    - name: Install git-restore-mtime
+      shell: bash
+      run: |
+        for i in 1 2 3; do
+          apt-get update -qq && apt-get install -y --no-install-recommends git-restore-mtime && break
+          echo "apt-get failed (attempt $i), retrying in 15s..."
+          sleep 15
+        done
+
+    # The container runs git as a different uid than checkout used, so mark
+    # the workspace safe before invoking git.
+    - name: Restore source mtimes from git history
+      shell: bash
+      run: |
+        git config --global --add safe.directory '*'
+        git restore-mtime
