@@ -18,9 +18,9 @@
     <link rel="stylesheet" href="/styles.css?v=#appVersion()">
     <!-- Shared JS utilities (escapeHtml / escapeAttr / getCsrfToken).  Loaded
          in <head> rather than next to app.js because inline page scripts and
-         template-loaded modules in #import("content") execute during parse,
-         before the end-of-body script tags, and they reference ChickadeeUI
-         (some at parse time, e.g. csrf-token captures). -->
+         template-loaded modules execute during parse, before the end-of-body
+         script tags, and they reference ChickadeeUI at parse time
+         (e.g. csrf-token captures). -->
     <script src="/chickadee-ui.js?v=#appVersion()"></script>
 </head>
 <body>
