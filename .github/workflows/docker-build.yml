@@ -54,21 +54,9 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - name: Install git-restore-mtime
-        run: |
-          for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends git-restore-mtime && break
-            echo "apt-get failed (attempt $i), retrying in 15s..."
-            sleep 15
-          done
-
       # Reset source mtimes to commit times so llbuild recompiles only files
-      # touched by new commits.  The container runs git as a different uid than
-      # checkout used, so mark the workspace safe first.
-      - name: Restore source mtimes from git history
-        run: |
-          git config --global --add safe.directory '*'
-          git restore-mtime
+      # touched by new commits.
+      - uses: ./.github/actions/restore-git-mtimes
 
       - name: Resolve toolchain cache key
         id: toolchain

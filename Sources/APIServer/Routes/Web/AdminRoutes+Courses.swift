@@ -600,15 +600,14 @@ extension AdminRoutes {
 // MARK: - Private helpers
 
 private func uniqueCopyCode(base: String, db: Database) async throws -> String {
-    let first = "\(base)-COPY"
-    if try await APICourse.query(on: db).filter(\.$code == first).count() == 0 {
-        return first
-    }
-    for n in 2...10 {
-        let candidate = "\(base)-COPY-\(n)"
-        if try await APICourse.query(on: db).filter(\.$code == candidate).count() == 0 {
-            return candidate
-        }
+    let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
+    let taken = Set(
+        try await APICourse.query(on: db)
+            .filter(\.$code ~~ candidates)
+            .all()
+            .map(\.code))
+    if let available = candidates.first(where: { !taken.contains($0) }) {
+        return available
     }
     throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }

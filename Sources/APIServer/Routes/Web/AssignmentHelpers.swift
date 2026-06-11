@@ -136,11 +136,13 @@ func normalizedDeadlineOverrideAfterDueDateChange(
 }
 
 func nextAssignmentSortOrder(req: Request) async throws -> Int {
+    // MAX over the non-null rows only; an explicit filter + sort avoids the
+    // driver-dependent NULL ordering Postgres and SQLite disagree on.
     let maxOrder =
         try await APIAssignment.query(on: req.db)
-        .all()
-        .compactMap(\.sortOrder)
-        .max() ?? 0
+        .filter(\.$sortOrder != nil)
+        .sort(\.$sortOrder, .descending)
+        .first()?.sortOrder ?? 0
     return maxOrder + 1
 }
 
