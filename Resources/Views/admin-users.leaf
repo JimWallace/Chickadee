@@ -119,6 +119,7 @@ Users
     display: inline;
 }
 </style>
+<script src="/relative-time.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -129,39 +130,6 @@ Users
     if (!usersBody) return;
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-
-    function formatRelative(isoString) {
-        var date = new Date(isoString);
-        if (Number.isNaN(date.getTime())) return isoString;
-        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
-        var abs = Math.abs(seconds);
-        if (abs < 60) return relativeFormatter.format(seconds, 'second');
-        var minutes = Math.round(seconds / 60);
-        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
-        var hours = Math.round(minutes / 60);
-        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
-        var days = Math.round(hours / 24);
-        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
-        var weeks = Math.round(days / 7);
-        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
-        var months = Math.round(days / 30);
-        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
-        var years = Math.round(days / 365);
-        return relativeFormatter.format(years, 'year');
-    }
-
-    function applyRelativeTimes(root) {
-        var scope = root || document;
-        scope.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
-            var iso = el.getAttribute('data-iso');
-            if (!iso) return;
-            var date = new Date(iso);
-            if (Number.isNaN(date.getTime())) return;
-            el.textContent = formatRelative(iso);
-            el.title = date.toLocaleString();
-        });
-    }
 
     var userHeaders = Array.from(usersTable.querySelectorAll('th[data-sort-key]'));
     var activeUserHeader = null;
@@ -237,7 +205,7 @@ Users
         });
     });
 
-    applyRelativeTimes(document);
+    ChickadeeRelativeTime.applyRelativeTimes(document);
 
     if (userHeaders.length) {
         var defaultUserHeader = userHeaders.find(function (header) {
@@ -322,7 +290,7 @@ Users
         var meta = document.querySelector('meta[name="csrf-token"]');
         var csrfToken = meta ? meta.getAttribute('content') : '';
         usersBody.innerHTML = rows.map(function (u) { return buildUserRow(u, csrfToken); }).join('');
-        applyRelativeTimes(usersBody);
+        ChickadeeRelativeTime.applyRelativeTimes(usersBody);
         if (activeUserHeader) {
             sortUsersByHeader(activeUserHeader, activeUserDirection);
         }

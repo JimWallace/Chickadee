@@ -269,8 +269,13 @@ func readWorkerSecretFromFile(path: String) -> String? {
 actor WorkerDaemon {
     static let downloadSession: URLSession = {
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = 5
-        cfg.timeoutIntervalForResource = 15
+        // Request timeout is per-idle-interval (resets whenever bytes arrive);
+        // resource timeout caps the WHOLE transfer. The old 15 s resource cap
+        // meant a large setup zip on a slow link could *never* download — a
+        // deterministic failure no retry can fix (June 2026 audit). 10 min is
+        // a backstop against truly hung transfers, not a tuning knob.
+        cfg.timeoutIntervalForRequest = 15
+        cfg.timeoutIntervalForResource = 600
         return URLSession(configuration: cfg)
     }()
 
@@ -371,6 +376,17 @@ actor WorkerDaemon {
                     slot: slot,
                     status: "unexpected_response",
                     message: "unexpected response from API server",
+                    httpStatus: nil,
+                    backoff: &backoff
+                )
+            } catch JobPollerError.decodingFailed(let underlying) {
+                // Schema mismatch between server and worker — retryable (it
+                // resolves when the lagging side is upgraded), but logged under
+                // its own status so it can't be mistaken for a network problem.
+                try await handleRetryablePollError(
+                    slot: slot,
+                    status: "job_decode_failed",
+                    message: String(describing: underlying),
                     httpStatus: nil,
                     backoff: &backoff
                 )

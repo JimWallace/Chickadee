@@ -10,6 +10,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 // MARK: - Intermediate query results
@@ -277,13 +278,6 @@ extension InstructorDashboardRoutes {
                 .filter(\.$kind == APISubmission.Kind.student)
                 .filter(\.$submittedAt >= windowStart)
                 .all()
-        let allCourseStudentSubmissions =
-            allSetupIDs.isEmpty
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID ~~ allSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .all()
         let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
             for: allSetupIDs,
             on: req.db
@@ -301,12 +295,19 @@ extension InstructorDashboardRoutes {
             return activeStudentIDs.contains(userID)
         }
         let activeAssignments24h = Set(recentStudentSubmissions.map(\.testSetupID)).count
-        let pendingNow = allCourseStudentSubmissions.filter { submission in
-            guard let userID = submission.userID else { return false }
-            return activeStudentIDs.contains(userID)
-                && workerModeSetupIDs.contains(submission.testSetupID)
-                && ["pending", "assigned"].contains(submission.status)
-        }.count
+        // SQL COUNT instead of loading every course submission ever made just
+        // to tally the in-flight ones (June 2026 audit, P1.6).
+        let pendingNow: Int
+        if workerModeSetupIDs.isEmpty || activeStudentIDs.isEmpty {
+            pendingNow = 0
+        } else {
+            pendingNow = try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ Array(workerModeSetupIDs))
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$status ~~ ["pending", "assigned"])
+                .filter(\.$userID ~~ Array(activeStudentIDs))
+                .count()
+        }
         let studentsWithBrowserErrors = try await countStudentsWithBrowserErrors(
             req: req,
             allSetupIDs: allSetupIDs,
@@ -402,6 +403,37 @@ extension InstructorDashboardRoutes {
         enrolledStudentIDs: Set<UUID>
     ) async throws -> [String: Int] {
         guard !allSetupIDs.isEmpty, !enrolledStudentIDs.isEmpty else { return [:] }
+
+        // Grouped COUNT(DISTINCT user_id) instead of loading every matching
+        // submission row and building per-setup sets in Swift — this runs on
+        // the instructor landing page and degrades linearly with term volume
+        // (June 2026 audit, P1.6; same pattern as the admin runner counts).
+        if let sql = req.db as? SQLDatabase {
+            struct SubmitterCountRow: Decodable {
+                let testSetupID: String
+                let submitters: Int
+                enum CodingKeys: String, CodingKey {
+                    case testSetupID = "test_setup_id"
+                    case submitters
+                }
+            }
+            let rows = try await sql.select()
+                .column("test_setup_id")
+                .column(
+                    SQLFunction("COUNT", args: SQLDistinct(SQLColumn("user_id"))), as: "submitters"
+                )
+                .from("submissions")
+                .where("test_setup_id", .in, allSetupIDs)
+                .where("kind", .equal, APISubmission.Kind.student)
+                // Bind UUIDs (not strings) so the Postgres uuid column and the
+                // SQLite text storage both compare correctly.
+                .where("user_id", .in, Array(enrolledStudentIDs))
+                .groupBy("test_setup_id")
+                .all(decoding: SubmitterCountRow.self)
+            return Dictionary(uniqueKeysWithValues: rows.map { ($0.testSetupID, $0.submitters) })
+        }
+
+        // Non-SQL fallback (not hit by the sqlite/postgres drivers in use).
         let studentSubmissions = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID ~~ allSetupIDs)
             .filter(\.$kind == APISubmission.Kind.student)

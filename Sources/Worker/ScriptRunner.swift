@@ -43,15 +43,37 @@ struct LinuxProcessLaunchConfiguration {
 #endif
 
 private final class CapturedPipeBuffer: Sendable {
-    private let storage = Mutex(Data())
+    /// Per-stream capture cap. A student script printing in a tight loop for
+    /// its whole time limit could otherwise grow this buffer without bound,
+    /// OOM the worker (taking down the other concurrent jobs), and ride the
+    /// blob into `longResult` → JSON → DB (June 2026 audit, P2.1). 1 MB keeps
+    /// every realistic traceback intact.
+    static let maxCapturedBytes = 1_048_576
+
+    private struct State {
+        var data = Data()
+        var truncated = false
+    }
+
+    private let storage = Mutex(State())
 
     func append(_ chunk: Data) {
         guard !chunk.isEmpty else { return }
-        storage.withLock { $0.append(chunk) }
+        storage.withLock { state in
+            guard !state.truncated else { return }
+            let remaining = Self.maxCapturedBytes - state.data.count
+            if chunk.count <= remaining {
+                state.data.append(chunk)
+            } else {
+                if remaining > 0 { state.data.append(chunk.prefix(remaining)) }
+                state.truncated = true
+                state.data.append(Data("\n... output truncated (limit 1 MB) ...\n".utf8))
+            }
+        }
     }
 
     func snapshot() -> Data {
-        storage.withLock { $0 }
+        storage.withLock { $0.data }
     }
 }
 
@@ -92,8 +114,7 @@ func executeScriptProcess(
 
     // Spawn a timeout Task instead of DispatchQueue.asyncAfter so the timeout
     // participates in Swift structured concurrency and supports cooperative
-    // cancellation. The main path still calls waitUntilExit() — acceptable in
-    // the worker daemon context where one thread per active job is expected.
+    // cancellation.
     let timeoutTask: Task<Void, Never>?
     if usesExternalTimeout {
         timeoutTask = nil
@@ -106,7 +127,29 @@ func executeScriptProcess(
         }
     }
 
-    proc.waitUntilExit()
+    // Suspend until exit instead of blocking on waitUntilExit(): the Swift
+    // cooperative pool has ~one thread per core and never grows, so a blocking
+    // wait per running script could pin every pool thread — starving the
+    // heartbeat tasks and (worst case) the timeout Task that is supposed to
+    // kill the hung script (June 2026 audit, P1.5).
+    //
+    // The handler is installed after run(), so guard the already-exited race:
+    // if the process exited before the handler was set the handler never
+    // fires, and if it exits in between both paths may fire — `resumed` keeps
+    // the continuation single-shot either way.
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let resumed = Mutex(false)
+        let resumeOnce: @Sendable () -> Void = {
+            let alreadyResumed = resumed.withLock { wasResumed in
+                let previous = wasResumed
+                wasResumed = true
+                return previous
+            }
+            if !alreadyResumed { continuation.resume() }
+        }
+        proc.terminationHandler = { _ in resumeOnce() }
+        if !proc.isRunning { resumeOnce() }
+    }
     timeoutTask?.cancel()
 
     if usesExternalTimeout && proc.terminationStatus == 124 {
@@ -282,7 +325,7 @@ private struct LinuxScriptPipes {
 /// Result of `waitpid`-loop bookkeeping. `status` is the raw wait status; the
 /// caller maps it to `ScriptOutput.exitCode` after taking the timeout flag
 /// into account.
-private struct LinuxWaitOutcome {
+private struct LinuxWaitOutcome: Sendable {
     let status: Int32
     let timedOut: Bool
 }
@@ -337,7 +380,16 @@ func executeLinuxScriptProcess(
     pipes.stdoutPipe.fileHandleForWriting.closeFile()
     pipes.stderrPipe.fileHandleForWriting.closeFile()
 
-    let wait = linuxWaitForChild(pid: pid, timeLimitSeconds: timeLimitSeconds)
+    // Run the waitpid poll loop on a dedicated OS thread and suspend here:
+    // the loop blocks (usleep between WNOHANG polls) for up to the full time
+    // limit, and the cooperative pool must not lose a thread per running
+    // script (June 2026 audit, P1.5). One short-lived thread per active job,
+    // bounded by --max-jobs.
+    let wait = await withCheckedContinuation { (continuation: CheckedContinuation<LinuxWaitOutcome, Never>) in
+        Thread.detachNewThread {
+            continuation.resume(returning: linuxWaitForChild(pid: pid, timeLimitSeconds: timeLimitSeconds))
+        }
+    }
 
     let elapsed = Int(Date().timeIntervalSince(start) * 1000)
     let stdoutData = finishPipeCapture(for: pipes.stdoutPipe, buffer: pipes.stdoutBuffer)

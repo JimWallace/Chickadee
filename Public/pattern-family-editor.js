@@ -60,7 +60,9 @@
         // page reloads.  Each entry has { name, paramNames, paramTypes,
         // returnType, paramCount, isShadowed }.
         var scannedFunctions = null;
-        var scanLoading = false;
+        // Cached in-flight scan promise — concurrent callers share it instead
+        // of spinning on a flag (old 50 ms setInterval poll).
+        var scanPromise = null;
 
         // Section-level variables in scope for the family currently being
         // edited.  Refreshed from the DOM whenever the modal opens.  Used
@@ -298,15 +300,8 @@
         /// scan-notebook endpoint.  Caches the result on `scannedFunctions`.
         function ensureScannedFunctions() {
             if (scannedFunctions !== null) return Promise.resolve(scannedFunctions);
-            if (scanLoading) {
-                return new Promise(function (resolve) {
-                    var iv = setInterval(function () {
-                        if (!scanLoading) { clearInterval(iv); resolve(scannedFunctions || []); }
-                    }, 50);
-                });
-            }
-            scanLoading = true;
-            return fetch(urls.solutionNotebook(), {
+            if (scanPromise) return scanPromise;
+            scanPromise = fetch(urls.solutionNotebook(), {
                 headers: { 'x-csrf-token': csrfToken }
             })
             .then(function (r) { return r.ok ? r.text() : Promise.reject('No solution notebook'); })
@@ -318,8 +313,9 @@
                 });
             })
             .then(function (r) { return r.ok ? r.json() : Promise.reject('Scan failed'); })
-            .then(function (fns) { scannedFunctions = fns || []; scanLoading = false; return scannedFunctions; })
-            .catch(function () { scannedFunctions = []; scanLoading = false; return []; });
+            .then(function (fns) { scannedFunctions = fns || []; return scannedFunctions; })
+            .catch(function () { scannedFunctions = []; return []; });
+            return scanPromise;
         }
 
         function populateFunctionSelect(selectedName) {

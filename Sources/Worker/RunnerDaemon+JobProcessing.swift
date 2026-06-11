@@ -613,16 +613,29 @@ extension WorkerDaemon {
         job: Job,
         startedAt: Date
     ) -> TestOutcomeCollection {
-        let passCount = outcomes.filter { $0.status == .pass }.count
-        let failCount = outcomes.filter { $0.status == .fail }.count
-        let errorCount = outcomes.filter { $0.status == .error }.count
-        let timeoutCount = outcomes.filter { $0.status == .timeout }.count
-        let totalMs = outcomes.reduce(0) { $0 + $1.executionTimeMs }
-        let totalPoints = outcomes.reduce(0) { $0 + $1.points }
+        // One pass over the outcomes instead of six (4 × filter().count +
+        // 2 × reduce) — the codebase's own stated antipattern.
+        var passCount = 0
+        var failCount = 0
+        var errorCount = 0
+        var timeoutCount = 0
+        var totalMs = 0
+        var totalPoints = 0
         // Weighted, partial-credit-aware: points × score per outcome (a script
         // with no footer `score` scores 1 on a pass / 0 otherwise, so this equals
         // the old "sum points for passing tests" for non-partial-credit suites).
-        let earnedPoints = outcomes.reduce(0.0) { $0 + Double($1.points) * $1.score }
+        var earnedPoints = 0.0
+        for outcome in outcomes {
+            switch outcome.status {
+            case .pass: passCount += 1
+            case .fail: failCount += 1
+            case .error: errorCount += 1
+            case .timeout: timeoutCount += 1
+            }
+            totalMs += outcome.executionTimeMs
+            totalPoints += outcome.points
+            earnedPoints += Double(outcome.points) * outcome.score
+        }
 
         let buildStatus: BuildStatus = outcomes.isEmpty ? .failed : .passed
 

@@ -58,6 +58,21 @@
         var pushTimer = null;
         var pushInFlight = false;
         var pushPending = false;
+        // Resolvers awaiting "no push in flight or pending" — replaces the
+        // old 50 ms setInterval spin in the form-submit path.
+        var pushSettledWaiters = [];
+
+        function whenPushSettled() {
+            if (!pushInFlight && !pushPending) return Promise.resolve();
+            return new Promise(function (resolve) { pushSettledWaiters.push(resolve); });
+        }
+
+        function notifyPushSettledIfIdle() {
+            if (pushInFlight || pushPending) return;
+            var waiters = pushSettledWaiters;
+            pushSettledWaiters = [];
+            waiters.forEach(function (resolve) { resolve(); });
+        }
 
         // Seed from the server-rendered JSON blob — same shape as
         // `GET /suite`.  Section membership flows through items' sectionID;
@@ -730,6 +745,7 @@
             .finally(function () {
                 pushInFlight = false;
                 if (pushPending) { pushPending = false; doPush(); }
+                notifyPushSettledIfIdle();
             });
         }
 
@@ -1295,12 +1311,9 @@
 
                 if (pushInFlight || pushPending) {
                     e.preventDefault();
-                    var iv = setInterval(function () {
-                        if (!pushInFlight && !pushPending) {
-                            clearInterval(iv);
-                            sectionVarsPromise.finally(resubmit);
-                        }
-                    }, 50);
+                    whenPushSettled().then(function () {
+                        sectionVarsPromise.finally(resubmit);
+                    });
                 } else {
                     // No suite PUT pending — still wait for section-vars
                     // if they're in flight, since they might have been
