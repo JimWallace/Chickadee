@@ -1,7 +1,6 @@
 // APIServer/Routes/Web/SuiteRowHelpers.swift
 //
-// Suite-row decode/encode types, the file resolver used by the legacy
-// edit/save path (`resolveEditSuiteFiles`), the row builders that feed
+// Suite-row decode/encode types, the row builders that feed
 // the editor view (`editableSuiteRowsForSetup`, `familySuiteRowsForSetup`,
 // `currentSetupFiles`), the publish-time authored-item reconstruction
 // (`authoredSuiteItemsFromDraftManifest`), suite-config building
@@ -17,19 +16,6 @@ import Vapor
 
 // MARK: - Suite config decode/encode types
 
-struct EditSuiteConfigRow: Decodable {
-    let source: String?
-    let name: String?
-    let displayName: String?  // optional human-readable name shown to students
-    let index: Int?
-    let isIncluded: Bool?
-    let isTest: Bool?
-    let tier: String?
-    let order: Int?
-    let dependsOn: [String]?  // script names of prerequisites
-    let points: Int?  // grade weight; nil decoded as 1
-}
-
 struct ReindexedSuiteConfigRow: Encodable {
     let index: Int
     let isTest: Bool
@@ -38,11 +24,6 @@ struct ReindexedSuiteConfigRow: Encodable {
     let dependsOn: [String]?  // script names of prerequisites
     let points: Int  // grade weight; 1 = default (unweighted)
     let displayName: String?  // optional human-readable name shown to students
-}
-
-struct ResolvedEditSuiteFiles {
-    let files: [File]
-    let reindexedSuiteConfigJSON: String?
 }
 
 struct SuiteConfigRow: Decodable {
@@ -177,210 +158,6 @@ func currentSetupFiles(
     }
 
     return (assignmentFile, solutionFile, existingSuiteRows)
-}
-
-func resolveEditSuiteFiles(
-    setupZipPath: String,
-    setupManifestJSON: String,
-    uploadedSuiteFiles: [File],
-    suiteConfigJSON: String?
-) throws -> ResolvedEditSuiteFiles {
-    let parsedRows = decodeEditSuiteConfigRows(suiteConfigJSON)
-
-    // Backward compatibility: no table config submitted.
-    // Preserve existing suite/support files and append any new uploads.
-    if parsedRows.isEmpty {
-        return resolveEditSuiteFilesBackCompat(
-            setupZipPath: setupZipPath,
-            setupManifestJSON: setupManifestJSON,
-            uploadedSuiteFiles: uploadedSuiteFiles
-        )
-    }
-
-    return resolveEditSuiteFilesFromRows(
-        rows: parsedRows,
-        setupZipPath: setupZipPath,
-        uploadedSuiteFiles: uploadedSuiteFiles
-    )
-}
-
-private func decodeEditSuiteConfigRows(_ suiteConfigJSON: String?) -> [EditSuiteConfigRow] {
-    guard let raw = suiteConfigJSON?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !raw.isEmpty,
-        let data = raw.data(using: .utf8),
-        let rows = try? JSONDecoder().decode([EditSuiteConfigRow].self, from: data)
-    else {
-        return []
-    }
-    return rows
-}
-
-private struct EditSuiteManifestTestEntry {
-    let tier: String
-    let order: Int
-    let dependsOn: [String]
-    let points: Int
-    let name: String?
-}
-
-private func manifestTestEntryMap(_ setupManifestJSON: String) -> [String: EditSuiteManifestTestEntry] {
-    guard let props = decodeManifest(fromJSON: setupManifestJSON)
-
-    else {
-        return [:]
-    }
-    var map: [String: EditSuiteManifestTestEntry] = [:]
-    for (idx, entry) in props.testSuites.enumerated() {
-        map[entry.script] = EditSuiteManifestTestEntry(
-            tier: entry.tier.rawValue,
-            order: idx + 1,
-            dependsOn: entry.dependsOn,
-            points: entry.points,
-            name: entry.name
-        )
-    }
-    return map
-}
-
-private func encodeReindexedSuiteConfig(_ rows: [ReindexedSuiteConfigRow]) -> String? {
-    guard let data = try? JSONEncoder().encode(rows) else { return nil }
-    return String(data: data, encoding: .utf8)
-}
-
-private func resolveEditSuiteFilesBackCompat(
-    setupZipPath: String,
-    setupManifestJSON: String,
-    uploadedSuiteFiles: [File]
-) -> ResolvedEditSuiteFiles {
-    let existingEntries = listZipEntries(zipPath: setupZipPath)
-        .filter { $0 != "assignment.ipynb" && $0 != "solution.ipynb" }
-        .sorted()
-
-    var resolvedFiles: [File] = []
-    var configRows: [ReindexedSuiteConfigRow] = []
-    var nextOrder = 1
-
-    let manifestTests = manifestTestEntryMap(setupManifestJSON)
-
-    for name in existingEntries {
-        guard let data = extractZipEntry(zipPath: setupZipPath, entryName: name) else { continue }
-        var buffer = ByteBufferAllocator().buffer(capacity: data.count)
-        buffer.writeBytes(data)
-        resolvedFiles.append(File(data: buffer, filename: name))
-
-        let testInfo = manifestTests[name]
-        let tier = testInfo?.tier ?? "support"
-        configRows.append(
-            ReindexedSuiteConfigRow(
-                index: resolvedFiles.count - 1,
-                isTest: testInfo != nil && tier != "support",
-                tier: tier,
-                order: testInfo?.order ?? nextOrder,
-                dependsOn: testInfo?.dependsOn,
-                points: testInfo?.points ?? 1,
-                displayName: testInfo?.name
-            ))
-        nextOrder += 1
-    }
-
-    let appendedUploads = uploadedSuiteFiles.filter { $0.data.readableBytes > 0 }
-    for (idx, file) in appendedUploads.enumerated() {
-        let rawName = file.filename.isEmpty ? "suite-file-\(idx + 1)" : file.filename
-        let cleanName = sanitizeSuiteFilename(rawName)
-        let data = Data(file.data.readableBytesView)
-        guard !data.isEmpty else { continue }
-        var buffer = ByteBufferAllocator().buffer(capacity: data.count)
-        buffer.writeBytes(data)
-        resolvedFiles.append(File(data: buffer, filename: cleanName))
-
-        let ext = URL(fileURLWithPath: cleanName).pathExtension.lowercased()
-        let likelyTest = ["sh", "bash", "zsh", "py", "rb", "pl", "js", "php"].contains(ext)
-        configRows.append(
-            ReindexedSuiteConfigRow(
-                index: resolvedFiles.count - 1,
-                isTest: likelyTest,
-                tier: likelyTest ? "public" : "support",
-                order: nextOrder,
-                dependsOn: nil,
-                points: 1,
-                displayName: nil
-            ))
-        nextOrder += 1
-    }
-
-    return ResolvedEditSuiteFiles(
-        files: resolvedFiles,
-        reindexedSuiteConfigJSON: encodeReindexedSuiteConfig(configRows)
-    )
-}
-
-private func resolveEditSuiteFilesFromRows(
-    rows parsedRows: [EditSuiteConfigRow],
-    setupZipPath: String,
-    uploadedSuiteFiles: [File]
-) -> ResolvedEditSuiteFiles {
-    var resolvedFiles: [File] = []
-    var configRows: [ReindexedSuiteConfigRow] = []
-    var nextOrder = 1
-
-    for row in parsedRows {
-        let included = row.isIncluded ?? true
-        guard included else { continue }
-        guard
-            let (data, name) = resolveEditSuiteRowSource(
-                row: row,
-                setupZipPath: setupZipPath,
-                uploadedSuiteFiles: uploadedSuiteFiles
-            )
-        else { continue }
-
-        var buffer = ByteBufferAllocator().buffer(capacity: data.count)
-        buffer.writeBytes(data)
-        resolvedFiles.append(File(data: buffer, filename: name))
-
-        let tier = normalizeTier(row.tier, isTest: row.isTest)
-        let isTest = tier != "support"
-        configRows.append(
-            ReindexedSuiteConfigRow(
-                index: resolvedFiles.count - 1,
-                isTest: isTest,
-                tier: tier,
-                order: row.order ?? nextOrder,
-                dependsOn: row.dependsOn,
-                points: row.points ?? 1,
-                displayName: row.displayName
-            ))
-        nextOrder += 1
-    }
-
-    return ResolvedEditSuiteFiles(
-        files: resolvedFiles,
-        reindexedSuiteConfigJSON: encodeReindexedSuiteConfig(configRows)
-    )
-}
-
-private func resolveEditSuiteRowSource(
-    row: EditSuiteConfigRow,
-    setupZipPath: String,
-    uploadedSuiteFiles: [File]
-) -> (Data, String)? {
-    let source = (row.source ?? "").lowercased()
-    if source == "existing" {
-        guard let rawName = row.name, !rawName.isEmpty else { return nil }
-        let cleanName = (rawName as NSString).lastPathComponent
-        guard cleanName == rawName, !cleanName.isEmpty else { return nil }
-        guard let data = extractZipEntry(zipPath: setupZipPath, entryName: cleanName) else { return nil }
-        return (data, cleanName)
-    }
-    if source == "upload" {
-        guard let idx = row.index, uploadedSuiteFiles.indices.contains(idx) else { return nil }
-        let file = uploadedSuiteFiles[idx]
-        let data = Data(file.data.readableBytesView)
-        guard !data.isEmpty else { return nil }
-        let rawName = file.filename.isEmpty ? "suite-file-\(idx + 1)" : file.filename
-        return (data, sanitizeSuiteFilename(rawName))
-    }
-    return nil
 }
 
 func editableSuiteRowsForSetup(_ setup: APITestSetup) -> [EditableSuiteRow] {

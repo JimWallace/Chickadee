@@ -308,23 +308,60 @@ func retestAllSubmissionsForSetup(
     on db: Database,
     force: Bool = false
 ) async throws -> Int {
-    let submissions = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-
-    let now = Date()
-    var touched = 0
-    for submission in submissions
-    where try await flipSubmissionToPending(
-        submission,
+    try await bulkFlipStudentSubmissionsToPending(
+        setupID: setupID,
+        studentUserID: nil,
         triggeredBy: userID,
-        on: db,
         force: force,
-        now: now
-    ) {
-        touched += 1
+        on: db)
+}
+
+/// Re-queues matching `kind == .student` submissions for one setup (optionally
+/// scoped to a single student) in **one** `UPDATE` rather than a save per row.
+///
+/// A deadline-day "Retest all" can touch tens of thousands of submissions; the
+/// previous load-all-then-save-each loop blocked the instructor's request and
+/// left a half-retested set on mid-failure. The bulk update is self-atomic and
+/// constant in round-trips. The returned count is measured with the identical
+/// predicate just before the write so it matches what the UPDATE affects (a
+/// concurrent insert between the two is benign — it's a freshly-pending row
+/// either way).
+@discardableResult
+func bulkFlipStudentSubmissionsToPending(
+    setupID: String,
+    studentUserID: UUID?,
+    triggeredBy userID: UUID?,
+    force: Bool,
+    on db: Database
+) async throws -> Int {
+    let now = Date()
+
+    func scoped() -> QueryBuilder<APISubmission> {
+        let query = APISubmission.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+        if let studentUserID {
+            _ = query.filter(\.$userID == studentUserID)
+        }
+        // Skip rows already in flight unless explicitly forced, mirroring
+        // `flipSubmissionToPending`'s idempotency guard.
+        if !force {
+            _ = query.filter(\.$status !~ ["pending", "assigned"])
+        }
+        return query
     }
+
+    let touched = try await scoped().count()
+    guard touched > 0 else { return 0 }
+
+    try await scoped()
+        .set(\.$status, to: "pending")
+        .set(\.$workerID, to: nil)
+        .set(\.$assignedAt, to: nil)
+        .set(\.$retestedAt, to: now)
+        .set(\.$retestedByUserID, to: userID)
+        .update()
+
     return touched
 }
 
@@ -371,25 +408,12 @@ func retestStudentSubmissionsForSetup(
     on db: Database,
     force: Bool = false
 ) async throws -> Int {
-    let submissions = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$userID == studentUserID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-
-    let now = Date()
-    var touched = 0
-    for submission in submissions
-    where try await flipSubmissionToPending(
-        submission,
+    try await bulkFlipStudentSubmissionsToPending(
+        setupID: setupID,
+        studentUserID: studentUserID,
         triggeredBy: userID,
-        on: db,
         force: force,
-        now: now
-    ) {
-        touched += 1
-    }
-    return touched
+        on: db)
 }
 
 /// Flips one submission back to `pending` for the worker queue.  Returns

@@ -89,7 +89,7 @@ extension WorkerDaemon {
         defer { try? FileManager.default.removeItem(at: prepared.testSetupDir) }
 
         let testExecutionStartedAt = Date()
-        let outcomes = await executeTestSuites(
+        let outcomes = try await executeTestSuites(
             manifest: prepared.manifest,
             testSetupDir: prepared.testSetupDir,
             job: job
@@ -540,7 +540,7 @@ extension WorkerDaemon {
         manifest: TestProperties,
         testSetupDir: URL,
         job: Job
-    ) async -> [TestOutcome] {
+    ) async throws -> [TestOutcome] {
         // Phase 1 of issue #461 — surface the per-(student, assignment) seed to
         // the grading subprocess. Nil/empty seed means non-personalized job;
         // leaving the env var unset preserves legacy behaviour.
@@ -570,7 +570,11 @@ extension WorkerDaemon {
             }
             lines.append("}")
             let source = lines.joined(separator: "\n") + "\n"
-            try? source.write(
+            // A failed write here would make every personalized test error with
+            // a confusing missing-file traceback that looks like a student
+            // mistake — and persist it as their grade. Throw instead so the job
+            // is reported as buildStatus:failed and stays retestable.
+            try source.write(
                 to: testSetupDir.appendingPathComponent("_ck_inputs.py"),
                 atomically: true, encoding: .utf8)
         }

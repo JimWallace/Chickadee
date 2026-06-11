@@ -248,4 +248,8 @@ func registerMigrations(on app: Application) {
     // personalization for validation submissions, so worker poll + download
     // stay eval-free.
     app.migrations.add(AddSubmissionMaterialization())
+
+    // Audit-followup indexes (June 2026): request_metrics(finished_at) and
+    // other uncovered hot-path filters. Index-only, runs last.
+    app.migrations.add(CreateAuditFollowupIndexes())
 }
