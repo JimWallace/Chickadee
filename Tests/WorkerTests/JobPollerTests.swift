@@ -158,7 +158,7 @@ import FoundationNetworking
         }
     }
 
-    @Test func throwsTransportError_onMalformedJson200() async throws {
+    @Test func throwsDecodingFailed_onMalformedJson200() async throws {
         try await withMockURLProtocolLock {
             MockURLProtocol.reset()
             MockURLProtocol.enqueue(.status(200, body: Data("not json".utf8)))
@@ -167,8 +167,9 @@ import FoundationNetworking
             do {
                 _ = try await poller.requestJob(activeJobs: 0)
                 Issue.record("expected throw")
-            } catch JobPollerError.transportError {
-                // ok — Job decode failure is mapped onto transportError per JobPoller.swift:73
+            } catch JobPollerError.decodingFailed {
+                // ok — a Job decode failure is a server/worker schema mismatch,
+                // classified distinctly from transport errors (June 2026 audit).
             } catch {
                 Issue.record("unexpected error: \(error)")
             }

@@ -64,7 +64,7 @@ func scriptInvocation(for script: URL) -> ScriptInvocation {
     let source: String
     if let handle = try? FileHandle(forReadingFrom: script) {
         defer { try? handle.close() }
-        let data = (try? handle.read(upToCount: 2048)) ?? nil
+        let data = try? handle.read(upToCount: 2048)
         source = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
     } else {
         source = ""
