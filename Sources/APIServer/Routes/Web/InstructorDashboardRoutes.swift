@@ -177,12 +177,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         do {
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
@@ -237,12 +232,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             var status: String
         }
 
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
 
         let body = try req.content.decode(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
@@ -265,12 +255,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -279,10 +264,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func saveBrightSpaceGradeObjectID(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         struct BSBody: Content {
             var gradeObjectID: String?
             /// "brightspace" → return to the BrightSpace tab (mapping table);
@@ -296,19 +278,14 @@ struct InstructorDashboardRoutes: RouteCollection {
         if body.returnTo == "brightspace" {
             return req.redirect(to: "/instructor/brightspace")
         }
-        return req.redirect(to: "/instructor/\(idStr)/edit?notice=BrightSpace+grade+item+ID+saved")
+        return req.redirect(to: "/instructor/\(assignment.publicID)/edit?notice=BrightSpace+grade+item+ID+saved")
     }
 
     // MARK: - POST /instructor/:assignmentID/delete
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         let setupID = assignment.testSetupID
 
         // Delete related submissions and their result rows for this setup.
@@ -371,14 +348,8 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func editPage(req: Request) async throws -> View {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
-        _ = setup  // keep existence check explicit
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let idStr = assignment.publicID
 
         struct EditQuery: Content {
             var assignmentName: String?

@@ -111,10 +111,7 @@ extension InstructorDashboardRoutes {
     /// end-of-term / first-time backfill button.
     @Sendable
     func brightspacePushAllForAssignment(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         let submissionIDs = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)

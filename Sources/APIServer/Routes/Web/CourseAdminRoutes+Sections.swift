@@ -155,11 +155,9 @@ extension CourseAdminRoutes {
         guard let courseID = courseState.activeCourseUUID else {
             throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            assignment.courseID == courseID
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
+        let assignment = try await loadAssignment(req)
+        guard assignment.courseID == courseID else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
         }
         let body = (try? req.content.decode(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
