@@ -10,6 +10,9 @@ import Vapor
 /// headroom while still unsticking runners that crash or disappear silently.
 private let stuckSubmissionDefaultMaxAge: TimeInterval = 10 * 60
 
+/// Sweep every minute so a crashed runner's jobs return to the queue quickly.
+private let stuckSubmissionSweepInterval: TimeInterval = 60
+
 @discardableResult
 func reapStuckAssignedSubmissions(
     on db: Database,
@@ -36,81 +39,25 @@ func reapStuckAssignedSubmissions(
     return stuck.count
 }
 
-final class StuckSubmissionReaperMonitor: @unchecked Sendable {
-    // @unchecked Sendable: the only mutable state (`task`) is touched solely
-    // from start()/stop() on the app lifecycle (didBoot/shutdown), never
-    // concurrently.
-    private var task: Task<Void, Never>?
-    private let intervalNanoseconds: UInt64
-    private let maxAge: TimeInterval
-
-    init(interval: TimeInterval = 60, maxAge: TimeInterval = stuckSubmissionDefaultMaxAge) {
-        intervalNanoseconds = UInt64(max(interval, 1) * 1_000_000_000)
-        self.maxAge = maxAge
-    }
-
-    func start(application: Application) {
-        guard task == nil else { return }
-        task = Task {
-            while !Task.isCancelled {
-                do {
-                    _ = try await reapStuckAssignedSubmissions(
-                        on: application.db,
-                        logger: application.logger,
-                        maxAge: maxAge
-                    )
-                } catch {
-                    application.logger.error(
-                        "Stuck submission reaper sweep failed: \(error.localizedDescription)"
-                    )
-                }
-
-                do {
-                    try await Task.sleep(nanoseconds: intervalNanoseconds)
-                } catch {
-                    break
-                }
-            }
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-    }
-}
-
 struct StuckSubmissionReaperMonitorKey: StorageKey {
-    typealias Value = StuckSubmissionReaperMonitor
+    typealias Value = PeriodicSweepMonitor
 }
 
-struct StuckSubmissionReaperLifecycleHandler: LifecycleHandler {
-    func didBoot(_ application: Application) throws {
-        Task {
-            do {
+extension Application {
+    var stuckSubmissionReaperMonitor: PeriodicSweepMonitor {
+        get {
+            if let existing = storage[StuckSubmissionReaperMonitorKey.self] { return existing }
+            let created = PeriodicSweepMonitor(
+                name: "Stuck submission reaper",
+                interval: stuckSubmissionSweepInterval,
+                minimumInterval: 1,
+                runImmediately: true
+            ) { application in
                 _ = try await reapStuckAssignedSubmissions(
                     on: application.db,
                     logger: application.logger
                 )
-            } catch {
-                application.logger.error(
-                    "Initial stuck submission sweep failed: \(error.localizedDescription)"
-                )
             }
-        }
-        application.stuckSubmissionReaperMonitor.start(application: application)
-    }
-
-    func shutdown(_ application: Application) {
-        application.stuckSubmissionReaperMonitor.stop()
-    }
-}
-
-extension Application {
-    var stuckSubmissionReaperMonitor: StuckSubmissionReaperMonitor {
-        get {
-            if let existing = storage[StuckSubmissionReaperMonitorKey.self] { return existing }
-            let created = StuckSubmissionReaperMonitor()
             storage[StuckSubmissionReaperMonitorKey.self] = created
             return created
         }

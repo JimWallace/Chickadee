@@ -7,9 +7,9 @@
 // the student progress bar (Phase 3 display) and the positive grade bonus
 // (Phase 3 grading).
 //
-// Modeled on `StuckSubmissionReaperService` / `AssignmentDeadlineService`:
-// a pure sweep function + a Task-based monitor + a LifecycleHandler (startup
-// sweep + periodic timer) registered in `AppServices`.
+// Periodic scaffolding (startup sweep + periodic timer, registered in
+// `AppServices`) lives in `PeriodicSweepMonitor`; this file keeps the pure
+// sweep functions plus the storage key and accessor.
 //
 // Individual achievement kinds (badges, records) are evaluated elsewhere and
 // land in later phases; this sweep is class-aggregate only.
@@ -147,68 +147,25 @@ func bestAssignmentGradeByStudent(testSetupID: String, on db: Database) async th
     return best
 }
 
-// MARK: - Monitor + lifecycle (same shape as StuckSubmissionReaperMonitor)
-
-final class AchievementEvaluationMonitor: @unchecked Sendable {
-    // @unchecked Sendable: `task` is touched only from start()/stop() on the
-    // app lifecycle (didBoot/shutdown), never concurrently.
-    private var task: Task<Void, Never>?
-    private let intervalNanoseconds: UInt64
-
-    init(interval: TimeInterval = achievementSweepInterval) {
-        intervalNanoseconds = UInt64(max(interval, 1) * 1_000_000_000)
-    }
-
-    func start(application: Application) {
-        guard task == nil else { return }
-        task = Task {
-            while !Task.isCancelled {
-                do {
-                    _ = try await evaluateClassGoalAchievements(
-                        on: application.db, logger: application.logger)
-                } catch {
-                    application.logger.error(
-                        "Class-goal achievement sweep failed: \(error.localizedDescription)")
-                }
-                do { try await Task.sleep(nanoseconds: intervalNanoseconds) } catch { break }
-            }
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-    }
-}
+// MARK: - Monitor storage (scaffolding in PeriodicSweepMonitor)
 
 struct AchievementEvaluationMonitorKey: StorageKey {
-    typealias Value = AchievementEvaluationMonitor
-}
-
-struct AchievementEvaluationLifecycleHandler: LifecycleHandler {
-    func didBoot(_ application: Application) throws {
-        Task {
-            do {
-                _ = try await evaluateClassGoalAchievements(
-                    on: application.db, logger: application.logger)
-            } catch {
-                application.logger.error(
-                    "Initial class-goal achievement sweep failed: \(error.localizedDescription)")
-            }
-        }
-        application.achievementEvaluationMonitor.start(application: application)
-    }
-
-    func shutdown(_ application: Application) {
-        application.achievementEvaluationMonitor.stop()
-    }
+    typealias Value = PeriodicSweepMonitor
 }
 
 extension Application {
-    var achievementEvaluationMonitor: AchievementEvaluationMonitor {
+    var achievementEvaluationMonitor: PeriodicSweepMonitor {
         get {
             if let existing = storage[AchievementEvaluationMonitorKey.self] { return existing }
-            let created = AchievementEvaluationMonitor()
+            let created = PeriodicSweepMonitor(
+                name: "Class-goal achievement",
+                interval: achievementSweepInterval,
+                minimumInterval: 1,
+                runImmediately: true
+            ) { application in
+                _ = try await evaluateClassGoalAchievements(
+                    on: application.db, logger: application.logger)
+            }
             storage[AchievementEvaluationMonitorKey.self] = created
             return created
         }

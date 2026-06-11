@@ -24,6 +24,12 @@ struct SubmissionQueryRoutes: RouteCollection {
     @Sendable
     func listSubmissions(req: Request) async throws -> SubmissionListResponse {
         let caller = try req.auth.require(APIUser.self)
+
+        // Pagination: ?limit= (default 500, clamped to 1...5000) and
+        // ?offset= (default 0, min 0), newest-first.
+        let limit = min(max(req.query[Int.self, at: "limit"] ?? 500, 1), 5000)
+        let offset = max(req.query[Int.self, at: "offset"] ?? 0, 0)
+
         var query = APISubmission.query(on: req.db)
             .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
@@ -35,7 +41,7 @@ struct SubmissionQueryRoutes: RouteCollection {
             query = query.filter(\.$userID == caller.id)
         }
 
-        let submissions = try await query.all()
+        let submissions = try await query.range(offset..<(offset + limit)).all()
         return SubmissionListResponse(
             submissions: submissions.map(SubmissionSummary.init)
         )

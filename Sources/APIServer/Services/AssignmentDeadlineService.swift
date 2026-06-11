@@ -260,76 +260,32 @@ func requireOpenStudentAssignment(
     return assignment
 }
 
-final class AssignmentDeadlineMonitor: @unchecked Sendable {
-    // @unchecked Sendable: the only mutable state (`task`) is touched solely
-    // from start()/stop() on the app lifecycle (didBoot/shutdown), never
-    // concurrently.
-    private var task: Task<Void, Never>?
-    private let intervalNanoseconds: UInt64
-
-    init(interval: TimeInterval = 60) {
-        intervalNanoseconds = UInt64(max(interval, 1) * 1_000_000_000)
-    }
-
-    func start(application: Application) {
-        guard task == nil else { return }
-        task = Task {
-            while !Task.isCancelled {
-                do {
-                    _ = try await openScheduledAssignments(
-                        on: application.db,
-                        logger: application.logger
-                    )
-                    _ = try await closeExpiredAssignments(
-                        on: application.db,
-                        logger: application.logger
-                    )
-                } catch {
-                    application.logger.error("Assignment deadline sweep failed: \(error.localizedDescription)")
-                }
-
-                do {
-                    try await Task.sleep(nanoseconds: intervalNanoseconds)
-                } catch {
-                    break
-                }
-            }
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-    }
-}
+/// Sweep every minute so scheduled opens/closes land close to their times.
+private let assignmentDeadlineSweepInterval: TimeInterval = 60
 
 struct AssignmentDeadlineMonitorKey: StorageKey {
-    typealias Value = AssignmentDeadlineMonitor
-}
-
-struct AssignmentDeadlineLifecycleHandler: LifecycleHandler {
-    func didBoot(_ application: Application) throws {
-        Task {
-            do {
-                _ = try await openScheduledAssignments(on: application.db, logger: application.logger)
-                _ = try await closeExpiredAssignments(on: application.db, logger: application.logger)
-            } catch {
-                application.logger.error("Initial assignment deadline sweep failed: \(error.localizedDescription)")
-            }
-        }
-        application.assignmentDeadlineMonitor.start(application: application)
-    }
-
-    func shutdown(_ application: Application) {
-        application.assignmentDeadlineMonitor.stop()
-    }
+    typealias Value = PeriodicSweepMonitor
 }
 
 extension Application {
-    var assignmentDeadlineMonitor: AssignmentDeadlineMonitor {
+    var assignmentDeadlineMonitor: PeriodicSweepMonitor {
         get {
             if let existing = storage[AssignmentDeadlineMonitorKey.self] { return existing }
-            let created = AssignmentDeadlineMonitor()
+            let created = PeriodicSweepMonitor(
+                name: "Assignment deadline",
+                interval: assignmentDeadlineSweepInterval,
+                minimumInterval: 1,
+                runImmediately: true
+            ) { application in
+                _ = try await openScheduledAssignments(
+                    on: application.db,
+                    logger: application.logger
+                )
+                _ = try await closeExpiredAssignments(
+                    on: application.db,
+                    logger: application.logger
+                )
+            }
             storage[AssignmentDeadlineMonitorKey.self] = created
             return created
         }

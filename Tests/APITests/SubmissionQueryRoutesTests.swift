@@ -224,6 +224,38 @@ import XCTVapor
         }
     }
 
+    @Test func listSubmissionsHonorsLimitAndOffset() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            try await insertSubmission(id: "sub_pg1", testSetupID: "setup_001")
+            try await insertSubmission(id: "sub_pg2", testSetupID: "setup_001")
+            try await insertSubmission(id: "sub_pg3", testSetupID: "setup_001")
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?limit=2",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 2)
+                })
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?limit=2&offset=2",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 1)
+                })
+
+        }
+    }
+
     // MARK: - GET /api/v1/submissions/:id
 
     @Test func getSubmissionReturnsStatus() async throws {
