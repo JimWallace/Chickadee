@@ -322,6 +322,23 @@ struct WebRoutes: RouteCollection {
             }
         }
 
+        // Notebook presence drives the Edit button.  The zip-derived answer
+        // costs an `unzip` subprocess per setup, so it is resolved through
+        // NotebookPresenceCache (keyed by zip mtime + size) instead of being
+        // recomputed on every dashboard view.
+        var hasNotebookBySetupID: [String: Bool] = [:]
+        for setup in sortedSetups {
+            let setupID = setup.id ?? ""
+            if let path = setup.notebookPath, !path.isEmpty,
+                FileManager.default.fileExists(atPath: path)
+            {
+                hasNotebookBySetupID[setupID] = true
+            } else {
+                hasNotebookBySetupID[setupID] = await req.application.notebookPresenceCache
+                    .zipContainsNotebook(zipPath: setup.zipPath)
+            }
+        }
+
         let rows = sortedSetups.map { setup -> TestSetupRow in
             let setupID = setup.id ?? ""
             let data = Data(setup.manifest.utf8)
@@ -357,17 +374,9 @@ struct WebRoutes: RouteCollection {
                 status = "unpublished"
                 staffOnly = false
             }
-            let hasNotebook: Bool = {
-                // True when the setup has a flat notebook file on disk, or the zip
-                // contains at least one .ipynb entry.
-                if let path = setup.notebookPath, !path.isEmpty,
-                    FileManager.default.fileExists(atPath: path)
-                {
-                    return true
-                }
-                return listZipEntries(zipPath: setup.zipPath)
-                    .contains { $0.hasSuffix(".ipynb") }
-            }()
+            // True when the setup has a flat notebook file on disk, or the zip
+            // contains at least one .ipynb entry (resolved above via the cache).
+            let hasNotebook = hasNotebookBySetupID[setupID] ?? false
             let vanityBaseURL: String? = {
                 guard let assignment,
                     let courseCode = courseState.active?.code,

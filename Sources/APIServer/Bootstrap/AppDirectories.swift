@@ -45,6 +45,10 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     app.storage[WorkerClaimQueueKey.self] = WorkerClaimQueue()
     app.storage[WorkerSecretStoreKey.self] = WorkerSecretStore(initialOverride: startupWorkerSecret)
     app.storage[WorkerActivityStoreKey.self] = WorkerActivityStore()
+    // Seeded eagerly (like the stores above) so request handlers never hit
+    // the lazy-create branch in the accessor — Application.storage writes
+    // are not synchronized.
+    app.storage[NotebookPresenceCacheKey.self] = NotebookPresenceCache()
     app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
         initialEnabled: localRunnerAutoStartEnabled
     )
