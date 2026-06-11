@@ -55,7 +55,7 @@ Admin
         </div>
     </div>
 
-    <table id="workers-table" class="results-table">
+    <div class="table-scroll"><table id="workers-table" class="results-table">
             <thead>
                 <tr>
                     <th data-sort-key="runner" data-sort-type="text" tabindex="0" aria-sort="none">Runner</th>
@@ -98,7 +98,7 @@ Admin
                 </tr>
             #endfor
             </tbody>
-        </table>
+        </table></div>
 </section>
 
 <!-- ── Courses ────────────────────────────────────────── -->
@@ -121,7 +121,7 @@ Admin
     #if(courses.isEmpty):
     <p class="empty">No courses yet.</p>
     #else:
-    <table class="results-table" id="courses-table">
+    <div class="table-scroll"><table class="results-table" id="courses-table">
         <thead>
             <tr>
                 <th data-sort-key="code" data-sort-type="text" tabindex="0" aria-sort="none">Code</th>
@@ -159,7 +159,7 @@ Admin
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 
 </section>
@@ -176,6 +176,10 @@ Admin
 }
 .worker-secret-input {
     width: 16rem;
+}
+@media (max-width: 640px) {
+    .toolbar--nowrap { flex-wrap: wrap; }
+    .worker-secret-input { width: 100%; }
 }
 .worker-host {
     font-size: .8em;

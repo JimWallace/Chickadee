@@ -10,7 +10,7 @@ Connected agents
         #if(isAdmin):a user's#else:your#endif behalf over the Model Context Protocol.
         Revoking stops the agent immediately; any access token it holds lapses within minutes.
     </p>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th>Agent</th>
@@ -48,7 +48,7 @@ Connected agents
             <tr><td colspan="7" class="text-muted">No connected agents.</td></tr>
         #endif
         </tbody>
-    </table>
+    </table></div>
 </section>
 <style>
 .agents-heading { margin-top: 0; }

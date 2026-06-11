@@ -359,6 +359,15 @@
     display: flex;
     gap: .3rem;
 }
+@media (max-width: 640px) {
+    /* On a phone the absolutely-positioned popover can't be trusted to fit
+       beside the rightmost cell — drop it into static flow under the row,
+       matching the assignment-submissions extension form. */
+    .action-panel {
+        position: static;
+        max-width: none;
+    }
+}
 </style>
 #endexport
 #endextend

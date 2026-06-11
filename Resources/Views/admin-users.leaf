@@ -20,7 +20,7 @@ Users
                style="--filter-width:280px" aria-label="Filter users"
                readonly onfocus="this.removeAttribute('readonly')">
     </div>
-    <table class="results-table" id="users-table">
+    <div class="table-scroll"><table class="results-table" id="users-table">
         <thead>
             <tr>
                 <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
@@ -82,7 +82,7 @@ Users
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
 </section>
 <style>
 #users-table th[data-sort-key] {

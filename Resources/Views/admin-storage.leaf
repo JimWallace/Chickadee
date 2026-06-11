@@ -34,7 +34,7 @@ Storage
     #if(storage.assignments.isEmpty):
     <p class="storage-muted">No assignments yet.</p>
     #else:
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Assignment</button></th>
@@ -57,7 +57,7 @@ Storage
             </tr>
             #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 <style>

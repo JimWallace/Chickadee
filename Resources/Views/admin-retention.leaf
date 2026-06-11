@@ -33,7 +33,7 @@ Retention
     #if(deletableCount > 0):
     <p class="retention-muted">#(deletableCount) course(s) past retention and eligible to delete.</p>
     #endif
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Code</button></th>
@@ -87,7 +87,7 @@ Retention
             </tr>
             #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 <style>
@@ -127,6 +127,9 @@ Retention
     display: flex;
     gap: .4rem;
     flex-wrap: nowrap;
+}
+@media (max-width: 640px) {
+    .retention-actions { flex-wrap: wrap; }
 }
 </style>
 <script src="/sortable-table.js?v=#appVersion()"></script>

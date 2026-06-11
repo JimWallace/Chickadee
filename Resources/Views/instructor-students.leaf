@@ -33,7 +33,8 @@ Students
           class="students-learn-status"></span>
     #endif
     #endif
-    <input id="enrolled-filter" class="form-input students-filter" type="search" autocomplete="off"
+    <input id="enrolled-filter" class="form-input filter-input students-filter" type="search" autocomplete="off"
+           style="--filter-width:220px"
            placeholder="Filter by name or username…"
            aria-label="Filter enrolled students"
            readonly onfocus="this.removeAttribute('readonly')">
@@ -107,7 +108,7 @@ Students
 .students-mode-label { font-size: .875rem; margin: 0; }
 .students-mode-select { display: block; font-size: .875rem; }
 .students-learn-status { font-size: .8rem; color: var(--gray-500); }
-.students-filter { width: 220px; flex: 1 1 220px; min-width: 220px; }
+.students-filter { flex: 1 1 220px; }
 .students-pending-name { color: var(--gray-500); }
 .students-pending-note { font-size: .72rem; color: var(--gray-500); margin-left: .4rem; }
 .students-pending-username { color: var(--gray-500); }

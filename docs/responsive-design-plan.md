@@ -3,6 +3,12 @@
 Status: **first pass complete** — all five phases landed; ready to deploy and
 fine-tune column-priority / breakpoint choices against real content.
 
+> **June 2026 audit:** [responsiveness-audit-2026-06.md](responsiveness-audit-2026-06.md)
+> verified phases 0–2 hold up live at 375px, and found seven admin/instructor
+> pages outside the original Phase 3 scope that still overflow a phone
+> viewport (plus a residual overflow on `/admin/users`). See the audit for
+> the prioritized follow-up list ("Phase 3b").
+
 ## Implementation status
 
 - **Phase 0 (foundation) — done.** Intrinsic containers (`.main` / `.form` /

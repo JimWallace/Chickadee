@@ -1708,4 +1708,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
 
     /* Filter/search inputs span the row. */
     .filter-input { width: 100%; }
+
+    /* iOS Safari auto-zooms any focused input under 16px; keep phone inputs
+       at 1rem so the extension/grade-override flow doesn't zoom-and-pan. */
+    .form-input { font-size: 1rem; }
+
+    /* The publish popover is absolutely positioned from an Actions cell;
+       its desktop floor would clip off a phone viewport. */
+    .publish-form { min-width: 0; }
 }
