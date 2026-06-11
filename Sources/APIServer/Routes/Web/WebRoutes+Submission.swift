@@ -97,12 +97,13 @@ func groupOutcomesBySection(
 
 /// The built-in badges (per-submission + class records) for one submission,
 /// sourced from the manifest when seeded, else the registry minus any disabled.
+/// Takes the page's already-loaded `setup` so it doesn't re-fetch the row.
 /// Lifted out of `submissionPage` to keep that handler within its length budget.
 func builtInBadgesForSubmission(
-    submission: APISubmission, badgeContext: BadgeContext,
-    classAchievements: [APIClassAchievement], on db: Database
-) async throws -> [AchievementBadge] {
-    let setup = try? await APITestSetup.find(submission.testSetupID, on: db)
+    badgeContext: BadgeContext,
+    classAchievements: [APIClassAchievement],
+    setup: APITestSetup?
+) -> [AchievementBadge] {
     let disabled = setup.map { BuiltInAchievements.disabled(in: $0) } ?? []
     return AchievementBadge.forSubmission(
         badgeContext,
@@ -204,23 +205,20 @@ extension WebRoutes {
         try fileData.write(to: URL(fileURLWithPath: filePath))
         let fallbackFilename = isZip ? nil : (uploadFilename ?? "submission.\(storedExt)")
 
-        // Attempt number is scoped to this student for this test setup.
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$userID == user.id)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-
+        // Attempt number is scoped to this student for this test setup,
+        // assigned race-free inside one transaction (concurrent submits used
+        // to share a number, corrupting the prior-attempt delta and the
+        // First-Try-Perfect badge).
         let submission = APISubmission(
             id: subID,
             testSetupID: setupID,
             zipPath: filePath,
-            attemptNumber: priorCount + 1,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
             filename: fallbackFilename,
             userID: user.id,
             kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: user.id, on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
             submission: submission, on: req.db, logger: req.logger
         )
@@ -285,33 +283,14 @@ extension WebRoutes {
             .sort(\.$submittedAt, .descending)
             .all()
 
-        let submissionIDs = submissions.compactMap(\.id)
-        var preferredResultBySubmissionID: [String: APIResult] = [:]
-        if !submissionIDs.isEmpty {
-            let results = try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .sort(\.$receivedAt, .descending)
-                .all()
-            for row in results {
-                let key = row.submissionID
-                if let existing = preferredResultBySubmissionID[key] {
-                    let existingSource = existing.source ?? "worker"
-                    let currentSource = row.source ?? "worker"
-                    if existingSource == "worker" { continue }
-                    if currentSource == "worker" {
-                        preferredResultBySubmissionID[key] = row
-                    }
-                } else {
-                    preferredResultBySubmissionID[key] = row
-                }
-            }
-        }
+        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+            for: submissions.compactMap(\.id), on: req.db)
 
         let rows = submissions.map { submission -> SubmissionHistoryRow in
             let subID = submission.id ?? ""
             let gradeText: String
             if let result = preferredResultBySubmissionID[subID],
-                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                let pct = result.gradePercentValue
             {
                 gradeText = "\(pct)%"
             } else {
@@ -425,10 +404,12 @@ extension WebRoutes {
         let individualBadges = try await earnedIndividualBadgesForDisplay(
             displayResult: displayResult, submission: submission,
             gradePercent: processed.gradePercent, decoder: decoder, on: req.db)
+        let setupForBadges = try await APITestSetup.find(submission.testSetupID, on: req.db)
         let badges =
-            try await builtInBadgesForSubmission(
-                submission: submission, badgeContext: processed.badgeContext,
-                classAchievements: classAchievements, on: req.db)
+            builtInBadgesForSubmission(
+                badgeContext: processed.badgeContext,
+                classAchievements: classAchievements,
+                setup: setupForBadges)
             + individualBadges
 
         let sectionedOutcomes = buildSectionedOutcomes(

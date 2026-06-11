@@ -59,9 +59,13 @@ private func shInvocation(for script: URL) -> ScriptInvocation {
 /// owns the substrate-only bits (reading the file, the executable-bit fallback).
 func scriptInvocation(for script: URL) -> ScriptInvocation {
     // Leading source for shebang / content classification (substrate I/O).
+    // Bounded read: only the first 2 KB matter, so don't pull a large support
+    // file fully into memory just to classify it.
     let source: String
-    if let data = try? Data(contentsOf: script) {
-        source = String(data: data.prefix(2048), encoding: .utf8) ?? ""
+    if let handle = try? FileHandle(forReadingFrom: script) {
+        defer { try? handle.close() }
+        let data = try? handle.read(upToCount: 2048)
+        source = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
     } else {
         source = ""
     }

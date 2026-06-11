@@ -105,12 +105,14 @@ extension InstructorDashboardRoutes {
                 .filter(\.$course.$id == activeCourseUUID)
                 .all()
                 .map { $0.userID }
-            let enrolledSet = Set(enrolledUserIDs)
-            let allStudents = try await APIUser.query(on: req.db)
+            guard !enrolledUserIDs.isEmpty else { return [] }
+            // Filter to the enrolled IDs in SQL instead of fetching every
+            // student in the system and filtering in memory.
+            return try await APIUser.query(on: req.db)
                 .filter(\.$role == "student")
+                .filter(\.$id ~~ enrolledUserIDs)
                 .sort(\.$username, .ascending)
                 .all()
-            return allStudents.filter { u in u.id.map { enrolledSet.contains($0) } ?? false }
         }
         return try await APIUser.query(on: req.db)
             .filter(\.$role == "student")
@@ -187,7 +189,7 @@ extension InstructorDashboardRoutes {
         var bestPointsByUserAndSetup: [String: Double] = [:]
         for submission in submissions {
             guard let result = preferredResultBySubmissionID[submission.id],
-                let points = gradePointsFromCollectionJSON(result.collectionJSON)
+                let points = result.gradePointsValue
             else {
                 continue
             }
@@ -350,7 +352,7 @@ extension InstructorDashboardRoutes {
             for submission in history {
                 guard let subID = submission.id,
                     let result = preferredResultBySubmissionID[subID],
-                    let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                    let pct = result.gradePercentValue
                 else {
                     continue
                 }
@@ -465,7 +467,7 @@ extension InstructorDashboardRoutes {
             let subID = submission.id ?? ""
             let gradeText: String
             if let result = preferredResultBySubmissionID[subID],
-                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                let pct = result.gradePercentValue
             {
                 gradeText = "\(pct)%"
             } else {
@@ -810,13 +812,25 @@ func preferredResultsBySubmissionID(
     for submissionIDs: [String],
     on db: Database
 ) async throws -> [String: APIResult] {
-    let results =
-        submissionIDs.isEmpty
-        ? []
-        : try await APIResult.query(on: db)
-            .filter(\.$submissionID ~~ submissionIDs)
-            .sort(\.$receivedAt, .descending)
-            .all()
+    // Chunk the IN-list: a term-scale grades export can pass 100k+ IDs, which
+    // exceeds bind-parameter limits (SQLite 32k variables, Postgres 65,535
+    // wire parameters) in a single query. Each submission's results live
+    // entirely inside the chunk holding its ID, so the fold below is
+    // order-equivalent to the unchunked query.
+    let chunkSize = 5_000
+    var results: [APIResult] = []
+    var index = submissionIDs.startIndex
+    while index < submissionIDs.endIndex {
+        let end =
+            submissionIDs.index(index, offsetBy: chunkSize, limitedBy: submissionIDs.endIndex)
+            ?? submissionIDs.endIndex
+        results.append(
+            contentsOf: try await APIResult.query(on: db)
+                .filter(\.$submissionID ~~ Array(submissionIDs[index..<end]))
+                .sort(\.$receivedAt, .descending)
+                .all())
+        index = end
+    }
 
     var preferredResultBySubmissionID: [String: APIResult] = [:]
     for result in results {

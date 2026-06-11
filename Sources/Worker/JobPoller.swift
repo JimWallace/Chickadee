@@ -74,7 +74,11 @@ struct JobPoller: Sendable {
         case 200:
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            do { return try decoder.decode(Core.Job.self, from: data) } catch { throw .transportError(error) }
+            // A decode failure is a server/worker schema mismatch, not a network
+            // problem — classify it distinctly so ops doesn't chase a transport
+            // issue that doesn't exist (June 2026 audit, P2.5). Still retryable:
+            // the mismatch usually resolves when the other side is upgraded.
+            do { return try decoder.decode(Core.Job.self, from: data) } catch { throw .decodingFailed(error) }
         case 204:
             return nil
         case 409:
@@ -98,6 +102,7 @@ enum JobPollerError: Error, LocalizedError {
     case httpError(Int, String)
     case transportError(any Error)
     case duplicateWorkerID(String)
+    case decodingFailed(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -109,6 +114,8 @@ enum JobPollerError: Error, LocalizedError {
             return "Transport error: \(error.localizedDescription)"
         case .duplicateWorkerID(let message):
             return "Duplicate worker ID: \(message)"
+        case .decodingFailed(let error):
+            return "Failed to decode job payload (server/worker version mismatch?): \(error)"
         }
     }
 }

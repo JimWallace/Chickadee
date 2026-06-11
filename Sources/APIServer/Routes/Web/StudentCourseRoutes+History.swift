@@ -9,10 +9,8 @@
 // grant / edit / revoke a deadline extension that lets that one student
 // keep submitting after the assignment-wide deadline.
 //
-// Phase 2 of the audit refactor moved these handlers from
-// `AssignmentRoutes` onto `StudentCourseRoutes`; the file name still
-// starts with `AssignmentRoutes+` for blame continuity until the next
-// rename pass.
+// These handlers were moved from `AssignmentRoutes` onto
+// `StudentCourseRoutes` in the Phase 2 audit refactor.
 
 import Core
 import Fluent
@@ -312,7 +310,7 @@ extension StudentCourseRoutes {
             let subID = submission.id ?? ""
             let gradeText: String
             if let result = preferredResultBySubmissionID[subID],
-                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                let pct = result.gradePercentValue
             {
                 gradeText = "\(pct)%"
             } else {
@@ -771,7 +769,7 @@ extension StudentCourseRoutes {
             for submission in history {
                 guard let subID = submission.id,
                     let result = preferredResultBySubmissionID[subID],
-                    let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                    let pct = result.gradePercentValue
                 else {
                     continue
                 }
@@ -875,7 +873,7 @@ extension StudentCourseRoutes {
             guard let psID = ps.id, let pr = preferredResultBySubmissionID[psID] else {
                 return nil
             }
-            return gradePercentFromCollectionJSON(pr.collectionJSON)
+            return pr.gradePercentValue
         }
         return AchievementBadge.forSubmission(
             BadgeContext(

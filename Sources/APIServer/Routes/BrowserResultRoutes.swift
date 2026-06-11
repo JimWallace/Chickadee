@@ -72,27 +72,21 @@ struct BrowserResultRoutes: RouteCollection {
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
-        // Count prior submissions to derive the attempt number.
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == body.testSetupID)
-            .filter(\.$userID == caller.id)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-        let attemptNumber = priorCount + 1
-
         // Create the submission record as "complete" immediately — browser
         // results are authoritative and no native worker re-run is queued.
+        // The attempt number is assigned race-free inside one transaction.
         let submission = APISubmission(
             id: subID,
             testSetupID: body.testSetupID,
             zipPath: nbPath,
-            attemptNumber: attemptNumber,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
             status: "complete",
             filename: "\(subID).ipynb",
             userID: caller.id,
             kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
+        let attemptNumber = submission.attemptNumber ?? 1
 
         // Persist the browser result, tagged source="browser".  The browser
         // builds its collection before it knows the server-authoritative attempt
@@ -176,24 +170,18 @@ struct BrowserResultRoutes: RouteCollection {
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == body.testSetupID)
-            .filter(\.$userID == caller.id)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-
         let submittedFilename = normalizedNotebookFilename(body.filename)
         let submission = APISubmission(
             id: subID,
             testSetupID: body.testSetupID,
             zipPath: nbPath,
-            attemptNumber: priorCount + 1,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
             status: "pending",
             filename: submittedFilename,
             userID: caller.id,
             kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
 
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing

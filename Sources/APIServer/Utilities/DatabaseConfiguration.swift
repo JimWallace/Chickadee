@@ -252,4 +252,8 @@ func registerMigrations(on app: Application) {
     // Audit-followup indexes (June 2026): request_metrics(finished_at) and
     // other uncovered hot-path filters. Index-only, runs last.
     app.migrations.add(CreateAuditFollowupIndexes())
+
+    // Denormalized grade columns on results + one-time backfill from the
+    // collection_json blob (June 2026 audit, P1.1).
+    app.migrations.add(AddResultGradeColumns())
 }

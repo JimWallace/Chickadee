@@ -77,9 +77,11 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     }
 
     // Strip the JSON footer line from stdout before showing it to students.
+    // Reuses `lines` from above rather than splitting a potentially large
+    // stdout a second time.
     let strippedStdout: String
     if footer != nil {
-        var stdoutLines = splitOnNewlines(output.stdout)
+        var stdoutLines = lines
         if let lastIdx = stdoutLines.indices.last(where: { !trimHorizontal(stdoutLines[$0]).isEmpty }) {
             stdoutLines.remove(at: lastIdx)
         }

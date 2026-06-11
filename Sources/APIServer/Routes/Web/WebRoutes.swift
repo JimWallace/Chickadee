@@ -247,7 +247,7 @@ struct WebRoutes: RouteCollection {
                     for submission in submissions {
                         guard let subID = submission.id,
                             let result = preferredResultBySubmissionID[subID],
-                            let gradePercent = gradePercentFromCollectionJSON(result.collectionJSON)
+                            let gradePercent = result.gradePercentValue
                         else {
                             continue
                         }
@@ -276,7 +276,7 @@ struct WebRoutes: RouteCollection {
                             guard let psID = ps.id,
                                 let pr = preferredResultBySubmissionID[psID]
                             else { return nil }
-                            return gradePercentFromCollectionJSON(pr.collectionJSON)
+                            return pr.gradePercentValue
                         }
                         latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(
                             BadgeContext(

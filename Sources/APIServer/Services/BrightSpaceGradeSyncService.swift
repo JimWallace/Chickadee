@@ -223,7 +223,7 @@ private func bestPointsForStudent(
         // recorded totalPoints for setups whose manifest is unavailable.
         let total =
             try await suiteTotalPoints(testSetupID: testSetupID, db: db)
-            ?? resultsForGrade.compactMap { gradeTotalPointsFromCollectionJSON($0.collectionJSON) }.max()
+            ?? resultsForGrade.compactMap { $0.gradeTotalPointsValue }.max()
         guard let total, total > 0 else { throw BrightSpaceSyncError.missingPoints }
         return Double(override.overridePercent) / 100.0 * total
     }
@@ -231,7 +231,7 @@ private func bestPointsForStudent(
     guard
         let points =
             resultsForGrade
-            .compactMap({ gradePointsFromCollectionJSON($0.collectionJSON) })
+            .compactMap({ $0.gradePointsValue })
             .max()
     else {
         throw BrightSpaceSyncError.missingPoints

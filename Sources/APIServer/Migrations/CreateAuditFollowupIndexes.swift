@@ -22,6 +22,9 @@ struct CreateAuditFollowupIndexes: ChickadeeMigration {
         try await sql.raw(
             "CREATE INDEX IF NOT EXISTS idx_submissions_submitted_at ON submissions(submitted_at)"
         ).run()
+        try await sql.raw(
+            "CREATE INDEX IF NOT EXISTS idx_submissions_assigned_at ON submissions(assigned_at)"
+        ).run()
 
         // Admin runner dashboard GROUP BY (polled every 5s) counts submissions
         // per worker by status — a full-table scan without this.
@@ -47,6 +50,7 @@ struct CreateAuditFollowupIndexes: ChickadeeMigration {
         try await sql.raw("DROP INDEX IF EXISTS idx_assignments_validation_submission_id").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_client_diagnostics_created_at").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_submissions_worker_status").run()
+        try await sql.raw("DROP INDEX IF EXISTS idx_submissions_assigned_at").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_submissions_submitted_at").run()
         try await sql.raw("DROP INDEX IF EXISTS idx_request_metrics_finished_at").run()
     }

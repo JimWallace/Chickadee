@@ -19,7 +19,11 @@ import Fluent
 import Foundation
 import Vapor
 
-private let achievementSweepInterval: TimeInterval = 60
+// 5 minutes: class-goal progress is a dashboard nicety, and each sweep walks
+// every non-frozen goal-bearing assignment's submissions — at term scale a
+// 60-second cadence spent most of its time re-running the same heavy scan
+// (June 2026 audit, P1.2). Deadline locking still lands within one interval.
+private let achievementSweepInterval: TimeInterval = 300
 
 /// Fraction of a class goal reached, `0...1`: the share of the roster meeting
 /// the threshold, scaled by the goal's target share.  Returns `1.0` once
@@ -45,8 +49,18 @@ func evaluateClassGoalAchievements(
     let assignments = try await APIAssignment.query(on: db).all()
     var written = 0
 
+    // One batched query for every referenced setup instead of a find() per
+    // assignment (June 2026 audit, P1.2 — this sweep runs on a timer forever).
+    let setupIDs = Array(Set(assignments.map(\.testSetupID)))
+    var setupByID: [String: APITestSetup] = [:]
+    if !setupIDs.isEmpty {
+        for setup in try await APITestSetup.query(on: db).filter(\.$id ~~ setupIDs).all() {
+            if let id = setup.id { setupByID[id] = setup }
+        }
+    }
+
     for assignment in assignments {
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db),
+        guard let setup = setupByID[assignment.testSetupID],
             let setupID = setup.id,
             let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
         else { continue }
@@ -125,7 +139,7 @@ func bestAssignmentGradeByStudent(testSetupID: String, on db: Database) async th
     var best: [UUID: Double] = [:]
     for sub in identified {
         guard let result = preferred[sub.id],
-            let percent = gradePercentFromCollectionJSON(result.collectionJSON)
+            let percent = result.gradePercentValue
         else { continue }
         let value = Double(percent) / 100
         if value > (best[sub.userID] ?? -1) { best[sub.userID] = value }

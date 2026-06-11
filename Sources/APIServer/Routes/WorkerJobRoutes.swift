@@ -185,10 +185,11 @@ struct WorkerJobRoutes: RouteCollection {
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
+        let downloadVersion = await testSetupDownloadVersion(for: setup)
         guard
             let submissionURL = URL(string: "\(base)/api/v1/worker/submissions/\(submissionID)/download"),
             let testSetupURL = URL(
-                string: "\(base)/api/v1/worker/testsetups/\(setupID)/download?v=\(testSetupDownloadVersion(for: setup))"
+                string: "\(base)/api/v1/worker/testsetups/\(setupID)/download?v=\(downloadVersion)"
             )
         else {
             throw WorkerJobError.internalInconsistency(reason: "Failed to build worker download URLs from base=\(base)")
@@ -302,17 +303,34 @@ private struct BlockedCandidate {
 private func collectClaimCandidates(
     on db: Database
 ) async throws -> [(APISubmission, APITestSetup, TestProperties)] {
-    let studentSubmissions = try await APISubmission.query(on: db)
+    // Cap the scan: a poll claims exactly one job, so walking the entire
+    // pending queue (potentially tens of thousands of rows after a retest
+    // fan-out) inside the globally-serialized claim transaction collapsed
+    // claim throughput exactly when the queue was deepest (June 2026 audit,
+    // P1.3). The cap only matters when the first `claimCandidateScanLimit`
+    // candidates are all requirement-incompatible with this runner — the next
+    // poll retries, and most assignments carry no runner requirements at all.
+    //
+    // Fresh student work (retestedAt == nil) keeps absolute priority over
+    // retests (#427) by querying the two groups separately — which also
+    // replaces the old full-scan + in-memory re-sort.
+    let claimCandidateScanLimit = 50
+    var studentSubmissions = try await APISubmission.query(on: db)
         .filter(\.$status == "pending")
         .filter(\.$kind == APISubmission.Kind.student)
+        .filter(\.$retestedAt == nil)
         .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
         .all()
-        .sorted { lhs, rhs in
-            let lhsIsRetest = lhs.retestedAt != nil
-            let rhsIsRetest = rhs.retestedAt != nil
-            if lhsIsRetest != rhsIsRetest { return !lhsIsRetest }
-            return (lhs.submittedAt ?? .distantPast) < (rhs.submittedAt ?? .distantPast)
-        }
+    if studentSubmissions.count < claimCandidateScanLimit {
+        studentSubmissions += try await APISubmission.query(on: db)
+            .filter(\.$status == "pending")
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$retestedAt != nil)
+            .sort(\.$submittedAt, .ascending)
+            .limit(claimCandidateScanLimit - studentSubmissions.count)
+            .all()
+    }
 
     // Many pending submissions often target the same test setup (e.g. a class
     // submitting to one assignment before a deadline). Resolve each setup +
@@ -340,6 +358,7 @@ private func collectClaimCandidates(
         .filter(\.$status == "pending")
         .filter(\.$kind == APISubmission.Kind.validation)
         .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
         .all()
 
     for validation in pendingValidation {
@@ -481,13 +500,47 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
     return host
 }
 
-private func testSetupDownloadVersion(for setup: APITestSetup) -> String {
-    var material = Data(setup.manifest.utf8)
-    if let zipData = try? Data(contentsOf: URL(fileURLWithPath: setup.zipPath)) {
-        material.append(Data("|zip=".utf8))
-        material.append(zipData)
+/// Memoizes the (manifest, zip) content hash per setup so the hot claim path
+/// doesn't re-read and re-SHA the full setup zip for every job handed out
+/// (June 2026 audit, P1.8). Keyed on manifest text + zip (path, size, mtime):
+/// suite edits rewrite both the manifest and the zip, so any real change
+/// invalidates the entry.
+private actor TestSetupDownloadVersionCache {
+    static let shared = TestSetupDownloadVersionCache()
+
+    private struct Key: Hashable {
+        let manifest: String
+        let zipPath: String
+        let zipSize: UInt64
+        let zipModified: Date
     }
-    return String(sha256HexDigest(material).prefix(16))
+
+    private var entries: [String: (key: Key, version: String)] = [:]
+
+    func version(for setup: APITestSetup) -> String {
+        let setupID = setup.id ?? setup.zipPath
+        let attributes = try? FileManager.default.attributesOfItem(atPath: setup.zipPath)
+        let key = Key(
+            manifest: setup.manifest,
+            zipPath: setup.zipPath,
+            zipSize: (attributes?[.size] as? UInt64) ?? 0,
+            zipModified: (attributes?[.modificationDate] as? Date) ?? .distantPast)
+
+        if let cached = entries[setupID], cached.key == key { return cached.version }
+
+        var material = Data(setup.manifest.utf8)
+        if let zipData = try? Data(contentsOf: URL(fileURLWithPath: setup.zipPath)) {
+            material.append(Data("|zip=".utf8))
+            material.append(zipData)
+        }
+        let version = String(sha256HexDigest(material).prefix(16))
+        entries[setupID] = (key, version)
+        return version
+    }
+}
+
+private func testSetupDownloadVersion(for setup: APITestSetup) async -> String {
+    await TestSetupDownloadVersionCache.shared.version(for: setup)
 }
 
 // MARK: - Application-level claim serializer
