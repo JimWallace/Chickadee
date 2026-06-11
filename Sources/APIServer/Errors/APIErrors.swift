@@ -80,12 +80,12 @@ enum WorkerJobError: AbortError, CustomStringConvertible {
 
 // MARK: - General-purpose application errors
 
-/// General-purpose typed errors for route handlers outside the
-/// instructor-assignment surface that `WebAssignmentError` covers.
-/// Same shape as `WebAssignmentError` minus the two assignment-specific
-/// cases (`noActiveCourse`, `validationRequired`); use this for
-/// AuthRoutes / AdminRoutes / SubmissionRoutes / TestSetupRoutes /
-/// the remaining web + API + worker routes.
+/// General-purpose typed errors for route handlers — the single web/API
+/// error vocabulary.  Formerly split into `AppError` (general routes) and
+/// `WebAssignmentError` (instructor assignment routes), which duplicated
+/// six of eight cases verbatim; the two assignment-specific cases
+/// (`noActiveCourse`, `validationRequired`) were folded in here and
+/// `WebAssignmentError` is now a typealias (June 2026 audit).
 ///
 /// Adopted incrementally — sites with explicit `reason:` strings on
 /// `Abort(...)` convert one-to-one; sites that throw a bare
@@ -107,6 +107,8 @@ enum AppError: AbortError, CustomStringConvertible {
     /// "Invalid <name>: <reason>".  Prefer over `badRequest` when the
     /// failure is about a specific field.
     case invalidParameter(name: String, reason: String)
+    /// The session has no active course but the action requires one.
+    case noActiveCourse(action: String)
     /// The current user lacks the role required for this action.
     /// `RoleMiddleware` covers most of these at the route-group level;
     /// throw this from a handler for per-resource authorization that
@@ -119,6 +121,9 @@ enum AppError: AbortError, CustomStringConvertible {
     /// Syntactically valid but semantic content can't be processed.
     /// Maps to HTTP 422 (Unprocessable Entity).
     case unprocessable(reason: String)
+    /// An assignment-validation precondition was not satisfied (e.g. the
+    /// runner has not produced a passing validation result yet).
+    case validationRequired(reason: String)
     /// A server-side write or external operation failed unexpectedly.
     case internalFailure(reason: String)
 
@@ -126,6 +131,7 @@ enum AppError: AbortError, CustomStringConvertible {
         switch self {
         case .notFound: return .notFound
         case .badRequest, .invalidParameter: return .badRequest
+        case .noActiveCourse, .validationRequired: return .badRequest
         case .forbidden: return .forbidden
         case .conflict: return .conflict
         case .unprocessable: return .unprocessableEntity
@@ -143,70 +149,6 @@ enum AppError: AbortError, CustomStringConvertible {
             return reason
         case .invalidParameter(let name, let reason):
             return "Invalid \(name): \(reason)"
-        case .forbidden(let action):
-            return "You do not have permission to \(action)."
-        case .conflict(let reason):
-            return reason
-        case .unprocessable(let reason):
-            return reason
-        case .internalFailure(let reason):
-            return reason
-        }
-    }
-}
-
-// MARK: - Web instructor assignment routes
-
-/// Errors raised by the instructor-facing assignment management web routes
-/// (`AssignmentRoutes` and its `+Draft`, `+Editor`, `+Sections`, `+Submissions`
-/// extensions).  Adopted incrementally — handlers migrate from `Abort(...)`
-/// to these cases as the surrounding code is touched for other reasons.
-enum WebAssignmentError: AbortError, CustomStringConvertible {
-    /// A required entity (assignment, test setup, section, submission, …)
-    /// could not be found.  The `resource` label is plain English so the
-    /// rendered 404 reads naturally.
-    case notFound(resource: String)
-    /// Bad request — invalid body, missing parameter, malformed value.
-    case invalidParameter(name: String, reason: String)
-    /// The session has no active course but the action requires one.
-    case noActiveCourse(action: String)
-    /// The current user lacks the role required for this action.
-    case forbidden(action: String)
-    /// The request is well-formed but conflicts with current server state
-    /// (e.g. duplicate filename, attempt to delete a setup that still has
-    /// an associated assignment).
-    case conflict(reason: String)
-    /// The request was syntactically valid but its semantic content can't
-    /// be processed (e.g. an invalid Python identifier, a duplicate name
-    /// in a list that requires uniqueness).  Maps to HTTP 422.
-    case unprocessable(reason: String)
-    /// An assignment-validation precondition was not satisfied (e.g. the
-    /// runner has not produced a passing validation result yet).
-    case validationRequired(reason: String)
-    /// A server-side write or external operation failed unexpectedly.
-    case internalFailure(reason: String)
-
-    var status: HTTPResponseStatus {
-        switch self {
-        case .notFound: return .notFound
-        case .invalidParameter: return .badRequest
-        case .noActiveCourse: return .badRequest
-        case .forbidden: return .forbidden
-        case .conflict: return .conflict
-        case .unprocessable: return .unprocessableEntity
-        case .validationRequired: return .badRequest
-        case .internalFailure: return .internalServerError
-        }
-    }
-
-    var reason: String { description }
-
-    var description: String {
-        switch self {
-        case .notFound(let resource):
-            return "\(resource) not found"
-        case .invalidParameter(let name, let reason):
-            return "Invalid \(name): \(reason)"
         case .noActiveCourse(let action):
             return "No active course selected. Please select a course before \(action)."
         case .forbidden(let action):
@@ -222,3 +164,12 @@ enum WebAssignmentError: AbortError, CustomStringConvertible {
         }
     }
 }
+
+// MARK: - Web instructor assignment routes
+
+/// Historical name for the instructor-assignment route error vocabulary.
+/// The enum's cases were folded into `AppError` (June 2026 audit; the two
+/// vocabularies duplicated six of eight cases verbatim).  ~230 throw/catch
+/// sites still use this name; the typealias keeps them source-compatible.
+/// New code should write `AppError` directly.
+typealias WebAssignmentError = AppError

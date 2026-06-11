@@ -24,13 +24,8 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getScript(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         let filename = try safeScriptFilename(from: req)
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         guard let content = readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {
             throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
@@ -47,16 +42,11 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func updateScript(req: Request) async throws -> HTTPStatus {
-        let idStr = try assignmentPublicIDParameter(from: req)
+        let (_, setup) = try await loadAssignmentAndSetup(req)
         let filename = try safeScriptFilename(from: req)
 
         struct UpdateBody: Content { var content: String }
         let body = try req.content.decode(UpdateBody.self)
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         // Verify the file exists before writing.
         guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
@@ -101,13 +91,9 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func createScript(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let idStr = assignment.publicID
         let body = try req.content.decode(CreateScriptBody.self)
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         let result = try await createScriptInSetup(setup: setup, body: body, on: req.db)
 
@@ -154,13 +140,8 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func deleteScript(req: Request) async throws -> HTTPStatus {
-        let idStr = try assignmentPublicIDParameter(from: req)
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
         let filename = try safeScriptFilename(from: req)
-
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
 
         try await deleteScriptFromSetup(setup: setup, filename: filename, on: req.db)
 

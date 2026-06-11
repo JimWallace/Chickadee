@@ -285,8 +285,8 @@ struct TestSetupRoutes: RouteCollection {
         switch manifest.gradingMode {
         case .browser:
             guard zipContainsNotebook(upload.files) else {
-                throw Abort(
-                    .unprocessableEntity, reason: "Browser-mode test setup must contain at least one .ipynb file")
+                throw AppError.unprocessable(
+                    reason: "Browser-mode test setup must contain at least one .ipynb file")
             }
         case .worker:
             guard !manifest.testSuites.isEmpty else {
