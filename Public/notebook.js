@@ -30,6 +30,19 @@
 
     if (!frame || !setupID) return;
 
+    // ≤640px the page hides the editor behind a "larger screen" notice and
+    // an inline guard in notebook.leaf aborts the iframe's eager navigation.
+    // Don't run the preflight, watchdog, or editor mount for a surface the
+    // student can't see; if the viewport grows past the breakpoint
+    // (rotation, window resize) reload so the page boots normally.
+    const phoneQuery = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;
+    if (phoneQuery && phoneQuery.matches) {
+        const onChange = (e) => { if (!e.matches) window.location.reload(); };
+        if (phoneQuery.addEventListener) phoneQuery.addEventListener('change', onChange);
+        else if (phoneQuery.addListener) phoneQuery.addListener(onChange);
+        return;
+    }
+
     // Disable Submit until the student's notebook has been synced into the
     // JupyterLite editor. This prevents a race condition where students click
     // Submit before their work is loaded, causing a blank notebook to be

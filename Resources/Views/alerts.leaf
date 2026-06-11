@@ -49,7 +49,7 @@ Server Health Alerts
     </form>
 
     <h3>Rules</h3>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th>Rule</th>
@@ -89,13 +89,13 @@ Server Health Alerts
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
 
     <h3 class="alerts-recent-heading">Recent firings</h3>
     #if(recentFirings.isEmpty):
     <p class="empty">No alerts have fired since startup.</p>
     #else:
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th class="time">When</th>
@@ -129,7 +129,7 @@ Server Health Alerts
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 <script src="/relative-time.js?v=#appVersion()"></script>
@@ -138,7 +138,7 @@ Server Health Alerts
 .alerts-flash--success { background: #d4edda; color: #155724; }
 .alerts-flash--error { background: #f8d7da; color: #721c24; }
 .alerts-flash--neutral { background: var(--gray-100); color: var(--gray-700); }
-.alerts-webhook-input { flex: 1; min-width: 320px; }
+.alerts-webhook-input { flex: 1; min-width: min(320px, 100%); }
 .alerts-test-form { margin-bottom: 1.5rem; }
 .alerts-env-note { margin-left: .6rem; color: var(--muted); font-size: .85rem; }
 .alerts-rule-code { font-size: .8em; color: var(--muted); }

@@ -1,5 +1,12 @@
 # Responsiveness Audit — June 2026
 
+> **Status: fixed.** Everything below except the two explicitly-deferred items
+> (assignment-editor 768px pass with a real suite; hands-on extension-flow
+> check with seeded data) was fixed in the same PR as this audit. The live
+> check was re-run after the fixes: **zero horizontal overflow on every
+> reachable page at both 375px and 768px**, and a 1280px spot check confirmed
+> desktop is unchanged. The findings are preserved as written for the record.
+
 Follow-up audit of the responsive first pass described in
 [responsive-design-plan.md](responsive-design-plan.md) ("first pass complete —
 ready to deploy and fine-tune"). Two methods:

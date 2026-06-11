@@ -78,7 +78,7 @@ LEARN
         an assignment.
     </p>
     <datalist id="bs-grade-objects"></datalist>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th>Assignment</th>
@@ -129,7 +129,7 @@ LEARN
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 
@@ -141,7 +141,7 @@ LEARN
         These students' grades can't sync because Chickadee can't resolve a BrightSpace account
         for them. Fix the student number on file, or confirm they're enrolled in the D2L course.
     </p>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead><tr><th>Name</th><th>Username</th><th>Reason</th></tr></thead>
         <tbody>
         #for(student in unmappedStudents):
@@ -152,7 +152,7 @@ LEARN
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
 </section>
 #endif
 
@@ -162,7 +162,7 @@ LEARN
     #if(!hasLog):
     <p class="empty">No grade pushes recorded yet.</p>
     #else:
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th>When</th>
@@ -191,7 +191,7 @@ LEARN
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 #endif
@@ -225,7 +225,10 @@ LEARN
 .bs-summary-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
-.bs-grade-input { width: 11rem; font-size: .85rem; padding: .25rem .45rem; }
+.bs-grade-input { width: 11rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
+@media (max-width: 640px) {
+    .bs-grade-form { flex-wrap: wrap; }
+}
 .bs-sync-detail { font-size: .72rem; }
 .bs-log-when { white-space: nowrap; }
 </style>

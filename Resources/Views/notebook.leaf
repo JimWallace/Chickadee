@@ -74,6 +74,19 @@ Notebook
     src="#(jupyterLiteEditorURL)"
     loading="eager">
 </iframe>
+<script>
+// On phones the editor is hidden behind the "larger screen" notice above,
+// but display:none does not stop the iframe from booting JupyterLite +
+// Pyodide in the background. Abort that navigation immediately after the
+// parser starts it; notebook.js skips mounting at this width and reloads
+// the page if the viewport grows past the breakpoint.
+(function () {
+    if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+        var frame = document.getElementById('jl-frame');
+        if (frame) frame.src = 'about:blank';
+    }
+})();
+</script>
 <section id="nb-fallback" class="nb-fallback" role="alert" hidden>
     <h2 class="nb-fallback-title">Editor didn&rsquo;t load</h2>
     <p class="nb-fallback-text">
