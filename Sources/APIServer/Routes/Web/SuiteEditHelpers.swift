@@ -45,6 +45,20 @@ func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APIT
     return (assignment, setup)
 }
 
+/// Lighter sibling of `loadAssignmentAndSetup(_:)` for handlers that never
+/// touch the test setup — same `:assignmentID` resolution and 404 message,
+/// without forcing an unnecessary `APITestSetup` fetch.  Handlers that need
+/// the raw path parameter afterwards can use `assignment.publicID`, which
+/// is always identical to it (`assignmentByPublicID` is an exact-match
+/// filter on a validated parameter).
+func loadAssignment(_ req: Request) async throws -> APIAssignment {
+    let idStr = try assignmentPublicIDParameter(from: req)
+    guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
+        throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
+    }
+    return assignment
+}
+
 /// Loads a draft test setup from the `?draftID=<id>` query parameter.
 /// The draft model is just an `APITestSetup` row that hasn't been
 /// linked to an `APIAssignment` yet — same row shape, no parent.

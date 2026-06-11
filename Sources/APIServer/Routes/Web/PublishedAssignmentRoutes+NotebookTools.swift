@@ -111,11 +111,7 @@ extension PublishedAssignmentRoutes {
             throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
         }
 
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else { throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'") }
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let sourceData =
             (try? notebookData(for: setup))

@@ -18,18 +18,12 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentNotebookFile(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         let data = try notebookData(for: setup)
         let downloadName = currentSetupFiles(
             for: setup,
-            assignmentID: idStr,
+            assignmentID: assignment.publicID,
             solutionFilename: nil
         ).assignmentFile.name
         return buildFileResponse(data: data, filename: downloadName)
@@ -39,13 +33,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentSetupItem(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let (_, setup) = try await loadAssignmentAndSetup(req)
 
         struct FileQuery: Content {
             let name: String
@@ -66,13 +54,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentSolutionFile(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
 
         // Look for a solution.* entry inside the test setup zip.
         let solutionZipEntry = listZipEntries(zipPath: setup.zipPath)
