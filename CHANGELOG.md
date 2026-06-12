@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.422] - 2026-06-12
+
+### Changed
+
+- **Dashboard queries parallelized.** The student dashboard's independent DB
+  reads now run concurrently via `async let` (extensions, prior engagement,
+  course sections; grade overrides + submissions; results + achievement
+  lookups), cutting the handler's sequential round trips roughly in half.
+  The engagement/extension/section loaders moved to
+  `WebRoutes+IndexLoading.swift`. No behaviour change — same queries, same
+  results, fewer back-to-back waits.
+
+
 ## [0.4.421] - 2026-06-12
 
 ### Changed
