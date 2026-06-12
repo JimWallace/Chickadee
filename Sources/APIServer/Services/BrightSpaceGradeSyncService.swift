@@ -28,7 +28,7 @@ import Vapor
 @discardableResult
 func sweepBrightSpaceGradeSync(
     on db: Database,
-    client: BrightSpaceAPIClient,
+    client: any BrightSpaceGrading,
     config: BrightSpaceSyncConfig,
     logger: Logger,
     application: Application,
@@ -222,7 +222,7 @@ private func clearPendingFlag(_ results: [APIResult], on db: Database) async thr
 private func pushGrade(
     for target: GradePushTarget,
     db: Database,
-    client: BrightSpaceAPIClient,
+    client: any BrightSpaceGrading,
     logger: Logger,
     application: Application
 ) async throws {
@@ -411,7 +411,7 @@ private func suiteTotalPoints(testSetupID: String, db: Database) async throws ->
 private func resolvedBrightSpaceUserID(
     for user: APIUser?,
     db: Database,
-    client: BrightSpaceAPIClient,
+    client: any BrightSpaceGrading,
     application: Application
 ) async throws -> String? {
     guard let user else { return nil }
