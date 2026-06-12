@@ -52,11 +52,7 @@ struct VanityURLRoutes: RouteCollection {
             throw Abort(.notFound)
         }
 
-        let courseCodeLower = courseCode.lowercased()
-        let activeCourses = try await APICourse.query(on: req.db)
-            .filter(\.$isArchived == false)
-            .all()
-        guard let course = activeCourses.first(where: { $0.code.lowercased() == courseCodeLower }) else {
+        guard let course = try await findActiveCourse(byCode: courseCode, on: req.db) else {
             throw Abort(.notFound)
         }
 
@@ -79,11 +75,12 @@ struct VanityURLRoutes: RouteCollection {
             }
         }
 
-        let assignments = try await APIAssignment.query(on: req.db)
-            .filter(\.$courseID == courseID)
-            .all()
-
-        guard let assignment = assignments.first(where: { $0.slug == slug }) else {
+        guard
+            let assignment = try await APIAssignment.query(on: req.db)
+                .filter(\.$courseID == courseID)
+                .filter(\.$slug == slug)
+                .first()
+        else {
             throw Abort(.notFound)
         }
 

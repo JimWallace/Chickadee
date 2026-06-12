@@ -99,18 +99,11 @@ actor MCPTokenAuthority {
             "use": "sig",
             "alg": "ES256",
             "kid": keyID.string,
-            "x": Self.base64url(parameters.x),
-            "y": Self.base64url(parameters.y),
+            "x": parameters.x.base64ToBase64URL(),
+            "y": parameters.y.base64ToBase64URL(),
         ]
     }
 
-    /// Converts standard base64 to unpadded base64url (RFC 4648 §5).
-    private static func base64url(_ standardBase64: String) -> String {
-        standardBase64
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 }
 
 // MARK: - Application storage

@@ -38,6 +38,9 @@ struct UpdateSuiteTool: ContentTool {
         let updatedScripts: [String]
         /// The assignment's validation status after the edit re-kicks validation.
         let validationStatus: String?
+        /// true when this edit closed a previously-open assignment (re-open with
+        /// update_assignment once validation passes).
+        let assignmentClosed: Bool
     }
 
     static let name = "update_suite"
@@ -45,7 +48,8 @@ struct UpdateSuiteTool: ContentTool {
         "Edit test-suite script metadata for an assignment, by its public ID. For each named "
         + "script provide any of: tier (public/release/secret/student), points, displayName, "
         + "dependsOn (prerequisite script names), and sectionID (\"\" to ungroup). Does NOT change "
-        + "script content or pattern families. Saving re-runs the assignment's validation."
+        + "script content or pattern families. Saving re-runs the assignment's validation and closes "
+        + "the assignment if it was open (re-open with update_assignment once validation passes)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -95,8 +99,11 @@ struct UpdateSuiteTool: ContentTool {
                 "type": .string("array"), "items": .object(["type": .string("string")]),
             ]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
-        "required": .array([.string("assignmentPublicID"), .string("updatedScripts")]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("updatedScripts"), .string("assignmentClosed"),
+        ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
         readOnlyHint: false, destructiveHint: false, idempotentHint: true)
@@ -106,21 +113,14 @@ struct UpdateSuiteTool: ContentTool {
         guard !input.edits.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Provide at least one edit.")
         }
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         // Load the full authored suite with script bodies preserved from the zip.
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         var updated: [String] = []
         for edit in input.edits {
-            let tier = try Self.parseTier(edit.tier)
+            let tier = try parseOptionalTier(edit.tier, tool: Self.name)
             guard
                 let idx = payload.items.firstIndex(where: {
                     $0.kind == "script" && $0.script?.script == edit.script
@@ -141,23 +141,16 @@ struct UpdateSuiteTool: ContentTool {
             updated.append(edit.script)
         }
 
-        try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        // Re-kick validation against the edited manifest (debounced), mirroring
-        // the web PUT /suite handler.
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,
             updatedScripts: updated,
-            validationStatus: assignment.validationStatus)
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
-    private static func parseTier(_ raw: String?) throws -> TestTier? {
-        guard let raw else { return nil }
-        guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "tier must be one of: public, release, secret, student.")
-        }
-        return tier
-    }
 }

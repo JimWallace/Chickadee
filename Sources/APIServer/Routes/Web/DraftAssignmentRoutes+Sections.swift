@@ -37,20 +37,7 @@ extension DraftAssignmentRoutes {
 
         let setup = try await loadDraftSetup(req)
         let body = try req.content.decode(Body.self)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
-        }
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            var sections = (dict["sections"] as? [[String: Any]]) ?? []
-            sections.append([
-                "id": UUID().uuidString,
-                "name": name,
-            ])
-            dict["sections"] = sections
-        }
-
+        try await createSuiteSectionCore(setup: setup, name: body.name, on: req.db)
         return redirectToDraft(req: req, setup: setup)
     }
 
@@ -65,22 +52,7 @@ extension DraftAssignmentRoutes {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(Body.self)
-        let name = body.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
-        }
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            guard var sections = dict["sections"] as? [[String: Any]] else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
-            }
-            guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
-            }
-            sections[idx]["name"] = name
-            dict["sections"] = sections
-        }
-
+        try await renameSuiteSectionCore(setup: setup, sectionID: sectionID, name: body.name, on: req.db)
         return redirectToDraft(req: req, setup: setup)
     }
 
@@ -92,79 +64,49 @@ extension DraftAssignmentRoutes {
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            // Drop the section from the list.
-            if var sections = dict["sections"] as? [[String: Any]] {
-                sections.removeAll { ($0["id"] as? String) == sectionID }
-                dict["sections"] = sections
-            }
-            // Clear matching entries' sectionID so the affected items flow
-            // into the trailing Ungrouped block — same semantics as the
-            // assignment-scoped variant.
-            if var testSuites = dict["testSuites"] as? [[String: Any]] {
-                for i in testSuites.indices where (testSuites[i]["sectionID"] as? String) == sectionID {
-                    testSuites[i].removeValue(forKey: "sectionID")
-                }
-                dict["testSuites"] = testSuites
-            }
-        }
-
+        try await deleteSuiteSectionCore(setup: setup, sectionID: sectionID, on: req.db)
         return redirectToDraft(req: req, setup: setup)
     }
 
     // MARK: - POST /instructor/new/draft/suite-sections/:sectionID/variables
     //
-    // Replaces the section's variables list atomically.  Shape matches
-    // the assignment-scoped endpoint: JSON body with `variables:
-    // [FamilyVariable]`; identical Python-identifier + uniqueness
-    // validation.  Returns 303 on the form-encoded path; the auto-save
-    // JS sends `redirect: 'manual'` so it doesn't follow the redirect
-    // back to the create page.
+    // Replaces the section's variables (and per-student expressions) list
+    // atomically, through the same `SectionInputsService.apply` path the
+    // published endpoint uses — so a draft gets the identical validation
+    // (Python-identifier, reserved-`seed`, cross-scope clash) AND expression
+    // support. The save-time expression eval no-ops here: a draft has no
+    // assignment seed yet (`assignmentID: nil`), so expressions are persisted
+    // and first evaluated when the assignment is published. Returns 303 on the
+    // form-encoded path; the auto-save JS sends `redirect: 'manual'` so it
+    // doesn't follow the redirect back to the create page.
 
     @Sendable
     func updateDraftSuiteSectionVariables(req: Request) async throws -> Response {
-        struct Body: Content { var variables: [FamilyVariable] }
+        struct Body: Content {
+            var variables: [FamilyVariable]
+            /// Per-student expressions in section scope (optional so older
+            /// editor builds sending only `variables` keep working).
+            var expressions: [PersonalizationExpression]?
+        }
 
         let setup = try await loadDraftSetup(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
         let body = try req.content.decode(Body.self)
+        let actingUserID = (try? req.auth.require(APIUser.self))?.id
 
-        var seenNames: Set<String> = []
-        for v in body.variables {
-            guard isValidPythonIdentifier(v.name) else {
-                throw WebAssignmentError.unprocessable(
-                    reason: "Section variable name '\(v.name)' is not a valid Python identifier.")
-            }
-            guard seenNames.insert(v.name).inserted else {
-                throw WebAssignmentError.unprocessable(
-                    reason: "Duplicate section variable name '\(v.name)'.")
-            }
-        }
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let varData = try encoder.encode(body.variables)
-        guard let parsed = try JSONSerialization.jsonObject(with: varData) as? [Any] else {
-            throw WebAssignmentError.internalFailure(reason: "Failed to re-serialise section variables.")
-        }
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            guard var sections = dict["sections"] as? [[String: Any]] else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
-            }
-            guard let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID }) else {
-                throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
-            }
-            if parsed.isEmpty {
-                sections[idx].removeValue(forKey: "variables")
-            } else {
-                sections[idx]["variables"] = parsed
-            }
-            dict["sections"] = sections
-        }
+        try await SectionInputsService.apply(
+            setup: setup,
+            sectionID: sectionID,
+            inputs: .init(variables: body.variables, expressions: body.expressions ?? []),
+            seed: .init(
+                actingUserID: actingUserID,
+                assignmentID: nil,
+                testSetupID: setup.id ?? "",
+                testSetupsDirectory: req.application.testSetupsDirectory),
+            on: req.db
+        )
 
         return redirectToDraft(req: req, setup: setup)
     }
@@ -177,24 +119,7 @@ extension DraftAssignmentRoutes {
 
         let setup = try await loadDraftSetup(req)
         let body = try req.content.decode(Body.self)
-
-        try await mutateManifest(setup: setup, on: req.db) { dict in
-            let existing = (dict["sections"] as? [[String: Any]]) ?? []
-            let byID = Dictionary(
-                uniqueKeysWithValues: existing.compactMap { s -> (String, [String: Any])? in
-                    guard let id = s["id"] as? String else { return nil }
-                    return (id, s)
-                }
-            )
-            guard Set(body.sectionIDs) == Set(byID.keys),
-                body.sectionIDs.count == existing.count
-            else {
-                throw WebAssignmentError.invalidParameter(
-                    name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
-            }
-            dict["sections"] = body.sectionIDs.compactMap { byID[$0] }
-        }
-
+        try await reorderSuiteSectionsCore(setup: setup, sectionIDs: body.sectionIDs, on: req.db)
         return .ok
     }
 

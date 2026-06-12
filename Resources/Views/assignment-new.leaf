@@ -4,15 +4,15 @@ Create Assignment
 #endexport
 #export("content"):
 #if(error):
-<div class="error-box" style="margin-bottom:1rem">
+<div class="error-box">
     <h2>Could not create assignment</h2>
-    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+    <p class="card-meta error-detail">#(error)</p>
 </div>
 #endif
 
 #if(notice):
-<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:var(--success-bg)">
-    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+<div class="notice-banner">
+    <p>#(notice)</p>
 </div>
 #endif
 
@@ -23,30 +23,25 @@ Create Assignment
     #endif
 
     <!-- ── Top header row ─────────────────────────────────────────────── -->
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
-        <div style="flex:1;min-width:16rem">
+    <div class="editor-titlebar">
+        <div class="editor-title-col">
             <label class="visually-hidden" for="assignmentNameInput">Assignment Name</label>
-            <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
+            <input class="form-input assignment-name-input" type="text" name="assignmentName" id="assignmentNameInput" required
                    value="#(assignmentName)"
-                   placeholder="Assignment name"
-                   style="font-size:1.4rem;font-weight:600;border:none;border-bottom:2px solid var(--border,#ddd);border-radius:0;padding:.15rem 0;background:transparent;width:100%">
-            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:.6rem;align-items:center">
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                   placeholder="Assignment name">
+            <div class="assignment-meta-row">
+                <label class="field-inline">
                     Opens
-                    <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)"
-                           title="Optional. Students cannot access or submit until this date; leave blank to open immediately."
-                           style="font-size:.875rem;padding:.2rem .5rem">
+                    <input class="form-input input-compact" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)">
                 </label>
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                <label class="field-inline">
                     Due
-                    <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)"
-                           style="font-size:.875rem;padding:.2rem .5rem">
+                    <input class="form-input input-compact" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
                 #if(!sections.isEmpty):
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                <label class="field-inline">
                     Section
-                    <select class="form-input" name="sectionID" id="sectionID"
-                            style="font-size:.875rem;padding:.2rem .5rem">
+                    <select class="form-input input-compact" name="sectionID" id="sectionID">
                         <option value="" #if(!preselectedSectionID):selected#endif>— Ungrouped —</option>
                         #for(section in sections):
                         <option value="#(section.sectionID)"
@@ -57,10 +52,10 @@ Create Assignment
                 </label>
                 #endif
             </div>
-            <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem"></div>
-            <p id="grading-mode-hint" class="card-meta" style="margin-top:.3rem;display:none"></p>
+            <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
+            <p id="grading-mode-hint" class="card-meta grading-mode-hint" style="display:none"></p>
         </div>
-        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
+        <div class="editor-actions">
             <button class="btn btn-primary" type="submit">Create &amp; Validate</button>
             <a class="btn" href="/instructor">Cancel</a>
         </div>
@@ -69,19 +64,30 @@ Create Assignment
     <!-- ── Notebooks ──────────────────────────────────────────────────── -->
 
     <!-- Hidden file inputs triggered by JS buttons -->
-    <input type="file" id="assignment-notebook-file-input" name="assignmentNotebookFile" accept=".ipynb" style="display:none">
-    <input type="file" id="solution-notebook-file-input"   name="solutionNotebookFile"   accept=".ipynb" style="display:none">
+    <input type="file" id="assignment-notebook-file-input" name="assignmentNotebookFile" accept=".ipynb" hidden>
+    <input type="file" id="solution-notebook-file-input"   name="solutionNotebookFile"   accept=".ipynb" hidden>
 
     <!-- Hidden submit buttons for draft notebook actions, fired by JS -->
-    <button id="js-upload-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-assignment-notebook"  style="display:none"></button>
-    <button id="js-upload-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook"    style="display:none"></button>
-    <button id="js-create-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook"  style="display:none"></button>
-    <button id="js-create-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook"    style="display:none"></button>
-    <button id="js-create-solution-from-assignment" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-from-assignment" style="display:none"></button>
-    <button id="js-clear-assignment-notebook"   type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook"   style="display:none"></button>
-    <button id="js-clear-solution-notebook"     type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook"     style="display:none"></button>
+    <button id="js-upload-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-assignment-notebook"  hidden></button>
+    <button id="js-upload-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook"    hidden></button>
+    <button id="js-create-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook"  hidden></button>
+    <button id="js-create-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook"    hidden></button>
+    <button id="js-create-solution-from-assignment" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-from-assignment" hidden></button>
+    <button id="js-clear-assignment-notebook"   type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook"   hidden></button>
+    <button id="js-clear-solution-notebook"     type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook"     hidden></button>
 
-    <div style="margin:0 0 1.25rem">
+    <div class="editor-block">
+        <div class="editor-block-head">
+            <h2>Files</h2>
+            #if(draftID):
+            <div class="toolbar toolbar--end">
+                <button class="btn action-btn" type="button" id="add-support-file-btn"
+                        title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Add Support File</button>
+                <input type="file" id="support-file-upload-input" hidden multiple>
+                <span id="support-file-upload-status" class="upload-status-inline"></span>
+            </div>
+            #endif
+        </div>
         <table class="results-table" id="notebook-files-table">
             <thead>
                 <tr>
@@ -101,7 +107,7 @@ Create Assignment
                         #endif
                     </td>
                     <td class="time">
-                        <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                        <div class="cell-actions">
                             #if(assignmentNotebook):
                             <a class="btn action-btn" href="#(assignmentNotebook.editURL)">Edit</a>
                             <button class="btn action-btn action-danger" type="button"
@@ -124,7 +130,7 @@ Create Assignment
                         #endif
                     </td>
                     <td class="time">
-                        <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                        <div class="cell-actions">
                             #if(solutionNotebook):
                             <a class="btn action-btn" href="#(solutionNotebook.editURL)">Edit</a>
                             <button class="btn action-btn action-danger" type="button"
@@ -161,24 +167,13 @@ Create Assignment
                     </td>
                 </tr>
                 #endfor
-                #if(draftID):
-                <tr>
-                    <td><strong>Add support file</strong></td>
-                    <td colspan="2">
-                        <button class="btn action-btn" type="button" id="add-support-file-btn"
-                                title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Upload file</button>
-                        <input type="file" id="support-file-upload-input" style="display:none" multiple>
-                        <span id="support-file-upload-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
-                    </td>
-                </tr>
-                #endif
             </tbody>
         </table>
     </div>
 
     <!-- ── Runner Requirements ────────────────────────────────────────── -->
     #if(!detectedLanguages.isEmpty):
-    <p class="card-meta" style="margin:.75rem 0 .4rem">
+    <p class="card-meta detected-note">
         <strong>Auto-detected:</strong>
         Languages: #(detectedLanguagesCSV)
         #if(!detectedCapabilities.isEmpty):
@@ -186,16 +181,16 @@ Create Assignment
         #endif
     </p>
     #endif
-    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0 1.25rem">
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+    <div class="runner-req-row">
+        <label class="req-field">
             Languages
-            <input class="form-input" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
-                   placeholder="python, r" style="font-size:.875rem;padding:.25rem .5rem">
+            <input class="form-input input-sm" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
+                   placeholder="python, r">
         </label>
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+        <label class="req-field">
             Capabilities
-            <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)"
-                   placeholder="numpy, pandas, shell-bash" style="font-size:.875rem;padding:.25rem .5rem">
+            <input class="form-input input-sm" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)"
+                   placeholder="numpy, pandas, shell-bash">
         </label>
     </div>
 
@@ -213,26 +208,24 @@ Create Assignment
 
 #if(draftID):
 <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-<input class="form-input" id="suite-files-input" type="file" multiple style="display:none">
+<input class="form-input" id="suite-files-input" type="file" multiple hidden>
 
-<div class="form form--wide" style="margin-top:1.25rem">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-        <h2 style="margin:0">Test Suite</h2>
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+<div class="form form--wide suite-editor-section">
+    <div class="editor-block-head">
+        <h2>Test Suite</h2>
+        <div class="toolbar toolbar--end">
             <!-- Add Section — form POST + full page reload, mirrors the
                  edit-page pattern (assignment-edit.leaf:154-168). -->
-            <details class="add-section-details" id="add-suite-section-details" style="position:relative">
-                <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Section</summary>
-                <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
-                    <form method="post" action="/instructor/new/draft/suite-sections?draftID=#(draftID)" class="form" style="margin:0;gap:.6rem">
+            <details class="add-section-details popup-anchor" id="add-suite-section-details">
+                <summary class="btn action-btn summary-btn">+ Section</summary>
+                <div class="add-section-popup card suite-section-popup">
+                    <form method="post" action="/instructor/new/draft/suite-sections?draftID=#(draftID)" class="form popup-form">
                         #csrfFormField()
-                        <label class="form-label" style="margin:0">
+                        <label class="form-label">
                             Section name
-                            <input class="form-input" type="text" name="name" placeholder="e.g. Question 1" required
-                                   style="font-size:.85rem;padding:.3rem .5rem">
+                            <input class="form-input editor-input" type="text" name="name" placeholder="e.g. Question 1" required>
                         </label>
-                        <button class="btn btn-primary" type="submit"
-                                style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+                        <button class="btn btn-primary btn-compact" type="submit">Create section</button>
                     </form>
                 </div>
             </details>
@@ -245,19 +238,19 @@ Create Assignment
     </div>
 
     <!-- Generate Tests from Solution (hidden; shown when solution notebook present) -->
-    <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
-        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
-            <span style="font-size:.875rem;font-weight:600">Generate Starter Tests</span>
-            <button class="btn" type="button" id="scan-solution-btn" style="padding:.2rem .6rem;font-size:.8rem">Scan Solution for Functions</button>
-            <span id="scan-status" style="font-size:.8rem;color:var(--meta)"></span>
+    <div id="gen-tests-panel" class="gen-tests-panel" style="display:none">
+        <div class="gen-tests-row">
+            <span class="gen-tests-title">Generate Starter Tests</span>
+            <button class="btn btn-sm" type="button" id="scan-solution-btn">Scan Solution for Functions</button>
+            <span id="scan-status" class="editor-status"></span>
         </div>
         <div id="scan-results" style="display:none">
-            <p class="card-meta" style="margin-bottom:.4rem">Select the functions to generate starter tests for:</p>
-            <div id="fn-checklist" style="display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-bottom:.6rem"></div>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem">
-                <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem">
+            <p class="card-meta gen-tests-prompt">Select the functions to generate starter tests for:</p>
+            <div id="fn-checklist" class="fn-checklist"></div>
+            <div class="gen-template-row">
+                <label class="gen-template-label">
                     Template:
-                    <select id="gen-template-select" class="form-input" style="padding:.2rem .5rem;font-size:.8rem">
+                    <select id="gen-template-select" class="form-input select-xs">
                         <option value="py:exists">Function Exists</option>
                         <option value="py:correctness" selected>Correctness (input/output pairs)</option>
                         <option value="py:corner_cases">Corner Cases</option>
@@ -270,7 +263,7 @@ Create Assignment
                     </select>
                 </label>
             </div>
-            <button class="btn btn-primary" type="button" id="add-gen-tests-btn" style="font-size:.8rem;padding:.25rem .6rem">Add Selected Tests to Suite</button>
+            <button class="btn btn-primary btn-tiny" type="button" id="add-gen-tests-btn">Add Selected Tests to Suite</button>
         </div>
     </div>
 
@@ -282,48 +275,38 @@ Create Assignment
          draft-scoped endpoints in AssignmentRoutes+DraftSections.swift. -->
     <div id="suite-sections">
     #for(sec in suiteSectionRows):
-        <div class="section-block" data-section-id="#(sec.sectionID)" style="margin-bottom:1.25rem">
+        <div class="section-block" data-section-id="#(sec.sectionID)">
         #if(!sec.isUngrouped):
-            <div class="section-header" draggable="true"
-                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
-                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
-                      style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
+            <div class="section-header" draggable="true">
+                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
 
                 <!-- View mode -->
-                <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
+                <div class="section-view">
                     <strong>#(sec.name)</strong>
-                    <button class="btn-link section-edit-toggle" type="button"
-                            title="Edit section" aria-label="Edit section"
-                            style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+                    <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+                            title="Edit section" aria-label="Edit section">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                     </button>
-                    <span style="flex:1"></span>
-                    <button type="button" class="btn action-btn section-var-add"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
-                    <button type="button" class="btn action-btn section-add-test-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
+                    <span class="section-spacer"></span>
+                    <button type="button" class="btn action-btn btn-xs section-var-add"
+                            data-section-id="#(sec.sectionID)">+ Add Input</button>
+                    <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                            data-section-id="#(sec.sectionID)">+ Add Test</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
-                <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
+                <div class="section-edit" style="display:none">
                     <form class="section-rename-form" method="post"
-                          action="/instructor/new/draft/suite-sections/#(sec.sectionID)/rename?draftID=#(draftID)"
-                          style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
+                          action="/instructor/new/draft/suite-sections/#(sec.sectionID)/rename?draftID=#(draftID)">
                         #csrfFormField()
-                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required
-                               style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
-                        <button class="btn btn-primary" type="submit"
-                                style="font-size:.8rem;padding:.25rem .5rem">Save</button>
+                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
+                        <button class="btn btn-primary btn-tiny" type="submit">Save</button>
                     </form>
-                    <button class="btn action-btn action-danger section-delete-btn" type="button"
+                    <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
                             data-action="/instructor/new/draft/suite-sections/#(sec.sectionID)/delete?draftID=#(draftID)"
-                            data-name="#(sec.name)"
-                            style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
-                    <button class="btn-link section-edit-cancel" type="button"
-                            aria-label="Cancel" title="Cancel"
-                            style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+                            data-name="#(sec.name)">Delete</button>
+                    <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
                 </div>
             </div>
 
@@ -332,22 +315,18 @@ Create Assignment
                  variables endpoint. -->
             <form class="section-vars-form" method="post"
                   action="/instructor/new/draft/suite-sections/#(sec.sectionID)/variables?draftID=#(draftID)"
-                  style="margin:.25rem 0 .5rem"
                   data-section-id="#(sec.sectionID)">
-                <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
+                <table class="results-table section-vars-table">
                     <tbody class="section-vars-body">
                         #for(v in sec.variables):
                         <tr class="section-var-row">
-                            <td style="width:14rem;white-space:nowrap">
-                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
-                                <input type="text" class="form-input section-var-name" value="#(v.name)" placeholder="Input Name"
-                                       style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
+                            <td class="section-var-namecell">
+                                <span class="section-var-row-valid section-var-valid"></span>
+                                <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
                             </td>
-                            <td><input type="text" class="form-input section-var-value" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"
-                                       style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
-                            <td style="width:2.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove"
-                                        title="Remove input" aria-label="Remove input"
-                                        style="padding:.2rem .4rem;display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
+                            <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
+                            <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
+                                        title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
                         </tr>
                         #endfor
                     </tbody>
@@ -355,14 +334,12 @@ Create Assignment
             </form>
         #else:
             <div class="section-create-toolbar"
-                 data-section-id="#(sec.sectionID)"
-                 style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
-                <button type="button" class="btn action-btn section-add-test-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Test</button>
+                 data-section-id="#(sec.sectionID)">
+                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                        data-section-id="#(sec.sectionID)">+ Add Test</button>
             </div>
         #endif
-            <table class="results-table" style="width:100%">
+            <table class="results-table">
                 <tbody data-section-id="#(sec.sectionID)"></tbody>
             </table>
         </div>
@@ -378,7 +355,7 @@ Create Assignment
 <!-- Pre-draft state: nothing to author yet.  The notebook upload above
      creates the draft setup, after which the page reloads with the
      suite editor visible. -->
-<div style="margin-top:1.25rem;padding:1rem 1.25rem;border:1px dashed var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa);color:var(--gray-500);font-size:.875rem">
+<div class="predraft-note">
     <strong>Test Suite</strong> — upload an assignment notebook above to begin authoring tests.
 </div>
 #endif
@@ -399,100 +376,10 @@ Create Assignment
      overlay. -->
 
 <!-- ── Pattern Family editor body ───────────────────────────────────────────
-     v0.4.238: a body renderer of the unified Test Editor modal (shell owns the
-     chrome).  Markup duplicated from assignment-edit.leaf until the LeafKit
-     partial cycle-detection false positive is resolved; the driving module
-     (Public/pattern-family-editor.js) is shared. -->
-<div id="family-editor-body" hidden style="display:none;flex-direction:column;gap:.75rem">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label id="family-function-label" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Function
-                    <select class="form-input" id="family-function-select" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="">— Scanning solution notebook… —</option>
-                    </select>
-                    <span id="family-function-hint" class="card-meta" style="font-size:.72rem"></span>
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Family name (shown in UI)
-                    <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Pattern kind
-                    <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="boundary_equality">Exact equality (== comparison)</option>
-                        <option value="approximate_equality">Approximate equality (float tolerance)</option>
-                        <option value="variable_equality">Variable equality (module-level variable)</option>
-                        <option value="return_type_check">Return type check (isinstance / class name)</option>
-                        <option value="exception_expected">Exception expected (function raises a specific class)</option>
-                        <option value="performance_threshold">Performance threshold (max milliseconds)</option>
-                        <option value="stdout_equality">Stdout equality (compare captured print output)</option>
-                    </select>
-                </label>
-                <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">
-                    Tolerance (max |result − expected|)
-                    <input type="number" class="form-input" id="family-default-tolerance" step="any" min="0"
-                           placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-            </div>
-            <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                Default hint <span style="color:var(--gray-600);font-weight:400">(optional — shown to students when a case with no hint of its own fails)</span>
-                <input type="text" class="form-input" id="family-default-hint" value=""
-                       placeholder="e.g. Re-check the boundary values in the spec."
-                       style="padding:.3rem .5rem;font-size:.85rem">
-            </label>
-            <input type="hidden" id="family-id">
-            <input type="hidden" id="family-function">
-            <input type="hidden" id="family-params">
-
-            <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Variables (shared across all cases)</strong>
-                    <button class="btn action-btn" type="button" id="add-family-variable-btn" style="padding:.2rem .6rem;font-size:.8rem">
-                        + Add variable
-                    </button>
-                </div>
-                <table class="results-table" id="family-variables-table" style="font-size:.8rem">
-                    <thead>
-                        <tr>
-                            <th style="width:12rem">Name</th>
-                            <th>Value (JSON / Python literal)</th>
-                            <th style="width:4rem"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="family-variables-body"></tbody>
-                </table>
-                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--meta)">
-                    Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.
-                </p>
-            </div>
-
-            <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Cases</strong>
-                    <button class="btn action-btn" type="button" id="add-case-btn" style="padding:.2rem .6rem;font-size:.8rem">
-                        + Add case
-                    </button>
-                </div>
-                <table class="results-table" id="family-cases-table" style="font-size:.8rem">
-                    <thead>
-                        <tr id="family-cases-header">
-                            <th style="width:2.25rem">#</th>
-                            <th>Label</th>
-                            <th class="pf-case-expected-col">Expected</th>
-                            <th style="width:4rem"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="family-cases-body"></tbody>
-                </table>
-                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--meta)">
-                    No cases yet.  Add at least one to save this family.
-                </p>
-            </div>
-    <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500)"></span>
-</div>
+     A body renderer of the unified Test Editor modal (the shell owns the
+     chrome).  Shared with assignment-edit via the _family-editor-body partial;
+     the driving module (Public/pattern-family-editor.js) is shared too. -->
+#extend("_family-editor-body")
 
 <!-- Pattern family editor module — same implementation as the edit page,
      wired to draft-scoped URLs.  After a save, the page reloads so the
@@ -502,7 +389,7 @@ Create Assignment
 (function () {
     var draftID = #rawJSON(draftIDJSON);
     if (!draftID) return;  // No draft yet — user hasn't uploaded a solution notebook
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
     var seed = document.getElementById('pattern-families-seed');
     var initialFamilies = [];
     if (seed) {
@@ -524,32 +411,19 @@ Create Assignment
 </script>
 
 
-<style>
-.suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
-.suite-drag-handle:active { cursor: grabbing; }
-.suite-row-dragging { opacity: .35; }
-tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
-tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
-tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
-.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
-.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
-.suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
-.suite-child-indent { padding-left: 2rem; white-space: nowrap; }
-.suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
-.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
-</style>
 <!-- ── Unified Suite Table ─────────────────────────────────────────────────
      v0.4.132: the create page now shares `suite-table.js` with the edit
      page (lines 809-841 in assignment-edit.leaf).  All section CRUD
      goes through draft-scoped endpoints — see
      AssignmentRoutes+DraftSections.swift. -->
 #if(draftID):
+<script src="/suite-list.js?v=#appVersion()"></script>
 <script src="/suite-table.js?v=#appVersion()"></script>
 <script>
 (function () {
     var draftID = #rawJSON(draftIDJSON);
     if (!draftID) return;
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
     var suiteTable = window.initSuiteTable({
         assignmentID: 'draft:' + draftID,  // diagnostics-only; URL builders below ignore
         csrfToken: csrfToken,
@@ -584,10 +458,8 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 (function () {
     'use strict';
 
-    function csrf() {
-        var m = document.querySelector('meta[name="csrf-token"]');
-        return m ? m.getAttribute('content') : '';
-    }
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var csrf = ChickadeeUI.getCsrfToken;
 
     function isValidPyIdent(s) {
         return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
@@ -618,19 +490,19 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         name = name.trim();
         var nameOk = name && isValidPyIdent(name);
         var nameEl = tr.querySelector('.section-var-name');
-        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red,#c0392b)';
+        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
         if (nameOk) {
             var others = Array.from(tr.parentNode.querySelectorAll('.section-var-name'))
                 .map(function (el) { return el.value.trim(); });
             if (others.filter(function (n) { return n === name; }).length > 1) {
-                nameEl.style.borderColor = 'var(--red,#c0392b)';
+                nameEl.style.borderColor = 'var(--red)';
                 nameOk = false;
             }
         }
         var parsed = tryParseValue(rawVal);
         var valueEl = tr.querySelector('.section-var-value');
         var valueOk = parsed.ok && !parsed.empty && parsed.strict;
-        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber,#b38600)';
+        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber)';
         valueEl.title = (parsed.ok && !parsed.empty && !parsed.strict)
             ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.' : '';
         var check = tr.querySelector('.section-var-row-valid');
@@ -645,12 +517,12 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         var tr = document.createElement('tr');
         tr.className = 'section-var-row';
         tr.innerHTML =
-            '<td style="width:14rem;white-space:nowrap">'
-          +   '<span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>'
-          +   '<input type="text" class="form-input section-var-name" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">'
+            '<td class="section-var-namecell">'
+          +   '<span class="section-var-row-valid section-var-valid"></span>'
+          +   '<input type="text" class="form-input section-var-name section-var-name-input" value="" placeholder="Input Name">'
           + '</td>'
-          + '<td><input type="text" class="form-input section-var-value" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}" style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>'
-          + '<td style="width:2.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove" title="Remove input" aria-label="Remove input" style="padding:.2rem .4rem;display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button></td>';
+          + '<td><input type="text" class="form-input section-var-value section-var-value-input" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>'
+          + '<td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove" title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button></td>';
         tbody.appendChild(tr);
         refreshRow(tr);
         var input = tr.querySelector('.section-var-name');
@@ -760,8 +632,9 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         });
     });
 
-    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are wired by
-    // the unified Test Editor modal (test-editor-modal.js, loaded below).
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
+    // into a test-type dropdown by the unified Test Editor modal
+    // (test-editor-modal.js, loaded below); a pick opens the modal in that type.
 
     // ── Section header view/edit toggle ────────────────────────────────
     document.addEventListener('click', function (e) {
@@ -790,8 +663,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             form.method = 'post';
             form.action = action;
             form.style.display = 'none';
-            var tokenEl = document.querySelector('meta[name="csrf-token"]');
-            var token = tokenEl ? tokenEl.getAttribute('content') : '';
+            var token = ChickadeeUI.getCsrfToken();
             var inp = document.createElement('input');
             inp.type = 'hidden';
             inp.name = '_csrf';
@@ -859,12 +731,11 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 (function () {
     'use strict';
 
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
 
-    function escHtml(v) {
-        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-    }
-    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
+    // Shared implementations (Public/chickadee-ui.js, loaded from base.leaf).
+    var escHtml = ChickadeeUI.escapeHtml;
+    var escAttr = ChickadeeUI.escapeAttr;
 
     // ── Notebook upload buttons ────────────────────────────────────────
     // Open hidden file pickers, then submit the main form to the draft
@@ -904,7 +775,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         function setStatus(msg, isError) {
             if (!statusEl) return;
             statusEl.textContent = msg;
-            statusEl.style.color = isError ? 'var(--red,#c0392b)' : 'var(--gray-500)';
+            statusEl.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
         }
 
         function readAsText(file) {
@@ -1044,7 +915,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             if (fnChecklist) fnChecklist.innerHTML = scannedFunctions.map(function (fn) {
                 var id = 'fn-chk-' + fn.name;
                 var label = fn.name + '(' + (fn.paramNames || []).join(', ') + ')';
-                return '<label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer">'
+                return '<label class="fn-check-item">'
                     + '<input type="checkbox" id="' + escAttr(id) + '" value="' + escAttr(fn.name) + '" checked>'
                     + '<code>' + escHtml(label) + '</code></label>';
             }).join('');
@@ -1115,19 +986,6 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     })();
 })();
 </script>
-<style>
-#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
-#cm-editor-mount .cm-scroller { overflow: auto; }
-@media (prefers-color-scheme: dark) {
-    #cm-editor-mount .cm-editor    { background: var(--gray-100); }
-    #cm-editor-mount .cm-gutters   { background: var(--gray-200); border-color: var(--gray-200); color: var(--gray-500); }
-    #cm-editor-mount .cm-content   { color: var(--gray-900); caret-color: var(--gray-900); }
-    #cm-editor-mount .cm-activeLine { background: var(--gray-200); }
-    #cm-editor-mount .cm-selectionBackground, #cm-editor-mount ::selection { background: var(--hover-bg) !important; }
-    #cm-editor-mount .cm-cursor    { border-left-color: var(--gray-900); }
-    #test-editor-overlay input, #test-editor-overlay select, #test-editor-overlay textarea { background: var(--gray-100); color: var(--gray-900); border-color: var(--gray-200); }
-}
-</style>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
     if (!dateTimeValue) { warningEl.style.display = 'none'; return; }
@@ -1167,7 +1025,7 @@ function checkUWDates(dateTimeValue, warningEl) {
 // scripts only (editing a saved script isn't a draft-page flow → no content
 // URL); the body persists via PUT /suite (suite-table's saveScriptViaSuite).
 window.ChickadeeScriptRendererConfig = {
-    csrfToken: (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+    csrfToken: ChickadeeUI.getCsrfToken(),
     scriptContentURL: null,
     uploadFilesInputID: null
 };
@@ -1177,7 +1035,7 @@ window.ChickadeeScriptRendererConfig = {
 <script src="/test-editor-modal.js?v=#appVersion()"></script>
 <script>
 (function () {
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrfToken = ChickadeeUI.getCsrfToken();
     window.initTestEditorModal({ csrfToken: csrfToken });
     var modal = window.__chickadeeTestEditorModal;
 

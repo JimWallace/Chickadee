@@ -470,10 +470,13 @@ import XCTVapor
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
             let generated = props.testSuites.filter { $0.generatedBy != nil }
-            #expect(generated.count == 2)
-            for entry in generated {
+            // 2 cases + the auto-existence guard.
+            #expect(generated.count == 3)
+            // family.defaults.points applies to each case; the guard gates at 0.
+            for entry in generated where !entry.script.hasSuffix("_exists.py") {
                 #expect(entry.points == 3)
             }
+            #expect(generated.first { $0.script.hasSuffix("_exists.py") }?.points == 0)
 
         }
     }

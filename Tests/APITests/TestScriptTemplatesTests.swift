@@ -224,10 +224,13 @@ import Testing
     @Test func structuralCheckTemplate_hasExpectedShape() {
         let s = pythonTestScript(
             type: .structuralCheck, functionName: "compute_bmi", paramNames: ["weight_kg", "height_m"])
-        // AST-based template — no function call.
+        // AST-based template — no function call. Source comes from
+        // student_source() (introspectable sidecar), not inspect.getsource on the
+        // exec(compile())-wrapped module. Parsing is per-cell (student_ast) so one
+        // non-Python cell can't blind the whole style check.
         #expect(s.contains("import ast"))
-        #expect(s.contains("inspect.getsource(student_module)"))
-        #expect(s.contains("ast.parse(source)"))
+        #expect(s.contains("from test_runtime import student_ast"))
+        #expect(s.contains("tree = student_ast(_skipped)"))
         // All the knobs are present as TODO-friendly placeholders.
         #expect(s.contains("parameter_count"))
         #expect(s.contains("typed_parameters"))

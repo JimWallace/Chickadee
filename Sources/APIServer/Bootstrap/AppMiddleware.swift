@@ -11,6 +11,14 @@
 //                               HTTPSRedirectMiddleware
 //   LeafErrorMiddleware     — catches every downstream error
 //   HTTPSRedirectMiddleware — only when enforceHTTPS, before sessions
+//   EditorAssetFastPathMiddleware — serves the vendored editor asset trees
+//                               (/jupyterlite/build, /jupyterlite/extensions,
+//                               /pyodide, /vendor) BEFORE the session chain so
+//                               a JupyterLite boot's hundreds of asset
+//                               requests skip the per-request Fluent session
+//                               lookup.  Whitelist-only: the auth-guarded
+//                               /jupyterlite/…/files/users/ paths are not
+//                               listed and still ride the full chain below.
 //   sessions.middleware
 //   UserSessionAuthenticator
 //   SessionIdleTimeoutMiddleware — runs before UserActivityMiddleware
@@ -19,6 +27,9 @@
 //   UserActivityMiddleware
 //   UserFileNamespaceMiddleware
 //   ScanModeMiddleware      — gates destructive POSTs in scan windows
+//   StaticAssetCacheMiddleware — stamps immutable Cache-Control on
+//                             version-fingerprinted (`?v=`) static assets
+//                             served by FileMiddleware
 //   FileMiddleware          — short-circuits the chain for static files
 //   COEPMiddleware          — sets Cross-Origin-Embedder-Policy headers
 //                             on dynamic pages (NOT on JupyterLite static
@@ -81,6 +92,10 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     if securityConfiguration.enforceHTTPS {
         app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
     }
+    // Vendored editor assets short-circuit here, before any session work.
+    // See EditorAssetFastPathMiddleware for the whitelist + cache policy.
+    app.middleware.use(
+        EditorAssetFastPathMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
@@ -111,6 +126,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // Allow notebook uploads from the assignment-creation flow.
     app.routes.defaultMaxBodySize = "10mb"
 
+    // Compress compressible response types (text, JS, JSON, SVG — Vapor's
+    // allowlist) when the client advertises Accept-Encoding.  The shared
+    // stylesheet and page scripts shrink ~4–8× on the wire.  Already-compressed
+    // formats (zip, wasm, images, fonts) are not in the allowlist, so the
+    // multi-megabyte Pyodide/JupyterLite payloads don't burn CPU recompressing.
+    // HTML opts out per-response in SecurityHeadersMiddleware: pages embed the
+    // per-session CSRF token, and compressing a secret alongside reflectable
+    // request data is the precondition for BREACH-style compression oracles.
+    app.http.server.configuration.responseCompression = .enabledForCompressibleTypes
+
     // MARK: - Views + static files
 
     app.views.use(.leaf)
@@ -131,6 +156,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // and prevent the app from initialising.  Modern Pyodide (0.27+) does not
     // require SharedArrayBuffer — it uses a service-worker-based synchronisation
     // fallback — so cross-origin isolation on the iframe document is unnecessary.
+    // Registered just OUTSIDE FileMiddleware so it can set immutable cache +
+    // application/wasm headers on the content-hashed wasm runner served from
+    // Public/runner-wasm/ (FileMiddleware short-circuits, so a middleware after
+    // it never sees those responses).
+    // Versioned-asset caching sits outside RunnerWasmCacheMiddleware so the
+    // wasm middleware's more specific policies (immutable hashed wasm,
+    // no-cache loader) win — StaticAssetCacheMiddleware never overwrites an
+    // existing Cache-Control.
+    app.middleware.use(StaticAssetCacheMiddleware())
+    app.middleware.use(RunnerWasmCacheMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware())
 }

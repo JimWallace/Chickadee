@@ -1,0 +1,14 @@
+<!--
+    Shared column header for the student-dashboard assignment tables.
+    Static (no scope needed); included via a single extend site in index.leaf.
+-->
+<thead>
+    <tr>
+        <th>Name</th>
+        <th>Status</th>
+        <th class="due-col col-hide-phone">Due</th>
+        <th>Grade</th>
+        <th class="col-hide-phone">History</th>
+        <th>Actions</th>
+    </tr>
+</thead>

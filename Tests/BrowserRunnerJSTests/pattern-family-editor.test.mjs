@@ -27,6 +27,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import vm from 'node:vm';
 
 const editorSource = await fs.readFile(
   path.resolve('Public/pattern-family-editor.js'),
@@ -220,4 +221,48 @@ test("stdout snippet captures normal print output and strips trailing newline", 
 test("stdout snippet preserves multi-line print output (only strips final newline)", () => {
   const out = runSnippet('stdout', 'def f():\n    print("a")\n    print("b")');
   assert.deepEqual(out, { __chickadee_kind__: 'value', value: 'a\nb' });
+});
+
+// ── Load smoke test ──────────────────────────────────────────────────────────
+// The snippet tests above only string-extract Python; nothing else executes the
+// editor. This loads the whole IIFE under a stubbed DOM so a runtime load error
+// (syntax-valid but a ReferenceError in the IIFE body — e.g. a typo'd helper) is
+// caught in CI rather than only in the browser.
+test("editor IIFE executes without throwing under a stubbed DOM", () => {
+  const make = () => new Proxy(function () {}, {
+    get(_t, p) {
+      if (p === 'value') return '';
+      if (p === 'dataset' || p === 'style') return {};
+      if (p === 'classList') return { contains: () => false };
+      return make();
+    },
+    apply() { return make(); },
+    construct() { return make(); },
+  });
+  const doc = {
+    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+    addEventListener() {}, createElement: () => make(), currentScript: { dataset: {} },
+    body: make(), head: make(),
+  };
+  const ctx = {
+    console, document: doc, setTimeout, clearTimeout, JSON, Array, Object, Math,
+    Set, Map, Promise, RegExp, fetch: () => Promise.resolve({}), location: { href: '' },
+  };
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  assert.doesNotThrow(() => {
+    vm.runInNewContext(editorSource, ctx, { filename: 'pattern-family-editor.js' });
+  });
+});
+
+// Regression guard for the slice-D per-student Expected wiring: the strict
+// reader maps a `$name` Expected cell to `expectedVarRef` (not a literal), and
+// the helper that lets per-student refs validate against Global Inputs exists.
+test("editor carries the per-student expectedVarRef + Global-Inputs wiring", () => {
+  assert.ok(editorSource.includes('expectedVarRef'),
+    'editor must serialize a $name Expected cell into expectedVarRef');
+  assert.ok(editorSource.includes('collectDeclaredInputNames'),
+    'editor must union Global Input names so per-student refs are not red-flagged');
+  assert.ok(editorSource.includes('global-input-name'),
+    'editor must read Global Input names from the DOM');
 });

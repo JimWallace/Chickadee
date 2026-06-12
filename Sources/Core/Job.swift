@@ -29,6 +29,18 @@ public struct Job: Codable, Sendable {
     /// runner skips env-var injection and grading proceeds without a seed.
     public let assignmentSeed: String?
 
+    /// Per-student personalization inputs, resolved server-side for this
+    /// submission's `assignmentSeed` by evaluating the manifest's global +
+    /// section `=` expressions. Maps each input name to its evaluated value
+    /// rendered as a Python literal (`repr(value)` — the same form
+    /// `PersonalizationEvaluator` emits for notebook substitution). The worker
+    /// materializes these into `_ck_inputs.py` in the grading workspace so
+    /// pattern-family scripts that reference per-student args / expected can
+    /// load them. Nil when the assignment declares no expressions or no seed
+    /// is available — generated scripts that need a value then fail closed
+    /// with a clear message.
+    public let personalizedInputs: [String: String]?
+
     public init(
         submissionID: String,
         testSetupID: String,
@@ -37,7 +49,8 @@ public struct Job: Codable, Sendable {
         testSetupURL: URL,
         manifest: TestProperties,
         submissionFilename: String? = nil,
-        assignmentSeed: String? = nil
+        assignmentSeed: String? = nil,
+        personalizedInputs: [String: String]? = nil
     ) {
         self.submissionID = submissionID
         self.testSetupID = testSetupID
@@ -47,5 +60,6 @@ public struct Job: Codable, Sendable {
         self.manifest = manifest
         self.submissionFilename = submissionFilename
         self.assignmentSeed = assignmentSeed
+        self.personalizedInputs = personalizedInputs
     }
 }

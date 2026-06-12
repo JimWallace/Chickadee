@@ -2,65 +2,34 @@
 //
 // Submission-related handlers and helpers for WebRoutes.
 // Extracted from WebRoutes.swift — no behaviour changes.
+//
+// The result-presentation pipeline (`processDisplayResult`,
+// `buildSectionedOutcomes`, the support structs, and the free helpers
+// `groupOutcomesBySection` / `buildHintByFilename` / `loadClassGoalViews`)
+// lives in SubmissionResultPresenter.swift.
 
 import Core
 import Fluent
 import Foundation
 import Vapor
 
-/// Groups a flat outcome list into per-section buckets for the student
-/// submission view.  Sections are emitted in `sections` order; an
-/// outcome whose originating entry had no `sectionID` (or a stale one)
-/// falls into a trailing bucket with `sectionName == nil`.  When every
-/// outcome is ungrouped and there are no sections, the result is one
-/// bucket with `sectionName == nil` — template renders it as a single
-/// unlabelled table, identical to the pre-sections layout.
-///
-/// `sectionIDPerOutcome` is a parallel array: `sectionIDPerOutcome[i]`
-/// is the section id of the manifest entry that produced `outcomes[i]`
-/// (or nil when ungrouped).  Index correlation — not a testName lookup
-/// — because two pattern families in different sections can legally
-/// share a case label (e.g. both `bmi` and `age` having a "Test 1"
-/// case), and a name-keyed dict silently collapsed them onto the
-/// last-written section (v0.4.105 fix).
-func groupOutcomesBySection(
-    _ outcomes: [OutcomeRow],
-    sections: [TestSuiteSection],
-    sectionIDPerOutcome: [String?]
-) -> [SectionedOutcomes] {
-    let knownSectionIDs = Set(sections.map(\.id))
-    var bucketsByID: [String: [OutcomeRow]] = [:]
-    var ungrouped: [OutcomeRow] = []
-    for (i, row) in outcomes.enumerated() {
-        let sid: String? = (i < sectionIDPerOutcome.count) ? sectionIDPerOutcome[i] : nil
-        if let sid, knownSectionIDs.contains(sid) {
-            bucketsByID[sid, default: []].append(row)
-        } else {
-            ungrouped.append(row)
+/// The built-in badges (per-submission + class records) for one submission,
+/// sourced from the manifest when seeded, else the registry minus any disabled.
+/// Takes the page's already-loaded `setup` so it doesn't re-fetch the row.
+/// Lifted out of `submissionPage` to keep that handler within its length budget.
+func builtInBadgesForSubmission(
+    badgeContext: BadgeContext,
+    classAchievements: [APIClassAchievement],
+    setup: APITestSetup?
+) -> [AchievementBadge] {
+    let disabled = setup.map { BuiltInAchievements.disabled(in: $0) } ?? []
+    return AchievementBadge.forSubmission(
+        badgeContext,
+        achievements: BuiltInAchievements.manifestPerSubmission(in: setup),
+        disabled: disabled)
+        + classAchievements.compactMap {
+            AchievementBadge.forClassAchievement($0.achievementID, disabled: disabled)
         }
-    }
-    var result: [SectionedOutcomes] = []
-    for section in sections {
-        if let rows = bucketsByID[section.id], !rows.isEmpty {
-            result.append(SectionedOutcomes(sectionName: section.name, outcomes: rows))
-        }
-    }
-    if !ungrouped.isEmpty {
-        // Trailing bucket label: when sections exist, call it "Ungrouped"
-        // so students see why this block appears separately.  When no
-        // sections exist at all, emit it unlabelled to preserve the
-        // legacy single-table look.
-        let label: String? = sections.isEmpty ? nil : "Ungrouped"
-        result.append(SectionedOutcomes(sectionName: label, outcomes: ungrouped))
-    }
-    if result.isEmpty {
-        // Empty outcome list still needs one bucket so the template's
-        // `#for(sec in sectionedOutcomes)` has something to skip over
-        // gracefully.  An empty `outcomes` array renders as an empty
-        // tbody, just like today.
-        result.append(SectionedOutcomes(sectionName: nil, outcomes: []))
-    }
-    return result
 }
 
 extension WebRoutes {
@@ -154,23 +123,20 @@ extension WebRoutes {
         try fileData.write(to: URL(fileURLWithPath: filePath))
         let fallbackFilename = isZip ? nil : (uploadFilename ?? "submission.\(storedExt)")
 
-        // Attempt number is scoped to this student for this test setup.
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$userID == user.id)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-
+        // Attempt number is scoped to this student for this test setup,
+        // assigned race-free inside one transaction (concurrent submits used
+        // to share a number, corrupting the prior-attempt delta and the
+        // First-Try-Perfect badge).
         let submission = APISubmission(
             id: subID,
             testSetupID: setupID,
             zipPath: filePath,
-            attemptNumber: priorCount + 1,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
             filename: fallbackFilename,
             userID: user.id,
             kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: user.id, on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
             submission: submission, on: req.db, logger: req.logger
         )
@@ -183,17 +149,23 @@ extension WebRoutes {
         // checks the submitter's role and uses the existence of a
         // pathfinder row directly (the unique constraint on
         // (test_setup_id, achievement_id) makes this the natural query).
-        if user.role == "student", let uid = user.id {
-            let pathfinderExists =
-                try await APIClassAchievement.query(on: req.db)
-                .filter(\.$testSetupID == setupID)
-                .filter(\.$achievementID == "pathfinder")
-                .first() != nil
-            if !pathfinderExists {
-                let badge = APIClassAchievement(
-                    testSetupID: setupID, achievementID: "pathfinder",
-                    userID: uid, submissionID: subID)
-                try? await badge.save(on: req.db)
+        if user.roleValue == .student, let uid = user.id {
+            // First-to-submit records (Pathfinder) — the manifest's authored
+            // ones, or the registry default, minus any the instructor disabled.
+            let records = BuiltInAchievements.classRecordsForAward(
+                in: setup, disabled: BuiltInAchievements.disabled(in: setup))
+            for record in records where record.recordDimension == .firstToSubmit {
+                let exists =
+                    try await APIClassAchievement.query(on: req.db)
+                    .filter(\.$testSetupID == setupID)
+                    .filter(\.$achievementID == record.id)
+                    .first() != nil
+                if !exists {
+                    try? await APIClassAchievement(
+                        testSetupID: setupID, achievementID: record.id,
+                        userID: uid, submissionID: subID
+                    ).save(on: req.db)
+                }
             }
         }
 
@@ -229,33 +201,14 @@ extension WebRoutes {
             .sort(\.$submittedAt, .descending)
             .all()
 
-        let submissionIDs = submissions.compactMap(\.id)
-        var preferredResultBySubmissionID: [String: APIResult] = [:]
-        if !submissionIDs.isEmpty {
-            let results = try await APIResult.query(on: req.db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .sort(\.$receivedAt, .descending)
-                .all()
-            for row in results {
-                let key = row.submissionID
-                if let existing = preferredResultBySubmissionID[key] {
-                    let existingSource = existing.source ?? "worker"
-                    let currentSource = row.source ?? "worker"
-                    if existingSource == "worker" { continue }
-                    if currentSource == "worker" {
-                        preferredResultBySubmissionID[key] = row
-                    }
-                } else {
-                    preferredResultBySubmissionID[key] = row
-                }
-            }
-        }
+        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+            for: submissions.compactMap(\.id), on: req.db)
 
         let rows = submissions.map { submission -> SubmissionHistoryRow in
             let subID = submission.id ?? ""
             let gradeText: String
             if let result = preferredResultBySubmissionID[subID],
-                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                let pct = result.gradePercentValue
             {
                 gradeText = "\(pct)%"
             } else {
@@ -310,11 +263,16 @@ extension WebRoutes {
             }
         }
 
-        // Fetch the assignment for deadline-based tier visibility.
+        // Fetch the assignment for deadline-based output gating.
         let submissionAssignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
-        let allowedTiers = visibleTiers(for: user, assignment: submissionAssignment)
+        // Students see public + release rows itemized (release output is gated
+        // on the deadline); secret is never itemized.  The grade itself spans
+        // every tier — see `processDisplayResult` — so it is stable across the
+        // deadline and matches the dashboard.
+        let itemized = itemizedTiers(for: user)
+        let releaseOutput = releaseOutputVisible(for: user, assignment: submissionAssignment)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -329,7 +287,8 @@ extension WebRoutes {
         if let result = displayResult {
             processed = processDisplayResult(
                 result: result,
-                viewer: SubmissionViewer(user: user, allowedTiers: allowedTiers),
+                viewer: SubmissionViewer(
+                    user: user, itemizedTiers: itemized, releaseOutputVisible: releaseOutput),
                 submission: submission,
                 priorAttempt: priorAttempt,
                 manifestDisplay: manifestDisplay,
@@ -337,19 +296,46 @@ extension WebRoutes {
             )
         }
 
+        // Class-goal bonus: extra credit on the autograded grade, capped at 100%
+        // (no-op unless the assignment has a points-rewarded class goal).
+        if processed.totalPoints > 0 {
+            let bonus = try await classGoalBonusPoints(
+                testSetupID: submission.testSetupID, on: req.db)
+            if bonus > 0 {
+                let bonused = earnedWithClassGoalBonus(
+                    earned: processed.rawEarnedPoints,
+                    total: Double(processed.totalPoints),
+                    bonus: bonus)
+                processed.gradePercent = Int(
+                    (bonused / Double(processed.totalPoints) * 100).rounded())
+                processed.earnedPoints = formatPoints(bonused)
+            }
+        }
+
         // Append class-wide achievement badges held by this specific submission.
         let classAchievements = try await APIClassAchievement.query(on: req.db)
             .filter(\.$submissionID == subID)
             .all()
+        // Authorable individual badges (threshold / test), earned per-student
+        // from this submission's result (evaluated over all tiers so a
+        // secret-test badge works without revealing the test).
+        let individualBadges = try await earnedIndividualBadgesForDisplay(
+            displayResult: displayResult, submission: submission,
+            gradePercent: processed.gradePercent, decoder: decoder, on: req.db)
+        let setupForBadges = try await APITestSetup.find(submission.testSetupID, on: req.db)
         let badges =
-            processed.badges
-            + classAchievements.compactMap { AchievementBadge.forClassAchievement($0.achievementID) }
+            builtInBadgesForSubmission(
+                badgeContext: processed.badgeContext,
+                classAchievements: classAchievements,
+                setup: setupForBadges)
+            + individualBadges
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
+            secretOutcomes: processed.secretOutcomes,
             manifestEntries: manifestDisplay.entries,
             manifestSections: manifestDisplay.sections,
-            allowedTiers: allowedTiers
+            allowedTiers: itemized
         )
 
         let currentAttempt = submission.attemptNumber ?? 1
@@ -360,12 +346,28 @@ extension WebRoutes {
             currentAttempt: currentAttempt
         )
 
+        // An instructor override is the student's effective grade for the
+        // assignment; surface it above this attempt's autograded breakdown.
+        var overrideGradePercent: Int?
+        if let submissionUserID = submission.userID {
+            overrideGradePercent = try await gradeOverridePercent(
+                setupID: submission.testSetupID, userID: submissionUserID, on: req.db)
+        }
+
+        let classGoals = try await loadClassGoalViews(
+            testSetupID: submission.testSetupID, on: req.db)
+
         let ctx = buildSubmissionContext(
             subID: subID,
             submission: submission,
             processed: processed,
             sectionedOutcomes: sectionedOutcomes,
-            decorations: SubmissionDecorations(badges: badges, currentUser: req.currentUserContext),
+            decorations: SubmissionDecorations(
+                badges: badges,
+                currentUser: req.currentUserContext,
+                overrideGradePercent: overrideGradePercent,
+                classGoals: classGoals
+            ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         return try await req.view.render("submission", ctx)
@@ -427,7 +429,7 @@ extension WebRoutes {
         let gradePercent: Int? =
             priorCollection.totalPoints > 0
             ? Int(
-                (Double(priorCollection.earnedPoints) / Double(priorCollection.totalPoints) * 100).rounded()
+                (priorCollection.earnedPoints / Double(priorCollection.totalPoints) * 100).rounded()
             )
             : nil
         return PriorAttemptDelta(outcomeMap: outcomeMap, gradePercent: gradePercent)
@@ -471,341 +473,6 @@ extension WebRoutes {
             displayNameMap: displayNameMap, hintByFilename: hintByFilename,
             sections: sections, entries: entries)
     }
-
-    /// Decodes the chosen result's `TestOutcomeCollection`, filters by tier,
-    /// computes totals and badges, and renders each visible outcome into an
-    /// `OutcomeRow` for the template.  Hidden-tier summaries (release before
-    /// deadline, secret) are computed for non-instructors only — instructors
-    /// see every tier directly.
-    private func processDisplayResult(
-        result: APIResult,
-        viewer: SubmissionViewer,
-        submission: APISubmission,
-        priorAttempt: PriorAttemptDelta,
-        manifestDisplay: ManifestDisplayData,
-        decoder: JSONDecoder
-    ) -> ProcessedCollection {
-        var processed = ProcessedCollection.empty
-        processed.resultSource = result.source ?? "worker"
-        guard let data = result.collectionJSON.data(using: .utf8),
-            let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
-        else {
-            return processed
-        }
-
-        // Compute per-tier summaries from the full (unfiltered) collection.
-        if !viewer.user.isInstructor {
-            let releaseOutcomes = collection.outcomes.filter { $0.tier == .release }
-            let secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
-            let releaseVisible = viewer.allowedTiers.contains("release")
-            if !releaseVisible, !releaseOutcomes.isEmpty {
-                processed.releaseSummary = TierSummary(outcomes: releaseOutcomes, isRelease: true)
-            }
-            if !secretOutcomes.isEmpty {
-                processed.secretSummary = TierSummary(outcomes: secretOutcomes, isRelease: false)
-            }
-        }
-
-        let visible = collection.filtering(tiers: viewer.allowedTiers)
-        processed.buildFailed = collection.buildStatus == .failed
-        processed.compilerOutput = collection.compilerOutput
-        processed.warnings = collection.warnings
-        processed.passCount = visible.passCount
-        processed.totalTests = visible.totalTests
-        processed.executionTimeMs = collection.executionTimeMs
-        processed.totalPoints = visible.totalPoints
-        processed.earnedPoints = visible.earnedPoints
-        processed.gradePercent =
-            processed.totalPoints > 0
-            ? Int((Double(processed.earnedPoints) / Double(processed.totalPoints) * 100).rounded())
-            : 0
-        processed.badges = AchievementBadge.forSubmission(
-            BadgeContext(
-                attemptNumber: submission.attemptNumber ?? 1,
-                gradePercent: processed.gradePercent,
-                executionTimeMs: collection.executionTimeMs,
-                priorGradePercent: priorAttempt.gradePercent
-            ))
-        let weighted = processed.totalPoints != visible.totalTests
-        processed.outcomes = visible.outcomes.map { outcome in
-            renderOutcomeRow(
-                outcome: outcome,
-                weighted: weighted,
-                priorOutcomeMap: priorAttempt.outcomeMap,
-                displayNameMap: manifestDisplay.displayNameMap,
-                hintByFilename: manifestDisplay.hintByFilename
-            )
-        }
-        return processed
-    }
-
-    /// Renders a single `TestOutcome` into the template-facing `OutcomeRow`.
-    /// Pulled out of `processDisplayResult` so the per-row formatting stays
-    /// inspectable in isolation.
-    private func renderOutcomeRow(
-        outcome: TestOutcome,
-        weighted: Bool,
-        priorOutcomeMap: [String: TestStatus],
-        displayNameMap: [String: String],
-        hintByFilename: [String: String]
-    ) -> OutcomeRow {
-        let skip = parseSkip(shortResult: outcome.shortResult)
-        let shortOutput = formattedShortResult(from: outcome.shortResult, status: outcome.status)
-        let longOutput =
-            outcome.status == .pass
-            ? formattedPassingDetailedOutput(primary: outcome.longResult)
-            : formattedDetailedOutput(
-                primary: outcome.longResult,
-                fallback: outcome.shortResult,
-                status: outcome.status
-            )
-        let (markLabel, markClass): (String, String) = {
-            if skip.isSkipped { return ("—", "skipped") }
-            switch outcome.status {
-            case .pass: return ("Pass", "pass")
-            case .fail: return ("Fail", "fail")
-            case .error: return ("Error", "error")
-            case .timeout: return ("Timeout", "timeout")
-            }
-        }()
-        let (deltaImproved, deltaRegressed): (Bool, Bool) = {
-            guard let prior = priorOutcomeMap[outcome.testName] else { return (false, false) }
-            let wasPass = (prior == .pass)
-            let isPass = (outcome.status == .pass)
-            return (!wasPass && isPass, wasPass && !isPass)
-        }()
-        let pointsLabel: String? = weighted && outcome.points > 1 ? "\(outcome.points) pts" : nil
-        // Surface the instructor hint only on a genuine failure (not pass, not
-        // a skipped/blocked test — there the blocker message is the guidance).
-        let hint: String? =
-            (!skip.isSkipped && outcome.status != .pass)
-            ? hintByFilename[outcome.testName] : nil
-        return OutcomeRow(
-            testName: displayNameMap[outcome.testName] ?? outcome.testName,
-            tier: outcome.tier.rawValue,
-            status: outcome.status.rawValue,
-            shortResult: shortOutput,
-            longResult: longOutput,
-            markLabel: markLabel,
-            markClass: markClass,
-            isSkipped: skip.isSkipped,
-            blockerName: skip.blockerName,
-            deltaImproved: deltaImproved,
-            deltaRegressed: deltaRegressed,
-            pointsLabel: pointsLabel,
-            hint: hint
-        )
-    }
-
-    /// Worker emits exactly one outcome per `manifest.testSuites` entry, in
-    /// the same order.  The student-visible outcomes are filtered by tier, so
-    /// we filter `manifestEntries` by the same tier predicate to keep the
-    /// parallel-index correlation aligned (`outcomes[i]` ↔ `visibleEntries[i]`).
-    /// We then defensively pad/truncate the section-id array in case browser-
-    /// mode submissions emit a slightly different shape or a manifest churn
-    /// happens mid-flight — drift falls into Ungrouped rather than
-    /// misattributing outcomes.
-    private func buildSectionedOutcomes(
-        outcomes: [OutcomeRow],
-        manifestEntries: [TestSuiteEntry],
-        manifestSections: [TestSuiteSection],
-        allowedTiers: Set<String>
-    ) -> [SectionedOutcomes] {
-        let visibleEntries = manifestEntries.filter { allowedTiers.contains($0.tier.rawValue) }
-        var sectionIDPerOutcome: [String?] = visibleEntries.map { $0.sectionID }
-        if sectionIDPerOutcome.count < outcomes.count {
-            sectionIDPerOutcome.append(
-                contentsOf:
-                    Array(repeating: String?.none, count: outcomes.count - sectionIDPerOutcome.count))
-        } else if sectionIDPerOutcome.count > outcomes.count {
-            sectionIDPerOutcome = Array(sectionIDPerOutcome.prefix(outcomes.count))
-        }
-        return groupOutcomesBySection(
-            outcomes,
-            sections: manifestSections,
-            sectionIDPerOutcome: sectionIDPerOutcome
-        )
-    }
-
-    /// Composes the human-readable banner text shown above the outcomes table
-    /// when this attempt is being compared with the previous one.  Returns nil
-    /// when there's no prior attempt to compare against.
-    private func buildDeltaHeaderText(
-        outcomes: [OutcomeRow], hasDelta: Bool, currentAttempt: Int
-    ) -> String? {
-        guard hasDelta else { return nil }
-        let improved = outcomes.filter { $0.deltaImproved }.count
-        let regressed = outcomes.filter { $0.deltaRegressed }.count
-        var parts: [String] = []
-        if improved > 0 { parts.append("↑ fixed \(improved) test\(improved  == 1 ? "" : "s")") }
-        if regressed > 0 { parts.append("↓ broke \(regressed) test\(regressed == 1 ? "" : "s")") }
-        if parts.isEmpty { return "No change since attempt \(currentAttempt - 1)" }
-        return parts.joined(separator: " · ") + " since attempt \(currentAttempt - 1)"
-    }
-
-    /// Builds the final Leaf-facing `SubmissionContext` from the processed
-    /// pieces.  Pulled out so `submissionPage` itself stays a thin orchestrator.
-    private func buildSubmissionContext(
-        subID: String,
-        submission: APISubmission,
-        processed: ProcessedCollection,
-        sectionedOutcomes: [SectionedOutcomes],
-        decorations: SubmissionDecorations,
-        delta: DeltaBanner
-    ) -> SubmissionContext {
-        let badges = decorations.badges
-        let currentUser = decorations.currentUser
-        let isPending = submission.status == "pending" || submission.status == "assigned"
-        let isBrowserComplete = false  // browser submissions now go straight to "complete"
-        let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
-        let nameExt = (submission.filename ?? "").lowercased()
-        let openInNotebookURL: String? =
-            (pathExt == "ipynb" || nameExt.hasSuffix(".ipynb"))
-            ? "/testsetups/\(submission.testSetupID)/notebook?submissionID=\(subID)"
-            : nil
-        return SubmissionContext(
-            submissionID: subID,
-            testSetupID: submission.testSetupID,
-            status: submission.status,
-            attemptNumber: submission.attemptNumber ?? 1,
-            submissionFilename: submission.filename,
-            openInNotebookURL: openInNotebookURL,
-            isPending: isPending,
-            isBrowserComplete: isBrowserComplete,
-            resultSource: processed.resultSource,
-            buildFailed: processed.buildFailed,
-            compilerOutput: processed.compilerOutput,
-            hasWarnings: !processed.warnings.isEmpty,
-            warnings: processed.warnings,
-            outcomes: processed.outcomes,
-            sectionedOutcomes: sectionedOutcomes,
-            passCount: processed.passCount,
-            totalTests: processed.totalTests,
-            gradePercent: processed.gradePercent,
-            executionTimeMs: processed.executionTimeMs,
-            isWeighted: processed.totalPoints != processed.totalTests,
-            totalPoints: processed.totalPoints,
-            earnedPoints: processed.earnedPoints,
-            hasDelta: delta.hasDelta,
-            deltaHeaderText: delta.headerText,
-            releaseSummary: processed.releaseSummary,
-            secretSummary: processed.secretSummary,
-            badges: badges,
-            currentUser: currentUser
-        )
-    }
-}
-
-// MARK: - submissionPage support types
-
-/// All values derived from decoding & filtering the chosen
-/// `TestOutcomeCollection`.  Bundled into a struct so the per-helper signatures
-/// stay readable.
-private struct ProcessedCollection {
-    var resultSource: String  // "browser" | "worker" | ""
-    var buildFailed: Bool
-    var compilerOutput: String?
-    var warnings: [String]
-    var outcomes: [OutcomeRow]
-    var passCount: Int
-    var totalTests: Int
-    var totalPoints: Int
-    var earnedPoints: Int
-    var executionTimeMs: Int
-    var gradePercent: Int
-    var badges: [AchievementBadge]
-    var releaseSummary: TierSummary?
-    var secretSummary: TierSummary?
-
-    static let empty = ProcessedCollection(
-        resultSource: "",
-        buildFailed: false,
-        compilerOutput: nil,
-        warnings: [],
-        outcomes: [],
-        passCount: 0,
-        totalTests: 0,
-        totalPoints: 0,
-        earnedPoints: 0,
-        executionTimeMs: 0,
-        gradePercent: 0,
-        badges: [],
-        releaseSummary: nil,
-        secretSummary: nil
-    )
-}
-
-/// Delta information harvested from the immediately-prior attempt.
-private struct PriorAttemptDelta {
-    let outcomeMap: [String: TestStatus]
-    let gradePercent: Int?
-
-    static let empty = PriorAttemptDelta(outcomeMap: [:], gradePercent: nil)
-}
-
-/// Manifest-derived data used for friendly test names and section bucketing.
-/// Maps each generated/raw test filename — and its extensionless stem, so it
-/// matches both the worker (`testName == stem`) and browser (`testName ==
-/// filename`) outcome shapes — to its instructor hint: per-case `resolvedHint`
-/// for pattern families, `hint` for notebook checks, and the suite-entry `hint`
-/// for hand-written raw scripts.  The results view surfaces this as a "💡 Hint"
-/// callout on failing tests (v0.4.229), replacing the hint text that
-/// pattern-family scripts used to bake into their own output.
-func buildHintByFilename(_ props: TestProperties) -> [String: String] {
-    var map: [String: String] = [:]
-    func record(_ filename: String, _ hint: String?) {
-        guard let h = hint,
-            !h.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return }
-        let stem = (filename as NSString).deletingPathExtension
-        map[filename] = h
-        map[stem.isEmpty ? filename : stem] = h
-    }
-    // Raw scripts carry their hint on the suite entry; generated entries take
-    // it from the family-case / check spec instead.
-    for entry in props.testSuites where !entry.isGenerated {
-        record(entry.script, entry.hint)
-    }
-    for f in props.patternFamilies {
-        for c in f.cases where c.enabled {
-            record(
-                generatedScriptFilename(
-                    familyID: f.id, caseKey: c.key,
-                    tier: c.resolvedTier(defaults: f.defaults)),
-                c.resolvedHint(defaults: f.defaults))
-        }
-    }
-    for chk in props.notebookChecks {
-        record(generatedCheckFilename(checkID: chk.id, tier: chk.tier), chk.hint)
-    }
-    return map
-}
-
-private struct ManifestDisplayData {
-    let displayNameMap: [String: String]
-    let hintByFilename: [String: String]
-    let sections: [TestSuiteSection]
-    let entries: [TestSuiteEntry]
-}
-
-/// Viewer-side inputs that gate which tiers and summaries are visible.
-private struct SubmissionViewer {
-    let user: APIUser
-    let allowedTiers: Set<String>
-}
-
-/// Banner text shown above the outcomes table comparing this attempt against
-/// the previous one.  `headerText` is nil when `hasDelta` is false.
-private struct DeltaBanner {
-    let hasDelta: Bool
-    let headerText: String?
-}
-
-/// Per-page decoration data attached to `SubmissionContext` — class-wide
-/// achievement badges and the current user's display context.
-private struct SubmissionDecorations {
-    let badges: [AchievementBadge]
-    let currentUser: CurrentUserContext?
 }
 
 // `SubmitFormBody` and the submission-output formatting helpers live in

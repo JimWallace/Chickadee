@@ -43,6 +43,47 @@ import Testing
         let instructions = try #require(result["instructions"]?.stringValue)
         #expect(instructions.contains("list_courses"))
         #expect(instructions.contains("validation"))
+        // The instructions steer agents toward native check types and frame
+        // author_script as a last-resort escape hatch (regression guard for the
+        // "prefer native" steering).
+        #expect(instructions.contains("Prefer native check types"))
+        #expect(instructions.contains("escape hatch"))
+    }
+
+    @Test func initializeEchoesSupportedRequestedProtocolVersion() async throws {
+        // Lifecycle spec: when the client requests a revision the server
+        // supports, the server responds with that same revision.
+        let response = try #require(
+            await dispatcher.dispatch(
+                request(
+                    "initialize",
+                    params: .object(["protocolVersion": .string("2025-06-18")]))))
+        let result = try #require(response.result?.objectFields)
+        #expect(result["protocolVersion"] == .string("2025-06-18"))
+    }
+
+    @Test func initializeAnswersLatestForUnsupportedRequestedVersion() async throws {
+        // An unsupported requested revision gets the latest the server
+        // speaks; the client then decides whether to continue.
+        let response = try #require(
+            await dispatcher.dispatch(
+                request(
+                    "initialize",
+                    params: .object(["protocolVersion": .string("1999-01-01")]))))
+        let result = try #require(response.result?.objectFields)
+        #expect(result["protocolVersion"] == .string("2025-11-25"))
+    }
+
+    @Test func initializeToleratesMalformedParams() async throws {
+        // A lenient initialize maximises client compatibility: unreadable
+        // params fall back to the server-chosen version rather than erroring.
+        let response = try #require(
+            await dispatcher.dispatch(
+                request(
+                    "initialize",
+                    params: .object(["protocolVersion": .int(42)]))))
+        let result = try #require(response.result?.objectFields)
+        #expect(result["protocolVersion"] == .string("2025-11-25"))
     }
 
     @Test func pingReturnsEmptyObject() async throws {

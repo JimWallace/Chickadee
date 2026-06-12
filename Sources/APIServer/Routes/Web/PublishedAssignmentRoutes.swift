@@ -67,5 +67,10 @@ struct PublishedAssignmentRoutes: RouteCollection {
         // Assignment-scope global variables.
         r.get(":assignmentID", "global-variables", use: getGlobalVariables)
         r.put(":assignmentID", "global-variables", use: putGlobalVariables)
+
+        // Unified Achievements table — the whole typed achievement list (class
+        // goals, badges, built-in awards).  Display-only; no retest/validation.
+        r.get(":assignmentID", "achievements", use: getAchievements)
+        r.put(":assignmentID", "achievements", use: putAchievements)
     }
 }

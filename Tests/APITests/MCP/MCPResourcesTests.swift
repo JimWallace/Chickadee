@@ -49,12 +49,16 @@ import Vapor
         }
     }
 
-    @Test func listForAdminIncludesEveryCourse() async throws {
+    @Test func listForAdminIsEnrollmentScoped() async throws {
+        // Admins are enrollment-scoped like everyone else: the agent's listing
+        // covers exactly the courses the admin is enrolled in.
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let courseA = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
             let courseB = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            _ = try await makeTestUser(on: app, username: "boss", role: "admin")
+            let boss = try await makeTestUser(on: app, username: "boss", role: "admin")
+            try await makeTestEnrollment(
+                on: app, userID: boss.requireID(), courseID: courseA.requireID())
             try await makeTestSetup(on: app, id: "setup_a", courseID: courseA.requireID())
             try await makeTestSetup(on: app, id: "setup_b", courseID: courseB.requireID())
             let a = try await makeTestAssignment(
@@ -65,7 +69,7 @@ import Vapor
             let result = try await MCPResourceProvider().list(context: context(app, subject: "boss"))
             let uris = Self.resourceURIs(result)
             #expect(uris.contains(MCPResourceProvider.manifestURI(publicID: a.publicID)))
-            #expect(uris.contains(MCPResourceProvider.manifestURI(publicID: b.publicID)))
+            #expect(!uris.contains(MCPResourceProvider.manifestURI(publicID: b.publicID)))
         }
     }
 
@@ -78,6 +82,53 @@ import Vapor
                 on: app, userID: student.requireID(), courseID: course.requireID())
             await #expect(throws: MCPToolError.self) {
                 _ = try await MCPResourceProvider().list(context: context(app, subject: "stu"))
+            }
+        }
+    }
+
+    // MARK: - Authoring-guide docs
+
+    @Test func listIncludesAuthoringGuides() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            let result = try await MCPResourceProvider().list(context: context(app, subject: "prof"))
+            let uris = Self.resourceURIs(result)
+            #expect(uris.contains("chickadee://docs/personalization-solution-notebooks"))
+        }
+    }
+
+    @Test func readReturnsGuideMarkdown() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            let result = try await MCPResourceProvider().read(
+                uri: "chickadee://docs/personalization-solution-notebooks",
+                context: context(app, subject: "prof"))
+            let text = try #require(Self.firstContentText(result))
+            #expect(text.hasPrefix("# Per-student answers in notebooks"))
+        }
+    }
+
+    @Test func readRejectsUnknownGuideSlug() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await MCPResourceProvider().read(
+                    uri: "chickadee://docs/not-a-guide", context: context(app, subject: "prof"))
+            }
+        }
+    }
+
+    @Test func readRejectsStudentSubjectForGuides() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "stu", role: "student")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await MCPResourceProvider().read(
+                    uri: "chickadee://docs/personalization-solution-notebooks",
+                    context: context(app, subject: "stu"))
             }
         }
     }

@@ -53,16 +53,23 @@ import Vapor
         }
     }
 
-    @Test func allowsAdminSubjectWithoutEnrollment() async throws {
+    @Test func adminSubjectIsEnrollmentScoped() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
             let courseID = try course.requireID()
-            // An admin subject is global — no enrollment needed.
-            _ = try await makeTestUser(on: app, username: "tester", role: "admin")
+            // Admins are enrollment-scoped like everyone else: denied before
+            // enrolling, allowed after.
+            let admin = try await makeTestUser(on: app, username: "tester", role: "admin")
             try await makeTestSetup(on: app, id: "setup_x", courseID: courseID)
             try await makeTestAssignment(on: app, testSetupID: "setup_x", courseID: courseID, title: "X")
 
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListAssignmentsTool().execute(
+                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            }
+
+            try await makeTestEnrollment(on: app, userID: admin.requireID(), courseID: courseID)
             let output = try await ListAssignmentsTool().execute(
                 ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
             #expect(output.assignments.map(\.title) == ["X"])

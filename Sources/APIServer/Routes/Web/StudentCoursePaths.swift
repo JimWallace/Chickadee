@@ -47,6 +47,42 @@ enum StudentCoursePaths {
         ) + "/retest"
     }
 
+    /// POST target — reset the student's working-copy notebook to the starter.
+    static func reset(
+        courseCode: String,
+        urlToken: String,
+        assignmentID: String
+    ) -> String {
+        baseAssignmentPath(
+            courseCode: courseCode,
+            urlToken: urlToken,
+            assignmentID: assignmentID
+        ) + "/reset-notebook"
+    }
+
+    /// POST target — upsert a grade override for one student × one assignment.
+    static func gradeOverrideSave(
+        courseCode: String,
+        urlToken: String,
+        assignmentID: String
+    ) -> String {
+        baseAssignmentPath(
+            courseCode: courseCode,
+            urlToken: urlToken,
+            assignmentID: assignmentID
+        ) + "/grade-override"
+    }
+
+    /// POST target — clear an existing grade override.
+    static func gradeOverrideClear(
+        courseCode: String,
+        urlToken: String,
+        assignmentID: String
+    ) -> String {
+        gradeOverrideSave(courseCode: courseCode, urlToken: urlToken, assignmentID: assignmentID)
+            + "/delete"
+    }
+
     /// POST target — upsert an extension for one student × one assignment.
     static func extensionSave(
         courseCode: String,

@@ -266,4 +266,73 @@ import Testing
         #expect(grouped[1].sectionName == "Warm Up II")
         #expect(grouped[1].outcomes.count == 1)
     }
+
+    // MARK: - groupOutcomesBySection (secret per-section summaries)
+
+    private func secret(_ name: String, _ status: TestStatus) -> TestOutcome {
+        TestOutcome(
+            testName: name, testClass: nil, tier: .secret, status: status,
+            shortResult: status == .pass ? "passed" : "failed", longResult: nil,
+            executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1,
+            isFirstPassSuccess: status == .pass)
+    }
+
+    @Test func secretOutcomesAggregateIntoTheirOwnSection() {
+        let sections = [
+            TestSuiteSection(id: "s1", name: "One"),
+            TestSuiteSection(id: "s2", name: "Two"),
+        ]
+        let outcomes = [row("a.py"), row("b.py")]
+        let perOutcome: [String?] = ["s1", "s2"]
+        // Two secret tests in s1 (1 pass, 1 fail), one in s2 (pass).
+        let secrets = [secret("x", .pass), secret("y", .fail), secret("z", .pass)]
+        let secretSections: [String?] = ["s1", "s1", "s2"]
+        let grouped = groupOutcomesBySection(
+            outcomes, sections: sections, sectionIDPerOutcome: perOutcome,
+            secretOutcomes: secrets, sectionIDPerSecretOutcome: secretSections)
+        #expect(grouped.count == 2)
+        #expect(grouped[0].sectionName == "One")
+        #expect(grouped[0].secretSummary?.passCount == 1)
+        #expect(grouped[0].secretSummary?.failCount == 1)
+        #expect(grouped[0].secretSummary?.total == 2)
+        #expect(grouped[1].sectionName == "Two")
+        #expect(grouped[1].secretSummary?.passCount == 1)
+        #expect(grouped[1].secretSummary?.failCount == 0)
+    }
+
+    @Test func sectionWithOnlySecretTestsIsStillEmitted() {
+        // A section whose only tests are secret still appears (empty visible
+        // table, non-nil summary) so the student sees a signal for it.
+        let sections = [
+            TestSuiteSection(id: "s1", name: "Visible"),
+            TestSuiteSection(id: "s2", name: "Secret Only"),
+        ]
+        let outcomes = [row("a.py")]
+        let perOutcome: [String?] = ["s1"]
+        let secrets = [secret("x", .fail)]
+        let secretSections: [String?] = ["s2"]
+        let grouped = groupOutcomesBySection(
+            outcomes, sections: sections, sectionIDPerOutcome: perOutcome,
+            secretOutcomes: secrets, sectionIDPerSecretOutcome: secretSections)
+        #expect(grouped.count == 2)
+        #expect(grouped[0].sectionName == "Visible")
+        #expect(grouped[0].secretSummary == nil)
+        #expect(grouped[1].sectionName == "Secret Only")
+        #expect(grouped[1].outcomes.isEmpty)
+        #expect(grouped[1].secretSummary?.failCount == 1)
+    }
+
+    @Test func ungroupedSecretOutcomesFallIntoTrailingBucket() {
+        // No sections at all: visible + secret land in the single unlabelled
+        // bucket — the legacy single-table look with a secret count under it.
+        let outcomes = [row("a.py")]
+        let secrets = [secret("x", .pass), secret("y", .pass)]
+        let grouped = groupOutcomesBySection(
+            outcomes, sections: [], sectionIDPerOutcome: [nil],
+            secretOutcomes: secrets, sectionIDPerSecretOutcome: [nil, nil])
+        #expect(grouped.count == 1)
+        #expect(grouped[0].sectionName == nil)
+        #expect(grouped[0].outcomes.count == 1)
+        #expect(grouped[0].secretSummary?.passCount == 2)
+    }
 }

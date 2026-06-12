@@ -438,4 +438,259 @@ import Vapor
         try validatePatternFamilies([], testSuites: [])
     }
 
+    // MARK: - Personalization (per-student inputs, #461)
+
+    private func perStudentBoundaryFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Adults", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "adults_expected")
+        return PatternFamily(
+            id: "adults", name: "Adults", kind: .boundaryEquality,
+            functionName: "countAdults", paramNames: ["patients"], cases: [c])
+    }
+
+    @Test func rendererEmitsPerStudentPreambleAndExpectedRef() throws {
+        let scripts = renderPatternFamily(
+            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"])
+        let src = try #require(scripts.first).source
+        // The full generated script (preamble + body) must be valid Python.
+        try pfAssertValidPythonSyntax(src, label: "adults_01")
+        // Loads per-student inputs by path from the reserved file.
+        #expect(src.contains("_ck_inputs.py"))
+        #expect(src.contains("spec_from_file_location"))
+        // Binds both referenced per-student names from _ck.
+        #expect(src.contains(#"patients = _ck["patients"]"#))
+        #expect(src.contains(#"adults_expected = _ck["adults_expected"]"#))
+        // Fails closed when a value is missing (no seed).
+        #expect(src.contains("Personalization input"))
+        // Expected is the bare per-student ref, not a baked literal.
+        #expect(src.contains("expected = adults_expected"))
+        #expect(!src.contains("expected = None"))
+        // The arg is passed from the bound name and the function is called.
+        #expect(src.contains("patients = patients"))
+        #expect(src.contains("student_module.countAdults(patients)"))
+    }
+
+    /// Runtime contract (not just ast.parse): the generated preamble must
+    /// actually load `_ck_inputs.py`, bind the referenced per-student names,
+    /// and grade against them — passing when the student's result matches the
+    /// resolved expected, failing when it doesn't, and failing *closed* (no
+    /// crash) when the seed (hence `_ck_inputs.py`) is absent.  Exercises the
+    /// exact file the worker / browser write, so a renderer/runtime contract
+    /// drift on either side is caught here.
+    @Test func perStudentScriptGradesAgainstCkInputsAtRuntime() throws {
+        let scripts = renderPatternFamily(
+            perStudentBoundaryFamily(), perStudentNames: ["patients", "adults_expected"])
+        let body = try #require(scripts.first).source
+
+        // Byte-for-byte the shape `RunnerDaemon+JobProcessing` emits: a `_ck`
+        // dict of Python literals (here a list of dicts + an int).
+        let ckInputs = """
+            # Auto-generated per-student grading inputs (issue #461). Do not edit.
+            _ck = {
+                "adults_expected": 2,
+                "patients": [{'age': 40}, {'age': 17}, {'age': 65}],
+            }
+            """
+        let correct = "def countAdults(patients):\n    return sum(1 for p in patients if p['age'] >= 18)"
+        let buggy = "def countAdults(patients):\n    return len(patients)"
+
+        // Correct student matches the resolved expected (2 adults) → pass.
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        // Buggy student returns 3 → fail.
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        // No `_ck_inputs.py` (no seed resolved) → fail closed, not crash.
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+    }
+
+    @Test func rendererOmitsPreambleWhenNoPerStudentRefs() throws {
+        // A normal family renders unchanged even when the assignment declares
+        // per-student names the family doesn't reference.
+        let scripts = renderPatternFamily(pfBMIFamily(), perStudentNames: ["patients"])
+        let src = try #require(scripts.first).source
+        #expect(!src.contains("_ck_inputs.py"))
+        #expect(!src.contains("Personalization input"))
+        #expect(src.contains("expected = \"underweight\""))
+    }
+
+    @Test func validation_acceptsPerStudentArgAndExpectedRefs() throws {
+        try validatePatternFamilies(
+            [perStudentBoundaryFamily()], testSuites: [],
+            perStudentExpressionNames: ["patients", "adults_expected"])
+    }
+
+    @Test func validation_rejectsUnknownExpectedRef() throws {
+        let c = PatternCase(
+            key: "01", label: "Adults", args: [.int(1)], expected: .null,
+            expectedVarRef: "not_declared")
+        let family = PatternFamily(
+            id: "adults", name: "Adults", kind: .boundaryEquality,
+            functionName: "countAdults", paramNames: ["x"], cases: [c])
+        #expect {
+            try validatePatternFamilies(
+                [family], testSuites: [], perStudentExpressionNames: ["patients"])
+        } throws: { error in
+            #expect("\(error)".contains("must name a per-student input"))
+            return true
+        }
+    }
+
+    @Test func validation_rejectsPerStudentRefOnUnsupportedKind() throws {
+        // performance_threshold has no personalization preamble, so a per-student
+        // arg ref is still rejected (boundary + approximate are the supported set).
+        let c = PatternCase(
+            key: "01", label: "X", args: [.null], expected: .double(100.0),
+            argVarRefs: ["patients"])
+        let family = PatternFamily(
+            id: "perf", name: "Perf", kind: .performanceThreshold,
+            functionName: "f", paramNames: ["patients"], cases: [c])
+        #expect {
+            try validatePatternFamilies(
+                [family], testSuites: [], perStudentExpressionNames: ["patients"])
+        } throws: { error in
+            #expect("\(error)".contains("only supported in boundary_equality and approximate_equality"))
+            return true
+        }
+    }
+
+    // MARK: - Personalization for approximateEquality (Slice E)
+
+    private func perStudentApproxFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Average", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "avg_expected")
+        return PatternFamily(
+            id: "avg", name: "Average Age", kind: .approximateEquality,
+            functionName: "averageAge", paramNames: ["patients"], cases: [c])
+    }
+
+    @Test func validation_acceptsPerStudentRefsForApproximate() throws {
+        try validatePatternFamilies(
+            [perStudentApproxFamily()], testSuites: [],
+            perStudentExpressionNames: ["patients", "avg_expected"])
+    }
+
+    @Test func approximateRendererEmitsPerStudentPreambleAndExpectedRef() throws {
+        let scripts = renderPatternFamily(
+            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"])
+        let src = try #require(scripts.first).source
+        try pfAssertValidPythonSyntax(src, label: "avg_01")
+        #expect(src.contains("_ck_inputs.py"))
+        #expect(src.contains(#"patients = _ck["patients"]"#))
+        #expect(src.contains(#"avg_expected = _ck["avg_expected"]"#))
+        // Expected is the bare per-student ref, not a baked literal; tolerance kept.
+        #expect(src.contains("expected = avg_expected"))
+        #expect(src.contains("tolerance ="))
+        #expect(src.contains("student_module.averageAge(patients)"))
+    }
+
+    @Test func approximateRendererOmitsPreambleWhenNoPerStudentRefs() throws {
+        // A normal approximate family with a literal expected renders unchanged
+        // (no preamble) even when the assignment declares per-student names.
+        let c = PatternCase(key: "01", label: "x", args: [.double(2.0)], expected: .double(4.0))
+        let family = PatternFamily(
+            id: "sq", name: "Square", kind: .approximateEquality,
+            functionName: "square", paramNames: ["x"], cases: [c])
+        let src = try #require(renderPatternFamily(family, perStudentNames: ["patients"]).first).source
+        #expect(!src.contains("_ck_inputs.py"))
+        #expect(src.contains("expected = 4.0"))
+    }
+
+    @Test func perStudentApproxGradesAgainstCkInputsAtRuntime() throws {
+        let scripts = renderPatternFamily(
+            perStudentApproxFamily(), perStudentNames: ["patients", "avg_expected"])
+        let body = try #require(scripts.first).source
+        let ckInputs = """
+            # Auto-generated per-student grading inputs (issue #461). Do not edit.
+            _ck = {
+                "avg_expected": 40.0,
+                "patients": [{'age': 40}, {'age': 20}, {'age': 60}],
+            }
+            """
+        let correct = "def averageAge(patients):\n    return sum(p['age'] for p in patients) / len(patients)"
+        let buggy = "def averageAge(patients):\n    return sum(p['age'] for p in patients)"
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+    }
+
+    // MARK: - unorderedEquality (Slice F)
+
+    private func unorderedFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Pick", args: [.array([.int(3), .int(1), .int(2)])],
+            expected: .array([.int(1), .int(2), .int(3)]))
+        return PatternFamily(
+            id: "pick", name: "Pick", kind: .unorderedEquality,
+            functionName: "pick", paramNames: ["xs"], cases: [c])
+    }
+
+    private func unorderedPerStudentFamily() -> PatternFamily {
+        let c = PatternCase(
+            key: "01", label: "Find", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "matches")
+        return PatternFamily(
+            id: "find", name: "Find", kind: .unorderedEquality,
+            functionName: "findByDiag", paramNames: ["patients"], cases: [c])
+    }
+
+    @Test func unorderedRendererEmitsCanonicalComparison() throws {
+        let src = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: []).first).source
+        try pfAssertValidPythonSyntax(src, label: "pick_01")
+        #expect(src.contains("_ck_canon"))
+        #expect(src.contains("sort_keys=True"))
+        #expect(src.contains("student_module.pick("))
+    }
+
+    @Test func unorderedGradesOrderInsensitivelyAtRuntime() throws {
+        let body = try #require(renderPatternFamily(unorderedFamily(), perStudentNames: []).first).source
+        // Same elements, original (different) order → pass: order is ignored.
+        let reordered = "def pick(xs):\n    return list(xs)"
+        let sortedFn = "def pick(xs):\n    return sorted(xs)"
+        let missing = "def pick(xs):\n    return xs[:2]"
+        let notList = "def pick(xs):\n    return 5"
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: reordered) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: sortedFn) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: missing) == .fail)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: notList) == .fail)
+    }
+
+    @Test func unorderedPerStudentGradesAtRuntime() throws {
+        let scripts = renderPatternFamily(
+            unorderedPerStudentFamily(), perStudentNames: ["patients", "matches"])
+        let body = try #require(scripts.first).source
+        // `matches` lists the two 'A' patients in a different order than the
+        // student's filter will produce — order-insensitive compare → pass.
+        let ckInputs = """
+            _ck = {
+                "patients": [{'mrn': '1', 'dx': 'A'}, {'mrn': '2', 'dx': 'B'}, {'mrn': '3', 'dx': 'A'}],
+                "matches": [{'mrn': '3', 'dx': 'A'}, {'mrn': '1', 'dx': 'A'}],
+            }
+            """
+        let correct = "def findByDiag(patients):\n    return [p for p in patients if p['dx'] == 'A']"
+        let buggy = "def findByDiag(patients):\n    return patients"
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: correct) == .pass)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: ckInputs, student: buggy) == .fail)
+        #expect(try pfRunGeneratedCase(body: body, ckInputs: nil, student: correct) == .fail)
+    }
+
+    @Test func validation_unorderedRequiresListExpected() throws {
+        let c = PatternCase(key: "01", label: "x", args: [.int(1)], expected: .int(5))
+        let family = PatternFamily(
+            id: "u", name: "U", kind: .unorderedEquality,
+            functionName: "f", paramNames: ["x"], cases: [c])
+        #expect {
+            try validatePatternFamilies([family], testSuites: [])
+        } throws: { error in
+            #expect("\(error)".contains("must be a list"))
+            return true
+        }
+    }
+
+    @Test func validation_acceptsPerStudentRefsForUnordered() throws {
+        try validatePatternFamilies(
+            [unorderedPerStudentFamily()], testSuites: [],
+            perStudentExpressionNames: ["patients", "matches"])
+    }
+
 }

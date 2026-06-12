@@ -47,6 +47,14 @@ import XCTVapor
             res.headers.contentType = .html
             return res
         }
+        // Mimics the MCP consent page: a handler that relaxes form-action +
+        // COOP for a single response so its Authorize-button redirect to a
+        // cross-origin connector isn't blocked.
+        app.get("consent-style") { req -> Response in
+            SecurityHeadersMiddleware.allowFormAction("https://app.example", on: req)
+            SecurityHeadersMiddleware.setOpenerPolicy("same-origin-allow-popups", on: req)
+            return Response(status: .ok, body: .init(string: "ok"))
+        }
         return app
     }
 
@@ -68,6 +76,10 @@ import XCTVapor
         app.get("bare-404") { _ async throws -> Response in throw Abort(.notFound) }
         app.get("bare-403") { _ async throws -> Response in throw Abort(.forbidden) }
         app.get("bare-400") { _ async throws -> Response in throw Abort(.badRequest) }
+        // Mirrors how the vendored CSRF middleware aborts on a token mismatch.
+        app.get("csrf-fail") { _ async throws -> Response in
+            throw Abort(.forbidden, reason: "Invalid CSRF token.")
+        }
         app.get("api", "bare-500") { _ async throws -> Response in
             throw Abort(.internalServerError)
         }
@@ -209,6 +221,29 @@ import XCTVapor
         }
     }
 
+    @Test func consentPageRelaxesFormActionAndOpenerPolicy() async throws {
+        // Regression: the MCP consent Authorize button POSTs and the server
+        // 303s to the OAuth client's redirect_uri. Browsers enforce
+        // `form-action` across that redirect, so the default `form-action
+        // 'self'` silently blocks the hop back to the connector (the consent
+        // token burns, the page just sits there — the reported symptom). The
+        // page must add the redirect origin to form-action and relax COOP so a
+        // popup-driven connector keeps its `window.opener`.
+        try await withApp(try await makeSecurityHeadersApp()) { app in
+            try await app.asyncTest(.GET, "/consent-style") { res in
+                #expect(res.status == .ok)
+                let csp = res.headers.first(name: "Content-Security-Policy") ?? ""
+                #expect(
+                    csp.contains("form-action 'self' https://app.example"),
+                    "expected redirect origin in form-action, got: \(csp)"
+                )
+                #expect(
+                    res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin-allow-popups"
+                )
+            }
+        }
+    }
+
     @Test func cSPFormActionIncludesIdPOriginWhenSSOConfigured() async throws {
         // Regression: CSP form-action 'self' alone blocks the SSO logout
         // redirect chain (POST /logout → 303 → end_session_endpoint), which
@@ -276,6 +311,26 @@ import XCTVapor
                 #expect(
                     res.body.string.contains("page missing"),
                     "Explicit Abort reason should render verbatim: \(res.body.string.prefix(400))"
+                )
+            }
+        }
+    }
+
+    @Test func leafErrorMiddlewareRendersRecoverableMessageForCSRFFailures() async throws {
+        // A CSRF rejection means the page's token no longer matches the live
+        // session (a stale page after a session change). The bare "Invalid CSRF
+        // token." 403 is a confusing dead-end, so browser users get an
+        // actionable, recoverable message — and never the raw library reason.
+        try await withApp(try await makeLeafErrorApp(configureViews: true)) { app in
+            try await app.asyncTest(.GET, "/csrf-fail") { res in
+                #expect(res.status == .forbidden)
+                #expect(
+                    res.body.string.lowercased().contains("session was refreshed"),
+                    "CSRF 403 should render the recoverable message: \(res.body.string.prefix(400))"
+                )
+                #expect(
+                    res.body.string.contains("Invalid CSRF token") == false,
+                    "The raw CSRF library reason must not leak to browser users"
                 )
             }
         }

@@ -6,6 +6,7 @@
 // however the edit arrives). This is the seed of the authoring service layer
 // described in docs/mcp-authoring-roadmap.md (Phase 0).
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -158,7 +159,7 @@ enum AssignmentAuthoringService {
                 testSetupID: newSetupID,
                 title: newTitle,
                 dueAt: nil,
-                isOpen: false,
+                visibility: .closed,
                 sortOrder: nil,
                 validationStatus: nil,
                 validationSubmissionID: nil,
@@ -211,7 +212,7 @@ enum AssignmentAuthoringService {
                 testSetupID: setupID,
                 title: title,
                 dueAt: nil,
-                isOpen: false,
+                visibility: .closed,
                 sortOrder: nil,
                 validationStatus: nil,
                 validationSubmissionID: nil,
@@ -254,22 +255,52 @@ enum AssignmentAuthoringService {
         try await setup.save(on: db)
     }
 
-    /// Mutates open-state in memory (no save). Opening requires validation to
-    /// have passed and sets the deadline override when the due date is past.
+    /// Sets an assignment's three-state visibility (closed / preview / open) and
+    /// saves. Metadata-only — never touches the manifest, so it does not trigger
+    /// a regrade. Only opening requires validation to have passed; switching to
+    /// preview or closed is unconditional.
+    static func setVisibility(
+        _ assignment: APIAssignment,
+        _ visibility: AssignmentVisibility,
+        on db: Database,
+        now: Date = Date()
+    ) async throws {
+        try applyVisibility(assignment, visibility, now: now)
+        try await assignment.save(on: db)
+    }
+
+    /// Two-state convenience used by the metadata-update path (open/close).
+    /// Bridges onto `applyVisibility`.
     private static func applyOpenState(_ assignment: APIAssignment, open: Bool, now: Date) throws {
-        if open {
+        try applyVisibility(assignment, open ? .open : .closed, now: now)
+    }
+
+    /// Mutates visibility in memory (no save).
+    ///
+    /// - **open** requires validation to have passed (or no suite to validate),
+    ///   consumes any pending scheduled open date, and re-derives the deadline
+    ///   override from the (possibly past) due date — otherwise the student gate
+    ///   would keep blocking, or the auto-open sweep could re-open after a close.
+    /// - **preview** is a pure visibility flip with no side effects: it makes an
+    ///   already-validated assignment visible to staff (as open) while staying
+    ///   hidden from students, so it neither re-validates nor closes anything.
+    /// - **closed** simply hides it from everyone.
+    private static func applyVisibility(
+        _ assignment: APIAssignment, _ visibility: AssignmentVisibility, now: Date
+    ) throws {
+        switch visibility {
+        case .open:
             guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
                 throw AssignmentAuthoringError.validationNotPassed
             }
-            assignment.isOpen = true
-            // Opening now consumes any pending scheduled open date — otherwise the
-            // student gate would keep blocking until that future date, and the
-            // auto-open sweep could later re-open after a manual close.
+            assignment.visibility = .open
             assignment.startsAt = nil
             assignment.deadlineOverrideActive = deadlineOverrideValueForInstructorOpen(
                 dueAt: assignment.dueAt, now: now)
-        } else {
-            assignment.isOpen = false
+        case .preview:
+            assignment.visibility = .preview
+        case .closed:
+            assignment.visibility = .closed
         }
     }
 }

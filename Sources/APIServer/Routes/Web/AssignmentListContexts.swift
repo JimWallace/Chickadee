@@ -62,6 +62,9 @@ struct InstructorStudentsContext: Encodable {
     let enrolledStudentCount: Int
     let courseEnrollmentMode: String
     let courseIsArchived: Bool
+    /// True when BrightSpace is configured on the server AND the active course
+    /// is linked to a LEARN org unit — gates the "Check against LEARN" button.
+    let brightspaceLinkAvailable: Bool
 }
 
 /// BrightSpace tab (`GET /instructor/brightspace`): connection status, the
@@ -162,6 +165,12 @@ struct AssignmentStudentRow: Encodable {
     let surname: String
     let givenNames: String
     let gradeText: String
+    /// True when `gradeText` is an instructor override rather than the
+    /// runner-computed best grade.
+    let gradeIsOverridden: Bool
+    /// Prefill for the inline override form: the active override percent when
+    /// one is set, else the runner-computed best grade, else 0.
+    let gradeOverridePercent: Int
     let submissionCount: Int
     let hasLatestSubmission: Bool
     let latestSubmissionID: String

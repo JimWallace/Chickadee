@@ -118,6 +118,13 @@ extension CourseAdminRoutes {
             .filter(\.$userID == userID)
             .delete()
 
+        await AuditLogger.record(
+            action: .enrollmentRemoved,
+            targetType: .enrollment,
+            targetID: userIDString,
+            metadata: ["course_id": courseIDString, "subject_user_id": userIDString],
+            on: req
+        )
         return req.redirect(to: "/instructor")
     }
 

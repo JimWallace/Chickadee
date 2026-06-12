@@ -83,6 +83,31 @@ struct CoreCodableTests {
         #expect(outcome.isFirstPassSuccess == false)
     }
 
+    @Test func testOutcomeScoreDefaultsFromStatusForOldRecords() throws {
+        // A record predating partial credit has no `score`: a pass earns full
+        // credit and a non-pass none, so existing results grade exactly as before.
+        let passJSON = Data(
+            #"{"testName":"ok","tier":"public","status":"pass","shortResult":"passed","executionTimeMs":1,"attemptNumber":1,"isFirstPassSuccess":true}"#
+                .utf8)
+        let failJSON = Data(
+            #"{"testName":"bad","tier":"public","status":"fail","shortResult":"failed","executionTimeMs":1,"attemptNumber":1,"isFirstPassSuccess":false}"#
+                .utf8)
+        #expect(try decoder.decode(TestOutcome.self, from: passJSON).score == 1)
+        #expect(try decoder.decode(TestOutcome.self, from: failJSON).score == 0)
+    }
+
+    @Test func testOutcomeExplicitScoreRoundTrips() throws {
+        let outcome = TestOutcome(
+            testName: "partial", testClass: nil, tier: .pub, status: .pass,
+            shortResult: "3/4 cases passed", longResult: nil,
+            score: 0.75, points: 4, executionTimeMs: 2,
+            memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true
+        )
+        let decoded = try decoder.decode(TestOutcome.self, from: encoder.encode(outcome))
+        #expect(decoded == outcome)
+        #expect(decoded.score == 0.75)
+    }
+
     @Test func testOutcomeRoundTrip() throws {
         let outcome = TestOutcome(
             testName: "testBaz",
@@ -158,6 +183,23 @@ struct CoreCodableTests {
         #expect(decoded.warnings == ["file renamed"])
     }
 
+    @Test func collectionFractionalEarnedPointsRoundTrips() throws {
+        // Partial credit makes earnedPoints fractional; it must survive the
+        // JSON round trip (it is the grade numerator).
+        let col = TestOutcomeCollection(
+            submissionID: "s", testSetupID: "t",
+            attemptNumber: 1, buildStatus: .passed, compilerOutput: nil,
+            outcomes: [],
+            totalTests: 4, passCount: 3, failCount: 1, errorCount: 0, timeoutCount: 0,
+            executionTimeMs: 1,
+            totalPoints: 4, earnedPoints: 2.75,
+            runnerVersion: "shell-runner/1.0",
+            timestamp: Date(timeIntervalSince1970: 0)
+        )
+        let decoded = try decoder.decode(TestOutcomeCollection.self, from: encoder.encode(col))
+        #expect(decoded.earnedPoints == 2.75)
+    }
+
     @Test func collectionRoundTrip() throws {
         let col = TestOutcomeCollection(
             submissionID: "sub_rt", testSetupID: "setup_rt",
@@ -226,6 +268,50 @@ struct CoreCodableTests {
         let data = try encoder.encode(job)
         let decoded = try decoder.decode(Job.self, from: data)
         #expect(decoded.submissionFilename == nil)
+    }
+
+    @Test func jobPersonalizedInputsRoundTrip() throws {
+        let manifest = try decoder.decode(
+            TestProperties.self,
+            from: Data(#"{ "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 }"#.utf8))
+        let job = Job(
+            submissionID: "s", testSetupID: "t", attemptNumber: 1,
+            submissionURL: testURL("http://localhost/a"),
+            testSetupURL: testURL("http://localhost/b"),
+            manifest: manifest,
+            assignmentSeed: "deadbeef",
+            personalizedInputs: ["patients": "[{'mrn': '1'}]", "adults_expected": "2"])
+        let decoded = try decoder.decode(Job.self, from: encoder.encode(job))
+        #expect(decoded.personalizedInputs?["patients"] == "[{'mrn': '1'}]")
+        #expect(decoded.personalizedInputs?["adults_expected"] == "2")
+        #expect(decoded.assignmentSeed == "deadbeef")
+    }
+
+    @Test func jobWithoutPersonalizedInputsDecodesNil() throws {
+        // Back-compat: a payload from an older server omits the new fields.
+        let json = #"""
+            { "submissionID": "s", "testSetupID": "t", "attemptNumber": 1,
+              "submissionURL": "http://localhost/a", "testSetupURL": "http://localhost/b",
+              "manifest": { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 } }
+            """#
+        let decoded = try decoder.decode(Job.self, from: Data(json.utf8))
+        #expect(decoded.personalizedInputs == nil)
+        #expect(decoded.assignmentSeed == nil)
+    }
+
+    @Test func patternCaseExpectedVarRefRoundTrip() throws {
+        let c = PatternCase(
+            key: "01", label: "Adults", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "adults_expected")
+        let decoded = try decoder.decode(PatternCase.self, from: encoder.encode(c))
+        #expect(decoded.expectedVarRef == "adults_expected")
+        #expect(decoded.argVarRefs == ["patients"])
+    }
+
+    @Test func patternCaseWithoutExpectedVarRefDecodesNil() throws {
+        let json = #"{ "key": "01", "label": "L", "args": [1], "expected": 2 }"#
+        let decoded = try decoder.decode(PatternCase.self, from: Data(json.utf8))
+        #expect(decoded.expectedVarRef == nil)
     }
 
     @Test func runnerSanitizedStripsPatternFamilies() throws {

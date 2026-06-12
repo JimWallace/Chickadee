@@ -77,6 +77,7 @@ opt_in_rules:
 
 excluded:
   - .build
+  - wasm/.build     # wasm bridge sub-package build dir + vendored JavaScriptKit checkouts
   - .claude         # agent worktrees + local state (nested .build vendored deps)
   - .swiftpm
   - Packages

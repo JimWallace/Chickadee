@@ -185,6 +185,71 @@ import XCTVapor
         }
     }
 
+    /// Regression: a live suite edit (`PUT /suite`) must auto-re-grade every
+    /// existing student submission against the new manifest — the automatic
+    /// equivalent of the "Retest all" button.  This was lost when suite editing
+    /// moved off the Save button onto this live endpoint (the v0.4.93 fan-out no
+    /// longer fired); restored via `retestSubmissionsIfManifestChanged`.
+    @Test func putSuiteAutoRegradesStudentSubmissions() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            let setupID = "setup_putsuite_regrade"
+            let zipPath = app.testSetupsDirectory + "\(setupID).zip"
+            try arMakeZip(at: zipPath, entries: [("test_q1.py", "print('q1')")])
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_q1.py","points":1}],"timeLimitSeconds":10,"makefile":null}
+                """
+            let setup = APITestSetup(
+                id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: nil, courseID: courseID)
+            try await setup.save(on: app.db)
+            let assignment = APIAssignment(
+                testSetupID: setupID, title: "PutSuite Regrade", dueAt: nil, isOpen: true, courseID: courseID)
+            try await assignment.save(on: app.db)
+            let assignmentID = assignment.publicID
+
+            let student = try await arInsertStudent(username: "putsuite_student", on: app)
+            let submission = APISubmission(
+                id: "sub_putsuite",
+                testSetupID: setupID,
+                zipPath: app.submissionsDirectory + "sub_putsuite.zip",
+                attemptNumber: 1,
+                status: "complete",
+                userID: student.id
+            )
+            submission.workerID = "worker-z"
+            submission.assignedAt = Date()
+            try await submission.save(on: app.db)
+
+            // PUT a suite whose manifest differs (points 1 -> 5).
+            let (csrf, sessionCookie) = try await csrfFields(
+                for: "/instructor/\(assignmentID)/edit", cookie: cookie, on: app)
+            let body = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"test_q1.py","tier":"public","points":5,"displayName":"Q1","dependsOn":[]}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(assignmentID)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            let updated = try await APISubmission.find("sub_putsuite", on: app.db)
+            #expect(updated?.status == "pending", "PUT /suite must auto-re-grade existing submissions")
+            #expect(updated?.workerID == nil)
+            #expect(updated?.retestedAt != nil)
+            // Dedup hash stamped so a follow-up cosmetic save won't re-fan-out.
+            let setupAfter = try await APITestSetup.find(setupID, on: app.db)
+            #expect(setupAfter?.lastRetestedManifestHash != nil)
+        }
+    }
+
     /// The retest-all endpoint requires instructor role.  Students/guests
     /// hitting it should get a 403.
     @Test func retestAllRequiresInstructorRole() async throws {

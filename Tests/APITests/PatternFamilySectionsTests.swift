@@ -192,13 +192,13 @@ import Vapor
 
             // Per-entry sectionID survives:
             //   - publictest_a.py was authored in the section
-            //   - bmi_category's three generated entries were too
+            //   - bmi_category's existence guard + three generated entries were too
             //   - df_shape's generated entry was too
             //   - publictest_b.py was authored ungrouped → sectionID nil
             let bySection = Dictionary(grouping: props.testSuites, by: { $0.sectionID })
             #expect(
-                bySection[sectionID]?.count ?? 0 == 5,
-                "Five entries must keep sectionID=\(sectionID): publictest_a.py + 3 generated bmi_category + 1 generated df_shape; got: \(props.testSuites.map { "\($0.script)→\($0.sectionID ?? "nil")" })"
+                bySection[sectionID]?.count ?? 0 == 6,
+                "Six entries must keep sectionID=\(sectionID): publictest_a.py + bmi_category guard + 3 generated bmi_category + 1 generated df_shape; got: \(props.testSuites.map { "\($0.script)→\($0.sectionID ?? "nil")" })"
             )
             #expect(
                 bySection[nil]?.map(\.script) == ["publictest_b.py"],

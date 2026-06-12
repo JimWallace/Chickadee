@@ -15,10 +15,10 @@ MCP
 </nav>
 <section class="admin-section">
     #if(showServiceAccounts):
-    <h2 style="margin-top:0">MCP service accounts</h2>
+    <h2 class="mcp-heading-flush">MCP service accounts</h2>
 
     #if(!enabled):
-    <div class="form-error" style="margin-bottom:1rem">
+    <div class="form-error mcp-alert-gap">
         The MCP endpoint is not active, so tokens cannot be minted. Set
         <code>MCP_MODE=read_only</code> or <code>MCP_MODE=read_write</code>
         and <code>PUBLIC_BASE_URL</code> (or <code>MCP_ISSUER</code>/<code>MCP_RESOURCE</code>),
@@ -27,7 +27,7 @@ MCP
     #endif
     #if(enabled):
     #if(!writeAllowed):
-    <div style="margin-bottom:1rem;padding:.75rem;border:1px solid var(--gray-500);border-radius:6px;background:rgba(234,179,8,.10)">
+    <div class="mcp-banner mcp-banner--warn">
         MCP is in <strong>read-only</strong> mode (<code>MCP_MODE=read_only</code>): agents can read
         course content but cannot create or edit it. Minted tokens carry <code>content:read</code> only.
         Set <code>MCP_MODE=read_write</code> and restart to allow writes.
@@ -35,47 +35,46 @@ MCP
     #endif
     #endif
     #if(error == "username_required"):
-    <div class="form-error" style="margin-bottom:1rem">A username is required.</div>
+    <div class="form-error mcp-alert-gap">A username is required.</div>
     #endif
     #if(error == "username_taken"):
-    <div class="form-error" style="margin-bottom:1rem">That username is already in use.</div>
+    <div class="form-error mcp-alert-gap">That username is already in use.</div>
     #endif
     #if(error == "mcp_disabled"):
-    <div class="form-error" style="margin-bottom:1rem">Cannot mint a token while the MCP endpoint is inactive.</div>
+    <div class="form-error mcp-alert-gap">Cannot mint a token while the MCP endpoint is inactive.</div>
     #endif
     #if(error == "enroll_failed"):
-    <div class="form-error" style="margin-bottom:1rem">Could not update the account's course enrollment.</div>
+    <div class="form-error mcp-alert-gap">Could not update the account's course enrollment.</div>
     #endif
 
     #if(mintedToken):
-    <div style="margin-bottom:1rem;padding:.75rem;border:1px solid var(--gray-500);border-radius:6px;background:rgba(34,197,94,.08)">
-        <p style="margin:.1rem 0 .5rem"><strong>Access token for #(mintedFor)</strong>
+    <div class="mcp-banner mcp-banner--success">
+        <p class="mcp-token-caption"><strong>Access token for #(mintedFor)</strong>
             &middot; scopes: <code>#(mintedScopes)</code> &middot; expires after #(tokenTTLSeconds)s.
             Copy it now — it is shown only once.</p>
-        <textarea readonly rows="4" class="form-input"
-                  style="width:100%;font-family:monospace;font-size:.78rem;box-sizing:border-box"
+        <textarea readonly rows="4" class="form-input mcp-token-area"
                   onclick="this.select()">#(mintedToken)</textarea>
     </div>
     #endif
 
     #if(enabled):
-    <p style="color:var(--gray-600);font-size:.8rem">
+    <p class="mcp-issuer-note">
         Issuer <code>#(issuer)</code> &middot; Resource <code>#(resource)</code>.
         Tokens are stateless: deleting an account stops new tokens being minted, but a token
         already issued stays valid until it expires.
     </p>
     #endif
 
-    <form method="post" action="/admin/mcp/accounts" style="display:flex;gap:.5rem;align-items:center;margin:1rem 0">
+    <form method="post" action="/admin/mcp/accounts" class="mcp-create-form">
         #csrfFormField()
-        <input class="form-input" type="text" name="username" required
+        <input class="form-input mcp-username-input" type="text" name="username" required
                autocomplete="new-password"
-               placeholder="agent name, e.g. course-bot" style="width:260px"
+               placeholder="agent name, e.g. course-bot"
                aria-label="New MCP account username">
         <button class="btn" type="submit">Create account</button>
     </form>
 
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Username</button></th>
@@ -90,25 +89,25 @@ MCP
                 <td><code>#(account.username)</code></td>
                 <td class="time">#(account.createdAt)</td>
                 <td>
-                    <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
+                    <div class="mcp-course-cell">
                         #for(c in account.enrolledCourses):
-                        <span style="display:inline-flex;align-items:center;gap:.2rem;border:1px solid var(--gray-400);border-radius:4px;padding:.05rem .35rem;font-size:.78rem">
+                        <span class="mcp-course-chip">
                             <code>#(c.code)</code>
-                            <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll" style="display:inline">
+                            <form method="post" action="/admin/mcp/accounts/#(account.id)/unenroll" class="mcp-inline">
                                 #csrfFormField()
                                 <input type="hidden" name="courseID" value="#(c.id)">
                                 <button type="submit" title="Remove from #(c.code)"
-                                        style="background:none;border:0;cursor:pointer;color:var(--gray-600);padding:0;font-size:.95rem;line-height:1">&times;</button>
+                                        class="mcp-chip-remove">&times;</button>
                             </form>
                         </span>
                         #endfor
                         #if(account.enrolledCourses.isEmpty):
-                        <span style="color:var(--gray-600);font-size:.78rem">none — no access</span>
+                        <span class="mcp-none">none — no access</span>
                         #endif
-                        <form method="post" action="/admin/mcp/accounts/#(account.id)/enroll" style="display:inline-flex;gap:.2rem">
+                        <form method="post" action="/admin/mcp/accounts/#(account.id)/enroll" class="mcp-enroll-form">
                             #csrfFormField()
                             <label class="visually-hidden" for="enroll-#(account.id)">Enroll #(account.username) in a course</label>
-                            <select id="enroll-#(account.id)" name="courseID" class="form-input" style="padding:.2rem .4rem;font-size:.78rem">
+                            <select id="enroll-#(account.id)" name="courseID" class="form-input mcp-enroll-select">
                                 #for(c in allCourses):
                                 <option value="#(c.id)">#(c.code)</option>
                                 #endfor
@@ -118,14 +117,13 @@ MCP
                     </div>
                 </td>
                 <td>
-                    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+                    <div class="mcp-actions">
                         #if(enabled):
                         <form method="post" action="/admin/mcp/accounts/#(account.id)/token"
-                              style="display:flex;gap:.3rem;align-items:center">
+                              class="mcp-token-form">
                             #csrfFormField()
                             <label class="visually-hidden" for="scope-#(account.id)">Token scope for #(account.username)</label>
-                            <select id="scope-#(account.id)" name="scope" class="form-input"
-                                    style="padding:.25rem .5rem;font-size:.8rem">
+                            <select id="scope-#(account.id)" name="scope" class="form-input mcp-scope-select">
                                 #if(writeAllowed):
                                 <option value="readwrite">read + write</option>
                                 #endif
@@ -134,7 +132,7 @@ MCP
                             <button class="btn action-btn" type="submit">Mint token</button>
                         </form>
                         #endif
-                        <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" style="display:inline">
+                        <form method="post" action="/admin/mcp/accounts/#(account.id)/delete" class="mcp-inline">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     onclick="return confirm('Delete this MCP account? Existing tokens stay valid until they expire.')">Delete</button>
@@ -144,14 +142,14 @@ MCP
             </tr>
         #endfor
         #if(accounts.isEmpty):
-            <tr><td colspan="4" style="color:var(--gray-600)">No MCP accounts yet.</td></tr>
+            <tr><td colspan="4" class="mcp-empty-cell">No MCP accounts yet.</td></tr>
         #endif
         </tbody>
-    </table>
+    </table></div>
     #endif
 
-    <h2 style="margin-top:2rem">Connected agents</h2>
-    <table class="results-table sortable-table">
+    <h2 class="mcp-heading-spaced">Connected agents</h2>
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Agent</button></th>
@@ -174,9 +172,9 @@ MCP
                 <td class="time">#(grant.expiresAt)</td>
                 <td>
                     #if(grant.revoked):
-                    <span style="color:var(--gray-600)">Revoked</span>
+                    <span class="mcp-revoked">Revoked</span>
                     #else:
-                    <form method="post" action="/agents/#(grant.id)/revoke" style="display:inline">
+                    <form method="post" action="/agents/#(grant.id)/revoke" class="mcp-inline">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Revoke this agent? It will lose access immediately.')">Revoke</button>
@@ -186,11 +184,100 @@ MCP
             </tr>
         #endfor
         #if(grants.isEmpty):
-            <tr><td colspan="7" style="color:var(--gray-600);text-align:center;padding:1rem">No agents have connected yet.</td></tr>
+            <tr><td colspan="7" class="mcp-empty-cell mcp-empty-cell--center">No agents have connected yet.</td></tr>
         #endif
         </tbody>
-    </table>
+    </table></div>
 </section>
+<style>
+.mcp-heading-flush { margin-top: 0; }
+.mcp-heading-spaced { margin-top: 2rem; }
+.mcp-alert-gap { margin-bottom: 1rem; }
+.mcp-banner {
+    margin-bottom: 1rem;
+    padding: .75rem;
+    border: 1px solid var(--gray-500);
+    border-radius: 6px;
+}
+.mcp-banner--warn { background: rgba(234, 179, 8, .10); }
+.mcp-banner--success { background: rgba(34, 197, 94, .08); }
+.mcp-token-caption { margin: .1rem 0 .5rem; }
+.mcp-token-area {
+    width: 100%;
+    font-family: monospace;
+    font-size: .78rem;
+    box-sizing: border-box;
+}
+.mcp-issuer-note {
+    color: var(--gray-600);
+    font-size: .8rem;
+}
+.mcp-create-form {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    margin: 1rem 0;
+}
+.mcp-username-input { width: 260px; max-width: 100%; }
+.mcp-course-cell {
+    display: flex;
+    gap: .35rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.mcp-course-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    border: 1px solid var(--gray-400);
+    border-radius: 4px;
+    padding: .05rem .35rem;
+    font-size: .78rem;
+}
+.mcp-inline { display: inline; }
+.mcp-chip-remove {
+    background: none;
+    border: 0;
+    cursor: pointer;
+    color: var(--gray-600);
+    padding: 0;
+    font-size: .95rem;
+    line-height: 1;
+}
+.mcp-none {
+    color: var(--gray-600);
+    font-size: .78rem;
+}
+.mcp-enroll-form {
+    display: inline-flex;
+    gap: .2rem;
+}
+.mcp-enroll-select {
+    padding: .2rem .4rem;
+    font-size: .78rem;
+}
+.mcp-actions {
+    display: flex;
+    gap: .4rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.mcp-token-form {
+    display: flex;
+    gap: .3rem;
+    align-items: center;
+}
+.mcp-scope-select {
+    padding: .25rem .5rem;
+    font-size: .8rem;
+}
+.mcp-empty-cell { color: var(--gray-600); }
+.mcp-empty-cell--center {
+    text-align: center;
+    padding: 1rem;
+}
+.mcp-revoked { color: var(--gray-600); }
+</style>
 <script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

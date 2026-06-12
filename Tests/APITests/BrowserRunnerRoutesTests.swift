@@ -255,6 +255,235 @@ import XCTVapor
         }
     }
 
+    // MARK: - Seed endpoint (personalization parity)
+
+    @Test func seedRequiresAuthentication() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                afterResponse: { res in
+                    #expect(
+                        res.status == .unauthorized || res.status == .seeOther,
+                        "unauthenticated seed request should be rejected, got \(res.status)")
+                })
+
+        }
+    }
+
+    @Test func seedReturns404ForUnknownSetup() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/setup_missing_seed/seed",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+
+        }
+    }
+
+    /// A setup with no owning assignment can't resolve a (user, assignment)
+    /// seed — the endpoint returns `{ "seed": null }`, matching the worker
+    /// leaving the env var unset for an assignment-less job.
+    @Test func seedReturnsNullWhenSetupHasNoAssignment() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let json =
+                        try JSONSerialization.jsonObject(
+                            with: Data(res.body.readableBytesView)) as? [String: Any]
+                    #expect(json != nil, "seed body must be a JSON object")
+                    #expect(json?["seed"] as? String == nil, "no assignment → seed must be null")
+                })
+
+        }
+    }
+
+    /// Parity check: the browser seed endpoint returns exactly the value the
+    /// worker resolves via `AssignmentSeedStore.ensureSeed` for the same
+    /// (user, assignment), and that value is stable across calls.
+    @Test func seedMatchesEnsureSeedAndIsStable() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+
+            func fetchSeed() async throws -> String? {
+                var seed: String?
+                try await app.asyncTest(
+                    .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: cookie)
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .ok)
+                        let json =
+                            try JSONSerialization.jsonObject(
+                                with: Data(res.body.readableBytesView)) as? [String: Any]
+                        seed = json?["seed"] as? String
+                    })
+                return seed
+            }
+
+            let first = try #require(try await fetchSeed(), "personalized setup must return a seed")
+            #expect(first.isEmpty == false)
+
+            let second = try await fetchSeed()
+            #expect(second == first, "seed must be stable across calls")
+
+            let user = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student1").first())
+            let direct = try await AssignmentSeedStore.ensureSeed(
+                userID: try user.requireID(),
+                assignmentID: try assignment.requireID(),
+                on: app.db)
+            #expect(
+                direct == first,
+                "browser seed endpoint must return the same seed AssignmentSeedStore.ensureSeed gives the worker")
+
+        }
+    }
+
+    /// Slice B of #461: the seed endpoint resolves the assignment's `=`
+    /// expressions for this student and returns them as `personalizedInputs`
+    /// (Python literals), which the browser writes to `_ck_inputs.py` so
+    /// generated pattern-family scripts can bind per-student args / expected.
+    @Test func seedResponseIncludesPersonalizedInputs() async throws {
+        try await withApp(app) { _ in
+            let manifest = """
+                {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\
+                "globalExpressions":[{"name":"answer","expression":"7 * 6"}]}
+                """
+            let setupID = try await insertSetup(manifest: manifest)
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/seed",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let json =
+                        try JSONSerialization.jsonObject(
+                            with: Data(res.body.readableBytesView)) as? [String: Any]
+                    #expect(json?["seed"] is String, "personalized setup must return a seed")
+                    let inputs = try #require(
+                        json?["personalizedInputs"] as? [String: String],
+                        "seed endpoint must resolve = expressions into personalizedInputs")
+                    #expect(inputs["answer"] == "42", "value must be the expression's repr literal")
+                })
+        }
+    }
+
+    // MARK: - Effective-open gate (hidden-assignment leak)
+
+    /// Security regression: an enrolled student must NOT be able to fetch a
+    /// closed (or not-yet-opened / preview) assignment's test scripts, manifest,
+    /// or per-student seed by guessing its testSetupID. The seed in particular
+    /// can encode solution-derived `expected` answers, so all three
+    /// browser-runner GETs are gated on effective-open for students.
+    @Test func closedAssignmentHidesBrowserEndpointsFromStudents() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: false)
+            // loginAsStudent auto-enrolls in the .auto course, so a 403 here is
+            // the effective-open gate firing, not a missing-enrollment 403.
+            let cookie = try await loginAsStudent()
+
+            for endpoint in ["manifest", "download", "seed"] {
+                try await app.asyncTest(
+                    .GET, "/api/v1/browser-runner/testsetups/\(setupID)/\(endpoint)",
+                    beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                    afterResponse: { res in
+                        #expect(
+                            res.status == .forbidden,
+                            "enrolled student must be blocked from \(endpoint) of a closed assignment, got \(res.status)"
+                        )
+                    })
+            }
+        }
+    }
+
+    /// A `.preview` (staff-only) assignment is the sharp case: hidden from
+    /// students but usable by staff. The student must be blocked from the
+    /// manifest while the instructor — who bypasses the effective-open gate for
+    /// preview — gets it.
+    @Test func previewAssignmentVisibleToStaffHiddenFromStudents() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            assignment.visibility = .preview
+            try await assignment.save(on: app.db)
+
+            let studentCookie = try await loginAsStudent()
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: studentCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden, "student must not see a preview assignment's manifest")
+                })
+
+            let staffCookie = try await loginUser(
+                username: "prof1", password: "pass", role: "instructor", on: app)
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "staff must still access a preview assignment's manifest")
+                })
+        }
+    }
+
+    /// Regression: a `.preview` assignment that *also* carries a future open
+    /// date (`startsAt`) must still be testable by staff. The open date is when
+    /// the assignment auto-publishes to students; it must not hold the preview
+    /// closed for the very staff who put it in preview to exercise grading.
+    /// Students stay blocked (preview is staff-only regardless of the date).
+    @Test func previewWithFutureOpenDateStillReachableByStaff() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            assignment.visibility = .preview
+            assignment.startsAt = Date().addingTimeInterval(7 * 24 * 3_600)  // a week out
+            try await assignment.save(on: app.db)
+
+            let studentCookie = try await loginAsStudent()
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: studentCookie) },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .forbidden,
+                        "student must not reach a preview assignment, even before its open date")
+                })
+
+            let staffCookie = try await loginUser(
+                username: "prof1", password: "pass", role: "instructor", on: app)
+            try await app.asyncTest(
+                .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .ok,
+                        "staff must reach a preview assignment to test it before its scheduled open date")
+                })
+        }
+    }
+
     // MARK: - Full round-trip: dependency-skipped outcomes stored correctly
 
     /// Regression for #105: when the browser runner skips a test because its

@@ -12,20 +12,20 @@ My Account
 <!-- ── User info ──────────────────────────────────────────── -->
 <section class="admin-section">
     <h2>Account info</h2>
-    <dl style="display:grid;grid-template-columns:max-content 1fr;gap:.4rem 1.25rem;max-width:480px">
-        <dt style="color:var(--gray-600)">Username</dt>
-        <dd style="margin:0"><strong>#(username)</strong></dd>
+    <dl class="detail-grid">
+        <dt>Username</dt>
+        <dd><strong>#(username)</strong></dd>
         #if(preferredName):
-        <dt style="color:var(--gray-600)">Preferred name</dt>
-        <dd style="margin:0">#(preferredName)</dd>
+        <dt>Preferred name</dt>
+        <dd>#(preferredName)</dd>
         #endif
         #if(studentID):
-        <dt style="color:var(--gray-600)">Student ID</dt>
-        <dd style="margin:0">#(studentID)</dd>
+        <dt>Student ID</dt>
+        <dd>#(studentID)</dd>
         #endif
         #if(email):
-        <dt style="color:var(--gray-600)">Email</dt>
-        <dd style="margin:0">#(email)</dd>
+        <dt>Email</dt>
+        <dd>#(email)</dd>
         #endif
     </dl>
 </section>
@@ -53,7 +53,7 @@ My Account
                 <td>#(course.name)</td>
                 <td>
                     #if(course.enrollmentMode == "open"):
-                    <form method="post" action="/account/unenroll/#(course.id)" style="display:inline">
+                    <form method="post" action="/account/unenroll/#(course.id)" class="inline-form">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 onclick="return confirm('Leave #(course.code)?')">Leave</button>
@@ -89,7 +89,7 @@ My Account
                 <td><strong>#(course.code)</strong></td>
                 <td>#(course.name)</td>
                 <td>
-                    <form method="post" action="/account/enroll" style="display:inline">
+                    <form method="post" action="/account/enroll" class="inline-form">
                         #csrfFormField()
                         <input type="hidden" name="courseID" value="#(course.id)">
                         <button class="btn btn-primary" type="submit">Join</button>

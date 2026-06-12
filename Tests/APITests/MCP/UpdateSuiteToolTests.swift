@@ -113,6 +113,47 @@ import Vapor
         }
     }
 
+    @Test func closesOpenAssignmentOnEdit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)  // makeTestAssignment defaults isOpen: true
+            #expect(assignment.isOpen)
+            let output = try await UpdateSuiteTool().execute(
+                UpdateSuiteTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    edits: [
+                        UpdateSuiteTool.ScriptEdit(
+                            script: "test_a.sh", tier: "secret", points: nil, displayName: nil,
+                            dependsOn: nil, sectionID: nil)
+                    ]),
+                context(app))
+            #expect(output.assignmentClosed)
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(!reloaded.isOpen)
+        }
+    }
+
+    @Test func leavesClosedAssignmentClosed() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            assignment.visibility = .closed
+            try await assignment.save(on: app.db)
+            let output = try await UpdateSuiteTool().execute(
+                UpdateSuiteTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    edits: [
+                        UpdateSuiteTool.ScriptEdit(
+                            script: "test_a.sh", tier: "secret", points: nil, displayName: nil,
+                            dependsOn: nil, sectionID: nil)
+                    ]),
+                context(app))
+            #expect(!output.assignmentClosed)
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(!reloaded.isOpen)
+        }
+    }
+
     @Test func unknownScriptThrows() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

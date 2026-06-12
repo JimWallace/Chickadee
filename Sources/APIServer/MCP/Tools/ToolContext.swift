@@ -58,26 +58,59 @@ struct ToolContext {
 
     /// Authorizes the token subject for an action scoped to `courseID`.
     ///
-    /// The subject must be MCP-eligible (`requireEligibleSubject`), then: admins
-    /// act globally; every other subject (instructor browser-flow tokens and
-    /// `mcp` service accounts alike) must be enrolled in the target course.
-    /// Throws `MCPToolError.notAuthorized` otherwise, so a tool confines itself
-    /// to the courses its account is enrolled in.
+    /// The subject must be MCP-eligible (`requireEligibleSubject`) and enrolled
+    /// in the target course — admins included. An agent token never reaches
+    /// further than the courses its human is enrolled in (the dashboard tab
+    /// strip): enrolling widens an agent's reach, and unenrolling revokes it on
+    /// the next call, since the enrollment row is re-checked per request.
+    /// Throws `MCPToolError.notAuthorized` otherwise.
     func authorizeCourseAccess(_ courseID: UUID, tool: String) async throws {
         let user = try await requireEligibleSubject(tool: tool)
-        if user.isAdmin { return }
         guard let userID = user.id else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Token subject is not a valid user.")
         }
-        let enrolled =
-            try await APICourseEnrollment.query(on: db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == courseID)
-            .count() > 0
-        guard enrolled else {
+        guard try await userIsEnrolled(userID: userID, inCourse: courseID, db: db) else {
             throw MCPToolError.notAuthorized(
                 tool: tool,
                 detail: "The MCP account is not enrolled in the target course.")
         }
+    }
+
+    // MARK: - Assignment resolution
+
+    /// Resolves the assignment referenced by a tool's `assignmentPublicID`,
+    /// throwing the standard `invalidArguments` error if none matches. Does
+    /// not check authorization — prefer `authorizedAssignment` unless the
+    /// caller authorizes by other means.
+    func requireAssignment(publicID: String, tool: String) async throws -> APIAssignment {
+        guard let assignment = try await assignmentByPublicID(publicID, on: db) else {
+            throw MCPToolError.invalidArguments(
+                tool: tool, detail: "No assignment found with public ID \"\(publicID)\".")
+        }
+        return assignment
+    }
+
+    /// Resolves the assignment and authorizes the acting subject for its course
+    /// (`authorizeCourseAccess`). The standard entry point for a tool acting on
+    /// a single assignment.
+    func authorizedAssignment(publicID: String, tool: String) async throws -> APIAssignment {
+        let assignment = try await requireAssignment(publicID: publicID, tool: tool)
+        try await authorizeCourseAccess(assignment.courseID, tool: tool)
+        return assignment
+    }
+
+    /// Resolves and authorizes the assignment, then loads its test setup,
+    /// throwing the standard `invalidArguments` error if the setup is missing.
+    func authorizedAssignmentAndSetup(
+        publicID: String, tool: String
+    ) async throws
+        -> (assignment: APIAssignment, setup: APITestSetup)
+    {
+        let assignment = try await authorizedAssignment(publicID: publicID, tool: tool)
+        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
+            throw MCPToolError.invalidArguments(
+                tool: tool, detail: "The assignment's test setup could not be found.")
+        }
+        return (assignment, setup)
     }
 }

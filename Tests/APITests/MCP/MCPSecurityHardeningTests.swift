@@ -82,19 +82,23 @@ import XCTVapor
         _ app: Application, cookie: String, clientID: String, redirectURI: String,
         scope: String, decision: String
     ) async throws -> XCTHTTPResponse {
-        let (csrf, bound) = try await csrfFields(
-            for: authorizePath(clientID: clientID, redirectURI: redirectURI, scope: scope),
-            cookie: cookie, on: app)
+        // GET the consent screen (authenticated) to mint the single-use token,
+        // then submit it. The POST carries no cookie — the token alone guards it.
+        var html = ""
+        try await app.asyncTest(
+            .GET, authorizePath(clientID: clientID, redirectURI: redirectURI, scope: scope),
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in html = res.body.string })
+        let marker = "name=\"request_token\" value=\""
+        let after = try #require(html.range(of: marker)).upperBound
+        let tail = html[after...]
+        let end = try #require(tail.firstIndex(of: "\""))
+        let token = String(tail[..<end])
         return try await app.asyncSendRequest(
             .POST, "/oauth/authorize",
             beforeRequest: { req in
-                req.headers.add(name: .cookie, value: bound)
                 try req.content.encode(
-                    [
-                        "client_id": clientID, "redirect_uri": redirectURI, "scope": scope,
-                        "state": "xyz", "code_challenge": codeChallenge,
-                        "code_challenge_method": "S256", "decision": decision, "_csrf": csrf,
-                    ], as: .urlEncodedForm)
+                    ["request_token": token, "decision": decision], as: .urlEncodedForm)
             })
     }
 

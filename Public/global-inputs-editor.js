@@ -26,10 +26,8 @@
 
     var RESERVED_NAMES = { 'seed': true };
 
-    function csrf() {
-        var m = document.querySelector('meta[name="csrf-token"]');
-        return m ? m.getAttribute('content') : '';
-    }
+    // Shared implementation (Public/chickadee-ui.js).
+    var csrf = ChickadeeUI.getCsrfToken;
 
     function isValidPyIdent(s) {
         return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
@@ -93,7 +91,7 @@
                 nameOk = false;
             }
         }
-        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red,#c0392b)';
+        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
         nameEl.title = (name && RESERVED_NAMES[name])
             ? "'" + name + "' is reserved for Chickadee's personalization seed."
             : '';
@@ -128,9 +126,9 @@
             // existing greyscale palette so it doesn't clash on light or
             // dark themes.
             valueEl.style.backgroundColor = 'rgba(45, 143, 71, .07)';   // green tint
-            if (!valueOk) valueEl.style.borderColor = 'var(--amber,#b38600)';
+            if (!valueOk) valueEl.style.borderColor = 'var(--amber)';
         } else if (rawVal && !valueOk) {
-            valueEl.style.borderColor = 'var(--amber,#b38600)';
+            valueEl.style.borderColor = 'var(--amber)';
         }
 
         if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
@@ -146,21 +144,15 @@
         var tr = document.createElement('tr');
         tr.className = 'global-input-row';
         tr.innerHTML =
-            '<td><strong>Global input</strong></td>'
-          + '<td style="width:14rem;white-space:nowrap">'
-          +   '<span class="global-input-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>'
+            '<td style="width:14rem;white-space:nowrap">'
+          +   '<span class="global-input-row-valid" style="display:inline-block;width:1rem;color:var(--green);font-size:.95rem;text-align:center"></span>'
           +   '<input type="text" class="form-input global-input-name" value="" placeholder="Input Name" style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-family:monospace">'
           + '</td>'
           + '<td><input type="text" class="form-input global-input-value" value="" placeholder=\'12, "hello", [1, 2, 3], or = seed % 26\' style="width:100%;padding:.2rem .4rem;font-family:monospace"></td>'
           + '<td class="time"><button type="button" class="btn action-btn action-danger global-input-remove" title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button></td>';
-        // Insert before the trailing "Add input" row so the button stays at the bottom.
-        var addRow = document.getElementById('global-input-add');
-        var anchor = addRow ? addRow.closest('tr') : null;
-        if (anchor && anchor.parentNode === tbody) {
-            tbody.insertBefore(tr, anchor);
-        } else {
-            tbody.appendChild(tr);
-        }
+        // The "+ Add Input" button now lives in the panel header (not a
+        // trailing table row), so new rows simply append to the end.
+        tbody.appendChild(tr);
         refreshRow(tr, tbody);
         var input = tr.querySelector('.global-input-name');
         if (input) input.focus();
@@ -214,9 +206,9 @@
             if (!status) return;
             status.textContent = text || '';
             status.style.color = kind === 'error'
-                ? 'var(--red,#c0392b)'
+                ? 'var(--red)'
                 : (kind === 'ok'
-                    ? 'var(--green,#2d8f47)'
+                    ? 'var(--green)'
                     : 'var(--gray-500)');
         }
 

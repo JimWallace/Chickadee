@@ -23,8 +23,18 @@ import XCTVapor
     // MARK: - Auth helpers
 
     private func loginAsInstructor(on app: Application) async throws -> String {
-        return try await loginUser(
+        let cookie = try await loginUser(
             username: "testinstructor_edit", password: "testpassword", role: "instructor", on: app)
+        // Instructors are enrollment-scoped (no role bypass on the course
+        // guard), so the fixture instructor must be enrolled in the shared
+        // test course to reach its setups.
+        let user = try #require(
+            try await APIUser.query(on: app.db).filter(\.$username == "testinstructor_edit").first())
+        let courseID = try await app.testCourseID()
+        if try await !userIsEnrolled(userID: user.requireID(), inCourse: courseID, db: app.db) {
+            try await makeTestEnrollment(on: app, userID: user.requireID(), courseID: courseID)
+        }
+        return cookie
     }
 
     private func loginAsStudent(on app: Application) async throws -> String {
@@ -209,6 +219,48 @@ import XCTVapor
             #expect(kernelspec?["name"] as? String == "python")
             #expect(kernelspec?["display_name"] as? String == "Python (Pyodide)")
 
+        }
+    }
+
+    @Test func getAssignmentDeniesInstructorFromAnotherCourse() async throws {
+        // The cross-course leak the enrollment-scoped guard closes: an
+        // instructor who is not enrolled in the course that owns the setup
+        // must not fetch its notebook (instructors receive it unfiltered,
+        // secret tiers and all). An admin keeps the bypass.
+        let app = try await makeApp()
+        try await withApp(app) { app in
+            try await insertSetup(id: "setup_xcourse", on: app)
+            let flatPath = app.testSetupsDirectory + "setup_xcourse.ipynb"
+            try sampleNotebookJSON.write(toFile: flatPath, atomically: true, encoding: .utf8)
+            let setup = try #require(try await APITestSetup.find("setup_xcourse", on: app.db))
+            setup.notebookPath = flatPath
+            try await setup.save(on: app.db)
+
+            // An instructor with no enrollment in the owning course: 403.
+            let outsider = try await loginUser(
+                username: "outsider_prof", password: "testpassword", role: "instructor", on: app)
+            try await app.asyncTest(
+                .GET, "/api/v1/testsetups/setup_xcourse/assignment",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: outsider)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                }
+            )
+
+            // An admin without enrollment keeps the bypass: 200.
+            let admin = try await loginUser(
+                username: "root_admin", password: "testpassword", role: "admin", on: app)
+            try await app.asyncTest(
+                .GET, "/api/v1/testsetups/setup_xcourse/assignment",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: admin)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                }
+            )
         }
     }
 

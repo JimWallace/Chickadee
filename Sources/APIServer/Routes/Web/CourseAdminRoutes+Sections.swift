@@ -155,11 +155,9 @@ extension CourseAdminRoutes {
         guard let courseID = courseState.activeCourseUUID else {
             throw WebAssignmentError.noActiveCourse(action: "managing sections")
         }
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            assignment.courseID == courseID
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
+        let assignment = try await loadAssignment(req)
+        guard assignment.courseID == courseID else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
         }
         let body = (try? req.content.decode(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
@@ -168,23 +166,15 @@ extension CourseAdminRoutes {
 
         // When moving into a named section, sync the test setup's grading mode
         // to match the section's defaultGradingMode.  Moving to "ungrouped"
-        // (nil section) leaves the grading mode unchanged.
+        // (nil section) leaves the grading mode unchanged.  Shares
+        // `setManifestGradingMode` with the MCP set_grading_mode tool so both
+        // paths produce identical (sorted-key) manifest bytes — the
+        // manifest-hash retest gate depends on that determinism.
         if let sectionUUID = newSectionID,
             let section = try await APICourseSection.find(sectionUUID, on: req.db),
             let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
         {
-            let mode = section.defaultGradingMode  // "browser" | "worker"
-            if var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any],
-                (dict["gradingMode"] as? String) != mode
-            {
-                dict["gradingMode"] = mode
-                if let data = try? JSONSerialization.data(withJSONObject: dict),
-                    let json = String(data: data, encoding: .utf8)
-                {
-                    setup.manifest = json
-                    try await setup.save(on: req.db)
-                }
-            }
+            _ = try await setManifestGradingMode(setup: setup, to: section.defaultGradingMode, on: req.db)
         }
 
         return .ok
