@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.427] - 2026-06-12
+
+### Added
+
+- **Admin dashboard "Active Users" chart.** The admin overview now shows a
+  full-width bar chart of distinct active users per time bucket over a
+  selectable 24-hour / 1-week / 1-month window, beneath the existing
+  diagnostics, runners, and courses sections. A new `user_activity_events`
+  table records throttled per-user activity pings (written by
+  `UserActivityMiddleware`, at most once per user per 5 minutes); the chart is
+  served by `GET /admin/activity` and reaped to a 35-day retention by a new
+  hourly sweep.
+
+### Changed
+
+- **BrightSpace grade-sync logic is now unit-testable.** A narrow
+  `BrightSpaceGrading` protocol seam covers the two network-touching client
+  operations (`lookupUserID`, `pushGrade`); the sweep depends on the protocol
+  so tests substitute an in-memory fake. Seven new tests cover best-grade
+  selection, the debounce window, user-ID caching, missing-account and
+  push-failure paths, and the validation-run exclusion. Production behaviour
+  unchanged. (#629)
+
+
 ## [0.4.426] - 2026-06-12
 
 ### Changed
