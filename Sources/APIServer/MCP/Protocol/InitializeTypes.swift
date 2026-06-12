@@ -113,6 +113,10 @@ enum MCPServerInstructions {
         - Solution — the instructor's reference answer key (.ipynb), validated against the suite. It \
         is instructor-authored content, never a student submission. Read with get_solution, replace \
         with update_solution (which stores it as the validation submission and re-runs validation).
+        - Support files — non-graded helper/data files bundled in the setup zip (e.g. a CSV a check \
+        loads, a helper module tests import). List or read them with get_support_files (byte-capped \
+        reads, so big datasets return a useful head); write one with author_script(tier:"support"). \
+        Confirm a data file is bundled before authoring checks that load it.
         - Global inputs (personalization) — assignment-scoped names that vary the assignment per \
         student: literal `variables` (a name + JSON value) and `expressions` (a name + Python source \
         evaluated against the student's `seed`). They inline into generated/raw tests and substitute \
@@ -131,7 +135,7 @@ enum MCPServerInstructions {
         deployed version and whether writes are honored — call it to confirm a feature/deploy is live \
         (a tool call reflects the running process even if your tool list is cached).
         2. Inspect before editing: get_assignment, get_suite, get_notebook, get_solution, \
-        get_global_inputs. Use \
+        get_support_files, get_global_inputs. Use \
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
