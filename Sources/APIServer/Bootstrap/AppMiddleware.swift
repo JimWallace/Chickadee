@@ -27,6 +27,9 @@
 //   UserActivityMiddleware
 //   UserFileNamespaceMiddleware
 //   ScanModeMiddleware      — gates destructive POSTs in scan windows
+//   StaticAssetCacheMiddleware — stamps immutable Cache-Control on
+//                             version-fingerprinted (`?v=`) static assets
+//                             served by FileMiddleware
 //   FileMiddleware          — short-circuits the chain for static files
 //   COEPMiddleware          — sets Cross-Origin-Embedder-Policy headers
 //                             on dynamic pages (NOT on JupyterLite static
@@ -123,6 +126,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // Allow notebook uploads from the assignment-creation flow.
     app.routes.defaultMaxBodySize = "10mb"
 
+    // Compress compressible response types (text, JS, JSON, SVG — Vapor's
+    // allowlist) when the client advertises Accept-Encoding.  The shared
+    // stylesheet and page scripts shrink ~4–8× on the wire.  Already-compressed
+    // formats (zip, wasm, images, fonts) are not in the allowlist, so the
+    // multi-megabyte Pyodide/JupyterLite payloads don't burn CPU recompressing.
+    // HTML opts out per-response in SecurityHeadersMiddleware: pages embed the
+    // per-session CSRF token, and compressing a secret alongside reflectable
+    // request data is the precondition for BREACH-style compression oracles.
+    app.http.server.configuration.responseCompression = .enabledForCompressibleTypes
+
     // MARK: - Views + static files
 
     app.views.use(.leaf)
@@ -147,6 +160,11 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // application/wasm headers on the content-hashed wasm runner served from
     // Public/runner-wasm/ (FileMiddleware short-circuits, so a middleware after
     // it never sees those responses).
+    // Versioned-asset caching sits outside RunnerWasmCacheMiddleware so the
+    // wasm middleware's more specific policies (immutable hashed wasm,
+    // no-cache loader) win — StaticAssetCacheMiddleware never overwrites an
+    // existing Cache-Control.
+    app.middleware.use(StaticAssetCacheMiddleware())
     app.middleware.use(RunnerWasmCacheMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware())
