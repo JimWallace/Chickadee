@@ -78,7 +78,7 @@ func arInsertStudent(
     preferredName: String? = nil,
     on app: Application
 ) async throws -> APIUser {
-    let hash = try Bcrypt.hash("testpassword")
+    let hash = try testPasswordHash("testpassword")
     let student = APIUser(
         username: username,
         passwordHash: hash,
@@ -97,7 +97,7 @@ func arInsertUser(
     displayName: String? = nil,
     on app: Application
 ) async throws -> APIUser {
-    let hash = try Bcrypt.hash("testpassword")
+    let hash = try testPasswordHash("testpassword")
     let u = APIUser(
         username: username,
         passwordHash: hash,

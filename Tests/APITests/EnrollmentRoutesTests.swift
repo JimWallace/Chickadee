@@ -331,7 +331,7 @@ import XCTVapor
 
             let u = APIUser(
                 username: "plr_closed_student",
-                passwordHash: try Bcrypt.hash("pw"), role: "student")
+                passwordHash: try testPasswordHash("pw"), role: "student")
             try await u.save(on: app.db)
 
             let (csrf, cookie) = try await csrfFields(for: "/login", on: app)
@@ -357,7 +357,7 @@ import XCTVapor
 
             let u = APIUser(
                 username: "plr_open_student",
-                passwordHash: try Bcrypt.hash("pw"), role: "student")
+                passwordHash: try testPasswordHash("pw"), role: "student")
             try await u.save(on: app.db)
 
             let (csrf, cookie) = try await csrfFields(for: "/login", on: app)
@@ -385,7 +385,7 @@ import XCTVapor
 
             let u = APIUser(
                 username: "plr_auto_student",
-                passwordHash: try Bcrypt.hash("pw"), role: "student")
+                passwordHash: try testPasswordHash("pw"), role: "student")
             try await u.save(on: app.db)
             let userID = try u.requireID()
 
