@@ -285,8 +285,18 @@ func advanceLexState(_ line: String, _ state: inout CellLexState) {
 /// True if a non-indented Python statement is safe at module level — it defines
 /// something (function, class, import, constant) rather than executing
 /// side-effectful or control-flow code.
-func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
-    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@", "#"]
+func isSafeTopLevelStatement(_ rawTrimmed: String) -> Bool {
+    // Strip any trailing `#` comment first, so comment text (which may contain
+    // `=` or `(`) can't be mistaken for assignment or call syntax below
+    // (e.g. `print(x)  # a = b` must not look like an assignment).
+    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))
+
+    // A line that was nothing but a comment is harmless at module level.
+    if trimmed.isEmpty {
+        return true
+    }
+
+    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@"]
     where trimmed.hasPrefix(prefix) {
         return true
     }
@@ -322,6 +332,33 @@ func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
     }
 
     return false
+}
+
+/// Removes a trailing `#` comment from a single line, leaving `#` characters
+/// that appear inside string literals untouched. The scan tracks single- and
+/// double-quoted string state (honouring backslash escapes) and stops at the
+/// first `#` seen outside a string.
+private func strippingTrailingComment(from line: String) -> String {
+    var stringDelimiter: Character?
+    var prev: Character = " "
+    var idx = line.startIndex
+    while idx < line.endIndex {
+        let ch = line[idx]
+        if let delim = stringDelimiter {
+            if ch == delim && prev != "\\" {
+                stringDelimiter = nil
+            }
+        } else {
+            switch ch {
+            case "\"", "'": stringDelimiter = ch
+            case "#": return String(line[line.startIndex..<idx])
+            default: break
+            }
+        }
+        prev = ch
+        idx = line.index(after: idx)
+    }
+    return line
 }
 
 /// Index just past the `=` of a plain or annotated assignment (`x = …`,
