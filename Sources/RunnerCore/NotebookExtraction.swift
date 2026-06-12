@@ -107,21 +107,22 @@ public func sanitizeCellForModule(_ source: String) -> String {
     var defLines: [String] = []
     var usageLines: [String] = []
     var inUsage = false
-    var bracketDepth = 0
+    var lex = CellLexState()
 
     for line in lines {
         let trimmed = trimSpacesAndTabs(line)
-        // Only a new top-level statement when not inside open brackets.
-        let isTopLevel = bracketDepth == 0 && !line.isEmpty && !(line.first?.isWhitespace ?? true)
+        // A new top-level statement begins only when we are NOT inside open
+        // brackets AND NOT inside a triple-quoted string opened on an earlier
+        // line (otherwise the line is a continuation), and the line itself
+        // starts in column 0.
+        let isTopLevel =
+            lex.bracketDepth == 0 && !lex.inTripleString && !line.isEmpty
+            && !(line.first?.isWhitespace ?? true)
 
-        // Update depth AFTER the isTopLevel check — depth reflects prior lines.
-        for ch in line {
-            switch ch {
-            case "(", "[", "{": bracketDepth += 1
-            case ")", "]", "}": bracketDepth = max(0, bracketDepth - 1)
-            default: break
-            }
-        }
+        // Advance the lexical state AFTER the isTopLevel check — the state must
+        // reflect the lines *before* this one. The scan skips string and comment
+        // contents so their brackets/quotes can't perturb the classification.
+        advanceLexState(line, &lex)
 
         if isTopLevel && !trimmed.isEmpty {
             inUsage = !isSafeTopLevelStatement(trimmed)
@@ -200,13 +201,102 @@ public func pythonStringLiteral(_ s: String) -> String {
     return out
 }
 
+// MARK: - Cross-line lexical scan
+
+/// Carried lexical state for the per-cell line classifier: how deeply brackets
+/// are nested and whether we are currently inside a triple-quoted string. Both
+/// can span multiple physical lines, so the state persists across the cell's
+/// lines. Single-line strings and `#` comments never span lines, so they are
+/// resolved inside `advanceLexState` and never leak into the carried state.
+struct CellLexState {
+    var bracketDepth = 0
+    var inTripleString = false
+    var tripleDelimiter: Character = "\""
+}
+
+/// Advance `state` across one physical line. Brackets are counted only outside
+/// string and comment context, and a triple-quoted string opened here (or on an
+/// earlier line) is tracked until its closing delimiter so its interior lines
+/// aren't misread as new top-level statements. This is the fix for student cells
+/// that park a multi-line `\"\"\"…\"\"\"` block (prose or an alternate solution) at
+/// module level: without triple-quote tracking the interior lines were ripped
+/// out into the `if __name__` quarantine, producing invalid Python that the
+/// resilient-load wrapper then silently dropped — taking every definition and
+/// variable in the cell down with it.
+func advanceLexState(_ line: String, _ state: inout CellLexState) {
+    let chars = Array(line)
+    let count = chars.count
+    var index = 0
+    while index < count {
+        let char = chars[index]
+
+        if state.inTripleString {
+            if char == state.tripleDelimiter
+                && index + 2 < count
+                && chars[index + 1] == state.tripleDelimiter
+                && chars[index + 2] == state.tripleDelimiter
+            {
+                state.inTripleString = false
+                index += 3
+            } else {
+                index += 1
+            }
+            continue
+        }
+
+        // Outside any string: `#` starts a comment that runs to end of line.
+        if char == "#" { return }
+
+        if char == "\"" || char == "'" {
+            // Triple-quoted string opener?
+            if index + 2 < count && chars[index + 1] == char && chars[index + 2] == char {
+                state.inTripleString = true
+                state.tripleDelimiter = char
+                index += 3
+                continue
+            }
+            // Single-line string: skip to its matching unescaped quote.
+            index += 1
+            while index < count {
+                if chars[index] == "\\" {
+                    index += 2
+                    continue
+                }
+                if chars[index] == char {
+                    index += 1
+                    break
+                }
+                index += 1
+            }
+            continue
+        }
+
+        switch char {
+        case "(", "[", "{": state.bracketDepth += 1
+        case ")", "]", "}": state.bracketDepth = max(0, state.bracketDepth - 1)
+        default: break
+        }
+        index += 1
+    }
+}
+
 // MARK: - Top-level statement classification
 
 /// True if a non-indented Python statement is safe at module level — it defines
 /// something (function, class, import, constant) rather than executing
 /// side-effectful or control-flow code.
-func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
-    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@", "#"]
+func isSafeTopLevelStatement(_ rawTrimmed: String) -> Bool {
+    // Strip any trailing `#` comment first, so comment text (which may contain
+    // `=` or `(`) can't be mistaken for assignment or call syntax below
+    // (e.g. `print(x)  # a = b` must not look like an assignment).
+    let trimmed = trimSpacesAndTabs(strippingTrailingComment(from: rawTrimmed))
+
+    // A line that was nothing but a comment is harmless at module level.
+    if trimmed.isEmpty {
+        return true
+    }
+
+    for prefix in ["def ", "async def ", "class ", "import ", "from ", "@"]
     where trimmed.hasPrefix(prefix) {
         return true
     }
@@ -242,6 +332,33 @@ func isSafeTopLevelStatement(_ trimmed: String) -> Bool {
     }
 
     return false
+}
+
+/// Removes a trailing `#` comment from a single line, leaving `#` characters
+/// that appear inside string literals untouched. The scan tracks single- and
+/// double-quoted string state (honouring backslash escapes) and stops at the
+/// first `#` seen outside a string.
+private func strippingTrailingComment(from line: String) -> String {
+    var stringDelimiter: Character?
+    var prev: Character = " "
+    var idx = line.startIndex
+    while idx < line.endIndex {
+        let ch = line[idx]
+        if let delim = stringDelimiter {
+            if ch == delim && prev != "\\" {
+                stringDelimiter = nil
+            }
+        } else {
+            switch ch {
+            case "\"", "'": stringDelimiter = ch
+            case "#": return String(line[line.startIndex..<idx])
+            default: break
+            }
+        }
+        prev = ch
+        idx = line.index(after: idx)
+    }
+    return line
 }
 
 /// Index just past the `=` of a plain or annotated assignment (`x = …`,

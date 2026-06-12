@@ -207,7 +207,7 @@ struct AuthRoutes: RouteCollection {
         // Note: two truly-simultaneous first registrations could both see count == 0.
         // This is acceptable for a single-server classroom deployment.
         let totalUsers = try await APIUser.query(on: req.db).count()
-        let role = totalUsers == 0 ? "admin" : "student"
+        let role = totalUsers == 0 ? UserRole.admin.rawValue : UserRole.student.rawValue
 
         let hash = try await req.password.async.hash(body.password)
         let user = APIUser(username: body.username, passwordHash: hash, role: role)

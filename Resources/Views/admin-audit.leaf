@@ -14,30 +14,30 @@ Audit Log
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
 </nav>
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <h2 style="margin:0">Audit Log</h2>
+    <div class="page-titlebar">
+        <h2>Audit Log</h2>
     </div>
 
-    <p style="color:var(--muted);margin-top:0">
+    <p class="audit-intro">
         Records sensitive admin actions, authentication events, and agent
         (MCP / OAuth) activity.  The most recent 200 matching entries are
         shown; older entries remain in the database.
     </p>
 
     <form method="get" action="/admin/audit"
-        style="display:flex;align-items:flex-end;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem">
-        <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.85rem">
-            <span style="color:var(--muted)">Action</span>
-            <select name="action" style="min-width:18rem">
+        class="audit-filter-form">
+        <label class="audit-filter-field">
+            <span class="audit-filter-label">Action</span>
+            <select name="action" class="audit-action-select">
                 <option value="">All actions</option>
                 #for(option in actionOptions):
                 <option value="#(option.value)"#if(option.selected): selected#endif>#(option.label)</option>
                 #endfor
             </select>
         </label>
-        <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.85rem">
-            <span style="color:var(--muted)">Actor contains</span>
-            <input type="text" name="actor" value="#(filterActor)" placeholder="username" />
+        <label class="audit-filter-field">
+            <span class="audit-filter-label">Actor contains</span>
+            <input type="text" name="actor" value="#(filterActor)" placeholder="username" autocomplete="off" />
         </label>
         <button type="submit" class="btn">Filter</button>
         #if(filtered):
@@ -46,38 +46,60 @@ Audit Log
     </form>
 
     #if(!rows.count):
-    <p style="color:var(--muted)">#if(filtered):No audit entries match this filter.#else:No audit entries recorded yet.#endif</p>
+    <p class="audit-muted">#if(filtered):No audit entries match this filter.#else:No audit entries recorded yet.#endif</p>
     #else:
-    <p style="color:var(--muted);font-size:.85rem;margin-top:0">
+    <p class="audit-count">
         Showing #count(rows) of #(matchCount) matching #if(matchCount == 1):entry#else:entries#endif.
     </p>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
-                <th style="width:11rem">Time</th>
-                <th style="width:8rem">Actor</th>
-                <th style="width:9rem">Category</th>
-                <th style="width:14rem">Action</th>
-                <th style="width:9rem">Target</th>
+                <th class="audit-col-time">Time</th>
+                <th class="audit-col-actor">Actor</th>
+                <th class="audit-col-category">Category</th>
+                <th class="audit-col-action">Action</th>
+                <th class="audit-col-target">Target</th>
                 <th>Metadata</th>
-                <th style="width:9rem">Remote</th>
+                <th class="audit-col-remote">Remote</th>
             </tr>
         </thead>
         <tbody>
             #for(row in rows):
             <tr>
-                <td style="font-family:var(--font-mono,monospace);font-size:.85rem">#(row.timestamp)</td>
+                <td class="audit-mono">#(row.timestamp)</td>
                 <td>#(row.actor)</td>
                 <td>#(row.category)</td>
-                <td>#(row.label)<br><code style="font-size:.75rem;color:var(--muted)">#(row.action)</code></td>
+                <td>#(row.label)<br><code class="audit-action-code">#(row.action)</code></td>
                 <td>#if(row.targetType):#(row.targetType)#if(row.targetID): · <code>#(row.targetID)</code>#endif#else:—#endif</td>
-                <td style="font-family:var(--font-mono,monospace);font-size:.8rem;white-space:pre-wrap;word-break:break-word">#(row.metadata)</td>
-                <td style="font-family:var(--font-mono,monospace);font-size:.85rem">#(row.remoteAddr)</td>
+                <td class="audit-metadata">#(row.metadata)</td>
+                <td class="audit-mono">#(row.remoteAddr)</td>
             </tr>
             #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
+<style>
+.audit-col-time { width: 11rem; }
+.audit-col-actor { width: 8rem; }
+.audit-col-category { width: 9rem; }
+.audit-col-action { width: 14rem; }
+.audit-col-target { width: 9rem; }
+.audit-col-remote { width: 9rem; }
+.audit-mono {
+    font-family: var(--font-mono, monospace);
+    font-size: .85rem;
+}
+.audit-action-code {
+    font-size: .75rem;
+    color: var(--muted);
+}
+.audit-metadata {
+    font-family: var(--font-mono, monospace);
+    font-size: .8rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+</style>
 #endexport
 #endextend

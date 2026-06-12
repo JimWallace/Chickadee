@@ -10,6 +10,14 @@ on:
   # docs/release-process.md.
   merge_group:
 
+# Cancel superseded runs when new commits land on a PR branch (one branch
+# racked up four full CI runs in 70 minutes during the #890 audit).  Pushes
+# to main and merge-queue runs are never cancelled — their group key is the
+# unique ref/SHA and cancel-in-progress is false outside pull_request.
+concurrency:
+  group: swift-tests-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   format-lint:
     runs-on: ubuntu-latest
@@ -21,7 +29,10 @@ jobs:
     # invoke the swiftlint plugin.  Re-unify when SwiftLintBinary publishes
     # a jammy-compatible release or when the project moves all jobs to noble.
     container:
-      image: swift:6.3-noble
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
@@ -46,6 +57,9 @@ jobs:
       - name: Block new XCTest imports
         run: scripts/no-new-xctest.sh
 
+      - name: Check view / stylesheet hygiene
+        run: scripts/check-styles.sh
+
       - name: Check runner wasm size budget
         run: scripts/check-runner-wasm-size.sh
 
@@ -65,7 +79,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       # Full (blobless) history so `git restore-mtime` can read each file's
@@ -78,22 +95,9 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - name: Install git-restore-mtime
-        run: |
-          for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends git-restore-mtime && break
-            echo "apt-get failed (attempt $i), retrying in 15s..."
-            sleep 15
-          done
-
       # Normalise source mtimes to commit times so the restored `.build/`
       # stays valid for unchanged files and only new commits recompile.
-      # The container runs git as a different uid than checkout used, so mark
-      # the workspace safe before invoking git.
-      - name: Restore source mtimes from git history
-        run: |
-          git config --global --add safe.directory '*'
-          git restore-mtime
+      - uses: ./.github/actions/restore-git-mtimes
 
       - name: Resolve toolchain cache key
         id: toolchain
@@ -106,15 +110,19 @@ jobs:
       # the type) keep their old source mtime, so `git restore-mtime` marks
       # them "fresh" and llbuild reuses stale object files compiled against the
       # old symbol → "undefined reference" link errors. Bumping the salt forces
-      # one clean rebuild for everyone.  (v2: TestItem struct→enum, v0.4.228.)
+      # one clean rebuild for everyone.  (v2: TestItem struct→enum, v0.4.228;
+      # v3: TestProperties gained the `achievements` field — its init's mangled
+      # signature changed, so stale transitive objects fail to link.
+      # v4: CourseBundleManifest gained the `sections` field, same init-mangling
+      # story.)
       - name: Cache build artifacts
         id: build-cache
         uses: actions/cache@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
           restore-keys: |
-            ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-
+            ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-
 
       # Exact cache hit: artifacts already match this tree, skip even the
       # near-no-op build.  Restore-keys partial hit (cache-hit is false): the
@@ -129,7 +137,10 @@ jobs:
     needs: build
     timeout-minutes: 20
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
 
     steps:
@@ -144,7 +155,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Run CoreTests
         run: |
@@ -159,7 +170,10 @@ jobs:
     needs: build
     timeout-minutes: 20
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
 
     steps:
@@ -174,7 +188,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
         run: |
@@ -208,11 +222,17 @@ jobs:
     needs: build
     timeout-minutes: 25
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
     services:
       postgres:
-        image: postgres:16
+        image: ghcr.io/jimwallace/chickadee/postgres:16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_DB: chickadee_test
           POSTGRES_USER: postgres
@@ -243,7 +263,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
         run: |
@@ -296,7 +316,10 @@ jobs:
     # the test process; --parallel would just have the runner schedule
     # them across multiple xctest binaries that don't share the lock.
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
 
     steps:
@@ -311,12 +334,25 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v2-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install worker test dependencies
-        run: apt-get update -qq && apt-get install -y --no-install-recommends file
+        # `file` backs SubmissionNormalizer's MIME detection; `python3` runs the
+        # real local HTTP servers (LocalHTTPTestServer) and notebook probes in
+        # WorkerDaemonTests / NotebookExtractorTests, which otherwise fail (not
+        # skip) when the interpreter is absent.
+        run: apt-get update -qq && apt-get install -y --no-install-recommends file python3
 
       - name: Run WorkerTests
+        # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
+        # Testing's in-process parallelism, matching the APITests jobs and
+        # the nightly coverage run.  WorkerTests spawn real subprocesses
+        # (/bin/sh scripts, python3 HTTP servers) and daemon Tasks that get
+        # starved when every test fires at once on a 2-core runner; the cap
+        # bounds that contention at the scheduler instead of relying solely
+        # on the in-suite throttles.
+        env:
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
           if [ "${{ steps.build-cache.outputs.cache-hit }}" = "true" ]; then
             swift test --skip-build --filter WorkerTests

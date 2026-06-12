@@ -17,19 +17,37 @@ enum MCPToolCatalog {
     static var live: ToolRegistry {
         ToolRegistry([
             ListCoursesTool().erased(),
+            GetServerInfoTool().erased(),
             ListAssignmentsTool().erased(),
+            ListCourseSectionsTool().erased(),
             GetAssignmentTool().erased(),
             GetSuiteTool().erased(),
             GetNotebookTool().erased(),
+            GetSolutionTool().erased(),
             GetGlobalInputsTool().erased(),
             PreviewPersonalizationTool().erased(),
             ValidateAssignmentTool().erased(),
             UpdateAssignmentTool().erased(),
+            SetGradingModeTool().erased(),
             UpdateSuiteTool().erased(),
             UpdateGlobalInputsTool().erased(),
             UpdateSectionVariablesTool().erased(),
+            CreateSuiteSectionTool().erased(),
+            RenameSuiteSectionTool().erased(),
+            DeleteSuiteSectionTool().erased(),
+            MoveSuiteItemTool().erased(),
             UpdatePatternFamilyTool().erased(),
+            CreatePatternFamilyTool().erased(),
+            DeleteSuiteItemTool().erased(),
+            AuthorNotebookCheckTool().erased(),
             UpdateNotebookTool().erased(),
+            UpdateSolutionTool().erased(),
+            AuthorScriptTool().erased(),
+            CreateCourseSectionTool().erased(),
+            RenameCourseSectionTool().erased(),
+            DeleteCourseSectionTool().erased(),
+            ReorderCourseSectionsTool().erased(),
+            SetAssignmentCourseSectionTool().erased(),
             CloneAssignmentTool().erased(),
             CreateAssignmentTool().erased(),
         ])
@@ -75,6 +93,14 @@ func registerMCPRoutes(_ app: Application) throws {
             "MCP_MODE=\(mcp.mode.rawValue) but no issuer/resource could be resolved (set MCP_ISSUER/MCP_RESOURCE or PUBLIC_BASE_URL); /mcp not mounted."
         )
         return
+    }
+
+    if let warning = mcpAllowlistWarning(
+        environment: app.environment,
+        allowedHosts: mcp.allowedHosts,
+        allowedOrigins: mcp.allowedOrigins)
+    {
+        app.logger.warning("\(warning)")
     }
 
     let dispatcher = MCPDispatcher(
@@ -143,6 +169,24 @@ func registerMCPOAuthRoutes(
 
     app.logger.info(
         "MCP browser OAuth flow mounted at /oauth/{authorize,token,revoke,register}")
+}
+
+/// The operator-facing warning to log when the MCP transport is being mounted
+/// in production with one or both DNS-rebinding guards disabled (an empty
+/// allowlist means "allow any" — see MCPRoutes.Configuration).  Nil when both
+/// are configured, or in non-production environments where empty allowlists
+/// are the normal development default.
+func mcpAllowlistWarning(
+    environment: Environment, allowedHosts: Set<String>, allowedOrigins: Set<String>
+) -> String? {
+    guard environment == .production else { return nil }
+    var unset: [String] = []
+    if allowedHosts.isEmpty { unset.append("MCP_ALLOWED_HOSTS") }
+    if allowedOrigins.isEmpty { unset.append("MCP_ALLOWED_ORIGINS") }
+    guard !unset.isEmpty else { return nil }
+    return "MCP transport mounted with \(unset.joined(separator: " and ")) unset — "
+        + "the Host/Origin DNS-rebinding guards are disabled. Set them to this "
+        + "deployment's public host and origin."
 }
 
 private extension String {

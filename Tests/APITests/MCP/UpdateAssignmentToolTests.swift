@@ -1,5 +1,6 @@
 // Tests for UpdateAssignmentTool (open/close), backed by a real test database.
 
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -70,6 +71,39 @@ import Vapor
             #expect(output.isOpen == false)
             let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
             #expect(reloaded?.isOpen == false)
+        }
+    }
+
+    @Test func setsPreviewVisibilityWithoutRequiringValidation() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // Preview is a pure visibility flip: no validation gate.
+            let assignment = try await enrolledAssignment(
+                on: app, validationStatus: "pending", isOpen: false)
+            let output = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, visibility: "preview"),
+                context(app))
+            #expect(output.visibility == "preview")
+            #expect(output.isOpen == false)
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.visibility == .preview)
+        }
+    }
+
+    @Test func allowsPreviewOnOpenAssignment() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // No one-way restriction: open → preview is allowed.
+            let assignment = try await enrolledAssignment(
+                on: app, validationStatus: "passed", isOpen: true)
+            let output = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, visibility: "preview"),
+                context(app))
+            #expect(output.visibility == "preview")
+            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.visibility == .preview)
         }
     }
 

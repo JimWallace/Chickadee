@@ -1,7 +1,13 @@
 // APIServer/Routes/Web/InstructorDashboardRoutes+Submissions.swift
 //
-// Submission-related handlers for AssignmentRoutes.
-// Extracted from AssignmentRoutes.swift — no behaviour changes.
+// The instructor assignment-submissions page
+// (GET /instructor/:assignmentID/submissions) and its row/metric builders.
+//
+// The grades CSV export lives in `InstructorDashboardRoutes+GradesCSV.swift`;
+// the per-student actions (history, retest, notebook reset, grade overrides)
+// live in `InstructorDashboardRoutes+StudentActions.swift`; the shared
+// `preferredResultsBySubmissionID` fold lives in
+// `Helpers/PreferredResultsBySubmissionID.swift`.
 
 import Fluent
 import Foundation
@@ -9,205 +15,12 @@ import Vapor
 
 extension InstructorDashboardRoutes {
 
-    // MARK: - GET /instructor/grades.csv
-
-    @Sendable
-    func exportGradesCSV(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-
-        // Phase 1: students + assignments in parallel.  Both only need
-        // `activeCourseUUID`; neither depends on the other.
-        async let studentsFuture = loadGradesCSVStudents(
-            req: req, activeCourseUUID: courseState.activeCourseUUID)
-        async let assignmentsFuture = loadGradesCSVAssignments(
-            req: req, activeCourseUUID: courseState.activeCourseUUID)
-        let students = try await studentsFuture
-        let assignments = try await assignmentsFuture
-
-        let setupIDs = Set(assignments.map(\.testSetupID))
-        let studentIDs = Set(students.compactMap(\.id))
-
-        // Phase 2: setups-by-id + submissions in parallel.  Both depend on
-        // phase 1 (setupIDs / studentIDs), but neither depends on the other.
-        async let setupByIDFuture = loadGradesCSVSetupsByID(req: req, setupIDs: setupIDs)
-        async let submissionsFuture = loadGradesCSVSubmissions(
-            req: req, setupIDs: setupIDs, studentIDs: studentIDs)
-        let setupByID = try await setupByIDFuture
-        let submissions = try await submissionsFuture
-
-        let sortedAssignments = sortedGradesCSVAssignments(assignments, setupByID: setupByID)
-        let submissionIDs = submissions.map(\.id)
-
-        // Serial follow-on: needs submission IDs from phase 2.
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
-            for: submissionIDs, on: req.db)
-        let bestPointsByUserAndSetup = bestPointsByUserAndSetup(
-            submissions: submissions,
-            preferredResultBySubmissionID: preferredResultBySubmissionID
-        )
-
-        let csv = renderGradesCSV(
-            students: students,
-            sortedAssignments: sortedAssignments,
-            bestPointsByUserAndSetup: bestPointsByUserAndSetup
-        )
-
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let response = Response(status: .ok)
-        response.headers.replaceOrAdd(name: .contentType, value: "text/csv; charset=utf-8")
-        response.headers.replaceOrAdd(
-            name: .contentDisposition,
-            value: "attachment; filename=\"grades-\(timestamp).csv\""
-        )
-        response.body = .init(string: csv)
-        return response
-    }
-
-    // MARK: - exportGradesCSV helpers
-
-    /// Only include students enrolled in the active course (if one is set).
-    private func loadGradesCSVStudents(
-        req: Request, activeCourseUUID: UUID?
-    ) async throws -> [APIUser] {
-        if let activeCourseUUID {
-            let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == activeCourseUUID)
-                .all()
-                .map { $0.userID }
-            let enrolledSet = Set(enrolledUserIDs)
-            let allStudents = try await APIUser.query(on: req.db)
-                .filter(\.$role == "student")
-                .sort(\.$username, .ascending)
-                .all()
-            return allStudents.filter { u in u.id.map { enrolledSet.contains($0) } ?? false }
-        }
-        return try await APIUser.query(on: req.db)
-            .filter(\.$role == "student")
-            .sort(\.$username, .ascending)
-            .all()
-    }
-
-    private func loadGradesCSVAssignments(
-        req: Request, activeCourseUUID: UUID?
-    ) async throws -> [APIAssignment] {
-        if let activeCourseUUID {
-            return try await APIAssignment.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .all()
-        }
-        return try await APIAssignment.query(on: req.db).all()
-    }
-
-    private func loadGradesCSVSetupsByID(
-        req: Request, setupIDs: Set<String>
-    ) async throws -> [String: APITestSetup] {
-        let setups =
-            setupIDs.isEmpty
-            ? []
-            : try await APITestSetup.query(on: req.db)
-                .filter(\.$id ~~ setupIDs)
-                .all()
-        return Dictionary(
-            uniqueKeysWithValues: setups.compactMap { setup in
-                setup.id.map { ($0, setup) }
-            })
-    }
-
-    private func sortedGradesCSVAssignments(
-        _ assignments: [APIAssignment],
-        setupByID: [String: APITestSetup]
-    ) -> [APIAssignment] {
-        assignments.sorted { lhs, rhs in
-            switch (lhs.sortOrder, rhs.sortOrder) {
-            case (let l?, let r?) where l != r:
-                return l < r
-            default:
-                let lhsCreated = setupByID[lhs.testSetupID]?.createdAt ?? .distantPast
-                let rhsCreated = setupByID[rhs.testSetupID]?.createdAt ?? .distantPast
-                if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
-                return lhs.testSetupID < rhs.testSetupID
-            }
-        }
-    }
-
-    private func loadGradesCSVSubmissions(
-        req: Request,
-        setupIDs: Set<String>,
-        studentIDs: Set<UUID>
-    ) async throws -> [(id: String, userID: UUID, setupID: String)] {
-        let submissionRows =
-            (setupIDs.isEmpty || studentIDs.isEmpty)
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$testSetupID ~~ setupIDs)
-                .filter(\.$userID ~~ studentIDs)
-                .all()
-        return submissionRows.compactMap { row -> (id: String, userID: UUID, setupID: String)? in
-            guard let id = row.id, let userID = row.userID else { return nil }
-            return (id, userID, row.testSetupID)
-        }
-    }
-
-    private func bestPointsByUserAndSetup(
-        submissions: [(id: String, userID: UUID, setupID: String)],
-        preferredResultBySubmissionID: [String: APIResult]
-    ) -> [String: Double] {
-        var bestPointsByUserAndSetup: [String: Double] = [:]
-        for submission in submissions {
-            guard let result = preferredResultBySubmissionID[submission.id],
-                let points = gradePointsFromCollectionJSON(result.collectionJSON)
-            else {
-                continue
-            }
-            let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
-            let prior = bestPointsByUserAndSetup[key] ?? -1
-            if points > prior {
-                bestPointsByUserAndSetup[key] = points
-            }
-        }
-        return bestPointsByUserAndSetup
-    }
-
-    private func renderGradesCSV(
-        students: [APIUser],
-        sortedAssignments: [APIAssignment],
-        bestPointsByUserAndSetup: [String: Double]
-    ) -> String {
-        var lines: [String] = []
-        let header =
-            ["OrgDefinedId", "Username"]
-            + sortedAssignments.map { "\($0.title) Points Grade" }
-            + ["End-of-Line Indicator"]
-        lines.append(header.map(csvEscaped).joined(separator: ","))
-
-        for student in students {
-            guard let userID = student.id else { continue }
-            var row: [String] = [student.studentID ?? "", "#\(student.username)"]
-            for assignment in sortedAssignments {
-                let key = "\(userID.uuidString.lowercased())::\(assignment.testSetupID)"
-                if let points = bestPointsByUserAndSetup[key] {
-                    row.append(String(format: "%.1f", points))
-                } else {
-                    row.append("")
-                }
-            }
-            row.append("#")
-            lines.append(row.map(csvEscaped).joined(separator: ","))
-        }
-
-        return lines.joined(separator: "\n") + "\n"
-    }
-
     // MARK: - GET /instructor/:assignmentID/submissions
 
     @Sendable
     func assignmentSubmissionsPage(req: Request) async throws -> View {
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
-        }
+        let assignment = try await loadAssignment(req)
+        let assignmentIDRaw = assignment.publicID
 
         // Canonical roster size: role=="student" enrolled users + pre-enrollments.
         // Matches /admin and /instructor; the table below still only lists
@@ -225,12 +38,21 @@ extension InstructorDashboardRoutes {
         let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
             for: submissionIDs, on: req.db)
 
+        // Instructor grade overrides for this assignment, indexed by student.
+        let overrideMap = try await loadGradeOverridePercents(
+            setupIDs: [assignment.testSetupID], on: req.db)
+        var overrideByStudentID: [UUID: Int] = [:]
+        for (key, pct) in overrideMap where key.setupID == assignment.testSetupID {
+            overrideByStudentID[key.userID] = pct
+        }
+
         let fmt = waterlooDateTimeFormatter()
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             buildAssignmentStudentRow(
                 student: student,
                 submissionsByStudentID: submissionsByStudentID,
                 preferredResultBySubmissionID: preferredResultBySubmissionID,
+                overrideByStudentID: overrideByStudentID,
                 assignmentIDRaw: assignmentIDRaw,
                 fmt: fmt
             )
@@ -266,7 +88,7 @@ extension InstructorDashboardRoutes {
             .map(\.userID)
         guard !enrolledUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
-            .filter(\.$role == "student")
+            .filter(\.$role == UserRole.student.rawValue)
             .filter(\.$id ~~ enrolledUserIDs)
             .sort(\.$username, .ascending)
             .all()
@@ -299,18 +121,19 @@ extension InstructorDashboardRoutes {
         student: APIUser,
         submissionsByStudentID: [UUID: [APISubmission]],
         preferredResultBySubmissionID: [String: APIResult],
+        overrideByStudentID: [UUID: Int],
         assignmentIDRaw: String,
         fmt: DateFormatter
     ) -> AssignmentStudentRow? {
         guard let studentID = student.id else { return nil }
         let history = submissionsByStudentID[studentID] ?? []
         let latest = history.first
-        let bestGradePercent: Int? = {
+        let runnerBestGradePercent: Int? = {
             var best = -1
             for submission in history {
                 guard let subID = submission.id,
                     let result = preferredResultBySubmissionID[subID],
-                    let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                    let pct = result.gradePercentValue
                 else {
                     continue
                 }
@@ -318,6 +141,10 @@ extension InstructorDashboardRoutes {
             }
             return best >= 0 ? best : nil
         }()
+        // An instructor override is the student's effective grade — it feeds
+        // both the displayed grade and the median metric.
+        let override = overrideByStudentID[studentID]
+        let bestGradePercent = override ?? runnerBestGradePercent
         let inferredName =
             splitHumanName(student.displayName)
             ?? splitHumanName(student.preferredName)
@@ -328,6 +155,8 @@ extension InstructorDashboardRoutes {
             surname: inferredName.surname,
             givenNames: inferredName.givenNames,
             gradeText: bestGradePercent.map { "\($0)%" } ?? "—",
+            gradeIsOverridden: override != nil,
+            gradeOverridePercent: override ?? runnerBestGradePercent ?? 0,
             submissionCount: history.count,
             hasLatestSubmission: latest != nil,
             latestSubmissionID: latest?.id ?? "",
@@ -353,7 +182,7 @@ extension InstructorDashboardRoutes {
         let pendingLatestCount = rows.reduce(into: 0) { count, row in
             guard row.hasLatestSubmission,
                 let latest = submissions.first(where: { $0.id == row.latestSubmissionID }),
-                ["pending", "assigned"].contains(latest.status)
+                [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue].contains(latest.status)
             else { return }
             count += 1
         }
@@ -386,276 +215,4 @@ extension InstructorDashboardRoutes {
         ]
     }
 
-    // MARK: - GET /instructor/:assignmentID/students/:studentID/history
-
-    @Sendable
-    func studentSubmissionHistoryPage(req: Request) async throws -> View {
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
-            let studentIDRaw = req.parameters.get("studentID"),
-            let studentID = UUID(uuidString: studentIDRaw),
-            let student = try await APIUser.find(studentID, on: req.db),
-            student.role == "student"
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment or student")
-        }
-
-        let submissions = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == assignment.testSetupID)
-            .filter(\.$userID == studentID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .sort(\.$submittedAt, .descending)
-            .all()
-        let submissionIDs = submissions.compactMap(\.id)
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
-            for: submissionIDs,
-            on: req.db
-        )
-
-        let fmt = waterlooDateTimeFormatter()
-
-        let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
-            let subID = submission.id ?? ""
-            let gradeText: String
-            if let result = preferredResultBySubmissionID[subID],
-                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
-            {
-                gradeText = "\(pct)%"
-            } else {
-                gradeText = "—"
-            }
-            return AssignmentSubmissionHistoryRow(
-                submissionID: subID,
-                attemptNumber: submission.attemptNumber ?? 1,
-                status: submission.status,
-                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                gradeText: gradeText
-            )
-        }
-
-        return try await req.view.render(
-            "assignment-student-history",
-            AssignmentStudentHistoryContext(
-                currentUser: req.currentUserContext,
-                assignmentID: assignmentIDRaw,
-                assignmentTitle: assignment.title,
-                studentID: student.username,
-                historyPath: "/instructor/\(assignmentIDRaw)/students/\(studentIDRaw)/history",
-                rows: rows
-            )
-        )
-    }
-
-    // MARK: - POST /instructor/:assignmentID/submissions/:submissionID/retest
-
-    @Sendable
-    func retestSubmission(req: Request) async throws -> Response {
-        struct RetestBody: Content {
-            var returnTo: String?
-        }
-
-        let user = try req.auth.require(APIUser.self)
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
-            let submissionID = req.parameters.get("submissionID"),
-            let submission = try await APISubmission.find(submissionID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Submission")
-        }
-
-        guard submission.testSetupID == assignment.testSetupID else {
-            throw WebAssignmentError.notFound(resource: "Submission")
-        }
-        guard submission.kind == APISubmission.Kind.student else {
-            throw WebAssignmentError.invalidParameter(
-                name: "submissionID", reason: "Only student submissions can be re-tested.")
-        }
-
-        _ = try await flipSubmissionToPending(
-            submission,
-            triggeredBy: user.id,
-            on: req.db
-        )
-
-        let body = try? req.content.decode(RetestBody.self)
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo,
-            assignmentIDRaw: assignmentIDRaw,
-            fallbackPath: fallbackPath
-        )
-        return req.redirect(to: redirectPath)
-    }
-
-    // MARK: - POST /instructor/:assignmentID/retest
-    //
-    // "Retest all" — fans out a retest to every student submission on the
-    // assignment's test setup.  The manual sibling of the auto-retest
-    // trigger in `saveEditedAssignment`.  Always runs with `force = true`
-    // so an instructor click re-enqueues even the submissions currently
-    // being worked on (the queue can safely collapse duplicates at claim
-    // time; we'd rather over-trigger than silently skip on a retry).
-    //
-    // Bumps `setup.lastRetestedManifestHash` on success so a subsequent
-    // cosmetic Save doesn't duplicate the work.
-
-    @Sendable
-    func retestAllSubmissions(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
-        }
-
-        let count = try await retestAllSubmissionsForSetup(
-            setupID: assignment.testSetupID,
-            triggeredBy: user.id,
-            on: req.db,
-            force: true
-        )
-
-        setup.lastRetestedManifestHash = manifestHash(setup.manifest)
-        try await setup.save(on: req.db)
-
-        req.logger.info(
-            "retest_all_triggered assignment=\(assignmentIDRaw) count=\(count) by=\(user.id?.uuidString ?? "nil")")
-        await AuditLogger.record(
-            action: .submissionRetestAll,
-            targetType: .testSetup,
-            targetID: setup.id,
-            metadata: [
-                "assignment": assignmentIDRaw,
-                "submission_count": String(count),
-            ],
-            on: req
-        )
-
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        struct RetestAllBody: Content { var returnTo: String? }
-        let body = try? req.content.decode(RetestAllBody.self)
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo,
-            assignmentIDRaw: assignmentIDRaw,
-            fallbackPath: fallbackPath
-        )
-        return req.redirect(to: redirectPath)
-    }
-
-    // MARK: - POST /instructor/:assignmentID/students/:studentID/reset-notebook
-    //
-    // Instructor-driven reset of a student's working-copy notebook back to
-    // the canonical starter from the test setup.  Used when a student has
-    // corrupted their own notebook (e.g. uploaded a broken `.ipynb` that
-    // overwrote their working copy) and needs to start over from the
-    // original assignment.
-    //
-    // Past submissions are NOT deleted — they remain in the database and
-    // on disk for forensic / grading review.  Only the live working copy
-    // at jupyterlite/files/users/{userID}/{setupID}/<filename> is
-    // overwritten.
-    //
-    // Note for the student: the new starter is on the server, but the
-    // student's browser may still have the broken version cached in
-    // JupyterLite's IndexedDB.  The student should clear site data for
-    // chickadee.uwaterloo.ca (or use an incognito window) on their next
-    // visit for the reset to take effect end-to-end.
-    @Sendable
-    func resetStudentNotebook(req: Request) async throws -> Response {
-        struct ResetBody: Content {
-            var returnTo: String?
-        }
-
-        let user = try req.auth.require(APIUser.self)
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
-        }
-        guard let studentIDRaw = req.parameters.get("studentID"),
-            let studentID = UUID(uuidString: studentIDRaw)
-        else {
-            throw WebAssignmentError.notFound(resource: "Student")
-        }
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Test setup")
-        }
-
-        let isEnrolled =
-            try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == assignment.courseID)
-            .filter(\.$userID == studentID)
-            .count() > 0
-        guard isEnrolled else {
-            throw WebAssignmentError.notFound(resource: "Enrolled student '\(studentIDRaw)'")
-        }
-
-        let starter: Data
-        do {
-            starter = try notebookData(for: setup)
-        } catch {
-            throw WebAssignmentError.invalidParameter(
-                name: "setup",
-                reason: "Test setup has no starter notebook to reset to."
-            )
-        }
-
-        _ = try await ensureUserNotebookWorkingCopy(
-            req: req,
-            setupID: setup.id ?? assignment.testSetupID,
-            userID: studentID,
-            fallbackSetup: setup,
-            overwriteWith: starter
-        )
-
-        req.logger.info(
-            "student_notebook_reset assignment=\(assignmentIDRaw) student=\(studentIDRaw) by=\(user.id?.uuidString ?? "nil")"
-        )
-
-        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
-        let body = try? req.content.decode(ResetBody.self)
-        let redirectPath = sanitizedAssignmentReturnPath(
-            body?.returnTo,
-            assignmentIDRaw: assignmentIDRaw,
-            fallbackPath: fallbackPath
-        )
-        return req.redirect(to: redirectPath)
-    }
-}
-
-/// Loads `APIResult` rows for the given submission IDs and reduces them
-/// to one preferred result per submission, preferring `source == "worker"`
-/// over a browser-runner submission when both exist.  Promoted to a free
-/// function in v0.4.177 so the submissions and per-student views can
-/// share it across `RouteCollection`s.
-func preferredResultsBySubmissionID(
-    for submissionIDs: [String],
-    on db: Database
-) async throws -> [String: APIResult] {
-    let results =
-        submissionIDs.isEmpty
-        ? []
-        : try await APIResult.query(on: db)
-            .filter(\.$submissionID ~~ submissionIDs)
-            .sort(\.$receivedAt, .descending)
-            .all()
-
-    var preferredResultBySubmissionID: [String: APIResult] = [:]
-    for result in results {
-        let key = result.submissionID
-        if let existing = preferredResultBySubmissionID[key] {
-            let existingSource = existing.source ?? "worker"
-            let candidateSource = result.source ?? "worker"
-            if existingSource == "worker" { continue }
-            if candidateSource == "worker" {
-                preferredResultBySubmissionID[key] = result
-            }
-        } else {
-            preferredResultBySubmissionID[key] = result
-        }
-    }
-    return preferredResultBySubmissionID
 }

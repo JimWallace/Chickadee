@@ -1,0 +1,147 @@
+name: Vendor RunnerCore wasm
+
+# The in-browser grader runs the shared RunnerCore grading core compiled to
+# WebAssembly and vendored under Public/runner-wasm/ (loaded by browser-runner.js
+# as core.extractPython / runnerExecuteSuites). That artifact is hand-built with
+# an Embedded-Swift wasm SDK and checked in, so a change to RunnerCore source
+# does NOT regenerate it — the browser silently keeps grading with the old
+# logic. That is exactly the failure behind #801, where a notebook-extraction
+# fix reached the native worker but the browser path needed a re-vendor.
+#
+# This job closes that gap: on main, whenever the wasm build inputs change
+# (RunnerCore / the wasm bridge / the build script), it rebuilds and re-vendors
+# the artifact and commits it back to main. Prod is built from version tags, so
+# the fresh artifact ships on the next release (one-release lag; set a
+# RELEASE_TOKEN-driven trigger if same-release is ever needed).
+#
+# Drift is gated by a source hash (scripts/runnercore-source-hash.sh) recorded
+# in Public/runner-wasm/source.sha — so the expensive SDK install + build only
+# run when the inputs actually changed, and the very first run heals whatever
+# the checked-in artifact had drifted to.
+#
+# Loop-safety: the auto-commit only touches Public/runner-wasm/ (+ the size
+# baseline), which is NOT in the trigger paths; and a push made with the default
+# GITHUB_TOKEN does not re-trigger workflows. Both independently prevent a loop.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/RunnerCore/**'
+      - 'wasm/Sources/**'
+      - 'wasm/Package.swift'
+      - 'wasm/Package.resolved'
+      - 'wasm/wasm-sdk.pin'
+      - 'scripts/build-runner-wasm.sh'
+      - 'scripts/runnercore-source-hash.sh'
+      - '.github/workflows/runner-wasm-vendor.yml'
+
+concurrency:
+  group: runner-wasm-vendor
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Decide whether a re-vendor is needed
+        id: gate
+        run: |
+          current="$(scripts/runnercore-source-hash.sh)"
+          recorded="$(cat Public/runner-wasm/source.sha 2>/dev/null || echo none)"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          if [ "$current" = "$recorded" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::RunnerCore wasm inputs unchanged ($current) — no re-vendor."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::RunnerCore wasm inputs changed ($recorded -> $current) — re-vendoring."
+          fi
+
+      - name: Install Swift 6.3.2 + Embedded Wasm SDK
+        if: steps.gate.outputs.changed == 'true'
+        run: |
+          set -euxo pipefail
+          # The Swift toolchain links these system libs at runtime; the bare
+          # ubuntu-latest runner is missing some (swiftly flags libcurl), so the
+          # toolchain installs but `swift` won't run. Install the documented
+          # Swift-on-Ubuntu dependency set (apt is idempotent for ones already
+          # present).
+          sudo apt-get update
+          sudo apt-get install -y \
+            binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev \
+            libncurses-dev libpython3-dev libsqlite3-0 libstdc++-13-dev \
+            libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev
+          # Install swiftly from its binary release (the legacy swiftly-install.sh
+          # shell script does not support Ubuntu 24.04, the ubuntu-latest runner).
+          arch="$(uname -m)"
+          curl -fsSLO "https://download.swift.org/swiftly/linux/swiftly-${arch}.tar.gz"
+          tar zxf "swiftly-${arch}.tar.gz"
+          ./swiftly init -y --skip-install --quiet-shell-followup
+          . "$HOME/.local/share/swiftly/env.sh"
+          swiftly install 6.3.2
+          swiftly use 6.3.2
+          hash -r
+          swift --version
+          url="$(grep '^url=' wasm/wasm-sdk.pin | cut -d= -f2-)"
+          checksum="$(grep '^checksum=' wasm/wasm-sdk.pin | cut -d= -f2-)"
+          swift sdk install "$url" --checksum "$checksum"
+          swift sdk list
+
+      - name: Setup Node (esbuild + wasm-opt via npx)
+        if: steps.gate.outputs.changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Rebuild + re-vendor the browser wasm
+        if: steps.gate.outputs.changed == 'true'
+        run: |
+          . "$HOME/.local/share/swiftly/env.sh"
+          scripts/build-runner-wasm.sh
+          scripts/runnercore-source-hash.sh > Public/runner-wasm/source.sha
+          # Refresh the size baseline so the delta note in check-runner-wasm-size.sh
+          # tracks the new artifact (informational only; it never fails on growth).
+          wasm="$(ls Public/runner-wasm/RunnerWasm.*.wasm | head -1)"
+          gzip -9 -c "$wasm" | wc -c | tr -d ' ' > runner-size-baseline.txt
+
+      - name: Commit re-vendored artifact to main
+        if: steps.gate.outputs.changed == 'true'
+        run: |
+          if git diff --quiet -- Public/runner-wasm runner-size-baseline.txt; then
+            echo "::notice::Rebuild produced no artifact change — nothing to commit."
+            exit 0
+          fi
+          git config user.name "chickadee-wasm[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Public/runner-wasm runner-size-baseline.txt
+          git commit -m "chore(wasm): re-vendor RunnerCore browser artifact [skip ci]"
+          # main can advance between checkout and here: auto-release.yml pushes a
+          # `chore(release)` commit in the same post-merge window, and this job —
+          # the slower of the two (it installs the wasm SDK and rebuilds) — loses
+          # a plain push every time, so the re-vendor silently never lands until
+          # someone re-triggers it by hand. Rebase our artifact-only commit onto
+          # the latest main and retry; the commit touches only Public/runner-wasm
+          # and runner-size-baseline.txt, which nothing else writes, so the
+          # rebase never conflicts (abort + fail loudly if it somehow does rather
+          # than force-push over main).
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "::notice::Pushed re-vendored artifact (attempt $attempt)."
+              exit 0
+            fi
+            echo "::warning::push rejected (attempt $attempt) — rebasing onto origin/main and retrying"
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; echo "::error::unexpected rebase conflict re-vendoring wasm"; exit 1; }
+          done
+          echo "::error::could not push re-vendored artifact after 5 attempts"
+          exit 1

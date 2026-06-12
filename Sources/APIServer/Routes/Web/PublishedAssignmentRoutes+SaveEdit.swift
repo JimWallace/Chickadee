@@ -16,13 +16,8 @@ extension PublishedAssignmentRoutes {
     func saveEditedAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
 
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let idStr = assignment.publicID
 
         let form = try parseSaveEditedAssignmentForm(req: req)
 
@@ -101,7 +96,9 @@ extension PublishedAssignmentRoutes {
             dueAt: due,
             existingOverride: assignment.deadlineOverrideActive ?? false
         )
-        assignment.isOpen = false
+        // Editing returns the assignment to closed (re-validation gates the
+        // re-open / re-preview), matching the close-on-save contract.
+        assignment.visibility = .closed
 
         return try await enqueueValidationForEditedAssignment(
             req: req,

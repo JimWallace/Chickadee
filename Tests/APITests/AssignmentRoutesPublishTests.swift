@@ -30,12 +30,13 @@ import XCTVapor
                     )
                 },
                 afterResponse: { res in
-                    // Redirects to /instructor/:id/validate
+                    // Redirects to /instructor/:id/edit (finalize the draft; saving
+                    // there validates — there is no separate validate page).
                     #expect(res.status == .seeOther)
                     let location = res.headers.first(name: .location) ?? ""
                     #expect(
-                        location.contains("/instructor/") && location.contains("/validate"),
-                        "Expected redirect to /instructor/:id/validate, got \(location)")
+                        location.contains("/instructor/") && location.contains("/edit"),
+                        "Expected redirect to /instructor/:id/edit, got \(location)")
                 })
 
             // Assignment should be in DB as draft (isOpen: false)

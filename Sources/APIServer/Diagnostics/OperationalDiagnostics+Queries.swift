@@ -86,12 +86,12 @@ extension OperationalDiagnosticsService {
 
     func pendingQueueDepth(on db: Database) async throws -> Int {
         let pendingValidation = try await APISubmission.query(on: db)
-            .filter(\.$status == "pending")
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == APISubmission.Kind.validation)
             .count()
 
         let pendingStudents = try await APISubmission.query(on: db)
-            .filter(\.$status == "pending")
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
             .filter(\.$kind == APISubmission.Kind.student)
             .all()
 
@@ -130,7 +130,7 @@ extension OperationalDiagnosticsService {
         }
 
         for submission in try await APISubmission.query(on: db)
-            .filter(\.$status == "pending")
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
             .all()
         {
             if let id = submission.id {
@@ -222,8 +222,8 @@ extension OperationalDiagnosticsService {
     func inFlightJobCount(on db: Database) async throws -> Int {
         try await APISubmission.query(on: db)
             .group(.or) { group in
-                group.filter(\.$status == "assigned")
-                group.filter(\.$status == "running")
+                group.filter(\.$status == SubmissionStatus.assigned.rawValue)
+                group.filter(\.$status == SubmissionStatus.running.rawValue)
             }
             .count()
     }

@@ -270,6 +270,7 @@ function createPyodideHarness(options = {}) {
     exitCode: null,
     loadPackageCalls: [],
     configuredScripts: [],
+    assignmentSeedEnv: null,
   };
 
   const py = {
@@ -280,6 +281,12 @@ function createPyodideHarness(options = {}) {
       if (options.packageError) throw options.packageError;
     },
     async runPythonAsync(code) {
+      if (code.includes("os.environ['CHICKADEE_ASSIGNMENT_SEED']")) {
+        const m = code.match(/CHICKADEE_ASSIGNMENT_SEED'\]\s*=\s*"([^"]*)"/);
+        if (m) state.assignmentSeedEnv = m[1];
+        return null;
+      }
+
       if (code.includes("os.chdir('")) {
         const match = code.match(/os\.chdir\('([^']+)'\)/);
         if (match) state.cwd = match[1];
@@ -406,6 +413,19 @@ async function loadRunnerHarness(options = {}) {
         ok: true,
         async json() {
           return { submissionID: 'sub_test_123' };
+        },
+      };
+    }
+
+    if (url.endsWith('/seed')) {
+      if (options.seedFetchResponse) return options.seedFetchResponse;
+      return {
+        ok: true,
+        async text() {
+          return JSON.stringify({
+            seed: options.assignmentSeed ?? null,
+            personalizedInputs: options.personalizedInputs ?? null,
+          });
         },
       };
     }
@@ -926,5 +946,224 @@ test('failure detail strips the trailing JSON envelope so students never see the
   assert.equal(
     outcome.longResult,
     'stdout:\nVariable `age` is not defined in the student notebook.\n  expected: a module-level variable named `age`',
+  );
+});
+
+test('injects the per-student seed into os.environ for parity with the native worker', async () => {
+  // The worker sets CHICKADEE_ASSIGNMENT_SEED in the test subprocess
+  // (RunnerDaemon+JobProcessing). The browser must do the same so a test that
+  // reads the seed grades identically. The runner fetches the seed endpoint and
+  // sets os.environ before any script runs.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    zipFiles: { 'test_seed.py': '# seed\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_seed.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_seed',
+  );
+
+  assert.equal(harness.py.state.assignmentSeedEnv, 'deadbeefcafe0123');
+  assert.equal(
+    harness.fetchCalls.filter(call => call.url.endsWith('/seed')).length,
+    1,
+    'the seed endpoint should be fetched exactly once',
+  );
+});
+
+test('omits CHICKADEE_ASSIGNMENT_SEED when the assignment is not personalized (null seed)', async () => {
+  // A null seed (no owning assignment / non-personalized setup, or an older
+  // server) must leave the env var unset, preserving legacy behaviour.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: null,
+    zipFiles: { 'test_seed.py': '# seed\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_seed.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_noseed',
+  );
+
+  assert.equal(harness.py.state.assignmentSeedEnv, null);
+});
+
+test('writes _ck_inputs.py from the seed endpoint personalizedInputs (parity with the worker)', async () => {
+  // The worker writes _ck_inputs.py into the grading workspace from
+  // Job.personalizedInputs; the browser must do the same from the seed
+  // endpoint's personalizedInputs so a generated pattern-family script that
+  // loads per-student args/expected grades identically. Values are verbatim
+  // Python literals (repr) the server resolved for this student's seed.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    personalizedInputs: { adults_expected: '2', patients: "[{'mrn': '1001'}]" },
+    zipFiles: { 'publictest_x.py': '# x\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'publictest_x.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_personalized',
+  );
+
+  // FS.writes is an append-only log, so the record survives workdir cleanup.
+  const write = harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py'));
+  assert.ok(write, '_ck_inputs.py must be written to the work dir');
+  const src = String(write.value);
+  assert.ok(src.includes('_ck = {'), 'emits a _ck dict');
+  assert.ok(src.includes('"adults_expected": 2,'), 'value inserted verbatim');
+  assert.ok(src.includes(`"patients": [{'mrn': '1001'}],`), 'Python-literal value preserved');
+  // Keys sorted for determinism (adults_expected before patients).
+  assert.ok(src.indexOf('adults_expected') < src.indexOf('patients'));
+});
+
+test('omits _ck_inputs.py when the seed endpoint returns no personalizedInputs', async () => {
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    zipFiles: { 'publictest_x.py': '# x\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'publictest_x.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_noinputs',
+  );
+
+  assert.equal(
+    harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py')),
+    undefined,
+    'no _ck_inputs.py when there are no per-student inputs',
+  );
+});
+
+// ── Section grouping (results displayed per test-suite section) ──────────────
+// The browser-graded results views (notebook.js, assignment-validate.js) group
+// outcomes into one table per section, matching the server-rendered submission
+// view (submission.leaf).  The runner supplies the data — the ordered section
+// list plus a sectionID parallel to the outcomes — and the shared
+// BrowserRunner.groupBySection buckets them, mirroring the server's
+// groupOutcomesBySection (Tests/APITests/SectionsTests.swift).
+
+test('runScripts surfaces ordered sections + a sectionID parallel to outcomes; outcomes stay canonical', async () => {
+  const passing = exit => ({ stdout: '', stderr: '', exitCode: exit });
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'a.py': '# a\n', 'b.py': '# b\n', 'c.py': '# c\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      sections: [
+        { id: 's1', name: 'Question 1' },
+        { id: 's2', name: 'Question 2' },
+      ],
+      testSuites: [
+        { script: 'a.py', tier: 'public', sectionID: 's1' },
+        { script: 'b.py', tier: 'public', sectionID: 's2' },
+        { script: 'c.py', tier: 'public' },
+      ],
+    },
+    scriptBehaviors: { 'a.py': passing(0), 'b.py': passing(0), 'c.py': passing(0) },
+  });
+
+  const result = await harness.window.BrowserRunner.runScripts(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_sections',
+  );
+
+  // Ordered section list (id + name), straight from the manifest.
+  assert.deepEqual(plain(result.sections), [
+    { id: 's1', name: 'Question 1' },
+    { id: 's2', name: 'Question 2' },
+  ]);
+  // sectionIDs[i] is the section of outcomes[i] (c.py is ungrouped -> null).
+  assert.deepEqual(plain(result.sectionIDs), ['s1', 's2', null]);
+  // The outcome objects themselves must NOT carry a sectionID — they stay the
+  // canonical worker TestOutcome shape (guarded above for the single-outcome
+  // case; this is the multi-section regression guard).
+  for (const outcome of result.outcomes) {
+    assert.ok(!Object.hasOwn(outcome, 'sectionID'), 'outcome must not carry a sectionID field');
+  }
+});
+
+test('groupBySection buckets outcomes in section order with a trailing Ungrouped block', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const sections = [{ id: 's1', name: 'One' }, { id: 's2', name: 'Two' }];
+  const outcomes = ['a', 'b', 'c', 'd'].map(n => ({ testName: n }));
+  // d -> null => Ungrouped; matches SectionsTests.groupOutcomesEmits...Ungrouped.
+  const grouped = groupBySection(outcomes, sections, ['s1', 's2', 's1', null]);
+
+  // plain() normalises cross-realm objects returned from the vm context.
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, tests: g.outcomes.map(o => o.testName) }))),
+    [
+      { name: 'One', tests: ['a', 'c'] },
+      { name: 'Two', tests: ['b'] },
+      { name: 'Ungrouped', tests: ['d'] },
+    ],
+  );
+});
+
+test('groupBySection with no sections is a single unlabelled bucket (legacy flat table)', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const outcomes = [{ testName: 'a' }, { testName: 'b' }];
+  const grouped = groupBySection(outcomes, [], [null, null]);
+
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].sectionName, null, 'no sections => unlabelled bucket, identical to pre-sections layout');
+  assert.deepEqual(plain(grouped[0].outcomes.map(o => o.testName)), ['a', 'b']);
+});
+
+test('groupBySection keeps identical display names in their own sections (v0.4.105 index correlation)', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  // Two pattern-family cases sharing the label "Test 1" in different sections.
+  // A name-keyed map would collapse both onto one section; index correlation
+  // via the parallel sectionIDs array keeps them apart.
+  const sections = [{ id: 'warmup', name: 'Warm Up' }, { id: 'warmup2', name: 'Warm Up II' }];
+  const outcomes = [{ testName: 'Test 1' }, { testName: 'Test 1' }];
+  const grouped = groupBySection(outcomes, sections, ['warmup', 'warmup2']);
+
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, n: g.outcomes.length }))),
+    [{ name: 'Warm Up', n: 1 }, { name: 'Warm Up II', n: 1 }],
+  );
+});
+
+test('groupBySection sends a stale/unknown sectionID to the Ungrouped block', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const sections = [{ id: 's1', name: 'One' }];
+  // outcomes[1] points at a section no longer in the manifest.
+  const grouped = groupBySection([{ testName: 'a' }, { testName: 'b' }], sections, ['s1', 's-gone']);
+
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, tests: g.outcomes.map(o => o.testName) }))),
+    [
+      { name: 'One', tests: ['a'] },
+      { name: 'Ungrouped', tests: ['b'] },
+    ],
   );
 });

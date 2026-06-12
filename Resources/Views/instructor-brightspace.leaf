@@ -9,7 +9,7 @@ LEARN
     <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
 </nav>
 
-<h1 style="margin:0 0 1.25rem">LEARN</h1>
+<h1 class="bs-title">LEARN</h1>
 
 #if(!brightspaceSyncEnabled):
 #elseif(!hasActiveCourse):
@@ -21,11 +21,11 @@ LEARN
 <!-- ── Connection & course link ──────────────────────────── -->
 <section class="bs-section">
     <h2 class="bs-h2">Connection</h2>
-    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+    <div class="bs-connection-row">
         <button class="btn action-btn" type="button" id="bs-test-btn">Test connection</button>
         <span id="bs-test-result" class="card-meta"></span>
     </div>
-    <p class="card-meta" style="margin-top:.6rem;max-width:60ch">
+    <p class="card-meta bs-connection-note">
         #if(courseLinked):
             #if(orgUnitName):
             <span class="tier tier-open">linked</span>
@@ -53,12 +53,12 @@ LEARN
         <div class="bs-card"><div class="bs-card-label">Unmapped students</div><div class="bs-card-value">#(summary.unmapped)</div></div>
     </div>
     #if(!courseIsArchived):
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.9rem">
-        <form method="post" action="/instructor/brightspace/sync-now" style="margin:0">
+    <div class="bs-summary-actions">
+        <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
             #csrfFormField()
             <button class="btn btn-primary" type="submit">Sync now</button>
         </form>
-        <form method="post" action="/instructor/brightspace/retry-failed" style="margin:0">
+        <form method="post" action="/instructor/brightspace/retry-failed" class="inline-form">
             #csrfFormField()
             <button class="btn action-btn" type="submit">Retry failed</button>
         </form>
@@ -72,13 +72,13 @@ LEARN
     #if(!hasAssignments):
     <p class="empty">No assignments in this course yet.</p>
     #else:
-    <p class="card-meta" style="margin:0 0 .6rem;max-width:62ch">
+    <p class="card-meta bs-section-note">
         Map each assignment to its D2L grade item. Start typing to pick from the course's
         grade book (when connected), or paste the numeric grade-item ID. Leave blank to skip
         an assignment.
     </p>
     <datalist id="bs-grade-objects"></datalist>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th>Assignment</th>
@@ -93,14 +93,13 @@ LEARN
                 <td><strong>#(row.title)</strong></td>
                 <td>
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace"
-                          style="display:flex;gap:.4rem;align-items:center;margin:0">
+                          class="bs-grade-form">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="brightspace">
                         <label class="visually-hidden" for="bs-go-#(row.assignmentID)">Grade item ID for #(row.title)</label>
-                        <input class="form-input" type="text" name="gradeObjectID"
+                        <input class="form-input bs-grade-input" type="text" name="gradeObjectID"
                                id="bs-go-#(row.assignmentID)" list="bs-grade-objects"
-                               value="#(row.gradeObjectID)" placeholder="e.g. 78901"
-                               style="width:11rem;font-size:.85rem;padding:.25rem .45rem">
+                               value="#(row.gradeObjectID)" placeholder="e.g. 78901">
                         <button class="btn action-btn" type="submit">Save</button>
                     </form>
                 </td>
@@ -114,12 +113,12 @@ LEARN
                     #else:
                     <span class="card-meta">—</span>
                     #endif
-                    <div class="card-meta" style="font-size:.72rem">#if(row.lastSyncStatus != "none"):#(row.lastSyncText)#endif</div>
+                    <div class="card-meta bs-sync-detail">#if(row.lastSyncStatus != "none"):#(row.lastSyncText)#endif</div>
                 </td>
                 <td>
                     #if(!courseIsArchived):
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace/push-all"
-                          style="margin:0"
+                          class="inline-form"
                           onsubmit="return confirm('Re-push every student’s best grade for #(row.title) to BrightSpace?')">
                         #csrfFormField()
                         <button class="btn action-btn" type="submit"
@@ -130,7 +129,7 @@ LEARN
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 
@@ -138,11 +137,11 @@ LEARN
 #if(hasUnmapped):
 <section class="bs-section">
     <h2 class="bs-h2">Unmapped students (#(summary.unmapped))</h2>
-    <p class="card-meta" style="margin:0 0 .6rem;max-width:62ch">
+    <p class="card-meta bs-section-note">
         These students' grades can't sync because Chickadee can't resolve a BrightSpace account
         for them. Fix the student number on file, or confirm they're enrolled in the D2L course.
     </p>
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead><tr><th>Name</th><th>Username</th><th>Reason</th></tr></thead>
         <tbody>
         #for(student in unmappedStudents):
@@ -153,7 +152,7 @@ LEARN
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
 </section>
 #endif
 
@@ -163,7 +162,7 @@ LEARN
     #if(!hasLog):
     <p class="empty">No grade pushes recorded yet.</p>
     #else:
-    <table class="results-table">
+    <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th>When</th>
@@ -176,7 +175,7 @@ LEARN
         <tbody>
         #for(log in logRows):
             <tr>
-                <td style="white-space:nowrap">#(log.attemptedAt)</td>
+                <td class="bs-log-when">#(log.attemptedAt)</td>
                 <td><code>#(log.username)</code></td>
                 <td>#(log.assignmentTitle)</td>
                 <td>#(log.points)</td>
@@ -192,7 +191,7 @@ LEARN
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 #endif
@@ -200,7 +199,7 @@ LEARN
 <!-- ── Export grades (always available) ──────────────────── -->
 <section class="bs-section">
     <h2 class="bs-h2">Export grades</h2>
-    <p class="card-meta" style="margin:0 0 .6rem;max-width:62ch">
+    <p class="card-meta bs-section-note">
         Download a CSV of every enrolled student's best grade per assignment, formatted for
         BrightSpace grade import (OrgDefinedId + per-assignment points columns).
     </p>
@@ -221,6 +220,17 @@ LEARN
 }
 .bs-card-label { color: var(--gray-600); font-size: .82rem; }
 .bs-card-value { margin-top: .2rem; font-size: 1.4rem; font-weight: 600; color: var(--gray-900); }
+.bs-connection-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.bs-connection-note { margin-top: .6rem; max-width: 60ch; }
+.bs-summary-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
+.bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
+.bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
+.bs-grade-input { width: 11rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
+@media (max-width: 640px) {
+    .bs-grade-form { flex-wrap: wrap; }
+}
+.bs-sync-detail { font-size: .72rem; }
+.bs-log-when { white-space: nowrap; }
 </style>
 <script>
 (function () {

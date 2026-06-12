@@ -79,13 +79,8 @@ struct ValidateAssignmentTool: ContentTool {
     }
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db)
-        else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name,
-                detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
+        let assignment = try await context.authorizedAssignment(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         let timeout = Self.clampTimeout(input.timeoutSeconds)
         let outcome = try await watchValidation(

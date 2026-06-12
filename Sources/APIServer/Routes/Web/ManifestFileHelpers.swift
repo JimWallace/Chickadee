@@ -153,7 +153,10 @@ func makeWorkerManifestJSON(
     notebookChecks: [NotebookCheck] = [],
     sections: [TestSuiteSection] = [],
     globalVariables: [FamilyVariable] = [],
-    globalExpressions: [PersonalizationExpression] = []
+    globalExpressions: [PersonalizationExpression] = [],
+    achievements: [Achievement] = [],
+    disabledBuiltInAwardIDs: [String] = [],
+    builtInAchievementsSeeded: Bool = false
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -193,6 +196,17 @@ func makeWorkerManifestJSON(
     // Slice 2 — assignment-scope expressions (notebook only). Each
     // entry is `{ name, expression }`.
     try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
+    // Display/award-only fields (server-side; `runnerSanitized()` strips them).
+    // Spliced here so a suite rebuild doesn't wipe authored achievements or the
+    // instructor's built-in-award toggles — `makeWorkerManifestJSON` builds a
+    // fresh dict, so anything absent here is lost on the next suite edit.
+    try spliceEncodedArray(into: &manifest, key: "achievements", values: achievements)
+    if !disabledBuiltInAwardIDs.isEmpty {
+        manifest["disabledBuiltInAwardIDs"] = disabledBuiltInAwardIDs
+    }
+    if builtInAchievementsSeeded {
+        manifest["builtInAchievementsSeeded"] = true
+    }
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"
@@ -235,7 +249,11 @@ private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any
     if !entry.dependsOn.isEmpty {
         dict["dependsOn"] = entry.dependsOn
     }
-    if entry.points > 1 {
+    // Emit any non-default points value — including 0.  The decoder
+    // defaults a missing key to 1, so a 0-point entry (e.g. an existence
+    // guard, which gates rather than grades) must be written explicitly or
+    // it round-trips back to 1 and starts counting toward the score.
+    if entry.points != 1 {
         dict["points"] = entry.points
     }
     if let fid = entry.generatedBy, !fid.isEmpty {

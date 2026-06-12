@@ -34,14 +34,14 @@
     // Public API — called by notebook.js on Submit
     // -------------------------------------------------------------------------
 
-    window.BrowserRunner = { runAndSubmit, runScripts };
+    window.BrowserRunner = { runAndSubmit, runScripts, groupBySection };
 
     /**
      * Run all test scripts against the student's notebook and submit results.
      *
      * @param {Uint8Array} notebookBytes  Raw bytes of the student's .ipynb file.
      * @param {string}     setupID        The test setup ID for this assignment.
-     * @returns {{ outcomes: object[], response: object }}
+     * @returns {{ outcomes: object[], response: object, sections: object[], sectionIDs: (?string)[] }}
      */
     async function runAndSubmit(notebookBytes, setupID) {
         const result = await runScripts(notebookBytes, setupID, { filename: 'submission.ipynb' });
@@ -52,7 +52,52 @@
         return {
             outcomes: result.outcomes,
             response: await postBrowserResult(notebookBytes, result.collection, setupID),
+            sections: result.sections,
+            sectionIDs: result.sectionIDs,
         };
+    }
+
+    /**
+     * Bucket outcomes into display sections, mirroring the server's
+     * groupOutcomesBySection (Sources/APIServer/Routes/Web/WebRoutes+Submission.swift):
+     * sections in manifest order, each `outcomes[i]` placed by `sectionIDs[i]`
+     * (index correlation — not a name lookup, so two families that share a case
+     * label can't collapse onto one section, v0.4.105), with a trailing
+     * "Ungrouped" bucket for outcomes whose section is missing or unknown.  When
+     * the assignment defines no sections at all, returns a single unlabelled
+     * bucket so the layout is identical to the pre-sections flat table.
+     *
+     * @param {object[]} outcomes
+     * @param {{id: string, name: string}[]} sections
+     * @param {(?string)[]} sectionIDs  Parallel to outcomes; sectionIDs[i] is the
+     *   section id of the manifest entry that produced outcomes[i] (or null).
+     * @returns {{ sectionName: ?string, outcomes: object[] }[]}
+     */
+    function groupBySection(outcomes, sections, sectionIDs) {
+        const list = Array.isArray(sections) ? sections : [];
+        const ids = Array.isArray(sectionIDs) ? sectionIDs : [];
+        const known = new Set(list.map(s => s.id));
+        const byID = new Map();
+        const ungrouped = [];
+        (outcomes || []).forEach((o, i) => {
+            const sid = i < ids.length ? ids[i] : null;
+            if (sid && known.has(sid)) {
+                if (!byID.has(sid)) byID.set(sid, []);
+                byID.get(sid).push(o);
+            } else {
+                ungrouped.push(o);
+            }
+        });
+        const groups = [];
+        for (const section of list) {
+            const rows = byID.get(section.id);
+            if (rows && rows.length) groups.push({ sectionName: section.name, outcomes: rows });
+        }
+        if (ungrouped.length) {
+            groups.push({ sectionName: list.length ? 'Ungrouped' : null, outcomes: ungrouped });
+        }
+        if (groups.length === 0) groups.push({ sectionName: null, outcomes: [] });
+        return groups;
     }
 
     /**
@@ -199,6 +244,58 @@ for _module_name in student_module_names_in_load_order():
                 throw new Error('Failed to configure Python environment: ' + toMessage(e));
             }
 
+            // Personalization parity (issue #461): inject the per-student seed so a
+            // test reading CHICKADEE_ASSIGNMENT_SEED behaves identically to the
+            // native worker, which sets the same env var in RunnerDaemon's test
+            // subprocess. The server resolves the seed with the SAME
+            // AssignmentSeedStore.ensureSeed call the worker and notebook
+            // substitution use, so all three share one value. os.environ persists
+            // for the whole Pyodide session, so one set covers every test script.
+            // A non-personalized setup (or an older server without the endpoint)
+            // yields no seed → leave the env var unset, preserving legacy behaviour.
+            let assignmentSeed = null;
+            let personalizedInputs = null;
+            try {
+                const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
+                const parsed = JSON.parse(seedText);
+                if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
+                    assignmentSeed = parsed.seed;
+                }
+                if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
+                    personalizedInputs = parsed.personalizedInputs;
+                }
+            } catch (_) {
+                assignmentSeed = null;  // grade without a seed rather than failing the run
+                personalizedInputs = null;
+            }
+            if (assignmentSeed !== null) {
+                try {
+                    await py.runPythonAsync(
+                        `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(assignmentSeed)}`);
+                } catch (e) {
+                    throw new Error('Failed to set assignment seed: ' + toMessage(e));
+                }
+            }
+            // Per-student personalization inputs (issue #461, Slice B): mirror the
+            // native worker, which writes _ck_inputs.py into the grading workspace
+            // from Job.personalizedInputs. Each value is already a Python literal
+            // the server resolved for this student's seed (via the same
+            // gradingInputs helper); generated pattern-family scripts load this
+            // file by path. The filename is reserved in test_runtime so it can't
+            // be mistaken for the submission module.
+            if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
+                let ckSource = '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n_ck = {\n';
+                for (const key of Object.keys(personalizedInputs).sort()) {
+                    ckSource += `    ${JSON.stringify(key)}: ${personalizedInputs[key]},\n`;
+                }
+                ckSource += '}\n';
+                try {
+                    py.FS.writeFile(`${workDir}/_ck_inputs.py`, ckSource);
+                } catch (e) {
+                    throw new Error('Failed to write personalization inputs: ' + toMessage(e));
+                }
+            }
+
             // 4. Fetch manifest from server (test.properties.json is not in the zip;
             //    the server serves it directly from the database via the manifest endpoint).
             setRunnerStatus('loading', 'Loading test configuration…');
@@ -232,6 +329,20 @@ for _module_name in student_module_names_in_load_order():
                 points: typeof entry.points === 'number' ? entry.points : 1,
             }));
 
+            // Section metadata, so the inline results can be grouped per
+            // section exactly like the server-rendered submission view.  Kept
+            // as a parallel array (never stamped onto the outcomes, which must
+            // stay the canonical worker TestOutcome shape): `sectionIDPerSuite[i]`
+            // is the section of the manifest entry that produces `outcomes[i]`
+            // — index correlation, matching groupOutcomesBySection on the server
+            // (a name-keyed map would collapse two families that share a case
+            // label — v0.4.105).
+            const sections = (Array.isArray(manifest.sections) ? manifest.sections : [])
+                .filter(s => s && typeof s.id === 'string')
+                .map(s => ({ id: s.id, name: typeof s.name === 'string' ? s.name : '' }));
+            const sectionIDPerSuite = (manifest.testSuites || []).map(entry =>
+                (entry && typeof entry.sectionID === 'string' && entry.sectionID) ? entry.sectionID : null);
+
             // Substrate callbacks handed to the Swift loop.
             const scriptExists = (name) => {
                 try { py.FS.stat(`${workDir}/${name}`); return true; }
@@ -243,8 +354,11 @@ for _module_name in student_module_names_in_load_order():
                 suites, timeLimitSeconds, 1, scriptExists, runScript);
 
             // 5. Build collection. The caller decides whether to submit it.
+            // `outcomes` stays the canonical worker TestOutcome shape — section
+            // info rides alongside in a parallel array, never on the outcome
+            // objects, so the posted collection is byte-identical to the worker's.
             const collection = buildCollection(setupID, outcomes);
-            return { outcomes, collection };
+            return { outcomes, collection, sections, sectionIDs: sectionIDPerSuite };
 
         } finally {
             // Clean up MEMFS to avoid OOM on repeated submissions.
@@ -745,7 +859,7 @@ def _candidate_student_files() -> List[Path]:
     files: List[Path] = []
     for p in cwd.glob("*.py"):
         name = p.name
-        if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py"}:
+        if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py", "_ck_inputs.py"}:
             continue
         lower = name.lower()
         if lower.startswith("publictest") or lower.startswith("secrettest") or lower.startswith("releasetest"):
@@ -848,7 +962,7 @@ def load_student_module():
     return modules.get(_loaded_student_order[0])
 
 
-def student_source() -> str:
+def student_source_raw() -> str:
     hint = Path(".chickadee_student_source")
     try:
         if hint.exists():
@@ -866,6 +980,60 @@ def student_source() -> str:
     except Exception:
         pass
     return ""
+
+
+def student_cell_sources() -> List[Any]:
+    source = student_source_raw()
+    chunks: List[Any] = []
+    label = "module"
+    lines: List[str] = []
+    for raw in source.split("\\n"):
+        stripped = raw.strip()
+        if stripped.startswith("# --- ") and stripped.endswith(" ---"):
+            if lines:
+                chunks.append((label, "\\n".join(lines)))
+            label = stripped[6:-4].strip() or "module"
+            lines = []
+        else:
+            lines.append(raw)
+    if lines:
+        chunks.append((label, "\\n".join(lines)))
+    if not chunks:
+        chunks.append(("module", source))
+    return chunks
+
+
+def student_ast(skipped: Optional[List[Any]] = None) -> Any:
+    import ast
+    module = ast.parse("")
+    for label, chunk in student_cell_sources():
+        if not chunk.strip():
+            continue
+        try:
+            node = ast.parse(chunk)
+        except SyntaxError as ex:
+            if skipped is not None:
+                skipped.append((label, f"{type(ex).__name__}: {ex}"))
+            continue
+        module.body.extend(node.body)
+    return module
+
+
+def student_source() -> str:
+    import ast
+    parts: List[str] = []
+    dropped = False
+    for label, chunk in student_cell_sources():
+        if chunk.strip():
+            try:
+                ast.parse(chunk)
+            except SyntaxError:
+                dropped = True
+                continue
+        parts.append(f"# --- {label} ---\\n{chunk}")
+    if not dropped or not parts:
+        return student_source_raw()
+    return "\\n\\n".join(parts) + "\\n"
 
 
 def require_function(name: str, num_args: Optional[int] = None):

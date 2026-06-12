@@ -31,7 +31,8 @@ protocol PatternKindHandler: Sendable {
     /// `render*` function in `PatternFamilyRenderer.swift`.
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String
 
     /// Family-level validation (e.g. tolerance bounds).  Default: no-op.
@@ -60,6 +61,7 @@ func patternKindHandler(for kind: PatternKind) -> any PatternKindHandler {
     case .exceptionExpected: return ExceptionExpectedKind()
     case .performanceThreshold: return PerformanceThresholdKind()
     case .stdoutEquality: return StdoutEqualityKind()
+    case .unorderedEquality: return UnorderedEqualityKind()
     }
 }
 
@@ -86,9 +88,12 @@ private func validatePatternArgCount(
 struct BoundaryEqualityKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
-        renderBoundaryEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
+        renderBoundaryEquality(
+            family: family, case: c, sectionVariables: sectionVariables,
+            specHash: specHash, perStudentNames: perStudentNames)
     }
 
     func validateCase(family: PatternFamily, case c: PatternCase) throws {
@@ -101,9 +106,12 @@ struct BoundaryEqualityKind: PatternKindHandler {
 struct ApproximateEqualityKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
-        renderApproximateEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
+        renderApproximateEquality(
+            family: family, case: c, sectionVariables: sectionVariables,
+            specHash: specHash, perStudentNames: perStudentNames)
     }
 
     func validateFamily(_ family: PatternFamily) throws {
@@ -126,7 +134,8 @@ struct VariableEqualityKind: PatternKindHandler {
 
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderVariableEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -168,7 +177,8 @@ struct VariableEqualityKind: PatternKindHandler {
 struct ReturnTypeCheckKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderReturnTypeCheck(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -192,7 +202,8 @@ struct ReturnTypeCheckKind: PatternKindHandler {
 struct ExceptionExpectedKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderExceptionExpected(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -216,7 +227,8 @@ struct ExceptionExpectedKind: PatternKindHandler {
 struct PerformanceThresholdKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderPerformanceThreshold(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -245,7 +257,8 @@ struct PerformanceThresholdKind: PatternKindHandler {
 struct StdoutEqualityKind: PatternKindHandler {
     func render(
         family: PatternFamily, case c: PatternCase,
-        sectionVariables: [FamilyVariable], specHash: String
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
     ) -> String {
         renderStdoutEquality(family: family, case: c, sectionVariables: sectionVariables, specHash: specHash)
     }
@@ -262,6 +275,36 @@ struct StdoutEqualityKind: PatternKindHandler {
                 reason:
                     "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)"
             )
+        }
+    }
+}
+
+// MARK: - unorderedEquality
+
+struct UnorderedEqualityKind: PatternKindHandler {
+    func render(
+        family: PatternFamily, case c: PatternCase,
+        sectionVariables: [FamilyVariable], specHash: String,
+        perStudentNames: Set<String>
+    ) -> String {
+        renderUnorderedEquality(
+            family: family, case: c, sectionVariables: sectionVariables,
+            specHash: specHash, perStudentNames: perStudentNames)
+    }
+
+    func validateCase(family: PatternFamily, case c: PatternCase) throws {
+        try validatePatternArgCount(family: family, case: c, kindLabel: "unordered_equality")
+        // Expected must be a list (the elements to match, in any order) — except
+        // when it's per-student (expectedVarRef), where the list arrives at
+        // grading time and the literal `expected` is unused.
+        if c.expectedVarRef == nil {
+            guard case .array = c.expected else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)' (unordered_equality): case '\(c.key)' expected must be a list (the elements to match, in any order)"
+                )
+            }
         }
     }
 }

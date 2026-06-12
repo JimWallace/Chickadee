@@ -3,8 +3,8 @@
 #(assignmentTitle) — Submissions
 #endexport
 #export("content"):
-<div style="margin-bottom:1rem">
-    <h1 style="margin:0">#(assignmentTitle)</h1>
+<div class="section-gap">
+    <h1 class="page-heading-flush">#(assignmentTitle)</h1>
 </div>
 
 <section class="assignment-diagnostics">
@@ -14,10 +14,10 @@
 #if(rows.isEmpty):
 <p class="empty">No student users found.</p>
 #else:
-<div style="margin-bottom:.5rem">
-    <input id="submissions-filter" class="form-input" type="search" autocomplete="off"
+<div class="filter-row">
+    <input id="submissions-filter" class="form-input filter-input" type="search" autocomplete="off"
            placeholder="Filter by name or ID…"
-           style="width:220px" aria-label="Filter students"
+           style="--filter-width:220px" aria-label="Filter students"
            readonly onfocus="this.removeAttribute('readonly')">
 </div>
 <table class="results-table" id="assignment-submissions-table">
@@ -25,9 +25,9 @@
         <tr>
             <th data-sort-key="surname" data-sort-type="text" tabindex="0" aria-sort="none">Surname</th>
             <th data-sort-key="given_names" data-sort-type="text" tabindex="0" aria-sort="none">Given Names</th>
-            <th data-sort-key="student_id" data-sort-type="text" tabindex="0" aria-sort="none">Student ID</th>
+            <th class="col-hide-phone" data-sort-key="student_id" data-sort-type="text" tabindex="0" aria-sort="none">Student ID</th>
             <th data-sort-key="grade" data-sort-type="number" tabindex="0" aria-sort="none">Grade</th>
-            <th data-sort-key="history" data-sort-type="datetime" tabindex="0" aria-sort="none">History</th>
+            <th class="col-hide-phone" data-sort-key="history" data-sort-type="datetime" tabindex="0" aria-sort="none">History</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -36,16 +36,16 @@
         <tr>
             <td>#(row.surname)</td>
             <td>#(row.givenNames)</td>
-            <td><strong>#(row.studentID)</strong></td>
-            <td>#(row.gradeText)</td>
-            <td data-ts="#(row.latestSubmittedAtEpoch)">
+            <td class="col-hide-phone"><strong>#(row.studentID)</strong></td>
+            <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif</td>
+            <td class="col-hide-phone" data-ts="#(row.latestSubmittedAtEpoch)">
                 #if(row.submissionCount > 0):
-                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                    <div class="submission-history-cell">
                         #if(row.hasLatestSubmission):
-                            <a href="/submissions/#(row.latestSubmissionID)" style="font-size:.82rem">#(row.latestSubmittedAtText)</a>
+                            <a href="/submissions/#(row.latestSubmissionID)" class="submission-history-latest">#(row.latestSubmittedAtText)</a>
                         #endif
                         #if(row.additionalSubmissionCount > 0):
-                            <a href="#(row.fullHistoryURL)" style="font-size:.78rem;color:var(--gray-600)">+#(row.additionalSubmissionCount) more</a>
+                            <a href="#(row.fullHistoryURL)" class="submission-history-more">+#(row.additionalSubmissionCount) more</a>
                         #endif
                     </div>
                 #else:
@@ -53,24 +53,45 @@
                 #endif
             </td>
             <td>
-                <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                <div class="subm-row-actions">
                     #if(row.hasLatestSubmission):
-                        <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')" style="margin:0">
+                        <form method="post" action="/instructor/#(assignmentID)/submissions/#(row.latestSubmissionID)/retest" onsubmit="return confirm('Send this submission back to the testing queue?')" class="form-flush">
                             #csrfFormField()
                             <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
-                            <button class="btn action-btn" type="submit"
-                                    aria-label="Re-test latest submission" title="Re-test latest submission"
-                                    style="padding:.25rem .35rem">
+                            <button class="btn action-btn action-btn-tight" type="submit"
+                                    aria-label="Re-test latest submission" title="Re-test latest submission">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                             </button>
                         </form>
                     #endif
-                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/reset-notebook" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit.')" style="margin:0">
+                    <details class="ext-details form-flush">
+                        <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                        </summary>
+                        <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override" class="ext-panel">
+                            #csrfFormField()
+                            <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
+                            <label class="ext-field-label">
+                                Override grade (%)
+                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required class="ext-field-input">
+                            </label>
+                            <label class="ext-field-label">
+                                Note (optional)
+                                <input type="text" name="note" placeholder="Reason for override" class="ext-field-input">
+                            </label>
+                            <div class="ext-panel-actions">
+                                <button class="btn action-btn" type="submit">Save</button>
+                                #if(row.gradeIsOverridden):
+                                <button class="btn action-btn" type="submit" formaction="/instructor/#(assignmentID)/students/#(row.studentUUID)/grade-override/delete" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
+                                #endif
+                            </div>
+                        </form>
+                    </details>
+                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/reset-notebook" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit.')" class="form-flush">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
-                        <button class="btn action-btn action-danger" type="submit"
-                                aria-label="Reset notebook to starter" title="Reset notebook to starter (past submissions unaffected)"
-                                style="padding:.25rem .35rem">
+                        <button class="btn action-btn action-danger action-btn-tight" type="submit"
+                                aria-label="Reset notebook to starter" title="Reset notebook to starter (past submissions unaffected)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                         </button>
                     </form>
@@ -85,27 +106,42 @@
 .assignment-diagnostics {
     margin-bottom: 1.25rem;
 }
-.diagnostics-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
+.page-heading-flush {
+    margin: 0;
 }
-.diagnostic-card {
-    padding: .75rem .9rem;
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
+.filter-row {
+    margin-bottom: .5rem;
 }
-.diagnostic-label {
-    color: var(--gray-600);
-    font-size: .82rem;
+.subm-row-actions {
+    display: flex;
+    gap: .2rem;
+    flex-wrap: wrap;
+    align-items: center;
 }
-.diagnostic-value {
+.form-flush {
+    margin: 0;
+}
+.ext-panel {
+    margin-top: .4rem;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    padding: .5rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-300);
+    border-radius: .25rem;
+}
+.ext-field-label {
+    font-size: .78rem;
+    color: var(--gray-700);
+}
+.ext-field-input {
+    width: 100%;
     margin-top: .2rem;
-    font-size: 1.2rem;
-    font-weight: 600;
-    line-height: 1.2;
-    color: var(--gray-900);
+}
+.ext-panel-actions {
+    display: flex;
+    gap: .3rem;
 }
 #assignment-submissions-table th[data-sort-key] {
     cursor: pointer;

@@ -32,6 +32,29 @@ import Vapor
             #expect(output.title == "Tasks")
             #expect(output.courseCode == "CS246")
             #expect(output.isOpen == false)
+            // The default fixture manifest is browser-graded.
+            #expect(output.gradingMode == "browser")
+        }
+    }
+
+    @Test func reportsWorkerGradingMode() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(
+                on: app, id: "setup_w", courseID: courseID,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+            )
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_w", courseID: courseID, title: "Tasks")
+
+            let output = try await GetAssignmentTool().execute(
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+            #expect(output.gradingMode == "worker")
         }
     }
 

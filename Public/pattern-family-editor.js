@@ -60,7 +60,9 @@
         // page reloads.  Each entry has { name, paramNames, paramTypes,
         // returnType, paramCount, isShadowed }.
         var scannedFunctions = null;
-        var scanLoading = false;
+        // Cached in-flight scan promise — concurrent callers share it instead
+        // of spinning on a flag (old 50 ms setInterval poll).
+        var scanPromise = null;
 
         // Section-level variables in scope for the family currently being
         // edited.  Refreshed from the DOM whenever the modal opens.  Used
@@ -96,7 +98,7 @@
         /// same way family variables already work.
         function readSectionContextForFamily(familyID) {
             var familyRow = document.querySelector(
-                'tr[data-kind="family"][data-family-id="' + String(familyID).replace(/"/g, '\\"') + '"]'
+                'tr[data-kind="family"][data-family-id="' + String(familyID).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]'
             );
             if (!familyRow) return { vars: [], sectionName: null, sectionID: null };
             var block = familyRow.closest('.section-block[data-section-id]');
@@ -132,7 +134,7 @@
         /// v0.4.106+.
         function readSectionContextBySectionID(sectionID) {
             if (!sectionID) return { vars: [], sectionName: null, sectionID: null };
-            var safe = String(sectionID).replace(/"/g, '\\"');
+            var safe = String(sectionID).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
             var block = document.querySelector('.section-block[data-section-id="' + safe + '"]');
             if (!block) return { vars: [], sectionName: null, sectionID: null };
             var sectionName = (block.querySelector('.section-header strong') || {}).textContent || null;
@@ -286,11 +288,9 @@
         // variables are family-wide, not case-scoped.
         var familyVariables = [];
 
-        function escHtml(s) {
-            return String(s == null ? '' : s)
-                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
+        // Shared implementation (Public/chickadee-ui.js); local alias keeps
+        // the many call sites short.
+        var escHtml = ChickadeeUI.escapeHtml;
 
         // ── Solution-notebook scan ─────────────────────────────────────────
 
@@ -298,15 +298,8 @@
         /// scan-notebook endpoint.  Caches the result on `scannedFunctions`.
         function ensureScannedFunctions() {
             if (scannedFunctions !== null) return Promise.resolve(scannedFunctions);
-            if (scanLoading) {
-                return new Promise(function (resolve) {
-                    var iv = setInterval(function () {
-                        if (!scanLoading) { clearInterval(iv); resolve(scannedFunctions || []); }
-                    }, 50);
-                });
-            }
-            scanLoading = true;
-            return fetch(urls.solutionNotebook(), {
+            if (scanPromise) return scanPromise;
+            scanPromise = fetch(urls.solutionNotebook(), {
                 headers: { 'x-csrf-token': csrfToken }
             })
             .then(function (r) { return r.ok ? r.text() : Promise.reject('No solution notebook'); })
@@ -318,8 +311,9 @@
                 });
             })
             .then(function (r) { return r.ok ? r.json() : Promise.reject('Scan failed'); })
-            .then(function (fns) { scannedFunctions = fns || []; scanLoading = false; return scannedFunctions; })
-            .catch(function () { scannedFunctions = []; scanLoading = false; return []; });
+            .then(function (fns) { scannedFunctions = fns || []; return scannedFunctions; })
+            .catch(function () { scannedFunctions = []; return []; });
+            return scanPromise;
         }
 
         function populateFunctionSelect(selectedName) {
@@ -477,7 +471,7 @@
                     var hd = currentParamHasDefault && currentParamHasDefault[i];
                     var labelBase = t ? (escHtml(p) + ': ' + escHtml(t)) : escHtml(p);
                     var labelFull = hd
-                        ? (labelBase + '<span style="color:var(--meta);font-weight:normal"> ?</span>')
+                        ? (labelBase + '<span style="color:var(--gray-500);font-weight:normal"> ?</span>')
                         : labelBase;
                     th.push('<th><code style="font-size:.7rem">' + labelFull + '</code></th>');
                 });
@@ -486,7 +480,7 @@
                 ? 'Expected <code style="font-size:.7rem;font-weight:normal">: ' + escHtml(currentReturnType) + '</code>'
                 : 'Expected';
             th.push('<th>' + expectedHeader + '</th>');
-            th.push('<th>Hint <span style="color:var(--meta);font-weight:normal">(optional)</span></th>');
+            th.push('<th>Hint <span style="color:var(--gray-500);font-weight:normal">(optional)</span></th>');
             th.push('<th style="width:4rem"></th>');
             casesHeader.innerHTML = th.join('');
         }
@@ -504,7 +498,7 @@
             var argVarRefs   = Array.isArray(c.argVarRefs)   ? c.argVarRefs   : [];
             var tds = [];
             // Column 1: auto-numbered sequence (readonly, regenerated on reorder).
-            tds.push('<td class="pf-case-num" style="text-align:center;color:var(--meta);font-size:.75rem"></td>');
+            tds.push('<td class="pf-case-num" style="text-align:center;color:var(--gray-500);font-size:.75rem"></td>');
             tds.push('<td><input type="text" class="form-input pf-case-label" value="' + escHtml(c.label) + '" placeholder="e.g. bmi < 18.5 is underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
 
             if (!paramNames.length) {
@@ -532,18 +526,24 @@
                     tds.push('<td><input type="text" class="form-input pf-case-arg" data-arg-index="' + i + '" value="' + escHtml(val) + '" placeholder="' + escHtml(placeholder) + '" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
                 });
             }
-            tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(c.expected == null ? '' : renderTypedCellValue(c.expected)) + '" placeholder="e.g. underweight" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
+            // Expected cell. Display precedence: per-student ref (`$name`,
+            // resolved per student at grading time) > literal value.
+            var expectedDisplay = c.expectedVarRef
+                ? '$' + c.expectedVarRef
+                : (c.expected == null ? '' : renderTypedCellValue(c.expected));
+            tds.push('<td><input type="text" class="form-input pf-case-expected" value="' + escHtml(expectedDisplay) + '" placeholder="e.g. underweight or $expr" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace"></td>');
             tds.push('<td><input type="text" class="form-input pf-case-hint" value="' + escHtml(c.hint || '') + '" placeholder="shown to students on failure" style="width:100%;padding:.2rem .4rem;font-size:.8rem"></td>');
             tds.push('<td><button type="button" class="btn action-btn action-danger pf-case-remove" style="padding:.2rem .4rem;font-size:.75rem">Remove</button></td>');
 
             var tr = document.createElement('tr');
             tr.innerHTML = tds.join('');
             casesBody.appendChild(tr);
-            // Existing non-empty expected values are treated as author-set so
-            // the auto-computer doesn't overwrite them on first edit.
-            if (c.expected != null) {
-                var expCell = tr.querySelector('.pf-case-expected');
-                if (expCell && expCell.value.trim() !== '') expCell.dataset.manual = '1';
+            // Author-set expected values — a literal OR a per-student `$ref` —
+            // are marked manual so the auto-computer doesn't overwrite them.
+            var expCell = tr.querySelector('.pf-case-expected');
+            if (expCell && expCell.value.trim() !== '') {
+                expCell.dataset.manual = '1';
+                refreshExpectedCellHighlight(expCell, collectDeclaredInputNames());
             }
             renumberCases();
             updateCasesEmptyMessage();
@@ -663,7 +663,7 @@
                 catch (_) { preview = String(v.value); }
                 var textDeco = familyShadow ? 'line-through' : 'none';
                 var shadowNote = familyShadow
-                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber,#b38600);margin-left:.4rem">shadowed by family variable below</span>'
+                    ? '<span class="card-meta" style="font-size:.7rem;color:var(--amber);margin-left:.4rem">shadowed by family variable below</span>'
                     : '';
                 tr.innerHTML =
                     '<td></td>'
@@ -680,7 +680,7 @@
                     // and value pass their checks.  Replaces the v0.4.94
                     // "✓ referenced as $name" / "✓ parsed as dict" text
                     // lines beneath each input.
-                    '<td class="pf-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green,#2d8f47);font-size:1rem"></td>'
+                    '<td class="pf-var-row-valid" style="vertical-align:middle;text-align:center;color:var(--green);font-size:1rem"></td>'
                   + '<td style="vertical-align:top">'
                   +   '<input type="text" class="form-input pf-var-name" data-var-index="' + i + '" value="' + escHtml(v.name || '') + '" placeholder="e.g. patient_database" style="width:100%;padding:.2rem .4rem;font-size:.8rem;font-family:monospace">'
                   + '</td>'
@@ -733,7 +733,7 @@
                     nameOk = true;
                 }
             }
-            nameEl.style.borderColor = nameError ? 'var(--red,#c0392b)' : '';
+            nameEl.style.borderColor = nameError ? 'var(--red)' : '';
             nameEl.title = nameError || '';
 
             // Value validity.
@@ -748,7 +748,7 @@
             } else {
                 // Bare-string fallback — almost always a typo in dict/list JSON.
                 valueError = 'Treated as a bare string. Wrap in quotes for a JSON string, or check the syntax for list/dict.';
-                valueEl.style.borderColor = 'var(--amber,#b38600)';
+                valueEl.style.borderColor = 'var(--amber)';
             }
             valueEl.title = valueError || (valueOk ? 'Parsed as ' + parsed.kind : '');
 
@@ -761,21 +761,36 @@
         /// ref, red = `$name` with no matching variable, default styling
         /// for plain literals / empty cells.  Cheap enough to run on
         /// every keystroke.
-        function refreshAllArgCellVarHighlighting() {
-            // Union family-scoped + section-scoped variable names so a
-            // `$name` ref to either resolves.  Family vars shadow section
-            // vars at render time; for highlighting purposes both count
-            // as "declared".
-            var declaredVarNames = new Set();
+        /// Names a `$name` ref (in an arg cell or the Expected cell) may
+        /// resolve to: family variables, the family's section variables, and
+        /// assignment-scope Global Inputs — literal values AND `=` per-student
+        /// expressions alike (both carry a name in the Global Inputs panel).
+        /// The strict per-student-vs-literal + kind checks run server-side; the
+        /// editor only needs "is this name declared anywhere" so it doesn't
+        /// red-flag a valid per-student ref.
+        function collectDeclaredInputNames() {
+            var names = new Set();
             Array.from(variablesBody ? variablesBody.querySelectorAll('.pf-var-name') : []).forEach(function (el) {
-                var n = el.value.trim();
-                if (n && isValidPythonIdentifier(n)) declaredVarNames.add(n);
+                var n = (el.value || '').trim();
+                if (n && isValidPythonIdentifier(n)) names.add(n);
             });
             (currentSectionVariables || []).forEach(function (v) {
-                if (v && v.name && isValidPythonIdentifier(v.name)) declaredVarNames.add(v.name);
+                if (v && v.name && isValidPythonIdentifier(v.name)) names.add(v.name);
             });
+            Array.from(document.querySelectorAll('.global-input-name')).forEach(function (el) {
+                var n = (el.value || '').trim();
+                if (n && isValidPythonIdentifier(n)) names.add(n);
+            });
+            return names;
+        }
+
+        function refreshAllArgCellVarHighlighting() {
+            var declaredVarNames = collectDeclaredInputNames();
             Array.from(casesBody ? casesBody.querySelectorAll('.pf-case-arg') : []).forEach(function (cell) {
                 refreshArgCellHighlight(cell, declaredVarNames);
+            });
+            Array.from(casesBody ? casesBody.querySelectorAll('.pf-case-expected') : []).forEach(function (cell) {
+                refreshExpectedCellHighlight(cell, declaredVarNames);
             });
         }
 
@@ -790,12 +805,37 @@
             var name = match[1];
             if (declaredNames && declaredNames.has(name)) {
                 cell.style.fontStyle = 'italic';
-                cell.style.color = 'var(--green,#2d8f47)';
-                cell.title = 'Bound to family variable $' + name;
+                cell.style.color = 'var(--green)';
+                cell.title = 'Bound to input $' + name;
             } else {
-                cell.style.color = 'var(--red,#c0392b)';
-                cell.style.borderColor = 'var(--red,#c0392b)';
-                cell.title = 'No variable named $' + name + ' is declared in the Variables table.';
+                cell.style.color = 'var(--red)';
+                cell.style.borderColor = 'var(--red)';
+                cell.title = 'No input named $' + name + ' is declared (Variables table or Global Inputs).';
+            }
+        }
+
+        /// Highlight for the Expected cell.  A `$name` ref gets the green/red
+        /// treatment (per-student expected); a non-ref literal is left alone so
+        /// it keeps any auto-compute / manual styling rather than being cleared
+        /// when an unrelated keystroke triggers a bulk refresh.
+        function refreshExpectedCellHighlight(cell, declaredNames) {
+            var raw = (cell.value || '').trim();
+            var match = raw.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+            if (!match) {
+                cell.style.fontStyle = '';
+                cell.style.borderColor = '';
+                return;  // leave color/title to auto-compute / manual styling
+            }
+            var name = match[1];
+            cell.style.fontStyle = 'italic';
+            if (declaredNames && declaredNames.has(name)) {
+                cell.style.color = 'var(--green)';
+                cell.style.borderColor = '';
+                cell.title = '$' + name + ' — per-student expected (resolved at grading time)';
+            } else {
+                cell.style.color = 'var(--red)';
+                cell.style.borderColor = 'var(--red)';
+                cell.title = 'No input named $' + name + ' is declared (Variables table or Global Inputs).';
             }
         }
 
@@ -1031,12 +1071,11 @@
         ///      default value applies.
         function readCasesFromTable(paramNames) {
             paramNames = paramNames || [];
-            // Family vars OR section vars in scope for the family.  Both
-            // kinds of `$name` refs resolve correctly at render time.
-            var declaredVarNames = new Set(familyVariables.map(function (v) { return v.name; }));
-            (currentSectionVariables || []).forEach(function (v) {
-                if (v && v.name) declaredVarNames.add(v.name);
-            });
+            // Names a `$name` ref (arg or expected) may resolve to: family +
+            // section variables AND assignment-scope Global Inputs / `=`
+            // expressions.  The server does the strict per-student-vs-literal +
+            // kind checks at save; here we only reject names declared nowhere.
+            var declaredVarNames = collectDeclaredInputNames();
             var rows = Array.from(casesBody.querySelectorAll('tr'));
             var out = [];
             for (var i = 0; i < rows.length; i++) {
@@ -1094,6 +1133,7 @@
                     }
                 }
                 var expected;
+                var expectedVarRef = null;
                 // stdout_equality permits an empty Expected — that's the
                 // legitimate "this function should print nothing" case.
                 // For all other kinds an empty cell is still an error.
@@ -1102,7 +1142,20 @@
                 if (rawExp === '') {
                     expected = '';
                 } else {
-                    expected = coerceByType(rawExp, currentReturnType);
+                    // Per-student expected: `$name` references a declared input
+                    // (a global/section `=` expression), resolved per student at
+                    // grading time — mirrors arg-cell refs.
+                    var expRefMatch = rawExp.trim().match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                    if (expRefMatch) {
+                        var expRefName = expRefMatch[1];
+                        if (!declaredVarNames.has(expRefName)) {
+                            throw new Error('Case ' + caseNum + ': expected references unknown variable "$' + expRefName + '" — declare it in the Variables table or Global Inputs.');
+                        }
+                        expectedVarRef = expRefName;
+                        expected = null;   // placeholder; renderer uses the ref
+                    } else {
+                        expected = coerceByType(rawExp, currentReturnType);
+                    }
                 }
                 if (!label) throw new Error('Case ' + caseNum + ': label is required');
                 var hintCell = row.querySelector('.pf-case-hint');
@@ -1116,6 +1169,7 @@
                     expected: expected,
                     enabled: true
                 };
+                if (expectedVarRef) caseObj.expectedVarRef = expectedVarRef;
                 if (hint) caseObj.hint = hint;   // omit when blank to keep the manifest clean
                 out.push(caseObj);
             }
@@ -1168,9 +1222,17 @@
                         argVarRefs   = args.map(function () { return null; });
                     }
                 }
-                var expected = rawExp.trim() === ''
-                    ? null
-                    : coerceByType(rawExp, currentReturnType);
+                // Preserve a per-student `$name` Expected ref across header
+                // rebuilds (lossy read — no validation here, mirrors arg refs).
+                var expected = null;
+                var expectedVarRef = null;
+                var rawExpTrim = rawExp.trim();
+                var expRefMatch = rawExpTrim.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+                if (expRefMatch) {
+                    expectedVarRef = expRefMatch[1];
+                } else if (rawExpTrim !== '') {
+                    expected = coerceByType(rawExp, currentReturnType);
+                }
                 var hintCell = row.querySelector('.pf-case-hint');
                 var hint = hintCell ? hintCell.value.trim() : '';
                 var obj = {
@@ -1180,6 +1242,7 @@
                     argVarRefs: argVarRefs,
                     expected: expected
                 };
+                if (expectedVarRef) obj.expectedVarRef = expectedVarRef;
                 if (hint) obj.hint = hint;   // preserve across header rebuilds
                 return obj;
             });
@@ -1838,6 +1901,9 @@
             var expectedEl = row.querySelector('.pf-case-expected');
             if (!expectedEl) return;
             if (expectedEl.dataset.manual === '1' && expectedEl.value.trim() !== '') return;
+            // A per-student `$name` Expected is resolved server-side per
+            // student — never auto-compute/overwrite it.
+            if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(expectedEl.value.trim())) return;
 
             // Pull the latest variable values straight from the DOM so
             // `$name` refs in arg cells resolve to what the instructor
@@ -1900,7 +1966,7 @@
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ solution returned None';
                     expectedEl.title = 'The solution function returned None. Did you mean to print() and use the Stdout equality kind?';
-                    expectedEl.style.borderColor = 'var(--orange,#d80)';
+                    expectedEl.style.borderColor = 'var(--amber)';
                     expectedEl.style.color = '';
                     delete expectedEl.dataset.autoComputed;
                 } else if (res.ok) {
@@ -1922,7 +1988,7 @@
                     expectedEl.title = res.error.indexOf('notebook load') >= 0
                         ? 'A top-level cell in the solution notebook ran longer than ' + (LOAD_TIMEOUT_MS / 1000) + ' seconds. Look for an infinite loop, a slow I/O call, or a blocking input() OUTSIDE the function under test (e.g. in a setup cell that runs at notebook open).'
                         : 'Solution call did not return within ' + (TIMEOUT_MS / 1000) + ' seconds. Check for an infinite loop or blocking I/O in the solution notebook.';
-                    expectedEl.style.borderColor = 'var(--red,#c00)';
+                    expectedEl.style.borderColor = 'var(--red)';
                 } else if (res.unsupported) {
                     // The solution returned a value of a type that
                     // doesn't round-trip through JSON in a way the
@@ -1941,7 +2007,7 @@
                     expectedEl.value = '';
                     expectedEl.placeholder = '⚠ solution returned ' + reasonText;
                     expectedEl.title = "Auto-compute can't represent " + reasonText + ". Type the Expected value manually, or change the solution to return a JSON-friendly type (str, int, float, bool, list, dict).";
-                    expectedEl.style.borderColor = 'var(--orange,#d80)';
+                    expectedEl.style.borderColor = 'var(--amber)';
                     expectedEl.style.color = '';
                     delete expectedEl.dataset.autoComputed;
                 } else {
@@ -1952,7 +2018,7 @@
                     // function / etc.
                     expectedEl.placeholder = '⚠ ' + (res.error || 'auto-compute failed');
                     expectedEl.title = 'Solution raised: ' + res.error;
-                    expectedEl.style.borderColor = 'var(--red,#c00)';
+                    expectedEl.style.borderColor = 'var(--red)';
                 }
             });
         }
@@ -1961,32 +2027,28 @@
             var t = e.target;
             if (!t || !t.classList) return;
             if (t.classList.contains('pf-case-arg')) {
-                // Live-highlight the `$name` binding state so the
-                // instructor can see whether their ref resolves.  Union
-                // family + section variables for the declared set.
-                var declaredNames = new Set();
-                if (variablesBody) {
-                    Array.from(variablesBody.querySelectorAll('.pf-var-name')).forEach(function (el) {
-                        var n = el.value.trim();
-                        if (n && isValidPythonIdentifier(n)) declaredNames.add(n);
-                    });
-                }
-                (currentSectionVariables || []).forEach(function (v) {
-                    if (v && v.name && isValidPythonIdentifier(v.name)) declaredNames.add(v.name);
-                });
-                refreshArgCellHighlight(t, declaredNames);
+                // Live-highlight the `$name` binding state so the instructor
+                // can see whether their ref resolves (family + section vars +
+                // Global Inputs / `=` expressions).
+                refreshArgCellHighlight(t, collectDeclaredInputNames());
                 scheduleAutoCompute(t.closest('tr'));
             } else if (t.classList.contains('pf-case-expected')) {
-                // User is editing the Expected cell directly — mark as
-                // manual so auto-compute won't clobber.  If they clear it,
-                // un-mark so the next arg change can refill.
-                t.style.color = '';
-                t.title = '';
-                if (t.value.trim() === '') {
+                // Live-highlight a per-student `$name` Expected ref; mark the
+                // cell manual so auto-compute won't clobber an author value.
+                // Clearing the cell re-enables auto-compute.
+                refreshExpectedCellHighlight(t, collectDeclaredInputNames());
+                if (/^\$[A-Za-z_][A-Za-z0-9_]*$/.test(t.value.trim())) {
+                    t.dataset.manual = '1';
+                    delete t.dataset.autoComputed;
+                } else if (t.value.trim() === '') {
+                    t.style.color = '';
+                    t.title = '';
                     delete t.dataset.manual;
                     delete t.dataset.autoComputed;
                     scheduleAutoCompute(t.closest('tr'));
                 } else {
+                    t.style.color = '';
+                    t.title = '';
                     t.dataset.manual = '1';
                     delete t.dataset.autoComputed;
                 }
@@ -2009,9 +2071,13 @@
                     var fid = editBtn.getAttribute('data-family-id');
                     var idx = familiesState.findIndex(function (f) { return f.id === fid; });
                     if (idx >= 0) {
-                        // Open the unified shell pre-populated; fall back to the
-                        // legacy overlay only if the shell isn't on the page.
-                        if (window.__chickadeeTestEditorModal) {
+                        // Edit inline (accordion row) when the suite table is on
+                        // the page; fall back to the modal shell, then the legacy
+                        // overlay.
+                        if (typeof window.chickadeeExpandInlineEditor === 'function') {
+                            window.chickadeeExpandInlineEditor(
+                                { mechanism: 'family', editing: { item: familiesState[idx] }, afterRowID: 'family:' + fid });
+                        } else if (window.__chickadeeTestEditorModal) {
                             window.__chickadeeTestEditorModal.open(
                                 { editing: { mechanism: 'family', id: fid, item: familiesState[idx] } });
                         } else {

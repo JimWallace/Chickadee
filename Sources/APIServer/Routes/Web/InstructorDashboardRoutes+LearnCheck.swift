@@ -66,7 +66,7 @@ extension InstructorDashboardRoutes {
             ? []
             : try await APIUser.query(on: req.db)
                 .filter(\.$id ~~ enrolledUserIDs)
-                .filter(\.$role == "student")
+                .filter(\.$role == UserRole.student.rawValue)
                 .all()
         for student in enrolledUsers {
             guard let id = student.id else { continue }

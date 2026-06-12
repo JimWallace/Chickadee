@@ -620,6 +620,150 @@ import XCTVapor
         }
     }
 
+    // A reference-solution (validation) notebook carrying `{{name}}`
+    // personalization placeholders is substituted ONCE at enqueue
+    // (`materializeValidationGrading`) into a `<zipPath>.grading` sidecar; the
+    // download route then streams that sidecar verbatim (no eval on the hot
+    // path). These tests drive `materializeValidationGrading` directly and
+    // assert the download route is pure I/O.
+    private let substManifestJSON = """
+        {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,\
+        "globalVariables":[{"name":"answer","value":"ck_subst_marker"}]}
+        """
+
+    private func makeNotebookSubmission(
+        id: String, setupID: String, kind: String, source: String, userID: UUID? = nil
+    ) async throws -> APISubmission {
+        let nbURL = URL(fileURLWithPath: app.submissionsDirectory)
+            .appendingPathComponent("\(id).ipynb")
+        let notebook = """
+            {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[\
+            {"cell_type":"code","metadata":{},"execution_count":null,"outputs":[],"source":\(
+                String(data: try JSONEncoder().encode(source), encoding: .utf8) ?? "\"\"")}]}
+            """
+        try Data(notebook.utf8).write(to: nbURL)
+        let sub = APISubmission(
+            id: id, testSetupID: setupID, zipPath: nbURL.path,
+            attemptNumber: 1, status: "pending",
+            filename: "solution.ipynb", userID: userID, kind: kind)
+        try await sub.save(on: app.db)
+        return sub
+    }
+
+    @Test func materializeValidation_writesSidecar_andDownloadStreamsIt() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "subst_setup_01", manifest: substManifestJSON)
+            let setupID = try setup.requireID()
+            let sub = try await self.makeNotebookSubmission(
+                id: "subst_val_01", setupID: setupID,
+                kind: APISubmission.Kind.validation, source: "x = {{answer}}")
+
+            // Substitution happens at enqueue, NOT on the download hot path.
+            let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
+            _ = await materializeValidationGrading(
+                submission: sub, setupID: setupID, templateNotebookData: template,
+                testSetupsDirectory: self.app.testSetupsDirectory, on: self.app.db)
+
+            // The cache record is stamped on the row.
+            #expect(sub.materializationJSON != nil)
+
+            let path = "/api/v1/worker/submissions/subst_val_01/download"
+            try await self.app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers = self.workerHeaders(method: .GET, path: path) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("ck_subst_marker"))
+                    #expect(!res.body.string.contains("{{answer}}"))
+                })
+        }
+    }
+
+    @Test func downloadValidation_noSidecar_streamsTemplateVerbatim() async throws {
+        // Without materialization there is no sidecar, so the download route
+        // streams the stored template verbatim — pure I/O, never substituting
+        // on this path (so it can't trip the runner's download timeout).
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "subst_setup_03", manifest: substManifestJSON)
+            _ = try await self.makeNotebookSubmission(
+                id: "subst_val_03", setupID: (try setup.requireID()),
+                kind: APISubmission.Kind.validation, source: "x = {{answer}}")
+
+            let path = "/api/v1/worker/submissions/subst_val_03/download"
+            try await self.app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers = self.workerHeaders(method: .GET, path: path) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("{{answer}}"))
+                })
+        }
+    }
+
+    @Test func downloadSubmission_studentNotebook_leavesPlaceholdersVerbatim() async throws {
+        // Student submissions are already-substituted working copies, so the
+        // download path must NOT re-process them.
+        try await withApp(app) { _ in
+            let setup = try await makeTestSetup(id: "subst_setup_02", manifest: substManifestJSON)
+            _ = try await self.makeNotebookSubmission(
+                id: "subst_stu_01", setupID: (try setup.requireID()),
+                kind: APISubmission.Kind.student, source: "x = {{answer}}")
+
+            let path = "/api/v1/worker/submissions/subst_stu_01/download"
+            try await self.app.asyncTest(
+                .GET, path,
+                beforeRequest: { req in req.headers = self.workerHeaders(method: .GET, path: path) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("{{answer}}"))
+                })
+        }
+    }
+
+    // The gap #869 missed: a per-student `=` EXPRESSION in the solution (not a
+    // literal) must resolve at enqueue and land in the grading sidecar — with
+    // the same seed feeding `_ck_inputs.py`. Requires a real seed (→ user +
+    // assignment) and `python3`.
+    @Test func materializeValidation_resolvesExpressionForSeed() async throws {
+        let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+        guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            return  // python3 unavailable on this platform — skip
+        }
+        try await withApp(app) { _ in
+            let manifest = """
+                {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],\
+                "timeLimitSeconds":10,\
+                "globalExpressions":[{"name":"shift","expression":"1 + seed % 25"}]}
+                """
+            let setup = try await makeTestSetup(id: "subst_setup_expr", manifest: manifest)
+            let setupID = try setup.requireID()
+            _ = try await self.makeAssignment(setupID: setupID)
+            let user = APIUser(username: "ck_val_user", passwordHash: "x", role: "student")
+            try await user.save(on: self.app.db)
+
+            let sub = try await self.makeNotebookSubmission(
+                id: "subst_val_expr", setupID: setupID,
+                kind: APISubmission.Kind.validation, source: "shift = {{shift}}",
+                userID: try user.requireID())
+
+            let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
+            _ = await materializeValidationGrading(
+                submission: sub, setupID: setupID, templateNotebookData: template,
+                testSetupsDirectory: self.app.testSetupsDirectory, on: self.app.db)
+
+            // Sidecar carries the resolved int, not the raw placeholder.
+            let sidecar = sub.zipPath + ".grading"
+            let body = try String(contentsOf: URL(fileURLWithPath: sidecar), encoding: .utf8)
+            #expect(!body.contains("{{shift}}"))
+            #expect(body.range(of: #"shift = \d+"#, options: .regularExpression) != nil)
+
+            // The same value is cached for _ck_inputs.py, keyed to one seed.
+            let materialization = try #require(sub.decodedMaterialization())
+            #expect(materialization.seedHex != nil)
+            #expect(materialization.inputs["shift"] != nil)
+        }
+    }
+
     // MARK: - GET /api/v1/worker/testsetups/:id/download
 
     @Test func downloadTestSetup_existingFile_returns200() async throws {

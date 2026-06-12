@@ -17,8 +17,8 @@ extension MCPToolError {
         switch error {
         case .internalFailure:
             return .executionFailed(tool: tool, detail: error.reason)
-        case .notFound, .invalidParameter, .noActiveCourse, .forbidden, .conflict,
-            .unprocessable, .validationRequired:
+        case .notFound, .badRequest, .invalidParameter, .noActiveCourse, .forbidden,
+            .conflict, .unprocessable, .validationRequired:
             return .invalidArguments(tool: tool, detail: error.reason)
         }
     }

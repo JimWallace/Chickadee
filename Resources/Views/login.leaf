@@ -7,12 +7,12 @@ Log in
     <img class="auth-logo" src="/images/chickadee-icon-alt.png?v=#appVersion()" alt="" width="200" height="200">
     <h1>Log in to Chickadee</h1>
     #if(loggedOut && !error):
-    <div class="notice-box" style="margin-bottom:1rem">
+    <div class="notice-box">
         <p>You have been signed out.</p>
     </div>
     #endif
     #if(error):
-    <div class="error-box" style="margin-bottom:1rem">
+    <div class="error-box">
         #if(error == "invalid"):
         <p>Invalid username or password.</p>
         #elseif(error == "locked"):
@@ -32,7 +32,7 @@ Log in
     #endif
     #if(showSSOLogin):
     <div class="form">
-        <a class="btn btn-primary" href="/auth/sso/start" style="text-align:center">Login with UWaterloo</a>
+        <a class="btn btn-primary btn--center" href="/auth/sso/start">Login with UWaterloo</a>
     </div>
     #endif
     #if(showLocalLogin):

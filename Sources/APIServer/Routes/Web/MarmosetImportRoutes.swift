@@ -241,7 +241,7 @@ struct MarmosetImportRoutes: RouteCollection {
             testSetupID: setupID,
             title: title,
             dueAt: nil,
-            isOpen: false,
+            visibility: .closed,
             sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: hasCanonical ? "pending" : nil,
             validationSubmissionID: nil,

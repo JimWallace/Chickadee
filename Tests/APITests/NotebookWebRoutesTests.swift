@@ -638,7 +638,7 @@ import XCTVapor
         }
     }
 
-    @Test func notebookPageLinksSupportFilesAndRemovesLegacyNotebookCopies() async throws {
+    @Test func notebookPageLinksSupportFilesAndBootSweepRemovesLegacyNotebookCopies() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsStudent()
             let user = try await studentUser()
@@ -694,6 +694,20 @@ import XCTVapor
             #expect(try FileManager.default.destinationOfSymbolicLink(atPath: supportPath) == sharedDir + "bmi.py")
             #expect(FileManager.default.fileExists(atPath: studentDir + "/test.sh") == false)
 
+            // The legacy sweep no longer runs per-request: the page view above
+            // must leave the planted artifacts alone.
+            for root in legacyRoots {
+                let userDir = root + "users/\(userID.uuidString.lowercased())/"
+                let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
+                #expect(
+                    contents.contains { $0.hasSuffix(".ipynb") },
+                    "Page views must not sweep legacy notebooks from \(userDir)")
+            }
+
+            // The one-time boot sweep (LegacyNotebookCleanupLifecycleHandler)
+            // is what removes them now.
+            removeLegacyUserNotebookCopies(publicDirectory: publicDir, logger: app.logger)
+
             for root in legacyRoots {
                 let userDir = root + "users/\(userID.uuidString.lowercased())/"
                 let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
@@ -701,6 +715,10 @@ import XCTVapor
                     contents.contains { $0.hasSuffix(".ipynb") } == false,
                     "Legacy notebooks should be removed from \(userDir)")
             }
+
+            // The sweep only touches flat files in the user root; the current
+            // per-setup working copy must survive it.
+            #expect(FileManager.default.fileExists(atPath: workingCopyPath(setupID: setupID, userID: userID)))
 
         }
     }

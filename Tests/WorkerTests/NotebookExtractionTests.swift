@@ -97,4 +97,56 @@ import Testing
         #expect(result.executableModule.contains("daily_ml / 1000"))
         #expect(!result.executableModule.contains("\\/"))
     }
+
+    // Regression (HLTH-230 Lab 1): a cell that parks a multi-line triple-quoted
+    // block (prose / an alternate solution) at module level above the real code.
+    // Before triple-quote tracking, the interior prose lines were re-classified
+    // as new top-level statements and ripped into `if __name__`, splitting the
+    // string and producing invalid Python — which the resilient-load wrapper then
+    // silently dropped, wiping out the cell's real definitions and variables.
+    @Test func tripleQuotedBlockDoesNotSwallowFollowingDefinitions() {
+        let cell = code(
+            """
+            \"\"\"
+            This is a different way I got this to work
+            beats = beatsCalculated(72, 24*60)
+            print(beats)
+            \"\"\"
+
+            heartRate = 72
+            beats = heartRate * 60 * 24
+            print(beats)
+            """
+        )
+        let sanitized = sanitizeCellForModule(cell.source)
+
+        // The real module-level assignment survives at module level (NOT pushed
+        // into the __main__ quarantine), so `beats` is importable on the module.
+        let moduleLevel = sanitized.components(separatedBy: "if __name__").first ?? sanitized
+        #expect(moduleLevel.contains("beats = heartRate * 60 * 24"))
+
+        // The interior prose line never leaks out of the string as bare code.
+        let quarantine =
+            sanitized.range(of: "if __name__").map { String(sanitized[$0.lowerBound...]) } ?? ""
+        #expect(!quarantine.contains("This is a different way I got this to work"))
+    }
+
+    // A bare `'''…'''` block with a `def` inside it must stay intact and the
+    // function defined after it must remain at module level.
+    @Test func singleQuoteTripleBlockKeepsLaterDefAtModuleLevel() {
+        let cell = code(
+            """
+            '''
+            def shadow(price):
+                return price
+            shadow(100)
+            '''
+            def tax(price):
+                return round(price * 1.13, 2)
+            """
+        )
+        let sanitized = sanitizeCellForModule(cell.source)
+        let moduleLevel = sanitized.components(separatedBy: "if __name__").first ?? sanitized
+        #expect(moduleLevel.contains("def tax(price):"))
+    }
 }

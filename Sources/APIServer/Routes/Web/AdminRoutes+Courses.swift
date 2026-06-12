@@ -136,6 +136,10 @@ extension AdminRoutes {
             .filter(\.$courseID == sourceID)
             .sort(\.$sortOrder)
             .all()
+        let sections = try await APICourseSection.query(on: req.db)
+            .filter(\.$courseID == sourceID)
+            .sort(\.$sortOrder)
+            .all()
 
         let newCourseID = try await req.db.transaction { db -> UUID in
             // 1. Create the new course.
@@ -143,7 +147,21 @@ extension AdminRoutes {
             try await newCourse.save(on: db)
             let newCourseID = try newCourse.requireID()
 
-            // 2. Copy each test setup (zip + optional notebook) to a new ID.
+            // 2. Copy sections, building an old→new UUID map.
+            var sectionIDMap: [UUID: UUID] = [:]
+            for section in sections {
+                guard let oldSectionID = section.id else { continue }
+                let newSection = APICourseSection(
+                    name: section.name,
+                    defaultGradingMode: section.defaultGradingMode,
+                    sortOrder: section.sortOrder,
+                    courseID: newCourseID
+                )
+                try await newSection.save(on: db)
+                sectionIDMap[oldSectionID] = try newSection.requireID()
+            }
+
+            // 3. Copy each test setup (zip + optional notebook) to a new ID.
             var setupIDMap: [String: String] = [:]
             for setup in setups {
                 guard let oldID = setup.id else { continue }
@@ -154,11 +172,18 @@ extension AdminRoutes {
                 let dstZip = URL(fileURLWithPath: setupsDir + "\(newID).zip")
                 try FileManager.default.copyItem(at: srcZip, to: dstZip)
 
+                // Copy the notebook using the actual stored path — not a
+                // reconstructed `<setupID>.ipynb` flat path, which misses
+                // notebooks stored in the notebooks/<setupID>/ subdirectory.
                 var newNotebookPath: String?
-                if setup.notebookPath != nil {
-                    let srcNb = URL(fileURLWithPath: setupsDir + "\(oldID).ipynb")
+                if let srcPath = setup.notebookPath {
+                    let srcNb = URL(fileURLWithPath: srcPath)
                     if FileManager.default.fileExists(atPath: srcNb.path) {
-                        let dstNb = URL(fileURLWithPath: setupsDir + "\(newID).ipynb")
+                        let nbDir = draftNotebookDirectory(
+                            testSetupsDirectory: setupsDir, setupID: newID)
+                        try FileManager.default.createDirectory(
+                            atPath: nbDir, withIntermediateDirectories: true)
+                        let dstNb = URL(fileURLWithPath: nbDir + srcNb.lastPathComponent)
                         try FileManager.default.copyItem(at: srcNb, to: dstNb)
                         newNotebookPath = dstNb.path
                     }
@@ -174,7 +199,7 @@ extension AdminRoutes {
                 try await newSetup.save(on: db)
             }
 
-            // 3. Copy each assignment, remapping to the new test setup IDs.
+            // 4. Copy each assignment, remapping test setup IDs and section IDs.
             //    Validation state is reset so the instructor re-validates before opening.
             for (idx, a) in assignments.enumerated() {
                 guard let newSetupID = setupIDMap[a.testSetupID] else { continue }
@@ -183,10 +208,11 @@ extension AdminRoutes {
                     title: a.title,
                     slug: try await uniqueAssignmentSlug(title: a.title, courseID: newCourseID, db: db),
                     dueAt: a.dueAt,
-                    isOpen: false,
+                    visibility: .closed,
                     sortOrder: a.sortOrder ?? idx,
                     validationStatus: nil,
                     validationSubmissionID: nil,
+                    sectionID: a.sectionID.flatMap { sectionIDMap[$0] },
                     courseID: newCourseID
                 )
                 try await newAssignment.save(on: db)
@@ -437,7 +463,7 @@ extension AdminRoutes {
                 .filter(\.$id ~~ enrolledUserIDs)
                 // Exclude `mcp` service accounts: enrolled to scope an agent's
                 // access (admin MCP tab), not human roster members.
-                .filter(\.$role != "mcp")
+                .filter(\.$role != UserRole.mcp.rawValue)
                 .sort(\.$username)
                 .all()
             enrolledUsers = users.compactMap { u in
@@ -462,7 +488,8 @@ extension AdminRoutes {
                 id: a.publicID,
                 title: a.title,
                 dueAt: a.dueAt.map { df.string(from: $0) },
-                isOpen: a.isOpen
+                isOpen: a.isOpen,
+                visibility: a.visibility.rawValue
             )
         }
 
@@ -599,15 +626,14 @@ extension AdminRoutes {
 // MARK: - Private helpers
 
 private func uniqueCopyCode(base: String, db: Database) async throws -> String {
-    let first = "\(base)-COPY"
-    if try await APICourse.query(on: db).filter(\.$code == first).count() == 0 {
-        return first
-    }
-    for n in 2...10 {
-        let candidate = "\(base)-COPY-\(n)"
-        if try await APICourse.query(on: db).filter(\.$code == candidate).count() == 0 {
-            return candidate
-        }
+    let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
+    let taken = Set(
+        try await APICourse.query(on: db)
+            .filter(\.$code ~~ candidates)
+            .all()
+            .map(\.code))
+    if let available = candidates.first(where: { !taken.contains($0) }) {
+        return available
     }
     throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }

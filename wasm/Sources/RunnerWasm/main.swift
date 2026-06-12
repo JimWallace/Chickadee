@@ -74,8 +74,8 @@ JSObject.global.runnerClassifyScript = .object(runnerClassifyScript)
 //   run           — (name: string, timeLimit: number) => Promise<ScriptOutput>
 //                   ScriptOutput = { exitCode, stdout, stderr, executionTimeMs, timedOut }
 //   resolves to   — [{ testName, testClass, tier, status, shortResult, longResult,
-//                      points, executionTimeMs, memoryUsageBytes, attemptNumber,
-//                      isFirstPassSuccess }]  (canonical TestOutcome shape)
+//                      score, points, executionTimeMs, memoryUsageBytes,
+//                      attemptNumber, isFirstPassSuccess }]  (canonical TestOutcome shape)
 
 /// Drives `executeSuites` by delegating to JS callbacks (callable `JSObject`s —
 /// not `Sendable`, which is fine here: the wasm package builds in Swift 5
@@ -168,6 +168,7 @@ private func outcomesToJS(_ outcomes: [TestOutcome]) -> JSValue {
         obj.status = .string(outcome.status.rawValue)
         obj.shortResult = .string(outcome.shortResult)
         obj.longResult = outcome.longResult.map { JSValue.string($0) } ?? .null
+        obj.score = .number(outcome.score)
         obj.points = .number(Double(outcome.points))
         obj.executionTimeMs = .number(Double(outcome.executionTimeMs))
         obj.memoryUsageBytes = outcome.memoryUsageBytes.map { JSValue.number(Double($0)) } ?? .null

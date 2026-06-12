@@ -6,8 +6,7 @@
 //   GET  /instructor                               → assignments.leaf (all setups + status)
 //   GET  /instructor/new                           → assignment-new.leaf
 //   POST /instructor/new/save                      → save draft assignment, redirect to /instructor
-//   POST /instructor                               → create draft assignment → redirect to validate
-//   GET  /instructor/:assignmentID/validate        → assignment-validate.leaf
+//   POST /instructor                               → create draft assignment → redirect to edit
 //   GET  /instructor/:assignmentID/edit            → assignment-edit.leaf
 //   POST /instructor/:assignmentID/edit/save       → update assignment content + validate
 //   POST /instructor/:assignmentID/status          → set open/closed status → redirect to /instructor
@@ -52,13 +51,16 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "submissions", ":submissionID", "retest", use: retestSubmission)
         r.post(":assignmentID", "retest", use: retestAllSubmissions)
         r.post(":assignmentID", "students", ":studentID", "reset-notebook", use: resetStudentNotebook)
+        r.post(":assignmentID", "students", ":studentID", "grade-override", use: saveStudentGradeOverride)
+        r.post(
+            ":assignmentID", "students", ":studentID", "grade-override", "delete",
+            use: deleteStudentGradeOverride)
         // Draft-assignment authoring (create page, save, publish, draft
         // suite / family / check / script / suite-section CRUD) lives on
         // `DraftAssignmentRoutes` (registered in routes.swift).
         r.post("reorder", use: reorderAssignments)
         // Section CRUD + `:assignmentID/section` move live on
         // `CourseAdminRoutes` (registered in routes.swift).
-        r.get(":assignmentID", "validate", use: validatePage)
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
@@ -171,43 +173,11 @@ struct InstructorDashboardRoutes: RouteCollection {
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
     }
 
-    // MARK: - GET /instructor/:assignmentID/validate
-
-    @Sendable
-    func validatePage(req: Request) async throws -> View {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
-
-        let suiteCount = setup.decodedManifest()?.testSuites.count ?? 0
-
-        let fmt = waterlooDateTimeFormatter()
-
-        let ctx = ValidateContext(
-            currentUser: req.currentUserContext,
-            assignmentID: idStr,
-            setupID: assignment.testSetupID,
-            title: assignment.title,
-            suiteCount: suiteCount,
-            dueAt: assignment.dueAt.map { fmt.string(from: $0) }
-        )
-        return try await req.view.render("assignment-validate", ctx)
-    }
-
     // MARK: - POST /instructor/:assignmentID/open
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         do {
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
@@ -262,29 +232,20 @@ struct InstructorDashboardRoutes: RouteCollection {
             var status: String
         }
 
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
 
         let body = try req.content.decode(StatusBody.self)
-        switch body.status {
-        case "open":
-            do {
-                try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
-            } catch AssignmentAuthoringError.validationNotPassed {
-                throw WebAssignmentError.validationRequired(
-                    reason: "Assignment cannot be opened until runner validation passes."
-                )
-            }
-        case "closed":
-            try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
-        default:
+        guard let visibility = AssignmentVisibility(rawValue: body.status) else {
             throw WebAssignmentError.invalidParameter(
                 name: "status",
                 reason: "unsupported status '\(body.status)'"
+            )
+        }
+        do {
+            try await AssignmentAuthoringService.setVisibility(assignment, visibility, on: req.db)
+        } catch AssignmentAuthoringError.validationNotPassed {
+            throw WebAssignmentError.validationRequired(
+                reason: "Assignment cannot be opened until runner validation passes."
             )
         }
         return req.redirect(to: "/instructor")
@@ -294,12 +255,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -308,10 +264,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func saveBrightSpaceGradeObjectID(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         struct BSBody: Content {
             var gradeObjectID: String?
             /// "brightspace" → return to the BrightSpace tab (mapping table);
@@ -325,19 +278,14 @@ struct InstructorDashboardRoutes: RouteCollection {
         if body.returnTo == "brightspace" {
             return req.redirect(to: "/instructor/brightspace")
         }
-        return req.redirect(to: "/instructor/\(idStr)/edit?notice=BrightSpace+grade+item+ID+saved")
+        return req.redirect(to: "/instructor/\(assignment.publicID)/edit?notice=BrightSpace+grade+item+ID+saved")
     }
 
     // MARK: - POST /instructor/:assignmentID/delete
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let assignment = try await loadAssignment(req)
         let setupID = assignment.testSetupID
 
         // Delete related submissions and their result rows for this setup.
@@ -400,14 +348,8 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func editPage(req: Request) async throws -> View {
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
-        _ = setup  // keep existence check explicit
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let idStr = assignment.publicID
 
         struct EditQuery: Content {
             var assignmentName: String?
@@ -472,6 +414,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             globalVariableRows: globalVariableShellRows(fromManifest: setup.manifest),
+            achievementKindOptions: AchievementKindPresentation.all,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             notice: q?.notice,

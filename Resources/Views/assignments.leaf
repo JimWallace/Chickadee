@@ -9,35 +9,32 @@
     <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
 </nav>
 #if(currentUser.activeCourse):
-<h1 style="margin:0 0 1.25rem">#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
+<h1>#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
 #else:
-<h1 style="margin:0 0 1.25rem">Assignments</h1>
+<h1>Assignments</h1>
 #endif
 <section class="instructor-diagnostics">
     #extend("_diagnostic-cards")
 </section>
-<div style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
+<div class="section-toolbar">
     <!-- Add Section inline form -->
-    <details class="add-section-details" id="add-section-details" style="position:relative">
-        <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Add Section</summary>
-        <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
-            <form method="post" action="/instructor/sections" class="form" style="margin:0;gap:.6rem">
+    <details class="add-section-details popup-anchor" id="add-section-details">
+        <summary class="btn action-btn summary-btn">+ Add Section</summary>
+        <div class="add-section-popup card suite-section-popup">
+            <form method="post" action="/instructor/sections" class="form popup-form">
                 #csrfFormField()
-                <label class="form-label" style="margin:0">
+                <label class="form-label">
                     Section name
-                    <input class="form-input" type="text" name="name" placeholder="e.g. Labs" required
-                           style="font-size:.85rem;padding:.3rem .5rem">
+                    <input class="form-input editor-input" type="text" name="name" placeholder="e.g. Labs" required>
                 </label>
-                <label class="form-label" style="margin:0">
+                <label class="form-label">
                     Default grading mode
-                    <select class="form-input" name="defaultGradingMode"
-                            style="font-size:.85rem;padding:.3rem .5rem">
+                    <select class="form-input editor-input" name="defaultGradingMode">
                         <option value="worker">Chickadee</option>
                         <option value="browser">Student Browser</option>
                     </select>
                 </label>
-                <button class="btn btn-primary" type="submit"
-                        style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+                <button class="btn btn-primary btn-compact" type="submit">Create section</button>
             </form>
         </div>
     </details>
@@ -50,48 +47,38 @@
 <!-- Sections -->
 <div id="sections-container">
 #for(section in sections):
-<div class="section-block" data-section-id="#(section.sectionID)" style="margin-bottom:1.5rem">
-    <div class="section-header" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
-        <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
-              style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
+<div class="section-block" data-section-id="#(section.sectionID)">
+    <div class="section-header">
+        <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
 
         <!-- View mode -->
-        <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
+        <div class="section-view">
             <strong>#(section.name)</strong>
-            <span style="font-size:.78rem;color:var(--gray-500)">tested in #if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
-            <button class="btn-link section-edit-toggle" type="button"
-                    title="Edit section" aria-label="Edit section"
-                    style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+            <span class="section-mode-note">tested in #if(section.defaultGradingMode == "worker"):Chickadee#else:Student Browser#endif</span>
+            <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+                    title="Edit section" aria-label="Edit section">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
             </button>
-            <a class="btn action-btn" href="/instructor/new?sectionID=#(section.sectionID)"
-               style="font-size:.8rem;padding:.2rem .55rem;margin-left:auto">+ Create New</a>
-            <a class="btn action-btn" href="/instructor/import-marmoset?sectionID=#(section.sectionID)"
-               style="font-size:.8rem;padding:.2rem .55rem">Import from Marmoset</a>
+            <a class="btn action-btn section-action section-action--push" href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
+            <a class="btn action-btn section-action" href="/instructor/import-marmoset?sectionID=#(section.sectionID)">Import from Marmoset</a>
         </div>
 
         <!-- Edit mode (hidden by default) -->
-        <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
-            <form class="section-rename-form" method="post" action="/instructor/sections/#(section.sectionID)/rename"
-                  style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
+        <div class="section-edit" style="display:none">
+            <form class="section-rename-form" method="post" action="/instructor/sections/#(section.sectionID)/rename">
                 #csrfFormField()
-                <input class="form-input section-name-input" type="text" name="name" value="#(section.name)" required
-                       style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
-                <select class="form-input" name="defaultGradingMode"
-                        style="font-size:.85rem;padding:.25rem .45rem">
+                <input class="form-input section-name-input" type="text" name="name" value="#(section.name)" required>
+                <select class="form-input grading-mode-select" name="defaultGradingMode">
                     <option value="worker" #if(section.defaultGradingMode == "worker"):selected#endif>Chickadee</option>
                     <option value="browser" #if(section.defaultGradingMode == "browser"):selected#endif>Student Browser</option>
                 </select>
-                <button class="btn btn-primary" type="submit"
-                        style="font-size:.8rem;padding:.25rem .5rem">Save</button>
+                <button class="btn btn-primary btn-tiny" type="submit">Save</button>
             </form>
-            <button class="btn action-btn action-danger section-delete-btn" type="button"
+            <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
                     data-action="/instructor/sections/#(section.sectionID)/delete"
-                    data-name="#(section.name)"
-                    style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
-            <button class="btn-link section-edit-cancel" type="button"
-                    aria-label="Cancel" title="Cancel"
-                    style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+                    data-name="#(section.name)">Delete</button>
+            <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+                    aria-label="Cancel" title="Cancel">✕</button>
         </div>
     </div>
 
@@ -101,21 +88,21 @@
                 <th>Name</th>
                 <th>Status</th>
                 <th>Validation</th>
-                <th class="due-col">Due</th>
-                <th>Submissions</th>
+                <th class="due-col col-hide-phone">Due</th>
+                <th class="col-hide-phone">Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody class="assignments-body" data-section-id="#(section.sectionID)">
         #if(section.rows.isEmpty):
         <tr class="section-empty-row">
-            <td colspan="6" style="color:var(--gray-500);font-style:italic;padding:.6rem .75rem;text-align:center">
+            <td colspan="6" class="section-empty-cell">
                 Drag items here or use <a href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
             </td>
         </tr>
         #else:
         #for(row in section.rows):
-            <tr class="#if(row.status == "open"):status-open#elseif(row.status == "closed"):status-closed#endif"
+            <tr class="#if(row.status == "open"):status-open#elseif(row.status == "preview"):status-preview#elseif(row.status == "closed"):status-closed#endif"
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
                 <td>
                     #if(row.assignmentID):
@@ -129,7 +116,7 @@
                     <strong>#(row.title)</strong>
                     #endif
                     #else:
-                    <span style="color:var(--gray-600)">Unpublished</span>
+                    <span class="text-muted">Unpublished</span>
                     #endif
                     #if(row.assignmentID):
                     </span>
@@ -140,10 +127,10 @@
                     <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="status-s-#(row.assignmentID)">Status for #(row.title)</label>
-                        <select id="status-s-#(row.assignmentID)" class="form-input" name="status"
-                                style="font-size:.8rem;padding:.25rem .45rem;min-width:5.5rem"
+                        <select id="status-s-#(row.assignmentID)" class="form-input status-toggle-btn" name="status"
                                 onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
+                            <option value="preview" #if(row.status == "preview"):selected#endif>staff only</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
                     </form>
@@ -152,6 +139,7 @@
                     #else:
                     <span class="tier
                         #if(row.status == "open"):tier-open
+                        #elseif(row.status == "preview"):tier-preview
                         #elseif(row.status == "closed"):tier-closed
                         #elseif(row.status == "unpublished"):tier-unpublished
                     #endif">#(row.status)</span>
@@ -163,14 +151,14 @@
                     #elseif(row.validationStatus == "failed"):
                     <span class="tier tier-closed">failed</span>
                     #if(row.validationSubmissionID):
-                    <div style="margin-top:.25rem">
+                    <div class="cell-subrow">
                         <a href="/submissions/#(row.validationSubmissionID)">View results</a>
                     </div>
                     #endif
                     #elseif(row.validationStatus == "pending"):
                     <span class="tier">pending</span>
                     #if(row.validationSubmissionID):
-                    <div style="margin-top:.25rem">
+                    <div class="cell-subrow">
                         <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
                     </div>
                     #endif
@@ -180,33 +168,32 @@
                     <span class="tier">—</span>
                     #endif
                 </td>
-                <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
-                <td style="white-space:nowrap">
+                <td class="due-col col-hide-phone">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td class="col-hide-phone nowrap">
                     #if(row.assignmentID):
                     <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
                     #else:—#endif
                 </td>
                 <td>
                     #if(row.status == "unpublished"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div class="row-actions-tight">
                     <details class="publish-details">
-                        <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
+                        <summary class="btn action-btn summary-btn">Publish…</summary>
                         <form class="publish-form" method="post" action="/instructor">
                             <input type="hidden" name="testSetupID" value="#(row.setupID)">
-                            <label class="form-label" style="font-size:.8rem">
+                            <label class="form-label publish-label">
                                 Title
                                 <input class="form-input" type="text" name="title"
                                        placeholder="e.g. Lab 1 — Warmup" required
-                                       style="font-size:.85rem;padding:.3rem .5rem">
+                                       class="editor-input">
                             </label>
-                            <label class="form-label" style="font-size:.8rem">
+                            <label class="form-label publish-label">
                                 Due date (optional)
                                 <input class="form-input publish-due-date" type="datetime-local" name="dueAt"
-                                       style="font-size:.85rem;padding:.3rem .5rem">
+                                       class="editor-input">
                             </label>
-                            <div class="publish-uw-warning card-meta" style="display:none;color:#c05000;font-size:.8rem;margin-top:-.25rem;margin-bottom:.25rem"></div>
-                            <button class="btn btn-primary" type="submit"
-                                    style="font-size:.8rem;padding:.3rem .6rem">Create draft</button>
+                            <div class="publish-uw-warning card-meta" style="display:none"></div>
+                            <button class="btn btn-primary btn-compact" type="submit">Create draft</button>
                         </form>
                     </details>
                     <form method="post" action="/instructor/setup/#(row.setupID)/delete"
@@ -214,22 +201,22 @@
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 aria-label="Delete setup" title="Delete setup"
-                                style="padding:.25rem .35rem">
+                               >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                         </button>
                     </form>
                     </div>
                     #elseif(row.status == "closed"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
-                                style="padding:.25rem .35rem"
+                               
                                 onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
-                           style="padding:.25rem .35rem">
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/retest"
@@ -237,7 +224,7 @@
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
                                     aria-label="Retest all submissions" title="Retest all submissions"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                             </button>
                         </form>
@@ -246,22 +233,22 @@
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
                         </form>
                     </div>
                     #elseif(row.status == "open"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
-                                style="padding:.25rem .35rem"
+                               
                                 onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
-                           style="padding:.25rem .35rem">
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/retest"
@@ -269,7 +256,7 @@
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
                                     aria-label="Retest all submissions" title="Retest all submissions"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                             </button>
                         </form>
@@ -278,20 +265,39 @@
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
                         </form>
                     </div>
                     #else:
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
-                        <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                    <div class="row-actions-tight">
+                        <button class="btn action-btn" type="button"
+                                title="Copy student link" aria-label="Copy student link"
+                               
+                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
+                        <form method="post" action="/instructor/#(row.assignmentID)/retest"
+                              onsubmit="return confirm('Retest every submission for this assignment? The worker will re-grade each one against the current test suite.')">
+                            #csrfFormField()
+                            <button class="btn action-btn" type="submit"
+                                    aria-label="Retest all submissions" title="Retest all submissions"
+                                   >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
+                            </button>
+                        </form>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
                         </form>
@@ -309,9 +315,9 @@
 
 <!-- Ungrouped bucket: shown when there are ungrouped items, or when no sections exist at all (flat-table mode) -->
 #if(hasUngrouped || !hasSections):
-<div style="margin-bottom:1.5rem">
+<div class="dashboard-block">
     #if(hasSections):
-    <h2 style="font-size:1rem;font-weight:600;color:var(--gray-600);margin-bottom:.4rem">Ungrouped</h2>
+    <h2 class="ungrouped-heading">Ungrouped</h2>
     #endif
     <table class="results-table">
         <thead>
@@ -319,14 +325,14 @@
                 <th>Name</th>
                 <th>Status</th>
                 <th>Validation</th>
-                <th class="due-col">Due</th>
-                <th>Submissions</th>
+                <th class="due-col col-hide-phone">Due</th>
+                <th class="col-hide-phone">Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody id="assignments-body" data-section-id="">
         #for(row in ungroupedRows):
-            <tr class="#if(row.status == "open"):status-open#elseif(row.status == "closed"):status-closed#endif"
+            <tr class="#if(row.status == "open"):status-open#elseif(row.status == "preview"):status-preview#elseif(row.status == "closed"):status-closed#endif"
                 #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
                 <td>
                     #if(row.assignmentID):
@@ -340,7 +346,7 @@
                     <strong>#(row.title)</strong>
                     #endif
                     #else:
-                    <span style="color:var(--gray-600)">Unpublished</span>
+                    <span class="text-muted">Unpublished</span>
                     #endif
                     #if(row.assignmentID):
                     </span>
@@ -351,10 +357,10 @@
                     <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="status-u-#(row.assignmentID)">Status for #(row.title)</label>
-                        <select id="status-u-#(row.assignmentID)" class="form-input" name="status"
-                                style="font-size:.8rem;padding:.25rem .45rem;min-width:5.5rem"
+                        <select id="status-u-#(row.assignmentID)" class="form-input status-toggle-btn" name="status"
                                 onchange="this.form.submit()">
                             <option value="open" #if(row.status == "open"):selected#endif>open</option>
+                            <option value="preview" #if(row.status == "preview"):selected#endif>staff only</option>
                             <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
                         </select>
                     </form>
@@ -363,6 +369,7 @@
                     #else:
                     <span class="tier
                         #if(row.status == "open"):tier-open
+                        #elseif(row.status == "preview"):tier-preview
                         #elseif(row.status == "closed"):tier-closed
                         #elseif(row.status == "unpublished"):tier-unpublished
                     #endif">#(row.status)</span>
@@ -374,14 +381,14 @@
                     #elseif(row.validationStatus == "failed"):
                     <span class="tier tier-closed">failed</span>
                     #if(row.validationSubmissionID):
-                    <div style="margin-top:.25rem">
+                    <div class="cell-subrow">
                         <a href="/submissions/#(row.validationSubmissionID)">View results</a>
                     </div>
                     #endif
                     #elseif(row.validationStatus == "pending"):
                     <span class="tier">pending</span>
                     #if(row.validationSubmissionID):
-                    <div style="margin-top:.25rem">
+                    <div class="cell-subrow">
                         <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
                     </div>
                     #endif
@@ -391,33 +398,32 @@
                     <span class="tier">—</span>
                     #endif
                 </td>
-                <td class="due-col">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
-                <td style="white-space:nowrap">
+                <td class="due-col col-hide-phone">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td class="col-hide-phone nowrap">
                     #if(row.assignmentID):
                     <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
                     #else:—#endif
                 </td>
                 <td>
                     #if(row.status == "unpublished"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div class="row-actions-tight">
                     <details class="publish-details">
-                        <summary class="btn action-btn" style="cursor:pointer;list-style:none">Publish…</summary>
+                        <summary class="btn action-btn summary-btn">Publish…</summary>
                         <form class="publish-form" method="post" action="/instructor">
                             <input type="hidden" name="testSetupID" value="#(row.setupID)">
-                            <label class="form-label" style="font-size:.8rem">
+                            <label class="form-label publish-label">
                                 Title
                                 <input class="form-input" type="text" name="title"
                                        placeholder="e.g. Lab 1 — Warmup" required
-                                       style="font-size:.85rem;padding:.3rem .5rem">
+                                       class="editor-input">
                             </label>
-                            <label class="form-label" style="font-size:.8rem">
+                            <label class="form-label publish-label">
                                 Due date (optional)
                                 <input class="form-input publish-due-date" type="datetime-local" name="dueAt"
-                                       style="font-size:.85rem;padding:.3rem .5rem">
+                                       class="editor-input">
                             </label>
-                            <div class="publish-uw-warning card-meta" style="display:none;color:#c05000;font-size:.8rem;margin-top:-.25rem;margin-bottom:.25rem"></div>
-                            <button class="btn btn-primary" type="submit"
-                                    style="font-size:.8rem;padding:.3rem .6rem">Create draft</button>
+                            <div class="publish-uw-warning card-meta" style="display:none"></div>
+                            <button class="btn btn-primary btn-compact" type="submit">Create draft</button>
                         </form>
                     </details>
                     <form method="post" action="/instructor/setup/#(row.setupID)/delete"
@@ -425,63 +431,67 @@
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
                                 aria-label="Delete setup" title="Delete setup"
-                                style="padding:.25rem .35rem">
+                               >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                         </button>
                     </form>
                     </div>
                     #elseif(row.status == "closed"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
-                                style="padding:.25rem .35rem"
+                               
                                 onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
-                           style="padding:.25rem .35rem">
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
                         </form>
                     </div>
                     #elseif(row.status == "open"):
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
+                    <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
-                                style="padding:.25rem .35rem"
+                               
                                 onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
                         <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
-                           style="padding:.25rem .35rem">
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
                         </form>
                     </div>
                     #else:
-                    <div style="display:flex;gap:.2rem;flex-wrap:wrap;align-items:center">
-                        <a class="btn btn-primary" href="/instructor/#(row.assignmentID)/validate">Validate &amp; open →</a>
+                    <div class="row-actions-tight">
+                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                           title="Edit assignment" aria-label="Edit assignment"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
-                                    style="padding:.25rem .35rem">
+                                   >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             </button>
                         </form>
@@ -500,32 +510,6 @@
 <style>
 .instructor-diagnostics {
     margin-bottom: 1.25rem;
-}
-.diagnostics-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
-}
-.diagnostic-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    min-height: 5.5rem;
-    padding: .75rem .9rem;
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
-}
-.diagnostic-label {
-    color: var(--gray-600);
-    font-size: .82rem;
-    line-height: 1.25;
-}
-.diagnostic-value {
-    font-size: 1.2rem;
-    font-weight: 600;
-    line-height: 1.2;
-    color: var(--gray-900);
 }
 .assignment-name-cell {
     display: inline-flex;
@@ -551,71 +535,18 @@ tr.assignment-draggable.dragging {
 tr.assignment-draggable td {
     cursor: grab;
 }
-.section-block.section-dragging {
-    opacity: .55;
-}
 .section-empty-row td {
     cursor: default !important;
 }
-.add-section-details {
-    margin: 0;
-    padding: 0;
-}
-.add-section-details > summary {
-    margin: 0;
-}
-.add-section-details > summary::-webkit-details-marker {
-    display: none;
-}
-.add-section-details > summary::marker {
-    content: "";
-}
-.add-section-details[open] .add-section-popup {
-    display: block;
-}
+/* .add-section-details* and .section-block.section-dragging now live in the
+   global stylesheet (shared with assignment-edit.leaf). */
 </style>
+<script src="/relative-time.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
 
-    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-
-    function formatRelative(isoString) {
-        var date = new Date(isoString);
-        if (Number.isNaN(date.getTime())) return isoString;
-
-        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
-        var abs = Math.abs(seconds);
-
-        if (abs < 60) return relativeFormatter.format(seconds, 'second');
-        var minutes = Math.round(seconds / 60);
-        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
-        var hours = Math.round(minutes / 60);
-        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
-        var days = Math.round(hours / 24);
-        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
-        var weeks = Math.round(days / 7);
-        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
-        var months = Math.round(days / 30);
-        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
-        var years = Math.round(days / 365);
-        return relativeFormatter.format(years, 'year');
-    }
-
-    function applyRelativeTimes(root) {
-        var scope = root || document;
-        var nodes = scope.querySelectorAll('.js-relative-time[data-iso]');
-        nodes.forEach(function (el) {
-            var iso = el.getAttribute('data-iso');
-            if (!iso) return;
-            var date = new Date(iso);
-            if (Number.isNaN(date.getTime())) return;
-            el.textContent = formatRelative(iso);
-            el.title = date.toLocaleString();
-        });
-    }
-
-    applyRelativeTimes();
+    ChickadeeRelativeTime.applyRelativeTimes();
 
     // ── Assignment drag-and-drop (within and across sections) ─────────────────
     //
@@ -623,8 +554,8 @@ tr.assignment-draggable td {
     // Dragging to a different tbody triggers a section-move API call + reload.
     // Dragging within the same tbody triggers a reorder API call.
 
-    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var csrfToken = ChickadeeUI.getCsrfToken();
 
     var assignDragged = null;
     var assignStartTbody = null;

@@ -34,6 +34,37 @@ actor TestSetupCache {
     ) {
         self.cacheRoot = cacheRoot
         self.maxEntries = maxEntries
+        // Reconcile with what's already on disk: the LRU list used to be
+        // memory-only, so entries surviving a daemon restart were never
+        // tracked — they served hits but could never be evicted, growing
+        // /tmp without bound across restarts and manifest edits (June 2026
+        // audit, P2.4). Seed oldest-first so eviction order approximates LRU.
+        lruKeys = Self.existingEntryKeysSortedByAge(cacheRoot: cacheRoot)
+    }
+
+    /// Keys of committed cache entries already on disk, oldest modification
+    /// first. `.tmp` staging leftovers are ignored (and cleaned by the next
+    /// populate of their key).
+    private static func existingEntryKeysSortedByAge(cacheRoot: URL) -> [String] {
+        let fm = FileManager.default
+        guard
+            let entries = try? fm.contentsOfDirectory(
+                at: cacheRoot, includingPropertiesForKeys: [.contentModificationDateKey])
+        else { return [] }
+        return
+            entries
+            .filter { !$0.lastPathComponent.hasSuffix(".tmp") }
+            .filter { fm.fileExists(atPath: $0.appendingPathComponent("prepared").path) }
+            .sorted { lhs, rhs in
+                let lhsDate =
+                    (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                let rhsDate =
+                    (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                return lhsDate < rhsDate
+            }
+            .map(\.lastPathComponent)
     }
 
     // MARK: - Public interface
@@ -60,7 +91,30 @@ actor TestSetupCache {
         let didHit: Bool
     }
 
-    func acquire(
+    nonisolated func acquire(
+        testSetupID: String,
+        populate: @escaping @Sendable () async throws -> URL
+    ) async throws -> AcquireResult {
+        // The scratch copy of a multi-MB prepared directory runs OUTSIDE actor
+        // isolation so concurrent acquires for other setups don't serialize
+        // behind file I/O (June 2026 audit, P2.4). The committed source dir is
+        // immutable, so the only hazard is eviction racing the copy — rare
+        // (needs 16+ distinct setups churning), and retried once below: with
+        // the entry gone, the retry takes the populate path.
+        do {
+            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
+            let scratch = try Self.copyToScratch(source: source.directory, label: testSetupID)
+            return AcquireResult(directory: scratch, didHit: source.didHit)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
+            let scratch = try Self.copyToScratch(source: source.directory, label: testSetupID)
+            return AcquireResult(directory: scratch, didHit: source.didHit)
+        }
+    }
+
+    /// Actor-isolated bookkeeping half of `acquire`: returns the committed
+    /// prepared directory (populating it if needed) without copying it.
+    private func acquireSource(
         testSetupID: String,
         populate: @escaping @Sendable () async throws -> URL
     ) async throws -> AcquireResult {
@@ -75,8 +129,7 @@ actor TestSetupCache {
                 fields: [
                     "test_setup_id": testSetupID
                 ])
-            let scratch = try copyToScratch(source: preparedDir, label: testSetupID)
-            return AcquireResult(directory: scratch, didHit: true)
+            return AcquireResult(directory: preparedDir, didHit: true)
         }
 
         // ── Already populating — await in-flight task ─────────────────────
@@ -90,10 +143,9 @@ actor TestSetupCache {
             // Another caller may have already registered this key in lruKeys;
             // touchLRU is idempotent and safe to call from any code path.
             touchLRU(key: testSetupID)
-            let scratch = try copyToScratch(source: populated, label: testSetupID)
             // Awaiting an in-flight populate is a miss from the caller's
             // perspective — work was still being done on their behalf.
-            return AcquireResult(directory: scratch, didHit: false)
+            return AcquireResult(directory: populated, didHit: false)
         }
 
         // ── Cache miss — start population ────────────────────────────────────
@@ -123,8 +175,7 @@ actor TestSetupCache {
                 fields: [
                     "test_setup_id": testSetupID
                 ])
-            let scratch = try copyToScratch(source: populated, label: testSetupID)
-            return AcquireResult(directory: scratch, didHit: false)
+            return AcquireResult(directory: populated, didHit: false)
         } catch {
             inProgress.removeValue(forKey: testSetupID)
             cleanupPartialEntry(testSetupID: testSetupID)
@@ -188,8 +239,8 @@ actor TestSetupCache {
     // MARK: - File operations
 
     /// Copy the prepared cache entry into a fresh temporary directory that
-    /// the caller owns exclusively.
-    private func copyToScratch(source: URL, label: String) throws -> URL {
+    /// the caller owns exclusively. Static (non-isolated) — see `acquire`.
+    private static func copyToScratch(source: URL, label: String) throws -> URL {
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "chickadee_ts_\(label)_\(UUID().uuidString)",

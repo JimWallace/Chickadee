@@ -17,16 +17,18 @@ struct UpdateAssignmentTool: ContentTool {
         let dueAt: String?
         let startsAt: String?
         let isOpen: Bool?
+        let visibility: String?
 
         init(
             assignmentPublicID: String, title: String? = nil, dueAt: String? = nil,
-            startsAt: String? = nil, isOpen: Bool? = nil
+            startsAt: String? = nil, isOpen: Bool? = nil, visibility: String? = nil
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.title = title
             self.dueAt = dueAt
             self.startsAt = startsAt
             self.isOpen = isOpen
+            self.visibility = visibility
         }
     }
 
@@ -35,6 +37,8 @@ struct UpdateAssignmentTool: ContentTool {
         let title: String
         let slug: String
         let isOpen: Bool
+        /// Three-state visibility: "closed" | "preview" | "open".
+        let visibility: String
         let dueAt: String?
         let startsAt: String?
         let validationStatus: String?
@@ -47,7 +51,12 @@ struct UpdateAssignmentTool: ContentTool {
         + "due date), startsAt (ISO 8601 automatic open date — the assignment opens to students on "
         + "its own when this time arrives — or an empty string to remove it), and/or isOpen (true to "
         + "open for submissions now — refused until runner validation passes, and clears any pending "
-        + "open date — or false to close). Does not change test content, so it never triggers a regrade."
+        + "open date — or false to close), and/or visibility (\"closed\", \"preview\", or \"open\"). "
+        + "visibility is the three-state form of isOpen and wins if both are given: \"preview\" is a "
+        + "staff-only state where course staff see and use the assignment exactly like open while "
+        + "students see it as closed. Switching to preview is a pure visibility change (no validation, "
+        + "no close); only opening to students is refused until validation passes. Does not change "
+        + "test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -76,6 +85,13 @@ struct UpdateAssignmentTool: ContentTool {
                 "type": .string("boolean"),
                 "description": .string("true to open the assignment for submissions, false to close it."),
             ]),
+            "visibility": .object([
+                "type": .string("string"),
+                "enum": .array([.string("closed"), .string("preview"), .string("open")]),
+                "description": .string(
+                    "Three-state visibility. \"preview\" is a staff-only beta state. Wins over "
+                        + "isOpen if both are given. open → preview is refused (close first)."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -87,12 +103,17 @@ struct UpdateAssignmentTool: ContentTool {
             "title": .object(["type": .string("string")]),
             "slug": .object(["type": .string("string")]),
             "isOpen": .object(["type": .string("boolean")]),
+            "visibility": .object([
+                "type": .string("string"),
+                "enum": .array([.string("closed"), .string("preview"), .string("open")]),
+            ]),
             "dueAt": .object(["type": .string("string")]),
             "startsAt": .object(["type": .string("string")]),
             "validationStatus": .object(["type": .string("string")]),
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
+            .string("visibility"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -103,21 +124,28 @@ struct UpdateAssignmentTool: ContentTool {
         let dueUpdate = try Self.resolveDueDate(input.dueAt)
         let startsUpdate = try Self.resolveStartDate(input.startsAt)
         let newTitle = try Self.resolveTitle(input.title)
-        guard newTitle != nil || input.isOpen != nil || dueUpdate != .unchanged || startsUpdate != .unchanged
+        let visibilityUpdate = try Self.resolveVisibility(input.visibility)
+        guard
+            newTitle != nil || input.isOpen != nil || visibilityUpdate != nil
+                || dueUpdate != .unchanged || startsUpdate != .unchanged
         else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "Specify at least one of: title, dueAt, startsAt, isOpen.")
+                tool: Self.name, detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility.")
         }
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
+        let assignment = try await context.authorizedAssignment(
+            publicID: input.assignmentPublicID, tool: Self.name)
         do {
+            // Title/date metadata first. The legacy `isOpen` is applied here only
+            // when `visibility` was not given (visibility is the richer form and
+            // wins).
             try await AssignmentAuthoringService.updateMetadata(
                 assignment, title: newTitle, dueAt: dueUpdate, startsAt: startsUpdate,
-                open: input.isOpen, on: context.db)
+                open: visibilityUpdate == nil ? input.isOpen : nil, on: context.db)
+            if let visibilityUpdate {
+                try await AssignmentAuthoringService.setVisibility(
+                    assignment, visibilityUpdate, on: context.db)
+            }
         } catch AssignmentAuthoringError.validationNotPassed {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
@@ -130,10 +158,22 @@ struct UpdateAssignmentTool: ContentTool {
             title: assignment.title,
             slug: assignment.slug,
             isOpen: assignment.isOpen,
+            visibility: assignment.visibility.rawValue,
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
             startsAt: assignment.startsAt.map { formatter.string(from: $0) },
             validationStatus: assignment.validationStatus
         )
+    }
+
+    /// Maps the optional `visibility` argument to an `AssignmentVisibility`
+    /// (nil = no change), rejecting unknown values.
+    private static func resolveVisibility(_ raw: String?) throws -> AssignmentVisibility? {
+        guard let raw else { return nil }
+        guard let visibility = AssignmentVisibility(rawValue: raw) else {
+            throw MCPToolError.invalidArguments(
+                tool: name, detail: "visibility must be one of: closed, preview, open.")
+        }
+        return visibility
     }
 
     /// Maps the optional `dueAt` argument to a `DueDateUpdate`: absent → no

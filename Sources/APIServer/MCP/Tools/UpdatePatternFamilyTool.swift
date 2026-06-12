@@ -36,16 +36,29 @@ struct UpdatePatternFamilyTool: ContentTool {
         /// Parallel to `args`: false at a position omits that argument so
         /// Python's own parameter default applies.
         let argsProvided: [Bool]?
+        /// Per-student expected (issue #461): the name of a global/section `=`
+        /// expression whose value, resolved for the student's seed at grading
+        /// time, is the expected return — instead of the literal `expected`.
+        /// `boundary_equality` only. An empty string clears it; setting
+        /// `expected` (a literal) also clears it.
+        let expectedVarRef: String?
+        /// Per-case "💡 Hint" shown when this case fails (overrides the family
+        /// `defaultHint`). nil leaves the existing hint untouched; an empty
+        /// string clears it.
+        let hint: String?
 
         init(
             key: String, args: [JSONValue]? = nil, expected: JSONValue? = nil,
-            argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil
+            argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil,
+            expectedVarRef: String? = nil, hint: String? = nil
         ) {
             self.key = key
             self.args = args
             self.expected = expected
             self.argVarRefs = argVarRefs
             self.argsProvided = argsProvided
+            self.expectedVarRef = expectedVarRef
+            self.hint = hint
         }
     }
 
@@ -54,23 +67,40 @@ struct UpdatePatternFamilyTool: ContentTool {
         let familyID: String
         let defaultTier: String?
         let defaultPoints: Int?
+        /// Family-wide "💡 Hint" applied to cases without their own hint. nil
+        /// leaves it untouched; an empty string clears it.
+        let defaultHint: String?
         let enableCases: [String]?
         let disableCases: [String]?
         /// Per-case `args` / `expected` edits (the test logic).
         let cases: [CaseEdit]?
+        /// Brand-new cases to append to the family. Each is a full case spec
+        /// (the same shape create_pattern_family takes); keys must not collide
+        /// with an existing case. nil/empty appends nothing — use `cases` to
+        /// edit a case that already exists.
+        let addCases: [CreatePatternFamilyTool.CaseInput]?
+        /// Replaces the family's prerequisites (script filenames or `family:<id>`
+        /// tokens). Pass `[]` to clear all prerequisites; omit (nil) to leave
+        /// them untouched. Expanded + cycle-checked by the same save path the
+        /// web editor uses.
+        let dependsOn: [String]?
 
         init(
             assignmentPublicID: String, familyID: String, defaultTier: String? = nil,
-            defaultPoints: Int? = nil, enableCases: [String]? = nil, disableCases: [String]? = nil,
-            cases: [CaseEdit]? = nil
+            defaultPoints: Int? = nil, defaultHint: String? = nil, enableCases: [String]? = nil,
+            disableCases: [String]? = nil, cases: [CaseEdit]? = nil,
+            addCases: [CreatePatternFamilyTool.CaseInput]? = nil, dependsOn: [String]? = nil
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.familyID = familyID
             self.defaultTier = defaultTier
             self.defaultPoints = defaultPoints
+            self.defaultHint = defaultHint
             self.enableCases = enableCases
             self.disableCases = disableCases
             self.cases = cases
+            self.addCases = addCases
+            self.dependsOn = dependsOn
         }
     }
 
@@ -82,18 +112,32 @@ struct UpdatePatternFamilyTool: ContentTool {
         let enabledCaseKeys: [String]
         /// Keys of cases whose args/expected were edited by this call.
         let editedCaseKeys: [String]
+        /// Keys of cases appended by `addCases` in this call.
+        let addedCaseKeys: [String]
         let validationStatus: String?
+        /// true when this edit closed a previously-open assignment (re-open with
+        /// update_assignment once validation passes).
+        let assignmentClosed: Bool
     }
 
     static let name = "update_pattern_family"
     static let description =
         "Edit a pattern family for an assignment, by assignment public ID + family id. Set the "
         + "family's default tier (public/release/secret/student) and/or points, enable/disable cases "
-        + "by key (enableCases / disableCases), and/or edit individual cases' test logic via `cases` "
+        + "by key (enableCases / disableCases), set the family-wide `defaultHint` and/or per-case "
+        + "`hint` (the \"💡 Hint\" shown to the student only when that test fails; empty string clears "
+        + "it), and/or edit individual cases' test logic via `cases` "
         + "(each { key, args?, expected? }). args/expected are raw JSON values (a list of args in "
-        + "parameter order, and the expected return). Saving regenerates the family's scripts and "
+        + "parameter order, and the expected return). Append brand-new cases with `addCases` (each a "
+        + "full { key, args, expected, ... } spec like create_pattern_family takes; keys must not "
+        + "already exist — use `cases` to edit an existing one). Replace the family's prerequisites with "
+        + "`dependsOn` (script filenames or `family:<id>` tokens; pass `[]` to clear them). Saving "
+        + "regenerates the family's scripts and "
         + "re-runs validation, which rejects a wrong arg count or an expected value of the wrong shape "
-        + "for the family's kind. Family ids and case keys come from get_suite."
+        + "for the family's kind. Saving also closes the assignment if it was open (re-open with "
+        + "update_assignment once validation passes). Function-calling families carry an auto-generated "
+        + "`<function> is defined` existence guard (0 points) that the cases depend on; it isn't a case "
+        + "and you don't manage it directly. Family ids and case keys come from get_suite."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -112,6 +156,12 @@ struct UpdatePatternFamilyTool: ContentTool {
                 ]),
             ]),
             "defaultPoints": .object(["type": .string("integer")]),
+            "defaultHint": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Family-wide \"💡 Hint\" shown on a failing case that has no per-case hint. "
+                        + "Empty string clears it."),
+            ]),
             "enableCases": .object([
                 "type": .string("array"), "items": .object(["type": .string("string")]),
                 "description": .string("Case keys to enable."),
@@ -145,10 +195,79 @@ struct UpdatePatternFamilyTool: ContentTool {
                             "type": .string("array"),
                             "description": .string("Parallel to args: false omits the arg (use Python default)."),
                         ]),
+                        "expectedVarRef": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Per-student expected: name of a global/section = expression resolved for the "
+                                    + "student's seed (boundary_equality only). Empty string clears it."),
+                        ]),
+                        "hint": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint). "
+                                    + "Empty string clears it."),
+                        ]),
                     ]),
                     "required": .array([.string("key")]),
                     "additionalProperties": .bool(false),
                 ]),
+            ]),
+            "addCases": .object([
+                "type": .string("array"),
+                "description": .string(
+                    "New cases to append (keys must not already exist; use `cases` to edit an "
+                        + "existing one)."),
+                "items": .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "key": .object([
+                            "type": .string("string"),
+                            "description": .string("Unique case key (also part of the generated filename)."),
+                        ]),
+                        "label": .object(["type": .string("string")]),
+                        "args": .object([
+                            "type": .string("array"),
+                            "description": .string("Args in parameter order (raw JSON values)."),
+                        ]),
+                        "expected": .object([
+                            "description": .string("Expected return (raw JSON), shape per kind.")
+                        ]),
+                        "argVarRefs": .object([
+                            "type": .string("array"),
+                            "description": .string("Parallel to args: \"name\" for a $var ref, or null."),
+                        ]),
+                        "argsProvided": .object([
+                            "type": .string("array"),
+                            "description": .string("Parallel to args: false omits the arg (Python default)."),
+                        ]),
+                        "expectedVarRef": .object([
+                            "type": .string("string"),
+                            "description": .string("Per-student expected: name of a = expression."),
+                        ]),
+                        "hint": .object([
+                            "type": .string("string"),
+                            "description": .string(
+                                "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint)."),
+                        ]),
+                        "points": .object(["type": .string("integer")]),
+                        "tier": .object([
+                            "type": .string("string"),
+                            "enum": .array([
+                                .string("public"), .string("release"), .string("secret"),
+                                .string("student"),
+                            ]),
+                        ]),
+                        "enabled": .object(["type": .string("boolean")]),
+                    ]),
+                    "required": .array([.string("key")]),
+                    "additionalProperties": .bool(false),
+                ]),
+            ]),
+            "dependsOn": .object([
+                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "description": .string(
+                    "Replace the family's prerequisites (script filenames or family:<id> tokens). "
+                        + "Pass [] to clear them; omit to leave unchanged."),
             ]),
         ]),
         "required": .array([.string("assignmentPublicID"), .string("familyID")]),
@@ -167,11 +286,16 @@ struct UpdatePatternFamilyTool: ContentTool {
             "editedCaseKeys": .object([
                 "type": .string("array"), "items": .object(["type": .string("string")]),
             ]),
+            "addedCaseKeys": .object([
+                "type": .string("array"), "items": .object(["type": .string("string")]),
+            ]),
             "validationStatus": .object(["type": .string("string")]),
+            "assignmentClosed": .object(["type": .string("boolean")]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("familyID"), .string("defaultTier"),
             .string("defaultPoints"), .string("enabledCaseKeys"), .string("editedCaseKeys"),
+            .string("addedCaseKeys"), .string("assignmentClosed"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -179,33 +303,31 @@ struct UpdatePatternFamilyTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let newTier = try Self.parseTier(input.defaultTier)
+        let newTier = try parseOptionalTier(input.defaultTier, tool: Self.name, field: "defaultTier")
         let enable = Set(input.enableCases ?? [])
         let disable = Set(input.disableCases ?? [])
         let caseEdits = input.cases ?? []
+        let addCases = input.addCases ?? []
         guard
-            newTier != nil || input.defaultPoints != nil || !enable.isEmpty || !disable.isEmpty
-                || !caseEdits.isEmpty
+            newTier != nil || input.defaultPoints != nil || input.defaultHint != nil
+                || !enable.isEmpty || !disable.isEmpty || !caseEdits.isEmpty
+                || !addCases.isEmpty || input.dependsOn != nil
         else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
-                detail: "Specify at least one of: defaultTier, defaultPoints, enableCases, disableCases, cases.")
+                detail:
+                    "Specify at least one of: defaultTier, defaultPoints, defaultHint, enableCases, "
+                    + "disableCases, cases, addCases, dependsOn.")
         }
         guard enable.isDisjoint(with: disable) else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "A case key cannot be in both enableCases and disableCases.")
         }
         let editsByKey = try Self.indexCaseEdits(caseEdits)
+        try CreatePatternFamilyTool.assertUniqueCaseKeys(addCases, tool: Self.name)
 
-        guard let assignment = try await assignmentByPublicID(input.assignmentPublicID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "No assignment found with public ID \"\(input.assignmentPublicID)\".")
-        }
-        try await context.authorizeCourseAccess(assignment.courseID, tool: Self.name)
-        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) else {
-            throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "The assignment's test setup could not be found.")
-        }
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
@@ -225,23 +347,47 @@ struct UpdatePatternFamilyTool: ContentTool {
                 tool: Self.name,
                 detail: "Unknown case key(s): \(unknown.sorted().joined(separator: ", ")).")
         }
+        // New cases can't reuse an existing key (that would be an edit, not an
+        // add); per-kind/arity legality is left to the save-time validator.
+        let addKeys = Set(addCases.map { $0.key.trimmingCharacters(in: .whitespaces) })
+        let collisions = addKeys.intersection(caseKeys)
+        guard collisions.isEmpty else {
+            throw MCPToolError.invalidArguments(
+                tool: Self.name,
+                detail:
+                    "addCases key(s) already exist: \(collisions.sorted().joined(separator: ", ")). "
+                    + "Use `cases` to edit an existing case.")
+        }
+        let newCases = try addCases.map {
+            try CreatePatternFamilyTool.patternCase(from: $0, tool: Self.name)
+        }
 
+        let newDefaults = PatternDefaults(
+            tier: newTier ?? family.defaults.tier,
+            points: input.defaultPoints ?? family.defaults.points,
+            hint: Self.resolveHintEdit(input.defaultHint, existing: family.defaults.hint),
+            tolerance: family.defaults.tolerance)
         let updatedFamily = try Self.rebuild(
-            family, newTier: newTier, newPoints: input.defaultPoints,
-            enable: enable, disable: disable, edits: editsByKey)
+            family, defaults: newDefaults,
+            changes: CaseChanges(
+                enable: enable, disable: disable, edits: editsByKey, newCases: newCases),
+            dependsOn: input.dependsOn)
         payload.items[idx].family = updatedFamily
+        // The family's row-level dependsOn wins over `family.dependsOn` in
+        // applySuiteEdit, so when the caller replaces deps, mirror the new value
+        // onto the row too — otherwise the stale row value would override the
+        // family spec on save.
+        if let newDeps = input.dependsOn {
+            payload.items[idx].dependsOn = newDeps
+        }
 
         // applySuiteEdit -> applyPatternFamilies -> validatePatternFamilies runs
         // the structural + per-kind case checks synchronously; surface those as
         // clean MCP errors rather than opaque protocol failures.
-        do {
-            try await applySuiteEdit(setup: setup, body: payload, on: context.db)
-        } catch let error as WebAssignmentError {
-            throw MCPToolError.from(error, tool: Self.name)
-        } catch let error as any AbortError {
-            throw MCPToolError.from(error, tool: Self.name)
-        }
-        await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+        try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
+        // Close, re-grade, and re-validate (matching the web Save button).
+        let closed = try await finalizeContentEdit(
+            assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
             assignmentPublicID: assignment.publicID,
@@ -250,7 +396,9 @@ struct UpdatePatternFamilyTool: ContentTool {
             defaultPoints: updatedFamily.defaults.points,
             enabledCaseKeys: updatedFamily.cases.filter(\.enabled).map(\.key),
             editedCaseKeys: editsByKey.keys.sorted(),
-            validationStatus: assignment.validationStatus)
+            addedCaseKeys: newCases.map(\.key),
+            validationStatus: assignment.validationStatus,
+            assignmentClosed: closed)
     }
 
     /// Indexes case edits by key, rejecting duplicates so the last-write-wins
@@ -266,27 +414,35 @@ struct UpdatePatternFamilyTool: ContentTool {
         return byKey
     }
 
-    /// Reconstructs the family with new defaults, per-case enabled flags, and
-    /// per-case arg/expected edits; every other field is copied verbatim.
+    /// The case-level changes a rebuild applies: which existing cases to
+    /// enable/disable, per-case arg/expected/hint edits, and brand-new cases to
+    /// append.  Grouped so `rebuild` stays within the parameter-count budget.
+    private struct CaseChanges {
+        let enable: Set<String>
+        let disable: Set<String>
+        let edits: [String: CaseEdit]
+        let newCases: [PatternCase]
+    }
+
+    /// Reconstructs the family with the resolved `defaults` and `changes`
+    /// (enable/disable flags, per-case arg/expected/hint edits, and any new
+    /// cases appended after the existing ones), with `dependsOn` replaced when
+    /// provided (nil keeps the existing prerequisites); every other field is
+    /// copied verbatim.
     private static func rebuild(
-        _ family: PatternFamily, newTier: TestTier?, newPoints: Int?,
-        enable: Set<String>, disable: Set<String>, edits: [String: CaseEdit]
+        _ family: PatternFamily, defaults: PatternDefaults,
+        changes: CaseChanges, dependsOn: [String]?
     ) throws -> PatternFamily {
-        let defaults = PatternDefaults(
-            tier: newTier ?? family.defaults.tier,
-            points: newPoints ?? family.defaults.points,
-            hint: family.defaults.hint,
-            tolerance: family.defaults.tolerance)
         let cases = try family.cases.map { caseSpec -> PatternCase in
             let enabled =
-                enable.contains(caseSpec.key)
-                ? true : (disable.contains(caseSpec.key) ? false : caseSpec.enabled)
-            return try applyCaseEdit(edits[caseSpec.key], to: caseSpec, enabled: enabled)
+                changes.enable.contains(caseSpec.key)
+                ? true : (changes.disable.contains(caseSpec.key) ? false : caseSpec.enabled)
+            return try applyCaseEdit(changes.edits[caseSpec.key], to: caseSpec, enabled: enabled)
         }
         return PatternFamily(
             id: family.id, name: family.name, kind: family.kind, functionName: family.functionName,
-            paramNames: family.paramNames, defaults: defaults, cases: cases,
-            variables: family.variables, dependsOn: family.dependsOn)
+            paramNames: family.paramNames, defaults: defaults, cases: cases + changes.newCases,
+            variables: family.variables, dependsOn: dependsOn ?? family.dependsOn)
     }
 
     /// Applies one case's arg/expected edit, keeping the parallel
@@ -307,10 +463,30 @@ struct UpdatePatternFamilyTool: ContentTool {
             explicit: edit.argsProvided, argsReplaced: edit.args != nil,
             existing: caseSpec.argsProvided, argCount: finalArgs.count,
             field: "argsProvided", caseKey: caseSpec.key)
+        // Per-student expected ref: an explicit edit wins (empty string clears);
+        // switching to a literal `expected` clears any stale ref; otherwise the
+        // existing ref carries over.
+        let finalExpectedVarRef: String?
+        if let ref = edit.expectedVarRef {
+            finalExpectedVarRef = ref.isEmpty ? nil : ref
+        } else if edit.expected != nil {
+            finalExpectedVarRef = nil
+        } else {
+            finalExpectedVarRef = caseSpec.expectedVarRef
+        }
         return PatternCase(
             key: caseSpec.key, label: caseSpec.label, args: finalArgs, expected: finalExpected,
-            argsProvided: finalProvided, argVarRefs: finalVarRefs, hint: caseSpec.hint,
+            argsProvided: finalProvided, argVarRefs: finalVarRefs, expectedVarRef: finalExpectedVarRef,
+            hint: resolveHintEdit(edit.hint, existing: caseSpec.hint),
             tier: caseSpec.tier, points: caseSpec.points, enabled: enabled)
+    }
+
+    /// Resolves a hint edit against the existing value, matching the
+    /// `expectedVarRef` convention: nil (omitted) preserves the existing hint,
+    /// an empty string clears it, and any other string sets it.
+    private static func resolveHintEdit(_ edit: String?, existing: String?) -> String? {
+        guard let edit else { return existing }
+        return edit.isEmpty ? nil : edit
     }
 
     /// Resolves a parallel array (argVarRefs / argsProvided) for an edited case:
@@ -334,14 +510,6 @@ struct UpdatePatternFamilyTool: ContentTool {
         return argsReplaced ? [] : existing
     }
 
-    private static func parseTier(_ raw: String?) throws -> TestTier? {
-        guard let raw else { return nil }
-        guard let tier = TestTier(rawValue: raw) else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "defaultTier must be one of: public, release, secret, student.")
-        }
-        return tier
-    }
 }
 
 extension PatternCase {
@@ -349,7 +517,7 @@ extension PatternCase {
     fileprivate func with(enabled: Bool) -> PatternCase {
         PatternCase(
             key: key, label: label, args: args, expected: expected,
-            argsProvided: argsProvided, argVarRefs: argVarRefs, hint: hint,
-            tier: tier, points: points, enabled: enabled)
+            argsProvided: argsProvided, argVarRefs: argVarRefs, expectedVarRef: expectedVarRef,
+            hint: hint, tier: tier, points: points, enabled: enabled)
     }
 }

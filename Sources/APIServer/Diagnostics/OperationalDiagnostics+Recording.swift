@@ -53,7 +53,7 @@ extension OperationalDiagnosticsService {
                     submission: submission,
                     context: context,
                     extra: [
-                        "status": .string("pending"),
+                        "status": .string(SubmissionStatus.pending.rawValue),
                         "queue_depth": .stringConvertible(queueDepth),
                     ]
                 )
@@ -236,7 +236,7 @@ extension OperationalDiagnosticsService {
                 runnerID: runnerID,
                 requirements: requirements,
                 extra: [
-                    "status": .string("assigned")
+                    "status": .string(SubmissionStatus.assigned.rawValue)
                 ]
             )
         )
@@ -317,7 +317,7 @@ extension OperationalDiagnosticsService {
                     submission: submission,
                     context: context,
                     extra: [
-                        "status": .string("assigned"),
+                        "status": .string(SubmissionStatus.assigned.rawValue),
                         "queue_wait_ms": metric.queueWaitMs.map { .stringConvertible($0) } ?? .string(""),
                         "queue_depth": .stringConvertible(queueDepth),
                     ]

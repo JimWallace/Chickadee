@@ -22,7 +22,10 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     container:
-      image: swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --privileged
     env:
       MIN_COVERAGE_PERCENT: "60.0"
@@ -121,7 +124,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: coverage.lcov
           fail_ci_if_error: false

@@ -16,7 +16,11 @@ public struct TestOutcome: Equatable, Sendable {
     public let shortResult: String  // One-line human-readable summary
     public let longResult: String?  // Full output, stack trace, diff, etc.
 
-    // MARK: - Grade weight
+    // MARK: - Grade
+    /// Fraction of `points` this submission earned for the test, in `0...1`.
+    /// 1 for a pass / 0 for a non-pass, unless the script's stdout footer
+    /// reported an explicit partial `score` (then that value, clamped).
+    public let score: Double
     /// Integer weight for grade calculation. Default 1 (unweighted).
     /// Set from `TestSuiteEntry.points` in the manifest at run time.
     public let points: Int
@@ -36,6 +40,7 @@ public struct TestOutcome: Equatable, Sendable {
         status: TestStatus,
         shortResult: String,
         longResult: String?,
+        score: Double = 1,
         points: Int = 1,
         executionTimeMs: Int,
         memoryUsageBytes: Int?,
@@ -48,6 +53,7 @@ public struct TestOutcome: Equatable, Sendable {
         self.status = status
         self.shortResult = shortResult
         self.longResult = longResult
+        self.score = score
         self.points = points
         self.executionTimeMs = executionTimeMs
         self.memoryUsageBytes = memoryUsageBytes
@@ -70,6 +76,10 @@ extension TestOutcome: Codable {
         status = try c.decode(TestStatus.self, forKey: .status)
         shortResult = try c.decode(String.self, forKey: .shortResult)
         longResult = try c.decodeIfPresent(String.self, forKey: .longResult)
+        // Old records predate per-test partial credit: derive the score from the
+        // recorded status (pass = full, otherwise none) so their grades are
+        // unchanged; new records carry an explicit `score`.
+        score = try c.decodeIfPresent(Double.self, forKey: .score) ?? (status == .pass ? 1 : 0)
         points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
         executionTimeMs = try c.decode(Int.self, forKey: .executionTimeMs)
         memoryUsageBytes = try c.decodeIfPresent(Int.self, forKey: .memoryUsageBytes)

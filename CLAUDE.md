@@ -383,7 +383,7 @@ Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
 `/pyodide`, and *both* consumers load it: the JupyterLite editor kernel (via
 `pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's own
 browser paths (`browser-runner.js`, `assignment-validate.js`,
-`pyodide-worker.js`, `setup-edit.js`, `notebook.js`).  The editor and grader
+`pyodide-worker.js`, `notebook.js`).  The editor and grader
 therefore run the identical Python environment.  (Historically the editor
 loaded a *second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped
 that allowance and broke the editor — see `SecurityHeadersMiddleware`.)
@@ -462,6 +462,34 @@ surprise.
   `function_body_length` at 100 lines) starts causing legitimate
   friction, raise the threshold in `.swiftlint.yml` rather than dropping
   `--strict`.
+
+---
+
+## UI / Stylesheet Conventions
+
+The web UI is Leaf templates + one stylesheet (`Public/styles.css`). The
+render tests assert pages *render*, not how they look, so the following
+invariants are enforced statically by `scripts/check-styles.sh` (wired into
+the `format-lint` CI job) — keep them green:
+
+- **No inline `style=""` in templates** except a JS-toggled `display:none`
+  initial state, or a CSS custom-property assignment (e.g.
+  `style="--filter-width:220px"`). Everything else belongs in a class.
+- **Shared styling lives in `Public/styles.css`;** page-unique styling lives
+  in a page-local `<style>` block with **role-named** classes (e.g.
+  `.section-header`, not `.mt-1`). Don't paste the same rule into multiple
+  templates — hoist it to the global sheet. (`scripts/check-styles.sh` fails
+  if a page block re-defines a global selector or the same selector appears
+  in more than one page block; `.main` is an allowlisted page override.)
+- **Every `var(--x)` must resolve.** Declare new custom properties in
+  `styles.css` (with a `prefers-color-scheme: dark` value if it's a colour).
+  Never reference an undeclared var, and never use a hardcoded colour
+  fallback `var(--x, #hex)` — define the var so it routes through the palette
+  and adapts to dark mode. (`scripts/check-css-vars.sh` enforces both.)
+- **No native `alert()` in templates** — surface errors with the inline
+  `.form-error` banner pattern. The guard ratchets a baseline down only.
+
+Run `scripts/check-styles.sh` locally before pushing UI changes.
 
 ---
 
@@ -849,7 +877,7 @@ model quickly.
   only emitted `enrollmentMode` (never `openEnrollment`) since the
   helper extraction in #501.
 
-### v0.4.171 – v0.4.318 highlights (themed digest)
+### v0.4.171 – v0.4.350 highlights (themed digest)
 
 The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 
@@ -882,6 +910,21 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   Docs: `docs/inputs.md`, `docs/personalization-phase1.md`.  Remaining UI work
   tracked in #664.  This is the "first personalized assignments" path.
 
+- **Per-student pattern families (issue #461, v0.4.343–347).**  Pattern-family
+  cases can now personalize: a case's `$name` arg (`argVarRefs`) or its Expected
+  (`expectedVarRef`) may point at a per-student `=` expression instead of a
+  baked literal.  The expression is resolved **server-side** for the
+  submission's seed (`PersonalizationSubstitution.gradingInputs`, shared by the
+  worker job payload and the browser seed endpoint) and delivered to grading as
+  a `_ck_inputs.py` preamble the generated script loads — so a per-student
+  `expected = solution.foo(...)` stays server-side on the worker path.  The
+  generated script is byte-identical across students (cache + `spec_hash`
+  unchanged); only the resolved-values map differs.  Authorable via the browser
+  editor (type `$name` in an arg/Expected cell) and MCP (`update_pattern_family`
+  `expectedVarRef`); `preview_personalization` audits the refs.  Restricted to
+  `boundary_equality` families for now.  Doc:
+  `docs/personalization-pattern-families.md`.
+
 - **Notebook checks, BrightSpace grade sync, AppScan/security hardening,
   assignment-revision retest loop, sections** — see the per-version `CHANGELOG.md`.
 
@@ -898,17 +941,84 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   an `oauth_grants.previous_refresh_token_hash` index, a `timedOut`
   output-contract case, and `@unchecked Sendable` justification comments.
 
+- **MCP authoring-surface expansion (v0.4.328+).**  The agent tool catalog grew
+  from twelve to thirty-four content tools (`MCPToolCatalog.live`): `get_server_info`
+  (version/capability probe), `get_solution` / `update_solution` (read + replace
+  the reference solution, re-validating), `author_script` (create/replace a
+  hand-written test or support file through the same `applySuiteEdit` path the
+  web editor uses), and the personalization tools (`get_global_inputs`,
+  `update_global_inputs`, `update_section_variables`, `preview_personalization`).
+  `get_suite` now returns the full source of truth (script bodies + complete
+  pattern-family/notebook-check specs + on-disk filenames), and pattern-family
+  cases gained a per-student `expectedVarRef` (the worker/browser materialize
+  per-student `_ck_inputs.py` from `Job.personalizedInputs`).  Pattern-family
+  authoring also sets instructor **hints**: `create_pattern_family` /
+  `update_pattern_family` take a family-wide `defaultHint` and a per-case `hint`
+  (on update an empty string clears it, nil leaves it untouched), and `get_suite`
+  returns both in the `family` spec.  A hint surfaces to the student as a
+  "💡 Hint" only on a *failing* case — `buildHintByFilename` joins each case's
+  `resolvedHint(defaults:)` (per-case overriding the family default) by generated
+  filename at results-display time, so nothing is baked into the test script.
+  `PatternCase.hint` / `PatternDefaults.hint` have been manifest-authorable since
+  v0.4.94 but had no agent surface until now.  Agent-facing
+  copy lives in two places that must stay in sync with the catalog: each tool's
+  `description`/`inputSchema` and the server-level `MCPServerInstructions.text`
+  (the `initialize` handshake's `instructions`); the tool table in
+  `docs/mcp-authoring-roadmap.md` is the human index.  MCP content edits
+  (suite/family/script/notebook/solution) close a currently-open assignment and
+  re-validate — matching the web Save button (`saveEditedAssignment`), since the
+  student gate keys off `isOpen`, not `validationStatus` — so students can't
+  submit against a not-yet-revalidated suite; each write tool's response reports
+  it as `assignmentClosed`, and the human re-opens with
+  `update_assignment(isOpen:true)` once validation passes
+  (`closeOpenAssignmentForContentEdit`).
+
+- **MCP section / check / grading-mode round (v0.4.353+).**  The catalog reached
+  thirty-four tools: test-suite section management (`create_suite_section` /
+  `rename_suite_section` / `delete_suite_section`, plus `move_suite_item` to place a
+  script/family/check into a section); course-section management
+  (`list_course_sections`, `create_course_section`, `rename_course_section`,
+  `delete_course_section`, `reorder_course_sections`, and `set_assignment_course_section`,
+  which adopts the section's default grading mode); `create_pattern_family` /
+  `delete_suite_item`; `author_notebook_check` (create-or-replace a notebook check
+  — all ten `NotebookCheckKind`s, validated through `applySuiteEdit`); and
+  `set_grading_mode` (worker/browser, no regrade/close).  `get_assignment` now
+  reports `gradingMode` + the course section.  All the content-edit tools —
+  including the two that initially slipped (`create_pattern_family`,
+  `delete_suite_item`) — close a currently-open assignment on edit and report
+  `assignmentClosed`; metadata-only tools (`set_grading_mode`, section
+  organization) do not.  Content edits that change the graded suite also
+  **auto-re-grade** every existing student submission against the new suite
+  (`retestSubmissionsAfterContentEdit`, gated on a real manifest change), the
+  automatic equivalent of the instructor "Retest all" button; `move_suite_item`
+  (placement-only) and metadata edits do not.  (The suite-section tools were
+  renamed `create_section`→`create_suite_section` etc., and
+  `set_assignment_section`→`set_assignment_course_section`, so the two "section"
+  families read unambiguously — a breaking change to the not-yet-public MCP
+  surface.)
+
 **Near-term roadmap:**
 
-- **Vapor 5 / LeafKit 2.x investigation window** — the LeafKit 1.14.1
-  cycle-detection false positive blocking `assignment-{new,edit}.leaf`
-  decomposition is upstream and only fixed in the LeafKit 2 line.
+- **Leaf partial decomposition — UNBLOCKED (verified, not folklore).** Earlier
+  notes claimed a LeafKit 1.x "cyclically referenced" false positive blocked
+  decomposing the editor pages, pending LeafKit 2. That was re-tested on the
+  current pin (`leaf-kit 1.14.2`, the newest published — there is **no** 2.x /
+  Leaf 5 release to wait for) and could **not** be reproduced: a partial
+  `#extend`ed from two templates (new + edit), and a single template extending
+  `base` + two distinct partials, both render fine. The historical failures
+  were most likely on an older leaf-kit, or a cascade from a sibling parse
+  error surfaced through Leaf's shared AST cache. **Just decompose normally**
+  (extract a partial, `#extend` it — repeated from one template or shared across
+  pages). Caveat: render tests prove templates *resolve*; they don't exercise
+  page JS, so decomposing a JS-driven widget still wants a quick manual check.
 - **Feature backlog:** continued personalization / notebook-check
-  expansion; pattern kinds beyond
-  `.boundaryEquality` / `.approximateEquality` / `.variableEquality`
-  (e.g. exception-expected, type-check); multi-provider SSO testing
-  beyond UWaterloo DUO; refresh-token handling; gamification
-  expansion (leaderboards, more badges beyond First-Try Perfect).
+  expansion (e.g. per-student refs in pattern kinds beyond
+  `boundary_equality`); pattern kinds beyond the seven shipped
+  (`boundaryEquality` / `approximateEquality` / `variableEquality` /
+  `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
+  `stdoutEquality`); multi-provider SSO testing beyond UWaterloo DUO;
+  refresh-token handling; gamification expansion (leaderboards, more
+  badges beyond First-Try Perfect).
 
 ---
 
@@ -929,6 +1039,11 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
 - `docs/runner-wasm-migration.md` — plan to share one Swift grading core (RunnerCore) between the worker + browser runner via SwiftWasm; staging, the ScriptExecutor protocol, type-hoist
+- `docs/personalization-phase1.md` — per-(student, assignment) seed contract (`CHICKADEE_ASSIGNMENT_SEED`), worked hand-written example
+- `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
+- `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
+- `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; why the server runs `python3` today, the trilemma, and the direction to move eval to the runner/browser per-language
+- `docs/mcp-validation-access.md` — planned MCP read tool for validation-run results only (per-test outcomes, never student data)
 - `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)
 - `reference/` — original Java source for behavioural reference only
 - `CHANGELOG.md` — release history

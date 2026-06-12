@@ -4,10 +4,6 @@ import Testing
 
 @testable import chickadee_runner
 
-#if os(Linux)
-import Glibc
-#endif
-
 @Suite struct WorkerDaemonTests {
     private let fastRetryPolicy = RunnerRetryPolicy(
         enabled: true,
@@ -22,77 +18,6 @@ import Glibc
         baseDelayMs: 10,
         maxDelayMs: 20
     )
-
-    private final class StaticFileServer {
-        let process: Process
-        let port: Int
-        private let stdout: Pipe
-
-        init(directory: URL) throws {
-            process = Process()
-            stdout = Pipe()
-            process.standardOutput = stdout
-            process.standardError = FileHandle.nullDevice
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [
-                "python3",
-                "-c",
-                #"""
-                import http.server
-                import socketserver
-                import sys
-
-                directory = sys.argv[1]
-
-                class Handler(http.server.SimpleHTTPRequestHandler):
-                    def __init__(self, *args, **kwargs):
-                        super().__init__(*args, directory=directory, **kwargs)
-
-                    def log_message(self, format, *args):
-                        pass
-
-                with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
-                    print(httpd.server_address[1], flush=True)
-                    httpd.serve_forever()
-                """#,
-                directory.path,
-            ]
-
-            try process.run()
-
-            let data = stdout.fileHandleForReading.availableData
-            guard
-                let line = String(data: data, encoding: .utf8)?
-                    .split(separator: "\n")
-                    .first,
-                let port = Int(line)
-            else {
-                process.terminate()
-                throw IssueRecorded("python3 is unavailable for local static file serving")
-            }
-
-            self.port = port
-        }
-
-        func stop() {
-            guard process.isRunning else { return }
-            process.terminate()
-            for _ in 0..<20 where process.isRunning {
-                Thread.sleep(forTimeInterval: 0.05)
-            }
-
-            if process.isRunning {
-                #if os(Linux)
-                _ = Glibc.kill(process.processIdentifier, SIGKILL)
-                #else
-                _ = Darwin.kill(process.processIdentifier, SIGKILL)
-                #endif
-            }
-
-            process.waitUntilExit()
-            stdout.fileHandleForReading.closeFile()
-        }
-    }
 
     private actor MockPoller: JobPolling {
         private var jobs: [Job?]
@@ -222,87 +147,6 @@ import Glibc
         }
     }
 
-    private final class FlakyHTTPServer {
-        let process: Process
-        let port: Int
-        private let stdout: Pipe
-
-        init(failuresBeforeSuccess: Int, responseBody: String = "payload") throws {
-            process = Process()
-            stdout = Pipe()
-            process.standardOutput = stdout
-            process.standardError = FileHandle.nullDevice
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [
-                "python3",
-                "-c",
-                #"""
-                import http.server
-                import socketserver
-                import sys
-
-                remaining = int(sys.argv[1])
-                body = sys.argv[2].encode("utf-8")
-
-                class Handler(http.server.BaseHTTPRequestHandler):
-                    def do_GET(self):
-                        global remaining
-                        if remaining > 0:
-                            remaining -= 1
-                            self.send_response(503)
-                            self.end_headers()
-                            self.wfile.write(b"unavailable")
-                            return
-                        self.send_response(200)
-                        self.send_header("Content-Length", str(len(body)))
-                        self.end_headers()
-                        self.wfile.write(body)
-
-                    def log_message(self, format, *args):
-                        pass
-
-                with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
-                    print(httpd.server_address[1], flush=True)
-                    httpd.serve_forever()
-                """#,
-                String(failuresBeforeSuccess),
-                responseBody,
-            ]
-
-            try process.run()
-
-            let data = stdout.fileHandleForReading.availableData
-            guard
-                let line = String(data: data, encoding: .utf8)?
-                    .split(separator: "\n")
-                    .first,
-                let port = Int(line)
-            else {
-                process.terminate()
-                throw IssueRecorded("python3 is unavailable for local flaky HTTP serving")
-            }
-
-            self.port = port
-        }
-
-        func stop() {
-            guard process.isRunning else { return }
-            process.terminate()
-            for _ in 0..<20 where process.isRunning {
-                Thread.sleep(forTimeInterval: 0.05)
-            }
-            if process.isRunning {
-                #if os(Linux)
-                _ = Glibc.kill(process.processIdentifier, SIGKILL)
-                #else
-                _ = Darwin.kill(process.processIdentifier, SIGKILL)
-                #endif
-            }
-            process.waitUntilExit()
-            stdout.fileHandleForReading.closeFile()
-        }
-    }
-
     private actor MockRunner: ScriptRunner {
         private(set) var invocationCount = 0
         let output: ScriptOutput
@@ -362,7 +206,7 @@ import Glibc
         return path
     }
 
-    private func makeZip(at zipPath: String, files: [(path: String, contents: String)]) throws {
+    private func makeZip(at zipPath: String, files: [(path: String, contents: String)]) async throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-zip-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -377,32 +221,37 @@ import Glibc
             try Data(file.contents.utf8).write(to: path)
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.currentDirectoryURL = tempDir
-        process.arguments = [
-            "python3",
-            "-c",
-            #"""
-            import os
-            import sys
-            import zipfile
+        // Launched via `runProcessRobustly` so concurrent tests can't pile
+        // python3 forks on top of the suite's other real subprocesses, and a
+        // transient spawn failure under load is retried instead of failing
+        // the test.
+        let process = try await runProcessRobustly {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.currentDirectoryURL = tempDir
+            process.arguments = [
+                "python3",
+                "-c",
+                #"""
+                import os
+                import sys
+                import zipfile
 
-            zip_path = sys.argv[1]
-            root = sys.argv[2]
+                zip_path = sys.argv[1]
+                root = sys.argv[2]
 
-            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                for current_root, _, filenames in os.walk(root):
-                    for filename in filenames:
-                        full_path = os.path.join(current_root, filename)
-                        archive_name = os.path.relpath(full_path, root)
-                        archive.write(full_path, archive_name)
-            """#,
-            zipPath,
-            tempDir.path,
-        ]
-        try process.run()
-        process.waitUntilExit()
+                with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    for current_root, _, filenames in os.walk(root):
+                        for filename in filenames:
+                            full_path = os.path.join(current_root, filename)
+                            archive_name = os.path.relpath(full_path, root)
+                            archive.write(full_path, archive_name)
+                """#,
+                zipPath,
+                tempDir.path,
+            ]
+            return process
+        }
         #expect(process.terminationStatus == 0)
     }
 
@@ -410,12 +259,12 @@ import Glibc
         root: URL,
         serverPort: Int,
         submissionID: String
-    ) throws -> Job {
+    ) async throws -> Job {
         let submissionPath = root.appendingPathComponent("\(submissionID).ipynb")
         try Data(notebookJSON(code: "print(\(submissionID.debugDescription))\n").utf8).write(to: submissionPath)
 
         let setupZipPath = root.appendingPathComponent("\(submissionID)-setup.zip").path
-        try makeZip(
+        try await makeZip(
             at: setupZipPath,
             files: [
                 ("test.sh", "#!/bin/sh\necho passed\n")
@@ -586,10 +435,10 @@ import Glibc
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-report-failure-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try StaticFileServer(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let job = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_report_fail")
+        let job = try await makeServedJob(root: root, serverPort: server.port, submissionID: "sub_report_fail")
         let poller = MockPoller(jobs: [job, nil, nil, nil])
         let reporter = FlakyReporter(failuresRemaining: 1)
         let runner = MockRunner(
@@ -661,10 +510,10 @@ import Glibc
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-next-job-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try StaticFileServer(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let goodJob = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_good_job")
+        let goodJob = try await makeServedJob(root: root, serverPort: server.port, submissionID: "sub_good_job")
         let badJob = try makeJob(submissionID: "sub_bad_job")
         let poller = MockPoller(jobs: [badJob, goodJob, nil, nil, nil])
         let reporter = MockReporter()
@@ -729,10 +578,10 @@ import Glibc
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-json-footer-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try StaticFileServer(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let job = try makeServedJob(root: root, serverPort: server.port, submissionID: "sub_json_footer")
+        let job = try await makeServedJob(root: root, serverPort: server.port, submissionID: "sub_json_footer")
 
         let stdoutWithFooter = """
             Hello, World!
@@ -830,7 +679,7 @@ import Glibc
     }
 
     @Test func downloadRetriesThroughShortServerInterruption() async throws {
-        let flakyServer = try FlakyHTTPServer(failuresBeforeSuccess: 2, responseBody: "PK\0\0")
+        let flakyServer = try await LocalHTTPTestServer.flaky(failuresBeforeSuccess: 2, responseBody: "PK\0\0")
         defer { flakyServer.stop() }
 
         let poller = MockPoller(jobs: [])
@@ -1001,66 +850,6 @@ import Glibc
     /// Lets us exercise the "submission download terminally fails →
     /// daemon still reports a synthetic failure and keeps polling" path
     /// without needing a real flaky server.
-    private final class AlwaysFails404Server {
-        let process: Process
-        let port: Int
-        private let stdout: Pipe
-
-        init() throws {
-            process = Process()
-            stdout = Pipe()
-            process.standardOutput = stdout
-            process.standardError = FileHandle.nullDevice
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [
-                "python3",
-                "-c",
-                #"""
-                import http.server
-                import socketserver
-
-                class Handler(http.server.BaseHTTPRequestHandler):
-                    def do_GET(self):
-                        self.send_response(404)
-                        self.end_headers()
-                        self.wfile.write(b"not found")
-                    def log_message(self, format, *args):
-                        pass
-
-                with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
-                    print(httpd.server_address[1], flush=True)
-                    httpd.serve_forever()
-                """#,
-            ]
-            try process.run()
-            let data = stdout.fileHandleForReading.availableData
-            guard
-                let line = String(data: data, encoding: .utf8)?.split(separator: "\n").first,
-                let port = Int(line)
-            else {
-                process.terminate()
-                throw IssueRecorded("python3 is unavailable for always-404 server")
-            }
-            self.port = port
-        }
-
-        func stop() {
-            guard process.isRunning else { return }
-            process.terminate()
-            for _ in 0..<20 where process.isRunning {
-                Thread.sleep(forTimeInterval: 0.05)
-            }
-            if process.isRunning {
-                #if os(Linux)
-                _ = Glibc.kill(process.processIdentifier, SIGKILL)
-                #else
-                _ = Darwin.kill(process.processIdentifier, SIGKILL)
-                #endif
-            }
-            process.waitUntilExit()
-            stdout.fileHandleForReading.closeFile()
-        }
-    }
 
     /// With `maxConcurrentJobs > 1`, the daemon should actually run more
     /// than one job at a time — not serialize them through a single
@@ -1076,11 +865,13 @@ import Glibc
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-concurrent-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
 
-        let server = try StaticFileServer(directory: root)
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
         defer { server.stop() }
 
-        let jobs = try (0..<5).map { i in
-            try makeServedJob(root: root, serverPort: server.port, submissionID: "concurrent_\(i)")
+        var jobs: [Job] = []
+        for i in 0..<5 {
+            jobs.append(
+                try await makeServedJob(root: root, serverPort: server.port, submissionID: "concurrent_\(i)"))
         }
         let poller = MockPoller(jobs: jobs.map(Optional.some) + [nil])
         let reporter = MockReporter()
@@ -1123,7 +914,7 @@ import Glibc
     @Test func workerDaemonReportsSyntheticFailureWhenSubmissionDownloadTerminallyFails() async throws {
         let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-dl-terminal-cache")
         defer { try? FileManager.default.removeItem(at: cacheRoot) }
-        let failServer = try AlwaysFails404Server()
+        let failServer = try await LocalHTTPTestServer.alwaysNotFound()
         defer { failServer.stop() }
 
         let job = Job(

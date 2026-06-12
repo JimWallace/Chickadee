@@ -39,20 +39,16 @@ struct SubmissionRoutes: RouteCollection {
         // concurrent submissions doesn't serialize on synchronous file I/O.
         try await req.fileio.writeFile(.init(data: decoded), at: zipPath)
 
-        // Count prior submissions for this test setup to determine attempt number.
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == body.testSetupID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-
+        // Attempt number for API submissions stays per-setup (no user identity
+        // on this path), assigned race-free inside one transaction.
         let submission = APISubmission(
             id: subID,
             testSetupID: body.testSetupID,
             zipPath: zipPath,
-            attemptNumber: priorCount + 1,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
             kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: nil, on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
             submission: submission,
             on: req.db,
@@ -108,20 +104,15 @@ struct SubmissionRoutes: RouteCollection {
         // Offload the disk write to the NIO thread pool (see createSubmission).
         try await req.fileio.writeFile(.init(data: fileData), at: filePath)
 
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == body.testSetupID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-
         let submission = APISubmission(
             id: subID,
             testSetupID: body.testSetupID,
             zipPath: filePath,
-            attemptNumber: priorCount + 1,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
             filename: submittedFilename,
             kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: nil, on: req.db)
         await req.application.diagnostics.recordSubmissionCreated(
             submission: submission,
             on: req.db,

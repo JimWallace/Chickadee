@@ -110,6 +110,14 @@ import Testing
         #expect(output.contains("if __name__") == false)
     }
 
+    @Test func assignmentWithCommentMentioningCallPreserved() {
+        // The inline comment mentions a call, but the assignment's RHS is a
+        // plain literal — it must stay at module level, not be quarantined.
+        let output = extractor.sanitizeCellForModule("dose = 30  # see compute() for details")
+        #expect(moduleLevel(in: output).contains("dose = 30"))
+        #expect(!output.contains("if __name__"))
+    }
+
     @Test func docstringPreserved() {
         let output = extractor.sanitizeCellForModule("\"\"\"Module docstring.\"\"\"")
         #expect(moduleLevel(in: output).contains("Module docstring"))
@@ -169,6 +177,24 @@ import Testing
         let source = "if x > 0:\n    print(x)"
         let output = extractor.sanitizeCellForModule(source)
         #expect(guardBlock(in: output).contains("if x > 0:"))
+    }
+
+    @Test func callWithInlineCommentContainingEqualsQuarantined() {
+        // Regression: the inline comment's `=` must not make this look like a
+        // module-level assignment. The print(...) is a bare call → quarantined,
+        // so it doesn't leak stdout at module import time.
+        let output = extractor.sanitizeCellForModule("print(x)  # a = b")
+        #expect(guardBlock(in: output).contains("print(x)"))
+        #expect(!moduleLevel(in: output).contains("print("))
+    }
+
+    @Test func callWithDoseCommentQuarantined() {
+        // The motivating example from the bug report.
+        let output = extractor.sanitizeCellForModule(
+            "print(total_dose_mg) #when weight_kg = 30, dose = 450mg"
+        )
+        #expect(guardBlock(in: output).contains("print(total_dose_mg)"))
+        #expect(!moduleLevel(in: output).contains("print("))
     }
 
     @Test func assignmentWithCallRHSQuarantined() {
@@ -383,7 +409,7 @@ import Testing
 
     // MARK: - End-to-end: run the generated module through a real python3
 
-    @Test func generatedModuleLoadsUnderRealPython3() throws {
+    @Test func generatedModuleLoadsUnderRealPython3() async throws {
         // The shape-level tests above can't catch an emitted-Python bug that
         // still *looks* plausible — the v0.4.220 `\/` regression compiled fine
         // as a Swift string but made the inner compile() throw. Only a real
@@ -426,15 +452,16 @@ import Testing
             print(json.dumps({n: hasattr(m, n) for n in names}))
             """
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["python3", "-c", probe]
-        let outPipe = Pipe()
-        proc.standardOutput = outPipe
-        proc.standardError = Pipe()
-        try proc.run()
-        proc.waitUntilExit()
+        let proc = try await runProcessRobustly {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            proc.arguments = ["python3", "-c", probe]
+            proc.standardOutput = Pipe()
+            proc.standardError = Pipe()
+            return proc
+        }
 
+        let outPipe = try #require(proc.standardOutput as? Pipe)
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let out = (String(bytes: outData, encoding: .utf8) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)

@@ -115,9 +115,11 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
     /// Slice 4 of #461 — per-student expressions in section scope.
     /// Evaluated per-student at notebook first-open alongside global
     /// expressions; results substitute into `{{name}}` placeholders.
-    /// Stays literal-only for pattern-family `$name` references and
-    /// raw-script inlining (matches Slice 2's notebooks-only constraint
-    /// for personalization expressions).
+    /// Like `globalExpressions`, a section expression is never inlined
+    /// into a raw test script, but it MAY back a pattern-family
+    /// per-student reference (`$name` arg / `expectedVarRef`), whose
+    /// value is delivered to grading at dispatch time via
+    /// `Job.personalizedInputs` / the browser seed endpoint.
     public let expressions: [PersonalizationExpression]
 
     public init(
@@ -231,13 +233,52 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// values substitute into starter-notebook `{{name}}` placeholders
     /// alongside literal `globalVariables`.
     ///
-    /// Slice 2 scope: notebooks only.  Expression results are NOT
-    /// inlined into raw test scripts (those use the v0.4.156 env-var
-    /// seed contract for any per-student logic) and are NOT used for
-    /// pattern-family `$name` references (case args want save-time
-    /// literals).  Names cannot clash with any `globalVariables`,
-    /// `sections[].variables`, or the reserved name `seed`.
+    /// Expression results are NOT inlined into raw test scripts (those use
+    /// the v0.4.156 env-var seed contract for any per-student logic) and are
+    /// NOT substituted into them at save time.  They ARE, however, available
+    /// to pattern-family per-student references: a case's `$name` arg or
+    /// `expectedVarRef` may point at an expression row, and the resolved
+    /// value is delivered to grading at dispatch time via
+    /// `Job.personalizedInputs` / the browser seed endpoint (see
+    /// `docs/personalization-pattern-families.md`).  Names cannot clash with
+    /// any `globalVariables`, `sections[].variables`, or the reserved name
+    /// `seed`.
     public let globalExpressions: [PersonalizationExpression]
+
+    /// True when the manifest declares any per-student `=` expression, global
+    /// or section-scoped.  Expressions are the only personalization inputs
+    /// that need a per-(student, assignment) seed to resolve — use this to
+    /// decide whether a seed must be looked up.  Ask `hasPersonalization`
+    /// instead when the question is "is there anything to substitute at all".
+    public var hasExpressions: Bool {
+        !globalExpressions.isEmpty || sections.contains { !$0.expressions.isEmpty }
+    }
+
+    /// True when the manifest declares anything personalization substitutes —
+    /// literal variables or per-student expressions, global or section-scoped.
+    /// Strictly broader than `hasExpressions`: a literal-only assignment still
+    /// substitutes `{{name}}` placeholders, it just needs no seed.
+    public var hasPersonalization: Bool {
+        hasExpressions || !globalVariables.isEmpty || sections.contains { !$0.variables.isEmpty }
+    }
+
+    /// Instructor-authored achievements / goals / awards for this assignment —
+    /// the generalized form of the hardcoded badge + class-achievement system.
+    /// Server-evaluated and display-only; `runnerSanitized()` strips them so a
+    /// runner never decodes an `AchievementKind` it doesn't know (same rationale
+    /// as `patternFamilies` / `notebookChecks`).
+    public let achievements: [Achievement]
+
+    /// IDs of built-in awards (`BuiltInAchievements`) the instructor has disabled
+    /// for this assignment.  Empty = all built-ins active (the default).  The
+    /// award + display paths skip any id listed here.  Stripped from the
+    /// runner-facing manifest (awards are server-side) via the memberwise default.
+    public let disabledBuiltInAwardIDs: [String]
+    /// True once the instructor has saved the unified Achievements table.  Until
+    /// then the editor merges the built-in defaults in for display; after, the
+    /// manifest's `achievements` is authoritative (so a removed built-in stays
+    /// removed).  Stripped from the runner manifest via the memberwise default.
+    public let builtInAchievementsSeeded: Bool
 
     public init(
         schemaVersion: Int = 1,
@@ -252,6 +293,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         sections: [TestSuiteSection] = [],
         globalVariables: [FamilyVariable] = [],
         globalExpressions: [PersonalizationExpression] = [],
+        achievements: [Achievement] = [],
+        disabledBuiltInAwardIDs: [String] = [],
+        builtInAchievementsSeeded: Bool = false,
         testItems: [TestItem]? = nil
     ) {
         self.schemaVersion = schemaVersion
@@ -271,6 +315,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.sections = sections
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
+        self.achievements = achievements
+        self.disabledBuiltInAwardIDs = disabledBuiltInAwardIDs
+        self.builtInAchievementsSeeded = builtInAchievementsSeeded
     }
 
     public init(from decoder: Decoder) throws {
@@ -301,6 +348,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
             try c.decodeIfPresent(
                 [PersonalizationExpression].self,
                 forKey: .globalExpressions) ?? []
+        achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
+        disabledBuiltInAwardIDs =
+            try c.decodeIfPresent([String].self, forKey: .disabledBuiltInAwardIDs) ?? []
+        builtInAchievementsSeeded =
+            try c.decodeIfPresent(Bool.self, forKey: .builtInAchievementsSeeded) ?? false
     }
 
     // `patternFamilies` / `notebookChecks` are computed (derived from
@@ -321,6 +373,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case sections
         case globalVariables
         case globalExpressions
+        case achievements
+        case disabledBuiltInAwardIDs
+        case builtInAchievementsSeeded
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -340,6 +395,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(sections, forKey: .sections)
         try c.encode(globalVariables, forKey: .globalVariables)
         try c.encode(globalExpressions, forKey: .globalExpressions)
+        try c.encode(achievements, forKey: .achievements)
+        try c.encode(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs)
+        try c.encode(builtInAchievementsSeeded, forKey: .builtInAchievementsSeeded)
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook
@@ -361,13 +419,24 @@ public struct TestProperties: Codable, Equatable, Sendable {
             starterNotebook: starterNotebook,
             patternFamilies: [],
             notebookChecks: [],
-            sections: sections,
+            // Expressions are a server-side authoring concern — both global
+            // AND section scope.  Their source is evaluated server-side per
+            // student; only the resolved values travel to grading (worker via
+            // `Job.personalizedInputs`, browser via the seed endpoint), and
+            // the runner reads neither `globalExpressions` nor
+            // `sections[].expressions`.  Strip every `PersonalizationExpression`
+            // from the runner-facing manifest so reference-solution source
+            // (e.g. `= solution.countAdults(...)`) never ships in the Job
+            // payload.  Section *variables* (literals) are kept for parity
+            // with `globalVariables`.
+            sections: sections.map { section in
+                TestSuiteSection(
+                    id: section.id, name: section.name,
+                    variables: section.variables, expressions: [])
+            },
             globalVariables: globalVariables,
-            // Slice 2: expressions are a server-side authoring concern.
-            // They never reach the runner — values are evaluated at
-            // notebook first-open and substituted into the student
-            // working copy before the runner ever sees the assignment.
-            globalExpressions: []
+            globalExpressions: [],
+            achievements: []
         )
     }
 }

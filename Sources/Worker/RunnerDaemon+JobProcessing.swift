@@ -86,10 +86,10 @@ extension WorkerDaemon {
             paths: paths,
             stageTimings: &stageTimings
         )
-        defer { try? FileManager.default.removeItem(at: prepared.testSetupDir) }
+        defer { removeWorkspaceItem(at: prepared.testSetupDir, label: "test_setup_dir", job: job) }
 
         let testExecutionStartedAt = Date()
-        let outcomes = await executeTestSuites(
+        let outcomes = try await executeTestSuites(
             manifest: prepared.manifest,
             testSetupDir: prepared.testSetupDir,
             job: job
@@ -124,6 +124,26 @@ extension WorkerDaemon {
     }
 
     // MARK: - Per-job setup helpers
+
+    /// Best-effort workspace removal that leaves a structured breadcrumb on
+    /// failure — a silently leaked workdir is a disk leak ops can only find
+    /// from this log line. Quiet when the path is already gone.
+    private func removeWorkspaceItem(at url: URL, label: String, job: Job) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            writeStructuredRunnerLog(
+                event: "workspace_cleanup_failed",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "label": label,
+                    "path": url.path,
+                    "error": String(describing: error),
+                ])
+        }
+    }
 
     private func logJobAccepted(_ job: Job) {
         writeStructuredRunnerLog(
@@ -185,7 +205,7 @@ extension WorkerDaemon {
         }
 
         let cleanupStartedAt = Date()
-        try? FileManager.default.removeItem(at: paths.workDir)
+        removeWorkspaceItem(at: paths.workDir, label: "work_dir", job: job)
         stageTimings.record("cleanup", milliseconds: Int(Date().timeIntervalSince(cleanupStartedAt) * 1000))
 
         let freeDiskMBPostCleanup = freeSpaceMB(at: tempRoot)
@@ -540,13 +560,43 @@ extension WorkerDaemon {
         manifest: TestProperties,
         testSetupDir: URL,
         job: Job
-    ) async -> [TestOutcome] {
+    ) async throws -> [TestOutcome] {
         // Phase 1 of issue #461 — surface the per-(student, assignment) seed to
         // the grading subprocess. Nil/empty seed means non-personalized job;
         // leaving the env var unset preserves legacy behaviour.
         var scriptEnv: [String: String] = [:]
         if let seed = job.assignmentSeed, !seed.isEmpty {
             scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
+        }
+
+        // Materialize per-student personalization inputs (issue #461) into the
+        // grading workspace as `_ck_inputs.py`, so generated pattern-family
+        // scripts that reference per-student args / expected can load them by
+        // path. Each value is already a Python literal (`repr`) resolved
+        // server-side; keys are emitted as escaped Python string literals via
+        // `JSONValue.string(_:).pythonLiteral` — the same canonical escaping the
+        // renderer's reader and the browser path (`JSON.stringify`) use, so the
+        // three stay byte-for-byte consistent (input names are validated
+        // identifiers today, so this is defense in depth). The filename is
+        // reserved (excluded from student-module candidates in test_runtime), so
+        // it can't be mistaken for the submission.
+        if let inputs = job.personalizedInputs, !inputs.isEmpty {
+            var lines = [
+                "# Auto-generated per-student grading inputs (issue #461). Do not edit.",
+                "_ck = {",
+            ]
+            for key in inputs.keys.sorted() {
+                lines.append("    \(JSONValue.string(key).pythonLiteral): \(inputs[key] ?? "None"),")
+            }
+            lines.append("}")
+            let source = lines.joined(separator: "\n") + "\n"
+            // A failed write here would make every personalized test error with
+            // a confusing missing-file traceback that looks like a student
+            // mistake — and persist it as their grade. Throw instead so the job
+            // is reported as buildStatus:failed and stays retestable.
+            try source.write(
+                to: testSetupDir.appendingPathComponent("_ck_inputs.py"),
+                atomically: true, encoding: .utf8)
         }
 
         let executor = NativeScriptExecutor(runner: runner, workDir: testSetupDir, env: scriptEnv)
@@ -583,13 +633,29 @@ extension WorkerDaemon {
         job: Job,
         startedAt: Date
     ) -> TestOutcomeCollection {
-        let passCount = outcomes.filter { $0.status == .pass }.count
-        let failCount = outcomes.filter { $0.status == .fail }.count
-        let errorCount = outcomes.filter { $0.status == .error }.count
-        let timeoutCount = outcomes.filter { $0.status == .timeout }.count
-        let totalMs = outcomes.reduce(0) { $0 + $1.executionTimeMs }
-        let totalPoints = outcomes.reduce(0) { $0 + $1.points }
-        let earnedPoints = outcomes.filter { $0.status == .pass }.reduce(0) { $0 + $1.points }
+        // One pass over the outcomes instead of six (4 × filter().count +
+        // 2 × reduce) — the codebase's own stated antipattern.
+        var passCount = 0
+        var failCount = 0
+        var errorCount = 0
+        var timeoutCount = 0
+        var totalMs = 0
+        var totalPoints = 0
+        // Weighted, partial-credit-aware: points × score per outcome (a script
+        // with no footer `score` scores 1 on a pass / 0 otherwise, so this equals
+        // the old "sum points for passing tests" for non-partial-credit suites).
+        var earnedPoints = 0.0
+        for outcome in outcomes {
+            switch outcome.status {
+            case .pass: passCount += 1
+            case .fail: failCount += 1
+            case .error: errorCount += 1
+            case .timeout: timeoutCount += 1
+            }
+            totalMs += outcome.executionTimeMs
+            totalPoints += outcome.points
+            earnedPoints += Double(outcome.points) * outcome.score
+        }
 
         let buildStatus: BuildStatus = outcomes.isEmpty ? .failed : .passed
 

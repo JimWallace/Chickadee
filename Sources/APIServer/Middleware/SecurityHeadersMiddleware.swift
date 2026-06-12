@@ -10,7 +10,9 @@
 //     cache after the user logs out — so clicking a link or hitting Back
 //     shows a logged-in view even though the server-side session is gone.
 //     Scoped to text/html so versioned static assets (Pyodide, JupyterLite,
-//     CodeMirror, images) keep their long-lived caching.
+//     CodeMirror, images) keep their long-lived caching.  text/html responses
+//     are also marked to skip response compression (BREACH — see the inline
+//     comment in respond(to:chainingTo:)).
 //
 //   X-Content-Type-Options: nosniff
 //     Prevents browsers from MIME-sniffing a response away from the declared
@@ -112,7 +114,7 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
     /// `scripts/setup-vendor.sh`).  There is ONE canonical Pyodide, served at
     /// `/pyodide`, loaded by both the JupyterLite editor kernel (via
     /// `pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's
-    /// own browser paths (browser-runner grading, `/validate`, setup-edit).
+    /// own browser paths (browser-runner grading, `/validate`).
     /// Every browser asset is therefore same-origin, so NO third-party origin
     /// appears in the policy.
     ///
@@ -244,6 +246,12 @@ struct SecurityHeadersMiddleware: AsyncMiddleware {
             contentType.hasPrefix("text/html")
         {
             response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+            // HTML also opts out of the server-wide response compression
+            // (enabled in bootstrapAppMiddleware): pages embed the per-session
+            // CSRF token, and compressing a secret alongside reflectable
+            // request data is the precondition for BREACH-style compression
+            // oracles.  Static assets carry no secrets and stay compressible.
+            response.headers.responseCompression = .disable
         }
         response.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
         response.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")

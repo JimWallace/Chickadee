@@ -212,6 +212,7 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateRunnerProfiles())
     app.migrations.add(CreateAssignmentRequirements())
     app.migrations.add(CreateClassAchievements())
+    app.migrations.add(CreateAchievementResults())
     app.migrations.add(CreatePreEnrollments())
     app.migrations.add(SessionRecord.migration)
     app.migrations.add(CreateClientDiagnostics())
@@ -242,4 +243,20 @@ func registerMigrations(on app: Application) {
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())
     app.migrations.add(AddGrantPreviousRefreshTokenHashIndex())
+    // Replaces assignments.is_open (bool) with assignments.visibility (enum
+    // string). Runs after CreateAssignments on every deploy.
+    app.migrations.add(ChangeAssignmentIsOpenToVisibility())
+
+    // Adds submissions.materialization_json — cached once-at-enqueue
+    // personalization for validation submissions, so worker poll + download
+    // stay eval-free.
+    app.migrations.add(AddSubmissionMaterialization())
+
+    // Audit-followup indexes (June 2026): request_metrics(finished_at) and
+    // other uncovered hot-path filters. Index-only, runs last.
+    app.migrations.add(CreateAuditFollowupIndexes())
+
+    // Denormalized grade columns on results + one-time backfill from the
+    // collection_json blob (June 2026 audit, P1.1).
+    app.migrations.add(AddResultGradeColumns())
 }

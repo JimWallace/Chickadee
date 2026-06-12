@@ -8,11 +8,17 @@ public struct InterpretedScriptResult: Equatable, Sendable {
     public let status: TestStatus
     public let shortResult: String
     public let longResult: String?
+    /// Fraction of this test's `points` the submission earned, in `0...1`. Taken
+    /// from the footer's `score` (clamped) when present; otherwise 1 for a pass
+    /// and 0 for fail/error/timeout — so a script that emits no `score` grades
+    /// exactly as it did before partial credit existed.
+    public let score: Double
 
-    public init(status: TestStatus, shortResult: String, longResult: String?) {
+    public init(status: TestStatus, shortResult: String, longResult: String?, score: Double) {
         self.status = status
         self.shortResult = shortResult
         self.longResult = longResult
+        self.score = score
     }
 }
 
@@ -64,7 +70,6 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
         } else {
             shortResult = status.defaultShortResult
         }
-        // a numeric "score" field is reserved for future partial credit
     } else if let lastLine {
         shortResult = lastLine
     } else {
@@ -72,9 +77,11 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
     }
 
     // Strip the JSON footer line from stdout before showing it to students.
+    // Reuses `lines` from above rather than splitting a potentially large
+    // stdout a second time.
     let strippedStdout: String
     if footer != nil {
-        var stdoutLines = splitOnNewlines(output.stdout)
+        var stdoutLines = lines
         if let lastIdx = stdoutLines.indices.last(where: { !trimHorizontal(stdoutLines[$0]).isEmpty }) {
             stdoutLines.remove(at: lastIdx)
         }
@@ -99,7 +106,21 @@ public func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptRe
         return sections.isEmpty ? nil : sections.joined(separator: "\n\n")
     }()
 
-    return InterpretedScriptResult(status: status, shortResult: shortResult, longResult: longResult)
+    return InterpretedScriptResult(
+        status: status, shortResult: shortResult, longResult: longResult,
+        score: partialCreditScore(footer: footer, status: status))
+}
+
+/// The fraction of a test's points the submission earned, in `0...1`. An explicit
+/// footer `score` wins (clamped) — the exit code drives the pass/fail badge, the
+/// `score` drives the credit, and the two are orthogonal (a script may report a
+/// `score` on either). With no footer `score` it's full credit on a pass and
+/// none otherwise, so scripts that don't opt into partial credit grade as before.
+private func partialCreditScore(footer: [String: JSONValue]?, status: TestStatus) -> Double {
+    if let footer, case .number(let s)? = footer["score"] {
+        return min(1, max(0, s))
+    }
+    return status == .pass ? 1 : 0
 }
 
 /// Strip a leading `"<test>: "` label from a footer's `shortResult` when the

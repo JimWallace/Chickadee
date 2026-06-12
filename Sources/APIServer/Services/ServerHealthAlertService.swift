@@ -59,7 +59,7 @@ struct PendingQueueState: Sendable {
 
 private func loadPendingQueueState(on application: Application, now: Date) async throws -> PendingQueueState {
     let pending = try await APISubmission.query(on: application.db)
-        .filter(\.$status == "pending")
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
         .all()
     let pendingCount = pending.count
     // Use the effective enqueue time (retestedAt ?? submittedAt) so a fresh
@@ -317,10 +317,13 @@ struct AlertFiringRecord: Encodable, Sendable {
 
 // MARK: - Monitor actor
 
+/// Holds the alert rule state machine, recent-firings buffer, and webhook
+/// override.  The periodic *driving* of `sweep` lives in a separate
+/// `PeriodicSweepMonitor` (see `serverHealthAlertSweepMonitor`); this actor
+/// owns only the per-sweep logic and its mutable state.
 actor ServerHealthAlertMonitor {
     static let recentFiringsCap = 50
 
-    private var task: Task<Void, Never>?
     private var ruleStates: [HealthRule: AlertRuleState] = [:]
     private var recentFirings: [AlertFiringRecord] = []
     private var webhookURLOverride: String?
@@ -475,30 +478,6 @@ actor ServerHealthAlertMonitor {
         }
     }
 
-    func start(application: Application) {
-        guard task == nil else { return }
-        guard configuration.enabled else {
-            application.logger.info("server_health_alerts_disabled")
-            return
-        }
-        let intervalNs = UInt64(max(configuration.checkIntervalSeconds, 5) * 1_000_000_000)
-        task = Task {
-            while !Task.isCancelled {
-                await self.sweep(application: application)
-                do {
-                    try await Task.sleep(nanoseconds: intervalNs)
-                } catch {
-                    break
-                }
-            }
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-    }
-
     private func appendFiring(_ record: AlertFiringRecord) {
         recentFirings.insert(record, at: 0)
         if recentFirings.count > Self.recentFiringsCap {
@@ -562,24 +541,28 @@ func writeAlertWebhookURLToDisk(value: String, filePath: String) {
 
 // MARK: - Lifecycle handler + Application accessors
 
+/// Not the generic `PeriodicSweepLifecycleHandler`: boot is gated on the
+/// alerts-enabled flag (with its own log line when disabled).
 struct ServerHealthAlertLifecycleHandler: LifecycleHandler {
     func didBoot(_ application: Application) throws {
-        let monitor = application.serverHealthAlertMonitor
-        Task {
-            await monitor.start(application: application)
+        guard application.serverHealthAlertConfiguration.enabled else {
+            application.logger.info("server_health_alerts_disabled")
+            return
         }
+        application.serverHealthAlertSweepMonitor.start(application: application)
     }
 
     func shutdown(_ application: Application) {
-        let monitor = application.serverHealthAlertMonitor
-        Task {
-            await monitor.stop()
-        }
+        application.serverHealthAlertSweepMonitor.stop()
     }
 }
 
 struct ServerHealthAlertMonitorKey: StorageKey {
     typealias Value = ServerHealthAlertMonitor
+}
+
+struct ServerHealthAlertSweepMonitorKey: StorageKey {
+    typealias Value = PeriodicSweepMonitor
 }
 
 struct ServerHealthAlertWebhookURLFilePathKey: StorageKey {
@@ -598,6 +581,27 @@ extension Application {
             return created
         }
         set { storage[ServerHealthAlertMonitorKey.self] = newValue }
+    }
+
+    /// Drives `serverHealthAlertMonitor.sweep` on the configured cadence.
+    /// No `runImmediately` boot sweep — the loop's first iteration sweeps
+    /// right away, matching the historical actor loop, and there was never
+    /// an extra detached boot sweep for this service.
+    var serverHealthAlertSweepMonitor: PeriodicSweepMonitor {
+        get {
+            if let existing = storage[ServerHealthAlertSweepMonitorKey.self] { return existing }
+            let created = PeriodicSweepMonitor(
+                name: "Server health alert",
+                interval: serverHealthAlertConfiguration.checkIntervalSeconds,
+                minimumInterval: 5,
+                runImmediately: false
+            ) { application in
+                await application.serverHealthAlertMonitor.sweep(application: application)
+            }
+            storage[ServerHealthAlertSweepMonitorKey.self] = created
+            return created
+        }
+        set { storage[ServerHealthAlertSweepMonitorKey.self] = newValue }
     }
 
     var alertWebhookURLFilePath: String {

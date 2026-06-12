@@ -83,4 +83,26 @@ enum PersonalizationSubstitution {
                 evaluationError: "\(error)")
         }
     }
+
+    /// Per-student grading inputs for a submission: each `=` expression's
+    /// evaluated value (a Python literal), keyed by name, for `seedHex`.
+    /// Literal variables are excluded — those are inlined into scripts at save
+    /// time; only expression values need to travel to grading time. Returns nil
+    /// when there's no seed, the manifest declares no expressions, or nothing
+    /// evaluated (e.g. an expression raised) — callers then ship no
+    /// `_ck_inputs.py` and generated scripts that need a value fail closed.
+    ///
+    /// Shared by the worker job payload (`WorkerJobRoutes`) and the browser
+    /// seed endpoint (`BrowserRunnerRoutes`) so both grade identically.
+    static func gradingInputs(
+        manifest: TestProperties, seedHex: String?, supportFilesDirectory: String?
+    ) async -> [String: String]? {
+        guard let seedHex, !seedHex.isEmpty else { return nil }
+        guard manifest.hasExpressions else { return nil }
+        let resolution = await resolve(
+            manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportFilesDirectory)
+        let exprNames = Set(resolution.evaluatedExpressionNames)
+        let values = resolution.substitutions.filter { exprNames.contains($0.key) }
+        return values.isEmpty ? nil : values
+    }
 }

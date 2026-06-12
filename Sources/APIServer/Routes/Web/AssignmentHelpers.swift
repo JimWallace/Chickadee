@@ -136,11 +136,13 @@ func normalizedDeadlineOverrideAfterDueDateChange(
 }
 
 func nextAssignmentSortOrder(req: Request) async throws -> Int {
+    // MAX over the non-null rows only; an explicit filter + sort avoids the
+    // driver-dependent NULL ordering Postgres and SQLite disagree on.
     let maxOrder =
         try await APIAssignment.query(on: req.db)
-        .all()
-        .compactMap(\.sortOrder)
-        .max() ?? 0
+        .filter(\.$sortOrder != nil)
+        .sort(\.$sortOrder, .descending)
+        .first()?.sortOrder ?? 0
     return maxOrder + 1
 }
 
@@ -185,11 +187,11 @@ func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
         return nil
     }
     // Prefer weighted points when present (non-nil and non-zero totalPoints).
-    if let earnedPoints = root["earnedPoints"] as? Int,
-        let totalPoints = root["totalPoints"] as? Int,
-        totalPoints > 0
-    {
-        return Int((Double(earnedPoints) / Double(totalPoints) * 100).rounded())
+    // earnedPoints can be fractional (partial credit), so read it as Double.
+    let earned = (root["earnedPoints"] as? Double) ?? (root["earnedPoints"] as? Int).map(Double.init)
+    let total = (root["totalPoints"] as? Double) ?? (root["totalPoints"] as? Int).map(Double.init)
+    if let earned, let total, total > 0 {
+        return Int((earned / total * 100).rounded())
     }
     // Fall back to unweighted count for old results.
     guard let passCount = root["passCount"] as? Int,
@@ -197,6 +199,20 @@ func gradePercentFromCollectionJSON(_ collectionJSON: String) -> Int? {
         totalTests > 0
     else { return nil }
     return Int((Double(passCount) / Double(totalTests) * 100).rounded())
+}
+
+/// Formats a (possibly fractional) points value for display: whole numbers show
+/// without a decimal ("3"), partial credit shows up to two trimmed decimals
+/// ("2.75", "2.5").
+func formatPoints(_ value: Double) -> String {
+    let rounded = (value * 100).rounded() / 100
+    if rounded == rounded.rounded() {
+        return String(Int(rounded.rounded()))
+    }
+    var s = String(format: "%.2f", rounded)
+    while s.hasSuffix("0") { s.removeLast() }
+    if s.hasSuffix(".") { s.removeLast() }
+    return s
 }
 
 func csvEscaped(_ value: String) -> String {

@@ -58,6 +58,21 @@
         var pushTimer = null;
         var pushInFlight = false;
         var pushPending = false;
+        // Resolvers awaiting "no push in flight or pending" — replaces the
+        // old 50 ms setInterval spin in the form-submit path.
+        var pushSettledWaiters = [];
+
+        function whenPushSettled() {
+            if (!pushInFlight && !pushPending) return Promise.resolve();
+            return new Promise(function (resolve) { pushSettledWaiters.push(resolve); });
+        }
+
+        function notifyPushSettledIfIdle() {
+            if (pushInFlight || pushPending) return;
+            var waiters = pushSettledWaiters;
+            pushSettledWaiters = [];
+            waiters.forEach(function (resolve) { resolve(); });
+        }
 
         // Seed from the server-rendered JSON blob — same shape as
         // `GET /suite`.  Section membership flows through items' sectionID;
@@ -77,7 +92,7 @@
         }
         function tbodyForSection(sid) {
             var selector = sid
-                ? 'tbody[data-section-id="' + sid.replace(/"/g, '\\"') + '"]'
+                ? 'tbody[data-section-id="' + cssAttrEscape(sid) + '"]'
                 : 'tbody[data-section-id=""]';
             return container.querySelector(selector);
         }
@@ -140,12 +155,10 @@
             });
         }
 
-        function escHtml(v) {
-            return String(v == null ? '' : v)
-                .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-                .replaceAll('"','&quot;').replaceAll("'",'&#39;');
-        }
-        function escAttr(v) { return String(v == null ? '' : v).replaceAll('"','&quot;'); }
+        // Shared implementations (Public/chickadee-ui.js); local aliases keep
+        // the many call sites short.
+        var escHtml = ChickadeeUI.escapeHtml;
+        var escAttr = ChickadeeUI.escapeAttr;
 
         function findByID(id) { return items.find(function (it) { return it.id === id; }); }
         function itemsInSection(sid) {
@@ -314,8 +327,12 @@
                 +     '<span class="card-meta" style="font-size:.72rem">' + escHtml(kind || 'notebook check') + '</span>'
                 +   '</div>'
                 + '</div></td>'
-                + '<td><span class="card-meta" style="font-size:.8rem">' + escHtml(tier) + '</span></td>'
-                + '<td><span class="card-meta" style="font-size:.8rem">' + points + '</span></td>'
+                + '<td><select class="form-input suite-check-tier" style="padding:.25rem .5rem;font-size:.8rem">'
+                +   ['public','secret','release'].map(function (t) {
+                        return '<option value="' + t + '"' + (t === tier ? ' selected' : '') + '>' + t + '</option>';
+                    }).join('')
+                + '</select></td>'
+                + '<td><input type="number" class="form-input suite-check-points" min="0" max="100" value="' + points + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
                 + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
                 +   '<button class="btn action-btn check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
                 +   '<button class="btn action-btn action-danger check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
@@ -350,7 +367,7 @@
 
         function restoreFocus(snap) {
             if (!snap) return;
-            var row = container.querySelector('tr[data-id="' + snap.dataID.replace(/"/g, '\\"') + '"]');
+            var row = container.querySelector('tr[data-id="' + cssAttrEscape(snap.dataID) + '"]');
             if (!row) return;
             var el = row.querySelector('.' + snap.cls);
             if (!el) return;
@@ -360,11 +377,30 @@
             }
         }
 
+        // ── Inline editor (accordion) state ──
+        // Only one inline editor is open at a time (the family/check renderers
+        // are singletons). `renderSuspended` gates renderTree while it's open so
+        // a debounced PUT response can't wipe the open detail row.
+        var expandedDetail = null;   // { rowID, mechanism, renderer, detailRow }
+        var renderSuspended = false;
+        var renderPendingFlag = false;
+
+        /// Escape a value for safe interpolation inside a double-quoted CSS
+        /// attribute selector — backslash first, then double-quote (closes
+        /// CodeQL js/incomplete-sanitization on the [data-*="…"] lookups).
+        function cssAttrEscape(v) {
+            return String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        }
+
         /// Write rows into every server-rendered tbody.  Items without a
         /// sectionID (or with a stale one) land in the Ungrouped tbody
         /// (data-section-id=""), which the server always renders when any
         /// item is ungrouped.
         function renderTree() {
+            // While an inline editor (accordion) is open, defer re-rendering the
+            // tbodies — an innerHTML rebuild would wipe the open detail row
+            // mid-edit. The deferred render runs when the editor collapses.
+            if (renderSuspended) { renderPendingFlag = true; return; }
             var focusSnap = captureFocus();
             var tbodies = container.querySelectorAll('tbody[data-section-id]');
             var bySection = {};
@@ -402,6 +438,173 @@
             }
             restoreFocus(focusSnap);
         }
+
+        // ── Inline editor (accordion) open/close ──
+
+        /// ctx handed to a renderer hosted inline. Mirrors the modal's ctx so
+        /// the same family/check renderers work in either host.
+        function inlineCtx(sectionID) {
+            return {
+                csrfToken: csrfToken,
+                getSectionID: function () { return sectionID || null; },
+                setStatus: function () {},
+                extractErrorMessage: extractErrorMessage
+            };
+        }
+
+        /// Tear down the open inline editor: cleanup the renderer, remove the
+        /// detail row, un-suspend renderTree, and flush any deferred render.
+        function collapseInlineEditor() {
+            var d = expandedDetail;
+            if (!d) return;
+            expandedDetail = null;
+            if (d.renderer && typeof d.renderer.cleanup === 'function') {
+                try { d.renderer.cleanup(); } catch (e) { /* ignore */ }
+            }
+            // The family editor hosts the singleton #family-editor-body element;
+            // move it out (hidden) before removing the detail row, or removing
+            // the row would delete the one shared editor body for good.
+            if (d.mechanism === 'family') {
+                var fb = document.getElementById('family-editor-body');
+                if (fb) {
+                    fb.hidden = true;
+                    fb.style.display = 'none';
+                    document.body.appendChild(fb);
+                }
+            }
+            if (d.detailRow && d.detailRow.parentNode) {
+                d.detailRow.parentNode.removeChild(d.detailRow);
+            }
+            if (d.rowID) {
+                var pr = container.querySelector('tr[data-id="' + cssAttrEscape(d.rowID) + '"]');
+                if (pr) pr.classList.remove('suite-row-expanded');
+            }
+            renderSuspended = false;
+            if (renderPendingFlag) { renderPendingFlag = false; renderTree(); }
+        }
+
+        /// Open an inline editor for a family/check — either editing an existing
+        /// item (opts.editing.item + opts.afterRowID) or authoring a new one
+        /// (opts.kind, appended to the section's tbody). Hosts the singleton
+        /// renderer in a detail row with Save/Cancel; persistence flows through
+        /// the renderer's persistAndSync (the same PUT /suite path the modal
+        /// used). Custom scripts still use the modal.
+        function expandInlineEditor(opts) {
+            opts = opts || {};
+            var renderer = (window.ChickadeeTestRenderers || {})[opts.mechanism];
+            if (!renderer) { alert('This test type is unavailable — reload the page.'); return; }
+
+            // Section: caller-supplied, else inherited from the edited item's row.
+            var sectionID = (opts.sectionID != null) ? opts.sectionID : null;
+            if (sectionID == null && opts.afterRowID) {
+                var srcItem = findByID(opts.afterRowID);
+                if (srcItem) sectionID = srcItem.sectionID || null;
+            }
+
+            // Toggle off when re-clicking the row that's already open.
+            if (opts.afterRowID && expandedDetail && expandedDetail.rowID === opts.afterRowID) {
+                collapseInlineEditor();
+                return;
+            }
+            collapseInlineEditor();
+
+            var tr = document.createElement('tr');
+            tr.className = 'suite-detail-row';
+            var td = document.createElement('td');
+            td.setAttribute('colspan', '4');
+            var host = document.createElement('div');
+            host.className = 'suite-detail-host';
+            var actions = document.createElement('div');
+            actions.className = 'suite-detail-actions';
+            var saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = 'btn btn-primary btn-compact';
+            saveBtn.textContent = 'Save';
+            var cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'btn btn-compact';
+            cancelBtn.textContent = 'Cancel';
+            var status = document.createElement('span');
+            status.className = 'suite-detail-status card-meta';
+            actions.appendChild(saveBtn);
+            actions.appendChild(cancelBtn);
+            actions.appendChild(status);
+            td.appendChild(host);
+            td.appendChild(actions);
+            tr.appendChild(td);
+
+            var parentRow = opts.afterRowID
+                ? container.querySelector('tr[data-id="' + cssAttrEscape(opts.afterRowID) + '"]')
+                : null;
+            if (parentRow) {
+                parentRow.parentNode.insertBefore(tr, parentRow.nextSibling);
+                parentRow.classList.add('suite-row-expanded');
+            } else {
+                var sidSel = cssAttrEscape(sectionID || '');
+                var tb = container.querySelector('tbody[data-section-id="' + sidSel + '"]')
+                    || container.querySelector('tbody[data-section-id=""]')
+                    || container.querySelector('tbody');
+                if (!tb) { alert('No section to add this test to.'); return; }
+                var rootDrop = tb.querySelector('.suite-root-drop');
+                if (rootDrop) tb.insertBefore(tr, rootDrop); else tb.appendChild(tr);
+            }
+
+            renderSuspended = true;
+            window.__chickadeeTargetSection = sectionID || null;
+            var ctx = inlineCtx(sectionID);
+            expandedDetail = {
+                rowID: opts.afterRowID || null,
+                mechanism: opts.mechanism,
+                renderer: renderer,
+                detailRow: tr
+            };
+
+            try {
+                renderer.mount(host, ctx);
+                if (opts.editing && opts.editing.item) renderer.populate(opts.editing.item, ctx);
+                else renderer.reset(opts.kind, ctx);
+            } catch (e) {
+                status.textContent = 'Could not open editor: ' + ((e && e.message) ? e.message : e);
+            }
+
+            saveBtn.addEventListener('click', function () {
+                var spec;
+                try { spec = renderer.readSpec(); }
+                catch (err) {
+                    status.textContent = (err && err.message) ? err.message : String(err);
+                    status.classList.add('suite-detail-status-error');
+                    return;
+                }
+                status.textContent = 'Saving…';
+                status.classList.remove('suite-detail-status-error');
+                saveBtn.disabled = true;
+                renderer.persistAndSync(spec)
+                    .then(function () { collapseInlineEditor(); })
+                    .catch(function (err) {
+                        status.textContent = 'Save failed — ' + ((err && err.message) ? err.message : err);
+                        status.classList.add('suite-detail-status-error');
+                        saveBtn.disabled = false;
+                    });
+            });
+            cancelBtn.addEventListener('click', collapseInlineEditor);
+
+            if (tr.scrollIntoView) tr.scrollIntoView({ block: 'nearest' });
+        }
+
+        /// Entry point for the "+ Add Test" dropdown to author a NEW inline test
+        /// (no parent row yet). Exposed as a window global so the Test Editor
+        /// modal's dropdown can route family/check picks here.
+        function addInlineTest(mechanism, kind, sectionID) {
+            expandInlineEditor({ mechanism: mechanism, kind: kind, sectionID: sectionID || null, afterRowID: null });
+        }
+        window.chickadeeAddInlineTest = addInlineTest;
+        // Edit an existing family/check inline (called by the family-edit button
+        // in pattern-family-editor.js, and the check-edit button here).
+        window.chickadeeExpandInlineEditor = expandInlineEditor;
+        // Let the modal close any open inline editor before it opens, so the two
+        // hosts never run simultaneously (the renderSuspended guard would
+        // otherwise defer the modal's save render until the inline one closes).
+        window.chickadeeCollapseInlineEditor = collapseInlineEditor;
 
         // ── Persistence (items only; sections go through dedicated endpoints) ──
 
@@ -540,6 +743,7 @@
             .finally(function () {
                 pushInFlight = false;
                 if (pushPending) { pushPending = false; doPush(); }
+                notifyPushSettledIfIdle();
             });
         }
 
@@ -720,7 +924,7 @@
                 if (!overBlock) return;
                 var overSid = overBlock.getAttribute('data-section-id');
                 if (!overSid || overSid === dragSectionID) return;
-                var draggedBlock = container.querySelector('.section-block[data-section-id="' + dragSectionID.replace(/"/g, '\\"') + '"]');
+                var draggedBlock = container.querySelector('.section-block[data-section-id="' + cssAttrEscape(dragSectionID) + '"]');
                 if (!draggedBlock) return;
                 var brect = overBlock.getBoundingClientRect();
                 var afterBlock = e.clientY > brect.top + brect.height / 2;
@@ -862,6 +1066,19 @@
                 if (ptsElF)  nextDefaults.points = Math.max(0, parseInt(ptsElF.value) || 0);
                 fitem.family = Object.assign({}, fitem.family, { defaults: nextDefaults });
                 schedulePush();
+                return;
+            }
+            var checkRow = e.target.closest && e.target.closest('tr[data-kind="check"]');
+            if (checkRow) {
+                var citem = findByID(checkRow.getAttribute('data-id'));
+                if (!citem || !citem.check) return;
+                var tierElC = checkRow.querySelector('.suite-check-tier');
+                var ptsElC  = checkRow.querySelector('.suite-check-points');
+                var nextCheck = Object.assign({}, citem.check);
+                if (tierElC) nextCheck.tier = tierElC.value;
+                if (ptsElC)  nextCheck.points = Math.max(0, parseInt(ptsElC.value) || 0);
+                citem.check = nextCheck;
+                schedulePush();
             }
         });
 
@@ -893,9 +1110,13 @@
                 if (!row) return;
                 var cid = row.getAttribute('data-check-id');
                 var item = findByID('check:' + cid);
-                if (!item || !window.__chickadeeTestEditorModal) return;
-                window.__chickadeeTestEditorModal.open(
-                    { editing: { mechanism: 'check', id: cid, item: item.check } });
+                if (!item) return;
+                expandInlineEditor({
+                    mechanism: 'check',
+                    editing: { item: item.check },
+                    sectionID: item.sectionID || null,
+                    afterRowID: item.id
+                });
                 return;
             }
             var delBtn = e.target.closest && e.target.closest('.check-delete-btn');
@@ -1088,12 +1309,9 @@
 
                 if (pushInFlight || pushPending) {
                     e.preventDefault();
-                    var iv = setInterval(function () {
-                        if (!pushInFlight && !pushPending) {
-                            clearInterval(iv);
-                            sectionVarsPromise.finally(resubmit);
-                        }
-                    }, 50);
+                    whenPushSettled().then(function () {
+                        sectionVarsPromise.finally(resubmit);
+                    });
                 } else {
                     // No suite PUT pending — still wait for section-vars
                     // if they're in flight, since they might have been
