@@ -56,6 +56,18 @@ struct UserActivityMiddleware: AsyncMiddleware {
                     .set(\.$lastSeenAt, to: now)
                     .update()
             }
+
+            // Record a historical activity ping for the admin dashboard's
+            // "active users over time" chart, throttled to at most one row per
+            // user per window.  Separate from the last_seen_at debounce above:
+            // last_seen_at is a single live snapshot, whereas these rows
+            // accumulate so past time buckets can be reconstructed.  Best-
+            // effort — a failed insert must never block the request.
+            let throttle = request.application.activityEventThrottle
+            if await throttle.shouldRecord(userID: userID, now: now) {
+                let event = APIUserActivityEvent(userID: userID, role: user.role)
+                try? await event.create(on: request.db)
+            }
         }
         return try await next.respond(to: request)
     }

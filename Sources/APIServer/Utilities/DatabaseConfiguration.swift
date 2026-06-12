@@ -236,6 +236,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateMCPConsentRequests())
     // Per-student grade overrides. FKs reference `users` and `test_setups`.
     app.migrations.add(CreateGradeOverrides())
+    // Per-user activity pings behind the admin dashboard's "active users over
+    // time" chart. FK references `users`.
+    app.migrations.add(CreateUserActivityEvents())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())

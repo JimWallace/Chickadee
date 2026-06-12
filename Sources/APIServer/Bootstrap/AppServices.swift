@@ -24,6 +24,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.stuckSubmissionReaperMonitor })
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.achievementEvaluationMonitor })
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.sessionReaperMonitor })
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.activityEventReaperMonitor })
     let auditLogMaxAge = TimeInterval(appConfig.diagnostics.auditLogRetentionDays) * 86_400
     app.lifecycle.use(
         PeriodicSweepLifecycleHandler { $0.auditLogReaperMonitor(maxAge: auditLogMaxAge) }

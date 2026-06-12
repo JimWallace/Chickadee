@@ -164,6 +164,27 @@ Admin
 
 </section>
 
+<!-- ── Active users over time ─────────────────────────── -->
+<section class="admin-section activity-section">
+    <div class="activity-header">
+        <h2>Active Users</h2>
+        <div class="activity-windows" role="group" aria-label="Activity time range">
+            <button type="button" class="activity-window-btn activity-window-active" data-window="24h" aria-pressed="true">24h</button>
+            <button type="button" class="activity-window-btn" data-window="1w" aria-pressed="false">1 week</button>
+            <button type="button" class="activity-window-btn" data-window="1m" aria-pressed="false">1 month</button>
+        </div>
+    </div>
+    <p class="activity-caption" id="activity-caption">&nbsp;</p>
+    <div class="activity-chart">
+        <div class="activity-bars" id="activity-bars" role="img" aria-label="Distinct active users per time bucket">
+        #for(bucket in activityChart.buckets):
+            <div class="activity-bar" data-count="#(bucket.count)" data-label="#(bucket.label)"><span class="activity-bar-fill"></span></div>
+        #endfor
+        </div>
+        <p class="activity-empty" id="activity-empty" hidden>No activity recorded in this window.</p>
+    </div>
+</section>
+
 <style>
 .admin-diagnostics {
     padding-bottom: 1rem;
@@ -224,6 +245,90 @@ Admin
 }
 tr.runner-row-offline {
     opacity: .5;
+}
+/* ── Active-users activity chart ─────────────────────── */
+.activity-header h2 { margin: 0; }
+.activity-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: .25rem;
+}
+.activity-windows {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: .375rem;
+    overflow: hidden;
+}
+.activity-window-btn {
+    padding: .3rem .7rem;
+    font-size: .8rem;
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--gray-600);
+    border: none;
+    border-left: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.activity-window-btn:first-child { border-left: none; }
+.activity-window-btn:hover { background: var(--hover-bg); color: var(--gray-900); }
+.activity-window-active,
+.activity-window-active:hover {
+    background: var(--health-teal-dark);
+    color: #fff;
+}
+.activity-caption {
+    margin: 0 0 .5rem;
+    font-size: .8rem;
+    color: var(--gray-600);
+}
+.activity-chart {
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--surface);
+    padding: 1rem 1rem 1.9rem;
+}
+.activity-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 180px;
+    margin-bottom: 1.4rem;
+}
+.activity-bar {
+    position: relative;
+    flex: 1 1 0;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+}
+.activity-bar-fill {
+    width: 100%;
+    height: var(--bar-h, 0);
+    background: var(--health-teal);
+    border-radius: 3px 3px 0 0;
+    transition: height .25s ease;
+}
+.activity-bar:hover .activity-bar-fill { background: var(--health-teal-dark); }
+.activity-bar-label {
+    position: absolute;
+    bottom: -1.35rem;
+    left: -50%;
+    right: -50%;
+    text-align: center;
+    font-size: .65rem;
+    color: var(--gray-500);
+    white-space: nowrap;
+    pointer-events: none;
+}
+.activity-empty {
+    color: var(--gray-500);
+    font-size: .85rem;
+    text-align: center;
+    margin: -2.5rem 0 0;
 }
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
@@ -568,6 +673,81 @@ tr.runner-row-offline {
         refreshWorkers();
     }, 5000);
     setInterval(refreshDiagnostics, 15000);
+
+    // ── Active-users activity chart ──────────────────────────────────
+    var activityBars = document.getElementById('activity-bars');
+    if (activityBars) {
+        var activityCaption = document.getElementById('activity-caption');
+        var activityEmpty = document.getElementById('activity-empty');
+        var activityButtons = Array.from(document.querySelectorAll('.activity-window-btn'));
+        var activityWindow = '24h';
+
+        var windowCaptions = { '24h': 'last 24 hours', '1w': 'last 7 days', '1m': 'last 30 days' };
+
+        function renderActivity(buckets) {
+            buckets = Array.isArray(buckets) ? buckets : [];
+            var max = buckets.reduce(function (m, b) { return Math.max(m, Number(b.count) || 0); }, 0);
+            // Thin the x-axis labels so 24/30 bars don't collide: aim for ~8.
+            var labelEvery = Math.max(1, Math.ceil(buckets.length / 8));
+
+            activityBars.innerHTML = buckets.map(function (b, i) {
+                var count = Number(b.count) || 0;
+                var pct = max > 0 ? (count / max) * 100 : 0;
+                var label = b.label || '';
+                var showLabel = (i % labelEvery === 0) || i === buckets.length - 1;
+                var noun = count === 1 ? 'user' : 'users';
+                return '<div class="activity-bar" title="' + escapeHtml(label) + ': ' + count + ' active ' + noun + '">'
+                    + '<span class="activity-bar-fill" style="--bar-h:' + pct.toFixed(1) + '%"></span>'
+                    + (showLabel ? '<span class="activity-bar-label">' + escapeHtml(label) + '</span>' : '')
+                    + '</div>';
+            }).join('');
+
+            if (activityEmpty) activityEmpty.hidden = max > 0;
+            if (activityCaption) {
+                activityCaption.textContent = max > 0
+                    ? ('Peak ' + max + ' active in a single bucket · ' + (windowCaptions[activityWindow] || ''))
+                    : ' ';
+            }
+        }
+
+        function bucketsFromDOM() {
+            return Array.from(activityBars.querySelectorAll('.activity-bar')).map(function (el) {
+                return { count: Number(el.getAttribute('data-count')) || 0, label: el.getAttribute('data-label') || '' };
+            });
+        }
+
+        async function refreshActivity() {
+            try {
+                var res = await fetch('/admin/activity?window=' + encodeURIComponent(activityWindow), {
+                    headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
+                    cache: 'no-store'
+                });
+                if (!res.ok) return;
+                var data = await res.json();
+                renderActivity(data.buckets);
+            } catch (_) {
+                // Keep current chart on transient polling errors.
+            }
+        }
+
+        activityButtons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.getAttribute('data-window') === activityWindow) return;
+                activityWindow = btn.getAttribute('data-window') || '24h';
+                activityButtons.forEach(function (other) {
+                    var active = other === btn;
+                    other.classList.toggle('activity-window-active', active);
+                    other.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+                refreshActivity();
+            });
+        });
+
+        // Size the server-rendered bars immediately (no fetch, no flash), then
+        // keep them fresh on the same cadence as the runners table.
+        renderActivity(bucketsFromDOM());
+        setInterval(refreshActivity, 60000);
+    }
 
     // ── Import course ────────────────────────────────────────────────
     var importFile = document.getElementById('importCourseFile');
