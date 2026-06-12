@@ -887,7 +887,8 @@ import XCTVapor
             // Student A owns the submission; Student B must be forbidden from viewing it.
             // This exercises the ownership guard in WebRoutes+Submission.swift
             // (submission.userID == user.id check).
-            let studentA = APIUser(username: "peer_student_a", passwordHash: try testPasswordHash("pass"), role: "student")
+            let studentA = APIUser(
+                username: "peer_student_a", passwordHash: try testPasswordHash("pass"), role: "student")
             try await studentA.save(on: app.db)
             let studentAID = try studentA.requireID()
 
