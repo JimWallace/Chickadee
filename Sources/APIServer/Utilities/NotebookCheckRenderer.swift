@@ -40,14 +40,7 @@ struct GeneratedCheck: Equatable {
 /// the test scripts.  Mirrors `patternFamilyAllGeneratedFilenames`.
 func notebookCheckAllGeneratedFilenames(_ check: NotebookCheck) -> [String] {
     var out = [generatedCheckFilename(checkID: check.id, tier: check.tier)]
-    switch check.kind {
-    case .dataFrameShape, .dataFrameColumns, .numericArrayClose,
-        .figureCount, .cellContains, .functionExists,
-        .variableExists, .astStructure:
-        break  // no sidecars
-    case .dataFrameEquality, .seriesEquality:
-        out.append(expectedCSVSidecarFilename(checkID: check.id))
-    }
+    out.append(contentsOf: notebookCheckKindHandler(for: check.kind).sidecars(check).keys.sorted())
     return out
 }
 
@@ -55,45 +48,10 @@ func notebookCheckAllGeneratedFilenames(_ check: NotebookCheck) -> [String] {
 /// files the kind needs.
 func renderNotebookCheck(_ check: NotebookCheck) -> GeneratedCheck {
     let hash = notebookCheckSpecHash(check)
-    let source: String
-    let displayName: String
-    var sidecars: [String: String] = [:]
-    switch check.kind {
-    case .dataFrameShape:
-        source = renderDataFrameShape(check, specHash: hash)
-        displayName = check.name ?? defaultDataFrameShapeLabel(check)
-    case .dataFrameColumns:
-        source = renderDataFrameColumns(check, specHash: hash)
-        displayName = check.name ?? defaultDataFrameColumnsLabel(check)
-    case .dataFrameEquality:
-        source = renderDataFrameEquality(check, specHash: hash)
-        displayName = check.name ?? defaultDataFrameEqualityLabel(check)
-        sidecars[expectedCSVSidecarFilename(checkID: check.id)] =
-            check.expectedCSV ?? ""
-    case .seriesEquality:
-        source = renderSeriesEquality(check, specHash: hash)
-        displayName = check.name ?? defaultSeriesEqualityLabel(check)
-        sidecars[expectedCSVSidecarFilename(checkID: check.id)] =
-            check.expectedCSV ?? ""
-    case .numericArrayClose:
-        source = renderNumericArrayClose(check, specHash: hash)
-        displayName = check.name ?? defaultNumericArrayCloseLabel(check)
-    case .figureCount:
-        source = renderFigureCount(check, specHash: hash)
-        displayName = check.name ?? defaultFigureCountLabel(check)
-    case .cellContains:
-        source = renderCellContains(check, specHash: hash)
-        displayName = check.name ?? defaultCellContainsLabel(check)
-    case .functionExists:
-        source = renderFunctionExists(check, specHash: hash)
-        displayName = check.name ?? defaultFunctionExistsLabel(check)
-    case .variableExists:
-        source = renderVariableExists(check, specHash: hash)
-        displayName = check.name ?? defaultVariableExistsLabel(check)
-    case .astStructure:
-        source = renderASTStructure(check, specHash: hash)
-        displayName = check.name ?? defaultASTStructureLabel(check)
-    }
+    let handler = notebookCheckKindHandler(for: check.kind)
+    let source = handler.render(check, specHash: hash)
+    let displayName = check.name ?? handler.defaultLabel(check)
+    let sidecars = handler.sidecars(check)
 
     let script = GeneratedScript(
         filename: generatedCheckFilename(checkID: check.id, tier: check.tier),

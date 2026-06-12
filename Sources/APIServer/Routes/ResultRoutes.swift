@@ -1,7 +1,7 @@
 // APIServer/Routes/ResultRoutes.swift
 //
-// Phase 2: persists TestOutcomeCollection to both the DB (results table) and
-// to a JSON file on disk, then marks the originating submission as complete.
+// Persists TestOutcomeCollection to the DB (results table), then marks the
+// originating submission as complete.
 
 import Core
 import Fluent
@@ -35,16 +35,20 @@ struct ResultRoutes: RouteCollection {
         }
         let collection = report.collection
 
-        async let dbPersist: Void = persistToDB(collection, on: req)
-        async let diskPersist: Void = persistToDisk(collection, on: req)
-        try await dbPersist
-        try await diskPersist
+        // Persist the result and advance the submission to "complete" in one
+        // transaction: a failure between the two used to leave a result row
+        // with the submission stuck `assigned` until the stuck-submission
+        // reaper re-queued and regraded it (wasted work, duplicate results).
+        let completedSubmission = try await req.db.transaction { tx -> APISubmission? in
+            try await persistToDB(collection, on: req, db: tx)
+            guard let submission = try await APISubmission.find(collection.submissionID, on: tx)
+            else { return nil }
+            submission.setStatus(.complete)
+            try await submission.save(on: tx)
+            return submission
+        }
 
-        // Advance the submission's state machine to "complete".
-        if let submission = try await APISubmission.find(collection.submissionID, on: req.db) {
-            submission.status = "complete"
-            try await submission.save(on: req.db)
-
+        if let submission = completedSubmission {
             // Record execution diagnostics (execution time + queue wait).
             await req.application.diagnostics.recordWorkerExecutionReport(
                 collection: collection,
@@ -84,12 +88,16 @@ struct ResultRoutes: RouteCollection {
             {
                 let grade = gradePercent(from: collection) ?? 0
                 if grade == 100 {
+                    let disabled =
+                        (try? await APITestSetup.find(submission.testSetupID, on: req.db))
+                        .map { BuiltInAchievements.disabled(in: $0) } ?? []
                     try await awardClassBadgesFor100Percent(
                         testSetupID: submission.testSetupID,
                         userID: userID,
                         submissionID: subID,
                         executionTimeMs: collection.executionTimeMs,
                         attemptNumber: submission.attemptNumber ?? 1,
+                        disabled: disabled,
                         on: req.db
                     )
                 }
@@ -101,7 +109,9 @@ struct ResultRoutes: RouteCollection {
 
     // MARK: - DB persistence
 
-    private func persistToDB(_ collection: TestOutcomeCollection, on req: Request) async throws {
+    private func persistToDB(
+        _ collection: TestOutcomeCollection, on req: Request, db: Database
+    ) async throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let json = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
@@ -114,12 +124,12 @@ struct ResultRoutes: RouteCollection {
 
         // Mark for BrightSpace sync if the assignment is configured for it.
         if req.application.brightSpaceClient != nil {
-            if let assignment = try await APIAssignment.query(on: req.db)
+            if let assignment = try await APIAssignment.query(on: db)
                 .filter(\.$testSetupID == collection.testSetupID)
                 .first(),
                 let gradeObjectID = assignment.brightspaceGradeObjectID,
                 !gradeObjectID.isEmpty,
-                let course = try await APICourse.find(assignment.courseID, on: req.db),
+                let course = try await APICourse.find(assignment.courseID, on: db),
                 let orgUnitID = course.brightspaceOrgUnitID,
                 !orgUnitID.isEmpty
             {
@@ -129,24 +139,7 @@ struct ResultRoutes: RouteCollection {
             }
         }
 
-        try await result.save(on: req.db)
-    }
-
-    // MARK: - Disk persistence (kept for easy inspection / debugging)
-
-    private func persistToDisk(_ collection: TestOutcomeCollection, on req: Request) async throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-
-        let data = try encoder.encode(collection)
-        let timestamp = ISO8601DateFormatter().string(from: collection.timestamp)
-            .replacingOccurrences(of: ":", with: "-")
-        let filename = "\(collection.submissionID)_\(timestamp).json"
-        let filePath = req.application.resultsDirectory + filename
-
-        try await req.fileio.writeFile(.init(data: data), at: filePath)
-        req.logger.info("Stored result for submission \(collection.submissionID) at \(filePath)")
+        try await result.save(on: db)
     }
 }
 

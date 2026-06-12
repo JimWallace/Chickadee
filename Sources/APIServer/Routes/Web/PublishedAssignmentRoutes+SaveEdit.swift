@@ -16,21 +16,19 @@ extension PublishedAssignmentRoutes {
     func saveEditedAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
 
-        let idStr = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(idStr, on: req.db),
-            let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db)
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
-        }
+        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let idStr = assignment.publicID
 
         let form = try parseSaveEditedAssignmentForm(req: req)
 
         let title = (form.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(form.dueAtRaw)
+        let starts = parseDueDate(form.startsAtRaw)
+        let startsAtQuery = "&startsAt=\(urlEncode(form.startsAtRaw ?? ""))"
 
         guard !title.isEmpty else {
-            let q = "assignmentName=&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Assignment%20name%20is%20required"
+            let q =
+                "assignmentName=&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Assignment%20name%20is%20required"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
@@ -52,7 +50,7 @@ extension PublishedAssignmentRoutes {
             (try? JSONSerialization.jsonObject(with: assignmentNotebookRaw)) != nil
         else {
             let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Assignment%20notebook%20(.ipynb)%20is%20required%20and%20must%20be%20valid%20JSON"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
@@ -65,13 +63,13 @@ extension PublishedAssignmentRoutes {
         )
         guard !resolved.data.isEmpty else {
             let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Solution%20notebook%20(.ipynb)%20is%20required%20for%20validation"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
         guard try setupHasAnyTestEntries(manifestJSON: setup.manifest) else {
             let q =
-                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
+                "assignmentName=\(urlEncode(title))&dueAt=\(urlEncode(form.dueAtRaw ?? ""))\(startsAtQuery)&error=Add%20at%20least%20one%20test%20script%20or%20pattern%20family%20in%20the%20suite%20list%20before%20saving"
             return req.redirect(to: "/instructor/\(idStr)/edit?\(q)")
         }
 
@@ -93,11 +91,14 @@ extension PublishedAssignmentRoutes {
 
         assignment.title = title
         assignment.dueAt = due
+        assignment.startsAt = starts
         assignment.deadlineOverrideActive = normalizedDeadlineOverrideAfterDueDateChange(
             dueAt: due,
             existingOverride: assignment.deadlineOverrideActive ?? false
         )
-        assignment.isOpen = false
+        // Editing returns the assignment to closed (re-validation gates the
+        // re-open / re-preview), matching the close-on-save contract.
+        assignment.visibility = .closed
 
         return try await enqueueValidationForEditedAssignment(
             req: req,
@@ -114,6 +115,7 @@ extension PublishedAssignmentRoutes {
     fileprivate struct SaveEditedAssignmentForm {
         let assignmentName: String?
         let dueAtRaw: String?
+        let startsAtRaw: String?
         let assignmentNotebookFile: File?
         let solutionNotebookFile: File?
     }
@@ -128,6 +130,7 @@ extension PublishedAssignmentRoutes {
         struct SaveBodyMany: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var suiteFiles: [File]?
@@ -136,6 +139,7 @@ extension PublishedAssignmentRoutes {
         struct SaveBodySingle: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
             var suiteFiles: File?
@@ -156,12 +160,17 @@ extension PublishedAssignmentRoutes {
             try multipartTextField(named: ["dueAt"], from: req)
             ?? bodyMany?.dueAt
             ?? bodySingle?.dueAt
+        let startsAtRaw =
+            try multipartTextField(named: ["startsAt"], from: req)
+            ?? bodyMany?.startsAt
+            ?? bodySingle?.startsAt
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
 
         return SaveEditedAssignmentForm(
             assignmentName: assignmentName,
             dueAtRaw: dueAtRaw,
+            startsAtRaw: startsAtRaw,
             assignmentNotebookFile: assignmentNotebookFile,
             solutionNotebookFile: solutionNotebookFile
         )

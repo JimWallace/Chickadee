@@ -172,6 +172,69 @@ final class AssignmentHelpersManifestTests {
         #expect(props.testSuites.first?.dependsOn.isEmpty ?? true)
     }
 
+    // Regression: deleting one script must never wipe the manifest's
+    // sections list, the surviving entries' sectionID membership, or the
+    // assignment-scope globals.  Previously `updateManifestRemovingScript`
+    // rebuilt the manifest without forwarding any of these, so a single
+    // delete dropped every section.
+    @Test func updateManifestRemovingScriptPreservesSectionsAndMembership() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-1"),
+                ConfiguredSuiteEntry(
+                    script: "02_release.py", tier: "release", order: 2,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-2"),
+            ],
+            includeMakefile: false,
+            sections: [
+                TestSuiteSection(id: "sec-1", name: "Question 1"),
+                TestSuiteSection(id: "sec-2", name: "Question 2"),
+            ],
+            globalVariables: [FamilyVariable(name: "limit", value: .int(5))]
+        )
+
+        let updated = try #require(
+            updateManifestRemovingScript(manifestJSON: original, filename: "01_public.py")
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.map(\.script) == ["02_release.py"])
+        // Both sections survive even though one was emptied by the delete.
+        #expect(props.sections.map(\.id) == ["sec-1", "sec-2"])
+        // The surviving entry keeps its section membership.
+        #expect(props.testSuites.first?.sectionID == "sec-2")
+        // Assignment-scope globals are untouched.
+        #expect(props.globalVariables.map(\.name) == ["limit"])
+    }
+
+    @Test func updateManifestAddingScriptPreservesSections() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-1")
+            ],
+            includeMakefile: false,
+            sections: [TestSuiteSection(id: "sec-1", name: "Question 1")]
+        )
+
+        let updated = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)
+            )
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.map(\.script).sorted() == ["01_public.py", "02_public.py"])
+        #expect(props.sections.map(\.id) == ["sec-1"])
+        #expect(props.testSuites.first(where: { $0.script == "01_public.py" })?.sectionID == "sec-1")
+    }
+
     @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")
@@ -245,6 +308,53 @@ final class AssignmentHelpersManifestTests {
         #expect(suites[0]["dependsOn"] == nil, "Empty dependencies should be omitted")
         #expect(suites[1]["points"] as? Int == 4)
         #expect(suites[1]["name"] as? String == "Release tests")
+    }
+
+    // PR4: a raw script's instructor hint persists onto its `TestSuiteEntry`
+    // (emitted only when non-empty) and round-trips through the manifest, so
+    // the PR2 display-time join surfaces it on failure.
+    @Test func makeWorkerManifestJSONEmitsRawScriptHintAndRoundTrips() throws {
+        let manifest = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "publictest_a.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, hint: "read the docstring"),
+                ConfiguredSuiteEntry(
+                    script: "publictest_b.py", tier: "public", order: 2,
+                    dependsOn: [], points: 1, displayName: nil, hint: nil),
+            ],
+            includeMakefile: false
+        )
+
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(manifest.utf8)) as? [String: Any])
+        let suites = try #require(object["testSuites"] as? [[String: Any]])
+        let byScript = Dictionary(uniqueKeysWithValues: suites.map { ($0["script"] as? String ?? "", $0) })
+        #expect(byScript["publictest_a.py"]?["hint"] as? String == "read the docstring")
+        #expect(byScript["publictest_b.py"]?["hint"] == nil, "Absent hint must be omitted from the entry")
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(manifest.utf8))
+        let entryByScript = Dictionary(uniqueKeysWithValues: props.testSuites.map { ($0.script, $0) })
+        #expect(entryByScript["publictest_a.py"]?.hint == "read the docstring")
+        #expect(entryByScript["publictest_b.py"]?.hint == nil)
+    }
+
+    // PR4: `GET /suite` (buildSuitePayload) reads a raw script's hint back off
+    // the manifest so the editor round-trips it.
+    @Test func buildSuitePayloadPopulatesScriptHintFromManifest() throws {
+        let manifest = """
+            {
+              "schemaVersion": 1,
+              "testSuites": [
+                { "tier": "public", "script": "publictest_a.py", "hint": "mind the boundary" },
+                { "tier": "public", "script": "publictest_b.py" }
+              ]
+            }
+            """
+        let payload = buildSuitePayload(fromManifest: manifest)
+        #expect(payload.items.count == 2)
+        #expect(payload.items[0].script?.hint == "mind the boundary")
+        #expect(payload.items[1].script?.hint == nil)
     }
 
     @Test func buildSuiteEntriesUsesExplicitSuiteConfigOrderingAndMetadata() throws {

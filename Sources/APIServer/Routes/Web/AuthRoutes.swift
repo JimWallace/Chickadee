@@ -13,20 +13,34 @@
 //   POST /register   → create account (first user becomes admin), redirect to / (local/dual only)
 //   POST /logout     → clear session, redirect to /login
 
+import CSRF
 import Core
 import Fluent
 import Foundation
 import Vapor
 
 struct AuthRoutes: RouteCollection {
+    let csrf: CSRF
+
     func boot(routes: RoutesBuilder) throws {
+        // Login and register are CSRF-protected (defends against login-CSRF).
         // Tight per-endpoint body limits on the public auth POSTs: login and
         // register only carry two short form fields, so 8 KB is generous and
         // closes the OOM vector that the 10 MB global default leaves open.
-        routes.get("login", use: loginForm)
-        routes.on(.POST, "login", body: .collect(maxSize: "8kb"), use: login)
-        routes.get("register", use: registerForm)
-        routes.on(.POST, "register", body: .collect(maxSize: "8kb"), use: register)
+        let protected = routes.grouped(csrf)
+        protected.get("login", use: loginForm)
+        protected.on(.POST, "login", body: .collect(maxSize: "8kb"), use: login)
+        protected.get("register", use: registerForm)
+        protected.on(.POST, "register", body: .collect(maxSize: "8kb"), use: register)
+
+        // Logout is intentionally NOT CSRF-protected. A timed-out browser tab
+        // POSTs /logout?reason=timeout carrying the CSRF token minted when the
+        // page first loaded; by then the server-side session (and its CSRF
+        // secret) may be gone — reaped, expired, or already torn down by the
+        // idle-timeout middleware on another request — so the stale token fails
+        // validation and the user hits a 403 "Invalid CSRF token" instead of a
+        // clean logout. Logout CSRF is low risk (worst case: an unwanted
+        // sign-out) and the handler is fully idempotent, so it runs unconditionally.
         routes.post("logout", use: logout)
     }
 
@@ -39,19 +53,23 @@ struct AuthRoutes: RouteCollection {
             return req.redirect(to: "/")
         }
         let error = req.query[String.self, at: "error"]
+        let loggedOut = req.query[String.self, at: "loggedout"] != nil
         let authMode = req.application.authMode
 
-        // In SSO-only mode, start the SSO flow immediately so users do not
-        // need to click a button. Keep error states on /login so the message
-        // can be shown instead of creating a redirect loop.
-        if authMode == .sso, error == nil {
-            return req.redirect(to: "/auth/sso/start")
-        }
+        // Always render the login page — including in SSO-only mode, where it
+        // shows the "Login with UWaterloo" button. We deliberately do NOT
+        // auto-redirect into `/auth/sso/start`: auto-initiating SSO made logout
+        // look broken (IRA-PIA finding). Because the IdP keeps its own SSO
+        // session alive, landing on the app would silently re-authenticate
+        // instead of showing a logged-out page. Requiring an explicit click
+        // means logout visibly takes effect; the button still runs the full
+        // SSO flow (with `prompt=login` after a logout).
 
         return try await req.view.render(
             "login",
             LoginContext(
                 error: error,
+                loggedOut: loggedOut,
                 showLocalLogin: authMode != .sso,
                 showRegisterLink: authMode != .sso,
                 showSSOLogin: authMode != .local
@@ -125,12 +143,13 @@ struct AuthRoutes: RouteCollection {
         try await user.save(on: req.db)
 
         req.auth.login(user)
+        req.session.rotateID()  // session-fixation defense: fresh id on login
         req.session.authenticate(user)
         await AuditLogger.record(
             action: .loginSuccess,
             targetType: .auth,
             targetID: user.id?.uuidString,
-            metadata: ["username": user.username],
+            metadata: ["username": user.username, "method": "local"],
             actorOverride: user,
             on: req
         )
@@ -188,14 +207,23 @@ struct AuthRoutes: RouteCollection {
         // Note: two truly-simultaneous first registrations could both see count == 0.
         // This is acceptable for a single-server classroom deployment.
         let totalUsers = try await APIUser.query(on: req.db).count()
-        let role = totalUsers == 0 ? "admin" : "student"
+        let role = totalUsers == 0 ? UserRole.admin.rawValue : UserRole.student.rawValue
 
         let hash = try await req.password.async.hash(body.password)
         let user = APIUser(username: body.username, passwordHash: hash, role: role)
         try await user.save(on: req.db)
 
         req.auth.login(user)
+        req.session.rotateID()  // session-fixation defense: fresh id on login
         req.session.authenticate(user)
+        await AuditLogger.record(
+            action: .userRegistered,
+            targetType: .user,
+            targetID: user.id?.uuidString,
+            metadata: ["username": user.username, "role": role],
+            actorOverride: user,
+            on: req
+        )
         return try await postLoginRedirect(for: user, req: req)
     }
 
@@ -203,17 +231,50 @@ struct AuthRoutes: RouteCollection {
 
     @Sendable
     func logout(req: Request) async throws -> Response {
-        // Extract any SSO tokens stored at login time before clearing the session.
+        // The inactivity watchdog (idle-logout.js) posts `?reason=timeout` so the
+        // login page can explain why the user was signed out. A manual click on
+        // the nav button carries no reason and gets the neutral "signed out"
+        // confirmation. Either way the user lands back on /login (never silently
+        // re-authenticated) so it's obvious the session ended.
+        let isTimeout = req.query[String.self, at: "reason"] == "timeout"
+        let returnPath = isTimeout ? "/login?error=timeout" : "/login?loggedout=1"
+
+        // Audit the sign-out before the session is torn down (the actor is still
+        // resolvable from the live session here).
+        if let user = req.auth.get(APIUser.self) {
+            await AuditLogger.record(
+                action: .logout,
+                targetType: .auth,
+                targetID: user.id?.uuidString,
+                metadata: ["username": user.username, "reason": isTimeout ? "timeout" : "manual"],
+                actorOverride: user,
+                on: req
+            )
+        }
+
+        // Capture any SSO tokens stashed at login before tearing the session
+        // down — they're needed below to revoke at the IdP and to build the
+        // end-session redirect.
         let accessToken = req.session.data["oidc_access_token"]
         let refreshToken = req.session.data["oidc_refresh_token"]
         let idToken = req.session.data["oidc_id_token"]
 
-        req.session.data["oidc_access_token"] = nil
-        req.session.data["oidc_refresh_token"] = nil
-        req.session.data["oidc_id_token"] = nil
-
+        // Destroy the server-side session, not just the auth marker.
+        // `destroy()` deletes the persisted Fluent session row and expires the
+        // cookie (Set-Cookie with a past date); `unauthenticate()` alone left
+        // a (markerless) row in place and re-issued a live session cookie, so
+        // the cookie only really went away when the browser was closed.
         req.auth.logout(APIUser.self)
-        req.session.unauthenticate(APIUser.self)
+        req.session.destroy()
+
+        // Mark the next sign-in for forced IdP re-authentication. Duo keeps its
+        // own SSO session alive, so without this an explicit logout is silently
+        // undone the moment the user hits any protected page (it re-auths with
+        // no prompt). `/auth/sso/start` consumes this marker and adds
+        // `prompt=login`. Set on whichever redirect we return below.
+        let reauthCookie = chickadeeReauthMarkerCookie(
+            isSecure: req.application.securityConfiguration.sessionCookieSecure
+        )
 
         let oidcConfig = req.application.oidcConfig
 
@@ -256,17 +317,21 @@ struct AuthRoutes: RouteCollection {
             if let base = req.application.securityConfiguration.publicBaseURL?.absoluteString
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             {
-                items.append(URLQueryItem(name: "post_logout_redirect_uri", value: base + "/login"))
+                items.append(URLQueryItem(name: "post_logout_redirect_uri", value: base + returnPath))
             }
             if !items.isEmpty {
                 components?.queryItems = items
             }
             if let url = components?.url?.absoluteString {
-                return req.redirect(to: url)
+                let response = req.redirect(to: url)
+                response.cookies[reauthMarkerCookieName] = reauthCookie
+                return response
             }
         }
 
-        return req.redirect(to: "/login")
+        let response = req.redirect(to: returnPath)
+        response.cookies[reauthMarkerCookieName] = reauthCookie
+        return response
     }
 }
 
@@ -350,6 +415,15 @@ private func revokeToken(
 /// - If the user still has no enrollments and open-enrollment courses exist, redirect to /enroll.
 /// - Otherwise redirect to /.
 func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response {
+    // Honor a pending OAuth authorize request the user was bounced to /login
+    // from (MCP browser flow).  Only same-origin paths are accepted, so this
+    // can't be abused as an open redirect.
+    if let returnTo = req.session.data[MCPOAuthRoutes.returnToSessionKey] {
+        req.session.data[MCPOAuthRoutes.returnToSessionKey] = nil
+        if returnTo.hasPrefix("/"), !returnTo.hasPrefix("//") {
+            return req.redirect(to: returnTo)
+        }
+    }
     guard let userID = user.id else { return req.redirect(to: "/") }
 
     let allCourses = try await APICourse.query(on: req.db)
@@ -400,17 +474,20 @@ private struct RegisterBody: Content {
 
 private struct LoginContext: Encodable {
     var error: String?
+    var loggedOut: Bool
     var showLocalLogin: Bool
     var showRegisterLink: Bool
     var showSSOLogin: Bool
 
     init(
         error: String? = nil,
+        loggedOut: Bool = false,
         showLocalLogin: Bool,
         showRegisterLink: Bool,
         showSSOLogin: Bool
     ) {
         self.error = error
+        self.loggedOut = loggedOut
         self.showLocalLogin = showLocalLogin
         self.showRegisterLink = showRegisterLink
         self.showSSOLogin = showSSOLogin

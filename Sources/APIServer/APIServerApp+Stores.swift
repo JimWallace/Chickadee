@@ -158,6 +158,34 @@ actor WorkerActivityStore {
     func hasRecentActivity(within seconds: TimeInterval, now: Date = Date()) -> Bool {
         entries.values.contains { now.timeIntervalSince($0.lastSeen) <= seconds }
     }
+
+    /// Non-mutating presence signal for proactive runner alerting.
+    ///
+    /// - `anyRecent`: at least one runner checked in within `graceSeconds`.
+    /// - `anyKnown`: at least one runner checked in within `rememberSeconds`,
+    ///   i.e. we still remember it existing this session.
+    ///
+    /// The pair lets the alert fire when a runner we've *seen* goes quiet past
+    /// the grace period — even with an empty queue — while staying silent when
+    /// no runner has ever connected (`anyKnown == false`). Unlike
+    /// `snapshotsSortedByRecent`, this does not prune the store, so evaluating
+    /// the alert never races the dashboard's pruning. `rememberSeconds` should
+    /// match that prune cutoff so a long-dead runner is "forgotten" at the same
+    /// point the dashboard drops it.
+    func runnerPresence(
+        graceSeconds: TimeInterval,
+        rememberSeconds: TimeInterval,
+        now: Date = Date()
+    ) -> (anyRecent: Bool, anyKnown: Bool) {
+        var anyRecent = false
+        var anyKnown = false
+        for entry in entries.values {
+            let age = now.timeIntervalSince(entry.lastSeen)
+            if age <= graceSeconds { anyRecent = true }
+            if age <= rememberSeconds { anyKnown = true }
+        }
+        return (anyRecent, anyKnown)
+    }
 }
 
 actor LocalRunnerAutoStartStore {

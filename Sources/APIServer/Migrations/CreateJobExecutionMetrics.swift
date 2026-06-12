@@ -1,6 +1,6 @@
 import Fluent
 
-struct CreateJobExecutionMetrics: AsyncMigration {
+struct CreateJobExecutionMetrics: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema(JobExecutionMetric.schema)
             .id()

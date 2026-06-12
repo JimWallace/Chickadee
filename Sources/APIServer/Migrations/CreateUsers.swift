@@ -3,7 +3,7 @@
 import Fluent
 import SQLKit
 
-struct CreateUsers: AsyncMigration {
+struct CreateUsers: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("users")
             .id()

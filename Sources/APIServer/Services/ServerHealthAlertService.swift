@@ -31,7 +31,7 @@ func evaluateHealthRules(
     results[.runnerOffline] = await evaluateRunnerOffline(
         on: application,
         pending: pendingState,
-        threshold: configuration.runnerOfflineSeconds,
+        offlineThreshold: configuration.runnerOfflineSeconds,
         now: now
     )
     results[.queueBackedUp] = evaluateQueueBackedUp(
@@ -59,7 +59,7 @@ struct PendingQueueState: Sendable {
 
 private func loadPendingQueueState(on application: Application, now: Date) async throws -> PendingQueueState {
     let pending = try await APISubmission.query(on: application.db)
-        .filter(\.$status == "pending")
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
         .all()
     let pendingCount = pending.count
     // Use the effective enqueue time (retestedAt ?? submittedAt) so a fresh
@@ -70,26 +70,69 @@ private func loadPendingQueueState(on application: Application, now: Date) async
     return PendingQueueState(pendingCount: pendingCount, oldestPendingAge: oldestAge)
 }
 
+/// How long a silent-but-known runner stays "remembered" by the runner-offline
+/// alert. Matches `WorkerActivityStore.snapshotsSortedByRecent`'s prune cutoff,
+/// so a runner is forgotten by the alert (auto-resolving it) at the same moment
+/// the admin dashboard drops it.
+let runnerPresenceRememberSeconds: TimeInterval = 3600
+
+/// Runner presence as seen by the alert evaluator. Separated from the store so
+/// the firing decision is a pure, table-testable function.
+struct RunnerPresenceState: Sendable {
+    /// A runner checked in within the offline window.
+    let recentWithinOffline: Bool
+    /// We've seen at least one runner this session (still within the remember
+    /// window). Guards the rule so a server with no runners configured never
+    /// pages, and so a long-dead runner is forgotten (auto-resolves).
+    let anyKnownRunner: Bool
+}
+
+/// Decides the runner-offline rule purely from runner presence — queue state is
+/// not a gate. Fire when a runner we've seen this session has not checked in
+/// within `offlineSeconds`, regardless of whether jobs are waiting. The
+/// `anyKnownRunner` guard keeps a runner-less deployment quiet and lets a
+/// long-dead runner auto-resolve once it ages out of the remember window. The
+/// pending count is surfaced as context but never decides firing.
+func decideRunnerOffline(
+    pending: PendingQueueState,
+    presence: RunnerPresenceState,
+    offlineSeconds: TimeInterval
+) -> RuleEvaluation {
+    guard presence.anyKnownRunner, !presence.recentWithinOffline else { return .ok }
+    var details: [String: String] = [
+        "pending_count": String(pending.pendingCount),
+        "runner_offline_threshold_seconds": String(Int(offlineSeconds)),
+    ]
+    if let age = pending.oldestPendingAge {
+        details["oldest_pending_age_seconds"] = String(Int(age))
+    }
+    let pendingNote = pending.pendingCount > 0 ? "; \(pending.pendingCount) submission(s) pending" : ""
+    return RuleEvaluation(
+        isFiring: true,
+        summary: "No runner heartbeat in \(Int(offlineSeconds))s\(pendingNote)",
+        details: details
+    )
+}
+
 private func evaluateRunnerOffline(
     on application: Application,
     pending: PendingQueueState,
-    threshold: TimeInterval,
+    offlineThreshold: TimeInterval,
     now: Date
 ) async -> RuleEvaluation {
-    guard pending.pendingCount > 0 else { return .ok }
-    let hasRecentRunner = await application.workerActivityStore.hasRecentActivity(
-        within: threshold,
+    let presence = await application.workerActivityStore.runnerPresence(
+        graceSeconds: offlineThreshold,
+        rememberSeconds: runnerPresenceRememberSeconds,
         now: now
     )
-    if hasRecentRunner { return .ok }
-    return RuleEvaluation(
-        isFiring: true,
-        summary: "No runner heartbeat in \(Int(threshold))s; \(pending.pendingCount) submission(s) pending",
-        details: [
-            "pending_count": String(pending.pendingCount),
-            "runner_offline_threshold_seconds": String(Int(threshold)),
-            "oldest_pending_age_seconds": pending.oldestPendingAge.map { String(Int($0)) } ?? "n/a",
-        ]
+    let state = RunnerPresenceState(
+        recentWithinOffline: presence.anyRecent,
+        anyKnownRunner: presence.anyKnown
+    )
+    return decideRunnerOffline(
+        pending: pending,
+        presence: state,
+        offlineSeconds: offlineThreshold
     )
 }
 
@@ -274,10 +317,13 @@ struct AlertFiringRecord: Encodable, Sendable {
 
 // MARK: - Monitor actor
 
+/// Holds the alert rule state machine, recent-firings buffer, and webhook
+/// override.  The periodic *driving* of `sweep` lives in a separate
+/// `PeriodicSweepMonitor` (see `serverHealthAlertSweepMonitor`); this actor
+/// owns only the per-sweep logic and its mutable state.
 actor ServerHealthAlertMonitor {
     static let recentFiringsCap = 50
 
-    private var task: Task<Void, Never>?
     private var ruleStates: [HealthRule: AlertRuleState] = [:]
     private var recentFirings: [AlertFiringRecord] = []
     private var webhookURLOverride: String?
@@ -432,30 +478,6 @@ actor ServerHealthAlertMonitor {
         }
     }
 
-    func start(application: Application) {
-        guard task == nil else { return }
-        guard configuration.enabled else {
-            application.logger.info("server_health_alerts_disabled")
-            return
-        }
-        let intervalNs = UInt64(max(configuration.checkIntervalSeconds, 5) * 1_000_000_000)
-        task = Task {
-            while !Task.isCancelled {
-                await self.sweep(application: application)
-                do {
-                    try await Task.sleep(nanoseconds: intervalNs)
-                } catch {
-                    break
-                }
-            }
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-    }
-
     private func appendFiring(_ record: AlertFiringRecord) {
         recentFirings.insert(record, at: 0)
         if recentFirings.count > Self.recentFiringsCap {
@@ -519,24 +541,28 @@ func writeAlertWebhookURLToDisk(value: String, filePath: String) {
 
 // MARK: - Lifecycle handler + Application accessors
 
+/// Not the generic `PeriodicSweepLifecycleHandler`: boot is gated on the
+/// alerts-enabled flag (with its own log line when disabled).
 struct ServerHealthAlertLifecycleHandler: LifecycleHandler {
     func didBoot(_ application: Application) throws {
-        let monitor = application.serverHealthAlertMonitor
-        Task {
-            await monitor.start(application: application)
+        guard application.serverHealthAlertConfiguration.enabled else {
+            application.logger.info("server_health_alerts_disabled")
+            return
         }
+        application.serverHealthAlertSweepMonitor.start(application: application)
     }
 
     func shutdown(_ application: Application) {
-        let monitor = application.serverHealthAlertMonitor
-        Task {
-            await monitor.stop()
-        }
+        application.serverHealthAlertSweepMonitor.stop()
     }
 }
 
 struct ServerHealthAlertMonitorKey: StorageKey {
     typealias Value = ServerHealthAlertMonitor
+}
+
+struct ServerHealthAlertSweepMonitorKey: StorageKey {
+    typealias Value = PeriodicSweepMonitor
 }
 
 struct ServerHealthAlertWebhookURLFilePathKey: StorageKey {
@@ -555,6 +581,27 @@ extension Application {
             return created
         }
         set { storage[ServerHealthAlertMonitorKey.self] = newValue }
+    }
+
+    /// Drives `serverHealthAlertMonitor.sweep` on the configured cadence.
+    /// No `runImmediately` boot sweep — the loop's first iteration sweeps
+    /// right away, matching the historical actor loop, and there was never
+    /// an extra detached boot sweep for this service.
+    var serverHealthAlertSweepMonitor: PeriodicSweepMonitor {
+        get {
+            if let existing = storage[ServerHealthAlertSweepMonitorKey.self] { return existing }
+            let created = PeriodicSweepMonitor(
+                name: "Server health alert",
+                interval: serverHealthAlertConfiguration.checkIntervalSeconds,
+                minimumInterval: 5,
+                runImmediately: false
+            ) { application in
+                await application.serverHealthAlertMonitor.sweep(application: application)
+            }
+            storage[ServerHealthAlertSweepMonitorKey.self] = created
+            return created
+        }
+        set { storage[ServerHealthAlertSweepMonitorKey.self] = newValue }
     }
 
     var alertWebhookURLFilePath: String {

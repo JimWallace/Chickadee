@@ -3,7 +3,9 @@ import Foundation
 
 enum DetectedSubmissionKind {
     case pythonScript
-    case jupyterNotebook
+    // Carries the raw bytes + already-parsed notebook JSON so the handler
+    // doesn't re-read or re-parse the same file.
+    case jupyterNotebook(data: Data, notebook: [String: Any])
     case unsupported(String)
 }
 
@@ -130,11 +132,13 @@ struct SubmissionNormalizer {
                 workspaceDirectory: workspaceDirectory,
                 progress: &progress
             )
-        case .jupyterNotebook:
+        case .jupyterNotebook(let data, let notebook):
             try handleJupyterNotebook(
                 fileURL: fileURL,
                 fileRelativePath: fileRelativePath,
                 workspaceDirectory: workspaceDirectory,
+                data: data,
+                notebook: notebook,
                 progress: &progress
             )
         case .unsupported(let reason):
@@ -176,10 +180,10 @@ struct SubmissionNormalizer {
         fileURL: URL,
         fileRelativePath: String,
         workspaceDirectory: URL,
+        data: Data,
+        notebook: [String: Any],
         progress: inout NormalizationProgress
     ) throws {
-        let data = try Data(contentsOf: fileURL)
-        let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
         let extracted = try notebookExtractor.extractPythonSource(
             from: notebook,
             filename: fileURL.lastPathComponent
@@ -194,11 +198,30 @@ struct SubmissionNormalizer {
         )
         try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)
         progress.producedPythonFiles.append(destinationURL)
+
+        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)
+
+        // Sidecar: the introspectable source (real module-level defs) so
+        // student_source()-based structural / AST NotebookChecks work — the
+        // executable module is exec(compile())-wrapped and not AST-introspectable.
+        // Written for the first root-level module, mirroring .chickadee_student_module.
+        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {
+            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + ".source.py"
+            try extracted.introspectableSource.write(
+                to: workspaceDirectory.appendingPathComponent(sidecarName),
+                atomically: true,
+                encoding: .utf8
+            )
+            try sidecarName.write(
+                to: workspaceDirectory.appendingPathComponent(".chickadee_student_source"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+
         progress.preferredStudentModule =
             progress.preferredStudentModule
-            ?? preferredModuleIfRootLevel(
-                relativePath(of: destinationURL, under: workspaceDirectory)
-            )
+            ?? preferredModuleIfRootLevel(moduleRelative)
 
         // v0.4.114: also preserve the original notebook bytes
         // alongside the flattened .py so source-level checks
@@ -316,14 +339,15 @@ struct SubmissionNormalizer {
             guard notebookExtractor.isNotebookJSONObject(notebook) else {
                 throw SubmissionNormalizationError.invalidPythonSubmission(fileURL.lastPathComponent)
             }
-            return .jupyterNotebook
+            return .jupyterNotebook(data: data, notebook: notebook)
         }
 
         if mimeType == "application/json" {
             let data = try Data(contentsOf: fileURL)
             let notebook = try notebookExtractor.notebookJSONObject(from: data, filename: fileURL.lastPathComponent)
             return notebookExtractor.isNotebookJSONObject(notebook)
-                ? .jupyterNotebook : .unsupported("content is JSON but not a Jupyter notebook")
+                ? .jupyterNotebook(data: data, notebook: notebook)
+                : .unsupported("content is JSON but not a Jupyter notebook")
         }
 
         if mimeType.hasPrefix("text/") || mimeType == "application/x-empty" {

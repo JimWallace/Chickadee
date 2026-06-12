@@ -34,7 +34,7 @@ extension DraftAssignmentRoutes {
     @Sendable
     func getDraftSuite(req: Request) async throws -> Response {
         let setup = try await loadDraftSetup(req)
-        let payload = buildSuitePayload(fromManifest: setup.manifest)
+        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
@@ -57,110 +57,22 @@ extension DraftAssignmentRoutes {
 
         try await applySuiteEdit(setup: setup, body: body, on: req.db)
 
-        let payload = buildSuitePayload(fromManifest: setup.manifest)
+        let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
 
-    // MARK: - PUT /instructor/new/draft/families
-
-    @Sendable
-    func putDraftPatternFamilies(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
-
-        let families: [PatternFamily]
-        do {
-            families = try req.content.decode([PatternFamily].self)
-        } catch {
-            throw WebAssignmentError.invalidParameter(
-                name: "request body",
-                reason: "Invalid pattern family list: \(error.localizedDescription)")
-        }
-
-        try await applyPatternFamiliesEdit(setup: setup, families: families, on: req.db)
-
-        return try jsonResponse(families)
-    }
-
-    // MARK: - PUT /instructor/new/draft/checks
-    //
-    // Draft-scoped sibling of `putNotebookChecks` (parity PR 2 of #433).
-    // Same body / response shape; the only differences are the resolver
-    // (`loadDraftSetup` reading `?draftID=…`) and the absence of the
-    // `scheduleValidationAfterSuiteEdit` call — drafts don't enter the
-    // validation pipeline until publish.
-
-    @Sendable
-    func putDraftNotebookChecks(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
-
-        let checks: [NotebookCheck]
-        do {
-            checks = try req.content.decode([NotebookCheck].self)
-        } catch {
-            throw WebAssignmentError.invalidParameter(
-                name: "request body",
-                reason: "Invalid notebook check list: \(error.localizedDescription)")
-        }
-
-        try await applyNotebookChecksEdit(setup: setup, checks: checks, on: req.db)
-
-        return try jsonResponse(checks)
-    }
+    // Pattern families + notebook checks are written through PUT /suite
+    // (`putDraftSuite` above).  The dedicated PUT /draft/families and
+    // PUT /draft/checks handlers were retired in v0.4.227 — see the
+    // matching note on the published side.
 
     // MARK: - POST /instructor/new/draft/scripts
 
     @Sendable
     func createDraftScript(req: Request) async throws -> Response {
         let setup = try await loadDraftSetup(req)
-
-        struct CreateBody: Content {
-            var filename: String
-            var content: String
-            var tier: String?
-            var points: Int?
-            var isTest: Bool?
-        }
-        let body = try req.content.decode(CreateBody.self)
-
-        let cleaned = sanitizeSuiteFilename(body.filename)
-        guard !cleaned.isEmpty, cleaned == body.filename else {
-            throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
-        }
-
-        if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-            throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
-        }
-
-        // Slice 1: prepend assignment-scope variables (section vars get
-        // applied on the next suite-edit save once the new entry's
-        // sectionID is known).
-        let inlinedContent: String = {
-            guard let manifest = setup.decodedManifest()
-
-            else { return body.content }
-            return TestScriptVariablePrepender.applyForRawScript(
-                filename: cleaned,
-                content: body.content,
-                manifest: manifest
-            )
-        }()
-        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlinedContent)
-
-        let tier = normalizeTier(body.tier, isTest: body.isTest)
-        // v0.4.105: allow 0-mark tests for guards (see AssignmentRoutes+Editor).
-        let points = max(0, body.points ?? 1)
-        let shouldTest = tier != "support"
-
-        if shouldTest {
-            let entry = ConfiguredSuiteEntry(
-                script: cleaned, tier: tier, order: 0,
-                dependsOn: [], points: points, displayName: nil
-            )
-            if let updated = updateManifestAddingScript(manifestJSON: setup.manifest, entry: entry) {
-                setup.manifest = updated
-                try await setup.save(on: req.db)
-            }
-        }
+        let body = try req.content.decode(CreateScriptBody.self)
+        let result = try await createScriptInSetup(setup: setup, body: body, on: req.db)
 
         struct CreatedResponse: Content {
             var filename: String
@@ -169,13 +81,14 @@ extension DraftAssignmentRoutes {
             var isTest: Bool
         }
         // Note: no editURL yet — the draft doesn't have a stable assignment
-        // route.  The create page re-renders with the updated suite state
-        // to pick up the new row.
+        // route — and no shared-dir re-extraction (a draft has no students).
+        // The create page re-renders with the updated suite state to pick up
+        // the new row.
         let resp = CreatedResponse(
-            filename: cleaned,
-            tier: tier,
-            points: points,
-            isTest: shouldTest
+            filename: result.filename,
+            tier: result.tier,
+            points: result.points,
+            isTest: result.isTest
         )
         return try await resp.encodeResponse(status: .created, for: req)
     }
@@ -186,35 +99,7 @@ extension DraftAssignmentRoutes {
     func deleteDraftScript(req: Request) async throws -> HTTPStatus {
         let setup = try await loadDraftSetup(req)
         let filename = try safeScriptFilename(from: req)
-
-        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
-        }
-
-        if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-            throw WebAssignmentError.conflict(
-                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor."
-            )
-        }
-
-        let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
-        guard dependents.isEmpty else {
-            throw WebAssignmentError.conflict(
-                reason:
-                    "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
-            )
-        }
-
-        do {
-            try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
-        } catch ScriptZipError.zipFailed {
-            throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
-        }
-
-        if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
-            setup.manifest = updated
-            try await setup.save(on: req.db)
-        }
+        try await deleteScriptFromSetup(setup: setup, filename: filename, on: req.db)
         return .noContent
     }
 

@@ -45,13 +45,19 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     public let generatedBy: String?  // pattern family id, nil for hand-written scripts
     public let generatedByCheck: String?  // notebook check id, nil otherwise
     public let sectionID: String?  // id into TestProperties.sections, or nil = ungrouped
+    // Optional instructor hint shown as a "💡 Hint" callout when this test
+    // fails (surfaced at results-display time). For generated entries the
+    // hint comes from the family case / notebook check spec instead; this
+    // field carries the hint for hand-written raw scripts. nil = none.
+    public let hint: String?
 
     public init(
         tier: TestTier, script: String, name: String? = nil,
         dependsOn: [String] = [], points: Int = 1,
         generatedBy: String? = nil,
         generatedByCheck: String? = nil,
-        sectionID: String? = nil
+        sectionID: String? = nil,
+        hint: String? = nil
     ) {
         self.tier = tier
         self.script = script
@@ -61,6 +67,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         self.generatedBy = generatedBy
         self.generatedByCheck = generatedByCheck
         self.sectionID = sectionID
+        self.hint = hint
     }
 
     public init(from decoder: Decoder) throws {
@@ -73,6 +80,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedBy = try c.decodeIfPresent(String.self, forKey: .generatedBy)
         generatedByCheck = try c.decodeIfPresent(String.self, forKey: .generatedByCheck)
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
+        hint = try c.decodeIfPresent(String.self, forKey: .hint)
     }
 
     /// True if this entry was produced by a pattern family or a notebook
@@ -82,6 +90,10 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedBy != nil || generatedByCheck != nil
     }
 }
+
+// `skippedPrerequisiteMessage(prerequisite:)` moved down into RunnerCore (the
+// wasm-safe leaf shared by both runners). Reached here via `import Core`, which
+// re-exports RunnerCore — so existing call sites are unchanged.
 
 /// A named grouping of test suite entries.  Sections drive visual
 /// grouping on the instructor suite editor and the student submission
@@ -103,9 +115,11 @@ public struct TestSuiteSection: Codable, Equatable, Sendable {
     /// Slice 4 of #461 — per-student expressions in section scope.
     /// Evaluated per-student at notebook first-open alongside global
     /// expressions; results substitute into `{{name}}` placeholders.
-    /// Stays literal-only for pattern-family `$name` references and
-    /// raw-script inlining (matches Slice 2's notebooks-only constraint
-    /// for personalization expressions).
+    /// Like `globalExpressions`, a section expression is never inlined
+    /// into a raw test script, but it MAY back a pattern-family
+    /// per-student reference (`$name` arg / `expectedVarRef`), whose
+    /// value is delivered to grading at dispatch time via
+    /// `Job.personalizedInputs` / the browser seed endpoint.
     public let expressions: [PersonalizationExpression]
 
     public init(
@@ -167,16 +181,29 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// tests so grading scripts don't confuse it with the student's submission.
     /// Nil when the assignment has no notebook template.
     public let starterNotebook: String?
-    /// Pattern families whose expansion produced some of the entries in
-    /// `testSuites`.  The runner ignores this field entirely — families are
-    /// a save-time authoring concern; by the time the zip reaches the runner
-    /// every generated `.py` is an ordinary test script.
-    public let patternFamilies: [PatternFamily]
-    /// Notebook checks whose expansion produced some of the entries in
-    /// `testSuites`.  Same save-time-only model as `patternFamilies`:
-    /// stripped from the runner-facing manifest by `runnerSanitized()`
-    /// so older runners never see new `NotebookCheckKind` cases.
-    public let notebookChecks: [NotebookCheck]
+    /// The unified list of instructor-authored test-item specs — pattern
+    /// families and notebook checks both — that expand into some of the
+    /// entries in `testSuites`.  This is the single source of truth; the
+    /// `patternFamilies` / `notebookChecks` accessors below are derived
+    /// views kept for the many existing read sites.  The runner ignores
+    /// this field entirely (families and checks are a save-time authoring
+    /// concern; by the time the zip reaches the runner every generated
+    /// `.py` is an ordinary test script), and `runnerSanitized()` empties
+    /// it so older runners never decode a `PatternKind` / `NotebookCheckKind`
+    /// case they don't know.
+    ///
+    /// Legacy manifests (pre-`testItems`) carry separate `patternFamilies`
+    /// and `notebookChecks` arrays; `init(from:)` migrates them into
+    /// `testItems` on read, and `encode(to:)` mirrors both legacy keys back
+    /// out (derived from `testItems`) so cross-version readers stay happy.
+    public let testItems: [TestItem]
+
+    /// Pattern-family specs, derived from `testItems`.  Order follows the
+    /// item list.  A save-time authoring concern only.
+    public var patternFamilies: [PatternFamily] { testItems.compactMap(\.family) }
+    /// Notebook-check specs, derived from `testItems`.  Order follows the
+    /// item list.  A save-time authoring concern only.
+    public var notebookChecks: [NotebookCheck] { testItems.compactMap(\.check) }
     /// Ordered list of sections that group `testSuites` for display only.
     /// Empty = "no grouping"; the student and instructor UIs render
     /// identically to the pre-sections layout.  Entries in `testSuites`
@@ -206,13 +233,52 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// values substitute into starter-notebook `{{name}}` placeholders
     /// alongside literal `globalVariables`.
     ///
-    /// Slice 2 scope: notebooks only.  Expression results are NOT
-    /// inlined into raw test scripts (those use the v0.4.156 env-var
-    /// seed contract for any per-student logic) and are NOT used for
-    /// pattern-family `$name` references (case args want save-time
-    /// literals).  Names cannot clash with any `globalVariables`,
-    /// `sections[].variables`, or the reserved name `seed`.
+    /// Expression results are NOT inlined into raw test scripts (those use
+    /// the v0.4.156 env-var seed contract for any per-student logic) and are
+    /// NOT substituted into them at save time.  They ARE, however, available
+    /// to pattern-family per-student references: a case's `$name` arg or
+    /// `expectedVarRef` may point at an expression row, and the resolved
+    /// value is delivered to grading at dispatch time via
+    /// `Job.personalizedInputs` / the browser seed endpoint (see
+    /// `docs/personalization-pattern-families.md`).  Names cannot clash with
+    /// any `globalVariables`, `sections[].variables`, or the reserved name
+    /// `seed`.
     public let globalExpressions: [PersonalizationExpression]
+
+    /// True when the manifest declares any per-student `=` expression, global
+    /// or section-scoped.  Expressions are the only personalization inputs
+    /// that need a per-(student, assignment) seed to resolve — use this to
+    /// decide whether a seed must be looked up.  Ask `hasPersonalization`
+    /// instead when the question is "is there anything to substitute at all".
+    public var hasExpressions: Bool {
+        !globalExpressions.isEmpty || sections.contains { !$0.expressions.isEmpty }
+    }
+
+    /// True when the manifest declares anything personalization substitutes —
+    /// literal variables or per-student expressions, global or section-scoped.
+    /// Strictly broader than `hasExpressions`: a literal-only assignment still
+    /// substitutes `{{name}}` placeholders, it just needs no seed.
+    public var hasPersonalization: Bool {
+        hasExpressions || !globalVariables.isEmpty || sections.contains { !$0.variables.isEmpty }
+    }
+
+    /// Instructor-authored achievements / goals / awards for this assignment —
+    /// the generalized form of the hardcoded badge + class-achievement system.
+    /// Server-evaluated and display-only; `runnerSanitized()` strips them so a
+    /// runner never decodes an `AchievementKind` it doesn't know (same rationale
+    /// as `patternFamilies` / `notebookChecks`).
+    public let achievements: [Achievement]
+
+    /// IDs of built-in awards (`BuiltInAchievements`) the instructor has disabled
+    /// for this assignment.  Empty = all built-ins active (the default).  The
+    /// award + display paths skip any id listed here.  Stripped from the
+    /// runner-facing manifest (awards are server-side) via the memberwise default.
+    public let disabledBuiltInAwardIDs: [String]
+    /// True once the instructor has saved the unified Achievements table.  Until
+    /// then the editor merges the built-in defaults in for display; after, the
+    /// manifest's `achievements` is authoritative (so a removed built-in stays
+    /// removed).  Stripped from the runner manifest via the memberwise default.
+    public let builtInAchievementsSeeded: Bool
 
     public init(
         schemaVersion: Int = 1,
@@ -226,7 +292,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
         notebookChecks: [NotebookCheck] = [],
         sections: [TestSuiteSection] = [],
         globalVariables: [FamilyVariable] = [],
-        globalExpressions: [PersonalizationExpression] = []
+        globalExpressions: [PersonalizationExpression] = [],
+        achievements: [Achievement] = [],
+        disabledBuiltInAwardIDs: [String] = [],
+        builtInAchievementsSeeded: Bool = false,
+        testItems: [TestItem]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.gradingMode = gradingMode
@@ -235,11 +305,19 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.timeLimitSeconds = timeLimitSeconds
         self.makefile = makefile
         self.starterNotebook = starterNotebook
-        self.patternFamilies = patternFamilies
-        self.notebookChecks = notebookChecks
+        // `testItems` wins when supplied; otherwise synthesize it from the
+        // legacy `patternFamilies` / `notebookChecks` arguments (families
+        // first, then checks) so every existing call site keeps working.
+        self.testItems =
+            testItems
+            ?? (patternFamilies.map(TestItem.family)
+                + notebookChecks.map(TestItem.check))
         self.sections = sections
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
+        self.achievements = achievements
+        self.disabledBuiltInAwardIDs = disabledBuiltInAwardIDs
+        self.builtInAchievementsSeeded = builtInAchievementsSeeded
     }
 
     public init(from decoder: Decoder) throws {
@@ -251,24 +329,85 @@ public struct TestProperties: Codable, Equatable, Sendable {
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
         makefile = try c.decodeIfPresent(MakefileConfig.self, forKey: .makefile)
         starterNotebook = try c.decodeIfPresent(String.self, forKey: .starterNotebook)
-        patternFamilies = try c.decodeIfPresent([PatternFamily].self, forKey: .patternFamilies) ?? []
-        notebookChecks = try c.decodeIfPresent([NotebookCheck].self, forKey: .notebookChecks) ?? []
+        // `testItems` is the canonical unified list when present.  A legacy
+        // manifest carries the separate `patternFamilies` / `notebookChecks`
+        // arrays instead — migrate them on read.  (An explicitly-empty
+        // `testItems` is treated the same as absent so an old + new pair
+        // that disagree never silently drops specs.)
+        let decodedItems = try c.decodeIfPresent([TestItem].self, forKey: .testItems) ?? []
+        if decodedItems.isEmpty {
+            let fams = try c.decodeIfPresent([PatternFamily].self, forKey: .patternFamilies) ?? []
+            let checks = try c.decodeIfPresent([NotebookCheck].self, forKey: .notebookChecks) ?? []
+            testItems = fams.map(TestItem.family) + checks.map(TestItem.check)
+        } else {
+            testItems = decodedItems
+        }
         sections = try c.decodeIfPresent([TestSuiteSection].self, forKey: .sections) ?? []
         globalVariables = try c.decodeIfPresent([FamilyVariable].self, forKey: .globalVariables) ?? []
         globalExpressions =
             try c.decodeIfPresent(
                 [PersonalizationExpression].self,
                 forKey: .globalExpressions) ?? []
+        achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
+        disabledBuiltInAwardIDs =
+            try c.decodeIfPresent([String].self, forKey: .disabledBuiltInAwardIDs) ?? []
+        builtInAchievementsSeeded =
+            try c.decodeIfPresent(Bool.self, forKey: .builtInAchievementsSeeded) ?? false
+    }
+
+    // `patternFamilies` / `notebookChecks` are computed (derived from
+    // `testItems`) so they're absent from the synthesized `CodingKeys`;
+    // declare the keys explicitly so `init(from:)` can still read the
+    // legacy arrays and `encode(to:)` can mirror them back out.
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case gradingMode
+        case requiredFiles
+        case testSuites
+        case timeLimitSeconds
+        case makefile
+        case starterNotebook
+        case testItems
+        case patternFamilies
+        case notebookChecks
+        case sections
+        case globalVariables
+        case globalExpressions
+        case achievements
+        case disabledBuiltInAwardIDs
+        case builtInAchievementsSeeded
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(schemaVersion, forKey: .schemaVersion)
+        try c.encode(gradingMode, forKey: .gradingMode)
+        try c.encode(requiredFiles, forKey: .requiredFiles)
+        try c.encode(testSuites, forKey: .testSuites)
+        try c.encode(timeLimitSeconds, forKey: .timeLimitSeconds)
+        try c.encodeIfPresent(makefile, forKey: .makefile)
+        try c.encodeIfPresent(starterNotebook, forKey: .starterNotebook)
+        try c.encode(testItems, forKey: .testItems)
+        // Mirror the legacy arrays (derived from `testItems`, so they can
+        // never drift) for cross-version readers that predate `testItems`.
+        try c.encode(patternFamilies, forKey: .patternFamilies)
+        try c.encode(notebookChecks, forKey: .notebookChecks)
+        try c.encode(sections, forKey: .sections)
+        try c.encode(globalVariables, forKey: .globalVariables)
+        try c.encode(globalExpressions, forKey: .globalExpressions)
+        try c.encode(achievements, forKey: .achievements)
+        try c.encode(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs)
+        try c.encode(builtInAchievementsSeeded, forKey: .builtInAchievementsSeeded)
     }
 
     /// Manifest view shipped to runners.  Pattern families and notebook
     /// checks are save-time authoring concerns — by the time the zip
     /// reaches the runner every generated `.py` is already an ordinary
-    /// test script — so both fields are stripped before encode.  Keeping
-    /// them in the payload would force every runner binary to know every
-    /// `PatternKind` / `NotebookCheckKind` case the server ever introduces
-    /// (a new raw value crashes the enum decoder), defeating rolling
-    /// deployments.
+    /// test script — so they are stripped before encode (which empties
+    /// the derived `testItems` list as well).  Keeping them in the payload
+    /// would force every runner binary to know every `PatternKind` /
+    /// `NotebookCheckKind` case the server ever introduces (a new raw value
+    /// crashes the enum decoder), defeating rolling deployments.
     public func runnerSanitized() -> TestProperties {
         TestProperties(
             schemaVersion: schemaVersion,
@@ -280,13 +419,24 @@ public struct TestProperties: Codable, Equatable, Sendable {
             starterNotebook: starterNotebook,
             patternFamilies: [],
             notebookChecks: [],
-            sections: sections,
+            // Expressions are a server-side authoring concern — both global
+            // AND section scope.  Their source is evaluated server-side per
+            // student; only the resolved values travel to grading (worker via
+            // `Job.personalizedInputs`, browser via the seed endpoint), and
+            // the runner reads neither `globalExpressions` nor
+            // `sections[].expressions`.  Strip every `PersonalizationExpression`
+            // from the runner-facing manifest so reference-solution source
+            // (e.g. `= solution.countAdults(...)`) never ships in the Job
+            // payload.  Section *variables* (literals) are kept for parity
+            // with `globalVariables`.
+            sections: sections.map { section in
+                TestSuiteSection(
+                    id: section.id, name: section.name,
+                    variables: section.variables, expressions: [])
+            },
             globalVariables: globalVariables,
-            // Slice 2: expressions are a server-side authoring concern.
-            // They never reach the runner — values are evaluated at
-            // notebook first-open and substituted into the student
-            // working copy before the runner ever sees the assignment.
-            globalExpressions: []
+            globalExpressions: [],
+            achievements: []
         )
     }
 }

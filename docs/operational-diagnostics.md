@@ -221,6 +221,15 @@ Environment flags:
   - default: `30`
 - `RUNNER_SNAPSHOT_RETENTION_DAYS`
   - default: `14`
+- `AUDIT_LOG_RETENTION_DAYS`
+  - default: `90`; `0` disables the audit-log reaper
+- `SUBMISSION_RETENTION_DAYS`
+  - default: `365`
+  - how long after a course is archived ("end of term") its student
+    submissions become eligible for purging on the admin **Retention** tab
+    (`/admin/retention`). Report-first: an admin triggers the purge manually;
+    this only controls when a course is flagged as eligible. See FIPPA /
+    UWaterloo TL55.
 - `RUNNER_ACTIVE_WINDOW_SECONDS`
   - default: `120`
 - `METRICS_RECENT_WINDOW_HOURS`

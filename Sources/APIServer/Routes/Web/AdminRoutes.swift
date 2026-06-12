@@ -12,12 +12,16 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 struct AdminRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
+        admin.get("users", use: usersPage)
+        admin.get("users-data", use: usersData)
+        admin.get("storage", use: storagePage)
         admin.get("runners", use: runners)
         admin.get("runners", ":runnerID", use: runnerDetail)
         admin.get("workers", use: workers)
@@ -26,6 +30,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
         admin.get("audit", use: auditPage)
+        admin.get("retention", use: retentionPage)
         admin.get("alerts", use: alertsPage)
         admin.post("alerts", "config", use: updateAlertsConfig)
         admin.post("alerts", "test", use: sendTestAlert)
@@ -43,13 +48,93 @@ struct AdminRoutes: RouteCollection {
         admin.post("users", ":userID", "delete", use: deleteUser)
         admin.post("users", ":userID", "enroll", use: adminEnrollUser)
         admin.post("users", ":userID", "unenroll", ":courseID", use: adminUnenrollUser)
+        admin.get("mcp", use: mcpPage)
+        admin.post("mcp", "accounts", use: createMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "token", use: mintMCPToken)
+        admin.post("mcp", "accounts", ":userID", "delete", use: deleteMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "enroll", use: enrollMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "unenroll", use: unenrollMCPAccount)
     }
 
     // MARK: - GET /admin
 
     @Sendable
     func dashboard(req: Request) async throws -> View {
-        let users = try await APIUser.query(on: req.db)
+        let workerRows = try await makeWorkerRows(req: req)
+        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
+
+        // Course management data — all three queries are independent so run in parallel.
+        async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
+        async let enrollmentsFetch = enrolledStudentCountsByCourse(on: req.db)
+        async let assignmentsFetch = assignmentCountsByCourse(on: req.db)
+        let (allCourses, enrollmentCounts, assignmentCounts) =
+            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
+        // Submission counts need the (active) course IDs, so they run after the
+        // course fetch resolves.
+        let activeCourseIDs = allCourses.filter { !$0.isArchived }.compactMap { $0.id }
+        let submissionCounts = try await SubmissionRetentionService.submissionCountsByCourse(
+            courseIDs: activeCourseIDs, on: req.db)
+        let bsSyncEnabled = req.application.brightSpaceClient != nil
+        // Archived courses move out of Overview and live on the Retention tab.
+        let iso = ISO8601DateFormatter()
+        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
+            guard let id = course.id, !course.isArchived else { return nil }
+            return AdminCourseRow(
+                id: id.uuidString,
+                code: course.code,
+                name: course.name,
+                isArchived: course.isArchived,
+                enrollmentMode: course.enrollmentMode.rawValue,
+                enrollmentCount: enrollmentCounts[id] ?? 0,
+                assignmentCount: assignmentCounts[id] ?? 0,
+                submissionCount: submissionCounts[id] ?? 0,
+                createdAt: course.createdAt.map { iso.string(from: $0) } ?? "—",
+                brightspaceOrgUnitID: course.brightspaceOrgUnitID,
+                brightspaceSyncEnabled: bsSyncEnabled
+            )
+        }
+
+        let ctx = AdminContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "overview",
+            workers: workerRows,
+            workerSecret: effectiveSecret,
+            courses: courseRows,
+            version: ChickadeeVersion.current
+        )
+        return try await req.view.render("admin", ctx)
+    }
+
+    // MARK: - GET /admin/users
+
+    @Sendable
+    func usersPage(req: Request) async throws -> View {
+        let userRows = try await fetchUserRows(on: req.db)
+        let ctx = AdminUsersContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "users",
+            users: userRows
+        )
+        return try await req.view.render("admin-users", ctx)
+    }
+
+    // MARK: - GET /admin/users-data
+    //
+    // JSON feed backing the Users tab's auto-refresh poll.  Returns the same
+    // rows `usersPage` renders so the client can repaint the table in place.
+    // Polls send the `X-Background-Refresh` header so they don't count as
+    // session activity (see UserActivityMiddleware).
+
+    @Sendable
+    func usersData(req: Request) async throws -> [AdminUserRow] {
+        try await fetchUserRows(on: req.db)
+    }
+
+    /// Loads every user, ordered most-recently-seen first (NULL last_seen
+    /// rows sink to the bottom, then username, then join date), and maps
+    /// them to the wire/template row shape.
+    private func fetchUserRows(on db: Database) async throws -> [AdminUserRow] {
+        let users = try await APIUser.query(on: db)
             .all()
             .sorted { lhs, rhs in
                 switch (lhs.lastSeenAt, rhs.lastSeenAt) {
@@ -72,54 +157,141 @@ struct AdminRoutes: RouteCollection {
                 return lhsCreated < rhsCreated
             }
 
-        let userRows = users.map { u in
+        let iso = ISO8601DateFormatter()
+        return users.map { u in
             AdminUserRow(
                 id: u.id?.uuidString ?? "",
                 displayName: u.displayName,
                 username: u.username,
                 role: u.role,
-                createdAt: u.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                lastSeenAt: u.lastSeenAt.map { ISO8601DateFormatter().string(from: $0) }
+                createdAt: u.createdAt.map { iso.string(from: $0) } ?? "—",
+                lastSeenAt: u.lastSeenAt.map { iso.string(from: $0) }
             )
         }
+    }
 
-        let workerRows = try await makeWorkerRows(req: req)
-        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
-        let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
+    // MARK: - GET /admin/storage
 
-        // Course management data — all three queries are independent so run in parallel.
-        async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
-        async let enrollmentsFetch = enrolledStudentCountsByCourse(on: req.db)
-        async let assignmentsFetch = assignmentCountsByCourse(on: req.db)
-        let (allCourses, enrollmentCounts, assignmentCounts) =
-            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
-        let bsSyncEnabled = req.application.brightSpaceClient != nil
-        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
-            guard let id = course.id else { return nil }
-            return AdminCourseRow(
-                id: id.uuidString,
-                code: course.code,
-                name: course.name,
-                isArchived: course.isArchived,
-                enrollmentMode: course.enrollmentMode.rawValue,
-                enrollmentCount: enrollmentCounts[id] ?? 0,
-                assignmentCount: assignmentCounts[id] ?? 0,
-                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                brightspaceOrgUnitID: course.brightspaceOrgUnitID,
-                brightspaceSyncEnabled: bsSyncEnabled
-            )
-        }
-
-        let ctx = AdminContext(
+    @Sendable
+    func storagePage(req: Request) async throws -> View {
+        let storage = try await makeStorageContext(req: req)
+        let ctx = AdminStoragePageContext(
             currentUser: req.currentUserContext,
-            users: userRows,
-            workers: workerRows,
-            workerSecret: effectiveSecret,
-            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
-            courses: courseRows,
-            version: ChickadeeVersion.current
+            activeAdminTab: "storage",
+            storage: storage
         )
-        return try await req.view.render("admin", ctx)
+        return try await req.view.render("admin-storage", ctx)
+    }
+
+    // MARK: - Storage breakdown
+
+    /// Measures the persistent-volume sinks (submission/test-setup uploads,
+    /// the results+logs dir, the static asset tree) and the database so an
+    /// admin can see where disk is going.  Directory walks are blocking, so
+    /// they run on the thread pool off the event loop.
+    private func makeStorageContext(req: Request) async throws -> AdminStorageContext {
+        let submissionsDir = req.application.submissionsDirectory
+        let testSetupsDir = req.application.testSetupsDirectory
+        let resultsDir = req.application.resultsDirectory
+        let publicDir = req.application.directory.publicDirectory
+
+        func dirSize(_ path: String) async throws -> Int {
+            try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
+                directorySizeBytes(at: path)
+            }.get()
+        }
+
+        // Per-id footprints feed both the aggregate cards and the per-assignment
+        // breakdown.  Submissions are stored flat (`<id>.<ext>`), so the
+        // top-level sum equals a full recursive walk — we reuse it for the
+        // "Submissions" card to avoid scanning that (potentially large) dir
+        // twice.  Test setups have `shared/`+`notebooks/` subtrees, so the
+        // card keeps an authoritative recursive walk.
+        async let submissionSizesFetch = req.application.threadPool.runIfActive(
+            eventLoop: req.eventLoop
+        ) { topLevelFileSizesByID(inDirectory: submissionsDir) }.get()
+        async let setupSizesFetch = req.application.threadPool.runIfActive(
+            eventLoop: req.eventLoop
+        ) { testSetupSizesByID(testSetupsDirectory: testSetupsDir) }.get()
+
+        async let testSetupsBytes = dirSize(testSetupsDir)
+        async let resultsBytes = dirSize(resultsDir)
+        async let publicBytes = dirSize(publicDir)
+        async let dbBytes = databaseSizeBytes(
+            on: req.db, settings: req.application.appConfig.database)
+
+        // Mapping rows for the per-assignment breakdown.
+        async let assignmentsFetch = APIAssignment.query(on: req.db).all()
+        async let coursesFetch = APICourse.query(on: req.db).all()
+        async let submissionLinksFetch = APISubmission.query(on: req.db)
+            .field(\.$id).field(\.$testSetupID).all()
+
+        let submissionSizesByID = try await submissionSizesFetch
+        let setupSizesByID = try await setupSizesFetch
+        let testSetups = try await testSetupsBytes
+        let results = try await resultsBytes
+        let publicAssets = try await publicBytes
+        let database = await dbBytes
+        let submissions = submissionSizesByID.values.reduce(0, +)
+
+        var rows = [
+            AdminStorageRow(label: "Submissions", formatted: humanReadableBytes(submissions)),
+            AdminStorageRow(label: "Test Setups", formatted: humanReadableBytes(testSetups)),
+            AdminStorageRow(label: "Results & Logs", formatted: humanReadableBytes(results)),
+            AdminStorageRow(label: "Static Assets", formatted: humanReadableBytes(publicAssets)),
+        ]
+        rows.append(
+            AdminStorageRow(
+                label: "Database",
+                formatted: database.map(humanReadableBytes) ?? "—"))
+
+        let total = submissions + testSetups + results + publicAssets + (database ?? 0)
+
+        let assignments = try await assignmentsFetch
+        let courses = try await coursesFetch
+        let submissionLinks = try await submissionLinksFetch
+
+        // Tally submission count + bytes per test setup.
+        var submissionCountBySetup: [String: Int] = [:]
+        var submissionBytesBySetup: [String: Int] = [:]
+        for link in submissionLinks {
+            submissionCountBySetup[link.testSetupID, default: 0] += 1
+            if let subID = link.id {
+                submissionBytesBySetup[link.testSetupID, default: 0] +=
+                    submissionSizesByID[subID] ?? 0
+            }
+        }
+        let codeByCourse = Dictionary(
+            courses.compactMap { course in course.id.map { ($0, course.code) } },
+            uniquingKeysWith: { first, _ in first })
+
+        let assignmentRows =
+            assignments
+            .map { assignment -> AdminAssignmentStorageRow in
+                let suiteBytes = setupSizesByID[assignment.testSetupID] ?? 0
+                let subBytes = submissionBytesBySetup[assignment.testSetupID] ?? 0
+                let count = submissionCountBySetup[assignment.testSetupID] ?? 0
+                let rowTotal = suiteBytes + subBytes
+                return AdminAssignmentStorageRow(
+                    assignmentTitle: assignment.title,
+                    courseCode: codeByCourse[assignment.courseID] ?? "—",
+                    testSuiteFormatted: humanReadableBytes(suiteBytes),
+                    submissionsFormatted: humanReadableBytes(subBytes),
+                    submissionCount: count,
+                    totalFormatted: humanReadableBytes(rowTotal),
+                    testSuiteBytes: suiteBytes,
+                    submissionsBytes: subBytes,
+                    totalBytes: rowTotal
+                )
+            }
+            .sorted { $0.totalBytes > $1.totalBytes }
+
+        return AdminStorageContext(
+            rows: rows,
+            totalFormatted: humanReadableBytes(total),
+            dbBackend: req.application.appConfig.database.backend.rawValue,
+            assignments: assignmentRows
+        )
     }
 
     // MARK: - POST /admin/users/:id/role
@@ -137,7 +309,10 @@ struct AdminRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(RoleBody.self)
-        guard ["student", "instructor", "admin"].contains(body.role) else {
+        guard
+            [UserRole.student.rawValue, UserRole.instructor.rawValue, UserRole.admin.rawValue]
+                .contains(body.role)
+        else {
             throw AppError.invalidParameter(
                 name: "role",
                 reason: "must be student, instructor, or admin (got '\(body.role)')")
@@ -217,33 +392,6 @@ struct AdminRoutes: RouteCollection {
         return req.redirect(to: "/admin")
     }
 
-    // MARK: - GET /admin/audit
-
-    @Sendable
-    func auditPage(req: Request) async throws -> View {
-        let entries = try await APIAuditLogEntry.query(on: req.db)
-            .sort(\.$createdAt, .descending)
-            .limit(200)
-            .all()
-
-        let iso = ISO8601DateFormatter()
-        let rows = entries.map { e -> AdminAuditRow in
-            AdminAuditRow(
-                timestamp: e.createdAt.map { iso.string(from: $0) } ?? "—",
-                actor: e.actorUsername ?? "—",
-                action: e.action,
-                targetType: e.targetType,
-                targetID: e.targetID,
-                metadata: e.metadata ?? "",
-                remoteAddr: e.remoteAddr ?? "—"
-            )
-        }
-        return try await req.view.render(
-            "admin-audit",
-            AdminAuditContext(currentUser: req.currentUserContext, rows: rows)
-        )
-    }
-
     // MARK: - GET /admin/alerts
 
     @Sendable
@@ -274,6 +422,7 @@ struct AdminRoutes: RouteCollection {
 
         let ctx = AdminAlertsContext(
             currentUser: req.currentUserContext,
+            activeAdminTab: "alerts",
             enabled: configuration.enabled,
             webhookURL: effectiveURL,
             webhookURLFromEnvironment: !envURL.isEmpty,
@@ -445,11 +594,29 @@ private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
 }
 
 func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    let assignments = try await APIAssignment.query(on: db).all()
-    var counts: [UUID: Int] = [:]
-    for a in assignments {
-        let cid = a.courseID
-        counts[cid, default: 0] += 1
+    // DB-side grouped COUNT rather than loading every assignment row into
+    // memory and tallying in Swift. Falls back to the in-memory tally on the
+    // (currently nonexistent) non-SQL driver.
+    guard let sql = db as? SQLDatabase else {
+        let assignments = try await APIAssignment.query(on: db).all()
+        return assignments.reduce(into: [:]) { $0[$1.courseID, default: 0] += 1 }
     }
-    return counts
+
+    let rows = try await sql.select()
+        .column("course_id")
+        .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+        .from("assignments")
+        .groupBy("course_id")
+        .all(decoding: CourseAssignmentCountRow.self)
+    return rows.reduce(into: [:]) { $0[$1.courseID] = $1.total }
+}
+
+private struct CourseAssignmentCountRow: Decodable {
+    let courseID: UUID
+    let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case courseID = "course_id"
+        case total
+    }
 }

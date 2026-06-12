@@ -9,10 +9,8 @@
 // grant / edit / revoke a deadline extension that lets that one student
 // keep submitting after the assignment-wide deadline.
 //
-// Phase 2 of the audit refactor moved these handlers from
-// `AssignmentRoutes` onto `StudentCourseRoutes`; the file name still
-// starts with `AssignmentRoutes+` for blame continuity until the next
-// rename pass.
+// These handlers were moved from `AssignmentRoutes` onto
+// `StudentCourseRoutes` in the Phase 2 audit refactor.
 
 import Core
 import Fluent
@@ -65,10 +63,25 @@ extension StudentCourseRoutes {
             req: req, student: student, assignments: assignments)
         async let classBadgesBySetupIDFuture = loadStudentCourseClassBadges(
             req: req, student: student, setupIDs: setupIDs)
+        async let overrideBySetupIDFuture = loadStudentCourseOverrides(
+            req: req, student: student, setupIDs: setupIDs)
         let setupsByID = try await setupsByIDFuture
         let submissions = try await submissionsFuture
         let extensionByAssignmentID = try await extensionByAssignmentIDFuture
-        let classBadgesBySetupID = try await classBadgesBySetupIDFuture
+        let classBadgesBySetupIDRaw = try await classBadgesBySetupIDFuture
+        let overrideBySetupID = try await overrideBySetupIDFuture
+
+        // Honor per-assignment disabled built-in awards across the page (reuses
+        // the setups already loaded above, so no extra query).
+        let disabledBySetup = setupsByID.mapValues { BuiltInAchievements.disabled(in: $0) }
+        let perSubBySetup = setupsByID.compactMapValues { BuiltInAchievements.manifestPerSubmission(in: $0) }
+        let classBadgesBySetupID = classBadgesBySetupIDRaw.reduce(
+            into: [String: [AchievementBadge]]()
+        ) { acc, entry in
+            let disabled = disabledBySetup[entry.key] ?? []
+            let kept = disabled.isEmpty ? entry.value : entry.value.filter { !disabled.contains($0.id) }
+            if !kept.isEmpty { acc[entry.key] = kept }
+        }
 
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
         // preferredResults must wait until submissions resolves (it needs
@@ -86,7 +99,9 @@ extension StudentCourseRoutes {
             urlToken: try student.requireURLToken(),
             preferredResultBySubmissionID: preferredResultBySubmissionID,
             student: student,
-            fmt: fmt
+            fmt: fmt,
+            disabledBySetup: disabledBySetup,
+            perSubBySetup: perSubBySetup
         )
         let rows = sortedAssignments.map { assignment in
             buildStudentAssignmentRow(
@@ -94,6 +109,7 @@ extension StudentCourseRoutes {
                 history: submissionsBySetupID[assignment.testSetupID] ?? [],
                 classBadges: classBadgesBySetupID[assignment.testSetupID] ?? [],
                 activeExtension: assignment.id.flatMap { extensionByAssignmentID[$0] },
+                activeOverride: overrideBySetupID[assignment.testSetupID],
                 context: rowContext
             )
         }
@@ -191,6 +207,21 @@ extension StudentCourseRoutes {
         return classBadgesBySetupID
     }
 
+    fileprivate func loadStudentCourseOverrides(
+        req: Request, student: APIUser, setupIDs: [String]
+    ) async throws -> [String: APIGradeOverride] {
+        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [:] }
+        let overrides = try await APIGradeOverride.query(on: req.db)
+            .filter(\.$testSetupID ~~ Set(setupIDs))
+            .filter(\.$userID == studentUUID)
+            .all()
+        var overrideBySetupID: [String: APIGradeOverride] = [:]
+        for row in overrides {
+            overrideBySetupID[row.testSetupID] = row
+        }
+        return overrideBySetupID
+    }
+
     /// Sort comparator matches the student dashboard (`WebRoutes.swift`):
     /// sortOrder → createdAt → id.
     fileprivate func sortedStudentCourseAssignments(
@@ -246,29 +277,17 @@ extension StudentCourseRoutes {
 
     @Sendable
     func studentAssignmentHistoryPage(req: Request) async throws -> View {
-        let viewer = try req.auth.require(APIUser.self)
-        guard viewer.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "view student submission history")
-        }
-        let (course, student) = try await resolveCourseAndStudent(req: req)
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
-            assignment.courseID == course.id
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
-        }
+        let action = try await resolveStudentAssignmentAction(
+            req: req, action: "view student submission history")
+        let (course, student, assignment) = (action.course, action.student, action.assignment)
+        let assignmentIDRaw = assignment.publicID
 
-        let submissions: [APISubmission]
-        if let studentUUID = student.id {
-            submissions = try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID == assignment.testSetupID)
-                .filter(\.$userID == studentUUID)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .sort(\.$submittedAt, .descending)
-                .all()
-        } else {
-            submissions = []
-        }
+        let submissions = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .filter(\.$userID == action.studentID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .sort(\.$submittedAt, .descending)
+            .all()
         let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
             for: submissions.compactMap(\.id),
             on: req.db
@@ -279,7 +298,7 @@ extension StudentCourseRoutes {
             let subID = submission.id ?? ""
             let gradeText: String
             if let result = preferredResultBySubmissionID[subID],
-                let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                let pct = result.gradePercentValue
             {
                 gradeText = "\(pct)%"
             } else {
@@ -325,23 +344,14 @@ extension StudentCourseRoutes {
 
     @Sendable
     func retestStudentAssignment(req: Request) async throws -> Response {
-        let actor = try req.auth.require(APIUser.self)
-        guard actor.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "retest student submissions")
-        }
-        let (course, student) = try await resolveCourseAndStudent(req: req)
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
-            assignment.courseID == course.id,
-            let studentID = student.id
-        else {
-            throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
-        }
+        let action = try await resolveStudentAssignmentAction(
+            req: req, action: "retest student submissions")
+        let (actor, student, assignment) = (action.actor, action.student, action.assignment)
+        let assignmentIDRaw = assignment.publicID
 
         let count = try await retestStudentSubmissionsForSetup(
             setupID: assignment.testSetupID,
-            studentUserID: studentID,
+            studentUserID: action.studentID,
             triggeredBy: actor.id,
             on: req.db,
             force: true
@@ -362,12 +372,50 @@ extension StudentCourseRoutes {
             on: req
         )
 
-        return req.redirect(
-            to: StudentCoursePaths.submissions(
-                courseCode: course.code,
-                urlToken: try student.requireURLToken()
+        return try redirectToStudentSubmissions(req: req, course: action.course, student: student)
+    }
+
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/reset-notebook
+
+    /// Resets one student's working-copy notebook for one assignment back to
+    /// the published starter.  Past submissions are untouched — this only
+    /// overwrites the in-progress JupyterLite copy (e.g. when a student has
+    /// corrupted their notebook and can't recover).  Mirrors the per-assignment
+    /// `resetStudentNotebook` action, scoped to this course-student page so the
+    /// redirect lands back here.
+    @Sendable
+    func resetStudentAssignmentNotebook(req: Request) async throws -> Response {
+        let action = try await resolveStudentAssignmentAction(
+            req: req, action: "reset student notebooks")
+        let (actor, student, assignment) = (action.actor, action.student, action.assignment)
+        let assignmentIDRaw = assignment.publicID
+        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
+            throw WebAssignmentError.notFound(resource: "Test setup")
+        }
+
+        let starter: Data
+        do {
+            starter = try notebookData(for: setup)
+        } catch {
+            throw WebAssignmentError.invalidParameter(
+                name: "setup",
+                reason: "Test setup has no starter notebook to reset to."
             )
+        }
+
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req,
+            setupID: setup.id ?? assignment.testSetupID,
+            userID: action.studentID,
+            fallbackSetup: setup,
+            overwriteWith: starter
         )
+
+        req.logger.info(
+            "student_notebook_reset assignment=\(assignmentIDRaw) student=\(student.username) by=\(actor.id?.uuidString ?? "nil")"
+        )
+
+        return try redirectToStudentSubmissions(req: req, course: action.course, student: student)
     }
 
     // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/extension
@@ -379,18 +427,12 @@ extension StudentCourseRoutes {
             var note: String?
         }
 
-        let actor = try req.auth.require(APIUser.self)
-        guard actor.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "grant deadline extensions")
-        }
-        let (course, student) = try await resolveCourseAndStudent(req: req)
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
-            assignment.courseID == course.id,
-            let assignmentUUID = assignment.id,
-            let studentUUID = student.id
-        else {
+        let action = try await resolveStudentAssignmentAction(
+            req: req, action: "grant deadline extensions")
+        let (actor, student) = (action.actor, action.student)
+        let assignmentIDRaw = action.assignment.publicID
+        let studentUUID = action.studentID
+        guard let assignmentUUID = action.assignment.id else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
@@ -440,30 +482,19 @@ extension StudentCourseRoutes {
             on: req
         )
 
-        return req.redirect(
-            to: StudentCoursePaths.submissions(
-                courseCode: course.code,
-                urlToken: try student.requireURLToken()
-            )
-        )
+        return try redirectToStudentSubmissions(req: req, course: action.course, student: student)
     }
 
     // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/extension/delete
 
     @Sendable
     func deleteStudentAssignmentExtension(req: Request) async throws -> Response {
-        let actor = try req.auth.require(APIUser.self)
-        guard actor.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "revoke deadline extensions")
-        }
-        let (course, student) = try await resolveCourseAndStudent(req: req)
-        let assignmentIDRaw = try assignmentPublicIDParameter(from: req)
-        guard
-            let assignment = try await assignmentByPublicID(assignmentIDRaw, on: req.db),
-            assignment.courseID == course.id,
-            let assignmentUUID = assignment.id,
-            let studentUUID = student.id
-        else {
+        let action = try await resolveStudentAssignmentAction(
+            req: req, action: "revoke deadline extensions")
+        let student = action.student
+        let assignmentIDRaw = action.assignment.publicID
+        let studentUUID = action.studentID
+        guard let assignmentUUID = action.assignment.id else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignmentIDRaw)'")
         }
 
@@ -485,12 +516,86 @@ extension StudentCourseRoutes {
             )
         }
 
-        return req.redirect(
-            to: StudentCoursePaths.submissions(
-                courseCode: course.code,
-                urlToken: try student.requireURLToken()
+        return try redirectToStudentSubmissions(req: req, course: action.course, student: student)
+    }
+
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/grade-override
+
+    @Sendable
+    func saveStudentAssignmentGradeOverride(req: Request) async throws -> Response {
+        struct OverrideBody: Content {
+            var overridePercent: Int?
+            var note: String?
+        }
+
+        let action = try await resolveStudentAssignmentAction(
+            req: req, action: "override grades")
+        let (actor, student, assignment) = (action.actor, action.student, action.assignment)
+        let assignmentIDRaw = assignment.publicID
+        let studentUUID = action.studentID
+        let testSetupID = assignment.testSetupID
+
+        let body = try req.content.decode(OverrideBody.self)
+        guard let percent = body.overridePercent, (0...100).contains(percent) else {
+            throw WebAssignmentError.invalidParameter(
+                name: "overridePercent",
+                reason: "Provide a whole-number percent between 0 and 100."
             )
+        }
+        let trimmedNote = body.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = (trimmedNote?.isEmpty == false) ? trimmedNote : nil
+
+        try await applyGradeOverride(
+            testSetupID: testSetupID,
+            studentUserID: studentUUID,
+            percent: percent,
+            note: note,
+            grantedByUserID: actor.id,
+            on: req.db
         )
+
+        await AuditLogger.record(
+            action: .gradeOverrideSet,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignmentIDRaw,
+                "student_username": student.username,
+                "override_percent": String(percent),
+            ],
+            on: req
+        )
+
+        return try redirectToStudentSubmissions(req: req, course: action.course, student: student)
+    }
+
+    // MARK: - POST /:courseCode/students/:urlToken/assignments/:assignmentID/grade-override/delete
+
+    @Sendable
+    func deleteStudentAssignmentGradeOverride(req: Request) async throws -> Response {
+        let action = try await resolveStudentAssignmentAction(
+            req: req, action: "clear grade overrides")
+        let (student, assignment) = (action.student, action.assignment)
+        let assignmentIDRaw = assignment.publicID
+        let studentUUID = action.studentID
+        let testSetupID = assignment.testSetupID
+
+        if try await clearGradeOverride(
+            testSetupID: testSetupID, studentUserID: studentUUID, on: req.db)
+        {
+            await AuditLogger.record(
+                action: .gradeOverrideCleared,
+                targetType: .assignment,
+                targetID: assignment.id?.uuidString,
+                metadata: [
+                    "assignment": assignmentIDRaw,
+                    "student_username": student.username,
+                ],
+                on: req
+            )
+        }
+
+        return try redirectToStudentSubmissions(req: req, course: action.course, student: student)
     }
 }
 
@@ -513,12 +618,7 @@ extension StudentCourseRoutes {
         else {
             throw WebAssignmentError.notFound(resource: "Course or student")
         }
-        let courseCode = courseCodeRaw.lowercased()
-        let course =
-            try await APICourse.query(on: req.db)
-            .filter(\.$isArchived == false)
-            .all()
-            .first(where: { $0.code.lowercased() == courseCode })
+        let course = try await findActiveCourse(byCode: courseCodeRaw, on: req.db)
         guard let course, let courseUUID = course.id else {
             throw WebAssignmentError.notFound(resource: "Course '\(courseCodeRaw)'")
         }
@@ -540,9 +640,65 @@ extension StudentCourseRoutes {
         return (course, student)
     }
 
-    /// Bundles the per-table inputs that don't vary across rows.  Lets
-    /// `buildStudentAssignmentRow` stay at 5 parameters even with 9
-    /// logical inputs.  `urlToken` is the student's opaque URL token
+    /// Everything the per-student assignment handlers resolve before doing
+    /// their real work: the authenticated instructor, the `(course, student)`
+    /// pair from `:courseCode` + `:urlToken`, and the `:assignmentID`
+    /// assignment verified to belong to that course.
+    fileprivate struct StudentAssignmentActionContext {
+        let actor: APIUser
+        let course: APICourse
+        let student: APIUser
+        let studentID: UUID
+        let assignment: APIAssignment
+    }
+
+    /// Shared resolve preamble for the seven per-student assignment handlers
+    /// (history page, retest, notebook reset, extension save/delete, grade
+    /// override save/delete).
+    ///
+    /// Note on the role check: these routes are registered under
+    /// `RoleMiddleware(required: .instructor)` (routes.swift), so the
+    /// `isInstructor` guard here is redundant — it is kept once, in this
+    /// helper, as defense-in-depth in case the route grouping ever changes.
+    /// `action` carries each handler's original forbidden-message wording.
+    ///
+    /// Error semantics match the guard chain each handler previously
+    /// inlined: `notFound("Assignment '<id>'")` when the assignment is
+    /// missing, belongs to a different course, or (unreachable for a
+    /// DB-loaded model) the student row has no id.
+    fileprivate func resolveStudentAssignmentAction(
+        req: Request, action: String
+    ) async throws -> StudentAssignmentActionContext {
+        let actor = try req.auth.require(APIUser.self)
+        guard actor.isInstructor else {
+            throw WebAssignmentError.forbidden(action: action)
+        }
+        let (course, student) = try await resolveCourseAndStudent(req: req)
+        let assignment = try await loadAssignment(req)
+        guard assignment.courseID == course.id, let studentID = student.id else {
+            throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
+        }
+        return StudentAssignmentActionContext(
+            actor: actor, course: course, student: student,
+            studentID: studentID, assignment: assignment)
+    }
+
+    /// Shared redirect epilogue: back to this student's per-course
+    /// submissions page.
+    fileprivate func redirectToStudentSubmissions(
+        req: Request, course: APICourse, student: APIUser
+    ) throws -> Response {
+        req.redirect(
+            to: StudentCoursePaths.submissions(
+                courseCode: course.code,
+                urlToken: try student.requireURLToken()
+            )
+        )
+    }
+
+    /// Bundles the per-table inputs that don't vary across rows.  Keeps
+    /// `buildStudentAssignmentRow` to a handful of parameters even with
+    /// many logical inputs.  `urlToken` is the student's opaque URL token
     /// (#556) — used to build per-student action URLs without leaking
     /// the username into request logs.
     fileprivate struct StudentAssignmentRowContext {
@@ -551,6 +707,11 @@ extension StudentCourseRoutes {
         let preferredResultBySubmissionID: [String: APIResult]
         let student: APIUser
         let fmt: DateFormatter
+        /// `[setupID: disabled built-in award ids]` — the same map for every row.
+        let disabledBySetup: [String: Set<String>]
+        /// `[setupID: manifest per-submission achievements]` — same map every
+        /// row; absent setups fall back to the registry.
+        let perSubBySetup: [String: [Achievement]]
     }
 
     fileprivate func buildStudentAssignmentRow(
@@ -558,12 +719,12 @@ extension StudentCourseRoutes {
         history: [APISubmission],
         classBadges: [AchievementBadge],
         activeExtension: APIAssignmentExtension?,
+        activeOverride: APIGradeOverride?,
         context: StudentAssignmentRowContext
     ) -> StudentAssignmentRow {
         let courseCode = context.courseCode
         let urlToken = context.urlToken
         let preferredResultBySubmissionID = context.preferredResultBySubmissionID
-        let student = context.student
         let fmt = context.fmt
         let latest = history.first
         let bestGradePercent: Int? = {
@@ -571,7 +732,7 @@ extension StudentCourseRoutes {
             for submission in history {
                 guard let subID = submission.id,
                     let result = preferredResultBySubmissionID[subID],
-                    let pct = gradePercentFromCollectionJSON(result.collectionJSON)
+                    let pct = result.gradePercentValue
                 else {
                     continue
                 }
@@ -580,36 +741,12 @@ extension StudentCourseRoutes {
             return best >= 0 ? best : nil
         }()
 
-        var badges: [AchievementBadge] = []
-        if let latestSubmission = latest,
-            let latestSubID = latestSubmission.id,
-            let result = preferredResultBySubmissionID[latestSubID],
-            let collection = visibleCollection(
-                from: result.collectionJSON,
-                for: student,
-                assignment: assignment
-            ),
-            let gradePct = gradePercent(from: collection)
-        {
-            let latestAttempt = latestSubmission.attemptNumber ?? 1
-            let priorSub = history.first(where: { $0.attemptNumber == latestAttempt - 1 })
-            let priorPct: Int? = priorSub.flatMap { ps in
-                guard let psID = ps.id, let pr = preferredResultBySubmissionID[psID] else {
-                    return nil
-                }
-                return gradePercentFromCollectionJSON(pr.collectionJSON)
-            }
-            badges.append(
-                contentsOf: AchievementBadge.forSubmission(
-                    BadgeContext(
-                        attemptNumber: latestAttempt,
-                        gradePercent: gradePct,
-                        executionTimeMs: collection.executionTimeMs,
-                        priorGradePercent: priorPct
-                    )
-                )
-            )
-        }
+        let disabledHere = context.disabledBySetup[assignment.testSetupID] ?? []
+        var badges = submissionBadges(
+            history: history,
+            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            achievements: context.perSubBySetup[assignment.testSetupID]
+        ).filter { !disabledHere.contains($0.id) }
         badges.append(contentsOf: classBadges)
 
         let dueAtText = assignment.dueAt.map { fmt.string(from: $0) }
@@ -623,7 +760,8 @@ extension StudentCourseRoutes {
         return StudentAssignmentRow(
             assignmentID: assignment.publicID,
             title: assignment.title,
-            status: assignment.isOpen ? "open" : "closed",
+            // Student-facing: Preview is indistinguishable from closed.
+            status: assignment.visibility == .preview ? "closed" : assignment.visibility.rawValue,
             isOpen: assignment.isOpen,
             dueAtText: dueAtText,
             effectiveDueAtText: effectiveDueAtText,
@@ -644,6 +782,11 @@ extension StudentCourseRoutes {
                 urlToken: urlToken,
                 assignmentID: assignment.publicID
             ),
+            resetPath: StudentCoursePaths.reset(
+                courseCode: courseCode,
+                urlToken: urlToken,
+                assignmentID: assignment.publicID
+            ),
             historyURL: StudentCoursePaths.assignmentHistory(
                 courseCode: courseCode,
                 urlToken: urlToken,
@@ -654,8 +797,55 @@ extension StudentCourseRoutes {
             latestSubmissionID: latest?.id ?? "",
             latestSubmittedAtText: latest?.submittedAt.map { fmt.string(from: $0) } ?? "—",
             additionalSubmissionCount: max(history.count - 1, 0),
-            bestGradeText: bestGradePercent.map { "\($0)%" },
+            bestGradeText: activeOverride.map { "\($0.overridePercent)%" }
+                ?? bestGradePercent.map { "\($0)%" },
+            gradeIsOverridden: activeOverride != nil,
+            gradeOverridePercent: activeOverride?.overridePercent ?? bestGradePercent ?? 0,
+            gradeOverrideSavePath: StudentCoursePaths.gradeOverrideSave(
+                courseCode: courseCode,
+                urlToken: urlToken,
+                assignmentID: assignment.publicID
+            ),
+            gradeOverrideClearPath: StudentCoursePaths.gradeOverrideClear(
+                courseCode: courseCode,
+                urlToken: urlToken,
+                assignmentID: assignment.publicID
+            ),
             badges: badges
+        )
+    }
+
+    /// Achievement badges earned on the latest submission (attempt/speed/
+    /// improvement).  Class-wide badges are appended by the caller.
+    fileprivate func submissionBadges(
+        history: [APISubmission],
+        preferredResultBySubmissionID: [String: APIResult],
+        achievements: [Achievement]?
+    ) -> [AchievementBadge] {
+        guard let latestSubmission = history.first,
+            let latestSubID = latestSubmission.id,
+            let result = preferredResultBySubmissionID[latestSubID],
+            let collection = decodedCollection(from: result.collectionJSON),
+            let gradePct = gradePercent(from: collection)
+        else {
+            return []
+        }
+        let latestAttempt = latestSubmission.attemptNumber ?? 1
+        let priorSub = history.first(where: { $0.attemptNumber == latestAttempt - 1 })
+        let priorPct: Int? = priorSub.flatMap { ps in
+            guard let psID = ps.id, let pr = preferredResultBySubmissionID[psID] else {
+                return nil
+            }
+            return pr.gradePercentValue
+        }
+        return AchievementBadge.forSubmission(
+            BadgeContext(
+                attemptNumber: latestAttempt,
+                gradePercent: gradePct,
+                executionTimeMs: collection.executionTimeMs,
+                priorGradePercent: priorPct
+            ),
+            achievements: achievements
         )
     }
 }

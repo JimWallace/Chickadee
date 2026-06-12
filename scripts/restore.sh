@@ -102,6 +102,8 @@ MANIFEST_LABEL="$(python3 -c "import json; print(json.load(open('$MANIFEST')).ge
 MANIFEST_TS="$(python3 -c "import json; print(json.load(open('$MANIFEST')).get('timestamp',''))")"
 MANIFEST_DB_BYTES="$(python3 -c "import json; print(json.load(open('$MANIFEST')).get('db_size_bytes',0))")"
 MANIFEST_DATA_BYTES="$(python3 -c "import json; print(json.load(open('$MANIFEST')).get('data_size_bytes',0))")"
+MANIFEST_BUILD_VERSION="$(python3 -c "import json; print(json.load(open('$MANIFEST')).get('build_version',''))")"
+MANIFEST_IMAGE_DIGEST="$(python3 -c "import json; print(json.load(open('$MANIFEST')).get('image_digest',''))")"
 
 CURRENT_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]')"
 
@@ -144,6 +146,33 @@ if [[ -z "$DATA_VOLUME" ]]; then
 fi
 
 # ----------------------------------------------------------------
+# Identity of the build currently running on THIS host. Read before we stop the
+# server (below). Compared against the snapshot's recorded build so we don't
+# silently restore a snapshot taken on a different image than the one deployed
+# here — the failure mode the VERSION-file check can't see, because the VERSION
+# file can match while the running image is something else entirely.
+# ----------------------------------------------------------------
+TARGET_BUILD_VERSION="$(curl -sf "$HEALTH_URL" 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
+TARGET_SERVER_CID="$($COMPOSE ps -q server 2>/dev/null | head -n1 || true)"
+TARGET_IMAGE_DIGEST=""
+if [[ -n "$TARGET_SERVER_CID" ]]; then
+  TARGET_IMAGE_DIGEST="$(docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$TARGET_SERVER_CID" 2>/dev/null || true)"
+fi
+
+# Prefer the image digest (exact identity); fall back to the /health build
+# version. Either being unknown (old snapshot / server down) is not a mismatch.
+IDENTITY_MISMATCH=0
+IDENTITY_REASON=""
+if [[ -n "$MANIFEST_IMAGE_DIGEST" && -n "$TARGET_IMAGE_DIGEST" && "$MANIFEST_IMAGE_DIGEST" != "$TARGET_IMAGE_DIGEST" ]]; then
+  IDENTITY_MISMATCH=1
+  IDENTITY_REASON="image digest differs"
+elif [[ -n "$MANIFEST_BUILD_VERSION" && -n "$TARGET_BUILD_VERSION" && "$MANIFEST_BUILD_VERSION" != "$TARGET_BUILD_VERSION" ]]; then
+  IDENTITY_MISMATCH=1
+  IDENTITY_REASON="build version differs"
+fi
+
+# ----------------------------------------------------------------
 # Confirmation prompt
 # ----------------------------------------------------------------
 HUMAN_DB="$(python3 -c "print(f'{$MANIFEST_DB_BYTES/1024/1024:.1f} MB')")"
@@ -159,6 +188,10 @@ cat <<EOF
   Label:             $MANIFEST_LABEL
   Snapshot version:  $MANIFEST_VERSION
   Current version:   $CURRENT_VERSION
+  Snapshot build:    ${MANIFEST_BUILD_VERSION:-(unknown)}
+  Snapshot image:    ${MANIFEST_IMAGE_DIGEST:-(unknown)}
+  Running build:     ${TARGET_BUILD_VERSION:-(unknown)}
+  Running image:     ${TARGET_IMAGE_DIGEST:-(unknown)}
   postgres.dump:     $HUMAN_DB
   data.tar.gz:       $HUMAN_DATA
   Database:          $DATABASE_NAME (on docker service 'db')
@@ -190,6 +223,22 @@ EOF
   fi
 fi
 
+if [[ $IDENTITY_MISMATCH -eq 1 ]]; then
+  cat <<EOF
+WARNING: the snapshot's build identity does not match the build running on this
+         host ($IDENTITY_REASON):
+           snapshot: ${MANIFEST_BUILD_VERSION:-?}  ${MANIFEST_IMAGE_DIGEST:-(no digest)}
+           running:  ${TARGET_BUILD_VERSION:-?}  ${TARGET_IMAGE_DIGEST:-(no digest)}
+         Restoring loads the snapshot's schema, then the running build migrates
+         it forward on boot. Make sure the running build can migrate that schema
+         (the module-rename case is handled by reconcileLegacyMigrationNamespace).
+EOF
+  if [[ $ASSUME_YES -ne 1 ]]; then
+    echo "         Pass --yes to proceed across a build mismatch." >&2
+    exit 1
+  fi
+fi
+
 if [[ $ASSUME_YES -ne 1 ]]; then
   read -r -p "Type RESTORE to proceed: " CONFIRM
   if [[ "$CONFIRM" != "RESTORE" ]]; then
@@ -205,14 +254,27 @@ echo "==> Stopping server and runner ..."
 $COMPOSE stop server runner
 
 # ----------------------------------------------------------------
-# 2. pg_restore --clean
+# 2. Reset schema, then restore
 # ----------------------------------------------------------------
 echo "==> Restoring Postgres from $DUMP ..."
-# Use --no-owner so role differences between hosts don't trip the restore.
-# --clean --if-exists drops every object before reloading.
-# pg_restore can emit non-fatal warnings while doing this; tolerate exit 1
-# only when stderr is warnings (we don't enforce that here — just log).
-$COMPOSE exec -T db pg_restore --clean --if-exists --no-owner \
+# Reset the schema with DROP SCHEMA ... CASCADE *before* reloading, rather than
+# letting `pg_restore --clean` drop objects individually. --clean drops one
+# object at a time without CASCADE, so it cannot drop users_pkey / the users
+# table while the AddUserFKConstraints foreign keys (fk_class_achievements_user_id,
+# fk_submissions_retested_by_user_id) still reference users.id — pg_restore then
+# fails with "cannot drop ... because other objects depend on it", the reload
+# collides with the surviving schema (duplicate keys, "already exists", FK
+# violations), and the DB is left corrupt. DROP SCHEMA ... CASCADE clears the
+# whole dependency graph in one shot so the reload lands on an empty schema.
+echo "    Dropping and recreating schema 'public' ..."
+$COMPOSE exec -T db psql -U "$DATABASE_USER" -d "$DATABASE_NAME" -v ON_ERROR_STOP=1 \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+# --no-owner so role differences between hosts don't trip the restore. No
+# --clean: we just emptied the schema above. pg_restore can still emit non-fatal
+# warnings (e.g. COMMENT ON SCHEMA public when not the schema owner); tolerate
+# exit 1, fail on anything worse.
+$COMPOSE exec -T db pg_restore --no-owner \
   -U "$DATABASE_USER" -d "$DATABASE_NAME" < "$DUMP" || {
     rc=$?
     if [[ $rc -gt 1 ]]; then

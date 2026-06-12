@@ -10,6 +10,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 // MARK: - Intermediate query results
@@ -117,7 +118,7 @@ extension InstructorDashboardRoutes {
 
         let activeStudentIDs = Set(
             enrolledUsers
-                .filter { $0.role == "student" }
+                .filter { $0.roleValue == .student }
                 .compactMap(\.id)
         )
         // Pending pre-enrollments are CSV-uploaded students who haven't
@@ -141,6 +142,41 @@ extension InstructorDashboardRoutes {
         )
     }
 
+    /// Enrolled-student rows + active-student count for the active course,
+    /// without the (relatively expensive) dashboard-metric computation.
+    /// Shared by the Students-tab page render and its polling endpoint, which
+    /// only need the roster.  Mirrors the roster half of `buildCourseRoster`:
+    /// active enrollments first (last-seen-desc), pending CSV pre-enrollments
+    /// appended as muted rows, with the count covering both.
+    func loadEnrolledStudentRows(
+        req: Request,
+        activeCourseUUID: UUID,
+        activeCourseCode: String,
+        fmt: DateFormatter,
+        isoFormatter: ISO8601DateFormatter
+    ) async throws -> (rows: [EnrolledStudentRow], count: Int) {
+        let enrolledUsers = try await loadEnrolledUsersForRoster(req: req, activeCourseUUID: activeCourseUUID)
+        var rows = buildEnrolledStudentRows(
+            enrolledUsers: enrolledUsers,
+            activeCourseUUID: activeCourseUUID,
+            activeCourseCode: activeCourseCode,
+            fmt: fmt,
+            isoFormatter: isoFormatter
+        )
+        let pendingPreEnrollments = try await APIPreEnrollment.query(on: req.db)
+            .filter(\.$course.$id == activeCourseUUID)
+            .sort(\.$username)
+            .all()
+        rows.append(
+            contentsOf: buildPendingPreEnrollmentRows(
+                pendingPreEnrollments: pendingPreEnrollments,
+                activeCourseUUID: activeCourseUUID
+            )
+        )
+        let activeStudentCount = enrolledUsers.filter { $0.roleValue == .student }.count
+        return (rows, activeStudentCount + pendingPreEnrollments.count)
+    }
+
     /// Loads the enrolled users for the course, sorted last-seen-desc then
     /// username-asc.  Returns an empty array if no enrollments exist.
     private func loadEnrolledUsersForRoster(
@@ -154,6 +190,9 @@ extension InstructorDashboardRoutes {
         guard !enrolledUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
             .filter(\.$id ~~ enrolledUserIDs)
+            // Exclude `mcp` service accounts: they may be enrolled to scope an
+            // agent's access (admin MCP tab) but are not roster members.
+            .filter(\.$role != UserRole.mcp.rawValue)
             .all()
             .sorted { lhs, rhs in
                 switch (lhs.lastSeenAt, rhs.lastSeenAt) {
@@ -239,20 +278,13 @@ extension InstructorDashboardRoutes {
                 .filter(\.$kind == APISubmission.Kind.student)
                 .filter(\.$submittedAt >= windowStart)
                 .all()
-        let allCourseStudentSubmissions =
-            allSetupIDs.isEmpty
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID ~~ allSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .all()
         let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
             for: allSetupIDs,
             on: req.db
         )
 
         let active24h = enrolledUsers.reduce(into: 0) { count, user in
-            guard user.role == "student" else { return }
+            guard user.roleValue == .student else { return }
             if let lastSeenAt = user.lastSeenAt, lastSeenAt >= windowStart {
                 count += 1
             }
@@ -263,12 +295,19 @@ extension InstructorDashboardRoutes {
             return activeStudentIDs.contains(userID)
         }
         let activeAssignments24h = Set(recentStudentSubmissions.map(\.testSetupID)).count
-        let pendingNow = allCourseStudentSubmissions.filter { submission in
-            guard let userID = submission.userID else { return false }
-            return activeStudentIDs.contains(userID)
-                && workerModeSetupIDs.contains(submission.testSetupID)
-                && ["pending", "assigned"].contains(submission.status)
-        }.count
+        // SQL COUNT instead of loading every course submission ever made just
+        // to tally the in-flight ones (June 2026 audit, P1.6).
+        let pendingNow: Int
+        if workerModeSetupIDs.isEmpty || activeStudentIDs.isEmpty {
+            pendingNow = 0
+        } else {
+            pendingNow = try await APISubmission.query(on: req.db)
+                .filter(\.$testSetupID ~~ Array(workerModeSetupIDs))
+                .filter(\.$kind == APISubmission.Kind.student)
+                .filter(\.$status ~~ [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue])
+                .filter(\.$userID ~~ Array(activeStudentIDs))
+                .count()
+        }
         let studentsWithBrowserErrors = try await countStudentsWithBrowserErrors(
             req: req,
             allSetupIDs: allSetupIDs,
@@ -286,13 +325,16 @@ extension InstructorDashboardRoutes {
     }
 
     /// Students With Browser Errors: distinct students who posted a
-    /// client-side diagnostic (preflight_fail or watchdog_timeout) for
-    /// one of this course's test setups within the 24h window.  Captures
-    /// the in-browser editor failing to start — JupyterLite / Pyodide
-    /// blocked by browser policy, IndexedDB disabled, service worker
-    /// blocked, etc. — before the student can even open the assignment.
-    /// Diagnostics with a null test_setup_id (the supplied setup ID didn't
-    /// resolve) are excluded since they can't be attributed to a course.
+    /// client-side diagnostic (preflight_fail or watchdog_timeout) for one of
+    /// this course's test setups within the 24h window **and never got a
+    /// submission in for that setup**.  The in-browser editor records a
+    /// diagnostic even when the student reloads and submits fine, so counting
+    /// raw diagnostics over-reports transient hiccups (a slow Pyodide cold
+    /// start that clears on reload).  A student who errored on a setup but has
+    /// a submission for it has self-recovered and drops out — what remains is
+    /// the actually-stuck signal.  Diagnostics with a null test_setup_id (the
+    /// supplied setup ID didn't resolve) are excluded since they can't be
+    /// attributed to a course.
     private func countStudentsWithBrowserErrors(
         req: Request,
         allSetupIDs: [String],
@@ -306,13 +348,35 @@ extension InstructorDashboardRoutes {
             : try await APIClientDiagnostic.query(on: req.db)
                 .filter(\.$createdAt >= windowStart)
                 .all()
+
+        // (student, setup) pairs that hit a browser error attributable to this course.
+        let errorPairs = recentClientDiagnostics.compactMap { record -> (userID: UUID, setupID: String)? in
+            guard let setupID = record.testSetupID,
+                setupIDSet.contains(setupID),
+                activeStudentIDs.contains(record.userID)
+            else { return nil }
+            return (record.userID, setupID)
+        }
+        if errorPairs.isEmpty { return 0 }
+
+        // A student "recovered" — and drops out of the stuck count — if they
+        // have a submission for the setup they errored on, even though the
+        // diagnostic row remains.
+        let erroredSetupIDs = Array(Set(errorPairs.map(\.setupID)))
+        let recoverySubmissions = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID ~~ erroredSetupIDs)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .all()
+        let recoveredKeys = Set(
+            recoverySubmissions.compactMap { submission -> String? in
+                guard let userID = submission.userID else { return nil }
+                return "\(userID.uuidString)|\(submission.testSetupID)"
+            }
+        )
+
         return Set(
-            recentClientDiagnostics.compactMap { record -> UUID? in
-                guard let setupID = record.testSetupID,
-                    setupIDSet.contains(setupID),
-                    activeStudentIDs.contains(record.userID)
-                else { return nil }
-                return record.userID
+            errorPairs.compactMap { pair -> UUID? in
+                recoveredKeys.contains("\(pair.userID.uuidString)|\(pair.setupID)") ? nil : pair.userID
             }
         ).count
     }
@@ -339,6 +403,37 @@ extension InstructorDashboardRoutes {
         enrolledStudentIDs: Set<UUID>
     ) async throws -> [String: Int] {
         guard !allSetupIDs.isEmpty, !enrolledStudentIDs.isEmpty else { return [:] }
+
+        // Grouped COUNT(DISTINCT user_id) instead of loading every matching
+        // submission row and building per-setup sets in Swift — this runs on
+        // the instructor landing page and degrades linearly with term volume
+        // (June 2026 audit, P1.6; same pattern as the admin runner counts).
+        if let sql = req.db as? SQLDatabase {
+            struct SubmitterCountRow: Decodable {
+                let testSetupID: String
+                let submitters: Int
+                enum CodingKeys: String, CodingKey {
+                    case testSetupID = "test_setup_id"
+                    case submitters
+                }
+            }
+            let rows = try await sql.select()
+                .column("test_setup_id")
+                .column(
+                    SQLFunction("COUNT", args: SQLDistinct(SQLColumn("user_id"))), as: "submitters"
+                )
+                .from("submissions")
+                .where("test_setup_id", .in, allSetupIDs)
+                .where("kind", .equal, APISubmission.Kind.student)
+                // Bind UUIDs (not strings) so the Postgres uuid column and the
+                // SQLite text storage both compare correctly.
+                .where("user_id", .in, Array(enrolledStudentIDs))
+                .groupBy("test_setup_id")
+                .all(decoding: SubmitterCountRow.self)
+            return Dictionary(uniqueKeysWithValues: rows.map { ($0.testSetupID, $0.submitters) })
+        }
+
+        // Non-SQL fallback (not hit by the sqlite/postgres drivers in use).
         let studentSubmissions = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID ~~ allSetupIDs)
             .filter(\.$kind == APISubmission.Kind.student)
@@ -376,7 +471,7 @@ extension InstructorDashboardRoutes {
 
             let status: String
             if let a = assignment {
-                status = a.isOpen ? "open" : "closed"
+                status = a.visibility.rawValue  // "closed" | "preview" | "open"
             } else {
                 status = "unpublished"
             }

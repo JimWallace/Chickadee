@@ -54,7 +54,7 @@ func makeTestUser(
 ) async throws -> APIUser {
     let user = APIUser(
         username: username,
-        passwordHash: try passwordHash ?? Bcrypt.hash("pw"),
+        passwordHash: try passwordHash ?? testPasswordHash("pw"),
         role: role
     )
     try await user.save(on: app.db)

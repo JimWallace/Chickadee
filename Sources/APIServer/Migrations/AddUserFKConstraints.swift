@@ -30,7 +30,7 @@
 import Fluent
 import SQLKit
 
-struct AddUserFKConstraints: AsyncMigration {
+struct AddUserFKConstraints: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         guard let sql = database as? SQLDatabase else { return }
         guard sql.dialect.name == "postgresql" else {

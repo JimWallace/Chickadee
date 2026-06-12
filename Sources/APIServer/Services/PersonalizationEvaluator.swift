@@ -238,7 +238,20 @@ enum PersonalizationEvaluator {
         proc.executableURL = executableURL
         proc.arguments = arguments
         proc.currentDirectoryURL = cwd
-        var mergedEnv = ProcessInfo.processInfo.environment
+        // SECURITY: do NOT inherit the parent process environment.  This
+        // subprocess runs instructor-authored expressions, and the server
+        // process holds secrets (RUNNER_SHARED_SECRET, database credentials,
+        // the OIDC client secret, BrightSpace keys, …) that must never be
+        // readable from an expression via `os.environ`.  Pass only an explicit
+        // allowlist of variables the interpreter needs to start (PATH to locate
+        // `python3`, plus HOME / locale / PYTHONHOME for the runtime), then
+        // overlay the caller-supplied vars (the assignment seed and an optional
+        // PYTHONPATH into the support-files dir).
+        let parentEnv = ProcessInfo.processInfo.environment
+        var mergedEnv: [String: String] = [:]
+        for key in ["PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "PYTHONHOME"] {
+            if let value = parentEnv[key] { mergedEnv[key] = value }
+        }
         for (k, v) in env { mergedEnv[k] = v }
         proc.environment = mergedEnv
 

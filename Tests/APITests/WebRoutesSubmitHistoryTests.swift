@@ -62,6 +62,15 @@ import XCTVapor
                 dueAt: Date().addingTimeInterval(-60),
                 on: app
             )
+            // The student opened this while it was open (here: a prior
+            // submission) so the closed-assignment gate lets them reach the
+            // submit form; the POST is still rejected for being past due.
+            try await wrInsertSubmission(
+                id: "sub_overdue_prior",
+                testSetupID: "setup_submit_overdue",
+                userID: try user.requireID(),
+                on: app
+            )
 
             let (csrf, sessionCookie) = try await csrfFields(
                 for: "/testsetups/setup_submit_overdue/submit",

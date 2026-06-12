@@ -5,6 +5,9 @@ struct ServerHealthAlertConfiguration: Sendable {
     let enabled: Bool
     let checkIntervalSeconds: TimeInterval
     let cooldownSeconds: TimeInterval
+    /// Grace period for the runner-offline rule: fire when a runner we've seen
+    /// this session has not checked in within this window, regardless of whether
+    /// jobs are queued.
     let runnerOfflineSeconds: TimeInterval
     let queueDepthThreshold: Int
     let oldestPendingSeconds: TimeInterval

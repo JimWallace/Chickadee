@@ -11,6 +11,14 @@ struct HTTPSRedirectMiddleware: AsyncMiddleware {
         guard configuration.enforceHTTPS else {
             return try await next.respond(to: request)
         }
+        // Internal service-to-service endpoints are exempt: the runner calls the
+        // worker API over plain HTTP on the internal network (no TLS, no
+        // X-Forwarded-Proto) and is already authenticated by per-request HMAC,
+        // and the container healthcheck hits /health over plain HTTP. Enforcing
+        // HTTPS here would 426 the runner's POSTs before HMAC auth runs.
+        guard !isHTTPSExempt(path: request.url.path) else {
+            return try await next.respond(to: request)
+        }
         guard !request.isHTTPSRequest(trustForwardedProto: configuration.trustForwardedProto) else {
             return try await next.respond(to: request)
         }
@@ -24,6 +32,13 @@ struct HTTPSRedirectMiddleware: AsyncMiddleware {
         }
 
         throw Abort(.upgradeRequired, reason: "HTTPS is required for this endpoint.")
+    }
+
+    /// Paths served over plain HTTP by internal callers, exempt from HTTPS
+    /// enforcement: the HMAC-authenticated worker API (runner ↔ server on the
+    /// internal Docker network) and the container healthcheck.
+    private func isHTTPSExempt(path: String) -> Bool {
+        path == "/health" || path.hasPrefix("/api/v1/worker/")
     }
 }
 

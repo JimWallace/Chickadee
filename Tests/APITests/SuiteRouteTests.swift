@@ -169,6 +169,153 @@ import XCTVapor
         }
     }
 
+    // MARK: - PUT /suite raw-script content channel (v0.4.222)
+
+    @Test func put_createsRawScriptFromContent() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [
+                ("publictest_existing.py", "passed('existing body')\n")
+            ])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            // Keep the existing script (no content → preserved) and add a
+            // brand-new one whose body rides in `content` — the channel that
+            // lets PUT /suite create a script without POST /scripts.
+            let body = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_existing.py","tier":"public","points":1,"displayName":null,"dependsOn":[]}},
+                    {"kind":"script","script":{"script":"publictest_new.py","tier":"public","points":2,"displayName":null,"dependsOn":[],"content":"passed('brand new body')\n"}}
+                ]}
+                """#
+
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "\(res.body.string)")
+                })
+
+            // GET round-trips the new script's body from the zip, and the
+            // untouched existing script's body is emitted too.
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let s = res.body.string
+                    #expect(s.contains("publictest_new.py"))
+                    #expect(s.contains("brand new body"), "new script body should round-trip via GET /suite")
+                    #expect(s.contains("existing body"), "untouched existing script body should still be emitted")
+                })
+        }
+    }
+
+    @Test func put_updatesExistingScriptContent() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [
+                ("publictest_a.py", "passed('original body')\n")
+            ])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let body = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_a.py","tier":"public","points":1,"displayName":null,"dependsOn":[],"content":"passed('rewritten body')\n"}}
+                ]}
+                """#
+
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "\(res.body.string)")
+                })
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let s = res.body.string
+                    #expect(s.contains("rewritten body"), "updated body should round-trip")
+                    #expect(!s.contains("original body"), "old body should be replaced in the zip")
+                })
+        }
+    }
+
+    // PR4c: a raw script's instructor hint rides in the script DTO, persists
+    // onto the manifest entry, and round-trips via GET /suite.  A later push
+    // that re-sends the script row WITH its hint preserves it (the editor's
+    // suite-table always re-emits hint, so reorders don't wipe it).
+    @Test func put_persistsAndRoundTripsRawScriptHint() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [
+                ("publictest_a.py", "passed('body a')\n")
+            ])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let withHint = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_a.py","tier":"public","points":1,"displayName":null,"dependsOn":[],"hint":"read the docstring"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: withHint)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("read the docstring"), "hint should round-trip via GET /suite")
+                })
+
+            // A second push that re-sends the row with its hint (the editor's
+            // table always does) must preserve it — no wipe on reorder/retier.
+            let stillHinted = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_a.py","tier":"release","points":2,"displayName":null,"dependsOn":[],"hint":"read the docstring"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: stillHinted)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("read the docstring"), "hint should survive a retier push")
+                })
+        }
+    }
+
     @Test func put_adoptScriptOnFamilyCollapsesBackIntoFamilyToken() async throws {
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [
@@ -323,11 +470,73 @@ import XCTVapor
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
             let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
             let generated = props.testSuites.filter { $0.generatedBy != nil }
-            #expect(generated.count == 2)
-            for entry in generated {
+            // 2 cases + the auto-existence guard.
+            #expect(generated.count == 3)
+            // family.defaults.points applies to each case; the guard gates at 0.
+            for entry in generated where !entry.script.hasSuffix("_exists.py") {
                 #expect(entry.points == 3)
             }
+            #expect(generated.first { $0.script.hasSuffix("_exists.py") }?.points == 0)
 
+        }
+    }
+
+    // Generated family-case files can't be edited or deleted through the
+    // raw-script endpoints — the instructor edits the family instead. (Ported
+    // from PatternFamilyRouteTests when PUT /families was retired in v0.4.227;
+    // the family is now installed via PUT /suite.)
+    @Test func putScript_rejectsEditOfGeneratedFamilyFile() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let body = #"""
+                {"items":[
+                    {"kind":"family","family":{
+                        "id":"bmi","name":"BMI","kind":"boundary_equality",
+                        "functionName":"bmi_category","paramNames":["bmi"],
+                        "defaults":{"tier":"public","points":1},
+                        "cases":[
+                            {"key":"01","label":"a","args":[18.49],"expected":"underweight","enabled":true}
+                        ]
+                    }}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            // Editing the generated file via the raw-script endpoint must 409.
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/scripts/publictest_bmi_01.py",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    try req.content.encode(["content": "# tampered\npassed('x')\n"])
+                },
+                afterResponse: { res in
+                    #expect(res.status == .conflict)
+                    #expect(
+                        res.body.string.contains("Edit the family"),
+                        "Expected hint to edit the family, got: \(res.body.string)")
+                })
+
+            // Deleting via the raw endpoint must also 409.
+            try await app.asyncTest(
+                .DELETE, "/instructor/\(id)/scripts/publictest_bmi_01.py",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                },
+                afterResponse: { res in #expect(res.status == .conflict) })
         }
     }
 
@@ -425,18 +634,21 @@ import XCTVapor
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
-            // Step 1: install a notebook check via PUT /checks.
-            let checksBody = #"""
-                [{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
-                  "tier":"public","points":1,"variable":"x"}]
+            // Step 1: install a notebook check through PUT /suite (the
+            // dedicated PUT /checks endpoint was retired in v0.4.227).
+            let installBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
+                      "tier":"public","points":1,"dependsOn":[],"variable":"x"}}
+                ]}
                 """#
             try await app.asyncTest(
-                .PUT, "/instructor/\(id)/checks",
+                .PUT, "/instructor/\(id)/suite",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.headers.add(name: "x-csrf-token", value: csrf)
                     req.headers.contentType = .json
-                    req.body = ByteBuffer(string: checksBody)
+                    req.body = ByteBuffer(string: installBody)
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok, "\(res.body.string)")
@@ -494,6 +706,108 @@ import XCTVapor
                 handWrittenSameName.isEmpty,
                 "No hand-written entry should have been created for the check's generated filename.")
 
+        }
+    }
+
+    // Phase B (suite-save unification): `PUT /suite` is now authoritative
+    // for check specs, not just (id, sectionID).  A spec edit carried in the
+    // suite payload persists into the manifest's notebookChecks — the editor
+    // always sends each row's current spec, so a save round-trips them.
+    @Test func put_suitePersistsChangedCheckSpec() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            // Install a check through PUT /suite (PUT /checks retired v0.4.227).
+            let installBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","name":"x exists","kind":"variable_exists",
+                      "tier":"public","points":1,"dependsOn":[],"variable":"x"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: installBody)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            // PUT /suite carrying the SAME check id but an edited spec:
+            // different variable, name, tier, and points.
+            let suiteBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","name":"y exists","kind":"variable_exists",
+                      "tier":"release","points":3,"dependsOn":[],"variable":"y"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: suiteBody)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            let check = try #require(props.notebookChecks.first(where: { $0.id == "var_exists_x" }))
+            #expect(check.variable == "y")
+            #expect(check.name == "y exists")
+            #expect(check.tier == .release)
+            #expect(check.points == 3)
+        }
+    }
+
+    // Symmetric with families: a `PUT /suite` whose payload omits an
+    // existing check removes it (full-replace).  The editor always sends
+    // every row, so omission means deletion.
+    @Test func put_suiteOmittingCheckRemovesIt() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let installBody = #"""
+                {"items":[
+                    {"kind":"check","check":{"id":"var_exists_x","kind":"variable_exists",
+                      "tier":"public","points":1,"dependsOn":[],"variable":"x"}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: installBody)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            // PUT /suite with no items at all — the check should be gone.
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"items":[]}"#)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            #expect(props.notebookChecks.isEmpty)
+            #expect(props.testSuites.allSatisfy { $0.generatedByCheck == nil })
         }
     }
 

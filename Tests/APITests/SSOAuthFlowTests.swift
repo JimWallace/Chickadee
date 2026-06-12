@@ -17,29 +17,6 @@ import XCTVapor
 
 @Suite struct SSOAuthFlowTests {
 
-    private struct EnvironmentOverride {
-        let key: String
-        let previousValue: String?
-
-        init(key: String, value: String?) {
-            self.key = key
-            self.previousValue = Environment.get(key)
-            if let value {
-                setenv(key, value, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-
-        func restore() {
-            if let previousValue {
-                setenv(key, previousValue, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-    }
-
     private actor MockTokenEndpoint {
         enum Mode {
             case alwaysFail
@@ -123,19 +100,6 @@ import XCTVapor
 
             try routes(app)
         }
-    }
-
-    private func withEnvironment(
-        _ values: [String: String?],
-        perform operation: () async throws -> Void
-    ) async rethrows {
-        let overrides = values.map { EnvironmentOverride(key: $0.key, value: $0.value) }
-        defer {
-            for override in overrides.reversed() {
-                override.restore()
-            }
-        }
-        try await operation()
     }
 
     private func signedToken(
@@ -313,6 +277,58 @@ import XCTVapor
                 afterResponse: { res in
                     let location = res.headers.first(name: .location) ?? ""
                     #expect(location.contains("redirect_uri="))
+                })
+        }
+    }
+
+    @Test func sSOStart_withoutReauthMarker_doesNotForcePrompt() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/auth/sso/start",
+                afterResponse: { res in
+                    let location = res.headers.first(name: .location) ?? ""
+                    #expect(!location.contains("prompt=login"))
+                })
+        }
+    }
+
+    @Test func sSOStart_withReauthMarker_forcesPromptLoginAndClearsMarker() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/auth/sso/start",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: "\(reauthMarkerCookieName)=1")
+                },
+                afterResponse: { res in
+                    let location = res.headers.first(name: .location) ?? ""
+                    #expect(location.contains("prompt=login"))
+                    #expect(location.contains("max_age=0"))
+                    // The marker is consumed: a Set-Cookie clears it (empty value).
+                    let setCookies = res.headers[.setCookie]
+                    let cleared = setCookies.contains { $0.contains("\(reauthMarkerCookieName)=;") }
+                    #expect(cleared, "expected the re-auth marker to be cleared, got: \(setCookies)")
+                })
+        }
+    }
+
+    // MARK: - Post-logout login page: SSO entry is a navigation link
+
+    @Test func loginPageAfterLogout_rendersSSOLinkNotForm() async throws {
+        // v0.4.211 stopped SSO-only mode from auto-redirecting /login into the
+        // SSO flow, which surfaced the "Login with UWaterloo" button for the
+        // first time. It must be a navigation link, NOT a form submit — the
+        // browser enforces the CSP form-action directive across the whole
+        // redirect chain, and the IdP authorization endpoint isn't (and can't
+        // reliably be) in that allow-list, so a form submit gets blocked.
+        // Regression guard for v0.4.212.
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/login?loggedout=1",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("href=\"/auth/sso/start\""))
+                    #expect(!body.contains("action=\"/auth/sso/start\""))
                 })
         }
     }
@@ -798,7 +814,7 @@ import XCTVapor
     }
 
     @Test func customOIDCCallbackRouteUsesConfiguredPath() async throws {
-        try await withEnvironment(["OIDC_CALLBACK": "oidc/custom/callback"]) {
+        try await withTestEnvironment(["OIDC_CALLBACK": "oidc/custom/callback"]) {
             try await withApp(try await makeApp()) { app in
                 try await app.asyncTest(
                     .GET, "/oidc/custom/callback?error=access_denied",

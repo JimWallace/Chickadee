@@ -102,13 +102,42 @@ import XCTVapor
         }
     }
 
-    @Test func ssoMode_loginAutoRedirectsToSSOStart() async throws {
+    @Test func ssoMode_loginRendersButtonNotAutoSSO() async throws {
+        // /login must NOT auto-redirect into SSO — it renders the login page
+        // with the "Login with UWaterloo" button. Auto-initiating SSO made
+        // logout look broken: the IdP's live session silently re-authenticated
+        // instead of showing a logged-out page (IRA-PIA finding).
         try await withApp(try await makeApp(authMode: .sso)) { app in
             try await app.asyncTest(
                 .GET, "/login",
                 afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/auth/sso/start")
+                    #expect(res.headers.first(name: .location) != "/auth/sso/start")
+                })
+        }
+    }
+
+    @Test func ssoMode_loginAfterLogoutRendersFormNotSSORestart() async throws {
+        // A just-logged-out SSO user lands on /login?loggedout=1.  Without the
+        // guard this would immediately redirect to /auth/sso/start and silently
+        // re-authenticate, making the logout button feel broken.
+        try await withApp(try await makeApp(authMode: .sso)) { app in
+            try await app.asyncTest(
+                .GET, "/login?loggedout=1",
+                afterResponse: { res in
+                    // Must NOT bounce back into SSO; renders the login form
+                    // instead (status 200, or 500 if this bare harness has no
+                    // Leaf views — either way, no /auth/sso/start redirect).
+                    #expect(res.headers.first(name: .location) != "/auth/sso/start")
+                })
+        }
+    }
+
+    @Test func ssoMode_loginWithTimeoutErrorRendersFormNotSSORestart() async throws {
+        try await withApp(try await makeApp(authMode: .sso)) { app in
+            try await app.asyncTest(
+                .GET, "/login?error=timeout",
+                afterResponse: { res in
+                    #expect(res.headers.first(name: .location) != "/auth/sso/start")
                 })
         }
     }

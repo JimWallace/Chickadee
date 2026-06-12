@@ -45,6 +45,20 @@ func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APIT
     return (assignment, setup)
 }
 
+/// Lighter sibling of `loadAssignmentAndSetup(_:)` for handlers that never
+/// touch the test setup — same `:assignmentID` resolution and 404 message,
+/// without forcing an unnecessary `APITestSetup` fetch.  Handlers that need
+/// the raw path parameter afterwards can use `assignment.publicID`, which
+/// is always identical to it (`assignmentByPublicID` is an exact-match
+/// filter on a validated parameter).
+func loadAssignment(_ req: Request) async throws -> APIAssignment {
+    let idStr = try assignmentPublicIDParameter(from: req)
+    guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
+        throw WebAssignmentError.notFound(resource: "Assignment '\(idStr)'")
+    }
+    return assignment
+}
+
 /// Loads a draft test setup from the `?draftID=<id>` query parameter.
 /// The draft model is just an `APITestSetup` row that hasn't been
 /// linked to an `APIAssignment` yet — same row shape, no parent.
@@ -79,6 +93,7 @@ func applySuiteEdit(
 ) async throws {
     var authored: [AuthoredSuiteItem] = []
     var nextFamilies: [PatternFamily] = []
+    var nextChecks: [NotebookCheck] = []
     for item in body.items {
         switch item.kind {
         case "script":
@@ -95,7 +110,9 @@ func applySuiteEdit(
                         points: s.points,
                         displayName: s.displayName,
                         dependsOn: s.dependsOn,
-                        sectionID: item.sectionID
+                        sectionID: item.sectionID,
+                        content: s.content,
+                        hint: s.hint
                     )))
         case "family":
             guard var f = item.family else {
@@ -121,17 +138,22 @@ func applySuiteEdit(
             authored.append(.family(id: f.id, sectionID: item.sectionID))
             nextFamilies.append(f)
         case "check":
-            // Notebook-check rows carry their full spec for editor display
-            // but the suite-edit path only acts on (id, sectionID).  The
-            // spec itself flows through `PUT /checks`; here we just stamp
-            // the authored position so applyPatternFamilies expands the
-            // check's generated entry at the right slot.
+            // Notebook-check rows carry their full spec.  As of the
+            // suite-save unification (Phase B) `PUT /suite` is authoritative
+            // for the whole test-item list — scripts, families, AND checks
+            // — so we collect the spec into `nextChecks` (full-replace,
+            // symmetric with `nextFamilies`) and stamp the authored
+            // position.  The editor always sends every row's current spec
+            // (the seed is refreshed after each `PUT /checks` modal save),
+            // so a reorder save round-trips check specs unchanged.  The
+            // dedicated `PUT /checks` endpoint stays for the check modal.
             guard let c = item.check else {
                 throw WebAssignmentError.invalidParameter(
                     name: "items",
                     reason: "Suite item kind=check is missing `check` payload.")
             }
             authored.append(.check(id: c.id, sectionID: item.sectionID))
+            nextChecks.append(c)
         default:
             throw WebAssignmentError.invalidParameter(
                 name: "items",
@@ -146,53 +168,18 @@ func applySuiteEdit(
     _ = try await applyPatternFamilies(
         to: setup,
         nextFamilies: nextFamilies,
+        nextChecks: nextChecks,
         authoredItems: authored,
         sections: nil,
         on: db
     )
 }
 
-// MARK: - Pattern families editor core
-
-/// Replaces the test setup's pattern family list and re-applies.
-/// Used by both `PUT /instructor/:id/families` and
-/// `PUT /instructor/new/draft/families`.
-func applyPatternFamiliesEdit(
-    setup: APITestSetup,
-    families: [PatternFamily],
-    on db: Database
-) async throws {
-    _ = try await applyPatternFamilies(
-        to: setup,
-        nextFamilies: families,
-        on: db
-    )
-}
-
-// MARK: - Notebook checks editor core
-
-/// Replaces the test setup's notebook check list, carrying forward the
-/// existing pattern families (so the shared apply path rewrites both
-/// generated-script sets in a single zip mutation).
-func applyNotebookChecksEdit(
-    setup: APITestSetup,
-    checks: [NotebookCheck],
-    on db: Database
-) async throws {
-    let currentFamilies: [PatternFamily] = {
-        guard let props = setup.decodedManifest()
-
-        else { return [] }
-        return props.patternFamilies
-    }()
-
-    _ = try await applyPatternFamilies(
-        to: setup,
-        nextFamilies: currentFamilies,
-        nextChecks: checks,
-        on: db
-    )
-}
+// Pattern families and notebook checks no longer have dedicated full-replace
+// editor helpers: their writes flow through `applySuiteEdit` above (the single
+// PUT /suite path).  The standalone `applyPatternFamiliesEdit` /
+// `applyNotebookChecksEdit` helpers — and the PUT /families / PUT /checks
+// endpoints they backed — were retired in v0.4.227.
 
 // MARK: - JSON response helper
 
@@ -238,4 +225,84 @@ func mutateManifest(
     }
     setup.manifest = json
     try await setup.save(on: db)
+}
+
+// MARK: - Suite-section manifest mutations
+//
+// Shared cores for the test-suite Sections CRUD, used by both the published
+// (`PublishedAssignmentRoutes+SuiteSections`) and draft
+// (`DraftAssignmentRoutes+Sections`) handlers. The handlers differ only in how
+// they resolve the setup and where they redirect afterward; the manifest
+// mutations are identical, so they live here once. (Section variables are
+// handled by `SectionInputsService`, which both paths call directly.)
+
+/// Appends a new, uniquely-identified section with the given display name.
+func createSuiteSectionCore(setup: APITestSetup, name: String, on db: any Database) async throws {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+    }
+    try await mutateManifest(setup: setup, on: db) { dict in
+        var sections = (dict["sections"] as? [[String: Any]]) ?? []
+        sections.append(["id": UUID().uuidString, "name": trimmed])
+        dict["sections"] = sections
+    }
+}
+
+/// Renames the section with `sectionID`, throwing `notFound` if it is absent.
+func renameSuiteSectionCore(
+    setup: APITestSetup, sectionID: String, name: String, on db: any Database
+) async throws {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        throw WebAssignmentError.invalidParameter(name: "name", reason: "Section name must not be empty.")
+    }
+    try await mutateManifest(setup: setup, on: db) { dict in
+        guard var sections = dict["sections"] as? [[String: Any]],
+            let idx = sections.firstIndex(where: { ($0["id"] as? String) == sectionID })
+        else {
+            throw WebAssignmentError.notFound(resource: "Section '\(sectionID)'")
+        }
+        sections[idx]["name"] = trimmed
+        dict["sections"] = sections
+    }
+}
+
+/// Removes the section and clears the `sectionID` of any test-suite entries
+/// that referenced it, so they flow into the trailing Ungrouped block (same
+/// semantics as `onDelete: .setNull` on course_sections).
+func deleteSuiteSectionCore(setup: APITestSetup, sectionID: String, on db: any Database) async throws {
+    try await mutateManifest(setup: setup, on: db) { dict in
+        if var sections = dict["sections"] as? [[String: Any]] {
+            sections.removeAll { ($0["id"] as? String) == sectionID }
+            dict["sections"] = sections
+        }
+        if var testSuites = dict["testSuites"] as? [[String: Any]] {
+            for i in testSuites.indices where (testSuites[i]["sectionID"] as? String) == sectionID {
+                testSuites[i].removeValue(forKey: "sectionID")
+            }
+            dict["testSuites"] = testSuites
+        }
+    }
+}
+
+/// Reorders the section list to match `sectionIDs`, which must be a permutation
+/// of the existing ids.
+func reorderSuiteSectionsCore(
+    setup: APITestSetup, sectionIDs: [String], on db: any Database
+) async throws {
+    try await mutateManifest(setup: setup, on: db) { dict in
+        let existing = (dict["sections"] as? [[String: Any]]) ?? []
+        let byID = Dictionary(
+            uniqueKeysWithValues: existing.compactMap { s -> (String, [String: Any])? in
+                guard let id = s["id"] as? String else { return nil }
+                return (id, s)
+            }
+        )
+        guard Set(sectionIDs) == Set(byID.keys), sectionIDs.count == existing.count else {
+            throw WebAssignmentError.invalidParameter(
+                name: "sectionIDs", reason: "Section set mismatch in reorder payload.")
+        }
+        dict["sections"] = sectionIDs.compactMap { byID[$0] }
+    }
 }

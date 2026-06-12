@@ -44,7 +44,7 @@ import XCTVapor
     @Test func registerSecondUserBecomesStudent() async throws {
         try await withApp(try await makeApp()) { app in
             // Seed an existing admin.
-            let hash = try Bcrypt.hash("password1")
+            let hash = try testPasswordHash("password1")
             let admin = APIUser(username: "admin", passwordHash: hash, role: "admin")
             try await admin.save(on: app.db)
 
@@ -70,7 +70,7 @@ import XCTVapor
 
     @Test func registerDuplicateUsernameRedirectsWithError() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("password1")
+            let hash = try testPasswordHash("password1")
             let existing = APIUser(username: "jim", passwordHash: hash, role: "admin")
             try await existing.save(on: app.db)
 
@@ -113,7 +113,7 @@ import XCTVapor
 
     @Test func loginWithCorrectCredentialsRedirects() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("mypassword")
+            let hash = try testPasswordHash("mypassword")
             let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
             try await user.save(on: app.db)
 
@@ -135,9 +135,48 @@ import XCTVapor
         }
     }
 
+    @Test func loginRotatesSessionID() async throws {
+        // Session-fixation defense: the authenticated session must get a fresh
+        // id, different from the pre-login one.
+        func sessionValue(_ header: String) -> String? {
+            for part in header.split(separator: ";") {
+                let kv = part.split(separator: "=", maxSplits: 1)
+                if kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces) == "vapor-session" {
+                    return String(kv[1])
+                }
+            }
+            return nil
+        }
+        try await withApp(try await makeApp()) { app in
+            let hash = try testPasswordHash("pass1234")
+            try await APIUser(username: "rot", passwordHash: hash, role: "student").save(on: app.db)
+
+            let (token, preCookie) = try await csrfFields(for: "/login", on: app)
+            let preID = sessionValue(preCookie)
+            #expect(preID != nil)
+
+            var postID: String?
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: preCookie)
+                    try req.content.encode(
+                        ["username": "rot", "password": "pass1234", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    for sc in res.headers[.setCookie] where sessionValue(sc) != nil {
+                        postID = sessionValue(sc)
+                    }
+                })
+            #expect(postID != nil)
+            #expect(postID != preID, "session id must rotate on login (fixation defense)")
+        }
+    }
+
     @Test func loginWithWrongPasswordRedirectsWithError() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("mypassword")
+            let hash = try testPasswordHash("mypassword")
             let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
             try await user.save(on: app.db)
 
@@ -217,6 +256,152 @@ import XCTVapor
         }
     }
 
+    // MARK: - Logout
+
+    @Test func logoutRedirectsToLoginWithSignedOutNotice() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?loggedout=1")
+                })
+        }
+    }
+
+    @Test func logoutSetsReauthMarkerCookie() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    // Logout arms the next sign-in for forced IdP re-auth so a
+                    // logout can't be silently undone by a live SSO session.
+                    let setCookies = res.headers[.setCookie]
+                    let armed = setCookies.contains { $0.contains("chickadee_reauth=1") }
+                    #expect(armed, "expected logout to set the re-auth marker, got: \(setCookies)")
+                })
+        }
+    }
+
+    @Test func logoutWithTimeoutReasonRedirectsToTimeoutMessage() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/logout?reason=timeout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?error=timeout")
+                })
+        }
+    }
+
+    @Test func logoutWithoutCSRFTokenStillSucceeds() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Logout is CSRF-exempt: a stale browser tab whose session (and CSRF
+            // secret) is already gone must still log out cleanly rather than 403.
+            try await app.asyncTest(
+                .POST, "/logout",
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?loggedout=1")
+                })
+        }
+    }
+
+    @Test func logoutTimeoutWithStaleCSRFTokenRedirectsNotForbidden() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Reproduces the idle-logout bug: the inactivity watchdog POSTs
+            // /logout?reason=timeout with the token minted at page load, but the
+            // server-side secret has since been torn down so the token is stale.
+            // Must redirect to the timeout notice, not 403.
+            try await app.asyncTest(
+                .POST, "/logout?reason=timeout",
+                beforeRequest: { req in
+                    try req.content.encode(["_csrf": "stale-token"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?error=timeout")
+                })
+        }
+    }
+
+    @Test func logoutInvalidatesServerSideSession() async throws {
+        try await withApp(try await makeApp()) { app in
+            let authCookie = try await loginUser(
+                username: "instr", password: "pass1234", role: "instructor", on: app)
+
+            // Sanity: the session cookie authenticates the dashboard.
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: authCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+            // CSRF token bound to the authenticated session.
+            let (token, csrfCookie) = try await csrfFields(for: "/", cookie: authCookie, on: app)
+            let logoutCookie = csrfCookie.isEmpty ? authCookie : csrfCookie
+
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: logoutCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            // Re-using the same session cookie must NOT be authenticated.
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: logoutCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login")
+                })
+        }
+    }
+
+    @Test func loginPageShowsSignedOutNotice() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/login?loggedout=1",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("You have been signed out"))
+                })
+        }
+    }
+
+    @Test func loginPageShowsChickadeeLogo() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/login",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("class=\"auth-logo\""))
+                    #expect(body.contains("/images/chickadee-icon-alt.png"))
+                })
+        }
+    }
+
     // MARK: - Access control
 
     @Test func unauthenticatedHomeRedirectsToLogin() async throws {
@@ -234,7 +419,7 @@ import XCTVapor
     @Test func studentCannotAccessTestSetupNew() async throws {
         try await withApp(try await makeApp()) { app in
             // Create a student, get a session cookie, then try to access instructor-only page.
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
 
@@ -254,7 +439,7 @@ import XCTVapor
 
     @Test func studentCannotAccessAdminPage() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
 
@@ -274,7 +459,7 @@ import XCTVapor
 
     @Test func studentCannotAccessAssignmentsPage() async throws {
         try await withApp(try await makeApp()) { app in
-            let hash = try Bcrypt.hash("pass1234")
+            let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student2", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
 

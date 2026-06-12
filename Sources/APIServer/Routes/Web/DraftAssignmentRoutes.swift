@@ -26,14 +26,15 @@ struct DraftAssignmentRoutes: RouteCollection {
         r.get("new", use: newAssignmentPage)
         r.post("new", "draft", use: updateNewAssignmentDraft)
         r.get("new", "draft", "solution-notebook", use: draftSolutionNotebook)
-        // Draft-scoped suite / families / scripts endpoints.  Mirror the
+        // Draft-scoped suite / scripts endpoints.  Mirror the
         // `:assignmentID`-scoped routes on `PublishedAssignmentRoutes`,
         // but identify the target `APITestSetup` via a `draftID` query
         // parameter because the assignment hasn't been published yet.
+        // Pattern families + notebook checks are written through PUT /suite
+        // (the dedicated draft /families and /checks endpoints were retired
+        // in v0.4.227, mirroring the published side).
         r.get("new", "draft", "suite", use: getDraftSuite)
         r.put("new", "draft", "suite", use: putDraftSuite)
-        r.put("new", "draft", "families", use: putDraftPatternFamilies)
-        r.put("new", "draft", "checks", use: putDraftNotebookChecks)
         r.post("new", "draft", "scripts", use: createDraftScript)
         r.delete("new", "draft", "scripts", ":filename", use: deleteDraftScript)
         r.get("new", "draft", "files", "item", use: downloadDraftSetupItem)

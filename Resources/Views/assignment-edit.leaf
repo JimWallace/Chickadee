@@ -4,56 +4,58 @@
 #endexport
 #export("content"):
 #if(error):
-<div class="error-box" style="margin-bottom:1rem">
+<div class="error-box">
     <h2>Could not update assignment</h2>
-    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+    <p class="card-meta error-detail">#(error)</p>
 </div>
 #endif
 
 #if(notice):
-<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:var(--success-bg)">
-    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+<div class="notice-banner">
+    <p>#(notice)</p>
 </div>
 #endif
 
 <form class="form form--wide" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
     #csrfFormField()
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem">
-        <div style="flex:1;min-width:16rem">
+    <div class="editor-titlebar">
+        <div class="editor-title-col">
             <!-- View mode header -->
-            <div id="assign-header-view" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <h1 style="margin:0">#(assignmentName)</h1>
-                <span class="card-meta" id="assign-due-display" style="font-size:.9rem"></span>
-                <button class="btn-link" id="assign-edit-toggle" type="button"
-                        title="Edit name and due date" aria-label="Edit assignment name and due date"
-                        style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+            <div id="assign-header-view" class="assign-header-view">
+                <h1>#(assignmentName)</h1>
+                <span class="card-meta fine-print" id="assign-due-display"></span>
+                <button class="btn-link icon-btn-text" id="assign-edit-toggle" type="button"
+                        title="Edit name and due date" aria-label="Edit assignment name and due date">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                 </button>
             </div>
 
             <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
-            <div id="assign-header-edit" style="display:none;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
-                <div style="display:flex;align-items:center;margin-bottom:.6rem">
-                    <strong style="font-size:.875rem">Name &amp; Due Date</strong>
-                    <button class="btn-link" id="assign-edit-cancel" type="button"
-                            aria-label="Cancel" title="Cancel"
-                            style="margin-left:auto;font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+            <div id="assign-header-edit" class="assign-header-edit" style="display:none">
+                <div class="assign-header-edit-top">
+                    <strong class="subhead-label">Name &amp; Due Date</strong>
+                    <button class="btn-link icon-btn-text" id="assign-edit-cancel" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
                 </div>
-                <label class="form-label" style="margin-bottom:.5rem">
+                <label class="form-label field-gap">
                     Assignment Name
                     <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
                            value="#(assignmentName)"
                            placeholder="e.g. Lab 2 - Linked Lists">
                 </label>
-                <label class="form-label" style="margin:0">
+                <label class="form-label field-gap">
+                    Open Date (optional)
+                    <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)">
+                </label>
+                <label class="form-label">
                     Due Date (optional)
                     <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
-                <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem;margin-bottom:0"></div>
+                <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
             </div>
         </div>
 
-        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
+        <div class="editor-actions">
             <button class="btn btn-primary" type="submit"
                     title="Save assignment metadata (name, due date, notebooks) and re-validate. Suite edits are saved live as you make them.">
                 Save &amp; Validate
@@ -62,7 +64,16 @@
         </div>
     </div>
 
-    <div style="margin:0 0 1.25rem">
+    <div class="editor-block">
+        <div class="editor-block-head">
+            <h2>Files</h2>
+            <div class="toolbar toolbar--end">
+                <button class="btn action-btn" type="button" id="add-support-file-btn"
+                        title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Add Support File</button>
+                <input type="file" id="support-file-upload-input" hidden multiple>
+                <span id="support-file-upload-status" class="upload-status-inline"></span>
+            </div>
+        </div>
         <table class="results-table" id="notebook-files-table">
             <thead>
                 <tr>
@@ -94,7 +105,7 @@
                         #if(solutionNotebookEditURL):
                         <a class="btn action-btn" id="solution-notebook-edit-btn" href="#(solutionNotebookEditURL)">Edit</a>
                         #else:
-                        <form method="post" action="/instructor/#(assignmentID)/create-solution" style="margin:0">
+                        <form method="post" action="/instructor/#(assignmentID)/create-solution" class="inline-form">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
                                     title="Copy the assignment notebook as a starting point for the solution">Create solution</button>
@@ -117,15 +128,6 @@
                     </td>
                 </tr>
                 #endfor
-                <tr>
-                    <td><strong>Add support file</strong></td>
-                    <td colspan="2">
-                        <button class="btn action-btn" type="button" id="add-support-file-btn"
-                                title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Upload file</button>
-                        <input type="file" id="support-file-upload-input" style="display:none" multiple>
-                        <span id="support-file-upload-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
-                    </td>
-                </tr>
             </tbody>
         </table>
     </div>
@@ -142,24 +144,27 @@
 -->
 <section id="global-inputs-block"
          data-assignment-id="#(assignmentID)"
-         style="margin:0 0 1.25rem">
+         class="editor-block">
+    <div class="editor-block-head">
+        <h2>Global Inputs</h2>
+        <div class="toolbar toolbar--end">
+            <button type="button" class="btn action-btn" id="global-input-add">+ Add Input</button>
+            <span id="global-inputs-status" class="upload-status-inline"></span>
+        </div>
+    </div>
     <table class="results-table" id="global-inputs-table">
         <tbody class="global-inputs-body">
             #for(v in globalVariableRows):
             <tr class="global-input-row">
-                <td><strong>Global input</strong></td>
-                <td style="width:14rem;white-space:nowrap">
-                    <span class="global-input-row-valid"
-                          style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
-                    <input type="text" class="form-input global-input-name"
-                           value="#(v.name)" placeholder="Input Name"
-                           style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-family:monospace">
+                <td class="section-var-namecell">
+                    <span class="global-input-row-valid section-var-valid"></span>
+                    <input type="text" class="form-input global-input-name global-input-name-input"
+                           value="#(v.name)" placeholder="Input Name">
                 </td>
                 <td>
-                    <input type="text" class="form-input global-input-value"
+                    <input type="text" class="form-input global-input-value global-input-value-input"
                            value="#(v.valueJSON)"
-                           placeholder='12, "hello", [1, 2, 3], or = seed % 26'
-                           style="width:100%;padding:.2rem .4rem;font-family:monospace">
+                           placeholder='12, "hello", [1, 2, 3], or = seed % 26'>
                 </td>
                 <td class="time">
                     <button type="button" class="btn action-btn action-danger global-input-remove"
@@ -177,33 +182,25 @@
                 </td>
             </tr>
             #endfor
-            <tr>
-                <td><strong>Add input</strong></td>
-                <td colspan="3">
-                    <button type="button" class="btn action-btn" id="global-input-add">+ Add Input</button>
-                    <span id="global-inputs-status" style="font-size:.78rem;color:var(--gray-500);margin-left:.5rem"></span>
-                </td>
-            </tr>
         </tbody>
     </table>
 </section>
 
 #if(brightspaceSyncEnabled):
 <!-- ── BrightSpace grade sync ─────────────────────────── -->
-<div style="margin-bottom:1.25rem">
+<div class="editor-block">
     <details>
-        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;padding:.4rem 0">BrightSpace Grade Sync</summary>
-        <div style="margin-top:.75rem;max-width:520px">
+        <summary class="bs-summary">BrightSpace Grade Sync</summary>
+        <div class="bs-body">
             <form method="post" action="/instructor/#(assignmentID)/brightspace">
                 #csrfFormField()
-                <label class="form-label" style="margin-bottom:.5rem">
+                <label class="form-label field-gap">
                     BrightSpace Grade Item ID
-                    <input class="form-input" type="text" name="gradeObjectID"
+                    <input class="form-input input-block" type="text" name="gradeObjectID"
                            value="#(brightspaceGradeObjectID)"
-                           placeholder="e.g. 78901"
-                           style="display:block;width:100%">
+                           placeholder="e.g. 78901">
                 </label>
-                <p class="card-meta" style="margin:.3rem 0 .6rem">
+                <p class="card-meta bs-note">
                     Enter the D2L grade item (grade object) ID for this assignment.
                     Find it in BrightSpace → Grades → hover the column → Properties → Grade Object ID in the URL.
                     Leave blank to disable sync for this assignment.
@@ -225,41 +222,33 @@
      the outer form. -->
 
 <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-<input class="form-input" id="suite-files-input" type="file" multiple style="display:none">
+<input class="form-input" id="suite-files-input" type="file" multiple hidden>
 
-<div style="margin-top:1.25rem">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-        <h2 style="margin:0">Test Suite</h2>
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+<div class="suite-editor-section">
+    <div class="editor-block-head">
+        <h2>Test Suite</h2>
+        <div class="toolbar toolbar--end">
             <!-- Add Section — form POST + full page reload.  Mirrors the
                  dashboard pattern (Resources/Views/assignments.leaf:29-51)
                  so section CRUD doesn't ride the fragile whole-state
                  `PUT /suite` pipeline. -->
-            <details class="add-section-details" id="add-suite-section-details" style="position:relative">
-                <summary class="btn action-btn" style="cursor:pointer;list-style:none">+ Section</summary>
-                <div class="add-section-popup card" style="position:absolute;z-index:100;top:100%;right:0;margin-top:.25rem;padding:1rem;min-width:18rem;box-shadow:0 4px 16px rgba(0,0,0,.15)">
-                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form" style="margin:0;gap:.6rem">
+            <details class="add-section-details popup-anchor" id="add-suite-section-details">
+                <summary class="btn action-btn summary-btn">+ Section</summary>
+                <div class="add-section-popup card suite-section-popup">
+                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form popup-form">
                         #csrfFormField()
-                        <label class="form-label" style="margin:0">
+                        <label class="form-label">
                             Section name
-                            <input class="form-input" type="text" name="name" placeholder="e.g. Question 1" required
-                                   style="font-size:.85rem;padding:.3rem .5rem">
+                            <input class="form-input editor-input" type="text" name="name" placeholder="e.g. Question 1" required>
                         </label>
-                        <button class="btn btn-primary" type="submit"
-                                style="font-size:.85rem;padding:.3rem .6rem">Create section</button>
+                        <button class="btn btn-primary btn-compact" type="submit">Create section</button>
                     </form>
                 </div>
             </details>
-            <!-- v0.4.104: top-level New Script / New Family hidden — every
-                 section (named + Ungrouped) has its own inline buttons now.
-                 Kept in the DOM (with `hidden`) so the per-section delegate
-                 click() in the IIFE below still routes to their handlers.
-                 v0.4.112: same treatment for the global Upload button —
-                 instructors author tests in-house via the family/script
-                 editor, or import from Marmoset on the create page.  No
-                 zip upload anymore. -->
-            <button class="btn action-btn" type="button" id="new-script-btn" hidden>New Script</button>
-            <button class="btn action-btn" type="button" id="add-family-btn" hidden>New Family</button>
+            <!-- Test authoring is per-section now (each section's inline
+                 "+ Add Test" opens the unified Test Editor modal).  The hidden
+                 Upload button is kept as the file-input trigger wired by
+                 suite-table.js (`#add-test-btn`). -->
             <button class="btn action-btn" type="button" id="add-test-btn" hidden>Upload</button>
         </div>
     </div>
@@ -272,58 +261,42 @@
          AssignmentRoutes+SuiteSections.swift. -->
     <div id="suite-sections">
     #for(sec in suiteSectionRows):
-        <div class="section-block" data-section-id="#(sec.sectionID)" style="margin-bottom:1.25rem">
+        <div class="section-block" data-section-id="#(sec.sectionID)">
         #if(!sec.isUngrouped):
-            <div class="section-header" draggable="true"
-                 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;padding:.4rem .6rem;background:var(--gray-100,#f5f5f5);border-radius:.4rem">
-                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true"
-                      style="color:var(--gray-500);font-weight:700;cursor:grab;user-select:none;font-size:1rem;flex-shrink:0">⋮⋮</span>
+            <div class="section-header" draggable="true">
+                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
 
                 <!-- View mode -->
-                <div class="section-view" style="display:flex;align-items:center;gap:.4rem;flex:1;min-width:0;flex-wrap:wrap">
+                <div class="section-view">
                     <strong>#(sec.name)</strong>
-                    <button class="btn-link section-edit-toggle" type="button"
-                            title="Edit section" aria-label="Edit section"
-                            style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+                    <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+                            title="Edit section" aria-label="Edit section">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                     </button>
                     <!-- Inline section action buttons (v0.4.103).  Add Input
                          lives inside section-view so it sits beside the
                          name; the section-vars-form below just renders the
                          tbody and keeps its action= for the auto-save POST. -->
-                    <span style="flex:1"></span>
-                    <button type="button" class="btn action-btn section-var-add"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Input</button>
-                    <button type="button" class="btn action-btn section-new-script-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
-                    <button type="button" class="btn action-btn section-add-family-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
-                    <button type="button" class="btn action-btn section-add-check-btn"
-                            data-section-id="#(sec.sectionID)"
-                            style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+                    <span class="section-spacer"></span>
+                    <button type="button" class="btn action-btn btn-xs section-var-add"
+                            data-section-id="#(sec.sectionID)">+ Add Input</button>
+                    <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                            data-section-id="#(sec.sectionID)">+ Add Test</button>
                 </div>
 
                 <!-- Edit mode (hidden by default) -->
-                <div class="section-edit" style="display:none;align-items:center;gap:.5rem;flex:1;flex-wrap:wrap">
+                <div class="section-edit" style="display:none">
                     <form class="section-rename-form" method="post"
-                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename"
-                          style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1">
+                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename">
                         #csrfFormField()
-                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required
-                               style="font-size:.85rem;padding:.25rem .45rem;flex:1;min-width:8rem">
-                        <button class="btn btn-primary" type="submit"
-                                style="font-size:.8rem;padding:.25rem .5rem">Save</button>
+                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
+                        <button class="btn btn-primary btn-tiny" type="submit">Save</button>
                     </form>
-                    <button class="btn action-btn action-danger section-delete-btn" type="button"
+                    <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
                             data-action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/delete"
-                            data-name="#(sec.name)"
-                            style="font-size:.8rem;padding:.25rem .5rem">Delete</button>
-                    <button class="btn-link section-edit-cancel" type="button"
-                            aria-label="Cancel" title="Cancel"
-                            style="font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+                            data-name="#(sec.name)">Delete</button>
+                    <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
                 </div>
             </div>
 
@@ -336,22 +309,18 @@
                  Save & Validate button is clicked. -->
             <form class="section-vars-form" method="post"
                   action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
-                  style="margin:.25rem 0 .5rem"
                   data-section-id="#(sec.sectionID)">
-                <table class="results-table section-vars-table" style="font-size:.78rem;width:100%">
+                <table class="results-table section-vars-table">
                     <tbody class="section-vars-body">
                         #for(v in sec.variables):
                         <tr class="section-var-row">
-                            <td style="width:14rem;white-space:nowrap">
-                                <span class="section-var-row-valid" style="display:inline-block;width:1rem;color:var(--green,#2d8f47);font-size:.95rem;text-align:center"></span>
-                                <input type="text" class="form-input section-var-name" value="#(v.name)" placeholder="Input Name"
-                                       style="width:calc(100% - 1.5rem);padding:.2rem .4rem;font-size:.78rem;font-family:monospace">
+                            <td class="section-var-namecell">
+                                <span class="section-var-row-valid section-var-valid"></span>
+                                <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
                             </td>
-                            <td><input type="text" class="form-input section-var-value" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"
-                                       style="width:100%;padding:.2rem .4rem;font-size:.78rem;font-family:monospace"></td>
-                            <td style="width:2.5rem;text-align:right"><button type="button" class="btn action-btn action-danger section-var-remove"
-                                        title="Remove input" aria-label="Remove input"
-                                        style="padding:.2rem .4rem;display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
+                            <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
+                            <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
+                                        title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
                         </tr>
                         #endfor
                     </tbody>
@@ -363,26 +332,109 @@
                  The global Upload button at the page top still handles
                  zip uploads. -->
             <div class="section-create-toolbar"
-                 data-section-id="#(sec.sectionID)"
-                 style="display:flex;align-items:center;gap:.4rem;justify-content:flex-end;margin:.15rem 0 .25rem">
-                <button type="button" class="btn action-btn section-new-script-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Script</button>
-                <button type="button" class="btn action-btn section-add-family-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Family</button>
-                <button type="button" class="btn action-btn section-add-check-btn"
-                        data-section-id="#(sec.sectionID)"
-                        style="padding:.2rem .55rem;font-size:.75rem">+ Add Check</button>
+                 data-section-id="#(sec.sectionID)">
+                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                        data-section-id="#(sec.sectionID)">+ Add Test</button>
             </div>
         #endif
-            <table class="results-table" style="width:100%">
+            <table class="results-table">
                 <tbody data-section-id="#(sec.sectionID)"></tbody>
             </table>
         </div>
     #endfor
     </div>
 </div>
+
+<!-- ── Achievements ──────────────────────────────────────────────────
+     The single Achievements table (class goals, individual badges, and
+     the built-in awards) as first-class editable rows.  Persists via
+     PUT /instructor/:id/achievements (the unified `achievements` list).
+     Lives outside the Save form; rows are edited in the <dialog> below. -->
+<section id="achievements-block"
+         data-assignment-id="#(assignmentID)"
+         class="editor-block">
+    <div class="editor-block-head">
+        <h2>Achievements</h2>
+        <div class="toolbar toolbar--end">
+            <button type="button" class="btn action-btn" id="achievement-add">+ Add Achievement</button>
+            <button type="button" class="btn action-btn" id="achievements-save">Save Achievements</button>
+            <span id="achievements-status" class="upload-status-inline"></span>
+        </div>
+    </div>
+    <table class="results-table" id="achievements-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Kind</th>
+                <th>Earned when</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody class="achievements-body"></tbody>
+    </table>
+
+    <dialog id="achievement-modal">
+        <form method="dialog" id="achievement-modal-form">
+            <h3 id="achievement-modal-title" class="subhead-label">Edit Achievement</h3>
+            <label class="form-label field-gap">
+                Name
+                <input type="text" class="form-input" id="am-name" placeholder="e.g. 80% Mastery">
+            </label>
+            <label class="form-label field-gap">
+                Kind
+                <!-- Options render from AchievementKindPresentation (the one
+                     source of truth for kinds); achievements-editor.js reads
+                     each option's data-label for its table Kind column. -->
+                <select class="form-input" id="am-kind">
+                    #for(opt in achievementKindOptions):
+                    <option value="#(opt.value)" data-label="#(opt.label)">#(opt.label) — #(opt.detail)</option>
+                    #endfor
+                </select>
+            </label>
+            <label class="form-label field-gap am-field" data-field="thresholdPercent" style="display:none">
+                Grade ≥ (%)
+                <input type="number" class="form-input" id="am-thresholdPercent" min="0" max="100">
+            </label>
+            <label class="form-label field-gap am-field" data-field="classPercent" style="display:none">
+                Class share ≥ (%)
+                <input type="number" class="form-input" id="am-classPercent" min="0" max="100">
+            </label>
+            <label class="form-label field-gap am-field" data-field="points" style="display:none">
+                Bonus points
+                <input type="number" class="form-input" id="am-points" min="0">
+            </label>
+            <label class="form-label field-gap am-field" data-field="testName" style="display:none">
+                Test filename that must pass
+                <input type="text" class="form-input" id="am-testName" placeholder="secrettest_x.py">
+            </label>
+            <label class="form-label field-gap am-field" data-field="recordDimension" style="display:none">
+                Ranked by
+                <select class="form-input" id="am-recordDimension">
+                    <option value="firstToSubmit">First to submit</option>
+                    <option value="firstToSolve">First to 100%</option>
+                    <option value="fastest">Fastest run</option>
+                    <option value="shortest">Fewest attempts</option>
+                </select>
+            </label>
+            <label class="form-label field-gap am-field" data-field="attemptThreshold" style="display:none">
+                Attempts
+                <input type="number" class="form-input" id="am-attemptThreshold" min="1">
+            </label>
+            <label class="form-label field-gap am-field" data-field="timeThresholdMs" style="display:none">
+                Under (ms)
+                <input type="number" class="form-input" id="am-timeThresholdMs" min="1">
+            </label>
+            <label class="form-label field-gap am-field" data-field="jumpThresholdPercent" style="display:none">
+                Grade jump ≥ (points)
+                <input type="number" class="form-input" id="am-jumpThresholdPercent" min="1">
+            </label>
+            <div class="toolbar toolbar--end field-gap">
+                <button type="submit" class="btn btn-primary" value="done">Done</button>
+                <button type="submit" class="btn" value="cancel">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+</section>
 
 <!-- Seed data: current suite state (scripts + families in authored form)
      and families as JSON.  rawJSON emits the string verbatim because the
@@ -391,466 +443,21 @@
 <script id="suite-state-seed" type="application/json">#rawJSON(suiteStateJSON)</script>
 <script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
 <script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
+<script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
 
-<!-- ── Notebook Check Editor Modal ──────────────────────────────────────
-     Sibling to the pattern-family modal below.  Kind picker reveals
-     kind-specific field cards.  Saves via PUT /instructor/:id/checks
-     (full-replace, same atomic semantics as PUT /families).  -->
-<div id="check-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(720px,96vw);max-height:92vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
-            <div id="check-editor-title" style="font-weight:600;flex:1">New Notebook Check</div>
-            <button class="btn-link" id="check-editor-close" type="button" aria-label="Close" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
-        </div>
+<!-- ── Notebook Check editor ────────────────────────────────────────────
+     The notebook-check form is now a body renderer of the unified Test
+     Editor modal (test-editor-modal.js + test-renderer-check.js): the
+     shell owns the chrome + type picker, and the renderer builds its
+     per-kind fields from the #check-schema seed.  No standalone overlay. -->
 
-        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
-            <input type="hidden" id="check-id">
-            <input type="hidden" id="check-section-id">
+<!-- ── Pattern Family editor body ───────────────────────────────────────────
+     v0.4.238: the family form is a body renderer of the unified Test Editor
+     modal (pattern-family-editor.js registers window.ChickadeeTestRenderers
+     .family).  The shell owns the chrome (title / Save / close); this hidden
+     body is relocated into the shell panel by the renderer's mount(). -->
+#extend("_family-editor-body")
 
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Kind
-                    <select class="form-input" id="check-kind" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="data_frame_shape">DataFrame shape (rows × cols)</option>
-                        <option value="data_frame_columns">DataFrame columns (exact / superset)</option>
-                        <option value="data_frame_equality">DataFrame equality (CSV expected)</option>
-                        <option value="series_equality">Series equality (CSV expected)</option>
-                        <option value="numeric_array_close">Numeric array close (numpy.assert_allclose)</option>
-                        <option value="figure_count">Figure count (matplotlib)</option>
-                        <option value="cell_contains">Cell contains (substring / regex)</option>
-                        <option value="function_exists">Function exists (callable, optional arity)</option>
-                        <option value="variable_exists">Variable exists (defined, optional type)</option>
-                        <option value="ast_structure">AST structure (uses for-loop, lambda, etc.)</option>
-                    </select>
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Display name (shown to students)
-                    <input type="text" class="form-input" id="check-name" placeholder="(auto-generated when blank)"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-            </div>
-            <p class="card-meta" style="font-size:.72rem;margin:.1rem 0 0">
-                Tier (visibility) and points are edited inline on the test suite row — same as scripts and pattern families.  New checks default to <code>public</code> and 1 point; tweak after saving.
-            </p>
-
-            <!-- Kind-specific field cards.  Each is hidden by default; the
-                 kind dropdown's change handler shows exactly one. -->
-
-            <div class="check-fields" data-kind="data_frame_shape" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    DataFrame variable name on student_module
-                    <input type="text" class="form-input" id="check-shape-variable" placeholder="df"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                        Expected rows
-                        <input type="number" class="form-input" id="check-shape-rows" min="0" step="1"
-                               style="padding:.3rem .5rem;font-size:.85rem">
-                    </label>
-                    <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                        Expected columns
-                        <input type="number" class="form-input" id="check-shape-cols" min="0" step="1"
-                               style="padding:.3rem .5rem;font-size:.85rem">
-                    </label>
-                </div>
-            </div>
-
-            <div class="check-fields" data-kind="data_frame_columns" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    DataFrame variable name on student_module
-                    <input type="text" class="form-input" id="check-columns-variable" placeholder="df"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected columns (one per line, in order)
-                    <textarea class="form-input" id="check-columns-list" rows="6"
-                              placeholder="caseid&#10;age&#10;sex&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <fieldset style="border:1px solid var(--border,#ddd);padding:.4rem .6rem;border-radius:.3rem">
-                    <legend style="font-size:.78rem;color:var(--gray-600);padding:0 .3rem">Match mode</legend>
-                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem;margin-right:1rem">
-                        <input type="radio" name="check-columns-match" value="exact" checked> Exact (order matters)
-                    </label>
-                    <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem">
-                        <input type="radio" name="check-columns-match" value="superset"> Superset (extras allowed)
-                    </label>
-                </fieldset>
-            </div>
-
-            <div class="check-fields" data-kind="data_frame_equality" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    DataFrame variable name on student_module
-                    <input type="text" class="form-input" id="check-eq-variable" placeholder="df_grouped"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected DataFrame (CSV — header row first)
-                    <textarea class="form-input" id="check-eq-csv" rows="8"
-                              placeholder="age,sex&#10;58.0,M&#10;70.0,M&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <details>
-                    <summary style="font-size:.82rem;cursor:pointer;color:var(--gray-700)">Comparison toggles (advanced)</summary>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:.4rem;margin-top:.4rem">
-                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                            <input type="checkbox" id="check-eq-check-dtype" checked> Strict dtype
-                        </label>
-                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                            <input type="checkbox" id="check-eq-check-like"> Ignore column/row order
-                        </label>
-                        <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                            <input type="checkbox" id="check-eq-ignore-index" checked> Ignore index
-                        </label>
-                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                            rtol
-                            <input type="number" class="form-input" id="check-eq-rtol" step="any" placeholder="1e-5"
-                                   style="padding:.2rem .4rem;font-size:.78rem">
-                        </label>
-                        <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                            atol
-                            <input type="number" class="form-input" id="check-eq-atol" step="any" placeholder="1e-8"
-                                   style="padding:.2rem .4rem;font-size:.78rem">
-                        </label>
-                    </div>
-                </details>
-            </div>
-
-            <div class="check-fields" data-kind="series_equality" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Series variable name on student_module
-                    <input type="text" class="form-input" id="check-series-variable" placeholder="scores"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected Series (single-column CSV — header row first)
-                    <textarea class="form-input" id="check-series-csv" rows="8"
-                              placeholder="score&#10;0.95&#10;0.88&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-            </div>
-
-            <div class="check-fields" data-kind="numeric_array_close" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Array variable name on student_module
-                    <input type="text" class="form-input" id="check-array-variable" placeholder="y_pred"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Expected values (one number per line, or JSON list)
-                    <textarea class="form-input" id="check-array-values" rows="6"
-                              placeholder="1.0&#10;2.5&#10;3.7&#10;..."
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                        rtol
-                        <input type="number" class="form-input" id="check-array-rtol" step="any" placeholder="1e-7"
-                               style="padding:.2rem .4rem;font-size:.78rem">
-                    </label>
-                    <label style="font-size:.78rem;display:flex;flex-direction:column;gap:.2rem">
-                        atol
-                        <input type="number" class="form-input" id="check-array-atol" step="any" placeholder="0"
-                               style="padding:.2rem .4rem;font-size:.78rem">
-                    </label>
-                </div>
-            </div>
-
-            <div class="check-fields" data-kind="figure_count" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Minimum number of matplotlib figures the student must produce
-                    <input type="number" class="form-input" id="check-fig-min" min="0" step="1" value="1"
-                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Counted via <code>plt.get_fignums()</code> after the student's notebook is loaded.  Every <code>plt.figure</code>, <code>plt.subplots</code>, and <code>df.plot</code> contributes.
-                </p>
-            </div>
-
-            <div class="check-fields" data-kind="cell_contains" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Pattern the student's submission must contain in at least one code cell
-                    <input type="text" class="form-input" id="check-cc-text" placeholder=".groupby("
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <label style="font-size:.78rem;display:flex;align-items:center;gap:.3rem">
-                    <input type="checkbox" id="check-cc-regex"> Interpret as Python regex
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Must differ from this reference (optional — for "not the same as the example" exercises)
-                    <textarea class="form-input" id="check-cc-must-differ" rows="3"
-                              placeholder='df.groupby("sex")["age"].mean()'
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-            </div>
-
-            <div class="check-fields" data-kind="function_exists" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Function name (must be defined in the student notebook and callable)
-                    <input type="text" class="form-input" id="check-fexists-name" placeholder="classify_bmi"
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Required arity (number of positional parameters — leave blank to skip)
-                    <input type="number" class="form-input" id="check-fexists-arity" min="0" step="1"
-                           placeholder="(any)"
-                           style="padding:.3rem .5rem;font-size:.85rem;width:8rem">
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Useful as a precondition before correctness tests so a missing function fails clearly instead of erroring every dependent test.
-                </p>
-            </div>
-
-            <div class="check-fields" data-kind="variable_exists" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Variable name (must be defined at module level in the student notebook)
-                    <input type="text" class="form-input" id="check-vexists-name" placeholder="df"
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Required type (optional — leave blank for any)
-                    <input type="text" class="form-input" id="check-vexists-type"
-                           placeholder="e.g. int, list, DataFrame, ndarray"
-                           style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace">
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Useful as a precondition before shape / value checks so a missing variable fails clearly instead of erroring every dependent test.  Recognised types include Python builtins (<code>int</code>, <code>float</code>, <code>bool</code>, <code>str</code>, <code>list</code>, <code>tuple</code>, <code>dict</code>, <code>set</code>, <code>NoneType</code>) and library types matched by MRO name (<code>DataFrame</code>, <code>Series</code>, <code>ndarray</code>); unknown names fall back to a class-name MRO walk.
-                </p>
-            </div>
-
-            <div class="check-fields" data-kind="ast_structure" style="display:none;flex-direction:column;gap:.5rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Required structural predicates (one per line)
-                    <textarea class="form-input" id="check-ast-constructs" rows="5"
-                              placeholder="for_loop&#10;list_comprehension&#10;import:pandas"
-                              style="padding:.3rem .5rem;font-size:.85rem;font-family:monospace"></textarea>
-                </label>
-                <p class="card-meta" style="font-size:.72rem;margin:0">
-                    Supported: <code>for_loop</code>, <code>while_loop</code>, <code>list_comprehension</code>, <code>lambda</code>, <code>recursion</code>, and <code>import:&lt;module&gt;</code> (e.g. <code>import:pandas</code>).  Prefix with <code>!</code> to forbid (e.g. <code>!for_loop</code> = "must NOT use a for-loop").
-                </p>
-            </div>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
-            <button class="btn btn-primary" id="check-save-btn" type="button">Save</button>
-            <button class="btn" id="check-cancel-btn" type="button">Cancel</button>
-            <button class="btn action-btn action-danger" id="check-delete-btn" type="button" style="margin-left:auto;display:none">Delete</button>
-            <span id="check-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
-        </div>
-    </div>
-</div>
-
-<!-- ── Pattern Family Editor Modal ──────────────────────────────────────── -->
-<div id="family-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(960px,96vw);max-height:92vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border,#ddd)">
-            <div id="family-editor-title" style="font-weight:600;flex:1">New Pattern Family</div>
-            <button class="btn-link" id="family-editor-close" type="button" aria-label="Close" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
-        </div>
-
-        <div style="padding:.75rem 1rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.75rem">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label id="family-function-label" style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Function
-                    <select class="form-input" id="family-function-select" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="">— Scanning solution notebook… —</option>
-                    </select>
-                    <span id="family-function-hint" class="card-meta" style="font-size:.72rem"></span>
-                </label>
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Family name (shown in UI)
-                    <input type="text" class="form-input" id="family-name" placeholder="BMI Category Boundaries"
-                           style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:.6rem">
-                <label style="font-size:.85rem;display:flex;flex-direction:column;gap:.2rem">
-                    Pattern kind
-                    <select class="form-input" id="family-kind" style="padding:.3rem .5rem;font-size:.85rem">
-                        <option value="boundary_equality">Exact equality (== comparison)</option>
-                        <option value="approximate_equality">Approximate equality (float tolerance)</option>
-                        <option value="variable_equality">Variable equality (module-level variable)</option>
-                        <option value="return_type_check">Return type check (isinstance / class name)</option>
-                        <option value="exception_expected">Exception expected (function raises a specific class)</option>
-                        <option value="performance_threshold">Performance threshold (max milliseconds)</option>
-                        <option value="stdout_equality">Stdout equality (compare captured print output)</option>
-                    </select>
-                </label>
-                <label id="family-tolerance-label" style="display:none;font-size:.85rem;flex-direction:column;gap:.2rem">
-                    Tolerance (max |result − expected|)
-                    <input type="number" class="form-input" id="family-default-tolerance" step="any" min="0"
-                           placeholder="1e-6" style="padding:.3rem .5rem;font-size:.85rem">
-                </label>
-            </div>
-            <!-- Hidden fields: the family id, function name, and param list
-                 are derived from the function dropdown selection.
-                 `family-default-hint` is kept as a hidden input so the editor
-                 JS's reads don't trip — v0.4.94 removed the visible UI for
-                 hints but keeps the hint field in the manifest shape for
-                 backward compatibility with already-deployed families. -->
-            <input type="hidden" id="family-id">
-            <input type="hidden" id="family-function">
-            <input type="hidden" id="family-params">
-            <input type="hidden" id="family-default-hint" value="">
-
-            <!-- v0.4.108: section-shared inputs were a separate read-only
-                 block above the Variables table.  Now merged INTO the
-                 Variables table as locked rows at the top, so the
-                 instructor sees one unified list of $names available
-                 across all cases.  Section name shown next to the table
-                 title; the legacy hidden span is kept so existing JS
-                 that writes to it doesn't break. -->
-            <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Variables (shared across all cases) <span id="family-section-name-label" style="font-weight:400;color:var(--gray-600)"></span></strong>
-                    <button class="btn action-btn" type="button" id="add-family-variable-btn" style="padding:.2rem .6rem;font-size:.8rem">
-                        + Add variable
-                    </button>
-                </div>
-                <table class="results-table" id="family-variables-table" style="font-size:.8rem">
-                    <thead>
-                        <tr>
-                            <th style="width:2rem" aria-label="Valid"></th>
-                            <th style="width:12rem">Name</th>
-                            <th>Value (JSON / Python literal)</th>
-                            <th style="width:4rem"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="family-variables-body"></tbody>
-                </table>
-                <p class="card-meta" id="family-variables-empty" style="margin:.3rem 0 0;font-size:.72rem;color:var(--meta)">
-                    Define a name and a value (e.g. a dict or list) once; reference it from any arg cell by typing <code>$name</code>.  Locked rows come from the section's shared inputs (edit in the section's Inputs table).
-                </p>
-            </div>
-
-            <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
-                    <strong style="font-size:.85rem">Cases</strong>
-                    <button class="btn action-btn" type="button" id="add-case-btn" style="padding:.2rem .6rem;font-size:.8rem">
-                        + Add case
-                    </button>
-                </div>
-                <table class="results-table" id="family-cases-table" style="font-size:.8rem">
-                    <thead>
-                        <tr id="family-cases-header">
-                            <th style="width:2.25rem">#</th>
-                            <th>Label</th>
-                            <!-- One arg column per detected parameter; columns are rebuilt
-                                 dynamically when the function changes. -->
-                            <th class="pf-case-expected-col">Expected</th>
-                            <th style="width:4rem"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="family-cases-body"></tbody>
-                </table>
-                <p class="card-meta" id="family-cases-empty" style="margin:.3rem 0 0;font-size:.75rem;color:var(--meta)">
-                    No cases yet.  Add at least one to save this family.
-                </p>
-            </div>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-top:1px solid var(--border,#ddd)">
-            <button class="btn btn-primary" id="family-save-btn" type="button">Save</button>
-            <button class="btn" id="family-cancel-btn" type="button">Cancel</button>
-            <span id="family-editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
-        </div>
-    </div>
-</div>
-
-<!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
-<div id="script-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-
-        <!-- Header -->
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
-                    border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div id="editor-title" style="font-weight:600;flex:1"></div>
-            <button class="btn-link" id="editor-close-btn" type="button"
-                    aria-label="Close editor" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
-        </div>
-
-        <!-- New-file controls (hidden when editing existing) -->
-        <div id="new-file-controls" style="display:none;padding:.75rem 1rem .5rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
-                    Filename
-                    <input type="text" id="new-filename-input" class="form-input"
-                           placeholder="e.g. test_correctness.py"
-                           style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-            </div>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
-                <select id="template-select" class="form-input"
-                        style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
-                    <optgroup label="Python">
-                        <option value="py:exists">Function Exists</option>
-                        <option value="py:correctness">Correctness (input/output pairs)</option>
-                        <option value="py:corner_cases">Corner Cases</option>
-                        <option value="py:exception">Exception Handling</option>
-                        <option value="py:type_check">Return Type Check</option>
-                        <option value="py:performance">Performance / Runtime</option>
-                        <option value="py:differential">Differential (reference solution)</option>
-                        <option value="py:variable_equality">Variable Equality</option>
-                        <option value="py:structural_check">Structural Check (AST properties)</option>
-                    </optgroup>
-                    <optgroup label="Shell">
-                        <option value="sh:always_pass">Always Pass (placeholder)</option>
-                        <option value="sh:file_exists">File Exists Check</option>
-                        <option value="sh:command_output">Command Output Check</option>
-                    </optgroup>
-                    <option value="blank">Blank</option>
-                </select>
-                <button class="btn" type="button" id="apply-template-btn" style="padding:.2rem .6rem;font-size:.8rem">Apply</button>
-            </div>
-        </div>
-
-        <!-- CodeMirror editor mount -->
-        <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
-
-        <!-- Footer -->
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
-                    border-top:1px solid var(--border,#ddd);flex-shrink:0">
-            <button class="btn btn-primary" id="editor-save-btn" type="button">Save</button>
-            <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
-            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
-        </div>
-    </div>
-</div>
-<style>
-.suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
-.suite-drag-handle:active { cursor: grabbing; }
-.suite-row-dragging { opacity: .35; }
-tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
-tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
-tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
-.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
-.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
-.suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
-.suite-child-indent { padding-left: 2rem; white-space: nowrap; }
-.suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
-.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
-.suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
-.suite-file-hint a { color: inherit; }
-#suite-config-table td { vertical-align: top; }
-/* v0.4.98 — suite sections (mirrors assignments.leaf) */
-.add-section-details { margin: 0; padding: 0; }
-.add-section-details > summary { margin: 0; }
-.add-section-details > summary::-webkit-details-marker { display: none; }
-.add-section-details > summary::marker { content: ""; }
-.add-section-details[open] .add-section-popup { display: block; }
-.section-block.section-dragging { opacity: .55; }
-</style>
 <script src="/suite-list.js?v=#appVersion()"></script>
 <script>
 (function () {
@@ -932,17 +539,16 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             },
             uploadScript: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
-            },
-            putChecks: function () {
-                return '/instructor/' + encodeURIComponent(assignmentID) + '/checks';
             }
         }
     });
-    // Keep the window globals wired so the pattern-family-editor and
-    // script-editor modules (which still invoke these as part of their
-    // save flows) keep working without API changes.
+    // Window globals the Test Editor renderers (family / check / script) call
+    // to persist through the single PUT /suite write path.
     window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
-    window.chickadeeSyncFamilies           = suiteTable.syncFamilies;
+    window.chickadeeSaveFamiliesViaSuite   = suiteTable.saveFamiliesViaSuite;
+    window.chickadeeSaveChecksViaSuite     = suiteTable.saveChecksViaSuite;
+    window.chickadeeSaveScriptViaSuite     = suiteTable.saveScriptViaSuite;
+    window.chickadeeGetSuiteItems          = suiteTable.getItems;
 })();
 </script>
 
@@ -957,382 +563,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     'use strict';
 
     // ── Section inputs JS extracted to Public/section-inputs-editor.js
-    //    (loaded above).  Per-section toolbar delegation stays here.
-
-
-    // Per-section create toolbar (v0.4.102).  Each section block has
-    // its own "+ Add Script" / "+ Add Family" / "Upload" buttons that
-    // delegate to the existing global buttons but stash the target
-    // section id on `window.__chickadeeTargetSection` first.  The
-    // suite-table's `addExistingScript` + `syncFamilies` read that
-    // flag and stamp `sectionID` on the newly-created item.
+    //    (loaded above).
     //
-    // Persistence: the flag lives until the next button click resets
-    // it — global toolbar clicks below explicitly clear it so their
-    // creates still land ungrouped.  This means a single per-section
-    // Upload click followed by multi-file selection correctly places
-    // every uploaded script in the same section.
-    function delegateWithSection(sid, globalID) {
-        window.__chickadeeTargetSection = sid;
-        var btn = document.getElementById(globalID);
-        if (btn) btn.click();
-    }
-    document.querySelectorAll('button.section-new-script-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            delegateWithSection(btn.getAttribute('data-section-id') || '', 'new-script-btn');
-        });
-    });
-    document.querySelectorAll('button.section-add-family-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            delegateWithSection(btn.getAttribute('data-section-id') || '', 'add-family-btn');
-        });
-    });
-    // (v0.4.103: per-section Upload button removed; the global Upload
-    // button at the page top still handles zip uploads.)
-
-    // Global-toolbar clicks clear the target section so their creates
-    // always land ungrouped — in case a user clicks a per-section
-    // button, cancels the modal, then clicks a global toolbar button.
-    // Uses `capture: true` so this listener fires BEFORE the original
-    // per-button handler reads the flag.
-    ['new-script-btn', 'add-family-btn', 'add-test-btn'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.addEventListener('click', function (e) {
-            // Only clear if this click originated as a direct user
-            // interaction on the global button — not a synthetic click
-            // we dispatched from a per-section delegator.
-            if (!e.isTrusted) return;
-            window.__chickadeeTargetSection = null;
-        }, true);
-    });
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
+    // in place by the unified Test Editor modal (test-editor-modal.js) into a
+    // <details> dropdown of the test-type catalog. Picking a type stashes
+    // `window.__chickadeeTargetSection` and opens the modal already in that
+    // type (no second picker inside the modal).
 })();
-</script>
-
-<style>
-/* CodeMirror 6 host element */
-#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
-#cm-editor-mount .cm-scroller { overflow: auto; }
-/* Dark-mode overrides for the CodeMirror editor */
-@media (prefers-color-scheme: dark) {
-    #cm-editor-mount .cm-editor {
-        background: var(--gray-100);
-    }
-    #cm-editor-mount .cm-gutters {
-        background: var(--gray-200);
-        border-color: var(--gray-200);
-        color: var(--gray-500);
-    }
-    #cm-editor-mount .cm-content {
-        color: var(--gray-900);
-        caret-color: var(--gray-900);
-    }
-    #cm-editor-mount .cm-activeLine {
-        background: var(--gray-200);
-    }
-    #cm-editor-mount .cm-selectionBackground,
-    #cm-editor-mount ::selection {
-        background: var(--hover-bg) !important;
-    }
-    #cm-editor-mount .cm-cursor {
-        border-left-color: var(--gray-900);
-    }
-    /* Modal inputs & selects */
-    #script-editor-overlay input,
-    #script-editor-overlay select {
-        background: var(--gray-100);
-        color: var(--gray-900);
-        border-color: var(--gray-200);
-    }
-}
-</style>
-<script type="module">
-// ── CodeMirror 6 script editor ─────────────────────────────────────────────
-// Bundled by scripts/setup-vendor.sh; source-of-truth in
-// Tools/vendor/codemirror-entry.js.  Single import keeps the wire
-// origin same-origin so the CSP doesn't need esm.sh in script-src.
-import {
-    EditorView, keymap, lineNumbers, highlightActiveLine,
-    drawSelection, dropCursor,
-    EditorState, Compartment,
-    defaultKeymap, history, historyKeymap, indentWithTab,
-    syntaxHighlighting, defaultHighlightStyle, StreamLanguage,
-    python, shell, r
-} from '/vendor/codemirror.js';
-
-const langComp = new Compartment();
-
-function langExtensionFor(filename) {
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    if (ext === 'py') return python();
-    if (ext === 'r')  return StreamLanguage.define(r);
-    return StreamLanguage.define(shell);
-}
-
-function makeEditorState(content, filename) {
-    return EditorState.create({
-        doc: content,
-        extensions: [
-            lineNumbers(),
-            highlightActiveLine(),
-            drawSelection(),
-            dropCursor(),
-            history(),
-            syntaxHighlighting(defaultHighlightStyle),
-            keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-            langComp.of(langExtensionFor(filename)),
-            EditorView.lineWrapping,
-            EditorView.theme({ '&': { height: '100%' } })
-        ]
-    });
-}
-
-const overlay    = document.getElementById('script-editor-overlay');
-const mount      = document.getElementById('cm-editor-mount');
-const titleEl    = document.getElementById('editor-title');
-const statusEl   = document.getElementById('editor-status');
-const saveBtn    = document.getElementById('editor-save-btn');
-const cancelBtn  = document.getElementById('editor-cancel-btn');
-const closeBtn   = document.getElementById('editor-close-btn');
-const newControls = document.getElementById('new-file-controls');
-const newNameInput = document.getElementById('new-filename-input');
-const tierSelect  = document.getElementById('new-file-tier');
-const pointsInput = document.getElementById('new-file-points');
-const templateSel = document.getElementById('template-select');
-const applyTplBtn = document.getElementById('apply-template-btn');
-const newScriptBtn = document.getElementById('new-script-btn');
-const assignmentID = '#(assignmentID)';
-const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-
-let view = null;
-let currentFilename = null;  // null when creating a new file
-let isCreating = false;
-let isEditingUpload = false;  // true when editing a not-yet-saved upload item
-
-function initView(content, filename) {
-    if (view) { view.destroy(); view = null; }
-    try {
-        view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
-    } catch (e) {
-        statusEl.textContent = 'Editor failed to load: ' + e.message;
-        console.error('EditorView init error:', e);
-    }
-}
-
-function openEditor(filename, content) {
-    currentFilename = filename;
-    isCreating = false;
-    titleEl.textContent = 'Edit: ' + filename;
-    newControls.style.display = 'none';
-    statusEl.textContent = '';
-    overlay.style.display = 'flex';
-    initView(content, filename);
-    if (view) view.focus();
-}
-
-function openCreator() {
-    currentFilename = null;
-    isCreating = true;
-    titleEl.textContent = 'New Test Script';
-    newControls.style.display = '';
-    newNameInput.value = '';
-    statusEl.textContent = '';
-    overlay.style.display = 'flex';
-    initView('', '');
-    newNameInput.focus();
-}
-
-function closeEditor() {
-    overlay.style.display = 'none';
-    if (view) { view.destroy(); view = null; }
-    isEditingUpload = false;
-    if (newNameInput) newNameInput.disabled = false;
-}
-
-// Open editor pre-loaded with the content of an upload-sourced (not yet saved) file.
-const editPageFilesInput = document.getElementById('suite-files-input');
-function openEditorForUpload(name, content) {
-    currentFilename = name;
-    isCreating = false;
-    isEditingUpload = true;
-    titleEl.textContent = 'Edit: ' + name;
-    newControls.style.display = '';
-    newNameInput.value = name;
-    newNameInput.disabled = true;
-    statusEl.textContent = '';
-    overlay.style.display = 'flex';
-    initView(content, name);
-    if (view) view.focus();
-}
-
-// ── Edit buttons on existing rows ─────────────────────────────────────────
-
-document.addEventListener('click', function(e) {
-    const btn = e.target.closest && e.target.closest('.suite-edit-btn');
-    if (!btn) return;
-    const filename = btn.getAttribute('data-filename');
-    if (!filename) return;
-    statusEl.textContent = 'Loading…';
-    overlay.style.display = 'flex';
-    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename), {
-        headers: { 'x-csrf-token': csrfToken }
-    })
-        .then(r => r.ok ? r.text() : r.text().then(t => Promise.reject(r.status + ' ' + t)))
-        .then(content => openEditor(filename, content))
-        .catch(err => { statusEl.textContent = 'Error: ' + err; console.error('getScript error:', err); });
-});
-
-// ── Edit buttons on upload-sourced (not-yet-saved) rows ───────────────────
-
-document.addEventListener('click', function(e) {
-    const btn = e.target.closest && e.target.closest('.suite-edit-upload-btn');
-    if (!btn) return;
-    const name = btn.getAttribute('data-name');
-    if (!name) return;
-    const files = Array.from(editPageFilesInput ? editPageFilesInput.files : []);
-    const file  = files.find(f => f.name === name);
-    if (!file) { statusEl.textContent = 'File not found in upload queue.'; return; }
-    file.text().then(content => openEditorForUpload(name, content))
-              .catch(err    => { statusEl.textContent = 'Could not read file: ' + err; });
-});
-
-// ── New Script button ──────────────────────────────────────────────────────
-
-if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
-
-// ── Template apply ─────────────────────────────────────────────────────────
-
-// Pre-loaded templates fetched from the server (populated on first template apply).
-let templateCache = null;
-
-function fetchTemplates() {
-    if (templateCache) return Promise.resolve(templateCache);
-    return fetch('/instructor/script-templates', { headers: { 'x-csrf-token': csrfToken } })
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
-        .then(data => { templateCache = data; return data; });
-}
-
-// Small inline cache of the smallest templates so "blank" doesn't round-trip.
-// Richer templates (correctness / corner_cases / exception / type_check / …)
-// are fetched from /instructor/script-templates and cached per-session — this
-// keeps the server's rendering the single source of truth and avoids drift.
-const INLINE_TEMPLATES = {
-    'blank': ''
-};
-
-// Auto-update filename extension when template language changes.
-templateSel.addEventListener('change', function() {
-    const [lang] = (templateSel.value || '').split(':');
-    const name = (newNameInput.value || '').trim();
-    if (!name) return;
-    const baseStem = name.replace(/\.[^.]*$/, '');
-    if (lang === 'py') newNameInput.value = baseStem + '.py';
-    if (lang === 'sh') newNameInput.value = baseStem + '.sh';
-});
-
-applyTplBtn.addEventListener('click', function() {
-    const tplKey = templateSel ? templateSel.value : 'blank';
-    // Auto-fill filename if empty.
-    function doApply(content) {
-        if (!newNameInput.value.trim()) {
-            const [lang] = (tplKey || '').split(':');
-            const ext = lang === 'py' ? 'py' : lang === 'sh' ? 'sh' : 'py';
-            newNameInput.value = 'test_new.' + ext;
-        }
-        if (view) {
-            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
-            view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput.value)) });
-            view.focus();
-        }
-    }
-    if (tplKey === 'blank') { doApply(''); return; }
-    // Try inline cache first, then fetch from server.
-    const inline = INLINE_TEMPLATES[tplKey];
-    if (inline !== undefined) { doApply(inline); return; }
-    fetchTemplates()
-        .then(templates => { doApply(templates[tplKey] || ''); })
-        .catch(err => { if (statusEl) statusEl.textContent = 'Could not load template: ' + err; });
-});
-
-// ── Save ───────────────────────────────────────────────────────────────────
-
-saveBtn.addEventListener('click', function() {
-    if (!view) { statusEl.textContent = 'Editor not ready — try closing and reopening.'; return; }
-    const content = view.state.doc.toString();
-
-    // Editing an upload-sourced file (not yet saved to the server): update filesInput.
-    if (isEditingUpload) {
-        const name = currentFilename;
-        if (!name) return;
-        const updated = new File([content], name, { type: 'text/plain' });
-        const dt = new DataTransfer();
-        Array.from(editPageFilesInput ? editPageFilesInput.files : []).forEach(f => {
-            dt.items.add(f.name === name ? updated : f);
-        });
-        if (editPageFilesInput) {
-            editPageFilesInput.files = dt.files;
-            editPageFilesInput.dispatchEvent(new Event('change'));
-        }
-        closeEditor();
-        return;
-    }
-
-    if (isCreating) {
-        const filename = (newNameInput.value || '').trim();
-        if (!filename) { statusEl.textContent = 'Enter a filename first.'; return; }
-        const tier   = tierSelect ? tierSelect.value : 'public';
-        const points = Math.max(1, parseInt(pointsInput ? pointsInput.value : '1') || 1);
-        const isTest = tier !== 'support';
-        statusEl.textContent = 'Saving…';
-        saveBtn.disabled = true;
-        fetch('/instructor/' + assignmentID + '/scripts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ filename, content, tier, points, isTest })
-        })
-        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-        .then(data => {
-            statusEl.textContent = 'Saved.';
-            saveBtn.disabled = false;
-            if (window.chickadeeAddExistingSuiteScript) {
-                window.chickadeeAddExistingSuiteScript(data);
-            }
-            closeEditor();
-        })
-        .catch(err => {
-            statusEl.textContent = 'Error: ' + err;
-            saveBtn.disabled = false;
-        });
-    } else {
-        if (!currentFilename) return;
-        statusEl.textContent = 'Saving…';
-        saveBtn.disabled = true;
-        fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(currentFilename), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ content })
-        })
-        .then(r => {
-            if (r.ok || r.status === 204) {
-                closeEditor();
-            } else {
-                return r.text().then(t => Promise.reject(t));
-            }
-        })
-        .catch(err => { statusEl.textContent = 'Error: ' + err; })
-        .finally(() => { saveBtn.disabled = false; });
-    }
-});
-
-// ── Close ──────────────────────────────────────────────────────────────────
-
-[cancelBtn, closeBtn].forEach(btn => btn && btn.addEventListener('click', closeEditor));
-overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) closeEditor();
-});
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
-});
 </script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
@@ -1377,7 +615,7 @@ function checkUWDates(dateTimeValue, warningEl) {
         try { initialFamilies = JSON.parse(seed.textContent || '[]') || []; }
         catch (e) { initialFamilies = []; }
     }
-    window.initPatternFamilyEditor({
+    window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
         assignmentID: assignmentID,
         csrfToken: csrfToken,
         initialFamilies: initialFamilies,
@@ -1385,79 +623,92 @@ function checkUWDates(dateTimeValue, warningEl) {
             solutionNotebook: function () {
                 return '/instructor/' + encodeURIComponent(assignmentID) + '/files/solution';
             },
-            scanNotebook: function () { return '/instructor/scan-notebook'; },
-            putFamilies: function () {
-                return '/instructor/' + encodeURIComponent(assignmentID) + '/families';
-            }
-        },
-        onFamiliesChange: function (applied) {
-            if (window.chickadeeSyncFamilies) window.chickadeeSyncFamilies(applied);
+            scanNotebook: function () { return '/instructor/scan-notebook'; }
         }
     });
 })();
 </script>
 
-<!-- ── Notebook Check Editor JS ────────────────────────────────────────────
-     Wires Public/notebook-check-editor.js to the page.  The module owns
-     the modal's state; this block just initialises it with the seed
-     check list and hooks the per-section "+ Add Check" buttons.  -->
-<script src="/notebook-check-editor.js?v=#appVersion()"></script>
 <script src="/global-inputs-editor.js?v=#appVersion()"></script>
+<script src="/achievements-editor.js?v=#appVersion()"></script>
+
+<!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
+     The "+ Add Test" button opens one modal; picking a type morphs the body
+     in place.  The notebook-check form is a body renderer
+     (test-renderer-check.js, fed by the #check-schema seed); the family and
+     script types delegate to their existing overlays during the staged
+     rollout (the shell shows a "Continue →" button for those).  Replaces the
+     standalone notebook-check editor + the add-test dispatcher.  Renderer
+     scripts load before the shell so they self-register first. -->
 <script>
+// Per-page config for the script renderer (test-renderer-script.js), read
+// lazily by the renderer.  Edit page: published-assignment script endpoints.
 (function () {
     var assignmentID = '#(assignmentID)';
-    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    var seed = document.getElementById('notebook-checks-seed');
-    var initialChecks = [];
-    if (seed) {
-        try { initialChecks = JSON.parse(seed.textContent || '[]') || []; }
-        catch (e) { initialChecks = []; }
-    }
-    var checkEditor = window.initNotebookCheckEditor({
-        assignmentID: assignmentID,
-        csrfToken: csrfToken,
-        initialChecks: initialChecks,
-        urls: {
-            putChecks: function () {
-                return '/instructor/' + encodeURIComponent(assignmentID) + '/checks';
-            }
+    window.ChickadeeScriptRendererConfig = {
+        csrfToken: (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+        scriptContentURL: function (name) {
+            return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(name);
         },
-        onChecksChange: function (applied) {
-            // Reload the page on save: the suite editor's authoritative
-            // state lives server-side, and a check save rewrites the
-            // manifest + zip, so refreshing is the simplest way to pick
-            // up the new generated rows.  When the suite-table grows
-            // native check-row support, this can be a hot-update like
-            // chickadeeSyncFamilies does for families.
-            window.location.reload();
+        uploadFilesInputID: 'suite-files-input'
+    };
+})();
+</script>
+<script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
+<script src="/test-editor-modal.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    window.initTestEditorModal({ csrfToken: csrfToken });
+
+    var modal = window.__chickadeeTestEditorModal;
+
+    function checkSpec(id) {
+        if (typeof window.chickadeeGetSuiteItems !== 'function') return null;
+        var m = window.chickadeeGetSuiteItems().find(function (i) {
+            return i.kind === 'check' && i.check && i.check.id === id;
+        });
+        return m ? m.check : null;
+    }
+    function scriptHint(name) {
+        if (typeof window.chickadeeGetSuiteItems !== 'function') return '';
+        var m = window.chickadeeGetSuiteItems().find(function (i) {
+            return i.kind === 'script' && i.script === name;
+        });
+        return (m && m.hint) || '';
+    }
+
+    document.body.addEventListener('click', function (ev) {
+        var t = ev.target;
+        // Edit an existing notebook check → shell, pre-populated.
+        var chk = t.closest && t.closest('[data-edit-check-id]');
+        if (chk) {
+            ev.preventDefault();
+            var item = checkSpec(chk.getAttribute('data-edit-check-id'));
+            if (item) modal.open({ editing: { mechanism: 'check', id: item.id, item: item } });
+            return;
+        }
+        // Edit an existing saved script → shell (renderer fetches the body).
+        var se = t.closest && t.closest('.suite-edit-btn');
+        if (se) {
+            var name = se.getAttribute('data-filename');
+            if (name) modal.open({ editing: { mechanism: 'script', id: name, item: { script: name, hint: scriptHint(name) } } });
+            return;
+        }
+        // Edit a queued-but-unsaved upload → shell (client-side body edit).
+        var ue = t.closest && t.closest('.suite-edit-upload-btn');
+        if (ue) {
+            var uname = ue.getAttribute('data-name');
+            var input = document.getElementById('suite-files-input');
+            var file = uname && input ? Array.from(input.files || []).find(function (f) { return f.name === uname; }) : null;
+            if (file) {
+                file.text().then(function (content) {
+                    modal.open({ editing: { mechanism: 'script', item: { uploadEdit: true, name: uname, content: content } } });
+                });
+            }
         }
     });
-
-    // Wire the per-section "+ Add Check" buttons.  Body-level event
-    // delegation matches how the section-add-family-btn buttons are
-    // hooked up elsewhere in this page.
-    document.body.addEventListener('click', function (ev) {
-        var btn = ev.target.closest('.section-add-check-btn');
-        if (!btn) return;
-        ev.preventDefault();
-        var sectionID = btn.getAttribute('data-section-id') || '';
-        checkEditor.open(null, sectionID || null);
-    });
-
-    // Edit existing check: any element with data-check-id triggers an
-    // edit-modal open.  The suite table doesn't currently emit these
-    // (v1 just shows generated rows verbatim), but instructors can
-    // also use the global "manage checks" hook below; future suite-
-    // table updates can plug in here without changing this module.
-    document.body.addEventListener('click', function (ev) {
-        var el = ev.target.closest('[data-edit-check-id]');
-        if (!el) return;
-        ev.preventDefault();
-        var id = el.getAttribute('data-edit-check-id');
-        checkEditor.open(id || null);
-    });
-
-    window.chickadeeNotebookCheckEditor = checkEditor;
 })();
 </script>
 
@@ -1478,7 +729,7 @@ function checkUWDates(dateTimeValue, warningEl) {
     function setStatus(msg, isError) {
         if (!status) return;
         status.textContent = msg;
-        status.style.color = isError ? 'var(--red,#c0392b)' : 'var(--gray-500)';
+        status.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
     }
 
     function readAsText(file) {

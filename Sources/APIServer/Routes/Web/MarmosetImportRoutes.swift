@@ -237,11 +237,11 @@ struct MarmosetImportRoutes: RouteCollection {
 
         let title = project.suggestedTitle ?? "Imported Assignment \(n)"
         let assignment = try await createAssignmentWithUniquePublicID(
-            req: req,
+            on: req.db,
             testSetupID: setupID,
             title: title,
             dueAt: nil,
-            isOpen: false,
+            visibility: .closed,
             sortOrder: try await nextAssignmentSortOrder(req: req),
             validationStatus: hasCanonical ? "pending" : nil,
             validationSubmissionID: nil,

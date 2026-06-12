@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -25,3 +25,18 @@ jobs:
 
       - name: Verify generated assets are committed
         run: git diff --exit-code -- Public/jupyterlite
+
+      - name: Verify Pyodide parity (vended == kernel)
+        # Fails if Public/pyodide drifts from the version the editor kernel is
+        # pinned to — the latent condition behind the #574 editor outage. This
+        # is what makes the editor's same-origin Pyodide trustworthy: green
+        # here means the vended copy actually matches the kernel.
+        run: scripts/check-pyodide-parity.sh
+
+      - name: Verify editor kernel boots with zero external fetches (FIPPA)
+        # Asserts every module the editor kernel imports at startup is provided
+        # by the locally-vended Pyodide. A miss would fall through to
+        # piplite.install(...) -> CDN/PyPI at boot, which FIPPA blocks — bricking
+        # the editor (the v0.4.292 `comm` outage). Catches that class in CI
+        # instead of on a student's screen.
+        run: python3 scripts/check-kernel-deps-vendored.py

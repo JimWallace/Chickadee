@@ -1,6 +1,6 @@
 import Fluent
 
-struct CreateRequestMetrics: AsyncMigration {
+struct CreateRequestMetrics: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("request_metrics")
             .id()

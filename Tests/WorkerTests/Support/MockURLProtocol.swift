@@ -154,8 +154,13 @@ extension URLSession {
     static func mocked() -> URLSession {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [MockURLProtocol.self]
-        cfg.timeoutIntervalForRequest = 5
-        cfg.timeoutIntervalForResource = 5
+        // Generous on purpose: every stub replies immediately (even the
+        // "no stub enqueued" path fails fast), so this timeout never gates a
+        // passing run — it can only fire when a loaded CI machine starves the
+        // delivery, which would surface as a spurious URLError instead of the
+        // stubbed response.
+        cfg.timeoutIntervalForRequest = 30
+        cfg.timeoutIntervalForResource = 30
         return URLSession(configuration: cfg)
     }
 }

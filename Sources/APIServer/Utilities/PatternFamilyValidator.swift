@@ -21,6 +21,18 @@ private func validatePatternCaseHeader(
                 "Pattern family '\(family.id)': case key '\(c.key)' must contain only letters, digits, and underscore"
         )
     }
+    // A function-calling family auto-generates an existence guard whose
+    // filename uses `patternExistenceGuardCaseKey`; forbid a real case from
+    // claiming that key so the two can never produce the same filename.
+    if patternKindHandler(for: family.kind).requiresFunctionName,
+        c.key == patternExistenceGuardCaseKey
+    {
+        throw Abort(
+            .unprocessableEntity,
+            reason:
+                "Pattern family '\(family.id)': case key '\(c.key)' is reserved for the auto-generated existence guard; choose a different key."
+        )
+    }
     guard seenCaseKeys.insert(c.key).inserted else {
         throw Abort(
             .unprocessableEntity,
@@ -33,127 +45,6 @@ private func validatePatternCaseHeader(
     }
 }
 
-// swiftlint:disable cyclomatic_complexity function_body_length
-/// Validates the `args` / `expected` shape of a single case against its
-/// family's `kind`.  Each branch corresponds to one `PatternKind`.
-private func validatePatternCaseKindSpecific(family: PatternFamily, c: PatternCase) throws {
-    switch family.kind {
-    case .variableEquality:
-        // Exactly one arg, which must be a non-empty string naming
-        // the module-level variable to check.  `paramNames` is
-        // ignored — for this kind it's purely a UI hint (column
-        // header), not something the renderer or validator cares
-        // about.
-        guard c.args.count == 1 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' must have exactly one arg (the variable name); got \(c.args.count)"
-            )
-        }
-        guard case .string(let varName) = c.args[0],
-            !varName.trimmingCharacters(in: .whitespaces).isEmpty
-        else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' arg must be a non-empty string (the variable name)"
-            )
-        }
-        guard isValidPythonIdentifier(varName) else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (variable_equality): case '\(c.key)' variable name '\(varName)' is not a valid Python identifier"
-            )
-        }
-    case .boundaryEquality, .approximateEquality:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)': case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-    case .returnTypeCheck:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        guard case .string(let expectedType) = c.expected,
-            !expectedType.trimmingCharacters(in: .whitespaces).isEmpty
-        else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (return_type_check): case '\(c.key)' expected must be a non-empty string naming the type (e.g. \"int\", \"DataFrame\")"
-            )
-        }
-    case .exceptionExpected:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        guard case .string(let exceptionType) = c.expected,
-            !exceptionType.trimmingCharacters(in: .whitespaces).isEmpty
-        else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (exception_expected): case '\(c.key)' expected must be a non-empty string naming the exception class (e.g. \"ValueError\")"
-            )
-        }
-    case .performanceThreshold:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        let threshold: Double? = {
-            switch c.expected {
-            case .double(let d): return d
-            case .int(let i): return Double(i)
-            default: return nil
-            }
-        }()
-        guard let t = threshold, t.isFinite, t > 0 else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (performance_threshold): case '\(c.key)' expected must be a positive number (milliseconds)"
-            )
-        }
-    case .stdoutEquality:
-        if !family.paramNames.isEmpty, c.args.count != family.paramNames.count {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' has \(c.args.count) arg(s) but family declares \(family.paramNames.count) parameter(s)"
-            )
-        }
-        // Empty string is intentionally allowed — it means "this
-        // function should print nothing", a legitimate case for
-        // a beginner exercise where the assignment is to add the
-        // print() call.
-        guard case .string = c.expected else {
-            throw Abort(
-                .unprocessableEntity,
-                reason:
-                    "Pattern family '\(family.id)' (stdout_equality): case '\(c.key)' expected must be a string (the captured stdout to match)"
-            )
-        }
-    }
-}
-// swiftlint:enable cyclomatic_complexity function_body_length
-
 /// Validates family-scoped variables (`PatternFamily.variables`) and any
 /// `$name` arg references in `PatternCase.argVarRefs`.  Each variable
 /// must be a valid identifier, unique within the family, and must not
@@ -162,7 +53,9 @@ private func validatePatternCaseKindSpecific(family: PatternFamily, c: PatternCa
 /// section.
 private func validateFamilyVariablesAndArgRefs(
     family: PatternFamily,
-    sectionVarNamesHere: Set<String>
+    sectionVarNamesHere: Set<String>,
+    globalVarNames: Set<String>,
+    perStudentExpressionNames: Set<String>
 ) throws {
     var seenVarNames: Set<String> = []
     let paramNameSet = Set(family.paramNames)
@@ -188,12 +81,17 @@ private func validateFamilyVariablesAndArgRefs(
     for c in family.cases {
         for (i, maybeRef) in c.argVarRefs.enumerated() {
             guard let ref = maybeRef else { continue }
-            // v0.4.100: a `$name` ref resolves if EITHER the family
-            // declares the variable OR the family's home section
-            // does.  Family-level shadows section-level at render
-            // time — so both are valid refs; only "declared in
-            // neither" is an error.
-            guard seenVarNames.contains(ref) || sectionVarNamesHere.contains(ref) else {
+            // A `$name` ref resolves if the family declares the variable,
+            // the family's home section does, it's an assignment-scope
+            // global input, OR it's a per-student `=` expression (global or
+            // section).  Literal refs are inlined at save time; per-student
+            // refs are bound at grading time from `_ck_inputs.py`.  Only
+            // "declared in none of these" is an error.
+            let isPerStudent = perStudentExpressionNames.contains(ref)
+            let isLiteralVar =
+                seenVarNames.contains(ref) || sectionVarNamesHere.contains(ref)
+                || globalVarNames.contains(ref)
+            guard isPerStudent || isLiteralVar else {
                 let paramLabel = (i < family.paramNames.count ? family.paramNames[i] : "arg \(i + 1)")
                 throw Abort(
                     .unprocessableEntity,
@@ -201,7 +99,47 @@ private func validateFamilyVariablesAndArgRefs(
                         "Pattern family '\(family.id)': case '\(c.key)' arg '\(paramLabel)' references unknown variable '$\(ref)'"
                 )
             }
+            // Per-student arg refs are bound by the generated case's
+            // personalization preamble, which only the equality kinds emit.
+            if isPerStudent, !kindSupportsPerStudentRefs(family.kind) {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': case '\(c.key)' references per-student input '$\(ref)', which is only supported in boundary_equality and approximate_equality families for now."
+                )
+            }
         }
+        // A per-student expected ref must name a declared `=` expression and
+        // is (for now) supported only in the equality kinds (boundary/approximate).
+        if let eref = c.expectedVarRef {
+            guard perStudentExpressionNames.contains(eref) else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': case '\(c.key)' expected reference '$\(eref)' must name a per-student input (a global or section `=` expression)."
+                )
+            }
+            guard kindSupportsPerStudentRefs(family.kind) else {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason:
+                        "Pattern family '\(family.id)': case '\(c.key)' uses a per-student expected, which is only supported in boundary_equality and approximate_equality families for now."
+                )
+            }
+        }
+    }
+}
+
+/// Whether a kind's generated cases bind per-student `_ck_inputs` (so `$name`
+/// arg refs and `expectedVarRef` resolve at grading time).  Extend as renderers
+/// gain the personalization preamble (`personalizationPreambleForCase`).  An
+/// exhaustive switch — a new `PatternKind` must opt in or out here explicitly.
+private func kindSupportsPerStudentRefs(_ kind: PatternKind) -> Bool {
+    switch kind {
+    case .boundaryEquality, .approximateEquality, .unorderedEquality: return true
+    case .variableEquality, .returnTypeCheck, .exceptionExpected,
+        .performanceThreshold, .stdoutEquality:
+        return false
     }
 }
 
@@ -223,11 +161,12 @@ private func validatePatternFamilyHeader(
             .unprocessableEntity,
             reason: "Duplicate pattern family id '\(family.id)'")
     }
-    // `functionName` is ignored for .variableEquality families (they
-    // check module-level variables, not function calls), so skip the
-    // identifier check in that case — an empty or placeholder value is
-    // acceptable.  Every other kind still requires a valid identifier.
-    if family.kind != .variableEquality {
+    // `functionName` is ignored for kinds that inspect module-level state
+    // rather than calling a function (`.variableEquality`), so skip the
+    // identifier check for those — an empty or placeholder value is
+    // acceptable.  Every function-calling kind still requires a valid
+    // identifier.
+    if patternKindHandler(for: family.kind).requiresFunctionName {
         guard isValidPythonIdentifier(family.functionName) else {
             throw Abort(
                 .unprocessableEntity,
@@ -275,7 +214,9 @@ func validatePatternFamilies(
     _ families: [PatternFamily],
     testSuites: [TestSuiteEntry],
     sections: [TestSuiteSection] = [],
-    familySectionID: [String: String] = [:]
+    familySectionID: [String: String] = [:],
+    globalVariableNames: Set<String> = [],
+    perStudentExpressionNames: Set<String> = []
 ) throws {
     // v0.4.100: build a "extra names in scope for this family" set so
     // each family can reference its home section's variables too.
@@ -309,20 +250,16 @@ func validatePatternFamilies(
     for family in families {
         try validatePatternFamilyHeader(family: family, seenFamilyIDs: &seenFamilyIDs)
 
+        let handler = patternKindHandler(for: family.kind)
         var seenCaseKeys: Set<String> = []
         for c in family.cases {
             try validatePatternCaseHeader(family: family, c: c, seenCaseKeys: &seenCaseKeys)
-            try validatePatternCaseKindSpecific(family: family, c: c)
+            try handler.validateCase(family: family, case: c)
         }
 
-        // Kind-specific rules: approximateEquality needs a non-negative tolerance.
-        if family.kind == .approximateEquality {
-            if let tol = family.defaults.tolerance, tol < 0 || !tol.isFinite {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Pattern family '\(family.id)': tolerance must be a non-negative finite number.")
-            }
-        }
+        // Family-level, kind-specific rules (e.g. approximateEquality's
+        // non-negative tolerance bound).
+        try handler.validateFamily(family)
 
         // v0.4.94: family-scoped variables.  Each name must be a valid
         // Python identifier, unique within the family, and not collide
@@ -331,7 +268,9 @@ func validatePatternFamilies(
         // a case arg cell must resolve to a declared variable.
         try validateFamilyVariablesAndArgRefs(
             family: family,
-            sectionVarNamesHere: sectionVarNames(forFamily: family.id)
+            sectionVarNamesHere: sectionVarNames(forFamily: family.id),
+            globalVarNames: globalVariableNames,
+            perStudentExpressionNames: perStudentExpressionNames
         )
     }
 

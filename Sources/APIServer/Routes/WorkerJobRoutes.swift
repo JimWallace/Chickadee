@@ -154,12 +154,22 @@ struct WorkerJobRoutes: RouteCollection {
         let setup = claimed.setup
         let base = resolvedWorkerBaseURL(req: req)
 
+        // Validation submissions are pre-materialized at enqueue
+        // (`materializeValidationGrading`): the seed + resolved expression values
+        // are cached on the row, so we read them here instead of re-running the
+        // personalization evaluator on this hot (poll) path — and the answer-key
+        // notebook, `_ck_inputs.py`, and `CHICKADEE_ASSIGNMENT_SEED` all derive
+        // from one seed. Student submissions have no cache and resolve live.
+        let materialization = submission.decodedMaterialization()
+
         // Per-(student, assignment) seed for personalized inputs (issue #461, Phase 1).
         // Generated lazily on first grading attempt; stable for the lifetime of the
         // (user, assignment) pair. Nil when the submission has no associated user
         // (legacy / unauthenticated path) or no assignment row was matched.
         var assignmentSeed: String?
-        if let userID = submission.userID, let resolvedAssignmentID = claimed.assignmentID {
+        if let materialization {
+            assignmentSeed = materialization.seedHex
+        } else if let userID = submission.userID, let resolvedAssignmentID = claimed.assignmentID {
             do {
                 assignmentSeed = try await AssignmentSeedStore.ensureSeed(
                     userID: userID,
@@ -175,14 +185,31 @@ struct WorkerJobRoutes: RouteCollection {
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
+        let downloadVersion = await testSetupDownloadVersion(for: setup)
         guard
             let submissionURL = URL(string: "\(base)/api/v1/worker/submissions/\(submissionID)/download"),
             let testSetupURL = URL(
-                string: "\(base)/api/v1/worker/testsetups/\(setupID)/download?v=\(testSetupDownloadVersion(for: setup))"
+                string: "\(base)/api/v1/worker/testsetups/\(setupID)/download?v=\(downloadVersion)"
             )
         else {
             throw WorkerJobError.internalInconsistency(reason: "Failed to build worker download URLs from base=\(base)")
         }
+
+        // Resolve per-student personalization inputs (issue #461) for this seed,
+        // server-side, so the worker can bind them in generated scripts via
+        // `_ck_inputs.py`. Shared with the browser seed endpoint via
+        // `gradingInputs` so the two grading paths resolve identically. For a
+        // pre-materialized validation submission we use the cached values
+        // (no re-eval on this hot path); otherwise we resolve live.
+        let personalizedInputs: [String: String]?
+        if let materialization {
+            personalizedInputs = materialization.inputs.isEmpty ? nil : materialization.inputs
+        } else {
+            let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+            personalizedInputs = await PersonalizationSubstitution.gradingInputs(
+                manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir)
+        }
+
         return Job(
             submissionID: submissionID,
             testSetupID: setupID,
@@ -191,7 +218,8 @@ struct WorkerJobRoutes: RouteCollection {
             testSetupURL: testSetupURL,
             manifest: claimed.manifest.runnerSanitized(),
             submissionFilename: submission.filename,
-            assignmentSeed: assignmentSeed
+            assignmentSeed: assignmentSeed,
+            personalizedInputs: personalizedInputs
         )
     }
 
@@ -275,25 +303,50 @@ private struct BlockedCandidate {
 private func collectClaimCandidates(
     on db: Database
 ) async throws -> [(APISubmission, APITestSetup, TestProperties)] {
-    let studentSubmissions = try await APISubmission.query(on: db)
-        .filter(\.$status == "pending")
+    // Cap the scan: a poll claims exactly one job, so walking the entire
+    // pending queue (potentially tens of thousands of rows after a retest
+    // fan-out) inside the globally-serialized claim transaction collapsed
+    // claim throughput exactly when the queue was deepest (June 2026 audit,
+    // P1.3). The cap only matters when the first `claimCandidateScanLimit`
+    // candidates are all requirement-incompatible with this runner — the next
+    // poll retries, and most assignments carry no runner requirements at all.
+    //
+    // Fresh student work (retestedAt == nil) keeps absolute priority over
+    // retests (#427) by querying the two groups separately — which also
+    // replaces the old full-scan + in-memory re-sort.
+    let claimCandidateScanLimit = 50
+    var studentSubmissions = try await APISubmission.query(on: db)
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
         .filter(\.$kind == APISubmission.Kind.student)
+        .filter(\.$retestedAt == nil)
         .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
         .all()
-        .sorted { lhs, rhs in
-            let lhsIsRetest = lhs.retestedAt != nil
-            let rhsIsRetest = rhs.retestedAt != nil
-            if lhsIsRetest != rhsIsRetest { return !lhsIsRetest }
-            return (lhs.submittedAt ?? .distantPast) < (rhs.submittedAt ?? .distantPast)
-        }
+    if studentSubmissions.count < claimCandidateScanLimit {
+        studentSubmissions += try await APISubmission.query(on: db)
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$retestedAt != nil)
+            .sort(\.$submittedAt, .ascending)
+            .limit(claimCandidateScanLimit - studentSubmissions.count)
+            .all()
+    }
 
+    // Many pending submissions often target the same test setup (e.g. a class
+    // submitting to one assignment before a deadline). Resolve each setup +
+    // decoded manifest once and reuse it, rather than re-querying the row and
+    // re-decoding the identical manifest JSON for every candidate.
+    var resolvedBySetupID: [String: (APITestSetup, TestProperties)] = [:]
     var candidates: [(APISubmission, APITestSetup, TestProperties)] = []
+
     for candidate in studentSubmissions {
-        guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
-        let data = Data(setup.manifest.utf8)
-        guard let manifest = decodeManifest(from: data) else {
+        if let cached = resolvedBySetupID[candidate.testSetupID] {
+            candidates.append((candidate, cached.0, cached.1))
             continue
         }
+        guard let setup = try await APITestSetup.find(candidate.testSetupID, on: db) else { continue }
+        guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
+        resolvedBySetupID[candidate.testSetupID] = (setup, manifest)
         // Accept both worker-mode and browser-mode pending submissions.
         // Browser-mode submissions only become pending when the client-side
         // runner fails or times out; the worker serves as a backstop that
@@ -302,17 +355,23 @@ private func collectClaimCandidates(
     }
 
     let pendingValidation = try await APISubmission.query(on: db)
-        .filter(\.$status == "pending")
+        .filter(\.$status == SubmissionStatus.pending.rawValue)
         .filter(\.$kind == APISubmission.Kind.validation)
         .sort(\.$submittedAt, .ascending)
+        .limit(claimCandidateScanLimit)
         .all()
 
     for validation in pendingValidation {
+        if let cached = resolvedBySetupID[validation.testSetupID] {
+            candidates.append((validation, cached.0, cached.1))
+            continue
+        }
         guard let valSetup = try await APITestSetup.find(validation.testSetupID, on: db) else {
             throw WorkerJobError.testSetupNotFound(id: validation.testSetupID)
         }
-        let valManifestData = Data(valSetup.manifest.utf8)
-        let valManifest = try ManifestCodec.decoder.decode(TestProperties.self, from: valManifestData)
+        let valManifest = try ManifestCodec.decoder.decode(
+            TestProperties.self, from: Data(valSetup.manifest.utf8))
+        resolvedBySetupID[validation.testSetupID] = (valSetup, valManifest)
         candidates.append((validation, valSetup, valManifest))
     }
 
@@ -379,7 +438,7 @@ private func evaluateAndClaimCandidate(
         }
 
         // Claim inside the transaction — atomic with the select above.
-        submission.status = "assigned"
+        submission.setStatus(.assigned)
         submission.workerID = body.workerID
         submission.assignedAt = Date()
         try await submission.save(on: db)
@@ -441,13 +500,47 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
     return host
 }
 
-private func testSetupDownloadVersion(for setup: APITestSetup) -> String {
-    var material = Data(setup.manifest.utf8)
-    if let zipData = try? Data(contentsOf: URL(fileURLWithPath: setup.zipPath)) {
-        material.append(Data("|zip=".utf8))
-        material.append(zipData)
+/// Memoizes the (manifest, zip) content hash per setup so the hot claim path
+/// doesn't re-read and re-SHA the full setup zip for every job handed out
+/// (June 2026 audit, P1.8). Keyed on manifest text + zip (path, size, mtime):
+/// suite edits rewrite both the manifest and the zip, so any real change
+/// invalidates the entry.
+private actor TestSetupDownloadVersionCache {
+    static let shared = TestSetupDownloadVersionCache()
+
+    private struct Key: Hashable {
+        let manifest: String
+        let zipPath: String
+        let zipSize: UInt64
+        let zipModified: Date
     }
-    return String(sha256HexDigest(material).prefix(16))
+
+    private var entries: [String: (key: Key, version: String)] = [:]
+
+    func version(for setup: APITestSetup) -> String {
+        let setupID = setup.id ?? setup.zipPath
+        let attributes = try? FileManager.default.attributesOfItem(atPath: setup.zipPath)
+        let key = Key(
+            manifest: setup.manifest,
+            zipPath: setup.zipPath,
+            zipSize: (attributes?[.size] as? UInt64) ?? 0,
+            zipModified: (attributes?[.modificationDate] as? Date) ?? .distantPast)
+
+        if let cached = entries[setupID], cached.key == key { return cached.version }
+
+        var material = Data(setup.manifest.utf8)
+        if let zipData = try? Data(contentsOf: URL(fileURLWithPath: setup.zipPath)) {
+            material.append(Data("|zip=".utf8))
+            material.append(zipData)
+        }
+        let version = String(sha256HexDigest(material).prefix(16))
+        entries[setupID] = (key, version)
+        return version
+    }
+}
+
+private func testSetupDownloadVersion(for setup: APITestSetup) async -> String {
+    await TestSetupDownloadVersionCache.shared.version(for: setup)
 }
 
 // MARK: - Application-level claim serializer

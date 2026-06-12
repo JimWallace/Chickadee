@@ -15,13 +15,14 @@ import Vapor
 // MARK: - Parsed form payload
 
 /// Raw + lightly normalised values extracted from the save-new-assignment
-/// multipart body.  Each field has been resolved across the
-/// "many" (`suiteFiles[]`) / "single" (`suiteFiles`) decode paths;
-/// validation (e.g. "title is required", "notebook must be JSON") happens
-/// later, in `validateSaveNewAssignment`.
+/// multipart body.  `suiteFiles` has been resolved across the
+/// "many" (`suiteFiles[]`) / "single" (`suiteFiles`) shapes via
+/// `MultipartFileList`; validation (e.g. "title is required", "notebook
+/// must be JSON") happens later, in `validateSaveNewAssignment`.
 struct SaveNewAssignmentForm {
     let assignmentName: String?
     let dueAtRaw: String?
+    let startsAtRaw: String?
     let sectionIDRaw: String?
     let draftIDRaw: String?
     let assignmentNotebookFile: File?
@@ -54,6 +55,8 @@ struct ValidatedSaveNewAssignment {
     let dueAt: Date?
     let dueAtRaw: String
     let sectionIDRaw: String
+    let startsAt: Date?
+    let startsAtRaw: String
     let draftID: String
     let draftSetup: APITestSetup?
     let draftState: NewAssignmentDraftFormState
@@ -70,34 +73,21 @@ extension DraftAssignmentRoutes {
 
     // MARK: - Multipart fan-in
 
-    /// Parses the save-new-assignment body across both the array-typed
-    /// (`suiteFiles[]`) and single-typed (`suiteFiles`) Vapor decode paths
-    /// and returns the fields a typed handler would expect.  Throws
-    /// `WebAssignmentError.invalidParameter` when neither decode path
-    /// recognises the body.
+    /// Parses the save-new-assignment body — `suiteFiles` decodes both the
+    /// array-typed (`suiteFiles[]`) and single-bare-`File` (Safari) shapes
+    /// via `MultipartFileList` — and returns the fields a typed handler
+    /// would expect.  Throws `WebAssignmentError.invalidParameter` when the
+    /// body isn't recognised.
     func parseSaveNewAssignmentForm(req: Request) throws -> SaveNewAssignmentForm {
-        struct SaveBodyMany: Content {
+        struct SaveBody: Content {
             var assignmentName: String?
             var dueAt: String?
+            var startsAt: String?
             var sectionID: String?
             var draftID: String?
             var assignmentNotebookFile: File?
             var solutionNotebookFile: File?
-            var suiteFiles: [File]?
-            var suiteConfig: String?
-            var requiredPlatform: String?
-            var requiredArchitecture: String?
-            var requiredLanguagesCSV: String?
-            var requiredCapabilitiesCSV: String?
-        }
-        struct SaveBodySingle: Content {
-            var assignmentName: String?
-            var dueAt: String?
-            var sectionID: String?
-            var draftID: String?
-            var assignmentNotebookFile: File?
-            var solutionNotebookFile: File?
-            var suiteFiles: File?
+            var suiteFiles: MultipartFileList?
             var suiteConfig: String?
             var requiredPlatform: String?
             var requiredArchitecture: String?
@@ -105,9 +95,7 @@ extension DraftAssignmentRoutes {
             var requiredCapabilitiesCSV: String?
         }
 
-        let bodyMany = try? req.content.decode(SaveBodyMany.self)
-        let bodySingle = bodyMany == nil ? (try? req.content.decode(SaveBodySingle.self)) : nil
-        guard bodyMany != nil || bodySingle != nil else {
+        guard let body = try? req.content.decode(SaveBody.self) else {
             throw WebAssignmentError.invalidParameter(
                 name: "request body",
                 reason: "Invalid assignment upload payload"
@@ -116,31 +104,33 @@ extension DraftAssignmentRoutes {
 
         let suiteFilesRaw =
             try multipartFiles(named: ["suiteFiles[]", "suiteFiles"], from: req)
-            ?? bodyMany?.suiteFiles
-            ?? (bodySingle?.suiteFiles.map { [$0] } ?? [])
+            ?? body.suiteFiles?.files
+            ?? []
 
         return SaveNewAssignmentForm(
             assignmentName: try multipartTextField(named: ["assignmentName"], from: req)
-                ?? bodyMany?.assignmentName ?? bodySingle?.assignmentName,
+                ?? body.assignmentName,
             dueAtRaw: try multipartTextField(named: ["dueAt"], from: req)
-                ?? bodyMany?.dueAt ?? bodySingle?.dueAt,
+                ?? body.dueAt,
+            startsAtRaw: try multipartTextField(named: ["startsAt"], from: req)
+                ?? body.startsAt,
             sectionIDRaw: try multipartTextField(named: ["sectionID"], from: req)
-                ?? bodyMany?.sectionID ?? bodySingle?.sectionID,
+                ?? body.sectionID,
             draftIDRaw: try multipartTextField(named: ["draftID"], from: req)
-                ?? bodyMany?.draftID ?? bodySingle?.draftID,
-            assignmentNotebookFile: bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile,
-            solutionNotebookFile: bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile,
+                ?? body.draftID,
+            assignmentNotebookFile: body.assignmentNotebookFile,
+            solutionNotebookFile: body.solutionNotebookFile,
             suiteFilesRaw: suiteFilesRaw,
             suiteConfigRaw: try multipartTextField(named: ["suiteConfig"], from: req)
-                ?? bodyMany?.suiteConfig ?? bodySingle?.suiteConfig,
+                ?? body.suiteConfig,
             requiredPlatform: try multipartTextField(named: ["requiredPlatform"], from: req)
-                ?? bodyMany?.requiredPlatform ?? bodySingle?.requiredPlatform ?? "",
+                ?? body.requiredPlatform ?? "",
             requiredArchitecture: try multipartTextField(named: ["requiredArchitecture"], from: req)
-                ?? bodyMany?.requiredArchitecture ?? bodySingle?.requiredArchitecture ?? "",
+                ?? body.requiredArchitecture ?? "",
             requiredLanguagesCSV: try multipartTextField(named: ["requiredLanguagesCSV"], from: req)
-                ?? bodyMany?.requiredLanguagesCSV ?? bodySingle?.requiredLanguagesCSV ?? "",
+                ?? body.requiredLanguagesCSV ?? "",
             requiredCapabilitiesCSV: try multipartTextField(named: ["requiredCapabilitiesCSV"], from: req)
-                ?? bodyMany?.requiredCapabilitiesCSV ?? bodySingle?.requiredCapabilitiesCSV ?? ""
+                ?? body.requiredCapabilitiesCSV ?? ""
         )
     }
 
@@ -158,6 +148,7 @@ extension DraftAssignmentRoutes {
     ) async throws -> SaveNewAssignmentValidation {
         let title = (form.assignmentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let due = parseDueDate(form.dueAtRaw)
+        let starts = parseDueDate(form.startsAtRaw)
         let draftID = (form.draftIDRaw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let draftSetup = draftID.isEmpty ? nil : try await APITestSetup.find(draftID, on: req.db)
         let draftState =
@@ -166,6 +157,7 @@ extension DraftAssignmentRoutes {
             : loadDraftFormState(req: req, draftID: draftID)
 
         let dueAtRaw = form.dueAtRaw ?? ""
+        let startsAtRaw = form.startsAtRaw ?? ""
         let sectionIDRaw = form.sectionIDRaw ?? ""
 
         guard !title.isEmpty else {
@@ -173,6 +165,7 @@ extension DraftAssignmentRoutes {
                 toURL: newAssignmentErrorRedirect(
                     title: "",
                     dueAt: dueAtRaw,
+                    startsAt: startsAtRaw,
                     sectionID: sectionIDRaw,
                     draftID: draftID,
                     error: "Assignment name is required"
@@ -189,7 +182,7 @@ extension DraftAssignmentRoutes {
         if let earlyRedirect = redirectIfNotebookDataInvalid(
             data: assignmentNotebookRaw,
             isPresent: !assignmentNotebookRaw.isEmpty,
-            title: title, dueAtRaw: dueAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            title: title, dueAtRaw: dueAtRaw, startsAtRaw: startsAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
             missingError: "Assignment notebook (.ipynb) is required",
             invalidJSONError: "Assignment notebook is not valid JSON (.ipynb)"
         ) {
@@ -201,7 +194,7 @@ extension DraftAssignmentRoutes {
         if let earlyRedirect = redirectIfNotebookDataInvalid(
             data: solutionNotebookRaw,
             isPresent: !solutionNotebookRaw.isEmpty,
-            title: title, dueAtRaw: dueAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
+            title: title, dueAtRaw: dueAtRaw, startsAtRaw: startsAtRaw, sectionIDRaw: sectionIDRaw, draftID: draftID,
             missingError: "Solution notebook (.ipynb) is required",
             invalidJSONError: "Solution notebook is not valid JSON (.ipynb)"
         ) {
@@ -221,6 +214,8 @@ extension DraftAssignmentRoutes {
                 dueAt: due,
                 dueAtRaw: dueAtRaw,
                 sectionIDRaw: sectionIDRaw,
+                startsAt: starts,
+                startsAtRaw: startsAtRaw,
                 draftID: draftID,
                 draftSetup: draftSetup,
                 draftState: draftState,
@@ -292,6 +287,7 @@ extension DraftAssignmentRoutes {
         isPresent: Bool,
         title: String,
         dueAtRaw: String,
+        startsAtRaw: String,
         sectionIDRaw: String,
         draftID: String,
         missingError: String,
@@ -300,14 +296,14 @@ extension DraftAssignmentRoutes {
         guard isPresent else {
             return .redirect(
                 toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    title: title, dueAt: dueAtRaw, startsAt: startsAtRaw, sectionID: sectionIDRaw, draftID: draftID,
                     error: missingError
                 ))
         }
         guard (try? JSONSerialization.jsonObject(with: data)) != nil else {
             return .redirect(
                 toURL: newAssignmentErrorRedirect(
-                    title: title, dueAt: dueAtRaw, sectionID: sectionIDRaw, draftID: draftID,
+                    title: title, dueAt: dueAtRaw, startsAt: startsAtRaw, sectionID: sectionIDRaw, draftID: draftID,
                     error: invalidJSONError
                 ))
         }
@@ -323,6 +319,7 @@ extension DraftAssignmentRoutes {
     func newAssignmentErrorRedirect(
         title: String,
         dueAt: String,
+        startsAt: String,
         sectionID: String,
         draftID: String,
         error: String
@@ -330,6 +327,7 @@ extension DraftAssignmentRoutes {
         let q =
             "assignmentName=\(urlEncode(title))"
             + "&dueAt=\(urlEncode(dueAt))"
+            + "&startsAt=\(urlEncode(startsAt))"
             + "&sectionID=\(urlEncode(sectionID))"
             + "&draftID=\(urlEncode(draftID))"
             + "&error=\(urlEncode(error))"

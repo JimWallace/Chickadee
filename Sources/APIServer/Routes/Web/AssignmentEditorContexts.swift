@@ -1,7 +1,7 @@
 // APIServer/Routes/Web/AssignmentEditorContexts.swift
 //
-// Leaf view-context types for the assignment authoring flow (validate /
-// new / edit pages).  Split from the original `AssignmentContextTypes.swift`
+// Leaf view-context types for the assignment authoring flow (new / edit
+// pages).  Split from the original `AssignmentContextTypes.swift`
 // so each `Encodable` synthesis lives in its own translation unit.
 //
 // `NewAssignmentContext` (26 fields) and `EditAssignmentContext` (23) are
@@ -12,19 +12,11 @@
 
 import Foundation
 
-struct ValidateContext: Encodable {
-    let currentUser: CurrentUserContext?
-    let assignmentID: String
-    let setupID: String
-    let title: String
-    let suiteCount: Int
-    let dueAt: String?
-}
-
 struct NewAssignmentContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentName: String
     let dueAt: String
+    let startsAt: String
     let sections: [CourseSectionRow]  // available sections for the section picker
     let preselectedSectionID: String  // from ?sectionID= query param
     let draftID: String?
@@ -54,6 +46,12 @@ struct NewAssignmentContext: Encodable {
     /// editor module parses this once at page load to seed its in-memory
     /// state; every subsequent save replaces it via `PUT /draft/checks`.
     let notebookChecksJSON: String
+    /// The notebook-check form schema (`notebookCheckFormSchemaJSON()`),
+    /// embedded as the `check-schema` seed.  Drives the generic
+    /// schema-driven check editor — the per-kind field cards are rendered
+    /// from this rather than hand-coded in the template.  Static across
+    /// assignments.
+    let checkSchemaJSON: String
     /// Full reconciled `GET /suite` payload embedded as JSON.  Same shape
     /// the edit page emits — `suite-table.js` parses it once at page load
     /// as the initial state of the unified items list, and every subsequent
@@ -90,6 +88,7 @@ struct EditAssignmentContext: Encodable {
     let testSetupID: String
     let assignmentName: String
     let dueAt: String
+    let startsAt: String
     let currentAssignmentFile: String
     let currentAssignmentURL: String
     let assignmentNotebookEditURL: String
@@ -116,6 +115,10 @@ struct EditAssignmentContext: Encodable {
     /// Empty `[]` for assignments with no checks (the common case until
     /// instructors start using the new editor).
     let notebookChecksJSON: String
+    /// The notebook-check form schema (`notebookCheckFormSchemaJSON()`),
+    /// embedded as the `check-schema` seed.  Drives the generic
+    /// schema-driven check editor.  Static across assignments.
+    let checkSchemaJSON: String
     /// Full reconciled `GET /suite` payload embedded as JSON.  The editor JS
     /// parses it once at page load as the initial state of the unified
     /// items list; every subsequent mutation is a PUT whose response
@@ -133,6 +136,10 @@ struct EditAssignmentContext: Encodable {
     /// "Global Inputs" panel at the top of the edit page iterates this
     /// list to seed its initial rows.  Empty when no globals declared.
     let globalVariableRows: [SuiteSectionVariableShellRow]
+    /// The authorable achievement kinds, in declaration order.  The kind
+    /// dropdown renders from this list and the editor JS derives its table
+    /// labels from the rendered options — see `AchievementKindPresentation`.
+    let achievementKindOptions: [AchievementKindOption]
     let brightspaceSyncEnabled: Bool
     let brightspaceGradeObjectID: String?
     let notice: String?

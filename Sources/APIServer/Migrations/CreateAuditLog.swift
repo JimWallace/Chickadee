@@ -1,7 +1,7 @@
 import Fluent
 import SQLKit
 
-struct CreateAuditLog: AsyncMigration {
+struct CreateAuditLog: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("audit_log")
             .id()

@@ -21,8 +21,10 @@ extension AdminRoutes {
             enrollmentMode: CourseEnrollmentMode.open.rawValue,
             enrollmentCount: 0,
             assignmentCount: 0,
+            submissionCount: 0,
             createdAt: "",
             brightspaceOrgUnitID: nil,
+            brightspaceOrgUnitName: nil,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil
         )
         return try await req.view.render(
@@ -54,6 +56,13 @@ extension AdminRoutes {
         let course = APICourse(code: code, name: name)
         try await course.save(on: req.db)
         let id = try course.requireID().uuidString
+        await AuditLogger.record(
+            action: .courseCreated,
+            targetType: .course,
+            targetID: id,
+            metadata: ["course_code": code, "course_name": name],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(id)")
     }
 
@@ -69,7 +78,19 @@ extension AdminRoutes {
             throw Abort(.notFound)
         }
         course.isArchived.toggle()
+        // Archiving is Chickadee's "end of term" signal: stamp the moment so
+        // the submission-retention clock has an anchor (see
+        // SubmissionRetentionService). Un-archiving clears it so a course that
+        // re-opens isn't carrying a stale retention deadline.
+        course.archivedAt = course.isArchived ? Date() : nil
         try await course.save(on: req.db)
+        await AuditLogger.record(
+            action: course.isArchived ? .courseArchived : .courseUnarchived,
+            targetType: .course,
+            targetID: idString,
+            metadata: ["course_code": course.code],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(idString)")
     }
 
@@ -115,6 +136,10 @@ extension AdminRoutes {
             .filter(\.$courseID == sourceID)
             .sort(\.$sortOrder)
             .all()
+        let sections = try await APICourseSection.query(on: req.db)
+            .filter(\.$courseID == sourceID)
+            .sort(\.$sortOrder)
+            .all()
 
         let newCourseID = try await req.db.transaction { db -> UUID in
             // 1. Create the new course.
@@ -122,7 +147,21 @@ extension AdminRoutes {
             try await newCourse.save(on: db)
             let newCourseID = try newCourse.requireID()
 
-            // 2. Copy each test setup (zip + optional notebook) to a new ID.
+            // 2. Copy sections, building an old→new UUID map.
+            var sectionIDMap: [UUID: UUID] = [:]
+            for section in sections {
+                guard let oldSectionID = section.id else { continue }
+                let newSection = APICourseSection(
+                    name: section.name,
+                    defaultGradingMode: section.defaultGradingMode,
+                    sortOrder: section.sortOrder,
+                    courseID: newCourseID
+                )
+                try await newSection.save(on: db)
+                sectionIDMap[oldSectionID] = try newSection.requireID()
+            }
+
+            // 3. Copy each test setup (zip + optional notebook) to a new ID.
             var setupIDMap: [String: String] = [:]
             for setup in setups {
                 guard let oldID = setup.id else { continue }
@@ -133,11 +172,18 @@ extension AdminRoutes {
                 let dstZip = URL(fileURLWithPath: setupsDir + "\(newID).zip")
                 try FileManager.default.copyItem(at: srcZip, to: dstZip)
 
+                // Copy the notebook using the actual stored path — not a
+                // reconstructed `<setupID>.ipynb` flat path, which misses
+                // notebooks stored in the notebooks/<setupID>/ subdirectory.
                 var newNotebookPath: String?
-                if setup.notebookPath != nil {
-                    let srcNb = URL(fileURLWithPath: setupsDir + "\(oldID).ipynb")
+                if let srcPath = setup.notebookPath {
+                    let srcNb = URL(fileURLWithPath: srcPath)
                     if FileManager.default.fileExists(atPath: srcNb.path) {
-                        let dstNb = URL(fileURLWithPath: setupsDir + "\(newID).ipynb")
+                        let nbDir = draftNotebookDirectory(
+                            testSetupsDirectory: setupsDir, setupID: newID)
+                        try FileManager.default.createDirectory(
+                            atPath: nbDir, withIntermediateDirectories: true)
+                        let dstNb = URL(fileURLWithPath: nbDir + srcNb.lastPathComponent)
                         try FileManager.default.copyItem(at: srcNb, to: dstNb)
                         newNotebookPath = dstNb.path
                     }
@@ -153,7 +199,7 @@ extension AdminRoutes {
                 try await newSetup.save(on: db)
             }
 
-            // 3. Copy each assignment, remapping to the new test setup IDs.
+            // 4. Copy each assignment, remapping test setup IDs and section IDs.
             //    Validation state is reset so the instructor re-validates before opening.
             for (idx, a) in assignments.enumerated() {
                 guard let newSetupID = setupIDMap[a.testSetupID] else { continue }
@@ -162,10 +208,11 @@ extension AdminRoutes {
                     title: a.title,
                     slug: try await uniqueAssignmentSlug(title: a.title, courseID: newCourseID, db: db),
                     dueAt: a.dueAt,
-                    isOpen: false,
+                    visibility: .closed,
                     sortOrder: a.sortOrder ?? idx,
                     validationStatus: nil,
                     validationSubmissionID: nil,
+                    sectionID: a.sectionID.flatMap { sectionIDMap[$0] },
                     courseID: newCourseID
                 )
                 try await newAssignment.save(on: db)
@@ -187,13 +234,26 @@ extension AdminRoutes {
             let courseID = UUID(uuidString: idString),
             let course = try await APICourse.find(courseID, on: req.db)
         else { throw Abort(.notFound) }
-        guard course.isArchived else {
-            throw AppError.badRequest(reason: "Only archived courses can be deleted.")
+
+        // Deletion is gated on the same retention window as Purge: a course
+        // can only be deleted from the Retention tab once it has been archived
+        // and its retention window has elapsed. Never trust the posting page.
+        let retentionDays = req.application.appConfig.diagnostics.submissionRetentionDays
+        guard course.isArchived, let archivedAt = course.archivedAt else {
+            return req.redirect(
+                to: retentionRedirect(error: "\(course.code) is not archived — cannot delete."))
+        }
+        let eligibleAt = SubmissionRetentionService.purgeEligibleDate(
+            archivedAt: archivedAt, retentionDays: retentionDays)
+        guard Date() >= eligibleAt else {
+            return req.redirect(
+                to: retentionRedirect(
+                    error: "\(course.code) is not yet past its retention window."))
         }
 
         let setupsDir = req.application.testSetupsDirectory
 
-        try await req.db.transaction { db in
+        let purgedSubmissions = try await req.db.transaction { db -> Int in
             // 1. Test setups for this course.
             let setups = try await APITestSetup.query(on: db)
                 .filter(\.$courseID == courseID).all()
@@ -234,10 +294,30 @@ extension AdminRoutes {
             try await APICourseEnrollment.query(on: db)
                 .filter(\.$course.$id == courseID).delete()
             try await course.delete(on: db)
+            return submissions.count
         }
 
         req.logger.info("Admin permanently deleted course \(course.code) (\(idString))")
-        return req.redirect(to: "/admin")
+        await AuditLogger.record(
+            action: .courseDeleted,
+            targetType: .course,
+            targetID: idString,
+            metadata: ["course_code": course.code, "submissions_purged": String(purgedSubmissions)],
+            on: req
+        )
+        // The one place student submissions are purged under the retention
+        // policy — record it distinctly when anything was actually removed.
+        if purgedSubmissions > 0 {
+            await AuditLogger.record(
+                action: .submissionsPurged,
+                targetType: .course,
+                targetID: idString,
+                metadata: ["course_code": course.code, "count": String(purgedSubmissions)],
+                on: req
+            )
+        }
+        return req.redirect(
+            to: retentionRedirect(ok: "Deleted \(course.code) and all its data."))
     }
 
     // MARK: - POST /admin/courses/:courseID/edit
@@ -275,12 +355,37 @@ extension AdminRoutes {
 
         course.code = code
         course.name = name
-        if req.application.brightSpaceClient != nil {
+        if let client = req.application.brightSpaceClient {
             let rawOrgUnit = (body.brightspaceOrgUnitID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            course.brightspaceOrgUnitID = rawOrgUnit.isEmpty ? nil : rawOrgUnit
+            let newOrgUnit = rawOrgUnit.isEmpty ? nil : rawOrgUnit
+            course.brightspaceOrgUnitID = newOrgUnit
+            // Verify the binding against D2L and cache the org-unit name so the
+            // admin can confirm they pointed at the right course. Verification
+            // failures (D2L unreachable, bad ID) don't block the save — the
+            // name just stays nil and the UI shows "unverified".
+            if let orgUnit = newOrgUnit {
+                course.brightspaceOrgUnitName = await verifiedOrgUnitName(
+                    orgUnitID: orgUnit, client: client, req: req)
+            } else {
+                course.brightspaceOrgUnitName = nil
+            }
         }
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
+    }
+
+    /// Looks the org unit up in D2L and returns its name, or nil if it can't
+    /// be verified (not found, or D2L unreachable). Never throws — a failed
+    /// verification must not block saving the course.
+    private func verifiedOrgUnitName(
+        orgUnitID: String, client: BrightSpaceAPIClient, req: Request
+    ) async -> String? {
+        do {
+            return try await client.getOrgUnit(orgUnitID: orgUnitID, on: req.application)?.name
+        } catch {
+            req.logger.warning("BrightSpace org-unit verification failed for \(orgUnitID): \(error)")
+            return nil
+        }
     }
 
     // MARK: - POST /admin/courses/:courseID/unenroll/:userID
@@ -301,6 +406,13 @@ extension AdminRoutes {
             .filter(\.$userID == userID)
             .delete()
 
+        await AuditLogger.record(
+            action: .enrollmentRemoved,
+            targetType: .enrollment,
+            targetID: userIDString,
+            metadata: ["course_id": courseIDString, "subject_user_id": userIDString],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(courseIDString)")
     }
 
@@ -320,6 +432,8 @@ extension AdminRoutes {
         async let assignmentCountFetch = APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseID)
             .count()
+        async let submissionCountFetch = SubmissionRetentionService.submissionCountsByCourse(
+            courseIDs: [courseID], on: req.db)
         let courseRow = AdminCourseRow(
             id: idString,
             code: course.code,
@@ -328,8 +442,10 @@ extension AdminRoutes {
             enrollmentMode: course.enrollmentMode.rawValue,
             enrollmentCount: try await enrollmentCountFetch,
             assignmentCount: try await assignmentCountFetch,
+            submissionCount: (try await submissionCountFetch)[courseID] ?? 0,
             createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
             brightspaceOrgUnitID: course.brightspaceOrgUnitID,
+            brightspaceOrgUnitName: course.brightspaceOrgUnitName,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil
         )
 
@@ -345,6 +461,9 @@ extension AdminRoutes {
         } else {
             let users = try await APIUser.query(on: req.db)
                 .filter(\.$id ~~ enrolledUserIDs)
+                // Exclude `mcp` service accounts: enrolled to scope an agent's
+                // access (admin MCP tab), not human roster members.
+                .filter(\.$role != UserRole.mcp.rawValue)
                 .sort(\.$username)
                 .all()
             enrolledUsers = users.compactMap { u in
@@ -369,7 +488,8 @@ extension AdminRoutes {
                 id: a.publicID,
                 title: a.title,
                 dueAt: a.dueAt.map { df.string(from: $0) },
-                isOpen: a.isOpen
+                isOpen: a.isOpen,
+                visibility: a.visibility.rawValue
             )
         }
 
@@ -439,6 +559,13 @@ extension AdminRoutes {
             .filter(\.$course.$id == courseID)
             .delete()
 
+        await AuditLogger.record(
+            action: .enrollmentRemoved,
+            targetType: .enrollment,
+            targetID: idString,
+            metadata: ["course_id": courseIDString, "subject_user_id": idString],
+            on: req
+        )
         return req.redirect(to: "/admin/users/\(idString)")
     }
 
@@ -468,6 +595,18 @@ extension AdminRoutes {
             on: req.db
         )
 
+        await AuditLogger.record(
+            action: .enrollmentBulkAdded,
+            targetType: .course,
+            targetID: idString,
+            metadata: [
+                "course_code": course.code,
+                "enrolled": String(result.enrolledCount),
+                "pre_enrolled": String(result.preEnrolledCount),
+                "already_enrolled": String(result.alreadyEnrolledCount),
+            ],
+            on: req
+        )
         return try await req.view.render(
             "admin-enroll-csv-result",
             EnrollCSVResultContext(
@@ -487,15 +626,14 @@ extension AdminRoutes {
 // MARK: - Private helpers
 
 private func uniqueCopyCode(base: String, db: Database) async throws -> String {
-    let first = "\(base)-COPY"
-    if try await APICourse.query(on: db).filter(\.$code == first).count() == 0 {
-        return first
-    }
-    for n in 2...10 {
-        let candidate = "\(base)-COPY-\(n)"
-        if try await APICourse.query(on: db).filter(\.$code == candidate).count() == 0 {
-            return candidate
-        }
+    let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
+    let taken = Set(
+        try await APICourse.query(on: db)
+            .filter(\.$code ~~ candidates)
+            .all()
+            .map(\.code))
+    if let available = candidates.first(where: { !taken.contains($0) }) {
+        return available
     }
     throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }

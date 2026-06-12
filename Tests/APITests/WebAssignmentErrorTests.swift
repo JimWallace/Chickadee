@@ -1,6 +1,9 @@
 // Tests/APITests/WebAssignmentErrorTests.swift
 //
-// Tests for `WebAssignmentError` (issue #442 typed-errors migration):
+// Tests for `WebAssignmentError` (issue #442 typed-errors migration).
+// As of the June 2026 audit the enum was folded into `AppError`
+// (`WebAssignmentError` is now a typealias), so these tests pin the
+// unified vocabulary:
 //
 //   1. Each enum case maps to the expected HTTP status, so future tweaks
 //      to the switch statement can't silently drop a status code.
@@ -27,6 +30,7 @@ import Vapor
     @Test(
         arguments: [
             (WebAssignmentError.notFound(resource: "Assignment 'abc'"), HTTPResponseStatus.notFound),
+            (.badRequest(reason: "Empty bundle upload"), .badRequest),
             (.invalidParameter(name: "draftID", reason: "missing"), .badRequest),
             (.noActiveCourse(action: "creating an assignment"), .badRequest),
             (.forbidden(action: "edit assignments"), .forbidden),
@@ -75,8 +79,6 @@ import Vapor
             "DraftAssignmentRoutes+SaveValidation.swift",
             "DraftAssignmentRoutes+SuiteEditing.swift",
             "DraftAssignmentRoutes+Sections.swift",
-            "PublishedAssignmentRoutes+Checks.swift",
-            "PublishedAssignmentRoutes+Families.swift",
             "PublishedAssignmentRoutes+FileDownloads.swift",
             "PublishedAssignmentRoutes+GlobalVariables.swift",
             "PublishedAssignmentRoutes+NotebookTools.swift",

@@ -6,6 +6,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 extension AdminRoutes {
@@ -88,7 +89,7 @@ extension AdminRoutes {
         let iso = ISO8601DateFormatter()
         let processedCount = try await APISubmission.query(on: req.db)
             .filter(\.$workerID == runnerID)
-            .filter(\.$status ~~ ["complete", "failed"])
+            .filter(\.$status ~~ [SubmissionStatus.complete.rawValue, SubmissionStatus.failed.rawValue])
             .count()
         let avgData = try? await req.application.diagnostics.rollingAverages(
             for: [runnerID], sampleSize: 50, on: req.db
@@ -227,20 +228,57 @@ extension AdminRoutes {
 
 // MARK: - File-private worker-row + formatting helpers
 
+private struct WorkerStatusCountRow: Decodable {
+    let workerID: String?
+    let status: String?
+    let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case workerID = "worker_id"
+        case status
+        case total
+    }
+}
+
 func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
     let iso = ISO8601DateFormatter()
     let workers = await req.application.workerActivityStore.snapshotsSortedByRecent()
-    let submissions = try await APISubmission.query(on: req.db).all()
 
+    // Grouped COUNT by (worker_id, status) rather than loading the entire
+    // submissions table into memory and tallying per worker in Swift — the
+    // submissions table grows without bound across terms.
     var assignedByWorkerID: [String: Int] = [:]
     var processedByWorkerID: [String: Int] = [:]
-    for submission in submissions {
-        guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
-        if submission.status == "assigned" {
-            assignedByWorkerID[workerID, default: 0] += 1
+    if let sql = req.db as? SQLDatabase {
+        let counts = try await sql.select()
+            .column("worker_id")
+            .column("status")
+            .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+            .from("submissions")
+            .groupBy("worker_id")
+            .groupBy("status")
+            .all(decoding: WorkerStatusCountRow.self)
+        for row in counts {
+            guard let workerID = row.workerID, !workerID.isEmpty else { continue }
+            switch row.status {
+            case SubmissionStatus.assigned.rawValue:
+                assignedByWorkerID[workerID, default: 0] += row.total
+            case SubmissionStatus.complete.rawValue, SubmissionStatus.failed.rawValue:
+                processedByWorkerID[workerID, default: 0] += row.total
+            default:
+                break
+            }
         }
-        if submission.status == "complete" || submission.status == "failed" {
-            processedByWorkerID[workerID, default: 0] += 1
+    } else {
+        let submissions = try await APISubmission.query(on: req.db).all()
+        for submission in submissions {
+            guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
+            if submission.statusValue == .assigned {
+                assignedByWorkerID[workerID, default: 0] += 1
+            }
+            if submission.statusValue == .complete || submission.statusValue == .failed {
+                processedByWorkerID[workerID, default: 0] += 1
+            }
         }
     }
 

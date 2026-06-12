@@ -21,6 +21,8 @@ struct AppConfig: Sendable {
     let brightspace: BrightSpaceSyncConfig?
     let diagnostics: DiagnosticsConfiguration
     let alerts: ServerHealthAlertConfiguration
+    let outboundProxy: OutboundProxyConfig?
+    let mcp: MCPConfig
 
     /// Loads the entire config tree from `Environment.get(...)`.
     ///
@@ -50,7 +52,9 @@ struct AppConfig: Sendable {
             workers: WorkerConfig.fromEnvironment(),
             brightspace: BrightSpaceSyncConfig.fromEnvironment(),
             diagnostics: DiagnosticsConfiguration.fromEnvironment(),
-            alerts: ServerHealthAlertConfiguration.fromEnvironment()
+            alerts: ServerHealthAlertConfiguration.fromEnvironment(),
+            outboundProxy: OutboundProxyConfig.fromEnvironment(),
+            mcp: MCPConfig.fromEnvironment(workDir: workDir)
         )
     }
 
@@ -67,7 +71,11 @@ struct AppConfig: Sendable {
         }
         let idleTimeout = security.sessionIdleTimeoutSeconds
         if idleTimeout > 0 {
-            logger.info("security: sessionIdleTimeoutMinutes=\(Int(idleTimeout / 60))")
+            let warning = Int(security.sessionIdleWarningSeconds)
+            let warningDesc = warning > 0 ? "\(warning)s" : "disabled"
+            logger.info(
+                "security: sessionIdleTimeoutMinutes=\(Int(idleTimeout / 60)), idleWarning=\(warningDesc)"
+            )
         } else {
             logger.info("security: sessionIdleTimeout=disabled")
         }
@@ -93,11 +101,19 @@ struct AppConfig: Sendable {
             )
         }
         logger.info(
-            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d"
+            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots/audit/submissions)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d/\(diagnostics.auditLogRetentionDays)d/\(diagnostics.submissionRetentionDays)d"
         )
         if alerts.enabled {
             logger.info(
                 "alerts: enabled, checkInterval=\(alerts.checkIntervalSeconds)s, cooldown=\(alerts.cooldownSeconds)s, webhook=\(redactPresence(alerts.webhookURLFromEnvironment))"
+            )
+        }
+        if let proxy = outboundProxy {
+            logger.info("outboundProxy: \(proxy.host):\(proxy.port)")
+        }
+        if mcp.mode.isMounted {
+            logger.info(
+                "mcp: mode=\(mcp.mode.rawValue), tokenTTL=\(mcp.tokenTTLSeconds)s, accessTokenTTL=\(mcp.accessTokenTTLSeconds)s, grantTTL=\(mcp.grantTTLDays)d, allowedHosts=\(mcp.allowedHosts.count), allowedOrigins=\(mcp.allowedOrigins.count), signingKeyPath=\(mcp.signingKeyPath)"
             )
         }
     }
@@ -153,7 +169,8 @@ extension AppConfig {
     /// `makeTestApp` and by the lazy fallback in `Application.appConfig`.
     static func testDefaults(
         authMode: AuthMode = .local,
-        database: DatabaseSettings = .sqliteInMemory()
+        database: DatabaseSettings = .sqliteInMemory(),
+        mcp: MCPConfig = .default
     ) -> AppConfig {
         let auth = AuthConfig(
             mode: authMode,
@@ -181,9 +198,12 @@ extension AppConfig {
                 activeRunnerWindowSeconds: 120,
                 recentMetricsWindowHours: 24,
                 pruneIntervalHours: 24,
-                auditLogRetentionDays: 90
+                auditLogRetentionDays: 90,
+                submissionRetentionDays: 365
             ),
-            alerts: .default
+            alerts: .default,
+            outboundProxy: nil,
+            mcp: mcp
         )
     }
 }

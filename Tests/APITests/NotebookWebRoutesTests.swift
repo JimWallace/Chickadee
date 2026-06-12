@@ -131,12 +131,14 @@ import XCTVapor
         testSetupID: String,
         title: String,
         dueAt: Date? = nil,
+        startsAt: Date? = nil,
         isOpen: Bool = true
     ) async throws -> APIAssignment {
         let assignment = APIAssignment(
             testSetupID: testSetupID,
             title: title,
             dueAt: dueAt,
+            startsAt: startsAt,
             isOpen: isOpen,
             courseID: try await makeCourse().requireID()
         )
@@ -288,22 +290,30 @@ import XCTVapor
 
     @Test func notebookPageClosedAssignmentRendersReadOnlyAndHidesSubmit() async throws {
         try await withApp(app) { _ in
-            // Closed assignment (deadline past, no override): the iframe must
-            // carry data-read-only="true", the Submit button must disappear,
-            // and the closed-view notice must appear.  This is the core
-            // contract for the closed-assignment read-only view.
+            // Closed assignment (deadline past, no override) the student has
+            // previously opened: the iframe must carry data-read-only="true",
+            // the Submit button must disappear, and the closed-view notice must
+            // appear.  This is the core contract for the closed-assignment
+            // read-only review view.
             let cookie = try await loginAsStudent()
             let user = try await studentUser()
             try await enroll(user)
 
             let setupID = "setup_nb_closed"
             _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Closed"))
-            _ = try await insertAssignment(
+            let assignment = try await insertAssignment(
                 testSetupID: setupID,
                 title: "Closed Lab",
                 dueAt: Date(timeIntervalSinceNow: -3600),  // due 1h ago
                 isOpen: true  // not explicitly closed; deadline carries it
             )
+
+            // Mark the assignment as previously opened by recording a
+            // participation row — otherwise the closed-assignment gate would
+            // redirect them to the dashboard (covered by the next test).
+            try await APIAssignmentParticipation(
+                userID: try user.requireID(), assignmentID: try assignment.requireID()
+            ).save(on: app.db)
 
             try await app.asyncTest(
                 .GET, "/testsetups/\(setupID)/notebook",
@@ -324,6 +334,224 @@ import XCTVapor
                         "Closed assignment must render the view-only notice")
                 })
 
+        }
+    }
+
+    @Test func notebookPageClosedAssignmentNeverOpenedRedirectsToDashboard() async throws {
+        try await withApp(app) { _ in
+            // A student who has never opened a closed assignment (no working
+            // copy, no submission) is redirected to their dashboard instead of
+            // seeing the notebook — this keeps pre-posted links from spoiling
+            // not-yet-opened labs.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_closed_unopened"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Hidden"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Unopened Closed Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),
+                isOpen: true
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                })
+        }
+    }
+
+    @Test func notebookPageNotYetOpenAssignmentRedirectsToDashboard() async throws {
+        try await withApp(app) { _ in
+            // A student following a pre-posted link to an assignment whose open
+            // date is still in the future is bounced to their dashboard rather
+            // than into the notebook — the future `startsAt` holds it closed for
+            // everyone, so the closed-assignment gate fires just as it does for a
+            // past-deadline lab.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_not_yet_open"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Future"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Scheduled Lab",
+                dueAt: Date(timeIntervalSinceNow: 7 * 24 * 3600),
+                startsAt: Date(timeIntervalSinceNow: 24 * 3600),
+                isOpen: false
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                })
+        }
+    }
+
+    @Test func resetOwnNotebookRestoresStarterForOpenAssignment() async throws {
+        try await withApp(app) { _ in
+            // A student self-resets their own working copy: the corrupted copy is
+            // overwritten with the canonical starter and they are bounced back to
+            // the dashboard.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+            let userID = try user.requireID()
+
+            let setupID = "setup_nb_self_reset"
+            let starterMarker = "Original starter cell"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: starterMarker))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Self Reset Lab", isOpen: true)
+
+            // Simulate the student having clobbered their own working copy.
+            let copyPath = workingCopyPath(setupID: setupID, userID: userID)
+            try FileManager.default.createDirectory(
+                atPath: (copyPath as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true)
+            try Data(notebookJSON(markdown: "Broken edits").utf8)
+                .write(to: URL(fileURLWithPath: copyPath))
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                })
+
+            let restored = try String(contentsOf: URL(fileURLWithPath: copyPath), encoding: .utf8)
+            #expect(restored.contains(starterMarker))
+            #expect(restored.contains("Broken edits") == false)
+        }
+    }
+
+    @Test func resetOwnNotebookRejectedForClosedAssignment() async throws {
+        try await withApp(app) { _ in
+            // The self-reset route is gated on the assignment being open to the
+            // student; a past-deadline assignment is refused with 403.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_self_reset_closed"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Starter"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Closed Self Reset Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),
+                isOpen: true
+            )
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+        }
+    }
+
+    @Test func notebookPageClosedAssignmentWithSubmissionStaysReachable() async throws {
+        try await withApp(app) { _ in
+            // Having submitted at least once also counts as "previously opened",
+            // so a closed assignment with a prior submission renders the
+            // read-only review view rather than redirecting.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_closed_submitted"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Submitted"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Submitted Closed Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),
+                isOpen: true
+            )
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_closed_submitted",
+                testSetupID: setupID,
+                userID: try user.requireID(),
+                notebookJSON: notebookJSON(markdown: "My answer")
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("This assignment is closed"))
+                })
+        }
+    }
+
+    @Test func openAccessRecordsParticipationSoClosedReviewStaysReachable() async throws {
+        try await withApp(app) { _ in
+            // The durable mechanism: opening an assignment while it is open
+            // records a participation row, which keeps it reachable once it
+            // later closes — without depending on the on-disk working copy.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_participation"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Lifecycle"))
+            let assignment = try await insertAssignment(
+                testSetupID: setupID, title: "Lifecycle Lab", dueAt: nil, isOpen: true)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+            let recorded = try await AssignmentParticipationStore.hasParticipation(
+                userID: try user.requireID(), assignmentID: try assignment.requireID(), on: app.db)
+            #expect(recorded, "Opening an assignment must record a durable participation row")
+
+            // Close it (deadline now in the past) — the student must still reach it.
+            assignment.dueAt = Date(timeIntervalSinceNow: -3600)
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .ok,
+                        "A closed assignment stays reachable for a student who opened it while open")
+                    #expect(res.body.string.contains("This assignment is closed"))
+                })
         }
     }
 
@@ -410,7 +638,7 @@ import XCTVapor
         }
     }
 
-    @Test func notebookPageLinksSupportFilesAndRemovesLegacyNotebookCopies() async throws {
+    @Test func notebookPageLinksSupportFilesAndBootSweepRemovesLegacyNotebookCopies() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsStudent()
             let user = try await studentUser()
@@ -466,6 +694,20 @@ import XCTVapor
             #expect(try FileManager.default.destinationOfSymbolicLink(atPath: supportPath) == sharedDir + "bmi.py")
             #expect(FileManager.default.fileExists(atPath: studentDir + "/test.sh") == false)
 
+            // The legacy sweep no longer runs per-request: the page view above
+            // must leave the planted artifacts alone.
+            for root in legacyRoots {
+                let userDir = root + "users/\(userID.uuidString.lowercased())/"
+                let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
+                #expect(
+                    contents.contains { $0.hasSuffix(".ipynb") },
+                    "Page views must not sweep legacy notebooks from \(userDir)")
+            }
+
+            // The one-time boot sweep (LegacyNotebookCleanupLifecycleHandler)
+            // is what removes them now.
+            removeLegacyUserNotebookCopies(publicDirectory: publicDir, logger: app.logger)
+
             for root in legacyRoots {
                 let userDir = root + "users/\(userID.uuidString.lowercased())/"
                 let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
@@ -473,6 +715,10 @@ import XCTVapor
                     contents.contains { $0.hasSuffix(".ipynb") } == false,
                     "Legacy notebooks should be removed from \(userDir)")
             }
+
+            // The sweep only touches flat files in the user root; the current
+            // per-setup working copy must survive it.
+            #expect(FileManager.default.fileExists(atPath: workingCopyPath(setupID: setupID, userID: userID)))
 
         }
     }

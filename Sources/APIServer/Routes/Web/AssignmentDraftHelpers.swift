@@ -20,6 +20,7 @@ struct ExistingSolution {
 struct NewAssignmentDraftFormState: Codable {
     var assignmentName: String
     var dueAt: String
+    var startsAt: String
     var sectionID: String
     var requiredPlatform: String
     var requiredArchitecture: String
@@ -31,6 +32,7 @@ struct NewAssignmentDraftFormState: Codable {
     static let empty = NewAssignmentDraftFormState(
         assignmentName: "",
         dueAt: "",
+        startsAt: "",
         sectionID: "",
         requiredPlatform: "",
         requiredArchitecture: "",
@@ -47,8 +49,22 @@ struct DraftRequirementSuggestions {
 }
 
 func loadExistingSolution(req: Request, assignment: APIAssignment) async throws -> ExistingSolution? {
+    try await loadExistingSolution(assignment: assignment, on: req.db)
+}
+
+/// Database-only resolver for an assignment's reference solution notebook,
+/// shared by the web edit flow (`loadExistingSolution(req:assignment:)`) and the
+/// MCP `get_solution` / `update_solution` tools, which authenticate via a bearer
+/// token and have only a `ToolContext` (no `Request.auth`).
+///
+/// Resolves the instructor's solution from the linked validation submission, or
+/// failing that the most recent `kind == .validation` submission for the setup.
+/// Only ever returns a validation (solution) submission — never a student one.
+func loadExistingSolution(
+    assignment: APIAssignment, on db: any Database
+) async throws -> ExistingSolution? {
     if let validationID = assignment.validationSubmissionID,
-        let validationSubmission = try await APISubmission.find(validationID, on: req.db),
+        let validationSubmission = try await APISubmission.find(validationID, on: db),
         let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
         !data.isEmpty
     {
@@ -58,7 +74,7 @@ func loadExistingSolution(req: Request, assignment: APIAssignment) async throws 
         )
     }
 
-    if let fallbackSubmission = try await APISubmission.query(on: req.db)
+    if let fallbackSubmission = try await APISubmission.query(on: db)
         .filter(\.$testSetupID == assignment.testSetupID)
         .filter(\.$kind == APISubmission.Kind.validation)
         .sort(\.$submittedAt, .descending)

@@ -61,6 +61,154 @@ import XCTVapor
         }
     }
 
+    @Test func openScheduledAssignmentsOpensOnlyEligibleAssignments() async throws {
+        try await withAssignmentRoutesApp { app in
+            // Open date already passed, validation passed, no/future due → opens.
+            _ = try await arInsertSetup(id: "setup_open_due", on: app)
+            let ready = try await arInsertAssignment(
+                testSetupID: "setup_open_due", title: "Ready",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400),
+                startsAt: Date().addingTimeInterval(-60),
+                validationStatus: "passed", on: app
+            )
+
+            // Open date still in the future → stays closed.
+            _ = try await arInsertSetup(id: "setup_open_future", on: app)
+            let future = try await arInsertAssignment(
+                testSetupID: "setup_open_future", title: "Future",
+                isOpen: false,
+                startsAt: Date().addingTimeInterval(86_400),
+                validationStatus: "passed", on: app
+            )
+
+            // Open date passed but validation not passed → stays closed.
+            _ = try await arInsertSetup(id: "setup_open_pending", on: app)
+            let pending = try await arInsertAssignment(
+                testSetupID: "setup_open_pending", title: "Pending",
+                isOpen: false,
+                startsAt: Date().addingTimeInterval(-60),
+                validationStatus: "pending", on: app
+            )
+
+            // Whole window already in the past (due also passed) → stays closed.
+            _ = try await arInsertSetup(id: "setup_open_pastdue", on: app)
+            let pastDue = try await arInsertAssignment(
+                testSetupID: "setup_open_pastdue", title: "Past window",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(-60),
+                startsAt: Date().addingTimeInterval(-120),
+                validationStatus: "passed", on: app
+            )
+
+            // Staff-only preview with a past open date → publishes to students.
+            _ = try await arInsertSetup(id: "setup_open_preview", on: app)
+            let preview = try await arInsertAssignment(
+                testSetupID: "setup_open_preview", title: "Preview ready",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400),
+                startsAt: Date().addingTimeInterval(-60),
+                validationStatus: "passed", on: app
+            )
+            preview.visibility = .preview
+            try await preview.save(on: app.db)
+
+            let openedCount = try await openScheduledAssignments(on: app.db, logger: app.logger)
+            #expect(openedCount == 2)
+
+            let readyReloaded = try #require(try await APIAssignment.find(ready.id, on: app.db))
+            #expect(readyReloaded.isOpen)
+            #expect(readyReloaded.startsAt == nil, "Open date is consumed once it fires")
+
+            let futureReloaded = try #require(try await APIAssignment.find(future.id, on: app.db))
+            #expect(futureReloaded.isOpen == false)
+            #expect(futureReloaded.startsAt != nil)
+
+            let pendingReloaded = try #require(try await APIAssignment.find(pending.id, on: app.db))
+            #expect(pendingReloaded.isOpen == false, "Must not auto-open before validation passes")
+
+            let pastDueReloaded = try #require(try await APIAssignment.find(pastDue.id, on: app.db))
+            #expect(pastDueReloaded.isOpen == false, "Must not open a window whose due date already passed")
+
+            let previewReloaded = try #require(try await APIAssignment.find(preview.id, on: app.db))
+            #expect(previewReloaded.visibility == .open, "Preview publishes to students at its open date")
+            #expect(previewReloaded.startsAt == nil, "Open date is consumed once it fires")
+        }
+    }
+
+    @Test func openSweepDoesNotReopenAfterScheduleConsumed() async throws {
+        try await withAssignmentRoutesApp { app in
+            // Mirrors the state after auto-open + a manual close: isOpen false,
+            // startsAt already cleared.  The sweep must leave it closed.
+            _ = try await arInsertSetup(id: "setup_open_consumed", on: app)
+            let closed = try await arInsertAssignment(
+                testSetupID: "setup_open_consumed", title: "Consumed",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400),
+                startsAt: nil,
+                validationStatus: "passed", on: app
+            )
+
+            let openedCount = try await openScheduledAssignments(on: app.db, logger: app.logger)
+            #expect(openedCount == 0)
+            let reloaded = try #require(try await APIAssignment.find(closed.id, on: app.db))
+            #expect(reloaded.isOpen == false)
+        }
+    }
+
+    @Test func closeExpiredAssignmentsClosesAtDeadlineEvenWithActiveExtension() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await arInsertSetup(id: "setup_ext_close", on: app)
+            let extended = try await arInsertAssignment(
+                testSetupID: "setup_ext_close",
+                title: "Extended overdue",
+                isOpen: true,
+                dueAt: Date().addingTimeInterval(-60), on: app
+            )
+            let extendedStudent = try await arInsertStudent(username: "extended_student", on: app)
+            try await arEnrollStudentInTestCourse(extendedStudent, on: app)
+            try await APIAssignmentExtension(
+                assignmentID: try extended.requireID(),
+                userID: try extendedStudent.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            // A second overdue assignment with no extension also closes.
+            _ = try await arInsertSetup(id: "setup_noext_close", on: app)
+            let plain = try await arInsertAssignment(
+                testSetupID: "setup_noext_close",
+                title: "Plain overdue",
+                isOpen: true,
+                dueAt: Date().addingTimeInterval(-60), on: app
+            )
+            let regularStudent = try await arInsertStudent(username: "regular_student", on: app)
+            try await arEnrollStudentInTestCourse(regularStudent, on: app)
+
+            // Both assignments must auto-close at the deadline: an active
+            // per-student extension does NOT hold the assignment-wide window
+            // open (that's what made assignments appear never to close).
+            let closedCount = try await closeExpiredAssignments(on: app.db, logger: app.logger)
+            #expect(closedCount == 2, "Both expired assignments close, extension or not")
+
+            let extendedReloaded = try #require(try await APIAssignment.find(extended.id, on: app.db))
+            #expect(
+                extendedReloaded.isOpen == false,
+                "Assignment auto-closes at its deadline even with an active extension")
+            let plainReloaded = try #require(try await APIAssignment.find(plain.id, on: app.db))
+            #expect(plainReloaded.isOpen == false, "Assignment with no extension auto-closes")
+
+            // After the close, per-student gating still grants the extended
+            // student access (their effectiveDueAt is in the future) while the
+            // non-extended student is held out.
+            let extendedStillOpen = try await isAssignmentEffectivelyOpen(
+                extendedReloaded, for: extendedStudent, on: app.db)
+            #expect(extendedStillOpen, "Extended student can still submit after the auto-close")
+            let regularBlocked = try await isAssignmentEffectivelyOpen(
+                extendedReloaded, for: regularStudent, on: app.db)
+            #expect(regularBlocked == false, "Non-extended student is blocked once the deadline passes")
+        }
+    }
+
     @Test func instructorCanReopenPastDueAssignmentWithOverride() async throws {
         try await withAssignmentRoutesApp { app in
             _ = try await arInsertSetup(id: "setup_reopen_deadline", on: app)
@@ -137,8 +285,10 @@ import XCTVapor
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
+            // The enrol-from-CSV link lives on the Students tab as of the
+            // instructor-view rework (v0.4.283+).
             try await app.asyncTest(
-                .GET, "/instructor",
+                .GET, "/instructor/students",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -171,8 +321,10 @@ import XCTVapor
             try await recent.save(on: app.db)
             try await arEnrollStudentInTestCourse(recent, on: app)
 
+            // The enrolled-students roster moved to the Students tab in the
+            // instructor-view rework (v0.4.283+).
             try await app.asyncTest(
-                .GET, "/instructor",
+                .GET, "/instructor/students",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -284,9 +436,11 @@ import XCTVapor
 
     /// Dashboard card "Students With Browser Errors" counts distinct
     /// students who posted a client-side diagnostic (preflight or watchdog
-    /// failure) on one of this course's test setups within the 24h window.
-    /// Diagnostics outside the window, on other courses' setups, or with
-    /// a null test_setup_id (stale) must not inflate the count.
+    /// failure) on one of this course's test setups within the 24h window
+    /// **and have no submission for that setup** (i.e. actually stuck).
+    /// Diagnostics outside the window, on other courses' setups, with a null
+    /// test_setup_id (stale), or from a student who later submitted (recovered)
+    /// must not inflate the count.
     @Test func instructorDashboardCountsStudentsWithBrowserErrors() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
@@ -361,7 +515,26 @@ import XCTVapor
             )
             try await dOrphan.save(on: app.db)
 
-            // Expected: 2 distinct students (s1, s2).
+            // A student who hit a watchdog timeout but then reloaded and got a
+            // submission in for that setup has self-recovered → must NOT count.
+            let recovered = try await arInsertStudent(username: "browserErr_recovered", on: app)
+            try await arEnrollStudentInTestCourse(recovered, on: app)
+            let dRecovered = APIClientDiagnostic(
+                userID: try recovered.requireID(),
+                testSetupID: "setup_browser_err",
+                kind: "watchdog_timeout",
+                failedChecks: "kernel-unhealthy",
+                userAgent: "TestUA"
+            )
+            try await dRecovered.save(on: app.db)
+            _ = try await arInsertSubmission(
+                id: "sub_browser_recovered",
+                testSetupID: "setup_browser_err",
+                userID: try recovered.requireID(),
+                on: app
+            )
+
+            // Expected: 2 distinct stuck students (s1, s2).
             try await app.asyncTest(
                 .GET, "/instructor",
                 beforeRequest: { req in
@@ -381,9 +554,10 @@ import XCTVapor
                         return
                     }
                     let countMsg: Comment = """
-                        Expected 2 students (s1 + s2 with recent diagnostics).  \
-                        Out-of-window diagnostics and diagnostics with a null \
-                        test_setup_id must not inflate the count.
+                        Expected 2 stuck students (s1 + s2: recent diagnostics, \
+                        no submission).  Out-of-window diagnostics, diagnostics \
+                        with a null test_setup_id, and students who errored but \
+                        later submitted (recovered) must not inflate the count.
                         """
                     #expect(String(html[valueRange]) == "2", countMsg)
                 })

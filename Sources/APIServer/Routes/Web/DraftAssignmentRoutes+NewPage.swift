@@ -170,7 +170,7 @@ extension DraftAssignmentRoutes {
     /// no-draft case (returns `{"items":[]}`); this wrapper just supplies
     /// the same payload when no draft exists.
     func newAssignmentSuiteStateSeedJSON(setup: APITestSetup?) -> String {
-        setup.map { suiteStateJSON(fromManifest: $0.manifest) } ?? #"{"items":[]}"#
+        setup.map { suiteStateJSON(fromManifest: $0.manifest, zipPath: $0.zipPath) } ?? #"{"items":[]}"#
     }
 
     /// Server-rendered section-shell rows.  Falls back to a single

@@ -30,6 +30,19 @@
 
     if (!frame || !setupID) return;
 
+    // ≤640px the page hides the editor behind a "larger screen" notice and
+    // an inline guard in notebook.leaf aborts the iframe's eager navigation.
+    // Don't run the preflight, watchdog, or editor mount for a surface the
+    // student can't see; if the viewport grows past the breakpoint
+    // (rotation, window resize) reload so the page boots normally.
+    const phoneQuery = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;
+    if (phoneQuery && phoneQuery.matches) {
+        const onChange = (e) => { if (!e.matches) window.location.reload(); };
+        if (phoneQuery.addEventListener) phoneQuery.addEventListener('change', onChange);
+        else if (phoneQuery.addListener) phoneQuery.addListener(onChange);
+        return;
+    }
+
     // Disable Submit until the student's notebook has been synced into the
     // JupyterLite editor. This prevents a race condition where students click
     // Submit before their work is loaded, causing a blank notebook to be
@@ -53,7 +66,10 @@
         frame.getAttribute('src') ||
         `/jupyterlite/notebooks/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
     const lockedNotebookPath = normalizeJupyterPath(extractPathFromEditorURL(editorURL));
-    let lastForcedEditorResetMs = 0;
+    // Timestamp of a forced editor reset whose navigation has not committed
+    // yet (cleared by the iframe load event).  Guards the locked-path
+    // enforcement against aborting its own still-loading reset.
+    let forcedEditorResetAt = 0;
     let serverSyncInFlight = false;
     let serverSyncComplete = false;
 
@@ -86,7 +102,14 @@
     });
 
     function mountEditor() {
-        frame.src = editorURL;
+        // The template renders the same URL into the iframe's src, so the
+        // editor is already loading by the time the preflight resolves.
+        // Re-assigning src aborts that in-flight navigation and starts it
+        // over — only navigate when the attribute is missing or different
+        // (an older cached copy of the page).
+        if (frame.getAttribute('src') !== editorURL) {
+            frame.src = editorURL;
+        }
 
         // Quick reachability check helps explain blank/failed editor loads.
         fetch(notebookURL, { method: 'GET' }).then((res) => {
@@ -97,16 +120,70 @@
             setStatus('error', 'Notebook source unavailable');
         });
 
+        // --- Idle-watchdog activity bridge -------------------------------
+        //
+        // Keystrokes/clicks INSIDE the JupyterLite iframe never reach the
+        // parent window, so idle-logout.js can't see a student who's actively
+        // editing.  On each iframe load we attach passive listeners to its
+        // document and (a) dispatch `chickadee:activity` on the parent window
+        // to reset the client idle deadline, and (b) send a throttled
+        // `/session/keepalive` so the server's last_seen_at tracks in-editor
+        // work and the next-request gate doesn't expire an active student.
+        // Same-origin contentDocument access is reliable in Chromium and
+        // best-effort in Safari (hence the try/catch).  Skipped entirely when
+        // the idle gate is disabled (timeout meta is 0/absent).
+        let lastNotebookKeepalive = 0;
+
+        function idleTimeoutConfigured() {
+            const meta = document.querySelector('meta[name="session-idle-timeout-seconds"]');
+            return meta ? (parseInt(meta.getAttribute('content'), 10) || 0) > 0 : false;
+        }
+
+        function notebookActivity() {
+            try {
+                window.dispatchEvent(new CustomEvent('chickadee:activity'));
+            } catch (_) { /* ignore */ }
+
+            const now = Date.now();
+            // Leading-edge, then at most once per 5 minutes.
+            if (now - lastNotebookKeepalive < 5 * 60 * 1000) return;
+            lastNotebookKeepalive = now;
+            const token = ChickadeeUI.getCsrfToken();
+            fetch('/session/keepalive', {
+                method: 'POST',
+                headers: { 'x-csrf-token': token, 'accept': 'application/json' },
+                redirect: 'manual'
+            }).catch(() => { /* best-effort */ });
+        }
+
+        function attachNotebookActivityBridge() {
+            if (!idleTimeoutConfigured()) return;
+            let doc;
+            try { doc = frame.contentDocument; } catch (_) { doc = null; }
+            if (!doc || doc._chickadeeActivityBound) return;
+            doc._chickadeeActivityBound = true;
+            ['keydown', 'pointerdown', 'wheel'].forEach((name) => {
+                try {
+                    doc.addEventListener(name, notebookActivity, { passive: true, capture: true });
+                } catch (_) { /* ignore */ }
+            });
+        }
+
         frame.addEventListener('load', () => {
+            // A document committed; any forced reset we were waiting on has
+            // landed, so the locked-path enforcement may act again.
+            forcedEditorResetAt = 0;
             if (!serverSyncComplete && !serverSyncInFlight) {
                 void syncNotebookFromServerSnapshot();
             }
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
+            attachNotebookActivityBridge();
         });
         setInterval(() => {
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
+            attachNotebookActivityBridge();
         }, 1500);
 
         armEditorWatchdog();
@@ -397,6 +474,24 @@
         return looksLikeNotebook(notebook) ? notebook : null;
     }
 
+    // Exposed for idle-logout.js: flush the open notebook to JupyterLite's
+    // storage before the inactivity watchdog signs the user out, so unsaved
+    // cells survive. Best-effort and read-only-aware; never throws.
+    window.chickadeeSaveNotebook = async function () {
+        if (readOnly) return;
+        try {
+            const childWindow = frame.contentWindow;
+            const app = childWindow && childWindow.jupyterapp;
+            if (app && app.commands && typeof app.commands.execute === 'function') {
+                try { await app.commands.execute('docmanager:save'); } catch (_) {}
+                try { await app.commands.execute('docmanager:save-all'); } catch (_) {}
+                await delay(150);
+            }
+        } catch (_) {
+            // Saving is best-effort; swallow everything.
+        }
+    };
+
     async function readNotebookFromJupyterFrame() {
         try {
             const childWindow = frame.contentWindow;
@@ -561,15 +656,31 @@
     function enforceLockedNotebookPath() {
         if (!lockedNotebookPath || !frame.contentWindow) return;
         try {
-            const currentURL = new URL(frame.contentWindow.location.href, window.location.origin);
+            const rawHref = frame.contentWindow.location.href;
+
+            // Until the iframe commits its first document, location.href is
+            // still the initial "about:blank" — the editor is loading, not
+            // navigated away.  Resetting src in that state aborts the
+            // in-flight load; on a slow connection (or a server busy with a
+            // class-wide rush) each 1.5s tick would abort and restart the
+            // navigation forever, so a healthy-but-slow boot never commits
+            // and the shell watchdog misfires.  Wait for a real document.
+            if (rawHref === 'about:blank') return;
+
+            const currentURL = new URL(rawHref, window.location.origin);
             const currentPath = normalizeJupyterPath(currentURL.searchParams.get('path'));
             const inNotebookApp = currentURL.pathname.includes('/jupyterlite/notebooks/');
 
             if (inNotebookApp && currentPath === lockedNotebookPath) return;
 
+            // The previous document's URL stays current while a forced
+            // reset's navigation is in flight, so the path still reads as
+            // wrong here.  Give the reset a generous window to commit (the
+            // load event clears the stamp) before forcing another one,
+            // otherwise slow recoveries are aborted in the same loop.
             const now = Date.now();
-            if (now - lastForcedEditorResetMs < 1000) return;
-            lastForcedEditorResetMs = now;
+            if (forcedEditorResetAt && now - forcedEditorResetAt < 20000) return;
+            forcedEditorResetAt = now;
             frame.src = editorURL;
         } catch (_) {
             // Ignore transient cross-frame navigation states.
@@ -849,223 +960,6 @@
     }
 
     // -------------------------------------------------------------------------
-    // 4. Pyodide execution engine
-    // -------------------------------------------------------------------------
-
-    let pyodide = null;
-
-    async function loadPyodideOnce() {
-        if (pyodide) return pyodide;
-        // Pyodide is loaded from CDN the first time Submit is clicked.
-        if (!window.loadPyodide) {
-            await loadScript('/pyodide/pyodide.js');
-        }
-        pyodide = await window.loadPyodide();
-        return pyodide;
-    }
-
-    // Run all cells in order; collect outcomes for TEST cells.
-    async function runNotebook(notebook) {
-        const py = await loadPyodideOnce();
-
-        // Reset the interpreter for a clean run.
-        await py.runPythonAsync('import sys; sys.modules.clear()');
-
-        const outcomes = [];
-
-        for (const cell of notebook.cells) {
-            if (cell.cell_type !== 'code') continue;
-
-            const source = Array.isArray(cell.source)
-                ? cell.source.join('')
-                : cell.source;
-
-            if (!source.trim()) continue;
-
-            const testMeta = parseTestComment(source);
-            const startMs  = Date.now();
-
-            if (testMeta) {
-                // This is a test cell — run it and record pass/fail.
-                const outcome = await runTestCell(py, source, testMeta, startMs);
-                outcomes.push(outcome);
-            } else {
-                // Regular cell — run it silently; exceptions propagate and abort.
-                try {
-                    await py.runPythonAsync(source);
-                } catch (err) {
-                    const longResult = await captureTraceback(py, err);
-                    // A non-test cell threw — record a generic error and stop.
-                    outcomes.push({
-                        testName:          'setup_error',
-                        testClass:         null,
-                        tier:              'public',
-                        status:            'error',
-                        shortResult:       `Setup cell failed: ${firstLine(err.message)}`,
-                        longResult,
-                        executionTimeMs:   Date.now() - startMs,
-                        memoryUsageBytes:  null,
-                        attemptNumber:     1,
-                        isFirstPassSuccess: false,
-                    });
-                    break;
-                }
-            }
-        }
-
-        return outcomes;
-    }
-
-    // Run a single test cell; return a TestOutcome-shaped object.
-    async function runTestCell(py, source, meta, startMs) {
-        let status      = 'pass';
-        let shortResult = 'passed';
-        let longResult  = null;
-
-        try {
-            await py.runPythonAsync(source);
-        } catch (err) {
-            const msg = err.message || String(err);
-            longResult = await captureTraceback(py, err);
-
-            if (msg.includes('AssertionError') || msg.includes('assert')) {
-                status = 'fail';
-                // Surface the assertion message if one was provided.
-                const assertMsg = extractAssertionMessage(msg);
-                shortResult = assertMsg
-                    ? `failed: ${assertMsg.substring(0, 80)}`
-                    : 'failed';
-            } else {
-                status      = 'error';
-                shortResult = `error: ${firstLine(msg).substring(0, 80)}`;
-            }
-        }
-
-        return {
-            testName:          meta.name,
-            testClass:         null,
-            tier:              meta.tier,
-            status,
-            shortResult,
-            longResult,
-            executionTimeMs:   Date.now() - startMs,
-            memoryUsageBytes:  null,
-            attemptNumber:     1,
-            isFirstPassSuccess: status === 'pass',
-        };
-    }
-
-    // Ask Pyodide to format the last traceback from Python's sys module.
-    // Falls back to err.message if Python-level info is unavailable.
-    async function captureTraceback(py, err) {
-        try {
-            const tb = await py.runPythonAsync(`
-import traceback, sys
-_exc = sys.last_value
-if _exc is not None:
-    ''.join(traceback.format_exception(type(_exc), _exc, _exc.__traceback__))
-else:
-    ''
-`);
-            return tb.trim() || (err.message || String(err));
-        } catch (_) {
-            return err.message || String(err);
-        }
-    }
-
-    // Extract the message from an AssertionError line, e.g.:
-    //   "AssertionError: expected 5 but got 3"  →  "expected 5 but got 3"
-    function extractAssertionMessage(msg) {
-        const line = msg.split('\n').find(l => l.includes('AssertionError'));
-        if (!line) return null;
-        const colon = line.indexOf(':');
-        return colon >= 0 ? line.slice(colon + 1).trim() : null;
-    }
-
-    function firstLine(msg) {
-        return (msg || '').split('\n')[0].trim();
-    }
-
-    // -------------------------------------------------------------------------
-    // 5. # TEST: comment parser
-    //
-    // Format: # TEST: <name> [key=value ...]
-    // Supported keys: tier (default "public"), weight (reserved), requires (reserved)
-    // -------------------------------------------------------------------------
-
-    function parseTestComment(source) {
-        const firstLine = source.trimStart().split('\n')[0];
-        const match     = firstLine.match(/^#\s*TEST:\s*(\S+)(.*)/);
-        if (!match) return null;
-
-        const name   = match[1];
-        const kvStr  = match[2].trim();
-        const kvPairs = {};
-        for (const part of kvStr.split(/\s+/)) {
-            const [k, v] = part.split('=');
-            if (k && v !== undefined) kvPairs[k] = v;
-        }
-
-        return {
-            name,
-            tier:     kvPairs.tier     || 'public',
-            weight:   kvPairs.weight   ? parseFloat(kvPairs.weight) : null,
-            requires: kvPairs.requires ? kvPairs.requires.split(',') : [],
-        };
-    }
-
-    // -------------------------------------------------------------------------
-    // 6. Notebook merge helper (client-side, for Pyodide only)
-    //
-    // Produces a notebook with:
-    //   - non-test cells from the student's upload  (their solution code)
-    //   - test cells from the assignment notebook    (visible tiers only)
-    //
-    // The server re-injects hidden test cells when the notebook is saved.
-    // -------------------------------------------------------------------------
-
-    function mergeNotebooksForRun(studentNB, assignmentNB) {
-        const isTestCellJS = function (cell) {
-            const source = Array.isArray(cell.source)
-                ? cell.source.join('')
-                : (cell.source || '');
-            return /^#\s*TEST:/.test(source.trimStart().split('\n')[0]);
-        };
-        const solutionCells = (studentNB.cells   || []).filter(c => !isTestCellJS(c));
-        const testCells     = (assignmentNB.cells || []).filter(c =>  isTestCellJS(c));
-        return { ...studentNB, cells: [...solutionCells, ...testCells] };
-    }
-
-    // -------------------------------------------------------------------------
-    // 7. Build TestOutcomeCollection
-    // -------------------------------------------------------------------------
-
-    function buildCollection(outcomes, testSetupID) {
-        const pass    = outcomes.filter(o => o.status === 'pass').length;
-        const fail    = outcomes.filter(o => o.status === 'fail').length;
-        const error   = outcomes.filter(o => o.status === 'error').length;
-        const timeout = outcomes.filter(o => o.status === 'timeout').length;
-        const totalMs = outcomes.reduce((s, o) => s + o.executionTimeMs, 0);
-
-        return {
-            submissionID:    '',          // filled in by server
-            testSetupID,
-            attemptNumber:   1,           // server will recompute
-            buildStatus:     'passed',
-            compilerOutput:  null,
-            outcomes,
-            totalTests:      outcomes.length,
-            passCount:       pass,
-            failCount:       fail,
-            errorCount:      error,
-            timeoutCount:    timeout,
-            executionTimeMs: totalMs,
-            runnerVersion:   'browser-pyodide/1.0',
-            timestamp:       new Date().toISOString(),
-        };
-    }
-
-    // -------------------------------------------------------------------------
     // 8. POST to /api/v1/submissions/runner-submit
     // -------------------------------------------------------------------------
 
@@ -1092,9 +986,9 @@ else:
         const notebookBytes = new Uint8Array(
             new TextEncoder().encode(JSON.stringify(notebook))
         );
-        const { outcomes, response } =
+        const { outcomes, response, sections, sectionIDs } =
             await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
-        renderResults(outcomes, response);
+        renderResults(outcomes, response, sections, sectionIDs);
         return { outcomes, response };
     }
 
@@ -1112,7 +1006,7 @@ else:
     // Pattern that identifies a dependency-skip shortResult.
     const SKIP_RE = /^Skipped: prerequisite '(.+)' did not pass$/;
 
-    function renderResults(outcomes, response) {
+    function renderResults(outcomes, response, sections, sectionIDs) {
         if (!resultsEl) return;
         const displayNameMap = buildOutcomeDisplayNameMap(outcomes);
 
@@ -1131,7 +1025,43 @@ else:
         if (timeout) parts.push(`${timeout} timed out`);
         summaryEl.textContent = parts.join(' · ');
 
-        // Results table — 4-column structure matching submission.leaf
+        resultsEl.innerHTML = '';
+        resultsEl.appendChild(summaryEl);
+
+        // One table per section, mirroring the server-rendered submission view
+        // (submission.leaf).  Unlabelled groups (no sections defined) render as
+        // a single bare table, identical to the pre-sections layout.
+        for (const group of groupOutcomesForDisplay(outcomes, sections, sectionIDs)) {
+            const block = document.createElement('section');
+            block.className = 'submission-section-block';
+            if (group.sectionName) {
+                const heading = document.createElement('h3');
+                heading.className = 'submission-section-heading';
+                heading.textContent = group.sectionName;
+                block.appendChild(heading);
+            }
+            block.appendChild(buildResultsTable(group.outcomes, displayNameMap));
+            resultsEl.appendChild(block);
+        }
+
+        resultsEl.hidden = false;
+
+        // Scroll results into view so student sees feedback immediately.
+        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Group outcomes for display via the browser runner's shared helper, with a
+    // flat single-bucket fallback if it is somehow unavailable.
+    function groupOutcomesForDisplay(outcomes, sections, sectionIDs) {
+        if (window.BrowserRunner && typeof window.BrowserRunner.groupBySection === 'function') {
+            return window.BrowserRunner.groupBySection(outcomes, sections, sectionIDs);
+        }
+        return [{ sectionName: null, outcomes }];
+    }
+
+    // Build one 4-column results table (Test / Tier / Output / Mark) for the
+    // given outcomes — the structure matches submission.leaf.
+    function buildResultsTable(outcomes, displayNameMap) {
         const table = document.createElement('table');
         table.className = 'results-table';
         table.innerHTML = `
@@ -1199,23 +1129,14 @@ else:
             tbody.appendChild(tr);
         }
         table.appendChild(tbody);
-
-        resultsEl.innerHTML = '';
-        resultsEl.appendChild(summaryEl);
-        resultsEl.appendChild(table);
-        resultsEl.hidden = false;
-
-        // Scroll results into view so student sees feedback immediately.
-        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return table;
     }
 
-    function escHtml(str) {
-        return String(str ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
+    // Shared implementation (Public/chickadee-ui.js).  Deliberately a lazy
+    // wrapper (not `ChickadeeUI.escapeHtml` directly): the node tests run
+    // this file in a vm context without ChickadeeUI, so the global must not
+    // be touched at module load time.
+    const escHtml = (str) => ChickadeeUI.escapeHtml(str);
 
     function buildOutcomeDisplayNameMap(outcomes) {
         const map = new Map();
@@ -1353,16 +1274,6 @@ else:
             r.onload  = e => resolve(e.target.result);
             r.onerror = () => reject(new Error('Could not read file'));
             r.readAsText(file);
-        });
-    }
-
-    function loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const s  = document.createElement('script');
-            s.src    = src;
-            s.onload  = resolve;
-            s.onerror = () => reject(new Error(`Failed to load ${src}`));
-            document.head.appendChild(s);
         });
     }
 

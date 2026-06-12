@@ -83,6 +83,31 @@ struct CoreCodableTests {
         #expect(outcome.isFirstPassSuccess == false)
     }
 
+    @Test func testOutcomeScoreDefaultsFromStatusForOldRecords() throws {
+        // A record predating partial credit has no `score`: a pass earns full
+        // credit and a non-pass none, so existing results grade exactly as before.
+        let passJSON = Data(
+            #"{"testName":"ok","tier":"public","status":"pass","shortResult":"passed","executionTimeMs":1,"attemptNumber":1,"isFirstPassSuccess":true}"#
+                .utf8)
+        let failJSON = Data(
+            #"{"testName":"bad","tier":"public","status":"fail","shortResult":"failed","executionTimeMs":1,"attemptNumber":1,"isFirstPassSuccess":false}"#
+                .utf8)
+        #expect(try decoder.decode(TestOutcome.self, from: passJSON).score == 1)
+        #expect(try decoder.decode(TestOutcome.self, from: failJSON).score == 0)
+    }
+
+    @Test func testOutcomeExplicitScoreRoundTrips() throws {
+        let outcome = TestOutcome(
+            testName: "partial", testClass: nil, tier: .pub, status: .pass,
+            shortResult: "3/4 cases passed", longResult: nil,
+            score: 0.75, points: 4, executionTimeMs: 2,
+            memoryUsageBytes: nil, attemptNumber: 1, isFirstPassSuccess: true
+        )
+        let decoded = try decoder.decode(TestOutcome.self, from: encoder.encode(outcome))
+        #expect(decoded == outcome)
+        #expect(decoded.score == 0.75)
+    }
+
     @Test func testOutcomeRoundTrip() throws {
         let outcome = TestOutcome(
             testName: "testBaz",
@@ -158,6 +183,23 @@ struct CoreCodableTests {
         #expect(decoded.warnings == ["file renamed"])
     }
 
+    @Test func collectionFractionalEarnedPointsRoundTrips() throws {
+        // Partial credit makes earnedPoints fractional; it must survive the
+        // JSON round trip (it is the grade numerator).
+        let col = TestOutcomeCollection(
+            submissionID: "s", testSetupID: "t",
+            attemptNumber: 1, buildStatus: .passed, compilerOutput: nil,
+            outcomes: [],
+            totalTests: 4, passCount: 3, failCount: 1, errorCount: 0, timeoutCount: 0,
+            executionTimeMs: 1,
+            totalPoints: 4, earnedPoints: 2.75,
+            runnerVersion: "shell-runner/1.0",
+            timestamp: Date(timeIntervalSince1970: 0)
+        )
+        let decoded = try decoder.decode(TestOutcomeCollection.self, from: encoder.encode(col))
+        #expect(decoded.earnedPoints == 2.75)
+    }
+
     @Test func collectionRoundTrip() throws {
         let col = TestOutcomeCollection(
             submissionID: "sub_rt", testSetupID: "setup_rt",
@@ -228,6 +270,50 @@ struct CoreCodableTests {
         #expect(decoded.submissionFilename == nil)
     }
 
+    @Test func jobPersonalizedInputsRoundTrip() throws {
+        let manifest = try decoder.decode(
+            TestProperties.self,
+            from: Data(#"{ "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 }"#.utf8))
+        let job = Job(
+            submissionID: "s", testSetupID: "t", attemptNumber: 1,
+            submissionURL: testURL("http://localhost/a"),
+            testSetupURL: testURL("http://localhost/b"),
+            manifest: manifest,
+            assignmentSeed: "deadbeef",
+            personalizedInputs: ["patients": "[{'mrn': '1'}]", "adults_expected": "2"])
+        let decoded = try decoder.decode(Job.self, from: encoder.encode(job))
+        #expect(decoded.personalizedInputs?["patients"] == "[{'mrn': '1'}]")
+        #expect(decoded.personalizedInputs?["adults_expected"] == "2")
+        #expect(decoded.assignmentSeed == "deadbeef")
+    }
+
+    @Test func jobWithoutPersonalizedInputsDecodesNil() throws {
+        // Back-compat: a payload from an older server omits the new fields.
+        let json = #"""
+            { "submissionID": "s", "testSetupID": "t", "attemptNumber": 1,
+              "submissionURL": "http://localhost/a", "testSetupURL": "http://localhost/b",
+              "manifest": { "schemaVersion": 1, "testSuites": [], "timeLimitSeconds": 5 } }
+            """#
+        let decoded = try decoder.decode(Job.self, from: Data(json.utf8))
+        #expect(decoded.personalizedInputs == nil)
+        #expect(decoded.assignmentSeed == nil)
+    }
+
+    @Test func patternCaseExpectedVarRefRoundTrip() throws {
+        let c = PatternCase(
+            key: "01", label: "Adults", args: [.null], expected: .null,
+            argVarRefs: ["patients"], expectedVarRef: "adults_expected")
+        let decoded = try decoder.decode(PatternCase.self, from: encoder.encode(c))
+        #expect(decoded.expectedVarRef == "adults_expected")
+        #expect(decoded.argVarRefs == ["patients"])
+    }
+
+    @Test func patternCaseWithoutExpectedVarRefDecodesNil() throws {
+        let json = #"{ "key": "01", "label": "L", "args": [1], "expected": 2 }"#
+        let decoded = try decoder.decode(PatternCase.self, from: Data(json.utf8))
+        #expect(decoded.expectedVarRef == nil)
+    }
+
     @Test func runnerSanitizedStripsPatternFamilies() throws {
         let family = PatternFamily(
             id: "bmi",
@@ -283,6 +369,107 @@ struct CoreCodableTests {
         // are preserved.  Only the spec list is stripped.
         #expect(sanitized.testSuites.count == 1)
         #expect(sanitized.testSuites.first?.generatedByCheck == "df_shape")
+    }
+
+    // MARK: - TestItem / unified manifest list
+
+    @Test func testItemFamilyRoundTripsThroughJSON() throws {
+        let item = TestItem.family(
+            PatternFamily(
+                id: "bmi", name: "BMI boundaries", kind: .boundaryEquality,
+                functionName: "classify_bmi"))
+        let decoded = try decoder.decode(TestItem.self, from: try encoder.encode(item))
+        #expect(decoded == item)
+        #expect(decoded.type == .family)
+        #expect(decoded.id == "bmi")
+        #expect(decoded.family != nil)
+        #expect(decoded.check == nil)
+    }
+
+    @Test func testItemCheckRoundTripsThroughJSON() throws {
+        let item = TestItem.check(
+            NotebookCheck(
+                id: "df_shape", kind: .dataFrameShape, tier: .pub, points: 1,
+                variable: "df", expectedRows: 250, expectedCols: 13))
+        let decoded = try decoder.decode(TestItem.self, from: try encoder.encode(item))
+        #expect(decoded == item)
+        #expect(decoded.type == .check)
+        #expect(decoded.id == "df_shape")
+        #expect(decoded.check != nil)
+        #expect(decoded.family == nil)
+    }
+
+    @Test func testPropertiesInitSynthesizesTestItemsFromLegacyArgs() throws {
+        let fam = PatternFamily(
+            id: "bmi", name: "BMI", kind: .boundaryEquality, functionName: "classify_bmi")
+        let chk = NotebookCheck(id: "df_shape", kind: .dataFrameShape, variable: "df")
+        let props = TestProperties(patternFamilies: [fam], notebookChecks: [chk])
+        #expect(props.testItems.count == 2)
+        // Families first, then checks (matches the documented synthesis order).
+        #expect(props.testItems.first?.type == .family)
+        #expect(props.testItems.last?.type == .check)
+        #expect(props.patternFamilies == [fam])
+        #expect(props.notebookChecks == [chk])
+    }
+
+    @Test func testPropertiesEncodeMirrorsLegacyKeysAndEmitsTestItems() throws {
+        let props = TestProperties(
+            patternFamilies: [
+                PatternFamily(id: "f", name: "F", kind: .boundaryEquality, functionName: "g")
+            ],
+            notebookChecks: [NotebookCheck(id: "c", kind: .figureCount, minFigures: 1)])
+        let obj =
+            try JSONSerialization.jsonObject(with: try encoder.encode(props)) as? [String: Any]
+        #expect(obj?["testItems"] != nil)
+        #expect((obj?["patternFamilies"] as? [Any])?.count == 1)
+        #expect((obj?["notebookChecks"] as? [Any])?.count == 1)
+    }
+
+    @Test func testPropertiesMigratesLegacyManifestOnRead() throws {
+        // A pre-testItems manifest carries the separate arrays only.
+        let legacy = """
+            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\
+            "patternFamilies":[{"id":"bmi","name":"BMI","kind":"boundary_equality",\
+            "functionName":"classify_bmi"}],\
+            "notebookChecks":[{"id":"df","kind":"data_frame_shape","variable":"df",\
+            "expectedRows":1,"expectedCols":1}]}
+            """
+        let props = try decoder.decode(TestProperties.self, from: Data(legacy.utf8))
+        #expect(props.testItems.count == 2)
+        #expect(props.patternFamilies.first?.id == "bmi")
+        #expect(props.notebookChecks.first?.id == "df")
+        #expect(props.testItems.first?.type == .family)
+        #expect(props.testItems.last?.type == .check)
+    }
+
+    @Test func testPropertiesPrefersTestItemsKeyWhenPresent() throws {
+        let json = """
+            {"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10,\
+            "testItems":[{"type":"family","spec":{"id":"only","name":"Only",\
+            "kind":"boundary_equality","functionName":"f"}}]}
+            """
+        let props = try decoder.decode(TestProperties.self, from: Data(json.utf8))
+        #expect(props.testItems.count == 1)
+        #expect(props.patternFamilies.first?.id == "only")
+        #expect(props.notebookChecks.isEmpty)
+    }
+
+    @Test func runnerSanitizedStripsTestItems() throws {
+        let props = TestProperties(
+            testSuites: [TestSuiteEntry(tier: .pub, script: "a.py")],
+            patternFamilies: [
+                PatternFamily(id: "f", name: "F", kind: .boundaryEquality, functionName: "g")
+            ],
+            notebookChecks: [NotebookCheck(id: "c", kind: .figureCount, minFigures: 1)])
+        let sanitized = props.runnerSanitized()
+        #expect(sanitized.testItems.isEmpty)
+        #expect(sanitized.patternFamilies.isEmpty)
+        #expect(sanitized.notebookChecks.isEmpty)
+        #expect(sanitized.testSuites == props.testSuites)
+        // Round-trips clean through the runner's decoder too.
+        let rt = try decoder.decode(
+            TestProperties.self, from: try encoder.encode(sanitized))
+        #expect(rt.testItems.isEmpty)
     }
 
     @Test func notebookCheckRoundTripsThroughJSON() throws {

@@ -3,10 +3,10 @@
 #(studentName) — Submissions
 #endexport
 #export("content"):
-<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+<div class="page-titlebar page-titlebar--baseline">
     <div>
-        <h1 style="margin:0">#(studentName)</h1>
-        <p style="margin:.35rem 0 0;color:var(--gray-700)">
+        <h1>#(studentName)</h1>
+        <p class="student-subtitle">
             <strong>#(studentUsername)</strong> in #(courseName)
         </p>
     </div>
@@ -20,15 +20,15 @@
 #if(hasSections):
 #for(section in sections):
 #if(!section.rows.isEmpty):
-<h2 style="font-size:1.05rem;font-weight:600;margin-top:1.5rem;margin-bottom:.4rem">#(section.name)</h2>
-<table class="results-table" style="margin-bottom:.5rem">
+<h2 class="section-group-heading">#(section.name)</h2>
+<table class="results-table submissions-table">
     <thead>
         <tr>
             <th>Name</th>
             <th>Status</th>
-            <th class="due-col">Due</th>
+            <th class="due-col col-hide-phone">Due</th>
             <th>Grade</th>
-            <th>History</th>
+            <th class="col-hide-phone">History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -53,9 +53,9 @@
                     #elseif(row.status == "closed"):tier-closed
                     #endif">#(row.status)</span>
             </td>
-            <td class="due-col">
+            <td class="due-col col-hide-phone">
                 #if(row.effectiveDueAtText):
-                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">+ extension</span></span>
+                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span class="extension-note">+ extension</span></span>
                 #elseif(row.dueAtText):
                     #(row.dueAtText)
                 #else:
@@ -65,18 +65,21 @@
             <td>
                 #if(row.bestGradeText):
                     <strong>#(row.bestGradeText)</strong>
+                    #if(row.gradeIsOverridden):
+                    <span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>
+                    #endif
                 #else:
                     <span class="empty">—</span>
                 #endif
             </td>
-            <td>
+            <td class="col-hide-phone">
                 #if(row.submissionCount > 0):
-                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                    <div class="submission-history-cell">
                         #if(row.hasLatestSubmission):
-                            <a href="/submissions/#(row.latestSubmissionID)" style="font-size:.82rem">#(row.latestSubmittedAtText)</a>
+                            <a href="/submissions/#(row.latestSubmissionID)" class="submission-history-latest">#(row.latestSubmittedAtText)</a>
                         #endif
                         #if(row.additionalSubmissionCount > 0):
-                            <a href="#(row.historyURL)" style="font-size:.78rem;color:var(--gray-600)">+#(row.additionalSubmissionCount) more</a>
+                            <a href="#(row.historyURL)" class="submission-history-more">+#(row.additionalSubmissionCount) more</a>
                         #endif
                     </div>
                 #else:
@@ -84,28 +87,34 @@
                 #endif
             </td>
             <td>
-                <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" style="margin:0">
+                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
                         #csrfFormField()
-                        <button class="btn action-btn" type="submit" title="Re-test every submission this student has on this assignment">Retest</button>
+                        <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
+                        </button>
                     </form>
                     #endif
-                    <details style="margin:0">
-                        <summary class="btn action-btn" style="cursor:pointer">
-                            #if(row.hasExtension):Edit extension#else:Grant extension#endif
+                    <details class="ext-details action-form-flush">
+                        <summary class="btn action-btn action-btn-tight ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
+                            #if(row.hasExtension):
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
+                            #else:
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                        <form method="post" action="#(row.extensionSavePath)" class="action-panel">
                             #csrfFormField()
-                            <label style="font-size:.78rem;color:var(--gray-700)">
+                            <label class="action-panel-label">
                                 New deadline for this student
-                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required style="width:100%;margin-top:.2rem">
+                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required class="action-panel-input">
                             </label>
-                            <label style="font-size:.78rem;color:var(--gray-700)">
+                            <label class="action-panel-label">
                                 Note (optional)
-                                <input type="text" name="note" placeholder="Reason for extension" style="width:100%;margin-top:.2rem">
+                                <input type="text" name="note" placeholder="Reason for extension" class="action-panel-input">
                             </label>
-                            <div style="display:flex;gap:.3rem">
+                            <div class="action-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.hasExtension):
                                 <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
@@ -113,6 +122,34 @@
                             </div>
                         </form>
                     </details>
+                    <details class="ext-details action-form-flush">
+                        <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                        </summary>
+                        <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
+                            #csrfFormField()
+                            <label class="action-panel-label">
+                                Override grade (%)
+                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required class="action-panel-input">
+                            </label>
+                            <label class="action-panel-label">
+                                Note (optional)
+                                <input type="text" name="note" placeholder="Reason for override" class="action-panel-input">
+                            </label>
+                            <div class="action-panel-actions">
+                                <button class="btn action-btn" type="submit">Save</button>
+                                #if(row.gradeIsOverridden):
+                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
+                                #endif
+                            </div>
+                        </form>
+                    </details>
+                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="action-form-flush">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        </button>
+                    </form>
                 </div>
             </td>
         </tr>
@@ -125,16 +162,16 @@
 
 #if(hasUngrouped):
 #if(hasSections):
-<h2 style="font-size:1.05rem;font-weight:600;margin-top:1.5rem;margin-bottom:.4rem">Ungrouped</h2>
+<h2 class="section-group-heading">Ungrouped</h2>
 #endif
-<table class="results-table" style="margin-bottom:.5rem">
+<table class="results-table submissions-table">
     <thead>
         <tr>
             <th>Name</th>
             <th>Status</th>
-            <th class="due-col">Due</th>
+            <th class="due-col col-hide-phone">Due</th>
             <th>Grade</th>
-            <th>History</th>
+            <th class="col-hide-phone">History</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -159,9 +196,9 @@
                     #elseif(row.status == "closed"):tier-closed
                     #endif">#(row.status)</span>
             </td>
-            <td class="due-col">
+            <td class="due-col col-hide-phone">
                 #if(row.effectiveDueAtText):
-                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span style="font-size:.75rem;color:var(--gray-600)">+ extension</span></span>
+                    <span title="Assignment-wide due date: #if(row.dueAtText):#(row.dueAtText)#else:none#endif">#(row.effectiveDueAtText)<br><span class="extension-note">+ extension</span></span>
                 #elseif(row.dueAtText):
                     #(row.dueAtText)
                 #else:
@@ -171,18 +208,21 @@
             <td>
                 #if(row.bestGradeText):
                     <strong>#(row.bestGradeText)</strong>
+                    #if(row.gradeIsOverridden):
+                    <span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>
+                    #endif
                 #else:
                     <span class="empty">—</span>
                 #endif
             </td>
-            <td>
+            <td class="col-hide-phone">
                 #if(row.submissionCount > 0):
-                    <div style="display:flex;flex-direction:column;gap:.2rem">
+                    <div class="submission-history-cell">
                         #if(row.hasLatestSubmission):
-                            <a href="/submissions/#(row.latestSubmissionID)" style="font-size:.82rem">#(row.latestSubmittedAtText)</a>
+                            <a href="/submissions/#(row.latestSubmissionID)" class="submission-history-latest">#(row.latestSubmittedAtText)</a>
                         #endif
                         #if(row.additionalSubmissionCount > 0):
-                            <a href="#(row.historyURL)" style="font-size:.78rem;color:var(--gray-600)">+#(row.additionalSubmissionCount) more</a>
+                            <a href="#(row.historyURL)" class="submission-history-more">+#(row.additionalSubmissionCount) more</a>
                         #endif
                     </div>
                 #else:
@@ -190,28 +230,34 @@
                 #endif
             </td>
             <td>
-                <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                <div class="student-row-actions">
                     #if(row.submissionCount > 0):
-                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" style="margin:0">
+                    <form method="post" action="#(row.retestPath)" onsubmit="return confirm('Re-test all of this student’s submissions on this assignment?')" class="action-form-flush">
                         #csrfFormField()
-                        <button class="btn action-btn" type="submit" title="Re-test every submission this student has on this assignment">Retest</button>
+                        <button class="btn action-btn action-btn-tight" type="submit" aria-label="Re-test this student’s submissions" title="Re-test every submission this student has on this assignment">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
+                        </button>
                     </form>
                     #endif
-                    <details style="margin:0">
-                        <summary class="btn action-btn" style="cursor:pointer">
-                            #if(row.hasExtension):Edit extension#else:Grant extension#endif
+                    <details class="ext-details action-form-flush">
+                        <summary class="btn action-btn action-btn-tight ext-summary" title="#if(row.hasExtension):Edit this student’s deadline extension#else:Grant this student a deadline extension#endif" aria-label="#if(row.hasExtension):Edit deadline extension#else:Grant deadline extension#endif">
+                            #if(row.hasExtension):
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
+                            #else:
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            #endif
                         </summary>
-                        <form method="post" action="#(row.extensionSavePath)" style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem;min-width:14rem;padding:.5rem;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:.25rem">
+                        <form method="post" action="#(row.extensionSavePath)" class="action-panel">
                             #csrfFormField()
-                            <label style="font-size:.78rem;color:var(--gray-700)">
+                            <label class="action-panel-label">
                                 New deadline for this student
-                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required style="width:100%;margin-top:.2rem">
+                                <input type="datetime-local" name="extendedDueAt" value="#(row.extensionFormInput)" required class="action-panel-input">
                             </label>
-                            <label style="font-size:.78rem;color:var(--gray-700)">
+                            <label class="action-panel-label">
                                 Note (optional)
-                                <input type="text" name="note" placeholder="Reason for extension" style="width:100%;margin-top:.2rem">
+                                <input type="text" name="note" placeholder="Reason for extension" class="action-panel-input">
                             </label>
-                            <div style="display:flex;gap:.3rem">
+                            <div class="action-panel-actions">
                                 <button class="btn action-btn" type="submit">Save</button>
                                 #if(row.hasExtension):
                                 <button class="btn action-btn" type="submit" formaction="#(row.extensionDeletePath)" formnovalidate onclick="return confirm('Remove this student’s extension on this assignment?')">Remove</button>
@@ -219,6 +265,34 @@
                             </div>
                         </form>
                     </details>
+                    <details class="ext-details action-form-flush">
+                        <summary class="btn action-btn action-btn-tight ext-summary#if(row.gradeIsOverridden): grade-override-active#endif" title="#if(row.gradeIsOverridden):Edit this student’s grade override#else:Override this student’s grade#endif" aria-label="#if(row.gradeIsOverridden):Edit grade override#else:Override grade#endif">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+                        </summary>
+                        <form method="post" action="#(row.gradeOverrideSavePath)" class="action-panel">
+                            #csrfFormField()
+                            <label class="action-panel-label">
+                                Override grade (%)
+                                <input type="number" name="overridePercent" min="0" max="100" step="1" value="#(row.gradeOverridePercent)" required class="action-panel-input">
+                            </label>
+                            <label class="action-panel-label">
+                                Note (optional)
+                                <input type="text" name="note" placeholder="Reason for override" class="action-panel-input">
+                            </label>
+                            <div class="action-panel-actions">
+                                <button class="btn action-btn" type="submit">Save</button>
+                                #if(row.gradeIsOverridden):
+                                <button class="btn action-btn" type="submit" formaction="#(row.gradeOverrideClearPath)" formnovalidate onclick="return confirm('Clear this student’s grade override and revert to the auto-graded result?')">Clear</button>
+                                #endif
+                            </div>
+                        </form>
+                    </details>
+                    <form method="post" action="#(row.resetPath)" onsubmit="return confirm('Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected.')" class="action-form-flush">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger action-btn-tight" type="submit" aria-label="Reset this student’s working notebook" title="Reset this student’s working-copy notebook to the original starter">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        </button>
+                    </form>
                 </div>
             </td>
         </tr>
@@ -228,5 +302,72 @@
 #endif
 
 #endif
+<style>
+.student-subtitle {
+    margin: .35rem 0 0;
+    color: var(--gray-700);
+}
+.section-group-heading {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: .4rem;
+}
+.submissions-table {
+    margin-bottom: .5rem;
+}
+.extension-note {
+    font-size: .75rem;
+    color: var(--gray-600);
+}
+.student-row-actions {
+    display: flex;
+    gap: .3rem;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+.action-form-flush {
+    margin: 0;
+}
+.ext-details {
+    position: relative;
+}
+.action-panel {
+    position: absolute;
+    top: calc(100% + .3rem);
+    right: 0;
+    z-index: 10;
+    max-width: calc(100vw - 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    padding: .5rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-300);
+    border-radius: .25rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+}
+.action-panel-label {
+    font-size: .78rem;
+    color: var(--gray-700);
+}
+.action-panel-input {
+    width: 100%;
+    margin-top: .2rem;
+}
+.action-panel-actions {
+    display: flex;
+    gap: .3rem;
+}
+@media (max-width: 640px) {
+    /* On a phone the absolutely-positioned popover can't be trusted to fit
+       beside the rightmost cell — drop it into static flow under the row,
+       matching the assignment-submissions extension form. */
+    .action-panel {
+        position: static;
+        max-width: none;
+    }
+}
+</style>
 #endexport
 #endextend

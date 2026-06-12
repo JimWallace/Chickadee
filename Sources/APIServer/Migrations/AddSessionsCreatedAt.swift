@@ -13,7 +13,7 @@ import SQLKit
 ///
 /// `TIMESTAMP DEFAULT CURRENT_TIMESTAMP` is portable to both PostgreSQL and
 /// SQLite (SQLite treats TIMESTAMP as a NUMERIC-affinity TEXT column).
-struct AddSessionsCreatedAt: AsyncMigration {
+struct AddSessionsCreatedAt: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         guard let sql = database as? SQLDatabase else { return }
         try await sql.raw(

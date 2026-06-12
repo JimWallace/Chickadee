@@ -9,7 +9,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
 
     var humanReadable: String {
         switch self {
-        case .runnerOffline: return "Runner offline while jobs queued"
+        case .runnerOffline: return "Runner offline"
         case .queueBackedUp: return "Submission queue backed up"
         case .errorRateSpike: return "System-level failure rate spike"
         case .databaseUnreachable: return "Database unreachable"

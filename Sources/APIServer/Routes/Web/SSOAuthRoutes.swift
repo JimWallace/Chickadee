@@ -40,20 +40,27 @@ struct SSOAuthRoutes: RouteCollection {
         // PKCE: generate random 32-byte code_verifier, then SHA-256 → base64url code_challenge
         var rng = SystemRandomNumberGenerator()
         let codeVerifierBytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        let codeVerifier = Data(codeVerifierBytes).base64URLEncoded()
-        let codeChallenge = Data(SHA256.hash(data: Data(codeVerifier.utf8))).base64URLEncoded()
+        let codeVerifier = Data(codeVerifierBytes).base64URLEncodedString()
+        let codeChallenge = Data(SHA256.hash(data: Data(codeVerifier.utf8))).base64URLEncodedString()
 
         // State token for CSRF protection
         let stateBytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        let state = Data(stateBytes).base64URLEncoded()
+        let state = Data(stateBytes).base64URLEncodedString()
 
         // Persist in session so callback can validate
         req.session.data["oidc_state"] = state
         req.session.data["oidc_verifier"] = codeVerifier
 
+        // If a logout/idle-timeout set the re-auth marker, force the IdP to
+        // re-authenticate (`prompt=login`) instead of silently honouring its
+        // own still-live SSO session — otherwise an explicit logout is undone
+        // the moment the user hits a protected page. Consumed once (cleared
+        // below) so normal day-to-day sign-ins stay one-click.
+        let forceReauth = req.cookies[reauthMarkerCookieName] != nil
+
         // Build the IdP authorization URL
         var components = URLComponents(string: config.discovery.authorizationEndpoint)
-        components?.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "client_id", value: config.clientID),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "scope", value: "openid profile email groups"),
@@ -62,13 +69,28 @@ struct SSOAuthRoutes: RouteCollection {
             URLQueryItem(name: "code_challenge", value: codeChallenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
         ]
+        if forceReauth {
+            // `prompt=login` asks the IdP to re-authenticate; `max_age=0` says
+            // the acceptable authentication age is zero, i.e. re-auth now.
+            // We send both because some IdPs honour one but not the other
+            // (and a federating IdP like Duo→ADFS may only translate one of
+            // them into an upstream re-auth / SAML ForceAuthn).
+            queryItems.append(URLQueryItem(name: "prompt", value: "login"))
+            queryItems.append(URLQueryItem(name: "max_age", value: "0"))
+        }
+        components?.queryItems = queryItems
 
         guard let authURL = components?.url?.absoluteString else {
             req.logger.error("Failed to build authorization URL from: \(config.discovery.authorizationEndpoint)")
             return req.redirect(to: "/login?error=sso_failed")
         }
 
-        return req.redirect(to: authURL)
+        let response = req.redirect(to: authURL)
+        if forceReauth {
+            // Clear the marker so it only forces re-auth for this first sign-in.
+            response.cookies[reauthMarkerCookieName] = .expired
+        }
+        return response
     }
 
     // MARK: - GET /auth/sso/callback
@@ -170,9 +192,21 @@ struct SSOAuthRoutes: RouteCollection {
         req.session.data["oidc_refresh_token"] = tokenResponse.refreshToken
         req.session.data["oidc_id_token"] = tokenResponse.idToken
 
-        // Establish session — identical to local login
+        // Establish session — identical to local login. rotateID() runs after
+        // the tokens are stashed (so they carry to the new session) but before
+        // authenticate(), giving the logged-in session a fresh id the pre-login
+        // cookie never had (session-fixation defense).
         req.auth.login(user)
+        req.session.rotateID()
         req.session.authenticate(user)
+        await AuditLogger.record(
+            action: .loginSuccess,
+            targetType: .auth,
+            targetID: user.id?.uuidString,
+            metadata: ["username": user.username, "method": "sso"],
+            actorOverride: user,
+            on: req
+        )
         return try await postLoginRedirect(for: user, req: req)
     }
 
@@ -204,12 +238,17 @@ struct SSOAuthRoutes: RouteCollection {
 
         let studentID = claims.extraClaims["student_id"]?.nilIfBlank()
         let email = claims.value(for: claimConfig.emailClaim)?.nilIfBlank()
-        let mappedRole = mappedSSORole(
-            username: username,
-            userIdentifier: userIdentifier,
-            email: email,
-            adminAllowlist: req.application.ssoAdminUsers,
-            instructorAllowlist: req.application.ssoInstructorUsers
+        // Sanitise so first-login SSO mapping can never assign the `mcp` role
+        // (or any non-auto-assignable role) — MCP service accounts are
+        // admin-created only.
+        let mappedRole = APIUser.sanitizedAutoAssignedRole(
+            mappedSSORole(
+                username: username,
+                userIdentifier: userIdentifier,
+                email: email,
+                adminAllowlist: req.application.ssoAdminUsers,
+                instructorAllowlist: req.application.ssoInstructorUsers
+            )
         )
 
         if let existing = try await APIUser.query(on: req.db)
@@ -223,6 +262,7 @@ struct SSOAuthRoutes: RouteCollection {
             existing.studentID = studentID ?? existing.studentID
             existing.email = email ?? existing.email
             existing.displayName = displayName ?? existing.displayName
+            let previousRole = existing.role
             if let mappedRole {
                 existing.role = mappedRole
             }
@@ -230,6 +270,23 @@ struct SSOAuthRoutes: RouteCollection {
             existing.lastLoginAt = now
             existing.lastSeenAt = now
             try await existing.save(on: req.db)
+            // An allowlist-driven privilege change on login is security-relevant
+            // — record it (only when the role actually moved).
+            if let mappedRole, mappedRole != previousRole {
+                await AuditLogger.record(
+                    action: .userRoleChanged,
+                    targetType: .user,
+                    targetID: existing.id?.uuidString,
+                    metadata: [
+                        "subject_username": existing.username,
+                        "previous_role": previousRole,
+                        "new_role": mappedRole,
+                        "source": "sso_allowlist",
+                    ],
+                    actorUsernameOverride: "sso",
+                    on: req
+                )
+            }
             return existing
         }
 
@@ -237,7 +294,7 @@ struct SSOAuthRoutes: RouteCollection {
         let newUser = APIUser(
             username: username,
             passwordHash: "",  // SSO users have no local password
-            role: mappedRole ?? "student",
+            role: mappedRole ?? UserRole.student.rawValue,
             authProvider: "duo-oidc",
             externalSubject: subject,
             email: email,
@@ -249,6 +306,18 @@ struct SSOAuthRoutes: RouteCollection {
             lastSeenAt: now
         )
         try await newUser.save(on: req.db)
+        await AuditLogger.record(
+            action: .userProvisioned,
+            targetType: .user,
+            targetID: newUser.id?.uuidString,
+            metadata: [
+                "username": newUser.username,
+                "role": newUser.role,
+                "provider": "duo-oidc",
+            ],
+            actorUsernameOverride: "sso",
+            on: req
+        )
         return newUser
     }
 
@@ -358,10 +427,10 @@ extension SSOAuthRoutes {
         )
 
         if !adminAllowlist.isDisjoint(with: candidates) {
-            return "admin"
+            return UserRole.admin.rawValue
         }
         if !instructorAllowlist.isDisjoint(with: candidates) {
-            return "instructor"
+            return UserRole.instructor.rawValue
         }
         return nil
     }
@@ -392,15 +461,5 @@ private extension String {
 
     func normalizedIdentityKey() -> String? {
         nilIfBlank()?.lowercased()
-    }
-}
-
-private extension Data {
-    /// Base64url encoding (RFC 4648 §5): replaces +/→-_, strips padding.
-    func base64URLEncoded() -> String {
-        base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
     }
 }

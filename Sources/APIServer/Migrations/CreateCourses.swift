@@ -18,7 +18,7 @@ import SQLKit
 /// change is invisible to production.  The historical Add* migrations
 /// remain registered and become no-ops on fresh deploys (they "run" but
 /// the columns they would add already exist via this Create).
-struct CreateCourses: AsyncMigration {
+struct CreateCourses: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("courses")
             .id()

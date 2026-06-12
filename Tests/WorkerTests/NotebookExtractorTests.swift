@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import chickadee_runner
@@ -109,6 +110,14 @@ import Testing
         #expect(output.contains("if __name__") == false)
     }
 
+    @Test func assignmentWithCommentMentioningCallPreserved() {
+        // The inline comment mentions a call, but the assignment's RHS is a
+        // plain literal — it must stay at module level, not be quarantined.
+        let output = extractor.sanitizeCellForModule("dose = 30  # see compute() for details")
+        #expect(moduleLevel(in: output).contains("dose = 30"))
+        #expect(!output.contains("if __name__"))
+    }
+
     @Test func docstringPreserved() {
         let output = extractor.sanitizeCellForModule("\"\"\"Module docstring.\"\"\"")
         #expect(moduleLevel(in: output).contains("Module docstring"))
@@ -168,6 +177,24 @@ import Testing
         let source = "if x > 0:\n    print(x)"
         let output = extractor.sanitizeCellForModule(source)
         #expect(guardBlock(in: output).contains("if x > 0:"))
+    }
+
+    @Test func callWithInlineCommentContainingEqualsQuarantined() {
+        // Regression: the inline comment's `=` must not make this look like a
+        // module-level assignment. The print(...) is a bare call → quarantined,
+        // so it doesn't leak stdout at module import time.
+        let output = extractor.sanitizeCellForModule("print(x)  # a = b")
+        #expect(guardBlock(in: output).contains("print(x)"))
+        #expect(!moduleLevel(in: output).contains("print("))
+    }
+
+    @Test func callWithDoseCommentQuarantined() {
+        // The motivating example from the bug report.
+        let output = extractor.sanitizeCellForModule(
+            "print(total_dose_mg) #when weight_kg = 30, dose = 450mg"
+        )
+        #expect(guardBlock(in: output).contains("print(total_dose_mg)"))
+        #expect(!moduleLevel(in: output).contains("print("))
     }
 
     @Test func assignmentWithCallRHSQuarantined() {
@@ -280,5 +307,171 @@ import Testing
         let output = extractor.sanitizeCellForModule("else_result = 0")
         #expect(moduleLevel(in: output).contains("else_result = 0"))
         #expect(!output.contains("if __name__"))
+    }
+
+    // MARK: - sanitizeCellForModule keeps the cell body raw
+
+    @Test func sanitizeKeepsSafeCodeRawNotTryWrapped() {
+        // The per-cell try/except now lives in wrapCellForResilientLoad; the
+        // sanitized body is the plain safe code so it can be compiled as a unit.
+        let output = extractor.sanitizeCellForModule("daily_ml = ____")
+        #expect(output == "daily_ml = ____")
+    }
+
+    // MARK: - Python string literal encoding
+
+    @Test func pythonStringLiteralEscapes() {
+        #expect(extractor.pythonStringLiteral("x") == "\"x\"")
+        #expect(extractor.pythonStringLiteral("a\nb") == "\"a\\nb\"")
+        #expect(extractor.pythonStringLiteral("say \"hi\"") == "\"say \\\"hi\\\"\"")
+    }
+
+    @Test func pythonStringLiteralDoesNotEscapeForwardSlash() {
+        // `\/` is valid JSON but an INVALID Python escape; emitting it would make
+        // the per-cell compile() raise SyntaxError, dropping any cell with a `/`
+        // (e.g. `daily_l = daily_ml / 1000`). Regression guard for v0.4.220.
+        #expect(extractor.pythonStringLiteral("daily_l = daily_ml / 1000") == "\"daily_l = daily_ml / 1000\"")
+        #expect(!extractor.pythonStringLiteral("a / b").contains("\\/"))
+    }
+
+    @Test func divisionCellSurvivesExtraction() throws {
+        // End-to-end guard: a cell using `/` must keep the `/` in the generated
+        // module so its exec(compile()) doesn't fail and its variables resolve.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["daily_ml = 2450\ndaily_l = daily_ml / 1000\n"]]
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.contains("daily_ml / 1000"))
+        #expect(!result.source.contains("\\/"))
+    }
+
+    // MARK: - Per-cell exec(compile()) isolation
+
+    @Test func wrapEmitsExecCompile() {
+        let output = extractor.wrapCellForResilientLoad("daily_ml = ____", label: "cell 7")
+        #expect(output.hasPrefix("try:"))
+        #expect(output.contains("exec(compile(\"daily_ml = ____\", \"cell 7\", \"exec\"), globals())"))
+        #expect(output.contains("except Exception:"))
+    }
+
+    @Test func wrapLeavesFutureImportRaw() {
+        // `from __future__` must stay a raw module-top statement (a per-cell
+        // compile would scope it to that cell only).
+        let output = extractor.wrapCellForResilientLoad("from __future__ import annotations", label: "cell 1")
+        #expect(output == "from __future__ import annotations")
+        #expect(!output.contains("exec(compile"))
+    }
+
+    @Test func eachCellCompiledIndependently() throws {
+        // A NameError in cell 2 must not prevent cell 1's variable from loading;
+        // each cell is its own exec(compile()) unit.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["resting_hr = 72\n"]],
+            ["cell_type": "code", "source": ["max_hr = 220 - age\n"]],
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.components(separatedBy: "exec(compile(").count - 1 == 2)
+        #expect(result.source.contains("resting_hr = 72"))
+        #expect(result.source.contains("max_hr = 220 - age"))
+    }
+
+    @Test func syntaxErrorCellIsCompiledAsAStringNotInlined() throws {
+        // The bad cell's source lives inside a compile() string literal, so it
+        // can't fail the whole-module compile — only its own exec is skipped at
+        // load. The good cell is emitted as its own unit alongside it.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["good = 1\n"]],
+            ["cell_type": "code", "source": ["broken = (\n"]],  // syntax error
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.components(separatedBy: "exec(compile(").count - 1 == 2)
+        #expect(result.source.contains("good = 1"))
+        // The broken source is quoted inside compile(...), never emitted as bare code.
+        #expect(result.source.contains("\"broken = (\""))
+    }
+
+    @Test func commentOnlyCellDoesNotProduceEmptyTryBody() throws {
+        // Regression: an untouched comment-only cell must not become
+        // `try:\n    # comment` (an empty try body → SyntaxError that zeros the
+        // whole notebook). It is compiled as a string instead.
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["# Your code here\n"]],
+            ["cell_type": "code", "source": ["age = 20\n"]],
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let result = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb")
+        #expect(result.source.contains("compile(\"# Your code here\""))
+        #expect(result.source.contains("age = 20"))
+    }
+
+    // MARK: - End-to-end: run the generated module through a real python3
+
+    @Test func generatedModuleLoadsUnderRealPython3() async throws {
+        // The shape-level tests above can't catch an emitted-Python bug that
+        // still *looks* plausible — the v0.4.220 `\/` regression compiled fine
+        // as a Swift string but made the inner compile() throw. Only a real
+        // interpreter catches that whole class, so here we extract a notebook
+        // (division cell, syntax-error cell, comment-only cell, and a trailing
+        // cell) and ask python3 which names actually resolve after import.
+        let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+        guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            return  // python3 unavailable on this platform — skip
+        }
+
+        let cells: [[String: Any]] = [
+            ["cell_type": "code", "source": ["good = 1\n"]],
+            ["cell_type": "code", "source": ["daily_ml = 2450\ndaily_l = daily_ml / 1000\n"]],  // division
+            ["cell_type": "code", "source": ["broken = (\n"]],  // syntax error → isolated
+            ["cell_type": "code", "source": ["# Your code here\n"]],  // comment-only → harmless
+            ["cell_type": "code", "source": ["after = 7\n"]],
+        ]
+        let notebook: [String: Any] = ["cells": cells]
+        let source = try extractor.extractPythonSource(from: notebook, filename: "submission.ipynb").source
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nbx-e2e-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let modulePath = dir.appendingPathComponent("submission.py")
+        try source.write(to: modulePath, atomically: true, encoding: .utf8)
+
+        // Load the module the way the worker does (importlib + exec_module) and
+        // report which names resolved.
+        let probe = """
+            import importlib.util, json
+            spec = importlib.util.spec_from_file_location("submission", r"\(modulePath.path)")
+            m = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(m)
+            except Exception:
+                pass
+            names = ["good", "daily_ml", "daily_l", "broken", "after"]
+            print(json.dumps({n: hasattr(m, n) for n in names}))
+            """
+
+        let proc = try await runProcessRobustly {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            proc.arguments = ["python3", "-c", probe]
+            proc.standardOutput = Pipe()
+            proc.standardError = Pipe()
+            return proc
+        }
+
+        let outPipe = try #require(proc.standardOutput as? Pipe)
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let out = (String(bytes: outData, encoding: .utf8) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let defined = try #require(try? JSONDecoder().decode([String: Bool].self, from: Data(out.utf8)))
+
+        #expect(defined["good"] == true)
+        // daily_ml/daily_l guard the v0.4.220 `\/`-escaping regression.
+        #expect(defined["daily_ml"] == true, "division cell must define daily_ml")
+        #expect(defined["daily_l"] == true, "division cell must define daily_l")
+        #expect(defined["after"] == true, "a later cell must still load after a broken cell")
+        #expect(defined["broken"] == false, "syntax-error cell must be isolated, not defined")
     }
 }

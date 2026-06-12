@@ -6,6 +6,13 @@ import XCTVapor
 
 @testable import APIServer
 
+/// Trivial tail of a middleware chain for unit-testing a single middleware.
+private struct PassthroughResponder: AsyncResponder {
+    func respond(to request: Request) async throws -> Response {
+        Response(status: .ok)
+    }
+}
+
 @Suite(.serialized) final class AdminRoutesTests {
 
     let app: Application
@@ -229,7 +236,66 @@ import XCTVapor
         }
     }
 
-    @Test func adminDashboardDefaultsUsersToMostRecentLastSeenFirst() async throws {
+    @Test func storageTabShowsBreakdown() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+
+            try await app.asyncTest(
+                .GET, "/admin/storage",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains(">Storage<"))
+                    #expect(body.contains(">Submissions<"))
+                    #expect(body.contains(">Test Setups<"))
+                    #expect(body.contains(">Database<"))
+                    #expect(body.contains("aria-current=\"page\""))
+                })
+
+            // The Storage panel must no longer appear on the Overview tab.
+            // (Use a storage-only label — the Overview courses table now has its
+            // own "Submissions" column header.)
+            try await app.asyncTest(
+                .GET, "/admin",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains(">Test Setups<") == false)
+                })
+        }
+    }
+
+    @Test func adminTabBarPresentWithOverviewActive() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            try await app.asyncTest(
+                .GET, "/admin",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains("class=\"admin-tabs\""))
+                    #expect(body.contains("href=\"/admin/users\""))
+                    #expect(body.contains("href=\"/admin/storage\""))
+                    #expect(body.contains("href=\"/admin/audit\""))
+                    #expect(body.contains("href=\"/admin/alerts\""))
+                    // Overview is the active tab.
+                    #expect(body.contains("href=\"/admin\" aria-current=\"page\""))
+                    // The inline audit/alerts buttons were removed from Overview.
+                    #expect(body.contains(">Server health alerts</a>") == false)
+                })
+        }
+    }
+
+    @Test func usersTabDefaultsToMostRecentLastSeenFirst() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
             let now = Date()
@@ -242,7 +308,7 @@ import XCTVapor
             try await recent.save(on: app.db)
 
             try await app.asyncTest(
-                .GET, "/admin",
+                .GET, "/admin/users",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -362,7 +428,7 @@ import XCTVapor
             let userID = try managedUser.requireID()
 
             try await app.asyncTest(
-                .GET, "/admin",
+                .GET, "/admin/users",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: cookie)
                 },
@@ -419,6 +485,35 @@ import XCTVapor
         }
     }
 
+    @Test func copyCourseSkipsTakenCopyCodes() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let source = try await makeCourse(code: "CPY101", name: "Copy Source")
+            // Occupy the first two candidate codes so the copy must fall
+            // through to -COPY-3 — pins the candidate ordering of
+            // uniqueCopyCode.
+            try await makeCourse(code: "CPY101-COPY", name: "Existing Copy")
+            try await makeCourse(code: "CPY101-COPY-2", name: "Existing Copy 2")
+            let courseID = try source.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(
+                cookie, path: "/admin/courses/\(courseID.uuidString)")
+
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/copy",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            let copied = try #require(
+                try await APICourse.query(on: app.db).filter(\.$code == "CPY101-COPY-3").first())
+            #expect(copied.name == "Copy Source (Copy)")
+        }
+    }
+
     @Test func toggleCourseArchiveFlipsArchivedState() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
@@ -449,6 +544,9 @@ import XCTVapor
             let student = try await makeUser(username: "delete_student", role: "student")
             let studentID = try student.requireID()
             let course = try await makeCourse(code: "DEL101", name: "Delete Me", archived: true)
+            // Past the 365-day retention window so deletion is permitted.
+            course.archivedAt = Date().addingTimeInterval(-400 * 86_400)
+            try await course.save(on: app.db)
             let courseID = try course.requireID()
             let setup = try await makeSetup(id: "setup_delete_admin", courseID: courseID)
             _ = try await makeAssignment(testSetupID: "setup_delete_admin", courseID: courseID)
@@ -467,7 +565,7 @@ import XCTVapor
                 },
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin")
+                    #expect(res.headers.first(name: .location)?.hasPrefix("/admin/retention") == true)
                 })
 
             let deletedCourse = try await APICourse.find(courseID, on: app.db)
@@ -492,6 +590,34 @@ import XCTVapor
             #expect(FileManager.default.fileExists(atPath: submission.zipPath) == false)
             _ = setup
 
+        }
+    }
+
+    @Test func deleteCourseRejectedWhenRetentionWindowNotElapsed() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "DELRECENT", name: "Recently Archived", archived: true)
+            // Archived just now — well inside the retention window.
+            course.archivedAt = Date()
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+            let (boundCookie, token) = try await csrfCookieAndToken(
+                cookie, path: "/admin/courses/\(courseID.uuidString)")
+
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("error=") == true)
+                })
+
+            // The course must survive — deletion was refused.
+            let survivor = try await APICourse.find(courseID, on: app.db)
+            #expect(survivor != nil)
         }
     }
 
@@ -702,6 +828,336 @@ import XCTVapor
                     #expect(body.contains(">Setup/Other<") == false)
                 })
 
+        }
+    }
+
+    // Validates the DB-side GROUP BY in assignmentCountsByCourse (incl. UUID
+    // decode) on whichever backend the suite runs against — SQLite locally and
+    // in the `api-tests` CI job, Postgres in `api-tests-postgres`.
+    @Test func assignmentCountsByCourseGroupsPerCourse() async throws {
+        try await withApp(app) { _ in
+            let courseA = try await makeCourse(code: "GRPA", name: "Group A")
+            let courseB = try await makeCourse(code: "GRPB", name: "Group B")
+            let aID = try courseA.requireID()
+            let bID = try courseB.requireID()
+            // Three assignments in A, one in B (distinct setups per assignment).
+            for index in 1...3 {
+                let setup = try await makeSetup(id: "setup_grp_a\(index)", courseID: aID)
+                _ = try await makeAssignment(
+                    testSetupID: try setup.requireID(), courseID: aID, title: "A\(index)")
+            }
+            let setupB = try await makeSetup(id: "setup_grp_b1", courseID: bID)
+            _ = try await makeAssignment(testSetupID: try setupB.requireID(), courseID: bID, title: "B1")
+
+            let counts = try await assignmentCountsByCourse(on: app.db)
+            #expect(counts[aID] == 3)
+            #expect(counts[bID] == 1)
+        }
+    }
+
+    // Validates the (worker_id, status) GROUP BY in makeWorkerRows: assigned
+    // jobs counted separately from processed (complete + failed), per worker.
+    @Test func adminRunnersCountsAssignedAndProcessedPerWorker() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "WRK101", name: "Worker Course")
+            let courseID = try course.requireID()
+            let setup = try await makeSetup(id: "setup_wrk_counts", courseID: courseID)
+            let setupID = try setup.requireID()
+            let student = try await makeUser(username: "wrk_counts_student", role: "student")
+            let studentID = try student.requireID()
+
+            func makeWorkerSubmission(_ id: String, worker: String, status: String) async throws {
+                let submission = try await makeTestSubmission(
+                    on: app, id: id, setupID: setupID, userID: studentID, status: status)
+                submission.workerID = worker
+                try await submission.update(on: app.db)
+            }
+            // runner-A: 2 complete + 1 failed = 3 processed, plus 1 assigned.
+            try await makeWorkerSubmission("sub_wc1", worker: "runner-A", status: "complete")
+            try await makeWorkerSubmission("sub_wc2", worker: "runner-A", status: "complete")
+            try await makeWorkerSubmission("sub_wc3", worker: "runner-A", status: "failed")
+            try await makeWorkerSubmission("sub_wc4", worker: "runner-A", status: "assigned")
+            // runner-B: 1 complete.
+            try await makeWorkerSubmission("sub_wc5", worker: "runner-B", status: "complete")
+
+            for worker in ["runner-A", "runner-B"] {
+                await app.workerActivityStore.markActive(
+                    workerID: worker,
+                    hostname: "runner-host",
+                    runnerVersion: "runner/1.0",
+                    maxConcurrentJobs: 2,
+                    activeJobs: 0,
+                    lastHeartbeatAt: Date()
+                )
+            }
+
+            try await app.asyncTest(
+                .GET, "/admin/runners",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let json = try JSONSerialization.jsonObject(with: Data(buffer: res.body)) as? [[String: Any]]
+                    let rowA = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-A" }))
+                    let rowB = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-B" }))
+                    #expect(rowA["assignedJobs"] as? Int == 1)
+                    #expect(rowA["jobsProcessed"] as? Int == 3)
+                    #expect(rowB["assignedJobs"] as? Int == 0)
+                    #expect(rowB["jobsProcessed"] as? Int == 1)
+                })
+        }
+    }
+
+    // MARK: - Users tab auto-refresh (#users-data feed)
+
+    @Test func usersDataReturnsJSONRows() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            _ = try await makeUser(username: "json_feed_user", role: "instructor")
+
+            try await app.asyncTest(
+                .GET, "/admin/users-data",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.contentType == .json)
+                    let rows = try res.content.decode([AdminUserRow].self)
+                    #expect(rows.contains { $0.username == "json_feed_user" && $0.role == "instructor" })
+                    #expect(rows.contains { $0.username == "admin_routes" })
+                })
+        }
+    }
+
+    /// A system-generated poll (carrying `X-Background-Refresh`) must not count
+    /// as activity, so a dashboard left open in a tab can't keep a user logged
+    /// in past the idle timeout.  A normal request still refreshes activity.
+    /// Driven through `UserActivityMiddleware.respond` directly because the
+    /// minimal test app doesn't wire the global activity-tracking middleware.
+    @Test func backgroundRefreshHeaderSkipsActivityRefresh() async throws {
+        try await withApp(app) { _ in
+            let user = try await makeUser(username: "activity_probe", role: "student")
+            let userID = try user.requireID()
+            let stale = Date().addingTimeInterval(-3600)
+            user.lastSeenAt = stale
+            try await user.save(on: app.db)
+
+            let middleware = UserActivityMiddleware(debounceWindow: 60)
+            let passthrough = PassthroughResponder()
+
+            // A poll carrying the header must leave last_seen_at untouched.
+            let pollReq = Request(
+                application: app, method: .GET, url: URI(path: "/admin/users-data"),
+                on: app.eventLoopGroup.next())
+            pollReq.headers.add(name: UserActivityMiddleware.backgroundRefreshHeader, value: "1")
+            pollReq.auth.login(try #require(try await APIUser.find(userID, on: app.db)))
+            _ = try await middleware.respond(to: pollReq, chainingTo: passthrough)
+            let afterPoll = try #require(try await APIUser.find(userID, on: app.db))
+            #expect(
+                abs(try #require(afterPoll.lastSeenAt).timeIntervalSince(stale)) < 1,
+                "background-refresh poll must not refresh last_seen_at")
+
+            // A normal request (no header) past the debounce must refresh it.
+            let normalReq = Request(
+                application: app, method: .GET, url: URI(path: "/admin/users"),
+                on: app.eventLoopGroup.next())
+            normalReq.auth.login(try #require(try await APIUser.find(userID, on: app.db)))
+            _ = try await middleware.respond(to: normalReq, chainingTo: passthrough)
+            let afterNormal = try #require(try await APIUser.find(userID, on: app.db))
+            #expect(
+                try #require(afterNormal.lastSeenAt).timeIntervalSince(stale) > 60,
+                "a normal (non-poll) request must refresh last_seen_at")
+        }
+    }
+
+    @Test func allAdminTabsShowVersionBanner() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            for path in ["/admin", "/admin/users", "/admin/storage", "/admin/audit", "/admin/alerts"] {
+                try await app.asyncTest(
+                    .GET, path,
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: cookie)
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .ok, "\(path) should render")
+                        #expect(
+                            String(buffer: res.body).contains("admin-version-banner"),
+                            "\(path) should carry the version banner")
+                    })
+            }
+        }
+    }
+
+    // MARK: - Storage tab per-assignment breakdown
+
+    @Test func storageTabListsPerAssignmentFootprint() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "STG101", name: "Storage Course")
+            let courseID = try course.requireID()
+            _ = try await makeSetup(id: "setup_storage_bd", courseID: courseID)
+            _ = try await makeAssignment(
+                testSetupID: "setup_storage_bd", courseID: courseID, title: "Storage Breakdown Lab")
+            let student = try await makeUser(username: "storage_bd_student", role: "student")
+            _ = try await makeSubmission(
+                id: "sub_storage_bd", setupID: "setup_storage_bd", userID: try student.requireID())
+
+            try await app.asyncTest(
+                .GET, "/admin/storage",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains("By Assignment"))
+                    #expect(body.contains("Storage Breakdown Lab"))
+                    #expect(body.contains(">STG101<"))
+                })
+        }
+    }
+
+    // MARK: - POST /admin/courses/:courseID/copy
+
+    @Test func courseCopySectionsArePreserved() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "CPSECT")
+            let courseID = try course.requireID()
+
+            // Two sections with distinct grading modes.
+            let browserSec = APICourseSection(
+                name: "Browser Labs", defaultGradingMode: "browser",
+                sortOrder: 1, courseID: courseID)
+            try await browserSec.save(on: app.db)
+            let workerSec = APICourseSection(
+                name: "Worker Labs", defaultGradingMode: "worker",
+                sortOrder: 2, courseID: courseID)
+            try await workerSec.save(on: app.db)
+
+            let setup1 = try await makeSetup(id: "cpsect_s1", courseID: courseID, withNotebook: false)
+            let setup2 = try await makeSetup(id: "cpsect_s2", courseID: courseID, withNotebook: false)
+
+            let a1 = APIAssignment(
+                testSetupID: try #require(setup1.id), title: "Browser Lab",
+                isOpen: false, sectionID: try browserSec.requireID(),
+                courseID: courseID)
+            try await a1.save(on: app.db)
+            let a2 = APIAssignment(
+                testSetupID: try #require(setup2.id), title: "Worker Lab",
+                isOpen: false, sectionID: try workerSec.requireID(),
+                courseID: courseID)
+            try await a2.save(on: app.db)
+
+            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/copy",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            let copied = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "CPSECT-COPY").first(),
+                "Copied course not found")
+            let copiedID = try copied.requireID()
+
+            // Sections should be recreated with matching names and modes.
+            let copiedSections = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == copiedID)
+                .sort(\.$sortOrder)
+                .all()
+            #expect(copiedSections.count == 2, "Copy should have 2 sections")
+            #expect(copiedSections.first?.name == "Browser Labs")
+            #expect(copiedSections.first?.defaultGradingMode == "browser")
+            #expect(copiedSections.last?.name == "Worker Labs")
+            #expect(copiedSections.last?.defaultGradingMode == "worker")
+
+            // Every copied assignment should land in the right new section.
+            let copiedAssignments = try await APIAssignment.query(on: app.db)
+                .filter(\.$courseID == copiedID)
+                .all()
+            #expect(copiedAssignments.count == 2)
+            #expect(
+                copiedAssignments.allSatisfy { $0.sectionID != nil },
+                "All copied assignments should have a sectionID")
+
+            let copiedBrowserSec = try #require(
+                copiedSections.first(where: { $0.defaultGradingMode == "browser" }))
+            let browserLab = try #require(
+                copiedAssignments.first(where: { $0.title == "Browser Lab" }))
+            #expect(browserLab.sectionID == (try copiedBrowserSec.requireID()))
+
+            let copiedWorkerSec = try #require(
+                copiedSections.first(where: { $0.defaultGradingMode == "worker" }))
+            let workerLab = try #require(
+                copiedAssignments.first(where: { $0.title == "Worker Lab" }))
+            #expect(workerLab.sectionID == (try copiedWorkerSec.requireID()))
+        }
+    }
+
+    @Test func courseCopyNotebookPathIsPreserved() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "CPNB")
+            let courseID = try course.requireID()
+
+            // Store the notebook in the new-style subdirectory
+            // (notebooks/<id>/<filename>.ipynb), not the legacy flat path —
+            // this is the path the old copy code couldn't find.
+            let setupID = "cpnb_s1"
+            let zipPath = app.testSetupsDirectory + "\(setupID).zip"
+            let nbDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
+            let nbPath = nbDir + "assignment.ipynb"
+            try FileManager.default.createDirectory(atPath: nbDir, withIntermediateDirectories: true)
+            try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
+                .write(to: URL(fileURLWithPath: zipPath))
+            try #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+                .write(to: URL(fileURLWithPath: nbPath), atomically: true, encoding: .utf8)
+
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
+                """
+            let setup = APITestSetup(
+                id: setupID, manifest: manifest, zipPath: zipPath,
+                notebookPath: nbPath, courseID: courseID)
+            try await setup.save(on: app.db)
+            try await makeAssignment(testSetupID: setupID, courseID: courseID)
+
+            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/copy",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            let copied = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "CPNB-COPY").first(),
+                "Copied course not found")
+            let copiedCourseID = try copied.requireID()
+
+            let copiedSetup = try #require(
+                try await APITestSetup.query(on: app.db)
+                    .filter(\.$courseID == copiedCourseID)
+                    .first())
+            let path = try #require(
+                copiedSetup.notebookPath, "Copied setup should have a notebookPath set")
+            #expect(
+                FileManager.default.fileExists(atPath: path),
+                "Notebook file should exist on disk at the copied path")
         }
     }
 }

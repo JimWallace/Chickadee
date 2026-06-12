@@ -1,0 +1,86 @@
+// APIServer/MCP/Tools/GetNotebookTool.swift
+//
+// Read tool: returns an assignment's notebook (the starter/assignment notebook
+// the student opens) as structured .ipynb JSON, by assignment public ID.
+// content:read, course-scoped.
+//
+// This is the first, read-only slice of notebook authoring (roadmap Phase 5):
+// an agent needs to see the current notebook before it can reason about or
+// (later) edit it. Loading reuses the canonical `notebookData(for:)` helper —
+// the same flat-file-then-zip resolution + JupyterLite normalization the web
+// notebook routes use — so the agent sees exactly what the editor would.
+//
+// No cell filtering: only instructors / admins / mcp service accounts can use
+// MCP at all (students are rejected at the tool layer), so the full notebook is
+// returned the way an instructor download would.
+
+import Core
+import Fluent
+import Foundation
+
+struct GetNotebookTool: ContentTool {
+    struct Input: Decodable, Sendable {
+        let assignmentPublicID: String
+    }
+
+    struct Output: Encodable, Sendable {
+        let assignmentPublicID: String
+        let cellCount: Int
+        let notebook: JSONValue
+    }
+
+    static let name = "get_notebook"
+    static let description =
+        "Get an assignment's notebook (the starter notebook students open) as .ipynb JSON, by "
+        + "assignment public ID. Returns the full notebook plus a cell count. Read-only; use it to "
+        + "inspect an assignment's notebook before editing the suite or (later) the notebook itself."
+    static let inputSchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "assignmentPublicID": .object([
+                "type": .string("string"),
+                "description": .string("The assignment's 6-character public ID."),
+            ])
+        ]),
+        "required": .array([.string("assignmentPublicID")]),
+        "additionalProperties": .bool(false),
+    ])
+    static let outputSchema: JSONValue? = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "assignmentPublicID": .object(["type": .string("string")]),
+            "cellCount": .object(["type": .string("integer")]),
+            "notebook": .object(["type": .string("object")]),
+        ]),
+        "required": .array([
+            .string("assignmentPublicID"), .string("cellCount"), .string("notebook"),
+        ]),
+    ])
+    static let requiredScopes: Set<ContentScope> = [.read]
+
+    func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+            publicID: input.assignmentPublicID, tool: Self.name)
+
+        let data: Data
+        do {
+            data = try notebookData(for: setup)
+        } catch {
+            throw MCPToolError.invalidArguments(
+                tool: Self.name, detail: "This assignment has no notebook to return.")
+        }
+
+        let notebook: JSONValue
+        do {
+            notebook = try JSONDecoder().decode(JSONValue.self, from: data)
+        } catch {
+            throw MCPToolError.executionFailed(
+                tool: Self.name, detail: "The stored notebook is not valid JSON.")
+        }
+
+        return Output(
+            assignmentPublicID: assignment.publicID,
+            cellCount: notebookCellCount(notebook),
+            notebook: notebook)
+    }
+}

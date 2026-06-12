@@ -3,6 +3,7 @@ import Fluent
 import Vapor
 
 final class AssignmentRequirement: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "assignment_requirements"
 
     @ID(key: .id)

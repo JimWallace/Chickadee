@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Run in the merge queue so CodeQL can be a required check there too
+  # (see docs/release-process.md).
+  merge_group:
   schedule:
     - cron: '0 6 * * 1'
 

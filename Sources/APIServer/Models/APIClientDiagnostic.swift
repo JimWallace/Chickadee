@@ -10,6 +10,7 @@ import Vapor
 ///   - "watchdog_timeout" — the iframe mounted but the JupyterLite kernel
 ///                           did not become ready within the watchdog window
 final class APIClientDiagnostic: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "client_diagnostics"
 
     @ID(key: .id)

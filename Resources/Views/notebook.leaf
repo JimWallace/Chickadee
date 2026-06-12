@@ -6,6 +6,36 @@ Notebook
 <style>
 /* Override the 900px max-width for this page only */
 .main { max-width: 100%; padding: 0 1rem; }
+
+/* Closed-assignment "view only" notice + fallback/small-screen text. */
+.nb-closed-notice { color: var(--gray-600); font-size: .9rem; }
+.nb-notice-title { margin: .2rem 0 .5rem; }
+.nb-notice-text { margin: 0; color: var(--gray-700); }
+.nb-fallback-title { margin: .2rem 0; }
+.nb-fallback-text { margin: .4rem 0; }
+.nb-fallback-diagnostic { margin-top: .6rem; }
+.nb-fallback-pre { white-space: pre-wrap; font-size: .85em; margin: .4rem 0; }
+
+/* The JupyterLite editor needs room and a pointer; it is unusable on a phone.
+   Below 640px we hide the editor surface and show a notice instead.  Tablets
+   (641px+) keep the full editor. */
+.nb-smallscreen-notice { display: none; }
+@media (max-width: 640px) {
+    .notebook-header,
+    #jl-frame,
+    #nb-fallback,
+    #nb-results,
+    #browser-runner-status { display: none; }
+    .nb-smallscreen-notice {
+        display: block;
+        margin: 2rem auto;
+        max-width: 32rem;
+        padding: 1.25rem 1.5rem;
+        border: 1px solid var(--gray-200);
+        border-radius: .5rem;
+        background: var(--surface);
+    }
+}
 </style>
 <div class="notebook-header">
     <div class="notebook-toolbar">
@@ -14,7 +44,7 @@ Notebook
             #if(showSubmit):
             <button class="btn btn-primary" id="nb-submit">Submit</button>
             #elseif(isClosed):
-            <span class="nb-closed-notice" style="color:var(--gray-600);font-size:.9rem">This assignment is closed &mdash; view only.</span>
+            <span class="nb-closed-notice">This assignment is closed &mdash; view only.</span>
             #endif
             #if(downloadURL):
             <a class="btn"
@@ -23,6 +53,13 @@ Notebook
             #endif
         </div>
     </div>
+</div>
+<div class="nb-smallscreen-notice" role="note">
+    <h2 class="nb-notice-title">Open on a larger screen</h2>
+    <p class="nb-notice-text">
+        The notebook editor needs a tablet or computer. Please reopen this
+        assignment on a larger screen to edit and submit your notebook.
+    </p>
 </div>
 <iframe
     id="jl-frame"
@@ -37,18 +74,31 @@ Notebook
     src="#(jupyterLiteEditorURL)"
     loading="eager">
 </iframe>
+<script>
+// On phones the editor is hidden behind the "larger screen" notice above,
+// but display:none does not stop the iframe from booting JupyterLite +
+// Pyodide in the background. Abort that navigation immediately after the
+// parser starts it; notebook.js skips mounting at this width and reloads
+// the page if the viewport grows past the breakpoint.
+(function () {
+    if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+        var frame = document.getElementById('jl-frame');
+        if (frame) frame.src = 'about:blank';
+    }
+})();
+</script>
 <section id="nb-fallback" class="nb-fallback" role="alert" hidden>
-    <h2 style="margin:.2rem 0">Editor didn&rsquo;t load</h2>
-    <p style="margin:.4rem 0">
+    <h2 class="nb-fallback-title">Editor didn&rsquo;t load</h2>
+    <p class="nb-fallback-text">
         The in-browser notebook editor didn&rsquo;t start in your browser.
         You can still submit your assignment by uploading your <code>.ipynb</code> file directly.
     </p>
-    <p style="margin:.4rem 0">
+    <p class="nb-fallback-text">
         <input type="file" id="nb-upload-file" accept=".ipynb,application/json">
     </p>
-    <details style="margin-top:.6rem">
+    <details class="nb-fallback-diagnostic">
         <summary>Diagnostic details</summary>
-        <pre id="nb-fallback-details" style="white-space:pre-wrap;font-size:.85em;margin:.4rem 0"></pre>
+        <pre id="nb-fallback-details" class="nb-fallback-pre"></pre>
     </details>
 </section>
 <div id="nb-results" class="nb-results" hidden></div>

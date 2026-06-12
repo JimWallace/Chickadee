@@ -34,14 +34,14 @@
     // Public API — called by notebook.js on Submit
     // -------------------------------------------------------------------------
 
-    window.BrowserRunner = { runAndSubmit, runScripts };
+    window.BrowserRunner = { runAndSubmit, runScripts, groupBySection };
 
     /**
      * Run all test scripts against the student's notebook and submit results.
      *
      * @param {Uint8Array} notebookBytes  Raw bytes of the student's .ipynb file.
      * @param {string}     setupID        The test setup ID for this assignment.
-     * @returns {{ outcomes: object[], response: object }}
+     * @returns {{ outcomes: object[], response: object, sections: object[], sectionIDs: (?string)[] }}
      */
     async function runAndSubmit(notebookBytes, setupID) {
         const result = await runScripts(notebookBytes, setupID, { filename: 'submission.ipynb' });
@@ -52,7 +52,52 @@
         return {
             outcomes: result.outcomes,
             response: await postBrowserResult(notebookBytes, result.collection, setupID),
+            sections: result.sections,
+            sectionIDs: result.sectionIDs,
         };
+    }
+
+    /**
+     * Bucket outcomes into display sections, mirroring the server's
+     * groupOutcomesBySection (Sources/APIServer/Routes/Web/WebRoutes+Submission.swift):
+     * sections in manifest order, each `outcomes[i]` placed by `sectionIDs[i]`
+     * (index correlation — not a name lookup, so two families that share a case
+     * label can't collapse onto one section, v0.4.105), with a trailing
+     * "Ungrouped" bucket for outcomes whose section is missing or unknown.  When
+     * the assignment defines no sections at all, returns a single unlabelled
+     * bucket so the layout is identical to the pre-sections flat table.
+     *
+     * @param {object[]} outcomes
+     * @param {{id: string, name: string}[]} sections
+     * @param {(?string)[]} sectionIDs  Parallel to outcomes; sectionIDs[i] is the
+     *   section id of the manifest entry that produced outcomes[i] (or null).
+     * @returns {{ sectionName: ?string, outcomes: object[] }[]}
+     */
+    function groupBySection(outcomes, sections, sectionIDs) {
+        const list = Array.isArray(sections) ? sections : [];
+        const ids = Array.isArray(sectionIDs) ? sectionIDs : [];
+        const known = new Set(list.map(s => s.id));
+        const byID = new Map();
+        const ungrouped = [];
+        (outcomes || []).forEach((o, i) => {
+            const sid = i < ids.length ? ids[i] : null;
+            if (sid && known.has(sid)) {
+                if (!byID.has(sid)) byID.set(sid, []);
+                byID.get(sid).push(o);
+            } else {
+                ungrouped.push(o);
+            }
+        });
+        const groups = [];
+        for (const section of list) {
+            const rows = byID.get(section.id);
+            if (rows && rows.length) groups.push({ sectionName: section.name, outcomes: rows });
+        }
+        if (ungrouped.length) {
+            groups.push({ sectionName: list.length ? 'Ungrouped' : null, outcomes: ungrouped });
+        }
+        if (groups.length === 0) groups.push({ sectionName: null, outcomes: [] });
+        return groups;
     }
 
     /**
@@ -199,6 +244,58 @@ for _module_name in student_module_names_in_load_order():
                 throw new Error('Failed to configure Python environment: ' + toMessage(e));
             }
 
+            // Personalization parity (issue #461): inject the per-student seed so a
+            // test reading CHICKADEE_ASSIGNMENT_SEED behaves identically to the
+            // native worker, which sets the same env var in RunnerDaemon's test
+            // subprocess. The server resolves the seed with the SAME
+            // AssignmentSeedStore.ensureSeed call the worker and notebook
+            // substitution use, so all three share one value. os.environ persists
+            // for the whole Pyodide session, so one set covers every test script.
+            // A non-personalized setup (or an older server without the endpoint)
+            // yields no seed → leave the env var unset, preserving legacy behaviour.
+            let assignmentSeed = null;
+            let personalizedInputs = null;
+            try {
+                const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
+                const parsed = JSON.parse(seedText);
+                if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
+                    assignmentSeed = parsed.seed;
+                }
+                if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
+                    personalizedInputs = parsed.personalizedInputs;
+                }
+            } catch (_) {
+                assignmentSeed = null;  // grade without a seed rather than failing the run
+                personalizedInputs = null;
+            }
+            if (assignmentSeed !== null) {
+                try {
+                    await py.runPythonAsync(
+                        `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(assignmentSeed)}`);
+                } catch (e) {
+                    throw new Error('Failed to set assignment seed: ' + toMessage(e));
+                }
+            }
+            // Per-student personalization inputs (issue #461, Slice B): mirror the
+            // native worker, which writes _ck_inputs.py into the grading workspace
+            // from Job.personalizedInputs. Each value is already a Python literal
+            // the server resolved for this student's seed (via the same
+            // gradingInputs helper); generated pattern-family scripts load this
+            // file by path. The filename is reserved in test_runtime so it can't
+            // be mistaken for the submission module.
+            if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
+                let ckSource = '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n_ck = {\n';
+                for (const key of Object.keys(personalizedInputs).sort()) {
+                    ckSource += `    ${JSON.stringify(key)}: ${personalizedInputs[key]},\n`;
+                }
+                ckSource += '}\n';
+                try {
+                    py.FS.writeFile(`${workDir}/_ck_inputs.py`, ckSource);
+                } catch (e) {
+                    throw new Error('Failed to write personalization inputs: ' + toMessage(e));
+                }
+            }
+
             // 4. Fetch manifest from server (test.properties.json is not in the zip;
             //    the server serves it directly from the database via the manifest endpoint).
             setRunnerStatus('loading', 'Loading test configuration…');
@@ -209,65 +306,59 @@ for _module_name in student_module_names_in_load_order():
             } catch (e) {
                 throw new Error('Failed to load test configuration: ' + toMessage(e));
             }
-            const outcomes = [];
-            // Track which scripts passed so dependent tests can be pre-checked.
-            const passedScripts = new Set();
-
-            for (const entry of manifest.testSuites || []) {
-                const script     = entry.script || '';
-                const ext        = script.split('.').pop().toLowerCase();
-                const tier       = entry.tier || 'public';
-                const scriptPath = `${workDir}/${script}`;
-                const deps       = Array.isArray(entry.dependsOn) ? entry.dependsOn : [];
-
-                // Dependency pre-check: if any prerequisite did not pass, auto-fail
-                // without running the script (mirrors worker RunnerDaemon behaviour).
-                const blockedBy = deps.find(dep => !passedScripts.has(dep));
-                if (blockedBy !== undefined) {
-                    outcomes.push(makeOutcome(script, tier, 'fail',
-                        `Skipped: prerequisite '${blockedBy}' did not pass`, null, 0));
-                    continue;
-                }
-
-                let outcome;
-                if (ext === 'py') {
-                    let src = '';
-                    try { src = py.FS.readFile(scriptPath, { encoding: 'utf8' }); }
-                    catch (_) {
-                        outcomes.push(makeOutcome(script, tier, 'error',
-                            `Script not found: ${script}`, null, 0));
-                        continue;
-                    }
-                    outcome = await runPyScript(py, src, script, tier,
-                        manifest.timeLimitSeconds || 10);
-
-                } else if (ext === 'r') {
-                    outcome = makeOutcome(script, tier, 'error',
-                        'R test scripts require WebR — not yet supported in browser runner',
-                        null, 0);
-
-                } else if (ext === 'sh' || ext === 'bash') {
-                    outcome = makeOutcome(script, tier, 'error',
-                        'Shell scripts cannot run in the browser runner',
-                        null, 0);
-
-                } else {
-                    outcome = makeOutcome(script, tier, 'error',
-                        `Unsupported test script type: .${ext}`,
-                        null, 0);
-                }
-
-                outcome.scriptName = script;
-                outcome.displayName = (typeof entry.name === 'string' && entry.name.trim())
-                    ? entry.name.trim()
-                    : null;
-                outcomes.push(outcome);
-                if (outcome.status === 'pass') passedScripts.add(script);
+            // Shared RunnerCore (wasm): the SAME Swift `executeSuites` loop the
+            // native worker runs. Dependency gating, the "Skipped: prerequisite…"
+            // messages, missing-script handling, and — crucially — output
+            // interpretation (exit code → status, JSON-footer parsing, longResult
+            // assembly) all live in RunnerCore now. The browser supplies only the
+            // one substrate-specific operation: run a script via Pyodide and
+            // report its RAW output (exit code + stdout/stderr), which RunnerCore
+            // interprets byte-for-byte the way the worker does. No grading logic
+            // or output interpretation remains in JS.
+            const runnerCore = await loadRunnerCore();
+            if (typeof globalThis.runnerExecuteSuites !== 'function') {
+                throw new Error('RunnerCore wasm did not register runnerExecuteSuites');
             }
 
+            const timeLimitSeconds = manifest.timeLimitSeconds || 10;
+            const suites = (manifest.testSuites || []).map(entry => ({
+                script: entry.script || '',
+                tier: entry.tier || 'public',
+                displayName: (typeof entry.name === 'string' && entry.name.trim()) ? entry.name.trim() : null,
+                dependsOn: Array.isArray(entry.dependsOn) ? entry.dependsOn : [],
+                points: typeof entry.points === 'number' ? entry.points : 1,
+            }));
+
+            // Section metadata, so the inline results can be grouped per
+            // section exactly like the server-rendered submission view.  Kept
+            // as a parallel array (never stamped onto the outcomes, which must
+            // stay the canonical worker TestOutcome shape): `sectionIDPerSuite[i]`
+            // is the section of the manifest entry that produces `outcomes[i]`
+            // — index correlation, matching groupOutcomesBySection on the server
+            // (a name-keyed map would collapse two families that share a case
+            // label — v0.4.105).
+            const sections = (Array.isArray(manifest.sections) ? manifest.sections : [])
+                .filter(s => s && typeof s.id === 'string')
+                .map(s => ({ id: s.id, name: typeof s.name === 'string' ? s.name : '' }));
+            const sectionIDPerSuite = (manifest.testSuites || []).map(entry =>
+                (entry && typeof entry.sectionID === 'string' && entry.sectionID) ? entry.sectionID : null);
+
+            // Substrate callbacks handed to the Swift loop.
+            const scriptExists = (name) => {
+                try { py.FS.stat(`${workDir}/${name}`); return true; }
+                catch (_) { return false; }
+            };
+            const runScript = (name, limit) => runRawScript(py, runnerCore, workDir, name, limit);
+
+            const outcomes = await globalThis.runnerExecuteSuites(
+                suites, timeLimitSeconds, 1, scriptExists, runScript);
+
             // 5. Build collection. The caller decides whether to submit it.
+            // `outcomes` stays the canonical worker TestOutcome shape — section
+            // info rides alongside in a parallel array, never on the outcome
+            // objects, so the posted collection is byte-identical to the worker's.
             const collection = buildCollection(setupID, outcomes);
-            return { outcomes, collection };
+            return { outcomes, collection, sections, sectionIDs: sectionIDPerSuite };
 
         } finally {
             // Clean up MEMFS to avoid OOM on repeated submissions.
@@ -299,40 +390,153 @@ for _module_name in student_module_names_in_load_order():
         const ksName = (ks.name || '').toLowerCase();
         const liName = ((meta.language_info || {}).name || '').toLowerCase();
         const isR    = ksName === 'ir' || ksName === 'r' || ksName === 'webr' || liName === 'r';
-        const ext    = isR ? 'R' : 'py';
+        const stem   = filename.replace(/\.ipynb$/i, '');
 
-        const stem    = filename.replace(/\.ipynb$/i, '');
-        const outPath = `${workDir}/${stem}.${ext}`;
-
-        let code = `# Generated from ${filename}\n\n`;
-        for (const cell of (notebook.cells || [])) {
-            if (cell.cell_type !== 'code') continue;
-            const src = Array.isArray(cell.source)
-                ? cell.source.join('')
-                : (cell.source || '');
-            const trimmed = src.replace(/\s+$/, '');
-            if (trimmed.trim()) code += trimmed + '\n\n';
+        if (isR) {
+            // R stays on the JS path — RunnerCore (the shared wasm extractor) is
+            // Python-only, matching the native worker.
+            let code = `# Generated from ${filename}\n\n`;
+            for (const cell of (notebook.cells || [])) {
+                if (cell.cell_type !== 'code') continue;
+                const src = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
+                const block = extractRCell(src);
+                if (block) code += block + '\n\n';
+            }
+            py.FS.writeFile(`${workDir}/${stem}.R`, code);
+            py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.R`);
+            return;
         }
 
-        py.FS.writeFile(outPath, code);
+        // Python: extract via the shared RunnerCore wasm — the SAME code the
+        // native worker runs (Sources/RunnerCore), instead of a JS reimplementation.
+        const cells = (notebook.cells || []).map(cell => ({
+            cell_type: cell.cell_type,
+            source: Array.isArray(cell.source) ? cell.source.join('') : (cell.source || ''),
+        }));
+        const core = await loadRunnerCore();
+        const result = core.extractPython(cells, filename);
 
-        // Write .chickadee_student_module hint so test_runtime.py can find the file.
-        py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.${ext}`);
+        py.FS.writeFile(`${workDir}/${stem}.py`, result.executableModule);
+        py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.py`);
+
+        // Sidecar: the introspectable (un-exec-wrapped) source, so structural /
+        // AST NotebookChecks can read real `def`s via student_source().
+        py.FS.writeFile(`${workDir}/${stem}.source.py`, result.introspectableSource);
+        py.FS.writeFile(`${workDir}/.chickadee_student_source`, `${stem}.source.py`);
     }
+
+    // -------------------------------------------------------------------------
+    // RunnerCore wasm (lazy singleton)
+    //
+    // Loads the vendored, embedded-Swift RunnerCore bridge and returns its
+    // exported functions — `extractPython(cells, filename)` and
+    // `classifyScript(name, source)`, the SAME Swift code the native worker
+    // runs. A test harness can preset the `globalThis.runner*` globals to skip
+    // loading the wasm.
+    // -------------------------------------------------------------------------
+
+    let _runnerCore = null;
+
+    async function loadRunnerCore() {
+        if (_runnerCore) return _runnerCore;
+        const ready = () =>
+            typeof globalThis.runnerExtractPython === 'function'
+            && typeof globalThis.runnerClassifyScript === 'function';
+        if (!ready()) {
+            const mod = await import('/runner-wasm/runner-core.js');
+            await mod.init();  // runs the wasm entrypoint → registers the globals
+        }
+        if (!ready()) {
+            throw new Error('RunnerCore wasm did not register its exports');
+        }
+        _runnerCore = {
+            extractPython: globalThis.runnerExtractPython,
+            classifyScript: globalThis.runnerClassifyScript,
+        };
+        return _runnerCore;
+    }
+
+    // Map a RunnerCore interpreter raw value to how the browser dispatches it.
+    // The browser can only execute Python (Pyodide); other interpreters get a
+    // precise "not here" message.
+    function interpreterToKind(interp) {
+        if (interp === 'python') return 'python';
+        if (interp === 'rscript') return 'r';
+        if (interp === 'sh' || interp === 'bash' || interp === 'zsh') return 'shell';
+        return 'unsupported';  // ruby / perl / node / php / unknown
+    }
+
+    // R cells are emitted verbatim — the browser R path (WebR) is not yet active.
+    function extractRCell(src) {
+        const trimmed = src.replace(/\s+$/, '');
+        return trimmed.trim() ? trimmed : '';
+    }
+
+    // Python per-cell extraction (magic stripping, def/usage split,
+    // exec(compile()) wrapping) now lives in RunnerCore (Swift, compiled to
+    // wasm) and is shared with the native worker — see extractNotebook above.
 
     // -------------------------------------------------------------------------
     // Python script execution
     // -------------------------------------------------------------------------
 
-    async function runPyScript(py, src, scriptName, tier, timeLimitSeconds) {
-        const startMs = Date.now();
-        let stdout    = '';
-        let stderr    = '';
+    // Lowercased file extension of a script name, or '' when there is none —
+    // a bare name like `beats` or a leading-dot dotfile. Mirrors the semantics
+    // of URL.pathExtension on the worker side.
+    function scriptExtension(name) {
+        const base = name.slice(name.lastIndexOf('/') + 1);
+        const dot  = base.lastIndexOf('.');
+        return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
+    }
 
-        // Auto-load any Pyodide packages the script imports (numpy, pandas,
-        // scipy, etc.).  loadPackagesFromImports inspects import statements and
-        // fetches the matching WASM wheels from Pyodide's CDN package index.
-        // Unknown names (test_runtime, student modules) are silently skipped.
+    // Script classification (recognised extension \u2192 shebang \u2192 Python
+    // content-sniff) now lives in RunnerCore (Swift/wasm) and is shared with the
+    // native worker \u2014 see loadRunnerCore().classifyScript / interpreterToKind.
+
+    // Run one script and return a RAW ScriptOutput
+    // { exitCode, stdout, stderr, executionTimeMs, timedOut }. RunnerCore's
+    // shared `interpretScriptOutput` (driven by `executeSuites`) turns it into a
+    // TestOutcome — identical interpretation to the native worker. The browser
+    // only runs Python (Pyodide); other interpreters return their "not here"
+    // message as a non-zero exit so the shared interpreter surfaces it the same
+    // way for every runner.
+    async function runRawScript(py, runnerCore, workDir, scriptName, timeLimitSeconds) {
+        let src = null;
+        try { src = py.FS.readFile(`${workDir}/${scriptName}`, { encoding: 'utf8' }); }
+        catch (_) { src = null; }
+
+        const kind = interpreterToKind(runnerCore.classifyScript(scriptName, src ?? ''));
+        if (kind === 'r') {
+            return rawError('R test scripts require WebR — not yet supported in browser runner');
+        }
+        if (kind === 'shell') {
+            return rawError('Shell scripts cannot run in the browser runner');
+        }
+        if (kind !== 'python') {
+            const ext = scriptExtension(scriptName);
+            return rawError(`Unsupported test script type: ${ext ? '.' + ext : scriptName}`);
+        }
+        if (src === null) {
+            return rawError(`Script not found: ${scriptName}`);
+        }
+        return runPyScriptRaw(py, src, scriptName, timeLimitSeconds);
+    }
+
+    // A synthetic raw output for a substrate error: exit 2 → RunnerCore maps to
+    // `error`, with `message` as the (last-line) shortResult.
+    function rawError(message) {
+        return { exitCode: 2, stdout: message, stderr: '', executionTimeMs: 0, timedOut: false };
+    }
+
+    // Execute a Python test script in Pyodide and capture RAW output. The exit
+    // code comes from the SystemExit that test_runtime's passed/failed/errored
+    // raise — the SAME codes the native subprocess exits with — so RunnerCore's
+    // exit-code → status mapping is identical across runners. No interpretation
+    // happens here.
+    async function runPyScriptRaw(py, src, scriptName, timeLimitSeconds) {
+        const startMs = Date.now();
+
+        // Auto-load any Pyodide packages the script imports (numpy, pandas, …).
         try { await py.loadPackagesFromImports(src); } catch (_) { /* non-fatal */ }
 
         // Redirect sys.stdout / sys.stderr to JS buffers.
@@ -347,20 +551,10 @@ sys.stderr = _br_stderr
         let timedOut = false;
         let pyErr    = null;
 
-        // Run the test script via compile() + exec() from its MEMFS file:
-        //
-        // 1. compile(source, scriptName) gives inspect.stack() the real
-        //    filename so test_runtime._first_comment_label() reads the
-        //    correct test label (not "<exec>").
-        //
-        // 2. except SystemExit catches the exit that test_runtime's
-        //    passed()/failed()/errored() raise.  In the native runner
-        //    this terminates the subprocess cleanly; in Pyodide it would
-        //    become a PythonError with noisy tracebacks in stderr.
-        //
-        // 3. The imports + compile + exec all run in the SAME exec() call
-        //    so they share one locals dict (Pyodide may isolate locals
-        //    between separate runPythonAsync calls).
+        // compile(source, scriptName) gives inspect.stack() the real filename so
+        // test_runtime reads the correct test label; `except SystemExit` catches
+        // the exit that passed()/failed()/errored() raise (a clean subprocess
+        // exit on the native side); imports + exec share one globals dict.
         const runSrc = `
 from test_runtime import passed, failed, errored, require_function
 _br_exit_code = None
@@ -372,11 +566,9 @@ except SystemExit as _e:
 `;
         const runPromise     = py.runPythonAsync(runSrc).catch(err => { pyErr = err; });
         const timeoutPromise = sleep(timeLimitSeconds * 1000).then(() => { timedOut = true; });
-
         await Promise.race([runPromise, timeoutPromise]);
 
-        // Restore stdout/stderr, collect output, and read exit code.
-        let brExitCode = null;
+        let stdout = '', stderr = '', brExitCode = null;
         try {
             const captured = await py.runPythonAsync(`
 (str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
@@ -394,95 +586,40 @@ sys.stderr = sys.__stderr__
 `);
 
         const executionTimeMs = Date.now() - startMs;
-
         if (timedOut) {
-            return makeOutcome(scriptName, tier, 'timeout', 'timed out', null, executionTimeMs);
+            return { exitCode: -1, stdout, stderr, executionTimeMs, timedOut: true };
         }
 
-        // Parse status from stdout.  test_runtime.py prints one JSON line then
-        // raises SystemExit.  If no JSON was printed, fall back to exit-code logic.
-        const lastLine = (stdout || '')
-            .split('\n')
-            .map(l => l.trim())
-            .filter(l => l)
-            .pop() || '';
-
-        let status      = 'pass';
-        let shortResult = 'passed';
-        let longResult  = null;
-        let parsedPayload = null;
-
-        // Determine status: prefer the Python-side exit code (caught SystemExit),
-        // fall back to JS-side pyErr if the wrapper itself threw.
+        // Exit code: prefer the SystemExit code; otherwise mirror a `python3
+        // script` subprocess — 0 on clean completion, 1 on an uncaught exception
+        // (with the traceback on stderr so RunnerCore puts it in longResult).
+        let exitCode;
         if (brExitCode !== null && brExitCode !== undefined) {
-            const code = typeof brExitCode === 'number' ? brExitCode : parseInt(brExitCode) || 1;
-            status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
+            exitCode = typeof brExitCode === 'number' ? brExitCode : (parseInt(brExitCode) || 1);
         } else if (pyErr) {
             const msg = pyErr.message || String(pyErr);
-            if (msg.includes('SystemExit')) {
-                const exitMatch = msg.match(/SystemExit:\s*(-?\d+)/);
-                const code = exitMatch ? parseInt(exitMatch[1]) : 1;
-                status = code === 0 ? 'pass' : code === 1 ? 'fail' : 'error';
+            const match = msg.match(/SystemExit:\s*(-?\d+)/);
+            if (match) {
+                exitCode = parseInt(match[1]);
             } else {
-                status = 'error';
-            }
-        }
-
-        // Prefer the JSON result the script printed (same protocol as native runner).
-        if (lastLine) {
-            try {
-                parsedPayload = JSON.parse(lastLine);
-                if (typeof parsedPayload.status === 'string' && parsedPayload.status.trim()) {
-                    status = parsedPayload.status.trim();
-                }
-                shortResult = structuredSummaryText(parsedPayload, status)
-                    || (status === 'pass' ? 'passed' : status);
-            } catch (_) {
-                shortResult = lastLine;
+                exitCode = 1;
+                if (!stderr.trim()) stderr = msg;
             }
         } else {
-            shortResult = status === 'pass' ? 'passed' : status === 'fail' ? 'failed' : 'error';
+            exitCode = 0;
         }
-
-        if (status !== 'pass') {
-            const stdoutTrim = (stdout || '').trim();
-            const stderrTrim = (stderr || '').trim();
-            longResult = detailedOutputFromParts({
-                parsedPayload,
-                stdout: stdoutTrim,
-                stderr: stderrTrim,
-                pyErr,
-            });
-        } else if ((stderr || '').trim()) {
-            // For passing tests, only include stderr if it has real content
-            // (not just SystemExit tracebacks).
-            const cleanStderr = (stderr || '').trim();
-            if (cleanStderr && !cleanStderr.match(/^\s*$/)) longResult = cleanStderr;
-        }
-
-        return makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs);
+        return { exitCode, stdout, stderr, executionTimeMs, timedOut: false };
     }
 
     // -------------------------------------------------------------------------
     // Outcome / collection builders
     // -------------------------------------------------------------------------
 
-    function makeOutcome(scriptName, tier, status, shortResult, longResult, executionTimeMs) {
-        // Strip extension to get test name (matches native runner).
-        const testName = scriptName.replace(/\.\w+$/, '') || scriptName;
-        return {
-            testName,
-            testClass:          null,
-            tier,
-            status,
-            shortResult,
-            longResult:         longResult || null,
-            executionTimeMs,
-            memoryUsageBytes:   null,
-            attemptNumber:      1,
-            isFirstPassSuccess: status === 'pass',
-        };
-    }
+    // Exit-code → status mapping and result interpretation (JSON-footer parsing,
+    // traceback extraction, longResult assembly) now live in RunnerCore
+    // (interpretScriptOutput), shared with the native worker and applied inside
+    // `executeSuites`. The browser no longer interprets output in JS — it only
+    // produces raw ScriptOutput (see runPyScriptRaw).
 
     function buildCollection(setupID, outcomes) {
         const passCount    = outcomes.filter(o => o.status === 'pass').length;
@@ -512,88 +649,6 @@ sys.stderr = sys.__stderr__
     function safeSubmissionFilename(filename) {
         const raw = String(filename || '').split(/[\\/]/).pop().trim();
         return raw || 'submission.ipynb';
-    }
-
-    function structuredSummaryText(payload, status) {
-        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-
-        if (status !== 'pass') {
-            for (const key of ['error', 'message', 'detail', 'reason']) {
-                const text = trimmedString(payload[key]);
-                if (text) return text;
-            }
-        }
-
-        const shortResult = trimmedString(payload.shortResult);
-        if (shortResult) {
-            const testLabel = trimmedString(payload.test);
-            return stripLeadingLabel(shortResult, testLabel) || shortResult;
-        }
-
-        return trimmedString(payload.status) || null;
-    }
-
-    function detailedOutputFromParts({ parsedPayload, stdout, stderr, pyErr }) {
-        const traceback = extractTracebackText(parsedPayload)
-            || extractTracebackText(stdout)
-            || extractTracebackText(stderr);
-        if (traceback) return traceback;
-
-        const exceptionText = pyErr && !String(pyErr.message || '').includes('SystemExit')
-            ? trimmedString(pyErr.message || String(pyErr))
-            : null;
-        return stderr || stdout || exceptionText || null;
-    }
-
-    function extractTracebackText(value) {
-        if (!value) return null;
-        if (typeof value === 'object' && !Array.isArray(value)) {
-            return trimmedString(value.traceback) || null;
-        }
-
-        const text = trimmedString(value);
-        if (!text) return null;
-
-        const structured = parseStructuredPayload(text);
-        if (structured) {
-            const traceback = extractTracebackText(structured);
-            if (traceback) return traceback;
-        }
-
-        const marker = text.indexOf('Traceback (most recent call last):');
-        return marker >= 0 ? text.slice(marker).trim() : null;
-    }
-
-    function parseStructuredPayload(text) {
-        const trimmed = trimmedString(text);
-        if (!trimmed) return null;
-
-        const candidates = [trimmed];
-        const stdoutMatch = trimmed.match(/(?:^|\n)stdout:\n([\s\S]*?)(?:\n\nstderr:\n|$)/);
-        if (stdoutMatch && stdoutMatch[1]) candidates.unshift(stdoutMatch[1].trim());
-        const stderrMatch = trimmed.match(/(?:^|\n)stderr:\n([\s\S]*)$/);
-        if (stderrMatch && stderrMatch[1]) candidates.push(stderrMatch[1].trim());
-
-        for (const candidate of candidates) {
-            try {
-                return JSON.parse(candidate);
-            } catch (_) {
-                // Try the next candidate shape.
-            }
-        }
-        return null;
-    }
-
-    function stripLeadingLabel(text, label) {
-        const trimmedText = trimmedString(text);
-        const trimmedLabel = trimmedString(label);
-        if (!trimmedText || !trimmedLabel) return null;
-        const prefix = `${trimmedLabel}: `;
-        return trimmedText.startsWith(prefix) ? trimmedText.slice(prefix.length).trim() : null;
-    }
-
-    function trimmedString(value) {
-        return typeof value === 'string' ? value.trim() : '';
     }
 
     // -------------------------------------------------------------------------
@@ -804,7 +859,7 @@ def _candidate_student_files() -> List[Path]:
     files: List[Path] = []
     for p in cwd.glob("*.py"):
         name = p.name
-        if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py"}:
+        if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py", "_ck_inputs.py"}:
             continue
         lower = name.lower()
         if lower.startswith("publictest") or lower.startswith("secrettest") or lower.startswith("releasetest"):
@@ -907,6 +962,80 @@ def load_student_module():
     return modules.get(_loaded_student_order[0])
 
 
+def student_source_raw() -> str:
+    hint = Path(".chickadee_student_source")
+    try:
+        if hint.exists():
+            name = Path(hint.read_text(encoding="utf-8").strip()).name
+            sidecar = Path(name)
+            if name and sidecar.exists():
+                return sidecar.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    try:
+        import inspect
+        module = load_student_module()
+        if module is not None:
+            return inspect.getsource(module)
+    except Exception:
+        pass
+    return ""
+
+
+def student_cell_sources() -> List[Any]:
+    source = student_source_raw()
+    chunks: List[Any] = []
+    label = "module"
+    lines: List[str] = []
+    for raw in source.split("\\n"):
+        stripped = raw.strip()
+        if stripped.startswith("# --- ") and stripped.endswith(" ---"):
+            if lines:
+                chunks.append((label, "\\n".join(lines)))
+            label = stripped[6:-4].strip() or "module"
+            lines = []
+        else:
+            lines.append(raw)
+    if lines:
+        chunks.append((label, "\\n".join(lines)))
+    if not chunks:
+        chunks.append(("module", source))
+    return chunks
+
+
+def student_ast(skipped: Optional[List[Any]] = None) -> Any:
+    import ast
+    module = ast.parse("")
+    for label, chunk in student_cell_sources():
+        if not chunk.strip():
+            continue
+        try:
+            node = ast.parse(chunk)
+        except SyntaxError as ex:
+            if skipped is not None:
+                skipped.append((label, f"{type(ex).__name__}: {ex}"))
+            continue
+        module.body.extend(node.body)
+    return module
+
+
+def student_source() -> str:
+    import ast
+    parts: List[str] = []
+    dropped = False
+    for label, chunk in student_cell_sources():
+        if chunk.strip():
+            try:
+                ast.parse(chunk)
+            except SyntaxError:
+                dropped = True
+                continue
+        parts.append(f"# --- {label} ---\\n{chunk}")
+    if not dropped or not parts:
+        return student_source_raw()
+    return "\\n\\n".join(parts) + "\\n"
+
+
 def require_function(name: str, num_args: Optional[int] = None):
     modules = load_student_modules()
     for key in _loaded_student_order:
@@ -923,10 +1052,8 @@ def require_function(name: str, num_args: Optional[int] = None):
         errors = student_module_errors()
         if errors:
             first_name = next(iter(errors.keys()))
-            errored(
-                "Could not load any student Python module from submission. "
-                f"First load failure came from '{first_name}'."
-            )
+            print(errors[first_name], end="")
+            errored("SyntaxError in submission")
         errored("Could not load a student Python module from submission.")
 
     errored(f"Required function '{name}' was not found or is not callable in loaded student modules.")
@@ -995,16 +1122,17 @@ for _module_name in _tr.student_module_names_in_load_order():
     const testHooks = globalThis.__CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__;
     if (testHooks) {
         testHooks.exports = {
+            // Embedded runtime sources, exposed so the drift test can assert
+            // they stay in sync with Tools/runner-support/*.py.
+            TEST_RUNTIME_PY,
+            SITECUSTOMIZE_PY,
             runAndSubmit,
             runScripts,
+            scriptExtension,
             extractNotebook,
-            runPyScript,
+            runRawScript,
+            runPyScriptRaw,
             buildCollection,
-            makeOutcome,
-            structuredSummaryText,
-            detailedOutputFromParts,
-            extractTracebackText,
-            parseStructuredPayload,
             removeRecursive,
             fetchBytes,
             fetchText,
@@ -1012,6 +1140,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             __resetStateForTests() {
                 _pyodide = null;
                 _JSZip   = null;
+                _runnerCore = null;
                 if (statusEl) {
                     statusEl.textContent = '';
                     statusEl.className   = '';

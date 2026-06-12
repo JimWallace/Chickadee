@@ -7,6 +7,7 @@
 // view changes.
 
 import Foundation
+import Vapor
 
 struct AssignmentRow: Encodable {
     let setupID: String
@@ -33,18 +34,94 @@ struct CourseSectionRow: Encodable {
     let rows: [AssignmentRow]  // assignments in this section, sorted
 }
 
+/// Overview tab (`GET /instructor`): dashboard metrics + the assignment /
+/// section listing.  The enrolled-students roster and BrightSpace export
+/// moved to their own tabs (`/instructor/students`, `/instructor/brightspace`)
+/// in the v0.4 instructor-view rework, so this context no longer carries the
+/// roster — only `enrolledStudentCount`, which the per-assignment "X / Y"
+/// submitted badge still needs.
 struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
+    let activeInstructorTab: String
     let metrics: [InstructorDashboardMetric]
     let sections: [CourseSectionRow]  // sections with their assignments
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
     let hasSections: Bool
     let hasUngrouped: Bool
+    let enrolledStudentCount: Int
+}
+
+/// Students tab (`GET /instructor/students`): the enrolled-students roster
+/// plus enrollment-mode controls.  The table self-updates by polling
+/// `GET /instructor/students-data`, which returns `[EnrolledStudentRow]`.
+struct InstructorStudentsContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeInstructorTab: String
     let enrolledStudents: [EnrolledStudentRow]
     let hasEnrolledStudents: Bool  // explicit flag — Leaf's array.isEmpty is unreliable
     let enrolledStudentCount: Int
     let courseEnrollmentMode: String
     let courseIsArchived: Bool
+    /// True when BrightSpace is configured on the server AND the active course
+    /// is linked to a LEARN org unit — gates the "Check against LEARN" button.
+    let brightspaceLinkAvailable: Bool
+}
+
+/// BrightSpace tab (`GET /instructor/brightspace`): connection status, the
+/// assignment→grade-item mapping, the sync log, and grade export.
+struct InstructorBrightspaceContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeInstructorTab: String
+    let hasActiveCourse: Bool
+    let courseIsArchived: Bool
+    /// True when the server has BrightSpace credentials configured at all.
+    let brightspaceSyncEnabled: Bool
+    /// True when this course is bound to a D2L org unit (admin-set).
+    let courseLinked: Bool
+    let orgUnitID: String?
+    let orgUnitName: String?
+    let assignmentRows: [BrightspaceAssignmentRow]
+    let hasAssignments: Bool
+    let logRows: [BrightspaceLogRow]
+    let hasLog: Bool
+    let summary: BrightspaceSyncSummary
+    let unmappedStudents: [BrightspaceUnmappedStudentRow]
+    let hasUnmapped: Bool
+}
+
+/// One assignment's BrightSpace grade-item mapping + its latest sync state.
+struct BrightspaceAssignmentRow: Encodable {
+    let assignmentID: String  // publicID
+    let title: String
+    let gradeObjectID: String  // "" when unmapped
+    let lastSyncText: String  // formatted time, or "—"
+    let lastSyncStatus: String  // "success" | "error" | "skipped" | "none"
+    let lastSyncDetail: String?
+}
+
+/// One row of the sync-activity log.
+struct BrightspaceLogRow: Encodable {
+    let attemptedAt: String
+    let username: String
+    let assignmentTitle: String
+    let points: String  // formatted, or "—"
+    let status: String  // "success" | "error" | "skipped"
+    let detail: String?
+}
+
+/// Headline counts shown as cards atop the panel.
+struct BrightspaceSyncSummary: Encodable {
+    let synced: Int
+    let pending: Int
+    let errored: Int
+    let unmapped: Int
+}
+
+/// A student whose grade can't sync because they have no resolvable D2L account.
+struct BrightspaceUnmappedStudentRow: Encodable {
+    let username: String
+    let displayName: String
+    let reason: String
 }
 
 struct InstructorDashboardMetric: Encodable {
@@ -52,7 +129,7 @@ struct InstructorDashboardMetric: Encodable {
     let value: String
 }
 
-struct EnrolledStudentRow: Encodable {
+struct EnrolledStudentRow: Content {
     let id: String
     let username: String
     let displayName: String
@@ -88,6 +165,12 @@ struct AssignmentStudentRow: Encodable {
     let surname: String
     let givenNames: String
     let gradeText: String
+    /// True when `gradeText` is an instructor override rather than the
+    /// runner-computed best grade.
+    let gradeIsOverridden: Bool
+    /// Prefill for the inline override form: the active override percent when
+    /// one is set, else the runner-computed best grade, else 0.
+    let gradeOverridePercent: Int
     let submissionCount: Int
     let hasLatestSubmission: Bool
     let latestSubmissionID: String

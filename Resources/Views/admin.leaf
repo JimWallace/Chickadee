@@ -4,6 +4,15 @@ Admin
 #endexport
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
+<nav class="admin-tabs" aria-label="Admin sections">
+    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
+    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
+    <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
+    #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
+    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
+    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
+</nav>
 <section class="admin-section admin-diagnostics">
     <div class="diagnostics-cards" id="diagnostics-cards">
         <article class="diagnostic-card">
@@ -30,38 +39,23 @@ Admin
 </section>
 
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <div style="display:flex;align-items:center;gap:.75rem">
-            <h2 style="margin:0">Runners</h2>
-            <form method="post" action="/admin/runner-autostart" style="display:flex;align-items:center;gap:.4rem">
+    <div class="page-titlebar admin-section-head">
+        <h2>Runners</h2>
+        <div class="toolbar">
+            <form method="post" action="/admin/runner-secret" class="toolbar toolbar--nowrap">
                 #csrfFormField()
-                <label style="display:inline-flex;align-items:center;gap:.4rem;white-space:nowrap;font-size:.875rem;cursor:pointer">
-                    <input type="checkbox"
-                           name="localRunnerAutoStart"
-                           #if(localRunnerAutoStartEnabled):checked#endif>
-                    Auto-start local
-                </label>
-                <button class="btn" type="submit" style="font-size:.8rem;padding:.2rem .5rem">Save</button>
-            </form>
-        </div>
-        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-            <a href="/admin/alerts" class="btn">Server health alerts</a>
-            <a href="/admin/audit" class="btn">Audit log</a>
-            <form method="post" action="/admin/runner-secret" style="display:flex;gap:.5rem;align-items:center">
-                #csrfFormField()
-                <input class="form-input"
+                <input class="form-input worker-secret-input"
                        type="text"
                        name="secret"
                        value="#(workerSecret)"
                        autocomplete="new-password"
-                       placeholder="Worker shared secret"
-                       style="width:16rem">
+                       placeholder="Worker shared secret">
                 <button class="btn" type="submit">Save secret</button>
             </form>
         </div>
     </div>
 
-    <table id="workers-table" class="results-table">
+    <div class="table-scroll"><table id="workers-table" class="results-table">
             <thead>
                 <tr>
                     <th data-sort-key="runner" data-sort-type="text" tabindex="0" aria-sort="none">Runner</th>
@@ -86,11 +80,11 @@ Admin
                     <td>
                         <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
                         #if(worker.hostname != ""):
-                            <br><span style="font-size:.8em;color:var(--muted)">#(worker.hostname)</span>
+                            <br><span class="worker-host">#(worker.hostname)</span>
                         #endif
                     </td>
                     <td>#if(worker.runnerVersion != ""):#(worker.runnerVersion)#else:—#endif</td>
-                    <td class="time" #if(worker.assignedJobs > 0):style="font-weight:600"#endif>
+                    <td class="time#if(worker.assignedJobs > 0): runner-load-busy#endif">
                         #if(worker.maxConcurrentJobs > 0):
                             #(worker.assignedJobs)&thinsp;/&thinsp;#(worker.maxConcurrentJobs)
                         #else:
@@ -104,14 +98,14 @@ Admin
                 </tr>
             #endfor
             </tbody>
-        </table>
+        </table></div>
 </section>
 
 <!-- ── Courses ────────────────────────────────────────── -->
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <h2 style="margin:0">Courses</h2>
-        <div style="display:flex;gap:.5rem">
+    <div class="page-titlebar admin-courses-head">
+        <h2>Courses</h2>
+        <div class="admin-courses-actions">
             <a href="/admin/courses/new" class="btn">Create course</a>
             <button class="btn btn-primary" id="importCourseBtn">Import course</button>
         </div>
@@ -121,221 +115,118 @@ Admin
     <form method="post" action="/admin/courses/import" enctype="multipart/form-data"
           id="importCourseForm">
         #csrfFormField()
-        <input type="file" name="file" accept=".zip" id="importCourseFile" style="display:none">
+        <input type="file" name="file" accept=".zip" id="importCourseFile" hidden>
     </form>
 
     #if(courses.isEmpty):
     <p class="empty">No courses yet.</p>
     #else:
-    <table class="results-table" id="courses-table">
+    <div class="table-scroll"><table class="results-table" id="courses-table">
         <thead>
             <tr>
                 <th data-sort-key="code" data-sort-type="text" tabindex="0" aria-sort="none">Code</th>
                 <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
-                <th data-sort-key="students" data-sort-type="text" tabindex="0" aria-sort="none">Students</th>
-                <th data-sort-key="status" data-sort-type="text" tabindex="0" aria-sort="none">Status</th>
+                <th data-sort-key="students" data-sort-type="number" tabindex="0" aria-sort="none">Students</th>
+                <th data-sort-key="submissions" data-sort-type="number" tabindex="0" aria-sort="none">Submissions</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
         #for(course in courses):
-            <tr class="#if(course.isArchived):status-closed#else:status-open#endif">
+            <tr class="status-open">
                 <td><a href="/admin/courses/#(course.id)"><strong>#(course.code)</strong></a></td>
                 <td>#(course.name)</td>
                 <td>#(course.enrollmentCount)</td>
-                <td>
-                    #if(course.isArchived):
-                    <span class="tier tier-closed">archived</span>
-                    #else:
-                    <span class="tier tier-open">active</span>
-                    #endif
-                </td>
-                <td style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
-                    #if(course.isArchived):
-                    <a class="btn action-btn" href="/admin/courses/#(course.id)/export"
-                       title="Export course" aria-label="Export course" style="padding:.3rem .45rem">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </a>
-                    <form method="post" action="/admin/courses/#(course.id)/delete" style="display:inline;margin:0">
+                <td>#(course.submissionCount)</td>
+                <td class="action-cell">
+                    <form method="post" action="/admin/courses/#(course.id)/copy" class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit"
-                                title="Delete course" aria-label="Delete course" style="padding:.3rem .45rem"
-                                onclick="return confirm('Permanently delete #(course.code) and all its data? This cannot be undone.')">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                        </button>
-                    </form>
-                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
-                        #csrfFormField()
-                        <button class="btn action-btn" type="submit"
-                                onclick="return confirm('Unarchive #(course.code)? Students will be able to see it again.')">Unarchive</button>
-                    </form>
-                    #else:
-                    <form method="post" action="/admin/courses/#(course.id)/copy" style="display:inline;margin:0">
-                        #csrfFormField()
-                        <button class="btn action-btn" type="submit"
-                                title="Copy course" aria-label="Copy course" style="padding:.3rem .45rem"
+                        <button class="btn action-btn action-btn-icon" type="submit"
+                                title="Copy course" aria-label="Copy course"
                                 onclick="return confirm('Copy #(course.code)? All test setups and assignments will be duplicated into a new course.')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                         </button>
                     </form>
-                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
+                    <form method="post" action="/admin/courses/#(course.id)/archive" class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit"
-                                title="Archive course" aria-label="Archive course" style="padding:.3rem .45rem"
+                        <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                                title="Archive course" aria-label="Archive course"
                                 onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
                         </button>
                     </form>
-                    #endif
                 </td>
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 
 </section>
 
-<!-- ── Users ──────────────────────────────────────────── -->
-<section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <h2 style="margin:0">Users</h2>
-        <input id="users-filter" class="form-input" type="search" autocomplete="off"
-               placeholder="Filter by name, username or role…"
-               style="width:280px" aria-label="Filter users"
-               readonly onfocus="this.removeAttribute('readonly')">
-    </div>
-    <table class="results-table" id="users-table">
-        <thead>
-            <tr>
-                <th data-sort-key="name" data-sort-type="text" tabindex="0" aria-sort="none">Name</th>
-                <th data-sort-key="username" data-sort-type="text" tabindex="0" aria-sort="none">Username</th>
-                <th data-sort-key="role" data-sort-type="text" tabindex="0" aria-sort="none">Role</th>
-                <th class="time" data-sort-key="last-seen" data-sort-type="date" tabindex="0" aria-sort="none">Last Seen</th>
-                <th class="time" data-sort-key="joined" data-sort-type="date" tabindex="0" aria-sort="none">Joined</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        #for(user in users):
-            <tr>
-                <td>
-                    #if(user.displayName):
-                        #(user.displayName)
-                    #else:
-                        —
-                    #endif
-                </td>
-                <td><code>#(user.username)</code></td>
-                <td>
-                    <form method="post" action="/admin/users/#(user.id)/role"
-                          style="display:flex;gap:.4rem;align-items:center">
-                        #csrfFormField()
-                        <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
-                        <select id="role-#(user.id)" name="role" class="form-input" style="padding:.25rem .5rem;font-size:.8rem">
-                            <option value="student"    #if(user.role == "student"):selected#endif>student</option>
-                            <option value="instructor" #if(user.role == "instructor"):selected#endif>instructor</option>
-                            <option value="admin"      #if(user.role == "admin"):selected#endif>admin</option>
-                        </select>
-                        <button class="btn action-btn" type="submit">Save</button>
-                    </form>
-                </td>
-                <td class="time js-relative-time" data-iso="#(user.lastSeenAt)">
-                    #if(user.lastSeenAt):
-                        #(user.lastSeenAt)
-                    #else:
-                        —
-                    #endif
-                </td>
-                <td class="time js-relative-time" data-iso="#(user.createdAt)">#(user.createdAt)</td>
-                <td>
-                    <div style="display:flex;align-items:center;gap:.35rem">
-                        <a href="/admin/users/#(user.id)"
-                           class="btn action-btn" title="Manage user" aria-label="Manage user" style="padding:.3rem .45rem">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                        </a>
-                        <form method="post" action="/admin/users/#(user.id)/delete" style="display:inline">
-                            #csrfFormField()
-                            <button class="btn action-btn action-danger" type="submit"
-                                    title="Delete user" aria-label="Delete user" style="padding:.3rem .45rem"
-                                    onclick="return confirm('Delete this user? Their enrollments will be removed. They can log in again to restore their account.')">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                            </button>
-                        </form>
-                    </div>
-                </td>
-            </tr>
-        #endfor
-        </tbody>
-    </table>
-</section>
 <style>
 .admin-diagnostics {
     padding-bottom: 1rem;
 }
-.diagnostics-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
+.admin-section-head {
+    gap: .5rem;
 }
-.diagnostic-card {
-    padding: .75rem .9rem;
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
+.toolbar--nowrap {
+    flex-wrap: nowrap;
 }
-.diagnostic-label {
-    color: var(--gray-600);
-    font-size: .82rem;
+.worker-secret-input {
+    width: 16rem;
 }
-.diagnostic-value {
-    margin-top: .2rem;
-    font-size: 1.2rem;
+@media (max-width: 640px) {
+    .toolbar--nowrap { flex-wrap: wrap; }
+    .worker-secret-input { width: 100%; }
+}
+.worker-host {
+    font-size: .8em;
+    color: var(--muted);
+}
+.runner-load-busy {
     font-weight: 600;
-    line-height: 1.2;
-    color: var(--gray-900);
+}
+.admin-courses-head {
+    gap: 0;
+    flex-wrap: nowrap;
+}
+.admin-courses-actions {
+    display: flex;
+    gap: .5rem;
+}
+.action-cell {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    align-items: center;
 }
 #workers-table th[data-sort-key],
-#users-table th[data-sort-key],
 #courses-table th[data-sort-key] {
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
 }
 #workers-table th[data-sort-key]::after,
-#users-table th[data-sort-key]::after,
 #courses-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
     font-size: .75rem;
 }
 #workers-table th[data-sort-key].sort-asc::after,
-#users-table th[data-sort-key].sort-asc::after,
 #courses-table th[data-sort-key].sort-asc::after {
     content: "  ↑";
 }
 #workers-table th[data-sort-key].sort-desc::after,
-#users-table th[data-sort-key].sort-desc::after,
 #courses-table th[data-sort-key].sort-desc::after {
     content: "  ↓";
 }
 tr.runner-row-offline {
     opacity: .5;
 }
-.runner-badge-offline {
-    display: inline-block;
-    font-size: .7rem;
-    font-weight: 600;
-    padding: .1rem .4rem;
-    border-radius: 999px;
-    background: var(--gray-200);
-    color: var(--gray-600);
-    vertical-align: middle;
-    margin-left: .3rem;
-    letter-spacing: .03em;
-    text-transform: uppercase;
-}
 </style>
+<script src="/relative-time.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -343,51 +234,8 @@ tr.runner-row-offline {
     var workersBody = document.getElementById('workers-body');
     if (!workersBody) return;
 
-    function escapeHtml(value) {
-        return String(value)
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#39;');
-    }
-
-    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-
-    function formatRelative(isoString) {
-        var date = new Date(isoString);
-        if (Number.isNaN(date.getTime())) return isoString;
-
-        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
-        var abs = Math.abs(seconds);
-
-        if (abs < 60) return relativeFormatter.format(seconds, 'second');
-        var minutes = Math.round(seconds / 60);
-        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
-        var hours = Math.round(minutes / 60);
-        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
-        var days = Math.round(hours / 24);
-        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
-        var weeks = Math.round(days / 7);
-        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
-        var months = Math.round(days / 30);
-        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
-        var years = Math.round(days / 365);
-        return relativeFormatter.format(years, 'year');
-    }
-
-    function applyRelativeTimes(root) {
-        var scope = root || document;
-        var nodes = scope.querySelectorAll('.js-relative-time[data-iso]');
-        nodes.forEach(function (el) {
-            var iso = el.getAttribute('data-iso');
-            if (!iso) return;
-            var date = new Date(iso);
-            if (Number.isNaN(date.getTime())) return;
-            el.textContent = formatRelative(iso);
-            el.title = date.toLocaleString();
-        });
-    }
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var escapeHtml = ChickadeeUI.escapeHtml;
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
     var diagQueueDepth = document.getElementById('diag-queue-depth');
@@ -481,11 +329,11 @@ tr.runner-row-offline {
 
             var idCell = '<a href="' + detailURL + '"><code>' + id + '</code></a>'
                 + (isOffline ? ' <span class="runner-badge-offline">Offline</span>' : '')
-                + (hostname ? '<br><span style="font-size:.8em;color:var(--muted)">' + hostname + '</span>' : '');
+                + (hostname ? '<br><span class="worker-host">' + hostname + '</span>' : '');
             var loadCell = maxJobs > 0
                 ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
                 : String(assignedJobs);
-            var loadStyle = assignedJobs > 0 ? ' style="font-weight:600"' : '';
+            var loadClass = assignedJobs > 0 ? ' runner-load-busy' : '';
 
             return '<tr'
                 + (isOffline ? ' class="runner-row-offline"' : '')
@@ -500,14 +348,14 @@ tr.runner-row-offline {
                 + '>'
                 + '<td>' + idCell + '</td>'
                 + '<td>' + (version || '—') + '</td>'
-                + '<td class="time"' + loadStyle + '>' + loadCell + '</td>'
+                + '<td class="time' + loadClass + '">' + loadCell + '</td>'
                 + '<td class="time">' + jobsProcessed + '</td>'
                 + '<td class="time">' + (avgRun || '—') + '</td>'
                 + '<td class="time">' + (avgWait || '—') + '</td>'
                 + '<td class="time js-relative-time" data-iso="' + lastActive + '">' + lastActive + '</td>'
                 + '</tr>';
         }).join('');
-        applyRelativeTimes(workersBody);
+        ChickadeeRelativeTime.applyRelativeTimes(workersBody);
         renderMaxLoadSummary();
     }
 
@@ -612,7 +460,7 @@ tr.runner-row-offline {
     async function refreshWorkers() {
         try {
             var res = await fetch('/admin/runners', {
-                headers: { 'Accept': 'application/json' },
+                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
                 cache: 'no-store'
             });
             if (!res.ok) return;
@@ -626,7 +474,7 @@ tr.runner-row-offline {
     async function refreshDiagnostics() {
         try {
             var response = await fetch('/admin/metrics', {
-                headers: { 'Accept': 'application/json' },
+                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
                 cache: 'no-store'
             });
             if (!response.ok) return;
@@ -637,7 +485,7 @@ tr.runner-row-offline {
         }
     }
 
-    applyRelativeTimes(document);
+    ChickadeeRelativeTime.applyRelativeTimes(document);
     recomputeLoadSummaryFromTable();
     refreshWorkers();
     refreshDiagnostics();
@@ -656,106 +504,6 @@ tr.runner-row-offline {
             });
         });
         sortWorkersByHeader(workerHeaders[0], 'asc');
-    }
-
-    var usersTable = document.getElementById('users-table');
-    if (usersTable) {
-        var usersBody = usersTable.querySelector('tbody');
-        var userHeaders = Array.from(usersTable.querySelectorAll('th[data-sort-key]'));
-        if (usersBody && userHeaders.length) {
-            var activeUserHeader = null;
-            var activeUserDirection = 'asc';
-
-            function clearUserSortIndicators() {
-                userHeaders.forEach(function (header) {
-                    header.classList.remove('sort-asc', 'sort-desc');
-                    header.setAttribute('aria-sort', 'none');
-                });
-            }
-
-            function dateValueFromCell(cell) {
-                if (!cell) return 0;
-                var iso = cell.getAttribute('data-iso');
-                var date = iso ? new Date(iso) : new Date((cell.textContent || '').trim());
-                return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-            }
-
-            function readUserCellValue(row, index, type, sortKey) {
-                var cell = row.children[index];
-                if (!cell) return '';
-                if (type === 'date') {
-                    return dateValueFromCell(cell);
-                }
-                if (sortKey === 'role') {
-                    var roleSelect = cell.querySelector('select[name="role"]');
-                    if (roleSelect) return roleSelect.value || '';
-                }
-                return (cell.textContent || '').trim();
-            }
-
-            function sortUsersByHeader(header, direction) {
-                var index = userHeaders.indexOf(header);
-                if (index < 0) return;
-                var type = header.getAttribute('data-sort-type') || 'text';
-                var sortKey = header.getAttribute('data-sort-key') || '';
-                var rows = Array.from(usersBody.querySelectorAll('tr'));
-                rows.sort(function (lhs, rhs) {
-                    var lv = readUserCellValue(lhs, index, type, sortKey);
-                    var rv = readUserCellValue(rhs, index, type, sortKey);
-                    var result = 0;
-                    if (type === 'date') {
-                        result = lv - rv;
-                    } else {
-                        result = collator.compare(String(lv), String(rv));
-                    }
-                    if (result === 0) {
-                        var lhsUsername = (lhs.children[1] && lhs.children[1].textContent || '').trim();
-                        var rhsUsername = (rhs.children[1] && rhs.children[1].textContent || '').trim();
-                        result = collator.compare(lhsUsername, rhsUsername);
-                    }
-                    return direction === 'asc' ? result : -result;
-                });
-                rows.forEach(function (row) { usersBody.appendChild(row); });
-                clearUserSortIndicators();
-                header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
-                header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
-                activeUserHeader = header;
-                activeUserDirection = direction;
-            }
-
-            userHeaders.forEach(function (header) {
-                header.addEventListener('click', function () {
-                    var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
-                    sortUsersByHeader(header, nextDirection);
-                });
-                header.addEventListener('keydown', function (event) {
-                    if (event.key !== 'Enter' && event.key !== ' ') return;
-                    event.preventDefault();
-                    var nextDirection = (activeUserHeader === header && activeUserDirection === 'asc') ? 'desc' : 'asc';
-                    sortUsersByHeader(header, nextDirection);
-                });
-            });
-
-            var defaultUserHeader = userHeaders.find(function (header) {
-                return header.getAttribute('data-sort-key') === 'last-seen';
-            }) || userHeaders[0];
-            sortUsersByHeader(defaultUserHeader, 'desc');
-        }
-    }
-
-    var usersFilter = document.getElementById('users-filter');
-    if (usersFilter && usersBody) {
-        usersFilter.addEventListener('input', function () {
-            var query = usersFilter.value.trim().toLowerCase();
-            Array.from(usersBody.querySelectorAll('tr')).forEach(function (row) {
-                if (!query) { row.hidden = false; return; }
-                var name     = ((row.children[0] && row.children[0].textContent) || '').toLowerCase();
-                var username = ((row.children[1] && row.children[1].textContent) || '').toLowerCase();
-                var roleEl   = row.children[2] && row.children[2].querySelector('select[name="role"]');
-                var role     = roleEl ? roleEl.value.toLowerCase() : '';
-                row.hidden   = !(name.includes(query) || username.includes(query) || role.includes(query));
-            });
-        });
     }
 
     var coursesTable = document.getElementById('courses-table');
@@ -816,7 +564,7 @@ tr.runner-row-offline {
     }
 
     setInterval(function () {
-        applyRelativeTimes(document);
+        ChickadeeRelativeTime.applyRelativeTimes(document);
         refreshWorkers();
     }, 5000);
     setInterval(refreshDiagnostics, 15000);

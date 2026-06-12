@@ -1,0 +1,90 @@
+// RunnerCore/TestOutcome.swift
+
+/// The complete record for a single test case execution.
+///
+/// Fields marked "gamification" are present from day one but can be
+/// null/zero until the corresponding feature is implemented.
+public struct TestOutcome: Equatable, Sendable {
+
+    // MARK: - Identity
+    public let testName: String  // e.g. "testBitCount"
+    public let testClass: String?  // e.g. "PublicTests" (nil for Python)
+    public let tier: TestTier
+
+    // MARK: - Result
+    public let status: TestStatus
+    public let shortResult: String  // One-line human-readable summary
+    public let longResult: String?  // Full output, stack trace, diff, etc.
+
+    // MARK: - Grade
+    /// Fraction of `points` this submission earned for the test, in `0...1`.
+    /// 1 for a pass / 0 for a non-pass, unless the script's stdout footer
+    /// reported an explicit partial `score` (then that value, clamped).
+    public let score: Double
+    /// Integer weight for grade calculation. Default 1 (unweighted).
+    /// Set from `TestSuiteEntry.points` in the manifest at run time.
+    public let points: Int
+
+    // MARK: - Performance
+    public let executionTimeMs: Int
+    public let memoryUsageBytes: Int?  // gamification — null if not measured yet
+
+    // MARK: - Gamification (future-ready, nullable now)
+    public let attemptNumber: Int  // Which attempt this was (starts at 1)
+    public let isFirstPassSuccess: Bool  // true if passed on attempt 1
+
+    public init(
+        testName: String,
+        testClass: String?,
+        tier: TestTier,
+        status: TestStatus,
+        shortResult: String,
+        longResult: String?,
+        score: Double = 1,
+        points: Int = 1,
+        executionTimeMs: Int,
+        memoryUsageBytes: Int?,
+        attemptNumber: Int,
+        isFirstPassSuccess: Bool
+    ) {
+        self.testName = testName
+        self.testClass = testClass
+        self.tier = tier
+        self.status = status
+        self.shortResult = shortResult
+        self.longResult = longResult
+        self.score = score
+        self.points = points
+        self.executionTimeMs = executionTimeMs
+        self.memoryUsageBytes = memoryUsageBytes
+        self.attemptNumber = attemptNumber
+        self.isFirstPassSuccess = isFirstPassSuccess
+    }
+}
+
+// Codable is unavailable in Embedded Swift (RunnerCore compiles to wasm); only
+// the native targets serialize TestOutcome. The conformance is synthesized
+// (CodingKeys + encode) except for the custom decoder below, which defaults
+// `points` to 1 for older records.
+#if !hasFeature(Embedded)
+extension TestOutcome: Codable {
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        testName = try c.decode(String.self, forKey: .testName)
+        testClass = try c.decodeIfPresent(String.self, forKey: .testClass)
+        tier = try c.decode(TestTier.self, forKey: .tier)
+        status = try c.decode(TestStatus.self, forKey: .status)
+        shortResult = try c.decode(String.self, forKey: .shortResult)
+        longResult = try c.decodeIfPresent(String.self, forKey: .longResult)
+        // Old records predate per-test partial credit: derive the score from the
+        // recorded status (pass = full, otherwise none) so their grades are
+        // unchanged; new records carry an explicit `score`.
+        score = try c.decodeIfPresent(Double.self, forKey: .score) ?? (status == .pass ? 1 : 0)
+        points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
+        executionTimeMs = try c.decode(Int.self, forKey: .executionTimeMs)
+        memoryUsageBytes = try c.decodeIfPresent(Int.self, forKey: .memoryUsageBytes)
+        attemptNumber = try c.decode(Int.self, forKey: .attemptNumber)
+        isFirstPassSuccess = try c.decode(Bool.self, forKey: .isFirstPassSuccess)
+    }
+}
+#endif
