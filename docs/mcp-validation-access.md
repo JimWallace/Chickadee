@@ -1,7 +1,8 @@
-# MCP read access to validation runs (planned)
+# MCP read access to validation runs
 
-**Status:** planned feature, not yet implemented. Captured here so the design
-is settled before we build it.
+**Status:** implemented as the `get_validation_result` tool
+(`Sources/APIServer/MCP/Tools/GetValidationResultTool.swift`), matching the
+surface sketched below. `list_validation_runs` remains deferred.
 
 ## Motivation
 

@@ -37,6 +37,7 @@ course-scoped:
 | `get_global_inputs` | `content:read` | Assignment personalization: global variables + per-student expressions |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
+| `get_validation_result` | `content:read` | Per-test outcomes of the reference solution's latest validation run (status + shortResult/longResult, all tiers); validation-only, never student data |
 | `update_assignment` | `content:write` | Metadata: title, due date, visibility (closed/preview/open) |
 | `set_grading_mode` | `content:write` | Set an assignment's grading path (worker vs browser); no regrade/close |
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
