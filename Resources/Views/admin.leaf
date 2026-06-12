@@ -307,7 +307,7 @@ tr.runner-row-offline {
 }
 .activity-bar-fill {
     width: 100%;
-    height: 0;
+    height: var(--bar-h, 0);
     background: var(--health-teal);
     border-radius: 3px 3px 0 0;
     transition: height .25s ease;
@@ -697,7 +697,7 @@ tr.runner-row-offline {
                 var showLabel = (i % labelEvery === 0) || i === buckets.length - 1;
                 var noun = count === 1 ? 'user' : 'users';
                 return '<div class="activity-bar" title="' + escapeHtml(label) + ': ' + count + ' active ' + noun + '">'
-                    + '<span class="activity-bar-fill" style="height:' + pct.toFixed(1) + '%"></span>'
+                    + '<span class="activity-bar-fill" style="--bar-h:' + pct.toFixed(1) + '%"></span>'
                     + (showLabel ? '<span class="activity-bar-label">' + escapeHtml(label) + '</span>' : '')
                     + '</div>';
             }).join('');
