@@ -19,8 +19,17 @@ runs:
 
     # The container runs git as a different uid than checkout used, so mark
     # the workspace safe before invoking git.
+    #
+    # --merge: by default git-restore-mtime IGNORES merge commits, so a file
+    # whose only change is part of a merge commit (a branch updated via
+    # "Update branch" / `git merge main`, or the synthetic PR merge ref
+    # itself) keeps the mtime of its last REGULAR commit — which matches the
+    # restored .build/ cache, so llbuild reuses a stale module and dependents
+    # fail with "cannot find type" / undefined-symbol errors (#342 and #629
+    # both hit this). --merge applies merge commits' dates to files no
+    # regular commit explains, restoring soundness for merge-heavy branches.
     - name: Restore source mtimes from git history
       shell: bash
       run: |
         git config --global --add safe.directory '*'
-        git restore-mtime
+        git restore-mtime --merge
