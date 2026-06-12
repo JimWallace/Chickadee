@@ -84,63 +84,20 @@ struct WebRoutes: RouteCollection {
             uniquingKeysWith: { first, _ in first }
         )
 
-        // Per-user active extensions for the current user, keyed by
-        // testSetupID (the dashboard works in setup space; the assignment for
-        // each row is looked up separately).  Loaded before the student
-        // visibility filter so an auto-closed-at-deadline assignment the
-        // student was granted more time on still appears in their list.
-        var extensionDueAtBySetupID: [String: Date] = [:]
-        if let userID = user.id, !allAssignments.isEmpty {
-            let assignmentIDs = allAssignments.compactMap(\.id)
-            let extensions = try await APIAssignmentExtension.query(on: req.db)
-                .filter(\.$assignmentID ~~ Set(assignmentIDs))
-                .filter(\.$userID == userID)
-                .all()
-            let setupIDByAssignmentID = Dictionary(
-                uniqueKeysWithValues: allAssignments.compactMap { a -> (UUID, String)? in
-                    guard let id = a.id else { return nil }
-                    return (id, a.testSetupID)
-                }
-            )
-            for row in extensions {
-                guard let setupID = setupIDByAssignmentID[row.assignmentID] else { continue }
-                extensionDueAtBySetupID[setupID] = row.extendedDueAt
-            }
-        }
+        // The three independent reads that key off the assignment list run
+        // concurrently (helpers in WebRoutes+IndexLoading.swift): per-user
+        // extensions, prior engagement (keeps closed assignments visible),
+        // and the course sections used to group rows at the bottom of the
+        // page.
+        async let extensionsFetch = Self.loadExtensionDueDates(
+            user: user, allAssignments: allAssignments, db: req.db)
+        async let previouslyOpenedFetch = Self.loadPreviouslyOpenedSetupIDs(
+            user: user, allAssignments: allAssignments, db: req.db)
+        async let sectionsFetch = Self.loadCourseSections(
+            activeCourseUUID: courseState.activeCourseUUID, db: req.db)
 
-        // Closed assignments the current student has previously engaged with
-        // stay visible (read-only review) and keep their Edit link.  Engagement
-        // = a durable participation row, or a student submission (the latter
-        // also bridges students who submitted before the participation table
-        // existed).  Empty for instructors/admins — they already see every
-        // setup in the course.
-        var previouslyOpenedSetupIDs = Set<String>()
-        if !user.isInstructor, let userID = user.id, !allAssignments.isEmpty {
-            let allSetupIDs = Set(allAssignments.map(\.testSetupID))
-            let submittedSetupIDs = try await APISubmission.query(on: req.db)
-                .filter(\.$userID == userID)
-                .filter(\.$testSetupID ~~ allSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .all()
-                .map(\.testSetupID)
-            previouslyOpenedSetupIDs.formUnion(submittedSetupIDs)
-
-            let setupIDByParticipationAssignment = Dictionary(
-                uniqueKeysWithValues: allAssignments.compactMap { a -> (UUID, String)? in
-                    guard let id = a.id else { return nil }
-                    return (id, a.testSetupID)
-                }
-            )
-            let participations = try await APIAssignmentParticipation.query(on: req.db)
-                .filter(\.$userID == userID)
-                .filter(\.$assignmentID ~~ Set(setupIDByParticipationAssignment.keys))
-                .all()
-            for row in participations {
-                if let setupID = setupIDByParticipationAssignment[row.assignmentID] {
-                    previouslyOpenedSetupIDs.insert(setupID)
-                }
-            }
-        }
+        let extensionDueAtBySetupID = try await extensionsFetch
+        let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
 
         let setups: [APITestSetup]
         if user.isInstructor {
@@ -190,19 +147,22 @@ struct WebRoutes: RouteCollection {
             let setupIDs = setups.compactMap(\.id)
             if !setupIDs.isEmpty {
                 // Instructor grade overrides for this student take precedence
-                // over the runner-computed best grade below.
-                let overrideMap = try await loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
-                for setupID in setupIDs {
-                    if let pct = overrideMap[GradeOverrideKey(setupID: setupID, userID: userID)] {
-                        overridePercentBySetupID[setupID] = pct
-                    }
-                }
-                let submissions = try await APISubmission.query(on: req.db)
+                // over the runner-computed best grade below.  The override and
+                // submission reads are independent and run concurrently.
+                async let overridesFetch = loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
+                async let submissionsFetch = APISubmission.query(on: req.db)
                     .filter(\.$userID == userID)
                     .filter(\.$testSetupID ~~ setupIDs)
                     .filter(\.$kind == APISubmission.Kind.student)
                     .sort(\.$submittedAt, .descending)
                     .all()
+                let overrideMap = try await overridesFetch
+                for setupID in setupIDs {
+                    if let pct = overrideMap[GradeOverrideKey(setupID: setupID, userID: userID)] {
+                        overridePercentBySetupID[setupID] = pct
+                    }
+                }
+                let submissions = try await submissionsFetch
 
                 var grouped: [String: [APISubmission]] = [:]
                 for submission in submissions {
@@ -222,10 +182,22 @@ struct WebRoutes: RouteCollection {
 
                 let submissionIDs = submissions.compactMap(\.id)
                 if !submissionIDs.isEmpty {
-                    let resultRows = try await APIResult.query(on: req.db)
+                    // Results plus the three achievement reads only share
+                    // inputs computed above, so all four run concurrently.
+                    async let resultsFetch = APIResult.query(on: req.db)
                         .filter(\.$submissionID ~~ submissionIDs)
                         .sort(\.$receivedAt, .descending)
                         .all()
+                    async let disabledFetch = BuiltInAchievements.disabledBySetup(
+                        setupIDs: Array(setupIDs), on: req.db)
+                    async let perSubFetch = BuiltInAchievements.manifestPerSubmissionBySetup(
+                        setupIDs: Array(setupIDs), on: req.db)
+                    // Class-wide badges this user currently holds across all setups.
+                    async let classAchievementsFetch = APIClassAchievement.query(on: req.db)
+                        .filter(\.$userID == userID)
+                        .filter(\.$testSetupID ~~ setupIDs)
+                        .all()
+                    let resultRows = try await resultsFetch
 
                     // Keep one preferred result per submission:
                     // worker result first; browser result only if no worker exists.
@@ -258,10 +230,8 @@ struct WebRoutes: RouteCollection {
                         }
                     }
 
-                    let disabledBySetup = try await BuiltInAchievements.disabledBySetup(
-                        setupIDs: Array(setupIDs), on: req.db)
-                    let perSubBySetup = try await BuiltInAchievements.manifestPerSubmissionBySetup(
-                        setupIDs: Array(setupIDs), on: req.db)
+                    let disabledBySetup = try await disabledFetch
+                    let perSubBySetup = try await perSubFetch
                     for (setupID, latest) in latestSubmissionBySetupID {
                         guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
                             let result = preferredResultBySubmissionID[latest.submissionID],
@@ -289,11 +259,7 @@ struct WebRoutes: RouteCollection {
                             disabled: disabledBySetup[setupID] ?? [])
                     }
 
-                    // Batch-query class-wide badges this user currently holds across all setups.
-                    let classAchievements = try await APIClassAchievement.query(on: req.db)
-                        .filter(\.$userID == userID)
-                        .filter(\.$testSetupID ~~ setupIDs)
-                        .all()
+                    let classAchievements = try await classAchievementsFetch
                     for ach in classAchievements {
                         if let badge = AchievementBadge.forClassAchievement(
                             ach.achievementID, disabled: disabledBySetup[ach.testSetupID] ?? [])
@@ -444,16 +410,9 @@ struct WebRoutes: RouteCollection {
             )
         }
 
-        // Fetch sections for the active course to enable grouped display.
-        let allSections: [APICourseSection]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            allSections = try await APICourseSection.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .sort(\.$sortOrder, .ascending)
-                .all()
-        } else {
-            allSections = []
-        }
+        // Sections for the active course (fetch started up top) enable the
+        // grouped display below.
+        let allSections = try await sectionsFetch
 
         // Build lookup: testSetupID → section UUID
         let sectionBySetupID: [String: UUID] = Dictionary(
