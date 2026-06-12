@@ -136,6 +136,31 @@ struct AdminContext: Encodable {
     /// renders before the first poll.  The client re-fetches GET /admin/activity
     /// when the window changes or on its refresh interval.
     let activityChart: ActivityChartData
+
+    // Explicit initializer (rather than relying on the synthesized memberwise
+    // one): under the CI build's batch/non-WMO mode the synthesized init's
+    // symbol can fail to emit, producing an "undefined reference to
+    // AdminContext.init(...)" link error in chickadee-server. A hand-written
+    // init is emitted normally and sidesteps that. It is intentionally
+    // identical to the memberwise init, so silence the "unneeded" rule.
+    // swiftlint:disable:next unneeded_synthesized_initializer
+    init(
+        currentUser: CurrentUserContext?,
+        activeAdminTab: String,
+        workers: [AdminWorkerRow],
+        workerSecret: String,
+        courses: [AdminCourseRow],
+        version: String,
+        activityChart: ActivityChartData
+    ) {
+        self.currentUser = currentUser
+        self.activeAdminTab = activeAdminTab
+        self.workers = workers
+        self.workerSecret = workerSecret
+        self.courses = courses
+        self.version = version
+        self.activityChart = activityChart
+    }
 }
 
 struct AdminUsersContext: Encodable {
