@@ -50,4 +50,22 @@ import Testing
         #expect(MCPMode.readOnly.isMounted)
         #expect(MCPMode.readWrite.isMounted)
     }
+
+    /// `advertisedScopes` is the single source of truth for the discovery
+    /// metadata and DCR; order is stable (read before write) for deterministic
+    /// JSON output.
+    @Test func advertisedScopesMatchMode() {
+        #expect(MCPMode.off.advertisedScopes.isEmpty)
+        #expect(MCPMode.readOnly.advertisedScopes == [.read])
+        #expect(MCPMode.readWrite.advertisedScopes == [.read, .write])
+    }
+
+    /// `scopeCeiling` (the set used for per-request clamping) must always be the
+    /// set projection of `advertisedScopes`, so the runtime can never honor a
+    /// scope the metadata didn't advertise — or vice versa.
+    @Test func scopeCeilingIsTheSetOfAdvertisedScopes() {
+        for mode in MCPMode.allCases {
+            #expect(mode.scopeCeiling == Set(mode.advertisedScopes))
+        }
+    }
 }

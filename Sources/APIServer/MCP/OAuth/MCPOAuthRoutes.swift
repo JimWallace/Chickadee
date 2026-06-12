@@ -22,6 +22,7 @@ import Core
 import Crypto
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 struct MCPOAuthRoutes: Sendable {
@@ -55,6 +56,16 @@ struct MCPOAuthRoutes: Sendable {
             throw Abort(.badRequest, reason: "redirect_uri is not registered for this client.")
         }
 
+        // The Authorize button POSTs here and the server 303s to the client's
+        // (now-validated) redirect_uri. Browsers enforce `form-action` across
+        // that redirect, so the default `form-action 'self'` would silently
+        // block the hop to the connector — add the redirect origin. Likewise a
+        // connector may drive this in a popup expecting a `window.opener`
+        // handshake, which the default COOP `same-origin` severs; relax it.
+        SecurityHeadersMiddleware.allowFormAction(
+            SecurityHeadersMiddleware.cspOrigin(of: query.redirectURI), on: req)
+        SecurityHeadersMiddleware.setOpenerPolicy("same-origin-allow-popups", on: req)
+
         guard query.responseType == "code" else {
             return redirect(query.redirectURI, error: "unsupported_response_type", state: query.state)
         }
@@ -75,10 +86,43 @@ struct MCPOAuthRoutes: Sendable {
 
         let firstTimeApproval = try await Self.isFirstApproval(
             req, userID: user.id, clientID: client.clientID)
-        return try await renderConsent(
-            req, client: client, scopes: scopes, query: query,
-            notPermitted: !user.isInstructor, firstTimeApproval: firstTimeApproval)
+
+        // Mint a single-use consent token only for a permitted instructor. The
+        // token (not a cookie) carries identity + CSRF protection to the POST,
+        // so the submit works even when Safari/ITP drops the session cookie on
+        // the cross-site hop. Non-instructors get the not-permitted view and no
+        // actionable token.
+        var requestToken: String?
+        if let userID = user.id, user.isInstructor {
+            let token = Self.randomToken()
+            try await MCPConsentRequest(
+                tokenHash: sha256HexDigest(token),
+                userID: userID,
+                clientID: client.clientID,
+                redirectURI: query.redirectURI,
+                scope: scopes.map(\.rawValue).sorted().joined(separator: " "),
+                state: query.state,
+                codeChallenge: query.codeChallenge,
+                codeChallengeMethod: query.codeChallengeMethod,
+                expiresAt: Date().addingTimeInterval(Self.consentRequestTTLSeconds)
+            ).save(on: req.db)
+            requestToken = token
+        }
+
+        let ordered = ContentScope.allCases.filter { scopes.contains($0) }
+        let context = ConsentContext(
+            currentUser: req.currentUserContext,
+            clientName: client.name,
+            scopeLabels: ordered.map(Self.scopeLabel),
+            redirectHost: URLComponents(string: query.redirectURI)?.host ?? query.redirectURI,
+            firstTimeApproval: firstTimeApproval,
+            notPermitted: !user.isInstructor,
+            requestToken: requestToken)
+        return try await renderConsent(req, context: context)
     }
+
+    /// How long a rendered consent screen stays submittable.
+    static let consentRequestTTLSeconds: TimeInterval = 600
 
     /// True when the user holds no existing non-revoked grant for this client —
     /// drives the "you have not approved this app before" consent warning.
@@ -98,38 +142,89 @@ struct MCPOAuthRoutes: Sendable {
 
     @Sendable
     func authorizeSubmit(req: Request) async throws -> Response {
-        guard let user = req.auth.get(APIUser.self), user.isInstructor, let userID = user.id else {
-            throw Abort(.forbidden, reason: "Only instructors and admins may authorize agents.")
-        }
+        // Identity + CSRF ride on the single-use consent token, not the session
+        // cookie — so this works in the cross-site connector context where the
+        // cookie is dropped. Look the token up by hash, then burn it.
         let form = try req.content.decode(ConsentForm.self)
+        let tokenHash = sha256HexDigest(form.requestToken)
+        guard
+            let record = try await MCPConsentRequest.query(on: req.db)
+                .filter(\.$tokenHash == tokenHash).first(),
+            record.expiresAt > Date()
+        else {
+            throw Abort(
+                .badRequest,
+                reason: "This authorization request has expired or already been used. "
+                    + "Restart the connection to try again.")
+        }
+        // Single-use: atomically burn the consent token before any further work
+        // and only proceed if this submit won the burn — a concurrent replay
+        // loses the conditional UPDATE and is rejected.
+        guard
+            try await Self.burnConsumable(
+                on: req.db, table: MCPConsentRequest.schema, hashColumn: "token_hash", hash: tokenHash)
+        else {
+            throw Abort(
+                .badRequest,
+                reason: "This authorization request has expired or already been used. "
+                    + "Restart the connection to try again.")
+        }
+
+        // Re-validate the client/redirect from the frozen record (defense in
+        // depth — the record is server-authored, but a stale client edit could
+        // have dropped the redirect URI between GET and POST).
         guard
             let client = try await MCPOAuthClient.query(on: req.db)
-                .filter(\.$clientID == form.clientID).first(),
-            client.redirectURIs.contains(form.redirectURI)
+                .filter(\.$clientID == record.clientID).first(),
+            client.redirectURIs.contains(record.redirectURI)
         else {
             throw Abort(.badRequest, reason: "Invalid client or redirect_uri.")
         }
-        let state = form.state ?? ""
+        let state = record.state
         guard form.decision == "authorize" else {
-            return redirect(form.redirectURI, error: "access_denied", state: state)
+            return redirect(record.redirectURI, error: "access_denied", state: state)
         }
-        let scopes = resolveScopes(form.scope, ceiling: req.application.appConfig.mcp.mode.scopeCeiling)
-        guard !scopes.isEmpty, !form.codeChallenge.isEmpty, form.codeChallengeMethod == "S256" else {
-            return redirect(form.redirectURI, error: "invalid_request", state: state)
+        // Re-check the role from the bound user at submit time: a downgrade
+        // between rendering the consent screen and submitting it must stop here.
+        guard
+            let user = try await APIUser.find(record.userID, on: req.db), user.isInstructor
+        else {
+            throw Abort(.forbidden, reason: "Only instructors and admins may authorize agents.")
+        }
+        let scopes = resolveScopes(record.scope, ceiling: req.application.appConfig.mcp.mode.scopeCeiling)
+        guard !scopes.isEmpty, !record.codeChallenge.isEmpty, record.codeChallengeMethod == "S256" else {
+            return redirect(record.redirectURI, error: "invalid_request", state: state)
         }
 
         let code = Self.randomToken()
         let authCode = MCPAuthorizationCode(
             codeHash: sha256HexDigest(code),
             clientID: client.clientID,
-            userID: userID,
-            redirectURI: form.redirectURI,
-            codeChallenge: form.codeChallenge,
-            codeChallengeMethod: form.codeChallengeMethod,
+            userID: record.userID,
+            redirectURI: record.redirectURI,
+            codeChallenge: record.codeChallenge,
+            codeChallengeMethod: record.codeChallengeMethod,
             scope: scopes.map(\.rawValue).sorted().joined(separator: " "),
             expiresAt: Date().addingTimeInterval(60))
         try await authCode.save(on: req.db)
-        return redirect(form.redirectURI, code: code, state: state)
+        // The human consenting to an agent is the single most security-sensitive
+        // event in the MCP flow — record it (the headline "I authorized MCP and
+        // saw nothing in the audit log" gap).
+        await AuditLogger.record(
+            action: .mcpConsentGranted,
+            targetType: .user,
+            targetID: record.userID.uuidString,
+            metadata: [
+                "username": user.username,
+                "client_id": client.clientID,
+                "client_name": client.name,
+                "scope": authCode.scope,
+                "redirect_host": URLComponents(string: record.redirectURI)?.host ?? record.redirectURI,
+            ],
+            actorOverride: user,
+            on: req
+        )
+        return redirect(record.redirectURI, code: code, state: state)
     }
 
     // MARK: - POST /oauth/token
@@ -157,17 +252,24 @@ struct MCPOAuthRoutes: Sendable {
         else {
             return Self.tokenError(.badRequest, "invalid_request")
         }
+        let codeHash = sha256HexDigest(code)
         guard
             let authCode = try await MCPAuthorizationCode.query(on: req.db)
-                .filter(\.$codeHash == sha256HexDigest(code)).first(),
-            !authCode.consumed,
+                .filter(\.$codeHash == codeHash).first(),
             authCode.expiresAt > Date()
         else {
             return Self.tokenError(.badRequest, "invalid_grant")
         }
-        // Single-use: burn the code before any further work so a replay loses.
-        authCode.consumed = true
-        try await authCode.save(on: req.db)
+        // Single-use: atomically burn the code BEFORE any further work and only
+        // proceed if this request won the burn.  A concurrent replay of the same
+        // code loses the conditional UPDATE and is rejected (the prior in-process
+        // read-modify-write could otherwise mint two token pairs from one code).
+        guard
+            try await Self.burnConsumable(
+                on: req.db, table: MCPAuthorizationCode.schema, hashColumn: "code_hash", hash: codeHash)
+        else {
+            return Self.tokenError(.badRequest, "invalid_grant")
+        }
 
         guard
             authCode.redirectURI == redirectURI,
@@ -190,6 +292,22 @@ struct MCPOAuthRoutes: Sendable {
         let access = try await mintAccess(
             authority, subject: user.username, scope: authCode.scope,
             clientID: authCode.clientID, agentName: client?.name)
+        // Records the first access+refresh pair an agent receives after consent.
+        // (Routine hourly refresh rotation is deliberately NOT logged — high
+        // volume, low signal; refresh *theft* and downgrade-revoke are below.)
+        await AuditLogger.record(
+            action: .mcpTokenIssued,
+            targetType: .user,
+            targetID: authCode.userID.uuidString,
+            metadata: [
+                "username": user.username,
+                "client_id": authCode.clientID,
+                "client_name": client?.name ?? "",
+                "scope": authCode.scope,
+            ],
+            actorOverride: user,
+            on: req
+        )
         return try tokenSuccess(req, access: access, refresh: refresh, scope: authCode.scope)
     }
 
@@ -208,6 +326,20 @@ struct MCPOAuthRoutes: Sendable {
         {
             reused.revoked = true
             try await reused.save(on: req.db)
+            // Replay of a rotated-away token is a theft signal — record it (and
+            // who/what it was for) before refusing.
+            let reusedUsername = try await APIUser.find(reused.userID, on: req.db)?.username
+            await AuditLogger.record(
+                action: .mcpRefreshReuseDetected,
+                targetType: .user,
+                targetID: reused.userID.uuidString,
+                metadata: [
+                    "username": reusedUsername ?? reused.userID.uuidString,
+                    "client_id": reused.clientID,
+                ],
+                actorUsernameOverride: reusedUsername,
+                on: req
+            )
             return Self.tokenError(.badRequest, "invalid_grant")
         }
 
@@ -228,12 +360,33 @@ struct MCPOAuthRoutes: Sendable {
         guard user.isInstructor else {
             grant.revoked = true
             try await grant.save(on: req.db)
+            await AuditLogger.record(
+                action: .mcpGrantRevoked,
+                targetType: .user,
+                targetID: grant.userID.uuidString,
+                metadata: [
+                    "username": user.username,
+                    "client_id": grant.clientID,
+                    "reason": "role_downgrade",
+                ],
+                actorOverride: user,
+                on: req
+            )
             return Self.tokenError(.badRequest, "invalid_grant")
         }
-        // Rotate: remember the spent token (for replay detection) and issue a new one.
+        // Rotate: issue a new refresh token and swap it in atomically, gated on
+        // the CURRENT hash so two concurrent rotations of the same token can't
+        // both win (the loser matches zero rows and is rejected as a replay).
         let newRefresh = Self.randomToken()
-        grant.previousRefreshTokenHash = grant.refreshTokenHash
-        grant.refreshTokenHash = sha256HexDigest(newRefresh)
+        let newHash = sha256HexDigest(newRefresh)
+        guard try await Self.rotateRefreshHash(on: req.db, currentHash: hash, newHash: newHash) else {
+            return Self.tokenError(.badRequest, "invalid_grant")
+        }
+        // We won the rotation: mirror the swap onto the in-memory model and
+        // persist last-used telemetry (kept out of the atomic UPDATE to avoid
+        // Fluent↔raw-SQL date-format skew). Only the winner reaches this save.
+        grant.previousRefreshTokenHash = hash
+        grant.refreshTokenHash = newHash
         grant.lastUsedAt = Date()
         try await grant.save(on: req.db)
 
@@ -288,6 +441,15 @@ struct MCPOAuthRoutes: Sendable {
         // until an instructor/admin consents at /authorize.
         try await MCPOAuthClient(clientID: clientID, name: name, redirectURIs: redirects, isPublic: true)
             .save(on: req.db)
+        // Open registration is anonymous, but the new client is inert until an
+        // instructor consents — still worth a record of what was registered.
+        await AuditLogger.record(
+            action: .mcpClientRegistered,
+            targetType: .oauthClient,
+            targetID: clientID,
+            metadata: ["client_name": name, "redirect_uri_count": String(redirects.count)],
+            on: req
+        )
 
         let response = RegistrationResponse(
             clientID: clientID,
@@ -297,8 +459,11 @@ struct MCPOAuthRoutes: Sendable {
             grantTypes: ["authorization_code", "refresh_token"],
             responseTypes: ["code"],
             tokenEndpointAuthMethod: "none",
-            scope: req.application.appConfig.mcp.mode.scopeCeiling
-                .map(\.rawValue).sorted().joined(separator: " "))
+            // Grant exactly what the discovery metadata advertises — same
+            // source (MCPMode.advertisedScopes) so DCR and the .well-known docs
+            // can never disagree.
+            scope: req.application.appConfig.mcp.mode.advertisedScopes
+                .map(\.rawValue).joined(separator: " "))
         let result = Response(status: .created)
         try result.content.encode(response, as: .json)
         result.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
@@ -317,6 +482,8 @@ struct MCPOAuthRoutes: Sendable {
     private static func registrationError(_ error: String, _ description: String) -> Response {
         let response = Response(status: .badRequest)
         response.headers.contentType = .json
+        // RFC 6749 §5.1: credential/token-adjacent responses must not be cached.
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
         response.body = .init(string: "{\"error\":\"\(error)\",\"error_description\":\"\(description)\"}")
         return response
     }
@@ -359,26 +526,13 @@ struct MCPOAuthRoutes: Sendable {
             agentName: agentName)
     }
 
-    private func renderConsent(
-        _ req: Request, client: MCPOAuthClient, scopes: Set<ContentScope>,
-        query: AuthorizeQuery, notPermitted: Bool, firstTimeApproval: Bool
-    ) async throws -> Response {
-        let ordered = ContentScope.allCases.filter { scopes.contains($0) }
-        let context = ConsentContext(
-            currentUser: req.currentUserContext,
-            clientName: client.name,
-            scopeLabels: ordered.map(Self.scopeLabel),
-            scopeRaw: ordered.map(\.rawValue).joined(separator: " "),
-            clientID: client.clientID,
-            redirectURI: query.redirectURI,
-            redirectHost: URLComponents(string: query.redirectURI)?.host ?? query.redirectURI,
-            firstTimeApproval: firstTimeApproval,
-            state: query.state,
-            codeChallenge: query.codeChallenge,
-            codeChallengeMethod: query.codeChallengeMethod,
-            notPermitted: notPermitted)
+    private func renderConsent(_ req: Request, context: ConsentContext) async throws -> Response {
         let view = try await req.view.render("oauth-consent", context)
-        return try await view.encodeResponse(for: req)
+        let response = try await view.encodeResponse(for: req)
+        // The consent page embeds the single-use consent token; keep it out of
+        // any shared/proxy cache.
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+        return response
     }
 
     /// Keeps only valid content scopes, then clamps to the server-wide ceiling
@@ -446,21 +600,48 @@ struct MCPOAuthRoutes: Sendable {
     }
 
     private static func pkceMatches(verifier: String, challenge: String) -> Bool {
-        base64url(Data(SHA256.hash(data: Data(verifier.utf8)))) == challenge
+        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncodedString() == challenge
+    }
+
+    /// Atomically flips a single-use `consumed` flag from false→true for the row
+    /// whose `hashColumn` equals `hash`, returning true iff *this* call won the
+    /// flip.  One conditional `UPDATE … WHERE consumed = false RETURNING`
+    /// statement is atomic on both SQLite (WAL) and Postgres, so two concurrent
+    /// `/token` (or `/authorize`) submits of the same code/consent token can
+    /// never both win — closing the OAuth code-replay race that the prior
+    /// read-check-then-save left open.  `table`/`hashColumn` are compile-time
+    /// schema constants (no injection surface); only the hash is bound.
+    private static func burnConsumable(
+        on db: Database, table: String, hashColumn: String, hash: String
+    ) async throws -> Bool {
+        guard let sql = db as? SQLDatabase else { return true }
+        let rows = try await sql.raw(
+            "UPDATE \(unsafeRaw: table) SET consumed = true WHERE \(unsafeRaw: hashColumn) = \(bind: hash) AND consumed = false RETURNING id"
+        ).all()
+        return !rows.isEmpty
+    }
+
+    /// Atomically rotates a grant's refresh-token hash, gated on the *current*
+    /// hash so two concurrent rotations of the same refresh token can't both
+    /// succeed (the loser matches zero rows).  Returns true iff this call won the
+    /// rotation; the caller then mirrors the swap onto the in-memory model and
+    /// persists non-security telemetry (`lastUsedAt`).
+    private static func rotateRefreshHash(
+        on db: Database, currentHash: String, newHash: String
+    ) async throws -> Bool {
+        guard let sql = db as? SQLDatabase else { return true }
+        let rows = try await sql.raw(
+            "UPDATE \(unsafeRaw: MCPGrant.schema) SET previous_refresh_token_hash = refresh_token_hash, refresh_token_hash = \(bind: newHash) WHERE refresh_token_hash = \(bind: currentHash) AND revoked = false RETURNING id"
+        ).all()
+        return !rows.isEmpty
     }
 
     private static func randomToken() -> String {
         var rng = SystemRandomNumberGenerator()
         let bytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        return base64url(Data(bytes))
+        return Data(bytes).base64URLEncodedString()
     }
 
-    private static func base64url(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 }
 
 // MARK: - Request / response shapes
@@ -493,20 +674,15 @@ private struct AuthorizeQuery {
 }
 
 private struct ConsentForm: Content {
-    var clientID: String
-    var redirectURI: String
-    var scope: String
-    var state: String?
-    var codeChallenge: String
-    var codeChallengeMethod: String
+    /// The single-use consent token from the rendered form; everything else
+    /// (client, redirect, scope, PKCE, the consenting user) is frozen in the
+    /// server-side `MCPConsentRequest` keyed by this token.
+    var requestToken: String
     var decision: String
 
     enum CodingKeys: String, CodingKey {
-        case clientID = "client_id"
-        case redirectURI = "redirect_uri"
-        case scope, state, decision
-        case codeChallenge = "code_challenge"
-        case codeChallengeMethod = "code_challenge_method"
+        case requestToken = "request_token"
+        case decision
     }
 }
 
@@ -598,16 +774,13 @@ private struct ConsentContext: Encodable {
     let currentUser: CurrentUserContext?
     let clientName: String
     let scopeLabels: [String]
-    let scopeRaw: String
-    let clientID: String
-    let redirectURI: String
     /// Host portion of the redirect URI, shown prominently so the human can spot
     /// an unexpected destination (DCR client names are self-asserted).
     let redirectHost: String
     /// True when the user has never approved this client — drives a warning.
     let firstTimeApproval: Bool
-    let state: String
-    let codeChallenge: String
-    let codeChallengeMethod: String
     let notPermitted: Bool
+    /// Single-use consent token embedded in the form; nil for the not-permitted
+    /// view (no submittable form is shown).
+    let requestToken: String?
 }

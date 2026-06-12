@@ -42,6 +42,7 @@ struct AdminCourseRow: Encodable {
     let submissionCount: Int
     let createdAt: String
     var brightspaceOrgUnitID: String?
+    var brightspaceOrgUnitName: String?
     var brightspaceSyncEnabled: Bool
 }
 
@@ -237,6 +238,7 @@ struct AdminCourseAssignmentRow: Encodable {
     let title: String
     let dueAt: String?
     let isOpen: Bool
+    let visibility: String  // "closed" | "preview" | "open"
 }
 
 struct AdminAlertsRuleRow: Encodable {
@@ -267,6 +269,11 @@ struct AdminAlertsContext: Encodable {
 struct AdminAuditRow: Encodable {
     let timestamp: String
     let actor: String
+    /// Coarse grouping (e.g. "Authentication", "MCP / agents").
+    let category: String
+    /// Human-readable action label (e.g. "MCP access authorized").
+    let label: String
+    /// Raw machine action identifier, shown as a secondary <code> line.
     let action: String
     let targetType: String?
     let targetID: String?
@@ -274,10 +281,25 @@ struct AdminAuditRow: Encodable {
     let remoteAddr: String
 }
 
+/// One selectable option in the action-filter dropdown.
+struct AdminAuditFilterOption: Encodable {
+    let value: String
+    let label: String
+    let selected: Bool
+}
+
 struct AdminAuditContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeAdminTab: String
     let rows: [AdminAuditRow]
+    /// Available action filters (grouped label shown to the admin).
+    let actionOptions: [AdminAuditFilterOption]
+    /// The actor substring currently filtered on (echoed back into the input).
+    let filterActor: String
+    /// True when any filter is active — drives the "Clear filters" affordance.
+    let filtered: Bool
+    /// Total entries matching the current filter (may exceed the 200 shown).
+    let matchCount: Int
 }
 
 /// One archived course on the retention report.

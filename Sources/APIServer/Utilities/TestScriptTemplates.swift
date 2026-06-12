@@ -373,7 +373,6 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                 # when NotebookExtractor has quarantined them inside an
                 # `if __name__ == "__main__":` block.
                 import ast
-                import inspect
 
                 target_function     = "\(functionName)"    # "" to skip per-function checks
                 parameter_count     = None                # int — require exactly N parameters
@@ -383,12 +382,25 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                 min_asserts_in_body = None                # int — require >= N asserts inside the function body
                 min_module_asserts  = None                # int — require >= N module-level asserts (anywhere)
 
-                # ── AST walk ───────────────────────────────────────────────────────
+                # ── AST walk (best-effort, per-cell) ───────────────────────────────
+                # Style is about the source text, not whether the whole notebook
+                # runs — so we parse each notebook cell on its own via student_ast()
+                # and merge the parseable ones. A single non-Python cell (e.g. a
+                # Markdown cell saved as code, or a half-written cell) is skipped
+                # instead of failing the style check on every other cell. We only
+                # error if NOTHING in the submission parses.
+                # (`student_source()` is the introspectable source — real
+                # module-level defs — on both runners; see RunnerCore extraction +
+                # the .chickadee_student_source sidecar.)
                 try:
-                    source = inspect.getsource(student_module)
-                    tree   = ast.parse(source)
+                    from test_runtime import student_ast, student_source
+                    _skipped = []
+                    tree = student_ast(_skipped)
                 except Exception as ex:
                     errored(f"Could not parse student source: {type(ex).__name__}: {ex}")
+
+                if not tree.body and not student_source().strip():
+                    errored("No student source was available to check.")
 
                 def _find_function(node, name):
                     for n in ast.walk(node):
@@ -413,9 +425,17 @@ func pythonTestScript(  // swiftlint:disable:this function_body_length
                 if target_function:
                     fn_node = _find_function(tree, target_function)
                     if fn_node is None:
+                        hint = "Hint: make sure the function name matches the assignment exactly."
+                        if _skipped:
+                            cells = ", ".join(label for label, _ in _skipped)
+                            hint = (
+                                f"Note: {len(_skipped)} cell(s) could not be parsed as Python "
+                                f"({cells}) and were skipped. If your function lives in one of "
+                                "them, fix that cell — e.g. a Markdown cell saved as a code cell."
+                            )
                         failed(
                             f"Function `{target_function}` is not defined in your submission.\\n"
-                            "Hint: make sure the function name matches the assignment exactly."
+                            + hint
                         )
 
                     if parameter_count is not None:

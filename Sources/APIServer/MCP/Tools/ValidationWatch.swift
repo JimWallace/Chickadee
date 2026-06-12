@@ -101,7 +101,7 @@ private func currentValidationPhase(
         let submission = try await APISubmission.find(subID, on: db)
     {
         switch submission.status {
-        case "assigned", "running": return (status, .running)
+        case SubmissionStatus.assigned.rawValue, SubmissionStatus.running.rawValue: return (status, .running)
         default: return (status, .queued)
         }
     }

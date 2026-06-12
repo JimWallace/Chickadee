@@ -8,7 +8,6 @@
 // MCPConfig, falling back to PUBLIC_BASE_URL.  The signing-key authority itself
 // is loaded asynchronously at startup (see runAPIServer).
 
-import CSRF
 import Core
 import Vapor
 
@@ -18,15 +17,37 @@ enum MCPToolCatalog {
     static var live: ToolRegistry {
         ToolRegistry([
             ListCoursesTool().erased(),
+            GetServerInfoTool().erased(),
             ListAssignmentsTool().erased(),
+            ListCourseSectionsTool().erased(),
             GetAssignmentTool().erased(),
             GetSuiteTool().erased(),
             GetNotebookTool().erased(),
+            GetSolutionTool().erased(),
+            GetGlobalInputsTool().erased(),
+            PreviewPersonalizationTool().erased(),
             ValidateAssignmentTool().erased(),
             UpdateAssignmentTool().erased(),
+            SetGradingModeTool().erased(),
             UpdateSuiteTool().erased(),
+            UpdateGlobalInputsTool().erased(),
+            UpdateSectionVariablesTool().erased(),
+            CreateSuiteSectionTool().erased(),
+            RenameSuiteSectionTool().erased(),
+            DeleteSuiteSectionTool().erased(),
+            MoveSuiteItemTool().erased(),
             UpdatePatternFamilyTool().erased(),
+            CreatePatternFamilyTool().erased(),
+            DeleteSuiteItemTool().erased(),
+            AuthorNotebookCheckTool().erased(),
             UpdateNotebookTool().erased(),
+            UpdateSolutionTool().erased(),
+            AuthorScriptTool().erased(),
+            CreateCourseSectionTool().erased(),
+            RenameCourseSectionTool().erased(),
+            DeleteCourseSectionTool().erased(),
+            ReorderCourseSectionsTool().erased(),
+            SetAssignmentCourseSectionTool().erased(),
             CloneAssignmentTool().erased(),
             CreateAssignmentTool().erased(),
         ])
@@ -74,6 +95,14 @@ func registerMCPRoutes(_ app: Application) throws {
         return
     }
 
+    if let warning = mcpAllowlistWarning(
+        environment: app.environment,
+        allowedHosts: mcp.allowedHosts,
+        allowedOrigins: mcp.allowedOrigins)
+    {
+        app.logger.warning("\(warning)")
+    }
+
     let dispatcher = MCPDispatcher(
         serverInfo: MCPServerInfo(
             name: "Chickadee MCP", version: ChickadeeVersion.current,
@@ -93,17 +122,20 @@ func registerMCPRoutes(_ app: Application) throws {
 
     try app.grouped(bearer).register(
         collection: MCPRoutes(dispatcher: dispatcher, configuration: routeConfiguration))
-    try app.register(collection: MCPMetadataRoutes(endpoints: endpoints))
+    try app.register(
+        collection: MCPMetadataRoutes(endpoints: endpoints, advertisedScopes: mcp.mode.advertisedScopes))
 
     app.logger.info(
         "MCP endpoint mounted at /mcp — issuer=\(endpoints.issuer), resource=\(endpoints.resource)")
 }
 
 /// Registers the Phase-2 browser OAuth flow when MCP is enabled: the consent
-/// `/oauth/authorize` (session + CSRF guarded) and the machine `/oauth/token`
-/// (no session/CSRF — a back-channel call from the agent).  A no-op otherwise.
+/// `GET /oauth/authorize` (session-guarded, mints a single-use consent token)
+/// plus the back-channel POSTs — the consent submit (guarded by that token, not
+/// a cookie) and the machine `/oauth/token`/`/revoke`/`/register`.  A no-op
+/// otherwise.
 func registerMCPOAuthRoutes(
-    _ app: Application, sessionAuth: UserSessionAuthenticator, csrf: CSRF
+    _ app: Application, sessionAuth: UserSessionAuthenticator
 ) throws {
     let mcp = app.appConfig.mcp
     guard mcp.mode.isMounted,
@@ -117,23 +149,44 @@ func registerMCPOAuthRoutes(
         maxRegisteredClients: mcp.maxRegisteredClients,
         maxRedirectURIsPerClient: mcp.maxRedirectURIsPerClient
     )
-    // Consent UI: needs a logged-in human + a CSRF-protected form.
-    let userFacing = app.grouped(sessionAuth, csrf)
-    userFacing.get("oauth", "authorize", use: oauth.authorizeForm)
-    userFacing.post("oauth", "authorize", use: oauth.authorizeSubmit)
-    // Token + revoke + register: back-channel POSTs — no session, no CSRF, but
-    // rate-limited per IP since they're unauthenticated (register is open).
+    // Consent screen (GET): needs the logged-in human so we can mint a
+    // consent token bound to them. The submit is handled separately below.
+    let consentForm = app.grouped(sessionAuth)
+    consentForm.get("oauth", "authorize", use: oauth.authorizeForm)
+    // Back-channel POSTs — rate-limited per IP, no session/CSRF middleware:
+    //   • /authorize submit is guarded by the single-use consent token (not a
+    //     cookie), so it survives Safari/ITP dropping the cross-site cookie;
+    //   • /token, /revoke, /register are machine calls from the agent.
     let limiter = MCPOAuthRateLimitMiddleware(
         perMinute: mcp.oauthRateLimitPerMin,
         trustForwardedFor: app.loginRateLimitConfiguration.trustForwardedFor
     )
     let backChannel = app.grouped(limiter)
+    backChannel.post("oauth", "authorize", use: oauth.authorizeSubmit)
     backChannel.post("oauth", "token", use: oauth.token)
     backChannel.post("oauth", "revoke", use: oauth.revoke)
     backChannel.post("oauth", "register", use: oauth.register)
 
     app.logger.info(
         "MCP browser OAuth flow mounted at /oauth/{authorize,token,revoke,register}")
+}
+
+/// The operator-facing warning to log when the MCP transport is being mounted
+/// in production with one or both DNS-rebinding guards disabled (an empty
+/// allowlist means "allow any" — see MCPRoutes.Configuration).  Nil when both
+/// are configured, or in non-production environments where empty allowlists
+/// are the normal development default.
+func mcpAllowlistWarning(
+    environment: Environment, allowedHosts: Set<String>, allowedOrigins: Set<String>
+) -> String? {
+    guard environment == .production else { return nil }
+    var unset: [String] = []
+    if allowedHosts.isEmpty { unset.append("MCP_ALLOWED_HOSTS") }
+    if allowedOrigins.isEmpty { unset.append("MCP_ALLOWED_ORIGINS") }
+    guard !unset.isEmpty else { return nil }
+    return "MCP transport mounted with \(unset.joined(separator: " and ")) unset — "
+        + "the Host/Origin DNS-rebinding guards are disabled. Set them to this "
+        + "deployment's public host and origin."
 }
 
 private extension String {

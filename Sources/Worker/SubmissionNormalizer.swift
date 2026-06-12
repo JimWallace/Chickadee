@@ -198,11 +198,30 @@ struct SubmissionNormalizer {
         )
         try extracted.source.write(to: destinationURL, atomically: true, encoding: .utf8)
         progress.producedPythonFiles.append(destinationURL)
+
+        let moduleRelative = relativePath(of: destinationURL, under: workspaceDirectory)
+
+        // Sidecar: the introspectable source (real module-level defs) so
+        // student_source()-based structural / AST NotebookChecks work — the
+        // executable module is exec(compile())-wrapped and not AST-introspectable.
+        // Written for the first root-level module, mirroring .chickadee_student_module.
+        if progress.preferredStudentModule == nil, preferredModuleIfRootLevel(moduleRelative) != nil {
+            let sidecarName = destinationURL.deletingPathExtension().lastPathComponent + ".source.py"
+            try extracted.introspectableSource.write(
+                to: workspaceDirectory.appendingPathComponent(sidecarName),
+                atomically: true,
+                encoding: .utf8
+            )
+            try sidecarName.write(
+                to: workspaceDirectory.appendingPathComponent(".chickadee_student_source"),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+
         progress.preferredStudentModule =
             progress.preferredStudentModule
-            ?? preferredModuleIfRootLevel(
-                relativePath(of: destinationURL, under: workspaceDirectory)
-            )
+            ?? preferredModuleIfRootLevel(moduleRelative)
 
         // v0.4.114: also preserve the original notebook bytes
         // alongside the flattened .py so source-level checks

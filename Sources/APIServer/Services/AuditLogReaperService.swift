@@ -12,8 +12,8 @@
 // Setting it to 0 disables the reaper (kept around for installs that
 // pipe audit_log to an external sink and want to manage retention there).
 //
-// Pattern mirrors `SessionReaperService` and `StuckSubmissionReaperService`
-// for consistency.  Uses Fluent's typed query instead of raw SQL so the
+// Periodic scaffolding lives in `PeriodicSweepMonitor`.  Uses Fluent's
+// typed query instead of raw SQL so the
 // `Date < timestamptz` comparison works on both SQLite and Postgres (raw
 // SQL would need a `::timestamptz` cast on Postgres for Fluent's
 // `.datetime` columns).
@@ -26,6 +26,9 @@ import Vapor
 /// last term" debugging window without amassing years of identifying
 /// metadata.
 let auditLogDefaultMaxAge: TimeInterval = 90 * 24 * 60 * 60
+
+/// Hourly: audit-log disposal is retention hygiene, not correctness.
+private let auditLogReaperSweepInterval: TimeInterval = 3600
 
 /// Deletes audit_log rows older than `maxAge`.  A `maxAge` of zero (or
 /// negative) is a no-op so operators can disable the reaper cleanly via
@@ -45,90 +48,28 @@ func reapStaleAuditLogEntries(
     logger.debug("Audit-log reaper sweep complete (cutoff=\(cutoff))")
 }
 
-final class AuditLogReaperMonitor: @unchecked Sendable {
-    private var task: Task<Void, Never>?
-    private let intervalNanoseconds: UInt64
-    private let maxAge: TimeInterval
-
-    init(interval: TimeInterval = 3600, maxAge: TimeInterval = auditLogDefaultMaxAge) {
-        intervalNanoseconds = UInt64(max(interval, 60) * 1_000_000_000)
-        self.maxAge = maxAge
-    }
-
-    func start(application: Application) {
-        guard task == nil else { return }
-        task = Task { [maxAge, intervalNanoseconds] in
-            while !Task.isCancelled {
-                do {
-                    try await reapStaleAuditLogEntries(
-                        on: application.db,
-                        logger: application.logger,
-                        maxAge: maxAge
-                    )
-                } catch {
-                    application.logger.error(
-                        "Audit-log reaper sweep failed: \(error.localizedDescription)"
-                    )
-                }
-                do {
-                    try await Task.sleep(nanoseconds: intervalNanoseconds)
-                } catch {
-                    break
-                }
-            }
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-    }
-}
-
 struct AuditLogReaperMonitorKey: StorageKey {
-    typealias Value = AuditLogReaperMonitor
-}
-
-struct AuditLogReaperLifecycleHandler: LifecycleHandler {
-    let maxAge: TimeInterval
-
-    init(maxAge: TimeInterval = auditLogDefaultMaxAge) {
-        self.maxAge = maxAge
-    }
-
-    func didBoot(_ application: Application) throws {
-        // Best-effort first sweep at boot so a restart after a long quiet
-        // period doesn't have to wait an hour to reclaim space.
-        let maxAgeCapture = maxAge
-        Task {
-            do {
-                try await reapStaleAuditLogEntries(
-                    on: application.db,
-                    logger: application.logger,
-                    maxAge: maxAgeCapture
-                )
-            } catch {
-                application.logger.error(
-                    "Initial audit-log reaper sweep failed: \(error.localizedDescription)"
-                )
-            }
-        }
-        application.auditLogReaperMonitor(maxAge: maxAge).start(application: application)
-    }
-
-    func shutdown(_ application: Application) {
-        application.storage[AuditLogReaperMonitorKey.self]?.stop()
-    }
+    typealias Value = PeriodicSweepMonitor
 }
 
 extension Application {
     /// Returns the singleton monitor, creating it with the supplied
     /// `maxAge` on first access.  Subsequent calls ignore the parameter —
-    /// the caller (lifecycle handler) is the one source of truth for
-    /// retention configuration.
-    func auditLogReaperMonitor(maxAge: TimeInterval = auditLogDefaultMaxAge) -> AuditLogReaperMonitor {
+    /// the caller (the registration site in `AppServices`) is the one
+    /// source of truth for retention configuration.
+    func auditLogReaperMonitor(maxAge: TimeInterval = auditLogDefaultMaxAge) -> PeriodicSweepMonitor {
         if let existing = storage[AuditLogReaperMonitorKey.self] { return existing }
-        let created = AuditLogReaperMonitor(maxAge: maxAge)
+        let created = PeriodicSweepMonitor(
+            name: "Audit-log reaper",
+            interval: auditLogReaperSweepInterval,
+            runImmediately: true
+        ) { application in
+            try await reapStaleAuditLogEntries(
+                on: application.db,
+                logger: application.logger,
+                maxAge: maxAge
+            )
+        }
         storage[AuditLogReaperMonitorKey.self] = created
         return created
     }

@@ -1,0 +1,6 @@
+{
+  "_comment": "Shared wording for the dependency-skip result. Both grading runners PRODUCE this string when a test's dependsOn prerequisite did not pass -- the native worker (skippedPrerequisiteMessage in Sources/Core/TestProperties.swift, used by RunnerDaemon) and the browser runner (Public/browser-runner.js). Two consumers PARSE it back: parseSkip in Sources/APIServer/Helpers/SubmissionOutputFormatting.swift and the SKIP_RE regex in Public/notebook.js. This fixture pins the wording so producers and parsers cannot drift apart. Consumed by Tests/CoreTests/DependencySkipMessageTests.swift, Tests/APITests (parseSkip round-trip), and Tests/BrowserRunnerJSTests/browser-runner.test.mjs.",
+  "prerequisite": "test_build.py",
+  "message": "Skipped: prerequisite 'test_build.py' did not pass",
+  "parsedBlockerName": "test_build"
+}

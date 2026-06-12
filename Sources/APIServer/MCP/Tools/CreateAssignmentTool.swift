@@ -87,7 +87,7 @@ struct CreateAssignmentTool: ContentTool {
         guard !title.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "title must not be empty.")
         }
-        try Self.validateNotebookShape(input.notebook)
+        try validateNotebookShape(input.notebook, tool: Self.name)
 
         let code = input.courseCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
@@ -125,25 +125,8 @@ struct CreateAssignmentTool: ContentTool {
             title: created.assignment.title,
             slug: created.assignment.slug,
             courseCode: course.code,
-            cellCount: Self.cellCount(of: input.notebook),
+            cellCount: notebookCellCount(input.notebook),
             isOpen: created.assignment.isOpen)
     }
 
-    private static func validateNotebookShape(_ notebook: JSONValue) throws {
-        guard case .object(let root) = notebook else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "notebook must be a JSON object.")
-        }
-        guard case .array? = root["cells"] else {
-            throw MCPToolError.invalidArguments(
-                tool: name, detail: "notebook must contain a \"cells\" array.")
-        }
-    }
-
-    private static func cellCount(of notebook: JSONValue) -> Int {
-        guard case .object(let root) = notebook, case .array(let cells)? = root["cells"] else {
-            return 0
-        }
-        return cells.count
-    }
 }

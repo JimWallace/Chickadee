@@ -172,6 +172,69 @@ final class AssignmentHelpersManifestTests {
         #expect(props.testSuites.first?.dependsOn.isEmpty ?? true)
     }
 
+    // Regression: deleting one script must never wipe the manifest's
+    // sections list, the surviving entries' sectionID membership, or the
+    // assignment-scope globals.  Previously `updateManifestRemovingScript`
+    // rebuilt the manifest without forwarding any of these, so a single
+    // delete dropped every section.
+    @Test func updateManifestRemovingScriptPreservesSectionsAndMembership() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-1"),
+                ConfiguredSuiteEntry(
+                    script: "02_release.py", tier: "release", order: 2,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-2"),
+            ],
+            includeMakefile: false,
+            sections: [
+                TestSuiteSection(id: "sec-1", name: "Question 1"),
+                TestSuiteSection(id: "sec-2", name: "Question 2"),
+            ],
+            globalVariables: [FamilyVariable(name: "limit", value: .int(5))]
+        )
+
+        let updated = try #require(
+            updateManifestRemovingScript(manifestJSON: original, filename: "01_public.py")
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.map(\.script) == ["02_release.py"])
+        // Both sections survive even though one was emptied by the delete.
+        #expect(props.sections.map(\.id) == ["sec-1", "sec-2"])
+        // The surviving entry keeps its section membership.
+        #expect(props.testSuites.first?.sectionID == "sec-2")
+        // Assignment-scope globals are untouched.
+        #expect(props.globalVariables.map(\.name) == ["limit"])
+    }
+
+    @Test func updateManifestAddingScriptPreservesSections() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil, sectionID: "sec-1")
+            ],
+            includeMakefile: false,
+            sections: [TestSuiteSection(id: "sec-1", name: "Question 1")]
+        )
+
+        let updated = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)
+            )
+        )
+
+        let props = try JSONDecoder().decode(TestProperties.self, from: Data(updated.utf8))
+        #expect(props.testSuites.map(\.script).sorted() == ["01_public.py", "02_public.py"])
+        #expect(props.sections.map(\.id) == ["sec-1"])
+        #expect(props.testSuites.first(where: { $0.script == "01_public.py" })?.sectionID == "sec-1")
+    }
+
     @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")

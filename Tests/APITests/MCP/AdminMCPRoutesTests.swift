@@ -202,8 +202,7 @@ import XCTVapor
                     let body = res.body.string
                     // No manual service-account creation in SSO mode...
                     #expect(body.contains("Create account") == false)
-                    // ...but the SSO/audit explanation and Connected Agents table show.
-                    #expect(body.contains("single sign-on"))
+                    // ...but the Connected Agents table still shows.
                     #expect(body.contains("Connected agents"))
                 })
         }
@@ -252,7 +251,7 @@ import XCTVapor
                     #expect(body.contains("Connected agents"))
                     #expect(body.contains("Claude Bot"))
                     #expect(body.contains("prof-x"))
-                    #expect(body.contains("No connected agents.") == false)
+                    #expect(body.contains("No agents have connected yet.") == false)
                 })
         }
     }

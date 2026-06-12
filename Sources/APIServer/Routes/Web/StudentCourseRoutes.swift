@@ -27,6 +27,10 @@ struct StudentCourseRoutes: RouteCollection {
             use: retestStudentAssignment
         )
         routes.post(
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "reset-notebook",
+            use: resetStudentAssignmentNotebook
+        )
+        routes.post(
             ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "extension",
             use: saveStudentAssignmentExtension
         )
@@ -34,6 +38,15 @@ struct StudentCourseRoutes: RouteCollection {
             ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "extension",
             "delete",
             use: deleteStudentAssignmentExtension
+        )
+        routes.post(
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "grade-override",
+            use: saveStudentAssignmentGradeOverride
+        )
+        routes.post(
+            ":courseCode", "students", ":urlToken", "assignments", ":assignmentID", "grade-override",
+            "delete",
+            use: deleteStudentAssignmentGradeOverride
         )
     }
 }

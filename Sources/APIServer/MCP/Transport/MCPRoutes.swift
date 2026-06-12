@@ -15,6 +15,8 @@
 // DNS-rebinding mitigation (transport spec §Security): the `Origin` header is
 // validated against an allowlist (403 on mismatch), and — because Vapor does
 // not do this by default — the `Host` header is pinned to an allowlist too.
+// The `MCP-Protocol-Version` header is validated when present (400 on an
+// unsupported revision, per §Protocol Version Header).
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
 
 import Core
@@ -63,6 +65,7 @@ struct MCPRoutes: RouteCollection {
     func handlePost(req: Request) async throws -> Response {
         try validateHost(req)
         try validateOrigin(req)
+        if let rejection = try protocolVersionRejection(req) { return rejection }
 
         let rpcRequest: JSONRPCRequest
         do {
@@ -149,6 +152,21 @@ struct MCPRoutes: RouteCollection {
         guard configuration.allowedOrigins.contains(origin) else {
             throw Abort(.forbidden, reason: "Origin is not in the allowlist.")
         }
+    }
+
+    /// Transport spec §Protocol Version Header: a request declaring an
+    /// `MCP-Protocol-Version` this server does not speak is rejected with
+    /// HTTP 400, framed as a JSON-RPC invalid-request error with a null id
+    /// (the body is never read).  An absent header is accepted: every client
+    /// omits it on `initialize` (the version isn't negotiated yet), and
+    /// pre-2025-06-18 clients never send the header at all.
+    private func protocolVersionRejection(_ req: Request) throws -> Response? {
+        guard let version = req.headers.first(name: "MCP-Protocol-Version"),
+            !MCPProtocol.supportedVersions.contains(version)
+        else { return nil }
+        return try jsonResponse(
+            .failure(id: .null, error: .invalidRequest("Unsupported MCP-Protocol-Version: \(version)")),
+            status: .badRequest)
     }
 
     // MARK: - Body / response helpers

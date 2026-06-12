@@ -143,7 +143,7 @@ import {
             bodyEl.appendChild(newControls);
 
             // CodeMirror mount.
-            cmMount = el('div', { id: 'cm-editor-mount' }, 'min-height:240px;border:1px solid var(--border,#ddd);border-radius:.3rem;overflow:auto;font-size:.875rem');
+            cmMount = el('div', { id: 'cm-editor-mount' }, 'min-height:240px;border:1px solid var(--border);border-radius:.3rem;overflow:auto;font-size:.875rem');
             bodyEl.appendChild(cmMount);
 
             // Hint (shown to students on failure) — visible in all modes.

@@ -17,10 +17,12 @@ DATA_DIR="${DATA_DIR:-/data}"
 echo "[entrypoint] Syncing static assets to ${DATA_DIR} ..."
 mkdir -p "${DATA_DIR}"
 
-# Replace Public/ and Resources/ on every start so deploys are always fresh.
-rm -rf "${DATA_DIR}/Public" "${DATA_DIR}/Resources"
+# Replace Public/, Resources/, and docs/ on every start so deploys are always
+# fresh. docs/ feeds the MCP authoring-guide resources (MCPResourceProvider).
+rm -rf "${DATA_DIR}/Public" "${DATA_DIR}/Resources" "${DATA_DIR}/docs"
 cp -r /app/Public    "${DATA_DIR}/Public"
 cp -r /app/Resources "${DATA_DIR}/Resources"
+cp -r /app/docs      "${DATA_DIR}/docs"
 
 echo "[entrypoint] Starting chickadee-server ..."
 cd "${DATA_DIR}"

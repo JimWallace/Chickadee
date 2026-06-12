@@ -71,55 +71,8 @@ extension DraftAssignmentRoutes {
     @Sendable
     func createDraftScript(req: Request) async throws -> Response {
         let setup = try await loadDraftSetup(req)
-
-        struct CreateBody: Content {
-            var filename: String
-            var content: String
-            var tier: String?
-            var points: Int?
-            var isTest: Bool?
-        }
-        let body = try req.content.decode(CreateBody.self)
-
-        let cleaned = sanitizeSuiteFilename(body.filename)
-        guard !cleaned.isEmpty, cleaned == body.filename else {
-            throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(body.filename)'")
-        }
-
-        if listZipEntries(zipPath: setup.zipPath).contains(cleaned) {
-            throw WebAssignmentError.conflict(reason: "A file named '\(cleaned)' already exists in this setup")
-        }
-
-        // Slice 1: prepend assignment-scope variables (section vars get
-        // applied on the next suite-edit save once the new entry's
-        // sectionID is known).
-        let inlinedContent: String = {
-            guard let manifest = setup.decodedManifest()
-
-            else { return body.content }
-            return TestScriptVariablePrepender.applyForRawScript(
-                filename: cleaned,
-                content: body.content,
-                manifest: manifest
-            )
-        }()
-        try updateScriptInZip(zipPath: setup.zipPath, filename: cleaned, content: inlinedContent)
-
-        let tier = normalizeTier(body.tier, isTest: body.isTest)
-        // v0.4.105: allow 0-mark tests for guards (see AssignmentRoutes+Editor).
-        let points = max(0, body.points ?? 1)
-        let shouldTest = tier != "support"
-
-        if shouldTest {
-            let entry = ConfiguredSuiteEntry(
-                script: cleaned, tier: tier, order: 0,
-                dependsOn: [], points: points, displayName: nil
-            )
-            if let updated = updateManifestAddingScript(manifestJSON: setup.manifest, entry: entry) {
-                setup.manifest = updated
-                try await setup.save(on: req.db)
-            }
-        }
+        let body = try req.content.decode(CreateScriptBody.self)
+        let result = try await createScriptInSetup(setup: setup, body: body, on: req.db)
 
         struct CreatedResponse: Content {
             var filename: String
@@ -128,13 +81,14 @@ extension DraftAssignmentRoutes {
             var isTest: Bool
         }
         // Note: no editURL yet — the draft doesn't have a stable assignment
-        // route.  The create page re-renders with the updated suite state
-        // to pick up the new row.
+        // route — and no shared-dir re-extraction (a draft has no students).
+        // The create page re-renders with the updated suite state to pick up
+        // the new row.
         let resp = CreatedResponse(
-            filename: cleaned,
-            tier: tier,
-            points: points,
-            isTest: shouldTest
+            filename: result.filename,
+            tier: result.tier,
+            points: result.points,
+            isTest: result.isTest
         )
         return try await resp.encodeResponse(status: .created, for: req)
     }
@@ -145,35 +99,7 @@ extension DraftAssignmentRoutes {
     func deleteDraftScript(req: Request) async throws -> HTTPStatus {
         let setup = try await loadDraftSetup(req)
         let filename = try safeScriptFilename(from: req)
-
-        guard listZipEntries(zipPath: setup.zipPath).contains(filename) else {
-            throw WebAssignmentError.notFound(resource: "File '\(filename)' in setup zip")
-        }
-
-        if let familyID = generatedByFamilyID(manifestJSON: setup.manifest, filename: filename) {
-            throw WebAssignmentError.conflict(
-                reason: "'\(filename)' is generated from pattern family '\(familyID)'. Remove it via the family editor."
-            )
-        }
-
-        let dependents = manifestDependents(manifestJSON: setup.manifest, filename: filename)
-        guard dependents.isEmpty else {
-            throw WebAssignmentError.conflict(
-                reason:
-                    "Cannot delete '\(filename)': the following scripts depend on it: \(dependents.joined(separator: ", "))"
-            )
-        }
-
-        do {
-            try removeScriptFromZip(zipPath: setup.zipPath, filename: filename)
-        } catch ScriptZipError.zipFailed {
-            throw WebAssignmentError.internalFailure(reason: "Failed to update setup zip")
-        }
-
-        if let updated = updateManifestRemovingScript(manifestJSON: setup.manifest, filename: filename) {
-            setup.manifest = updated
-            try await setup.save(on: req.db)
-        }
+        try await deleteScriptFromSetup(setup: setup, filename: filename, on: req.db)
         return .noContent
     }
 

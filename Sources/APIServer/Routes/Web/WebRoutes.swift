@@ -29,6 +29,7 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "history", use: submissionHistoryPage)
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
+        routes.post("testsetups", ":testSetupID", "reset-notebook", use: resetOwnNotebook)
         routes.get("submissions", ":submissionID", use: submissionPage)
     }
 
@@ -83,63 +84,20 @@ struct WebRoutes: RouteCollection {
             uniquingKeysWith: { first, _ in first }
         )
 
-        // Per-user active extensions for the current user, keyed by
-        // testSetupID (the dashboard works in setup space; the assignment for
-        // each row is looked up separately).  Loaded before the student
-        // visibility filter so an auto-closed-at-deadline assignment the
-        // student was granted more time on still appears in their list.
-        var extensionDueAtBySetupID: [String: Date] = [:]
-        if let userID = user.id, !allAssignments.isEmpty {
-            let assignmentIDs = allAssignments.compactMap(\.id)
-            let extensions = try await APIAssignmentExtension.query(on: req.db)
-                .filter(\.$assignmentID ~~ Set(assignmentIDs))
-                .filter(\.$userID == userID)
-                .all()
-            let setupIDByAssignmentID = Dictionary(
-                uniqueKeysWithValues: allAssignments.compactMap { a -> (UUID, String)? in
-                    guard let id = a.id else { return nil }
-                    return (id, a.testSetupID)
-                }
-            )
-            for row in extensions {
-                guard let setupID = setupIDByAssignmentID[row.assignmentID] else { continue }
-                extensionDueAtBySetupID[setupID] = row.extendedDueAt
-            }
-        }
+        // The three independent reads that key off the assignment list run
+        // concurrently (helpers in WebRoutes+IndexLoading.swift): per-user
+        // extensions, prior engagement (keeps closed assignments visible),
+        // and the course sections used to group rows at the bottom of the
+        // page.
+        async let extensionsFetch = Self.loadExtensionDueDates(
+            user: user, allAssignments: allAssignments, db: req.db)
+        async let previouslyOpenedFetch = Self.loadPreviouslyOpenedSetupIDs(
+            user: user, allAssignments: allAssignments, db: req.db)
+        async let sectionsFetch = Self.loadCourseSections(
+            activeCourseUUID: courseState.activeCourseUUID, db: req.db)
 
-        // Closed assignments the current student has previously engaged with
-        // stay visible (read-only review) and keep their Edit link.  Engagement
-        // = a durable participation row, or a student submission (the latter
-        // also bridges students who submitted before the participation table
-        // existed).  Empty for instructors/admins — they already see every
-        // setup in the course.
-        var previouslyOpenedSetupIDs = Set<String>()
-        if !user.isInstructor, let userID = user.id, !allAssignments.isEmpty {
-            let allSetupIDs = Set(allAssignments.map(\.testSetupID))
-            let submittedSetupIDs = try await APISubmission.query(on: req.db)
-                .filter(\.$userID == userID)
-                .filter(\.$testSetupID ~~ allSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .all()
-                .map(\.testSetupID)
-            previouslyOpenedSetupIDs.formUnion(submittedSetupIDs)
-
-            let setupIDByParticipationAssignment = Dictionary(
-                uniqueKeysWithValues: allAssignments.compactMap { a -> (UUID, String)? in
-                    guard let id = a.id else { return nil }
-                    return (id, a.testSetupID)
-                }
-            )
-            let participations = try await APIAssignmentParticipation.query(on: req.db)
-                .filter(\.$userID == userID)
-                .filter(\.$assignmentID ~~ Set(setupIDByParticipationAssignment.keys))
-                .all()
-            for row in participations {
-                if let setupID = setupIDByParticipationAssignment[row.assignmentID] {
-                    previouslyOpenedSetupIDs.insert(setupID)
-                }
-            }
-        }
+        let extensionDueAtBySetupID = try await extensionsFetch
+        let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
 
         let setups: [APITestSetup]
         if user.isInstructor {
@@ -171,9 +129,7 @@ struct WebRoutes: RouteCollection {
             guard !visibleSetupIDs.isEmpty else {
                 return try await req.view.render(
                     "index",
-                    IndexContext(
-                        sections: [], ungroupedSetups: [], hasSections: false, hasUngrouped: false,
-                        currentUser: userContext)
+                    IndexContext(displayGroups: [], hasAny: false, currentUser: userContext)
                 ).encodeResponse(for: req)
             }
             setups = try await APITestSetup.query(on: req.db)
@@ -185,16 +141,28 @@ struct WebRoutes: RouteCollection {
         var latestSubmissionBySetupID: [String: LatestSubmissionItem] = [:]
         var submissionCountBySetupID: [String: Int] = [:]
         var bestGradePercentBySetupID: [String: Int] = [:]
+        var overridePercentBySetupID: [String: Int] = [:]
         var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
         if let userID = user.id {
             let setupIDs = setups.compactMap(\.id)
             if !setupIDs.isEmpty {
-                let submissions = try await APISubmission.query(on: req.db)
+                // Instructor grade overrides for this student take precedence
+                // over the runner-computed best grade below.  The override and
+                // submission reads are independent and run concurrently.
+                async let overridesFetch = loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
+                async let submissionsFetch = APISubmission.query(on: req.db)
                     .filter(\.$userID == userID)
                     .filter(\.$testSetupID ~~ setupIDs)
                     .filter(\.$kind == APISubmission.Kind.student)
                     .sort(\.$submittedAt, .descending)
                     .all()
+                let overrideMap = try await overridesFetch
+                for setupID in setupIDs {
+                    if let pct = overrideMap[GradeOverrideKey(setupID: setupID, userID: userID)] {
+                        overridePercentBySetupID[setupID] = pct
+                    }
+                }
+                let submissions = try await submissionsFetch
 
                 var grouped: [String: [APISubmission]] = [:]
                 for submission in submissions {
@@ -214,10 +182,22 @@ struct WebRoutes: RouteCollection {
 
                 let submissionIDs = submissions.compactMap(\.id)
                 if !submissionIDs.isEmpty {
-                    let resultRows = try await APIResult.query(on: req.db)
+                    // Results plus the three achievement reads only share
+                    // inputs computed above, so all four run concurrently.
+                    async let resultsFetch = APIResult.query(on: req.db)
                         .filter(\.$submissionID ~~ submissionIDs)
                         .sort(\.$receivedAt, .descending)
                         .all()
+                    async let disabledFetch = BuiltInAchievements.disabledBySetup(
+                        setupIDs: Array(setupIDs), on: req.db)
+                    async let perSubFetch = BuiltInAchievements.manifestPerSubmissionBySetup(
+                        setupIDs: Array(setupIDs), on: req.db)
+                    // Class-wide badges this user currently holds across all setups.
+                    async let classAchievementsFetch = APIClassAchievement.query(on: req.db)
+                        .filter(\.$userID == userID)
+                        .filter(\.$testSetupID ~~ setupIDs)
+                        .all()
+                    let resultRows = try await resultsFetch
 
                     // Keep one preferred result per submission:
                     // worker result first; browser result only if no worker exists.
@@ -239,7 +219,7 @@ struct WebRoutes: RouteCollection {
                     for submission in submissions {
                         guard let subID = submission.id,
                             let result = preferredResultBySubmissionID[subID],
-                            let gradePercent = gradePercentFromCollectionJSON(result.collectionJSON)
+                            let gradePercent = result.gradePercentValue
                         else {
                             continue
                         }
@@ -250,15 +230,12 @@ struct WebRoutes: RouteCollection {
                         }
                     }
 
+                    let disabledBySetup = try await disabledFetch
+                    let perSubBySetup = try await perSubFetch
                     for (setupID, latest) in latestSubmissionBySetupID {
                         guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
                             let result = preferredResultBySubmissionID[latest.submissionID],
-                            let assignment = assignmentBySetup[setupID],
-                            let collection = visibleCollection(
-                                from: result.collectionJSON,
-                                for: user,
-                                assignment: assignment
-                            ),
+                            let collection = decodedCollection(from: result.collectionJSON),
                             let gradePercent = gradePercent(from: collection)
                         else {
                             continue
@@ -269,7 +246,7 @@ struct WebRoutes: RouteCollection {
                             guard let psID = ps.id,
                                 let pr = preferredResultBySubmissionID[psID]
                             else { return nil }
-                            return gradePercentFromCollectionJSON(pr.collectionJSON)
+                            return pr.gradePercentValue
                         }
                         latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(
                             BadgeContext(
@@ -277,16 +254,16 @@ struct WebRoutes: RouteCollection {
                                 gradePercent: gradePercent,
                                 executionTimeMs: collection.executionTimeMs,
                                 priorGradePercent: priorGradePercent
-                            ))
+                            ),
+                            achievements: perSubBySetup[setupID],
+                            disabled: disabledBySetup[setupID] ?? [])
                     }
 
-                    // Batch-query class-wide badges this user currently holds across all setups.
-                    let classAchievements = try await APIClassAchievement.query(on: req.db)
-                        .filter(\.$userID == userID)
-                        .filter(\.$testSetupID ~~ setupIDs)
-                        .all()
+                    let classAchievements = try await classAchievementsFetch
                     for ach in classAchievements {
-                        if let badge = AchievementBadge.forClassAchievement(ach.achievementID) {
+                        if let badge = AchievementBadge.forClassAchievement(
+                            ach.achievementID, disabled: disabledBySetup[ach.testSetupID] ?? [])
+                        {
                             latestBadgesBySetupID[ach.testSetupID, default: []].append(badge)
                         }
                     }
@@ -311,6 +288,23 @@ struct WebRoutes: RouteCollection {
             }
         }
 
+        // Notebook presence drives the Edit button.  The zip-derived answer
+        // costs an `unzip` subprocess per setup, so it is resolved through
+        // NotebookPresenceCache (keyed by zip mtime + size) instead of being
+        // recomputed on every dashboard view.
+        var hasNotebookBySetupID: [String: Bool] = [:]
+        for setup in sortedSetups {
+            let setupID = setup.id ?? ""
+            if let path = setup.notebookPath, !path.isEmpty,
+                FileManager.default.fileExists(atPath: path)
+            {
+                hasNotebookBySetupID[setupID] = true
+            } else {
+                hasNotebookBySetupID[setupID] = await req.application.notebookPresenceCache
+                    .zipContainsNotebook(zipPath: setup.zipPath)
+            }
+        }
+
         let rows = sortedSetups.map { setup -> TestSetupRow in
             let setupID = setup.id ?? ""
             let data = Data(setup.manifest.utf8)
@@ -325,23 +319,30 @@ struct WebRoutes: RouteCollection {
                 guard let assignment, let startsAt = assignment.startsAt else { return false }
                 return Date() < startsAt
             }()
+            // Preview is staff-only: staff see it functioning as "open" with a
+            // subtle staff-only marker, while to students it is indistinguishable
+            // from "closed". So the displayed status is resolved per viewer.
             let status: String
+            let staffOnly: Bool
             if let assignment {
-                status = assignment.isOpen ? "open" : "closed"
+                switch assignment.visibility {
+                case .open:
+                    status = "open"
+                    staffOnly = false
+                case .closed:
+                    status = "closed"
+                    staffOnly = false
+                case .preview:
+                    status = user.isInstructor ? "open" : "closed"
+                    staffOnly = user.isInstructor
+                }
             } else {
                 status = "unpublished"
+                staffOnly = false
             }
-            let hasNotebook: Bool = {
-                // True when the setup has a flat notebook file on disk, or the zip
-                // contains at least one .ipynb entry.
-                if let path = setup.notebookPath, !path.isEmpty,
-                    FileManager.default.fileExists(atPath: path)
-                {
-                    return true
-                }
-                return listZipEntries(zipPath: setup.zipPath)
-                    .contains { $0.hasSuffix(".ipynb") }
-            }()
+            // True when the setup has a flat notebook file on disk, or the zip
+            // contains at least one .ipynb entry (resolved above via the cache).
+            let hasNotebook = hasNotebookBySetupID[setupID] ?? false
             let vanityBaseURL: String? = {
                 guard let assignment,
                     let courseCode = courseState.active?.code,
@@ -367,12 +368,15 @@ struct WebRoutes: RouteCollection {
             }()
             let isOpenForThisUser: Bool = {
                 guard let assignment else { return false }
+                // Preview is open for staff, closed for students; staff testing a
+                // preview also bypass the future-open-date gate (see submissionGate).
+                let gate = assignment.visibility.submissionGate(isStaff: user.isInstructor)
                 return isAssignmentOpenForUser(
-                    isOpen: assignment.isOpen,
+                    isOpen: gate.treatAsOpen,
                     overrideActive: assignment.deadlineOverrideActive ?? false,
                     baselineDueAt: baselineDueAt,
                     effectiveDueAt: effectiveDueAt,
-                    startsAt: assignment.startsAt
+                    startsAt: gate.honorsStartDate ? assignment.startsAt : nil
                 )
             }()
             let canEdit = isOpenForThisUser || previouslyOpenedSetupIDs.contains(setupID)
@@ -387,6 +391,7 @@ struct WebRoutes: RouteCollection {
                 dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
                 opensAtText: notYetOpen ? assignment?.startsAt.map { fmt.string(from: $0) } : nil,
                 status: status,
+                staffOnly: staffOnly,
                 isOpen: isOpenForThisUser,
                 canEdit: canEdit,
                 gradingMode: props?.gradingMode.rawValue ?? GradingMode.worker.rawValue,
@@ -396,23 +401,18 @@ struct WebRoutes: RouteCollection {
                 latestSubmissionID: latestSubmission?.submissionID ?? "",
                 latestSubmittedAtText: latestSubmission?.submittedAtText ?? "—",
                 additionalSubmissionCount: max(submissionCount - 1, 0),
-                bestGradeText: bestGradePercentBySetupID[setupID].map { "\($0)%" },
+                bestGradeText: overridePercentBySetupID[setupID].map { "\($0)%" }
+                    ?? bestGradePercentBySetupID[setupID].map { "\($0)%" },
+                gradeIsOverridden: overridePercentBySetupID[setupID] != nil,
                 badges: latestBadgesBySetupID[setupID] ?? [],
                 hasActiveExtension: hasActiveExtension,
                 effectiveDueAtText: effectiveDueAt.map { fmt.string(from: $0) }
             )
         }
 
-        // Fetch sections for the active course to enable grouped display.
-        let allSections: [APICourseSection]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            allSections = try await APICourseSection.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .sort(\.$sortOrder, .ascending)
-                .all()
-        } else {
-            allSections = []
-        }
+        // Sections for the active course (fetch started up top) enable the
+        // grouped display below.
+        let allSections = try await sectionsFetch
 
         // Build lookup: testSetupID → section UUID
         let sectionBySetupID: [String: UUID] = Dictionary(
@@ -434,21 +434,23 @@ struct WebRoutes: RouteCollection {
             }
         }
 
-        // Build per-section contexts, skipping sections with no visible items.
-        let sectionContexts: [IndexSectionContext] = allSections.compactMap { section in
+        // Build the ordered display groups: named sections (skipping any with no
+        // visible items) first, then a trailing unnamed bucket for ungrouped items.
+        var displayGroups: [IndexDisplayGroup] = allSections.compactMap { section in
             guard let sID = section.id else { return nil }
             let sectionRows = rowsBySectionID[sID] ?? []
             guard !sectionRows.isEmpty else { return nil }
-            return IndexSectionContext(sectionID: sID.uuidString, name: section.name, setups: sectionRows)
+            return IndexDisplayGroup(name: section.name, setups: sectionRows)
+        }
+        if !ungroupedSetups.isEmpty {
+            displayGroups.append(IndexDisplayGroup(name: nil, setups: ungroupedSetups))
         }
 
         return try await req.view.render(
             "index",
             IndexContext(
-                sections: sectionContexts,
-                ungroupedSetups: ungroupedSetups,
-                hasSections: !allSections.isEmpty,
-                hasUngrouped: !ungroupedSetups.isEmpty,
+                displayGroups: displayGroups,
+                hasAny: !displayGroups.isEmpty,
                 currentUser: userContext
             )
         ).encodeResponse(for: req)

@@ -76,10 +76,8 @@
         return lastActivity + timeoutMs;
     }
 
-    function csrfToken() {
-        var el = document.querySelector('meta[name="csrf-token"]');
-        return el ? el.getAttribute('content') : '';
-    }
+    // Shared implementation (Public/chickadee-ui.js).
+    var csrfToken = ChickadeeUI.getCsrfToken;
 
     // --- activity ---------------------------------------------------------
 

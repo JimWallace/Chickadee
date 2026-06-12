@@ -20,7 +20,7 @@ import Foundation
 /// appear in the map; callers should fall back to 0.
 func enrolledStudentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
     async let studentIDsFetch = APIUser.query(on: db)
-        .filter(\.$role == "student")
+        .filter(\.$role == UserRole.student.rawValue)
         .all()
         .map { $0.id }
     async let enrollmentsFetch = APICourseEnrollment.query(on: db).all()
@@ -50,7 +50,7 @@ func enrolledStudentCount(forCourse courseID: UUID, on db: Database) async throw
         enrolledUserIDs.isEmpty
         ? 0
         : APIUser.query(on: db)
-            .filter(\.$role == "student")
+            .filter(\.$role == UserRole.student.rawValue)
             .filter(\.$id ~~ enrolledUserIDs)
             .count()
     async let preCountFetch = APIPreEnrollment.query(on: db)

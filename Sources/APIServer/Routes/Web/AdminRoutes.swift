@@ -76,6 +76,7 @@ struct AdminRoutes: RouteCollection {
             courseIDs: activeCourseIDs, on: req.db)
         let bsSyncEnabled = req.application.brightSpaceClient != nil
         // Archived courses move out of Overview and live on the Retention tab.
+        let iso = ISO8601DateFormatter()
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
             guard let id = course.id, !course.isArchived else { return nil }
             return AdminCourseRow(
@@ -87,7 +88,7 @@ struct AdminRoutes: RouteCollection {
                 enrollmentCount: enrollmentCounts[id] ?? 0,
                 assignmentCount: assignmentCounts[id] ?? 0,
                 submissionCount: submissionCounts[id] ?? 0,
-                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+                createdAt: course.createdAt.map { iso.string(from: $0) } ?? "—",
                 brightspaceOrgUnitID: course.brightspaceOrgUnitID,
                 brightspaceSyncEnabled: bsSyncEnabled
             )
@@ -308,7 +309,10 @@ struct AdminRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(RoleBody.self)
-        guard ["student", "instructor", "admin"].contains(body.role) else {
+        guard
+            [UserRole.student.rawValue, UserRole.instructor.rawValue, UserRole.admin.rawValue]
+                .contains(body.role)
+        else {
             throw AppError.invalidParameter(
                 name: "role",
                 reason: "must be student, instructor, or admin (got '\(body.role)')")
@@ -386,34 +390,6 @@ struct AdminRoutes: RouteCollection {
             on: req
         )
         return req.redirect(to: "/admin")
-    }
-
-    // MARK: - GET /admin/audit
-
-    @Sendable
-    func auditPage(req: Request) async throws -> View {
-        let entries = try await APIAuditLogEntry.query(on: req.db)
-            .sort(\.$createdAt, .descending)
-            .limit(200)
-            .all()
-
-        let iso = ISO8601DateFormatter()
-        let rows = entries.map { e -> AdminAuditRow in
-            AdminAuditRow(
-                timestamp: e.createdAt.map { iso.string(from: $0) } ?? "—",
-                actor: e.actorUsername ?? "—",
-                action: e.action,
-                targetType: e.targetType,
-                targetID: e.targetID,
-                metadata: e.metadata ?? "",
-                remoteAddr: e.remoteAddr ?? "—"
-            )
-        }
-        return try await req.view.render(
-            "admin-audit",
-            AdminAuditContext(
-                currentUser: req.currentUserContext, activeAdminTab: "audit", rows: rows)
-        )
     }
 
     // MARK: - GET /admin/alerts

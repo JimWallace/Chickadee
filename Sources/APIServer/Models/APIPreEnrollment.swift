@@ -18,6 +18,7 @@ import Fluent
 import Vapor
 
 final class APIPreEnrollment: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "pre_enrollments"
 
     @ID(key: .id)

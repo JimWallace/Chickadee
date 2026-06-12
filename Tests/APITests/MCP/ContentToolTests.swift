@@ -36,6 +36,15 @@ import Vapor
         #expect(registry.all.map(\.name) == ["echo"])
     }
 
+    @Test func titleDerivesFromSnakeCaseName() {
+        // The default title Title-Cases the snake_case name; a single-word
+        // name just capitalizes.
+        #expect(EchoTool.title == "Echo")
+        #expect(GetServerInfoTool.title == "Get Server Info")
+        #expect(SetAssignmentCourseSectionTool.title == "Set Assignment Course Section")
+        #expect(EchoTool().erased().title == "Echo")
+    }
+
     @Test func erasedInvokeDecodesRunsAndEncodes() async throws {
         try await withApp(try await Application.make(.testing)) { app in
             let request = Request(application: app, on: app.eventLoopGroup.any())

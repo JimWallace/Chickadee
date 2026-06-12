@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "Cross-runner script-dispatch contract. Each case MUST classify to the same",
+    "kind in both runners:",
+    "  * native worker  -> Sources/Worker/ScriptInvocation.swift (scriptInvocation)",
+    "  * browser runner -> Public/browser-runner.js              (classifyScript)",
+    "Asserted by Tests/WorkerTests/ScriptDispatchContractTests.swift and",
+    "Tests/BrowserRunnerJSTests/script-dispatch-contract.test.mjs.",
+    "",
+    "Scope: the categories that real Chickadee assignments use and that both",
+    "runners must agree on -- python (the only browser-runnable kind), shell, and r.",
+    "Other interpreters (node/ruby/perl) and the last-resort fallback for an",
+    "unrecognised, non-shebang, non-Python file intentionally differ between the",
+    "runners (the worker tries /bin/sh; the browser reports unsupported) and are",
+    "therefore NOT part of this contract."
+  ],
+  "cases": [
+    { "name": "test_bit_count.py",        "content": "print('hi')\n",                                   "kind": "python", "note": "plain .py extension" },
+    { "name": "publictest_bmi_01.py",      "content": "import math\nassert True\n",                       "kind": "python", "note": "generated test script" },
+    { "name": "WARMUP.PY",                 "content": "print('hi')\n",                                   "kind": "python", "note": "uppercase extension lowercased" },
+    { "name": "beats",                     "content": "#!/usr/bin/env python3\nvariable_name = 'beats'\n", "kind": "python", "note": "extensionless + env-python shebang (the #754 bug)" },
+    { "name": "check_total",               "content": "#!/usr/bin/python3\nprint(1)\n",                  "kind": "python", "note": "extensionless + absolute-path python shebang" },
+    { "name": "leading_blank",             "content": "\n#!/usr/bin/env python3\nprint(1)\n",             "kind": "python", "note": "leading blank line before shebang" },
+    { "name": "sniff_import",              "content": "import sys\nsys.exit(0)\n",                        "kind": "python", "note": "no shebang, content-sniff: import" },
+    { "name": "sniff_def",                 "content": "# a comment\ndef test():\n    pass\n",             "kind": "python", "note": "no shebang, content-sniff: def after comment" },
+    { "name": "sniff_from",                "content": "from math import pi\n",                            "kind": "python", "note": "no shebang, content-sniff: from" },
+
+    { "name": "test_first_digit.sh",       "content": "echo hi\n",                                        "kind": "shell",  "note": "plain .sh extension" },
+    { "name": "build.bash",                "content": "echo hi\n",                                        "kind": "shell",  "note": ".bash extension" },
+    { "name": "runtests",                  "content": "#!/bin/sh\necho hi\n",                             "kind": "shell",  "note": "extensionless + /bin/sh shebang" },
+    { "name": "do_setup",                  "content": "#!/usr/bin/env bash\necho hi\n",                   "kind": "shell",  "note": "extensionless + env-bash shebang" },
+
+    { "name": "test_stats.R",              "content": "print(1)\n",                                       "kind": "r",      "note": "uppercase .R extension" },
+    { "name": "test_stats.r",              "content": "print(1)\n",                                       "kind": "r",      "note": "lowercase .r extension" }
+  ]
+}

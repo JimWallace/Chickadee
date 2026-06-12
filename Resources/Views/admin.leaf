@@ -39,24 +39,23 @@ Admin
 </section>
 
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <h2 style="margin:0">Runners</h2>
-        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-            <form method="post" action="/admin/runner-secret" style="display:flex;gap:.5rem;align-items:center">
+    <div class="page-titlebar admin-section-head">
+        <h2>Runners</h2>
+        <div class="toolbar">
+            <form method="post" action="/admin/runner-secret" class="toolbar toolbar--nowrap">
                 #csrfFormField()
-                <input class="form-input"
+                <input class="form-input worker-secret-input"
                        type="text"
                        name="secret"
                        value="#(workerSecret)"
                        autocomplete="new-password"
-                       placeholder="Worker shared secret"
-                       style="width:16rem">
+                       placeholder="Worker shared secret">
                 <button class="btn" type="submit">Save secret</button>
             </form>
         </div>
     </div>
 
-    <table id="workers-table" class="results-table">
+    <div class="table-scroll"><table id="workers-table" class="results-table">
             <thead>
                 <tr>
                     <th data-sort-key="runner" data-sort-type="text" tabindex="0" aria-sort="none">Runner</th>
@@ -81,11 +80,11 @@ Admin
                     <td>
                         <a href="/admin/runners/#(worker.workerID)"><code>#(worker.workerID)</code></a>
                         #if(worker.hostname != ""):
-                            <br><span style="font-size:.8em;color:var(--muted)">#(worker.hostname)</span>
+                            <br><span class="worker-host">#(worker.hostname)</span>
                         #endif
                     </td>
                     <td>#if(worker.runnerVersion != ""):#(worker.runnerVersion)#else:—#endif</td>
-                    <td class="time" #if(worker.assignedJobs > 0):style="font-weight:600"#endif>
+                    <td class="time#if(worker.assignedJobs > 0): runner-load-busy#endif">
                         #if(worker.maxConcurrentJobs > 0):
                             #(worker.assignedJobs)&thinsp;/&thinsp;#(worker.maxConcurrentJobs)
                         #else:
@@ -99,14 +98,14 @@ Admin
                 </tr>
             #endfor
             </tbody>
-        </table>
+        </table></div>
 </section>
 
 <!-- ── Courses ────────────────────────────────────────── -->
 <section class="admin-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <h2 style="margin:0">Courses</h2>
-        <div style="display:flex;gap:.5rem">
+    <div class="page-titlebar admin-courses-head">
+        <h2>Courses</h2>
+        <div class="admin-courses-actions">
             <a href="/admin/courses/new" class="btn">Create course</a>
             <button class="btn btn-primary" id="importCourseBtn">Import course</button>
         </div>
@@ -116,13 +115,13 @@ Admin
     <form method="post" action="/admin/courses/import" enctype="multipart/form-data"
           id="importCourseForm">
         #csrfFormField()
-        <input type="file" name="file" accept=".zip" id="importCourseFile" style="display:none">
+        <input type="file" name="file" accept=".zip" id="importCourseFile" hidden>
     </form>
 
     #if(courses.isEmpty):
     <p class="empty">No courses yet.</p>
     #else:
-    <table class="results-table" id="courses-table">
+    <div class="table-scroll"><table class="results-table" id="courses-table">
         <thead>
             <tr>
                 <th data-sort-key="code" data-sort-type="text" tabindex="0" aria-sort="none">Code</th>
@@ -139,19 +138,19 @@ Admin
                 <td>#(course.name)</td>
                 <td>#(course.enrollmentCount)</td>
                 <td>#(course.submissionCount)</td>
-                <td style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
-                    <form method="post" action="/admin/courses/#(course.id)/copy" style="display:inline;margin:0">
+                <td class="action-cell">
+                    <form method="post" action="/admin/courses/#(course.id)/copy" class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn" type="submit"
-                                title="Copy course" aria-label="Copy course" style="padding:.3rem .45rem"
+                        <button class="btn action-btn action-btn-icon" type="submit"
+                                title="Copy course" aria-label="Copy course"
                                 onclick="return confirm('Copy #(course.code)? All test setups and assignments will be duplicated into a new course.')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                         </button>
                     </form>
-                    <form method="post" action="/admin/courses/#(course.id)/archive" style="display:inline;margin:0">
+                    <form method="post" action="/admin/courses/#(course.id)/archive" class="inline-form">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit"
-                                title="Archive course" aria-label="Archive course" style="padding:.3rem .45rem"
+                        <button class="btn action-btn action-danger action-btn-icon" type="submit"
+                                title="Archive course" aria-label="Archive course"
                                 onclick="return confirm('Archive #(course.code)? Students will no longer see this course.')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
                         </button>
@@ -160,7 +159,7 @@ Admin
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 
 </section>
@@ -169,27 +168,39 @@ Admin
 .admin-diagnostics {
     padding-bottom: 1rem;
 }
-.diagnostics-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
+.admin-section-head {
+    gap: .5rem;
 }
-.diagnostic-card {
-    padding: .75rem .9rem;
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
+.toolbar--nowrap {
+    flex-wrap: nowrap;
 }
-.diagnostic-label {
-    color: var(--gray-600);
-    font-size: .82rem;
+.worker-secret-input {
+    width: 16rem;
 }
-.diagnostic-value {
-    margin-top: .2rem;
-    font-size: 1.2rem;
+@media (max-width: 640px) {
+    .toolbar--nowrap { flex-wrap: wrap; }
+    .worker-secret-input { width: 100%; }
+}
+.worker-host {
+    font-size: .8em;
+    color: var(--muted);
+}
+.runner-load-busy {
     font-weight: 600;
-    line-height: 1.2;
-    color: var(--gray-900);
+}
+.admin-courses-head {
+    gap: 0;
+    flex-wrap: nowrap;
+}
+.admin-courses-actions {
+    display: flex;
+    gap: .5rem;
+}
+.action-cell {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    align-items: center;
 }
 #workers-table th[data-sort-key],
 #courses-table th[data-sort-key] {
@@ -214,20 +225,8 @@ Admin
 tr.runner-row-offline {
     opacity: .5;
 }
-.runner-badge-offline {
-    display: inline-block;
-    font-size: .7rem;
-    font-weight: 600;
-    padding: .1rem .4rem;
-    border-radius: 999px;
-    background: var(--gray-200);
-    color: var(--gray-600);
-    vertical-align: middle;
-    margin-left: .3rem;
-    letter-spacing: .03em;
-    text-transform: uppercase;
-}
 </style>
+<script src="/relative-time.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -235,51 +234,8 @@ tr.runner-row-offline {
     var workersBody = document.getElementById('workers-body');
     if (!workersBody) return;
 
-    function escapeHtml(value) {
-        return String(value)
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#39;');
-    }
-
-    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-
-    function formatRelative(isoString) {
-        var date = new Date(isoString);
-        if (Number.isNaN(date.getTime())) return isoString;
-
-        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
-        var abs = Math.abs(seconds);
-
-        if (abs < 60) return relativeFormatter.format(seconds, 'second');
-        var minutes = Math.round(seconds / 60);
-        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
-        var hours = Math.round(minutes / 60);
-        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
-        var days = Math.round(hours / 24);
-        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
-        var weeks = Math.round(days / 7);
-        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
-        var months = Math.round(days / 30);
-        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
-        var years = Math.round(days / 365);
-        return relativeFormatter.format(years, 'year');
-    }
-
-    function applyRelativeTimes(root) {
-        var scope = root || document;
-        var nodes = scope.querySelectorAll('.js-relative-time[data-iso]');
-        nodes.forEach(function (el) {
-            var iso = el.getAttribute('data-iso');
-            if (!iso) return;
-            var date = new Date(iso);
-            if (Number.isNaN(date.getTime())) return;
-            el.textContent = formatRelative(iso);
-            el.title = date.toLocaleString();
-        });
-    }
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var escapeHtml = ChickadeeUI.escapeHtml;
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
     var diagQueueDepth = document.getElementById('diag-queue-depth');
@@ -373,11 +329,11 @@ tr.runner-row-offline {
 
             var idCell = '<a href="' + detailURL + '"><code>' + id + '</code></a>'
                 + (isOffline ? ' <span class="runner-badge-offline">Offline</span>' : '')
-                + (hostname ? '<br><span style="font-size:.8em;color:var(--muted)">' + hostname + '</span>' : '');
+                + (hostname ? '<br><span class="worker-host">' + hostname + '</span>' : '');
             var loadCell = maxJobs > 0
                 ? (assignedJobs + '&thinsp;/&thinsp;' + maxJobs)
                 : String(assignedJobs);
-            var loadStyle = assignedJobs > 0 ? ' style="font-weight:600"' : '';
+            var loadClass = assignedJobs > 0 ? ' runner-load-busy' : '';
 
             return '<tr'
                 + (isOffline ? ' class="runner-row-offline"' : '')
@@ -392,14 +348,14 @@ tr.runner-row-offline {
                 + '>'
                 + '<td>' + idCell + '</td>'
                 + '<td>' + (version || '—') + '</td>'
-                + '<td class="time"' + loadStyle + '>' + loadCell + '</td>'
+                + '<td class="time' + loadClass + '">' + loadCell + '</td>'
                 + '<td class="time">' + jobsProcessed + '</td>'
                 + '<td class="time">' + (avgRun || '—') + '</td>'
                 + '<td class="time">' + (avgWait || '—') + '</td>'
                 + '<td class="time js-relative-time" data-iso="' + lastActive + '">' + lastActive + '</td>'
                 + '</tr>';
         }).join('');
-        applyRelativeTimes(workersBody);
+        ChickadeeRelativeTime.applyRelativeTimes(workersBody);
         renderMaxLoadSummary();
     }
 
@@ -529,7 +485,7 @@ tr.runner-row-offline {
         }
     }
 
-    applyRelativeTimes(document);
+    ChickadeeRelativeTime.applyRelativeTimes(document);
     recomputeLoadSummaryFromTable();
     refreshWorkers();
     refreshDiagnostics();
@@ -608,7 +564,7 @@ tr.runner-row-offline {
     }
 
     setInterval(function () {
-        applyRelativeTimes(document);
+        ChickadeeRelativeTime.applyRelativeTimes(document);
         refreshWorkers();
     }, 5000);
     setInterval(refreshDiagnostics, 15000);

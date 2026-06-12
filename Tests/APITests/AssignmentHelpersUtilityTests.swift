@@ -18,6 +18,13 @@ final class AssignmentHelpersUtilityTests {
                 #"{"earnedPoints":7,"totalPoints":8,"passCount":1,"totalTests":4}"#
             ) == 88)
 
+        // Fractional earnedPoints (partial credit) rounds correctly: 2.75/4 = 68.75% → 69.
+        #expect(
+            gradePercentFromCollectionJSON(
+                #"{"earnedPoints":2.75,"totalPoints":4,"passCount":3,"totalTests":4}"#
+            ) == 69)
+        #expect(gradePointsFromCollectionJSON(#"{"earnedPoints":2.75,"totalPoints":4}"#) == 2.75)
+
         #expect(
             gradePercentFromCollectionJSON(
                 #"{"passCount":3,"totalTests":4}"#
@@ -25,6 +32,14 @@ final class AssignmentHelpersUtilityTests {
 
         #expect(gradePercentFromCollectionJSON(#"{"passCount":0,"totalTests":0}"#) == nil)
         #expect(gradePercentFromCollectionJSON("not-json") == nil)
+    }
+
+    @Test func formatPointsTrimsTrailingZeros() {
+        #expect(formatPoints(3) == "3")
+        #expect(formatPoints(2.0) == "2")
+        #expect(formatPoints(2.5) == "2.5")
+        #expect(formatPoints(2.75) == "2.75")
+        #expect(formatPoints(0) == "0")
     }
 
     @Test func csvEscapedQuotesOnlyWhenNeeded() {
@@ -137,131 +152,6 @@ final class AssignmentHelpersUtilityTests {
         #expect(result.existingSuiteRows[1].dependsOn == ["01_public.py"])
         #expect(result.existingSuiteRows[1].points == 3)
         #expect(result.existingSuiteRows[2].tier == "support")
-    }
-
-    @Test func resolveEditSuiteFilesFallbackPreservesExistingAndAppendsUploads() throws {
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("resolve-edit-fallback-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempRoot) }
-
-        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try ahMakeZip(
-            at: zipPath,
-            entries: [
-                ("assignment.ipynb", "{}"),
-                ("solution.ipynb", "{}"),
-                ("02_release.py", "print('release')"),
-                ("readme.txt", "support"),
-            ])
-
-        let uploads = [
-            ahMakeFile(named: "10_new.py", contents: "print('new')"),
-            ahMakeFile(named: "extra.txt", contents: "extra"),
-        ]
-
-        let resolved = try resolveEditSuiteFiles(
-            setupZipPath: zipPath,
-            setupManifestJSON: """
-                {
-                  "schemaVersion": 1,
-                  "gradingMode": "worker",
-                  "requiredFiles": [],
-                  "testSuites": [
-                    {"tier":"release","script":"02_release.py","points":2}
-                  ],
-                  "timeLimitSeconds": 10,
-                  "makefile": null
-                }
-                """,
-            uploadedSuiteFiles: uploads,
-            suiteConfigJSON: nil
-        )
-
-        #expect(resolved.files.map(\.filename) == ["02_release.py", "readme.txt", "10_new.py", "extra.txt"])
-        let configData = try #require(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
-        let rows = try JSONDecoder().decode([AHDecodedReindexedSuiteConfigRow].self, from: configData)
-        #expect(rows.map(\.tier) == ["release", "support", "public", "support"])
-        #expect(rows.map(\.isTest) == [true, false, true, false])
-        #expect(rows[0].points == 2)
-    }
-
-    @Test func resolveEditSuiteFilesExplicitConfigFiltersAndSanitizesSources() throws {
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("resolve-edit-explicit-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempRoot) }
-
-        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try ahMakeZip(
-            at: zipPath,
-            entries: [
-                ("existing.py", "print('existing')"),
-                ("keep.txt", "keep"),
-            ])
-
-        let uploads = [
-            ahMakeFile(named: "nested/new.py", contents: "print('upload')"),
-            ahMakeFile(named: "", contents: "fallback name"),
-        ]
-
-        let resolved = try resolveEditSuiteFiles(
-            setupZipPath: zipPath,
-            setupManifestJSON: "{}",
-            uploadedSuiteFiles: uploads,
-            suiteConfigJSON: """
-                [
-                  {"source":"existing","name":"existing.py","isTest":true,"tier":"SECRET","order":9,"dependsOn":["dep.py"],"points":4,"displayName":"Existing"},
-                  {"source":"upload","index":0,"isTest":true,"tier":"release","order":2},
-                  {"source":"upload","index":1,"isTest":false,"tier":"support","isIncluded":false},
-                  {"source":"existing","name":"../bad.py","isTest":true,"tier":"public"},
-                  {"source":"unknown","name":"skip.py","isTest":true}
-                ]
-                """
-        )
-
-        #expect(resolved.files.map(\.filename) == ["existing.py", "new.py"])
-        let configData = try #require(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
-        let rows = try JSONDecoder().decode([AHDecodedReindexedSuiteConfigRow].self, from: configData)
-        #expect(rows.count == 2)
-        #expect(rows[0].tier == "secret")
-        #expect(rows[0].dependsOn == ["dep.py"])
-        #expect(rows[0].points == 4)
-        #expect(rows[0].displayName == "Existing")
-        #expect(rows[1].tier == "release")
-        #expect(rows[1].isTest == true)
-    }
-
-    @Test func resolveEditSuiteFilesTreatsLegacyUncheckedRowsAsSupport() throws {
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("resolve-edit-legacy-support-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempRoot) }
-
-        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
-        try ahMakeZip(
-            at: zipPath,
-            entries: [
-                ("test_q1.py", "print('q1')"),
-                ("notes.txt", "notes"),
-            ])
-
-        let resolved = try resolveEditSuiteFiles(
-            setupZipPath: zipPath,
-            setupManifestJSON: "{}",
-            uploadedSuiteFiles: [],
-            suiteConfigJSON: """
-                [
-                  {"source":"existing","name":"test_q1.py","isTest":false,"tier":"public","order":1},
-                  {"source":"existing","name":"notes.txt","tier":"support","order":2}
-                ]
-                """
-        )
-
-        let configData = try #require(resolved.reindexedSuiteConfigJSON?.data(using: .utf8))
-        let rows = try JSONDecoder().decode([AHDecodedReindexedSuiteConfigRow].self, from: configData)
-        #expect(rows.map(\.tier) == ["support", "support"])
-        #expect(rows.map(\.isTest) == [false, false])
     }
 
     @Test func normalizeTierAndInferredOrderHandleFallbackCases() {
@@ -465,91 +355,4 @@ final class AssignmentHelpersUtilityTests {
         #expect(package.testSuites.count == 2)
     }
 
-    @Test func practiceLabBrowserSetupRoundTripPreservesAllSuiteFiles() throws {
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("practice-lab-roundtrip-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempRoot) }
-
-        let originalZipPath = tempRoot.appendingPathComponent("practice.zip").path
-        try ahMakeZip(
-            at: originalZipPath,
-            entries: [
-                ("assignment.ipynb", "{}"),
-                ("test.properties.json", #"{"gradingMode":"browser"}"#),
-                ("test_q1_bmi.py", "print('q1')"),
-                ("test_q2_bp.py", "print('q2')"),
-                ("test_q3_hr_zone.py", "print('q3')"),
-                ("test_q4_patients.py", "print('q4')"),
-                ("test_q5_dose.py", "print('q5')"),
-                ("test_q6_risk.py", "print('q6')"),
-            ])
-
-        let manifest = """
-            {
-              "schemaVersion": 1,
-              "gradingMode": "browser",
-              "requiredFiles": [],
-              "testSuites": [
-                {"tier":"public","script":"test_q1_bmi.py"},
-                {"tier":"public","script":"test_q2_bp.py"},
-                {"tier":"public","script":"test_q3_hr_zone.py"},
-                {"tier":"public","script":"test_q4_patients.py"},
-                {"tier":"release","script":"test_q5_dose.py"},
-                {"tier":"release","script":"test_q6_risk.py"}
-              ],
-              "timeLimitSeconds": 10,
-              "makefile": null,
-              "starterNotebook": "assignment.ipynb"
-            }
-            """
-
-        let resolved = try resolveEditSuiteFiles(
-            setupZipPath: originalZipPath,
-            setupManifestJSON: manifest,
-            uploadedSuiteFiles: [],
-            suiteConfigJSON: nil
-        )
-
-        #expect(
-            resolved.files.map(\.filename) == [
-                "test.properties.json",
-                "test_q1_bmi.py",
-                "test_q2_bp.py",
-                "test_q3_hr_zone.py",
-                "test_q4_patients.py",
-                "test_q5_dose.py",
-                "test_q6_risk.py",
-            ])
-
-        let rebuiltZipPath = tempRoot.appendingPathComponent("rebuilt.zip").path
-        _ = try createRunnerSetupZip(
-            suiteFiles: resolved.files,
-            suiteConfigJSON: resolved.reindexedSuiteConfigJSON,
-            zipPath: rebuiltZipPath
-        )
-
-        let setup = APITestSetup(
-            id: "practice_lab",
-            manifest: manifest,
-            zipPath: rebuiltZipPath,
-            notebookPath: tempRoot.appendingPathComponent("assignment.ipynb").path,
-            courseID: UUID()
-        )
-        try Data("{}".utf8).write(to: URL(fileURLWithPath: setup.notebookPath ?? ""))
-
-        let result = currentSetupFiles(for: setup, assignmentID: "asg_practice", solutionFilename: nil)
-
-        #expect(
-            result.existingSuiteRows.map(\.name) == [
-                "test_q1_bmi.py",
-                "test_q2_bp.py",
-                "test_q3_hr_zone.py",
-                "test_q4_patients.py",
-                "test_q5_dose.py",
-                "test_q6_risk.py",
-                "test.properties.json",
-            ])
-        #expect(result.existingSuiteRows.last?.tier == "support")
-    }
 }

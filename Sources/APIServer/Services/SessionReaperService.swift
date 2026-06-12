@@ -13,7 +13,8 @@
 // preserved on the assumption they'll be rewritten by Vapor on the next
 // session save and pick up a real timestamp.
 //
-// Pattern mirrors `StuckSubmissionReaperService` for consistency.
+// Periodic scaffolding lives in `PeriodicSweepMonitor`; this file keeps only
+// the sweep itself plus its storage key and accessor.
 
 import Fluent
 import Foundation
@@ -24,6 +25,9 @@ import Vapor
 /// = the 7-day cookie lifetime + 1-day grace for clock skew and stale-but-
 /// still-valid cookies that a slow client might be holding.
 private let sessionDefaultMaxAge: TimeInterval = 8 * 24 * 60 * 60
+
+/// Hourly: stale-session reclamation is space hygiene, not correctness.
+private let sessionReaperSweepInterval: TimeInterval = 3600
 
 func reapStaleSessions(
     on db: Database,
@@ -45,80 +49,21 @@ func reapStaleSessions(
     logger.debug("Session reaper sweep complete (cutoff=\(cutoffString))")
 }
 
-final class SessionReaperMonitor: @unchecked Sendable {
-    private var task: Task<Void, Never>?
-    private let intervalNanoseconds: UInt64
-    private let maxAge: TimeInterval
-
-    init(interval: TimeInterval = 3600, maxAge: TimeInterval = sessionDefaultMaxAge) {
-        intervalNanoseconds = UInt64(max(interval, 60) * 1_000_000_000)
-        self.maxAge = maxAge
-    }
-
-    func start(application: Application) {
-        guard task == nil else { return }
-        task = Task {
-            while !Task.isCancelled {
-                do {
-                    try await reapStaleSessions(
-                        on: application.db,
-                        logger: application.logger,
-                        maxAge: maxAge
-                    )
-                } catch {
-                    application.logger.error(
-                        "Session reaper sweep failed: \(error.localizedDescription)"
-                    )
-                }
-
-                do {
-                    try await Task.sleep(nanoseconds: intervalNanoseconds)
-                } catch {
-                    break
-                }
-            }
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-    }
-}
-
 struct SessionReaperMonitorKey: StorageKey {
-    typealias Value = SessionReaperMonitor
-}
-
-struct SessionReaperLifecycleHandler: LifecycleHandler {
-    func didBoot(_ application: Application) throws {
-        // Best-effort first sweep at boot so a restart after a long quiet
-        // period doesn't have to wait an hour to reclaim space.
-        Task {
-            do {
-                try await reapStaleSessions(
-                    on: application.db,
-                    logger: application.logger
-                )
-            } catch {
-                application.logger.error(
-                    "Initial session reaper sweep failed: \(error.localizedDescription)"
-                )
-            }
-        }
-        application.sessionReaperMonitor.start(application: application)
-    }
-
-    func shutdown(_ application: Application) {
-        application.sessionReaperMonitor.stop()
-    }
+    typealias Value = PeriodicSweepMonitor
 }
 
 extension Application {
-    var sessionReaperMonitor: SessionReaperMonitor {
+    var sessionReaperMonitor: PeriodicSweepMonitor {
         get {
             if let existing = storage[SessionReaperMonitorKey.self] { return existing }
-            let created = SessionReaperMonitor()
+            let created = PeriodicSweepMonitor(
+                name: "Session reaper",
+                interval: sessionReaperSweepInterval,
+                runImmediately: true
+            ) { application in
+                try await reapStaleSessions(on: application.db, logger: application.logger)
+            }
             storage[SessionReaperMonitorKey.self] = created
             return created
         }

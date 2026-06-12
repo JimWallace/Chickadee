@@ -14,8 +14,8 @@ Storage
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
 </nav>
 <section class="admin-section admin-diagnostics">
-    <div style="display:flex;align-items:baseline;justify-content:flex-end;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <span style="color:var(--gray-600);font-size:.85rem">Total: #(storage.totalFormatted) · DB: #(storage.dbBackend)</span>
+    <div class="storage-bar storage-bar--end">
+        <span class="storage-meta">Total: #(storage.totalFormatted) · DB: #(storage.dbBackend)</span>
     </div>
     <div class="diagnostics-cards">
         #for(row in storage.rows):
@@ -27,22 +27,22 @@ Storage
     </div>
 </section>
 <section class="admin-section">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
-        <h2 style="margin:0">By Assignment</h2>
-        <span style="color:var(--gray-600);font-size:.85rem">Largest first</span>
+    <div class="storage-bar">
+        <h2 class="storage-bar-title">By Assignment</h2>
+        <span class="storage-meta">Largest first</span>
     </div>
     #if(storage.assignments.isEmpty):
-    <p style="color:var(--muted)">No assignments yet.</p>
+    <p class="storage-muted">No assignments yet.</p>
     #else:
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Assignment</button></th>
                 <th data-sort-type="text"><button class="sort-header" type="button">Course</button></th>
-                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Test Suite</button></th>
-                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Submissions</button></th>
-                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Subs</button></th>
-                <th data-sort-type="number" style="text-align:right"><button class="sort-header" type="button">Total</button></th>
+                <th data-sort-type="number" class="storage-num"><button class="sort-header" type="button">Test Suite</button></th>
+                <th data-sort-type="number" class="storage-num"><button class="sort-header" type="button">Submissions</button></th>
+                <th data-sort-type="number" class="storage-num"><button class="sort-header" type="button">Subs</button></th>
+                <th data-sort-type="number" class="storage-num"><button class="sort-header" type="button">Total</button></th>
             </tr>
         </thead>
         <tbody>
@@ -50,38 +50,43 @@ Storage
             <tr>
                 <td>#(row.assignmentTitle)</td>
                 <td><code>#(row.courseCode)</code></td>
-                <td style="text-align:right" data-sort-value="#(row.testSuiteBytes)">#(row.testSuiteFormatted)</td>
-                <td style="text-align:right" data-sort-value="#(row.submissionsBytes)">#(row.submissionsFormatted)</td>
-                <td style="text-align:right" data-sort-value="#(row.submissionCount)">#(row.submissionCount)</td>
-                <td style="text-align:right;font-weight:600" data-sort-value="#(row.totalBytes)">#(row.totalFormatted)</td>
+                <td class="storage-num" data-sort-value="#(row.testSuiteBytes)">#(row.testSuiteFormatted)</td>
+                <td class="storage-num" data-sort-value="#(row.submissionsBytes)">#(row.submissionsFormatted)</td>
+                <td class="storage-num" data-sort-value="#(row.submissionCount)">#(row.submissionCount)</td>
+                <td class="storage-num storage-num--strong" data-sort-value="#(row.totalBytes)">#(row.totalFormatted)</td>
             </tr>
             #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 <style>
-.diagnostics-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: .75rem;
+.storage-bar {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: 1rem;
 }
-.diagnostic-card {
-    padding: .75rem .9rem;
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
+.storage-bar--end {
+    justify-content: flex-end;
 }
-.diagnostic-label {
+.storage-bar-title {
+    margin: 0;
+}
+.storage-meta {
     color: var(--gray-600);
-    font-size: .82rem;
+    font-size: .85rem;
 }
-.diagnostic-value {
-    margin-top: .2rem;
-    font-size: 1.2rem;
+.storage-muted {
+    color: var(--muted);
+}
+.storage-num {
+    text-align: right;
+}
+.storage-num--strong {
     font-weight: 600;
-    line-height: 1.2;
-    color: var(--gray-900);
 }
 </style>
 <script src="/sortable-table.js?v=#appVersion()"></script>

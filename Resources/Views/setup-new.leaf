@@ -7,14 +7,14 @@ Upload Test Setup
 <form class="form" method="post" action="/testsetups/new" enctype="multipart/form-data">
     #csrfFormField()
     <!-- ── Grading mode ─────────────────────────────────────── -->
-    <fieldset style="border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;margin-bottom:1.25rem">
-        <legend style="padding:0 .4rem;font-weight:600;font-size:.9rem">Grading mode</legend>
-        <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;cursor:pointer">
+    <fieldset class="option-fieldset">
+        <legend>Grading mode</legend>
+        <label class="radio-row">
             <input type="radio" name="gradingMode" value="browser" checked
                    onchange="toggleMode(this.value)">
             <span><strong>Browser</strong> — students run tests in-browser via Pyodide · upload <code>.ipynb</code></span>
         </label>
-        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+        <label class="radio-row">
             <input type="radio" name="gradingMode" value="worker"
                    onchange="toggleMode(this.value)">
             <span><strong>Runner</strong> — server-side shell scripts · upload <code>.zip</code></span>
@@ -34,7 +34,7 @@ Upload Test Setup
             Notebook (<code>.ipynb</code>)
             <input class="form-input" type="file" name="files" id="nb-input" accept=".ipynb" required>
         </label>
-        <p class="card-meta" style="margin-top:.25rem;font-size:.82rem">
+        <p class="card-meta field-note">
             The notebook must contain at least one code cell with a
             <code># TEST: name</code> comment.
         </p>
@@ -46,12 +46,12 @@ Upload Test Setup
             Test Setup Zip (<code>.zip</code>)
             <input class="form-input" type="file" name="files" id="zip-input" accept=".zip">
         </label>
-        <p class="card-meta" style="margin-top:.25rem;font-size:.82rem">
+        <p class="card-meta field-note">
             Zip must contain test scripts as <code>.sh</code> files at the root.
         </p>
     </div>
 
-    <div style="margin-top:1rem">
+    <div class="form-actions">
         <button class="btn btn-primary" type="submit">Upload</button>
         <a class="btn" href="/">Cancel</a>
     </div>

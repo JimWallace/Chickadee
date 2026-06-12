@@ -86,10 +86,10 @@ extension WorkerDaemon {
             paths: paths,
             stageTimings: &stageTimings
         )
-        defer { try? FileManager.default.removeItem(at: prepared.testSetupDir) }
+        defer { removeWorkspaceItem(at: prepared.testSetupDir, label: "test_setup_dir", job: job) }
 
         let testExecutionStartedAt = Date()
-        let outcomes = await executeTestSuites(
+        let outcomes = try await executeTestSuites(
             manifest: prepared.manifest,
             testSetupDir: prepared.testSetupDir,
             job: job
@@ -124,6 +124,26 @@ extension WorkerDaemon {
     }
 
     // MARK: - Per-job setup helpers
+
+    /// Best-effort workspace removal that leaves a structured breadcrumb on
+    /// failure — a silently leaked workdir is a disk leak ops can only find
+    /// from this log line. Quiet when the path is already gone.
+    private func removeWorkspaceItem(at url: URL, label: String, job: Job) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            writeStructuredRunnerLog(
+                event: "workspace_cleanup_failed",
+                fields: [
+                    "runner_id": workerID,
+                    "submission_id": job.submissionID,
+                    "label": label,
+                    "path": url.path,
+                    "error": String(describing: error),
+                ])
+        }
+    }
 
     private func logJobAccepted(_ job: Job) {
         writeStructuredRunnerLog(
@@ -185,7 +205,7 @@ extension WorkerDaemon {
         }
 
         let cleanupStartedAt = Date()
-        try? FileManager.default.removeItem(at: paths.workDir)
+        removeWorkspaceItem(at: paths.workDir, label: "work_dir", job: job)
         stageTimings.record("cleanup", milliseconds: Int(Date().timeIntervalSince(cleanupStartedAt) * 1000))
 
         let freeDiskMBPostCleanup = freeSpaceMB(at: tempRoot)
@@ -530,122 +550,78 @@ extension WorkerDaemon {
 
     // MARK: - Test execution
 
-    /// Walks `manifest.testSuites` in order, honouring the `dependsOn`
-    /// pass-gate: a test whose prerequisite hasn't passed is auto-failed
-    /// with a `Skipped:` short result instead of executed. Missing script
-    /// files are logged and skipped entirely (no outcome emitted, matching
-    /// the pre-extraction behaviour).
+    /// Projects the manifest entries to RunnerCore's runtime `SuiteItem` view
+    /// and drives the shared `executeSuites` loop. The dependency pass-gate,
+    /// skip messages, missing-script handling, and outcome shaping all live in
+    /// RunnerCore now — shared byte-for-byte with the browser runner. The worker
+    /// supplies its substrate (`NativeScriptExecutor`) and its structured
+    /// logging via the event sink.
     private func executeTestSuites(
         manifest: TestProperties,
         testSetupDir: URL,
         job: Job
-    ) async -> [TestOutcome] {
-        var outcomes: [TestOutcome] = []
-        var passedScripts: Set<String> = []
-
-        for entry in manifest.testSuites {
-            if let blockedBy = entry.dependsOn.first(where: { !passedScripts.contains($0) }),
-                !entry.dependsOn.isEmpty
-            {
-                let baseName = (entry.script as NSString).deletingPathExtension
-                let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-                outcomes.append(
-                    TestOutcome(
-                        testName: displayName ?? (baseName.isEmpty ? entry.script : baseName),
-                        testClass: nil,
-                        tier: entry.tier,
-                        status: .fail,
-                        shortResult: "Skipped: prerequisite '\(blockedBy)' did not pass",
-                        longResult: nil,
-                        executionTimeMs: 0,
-                        memoryUsageBytes: nil,
-                        attemptNumber: job.attemptNumber,
-                        isFirstPassSuccess: false
-                    ))
-                continue
-            }
-
-            let scriptURL = testSetupDir.appendingPathComponent(entry.script)
-            guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-                writeStructuredRunnerLog(
-                    event: "local_execution_error",
-                    fields: [
-                        "runner_id": workerID,
-                        "submission_id": job.submissionID,
-                        "test_id": entry.script,
-                        "error_type": "missing_script",
-                        "error_message_summary": entry.script,
-                    ])
-                continue
-            }
-
-            writeStructuredRunnerLog(
-                event: "test_execution_start",
-                fields: [
-                    "runner_id": workerID,
-                    "submission_id": job.submissionID,
-                    "test_id": entry.script,
-                ])
-
-            // Phase 1 of issue #461 — surface the per-(student, assignment)
-            // seed to the grading subprocess. Nil seed means non-personalized
-            // job; leaving the env var unset preserves legacy behaviour.
-            var scriptEnv: [String: String] = [:]
-            if let seed = job.assignmentSeed, !seed.isEmpty {
-                scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
-            }
-            let output = await runner.run(
-                script: scriptURL,
-                workDir: testSetupDir,
-                timeLimitSeconds: manifest.timeLimitSeconds,
-                env: scriptEnv
-            )
-
-            let isFirstAttempt = job.attemptNumber == 1
-            let outcome = interpretOutput(
-                output, entry: entry, attemptNumber: job.attemptNumber, isFirstAttempt: isFirstAttempt)
-            outcomes.append(outcome)
-            writeStructuredRunnerLog(
-                event: output.timedOut ? "timeout" : "test_execution_end",
-                fields: [
-                    "runner_id": workerID,
-                    "submission_id": job.submissionID,
-                    "test_id": normalizedTestID(for: outcome),
-                    "status": outcome.status.rawValue,
-                    "execution_ms": outcome.executionTimeMs,
-                ])
-            if outcome.status == .pass {
-                passedScripts.insert(entry.script)
-            }
+    ) async throws -> [TestOutcome] {
+        // Phase 1 of issue #461 — surface the per-(student, assignment) seed to
+        // the grading subprocess. Nil/empty seed means non-personalized job;
+        // leaving the env var unset preserves legacy behaviour.
+        var scriptEnv: [String: String] = [:]
+        if let seed = job.assignmentSeed, !seed.isEmpty {
+            scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
         }
 
-        return outcomes
-    }
+        // Materialize per-student personalization inputs (issue #461) into the
+        // grading workspace as `_ck_inputs.py`, so generated pattern-family
+        // scripts that reference per-student args / expected can load them by
+        // path. Each value is already a Python literal (`repr`) resolved
+        // server-side; keys are emitted as escaped Python string literals via
+        // `JSONValue.string(_:).pythonLiteral` — the same canonical escaping the
+        // renderer's reader and the browser path (`JSON.stringify`) use, so the
+        // three stay byte-for-byte consistent (input names are validated
+        // identifiers today, so this is defense in depth). The filename is
+        // reserved (excluded from student-module candidates in test_runtime), so
+        // it can't be mistaken for the submission.
+        if let inputs = job.personalizedInputs, !inputs.isEmpty {
+            var lines = [
+                "# Auto-generated per-student grading inputs (issue #461). Do not edit.",
+                "_ck = {",
+            ]
+            for key in inputs.keys.sorted() {
+                lines.append("    \(JSONValue.string(key).pythonLiteral): \(inputs[key] ?? "None"),")
+            }
+            lines.append("}")
+            let source = lines.joined(separator: "\n") + "\n"
+            // A failed write here would make every personalized test error with
+            // a confusing missing-file traceback that looks like a student
+            // mistake — and persist it as their grade. Throw instead so the job
+            // is reported as buildStatus:failed and stays retestable.
+            try source.write(
+                to: testSetupDir.appendingPathComponent("_ck_inputs.py"),
+                atomically: true, encoding: .utf8)
+        }
 
-    // MARK: - Script output interpretation
+        let executor = NativeScriptExecutor(runner: runner, workDir: testSetupDir, env: scriptEnv)
+        let items = manifest.testSuites.map { entry in
+            SuiteItem(
+                script: entry.script,
+                tier: entry.tier,
+                displayName: entry.name,
+                dependsOn: entry.dependsOn,
+                points: entry.points
+            )
+        }
 
-    private func interpretOutput(
-        _ output: ScriptOutput,
-        entry: TestSuiteEntry,
-        attemptNumber: Int,
-        isFirstAttempt: Bool
-    ) -> TestOutcome {
-        let interpreted = interpretScriptOutput(output)
-        let baseName = (entry.script as NSString).deletingPathExtension
-        let displayName = entry.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-
-        return TestOutcome(
-            testName: displayName ?? (baseName.isEmpty ? entry.script : baseName),
-            testClass: nil,
-            tier: entry.tier,
-            status: interpreted.status,
-            shortResult: interpreted.shortResult,
-            longResult: interpreted.longResult,
-            points: entry.points,
-            executionTimeMs: output.executionTimeMs,
-            memoryUsageBytes: nil,
-            attemptNumber: attemptNumber,
-            isFirstPassSuccess: isFirstAttempt && interpreted.status == .pass
+        // Capture only value types so the @Sendable event sink can run on the
+        // loop's (nonisolated) executor without touching actor state.
+        let runnerID = workerID
+        let submissionID = job.submissionID
+        return await executeSuites(
+            items,
+            timeLimitSeconds: manifest.timeLimitSeconds,
+            attemptNumber: job.attemptNumber,
+            executor: executor,
+            onEvent: { event in
+                logSuiteRunEvent(event, runnerID: runnerID, submissionID: submissionID)
+            }
         )
     }
 
@@ -657,13 +633,29 @@ extension WorkerDaemon {
         job: Job,
         startedAt: Date
     ) -> TestOutcomeCollection {
-        let passCount = outcomes.filter { $0.status == .pass }.count
-        let failCount = outcomes.filter { $0.status == .fail }.count
-        let errorCount = outcomes.filter { $0.status == .error }.count
-        let timeoutCount = outcomes.filter { $0.status == .timeout }.count
-        let totalMs = outcomes.reduce(0) { $0 + $1.executionTimeMs }
-        let totalPoints = outcomes.reduce(0) { $0 + $1.points }
-        let earnedPoints = outcomes.filter { $0.status == .pass }.reduce(0) { $0 + $1.points }
+        // One pass over the outcomes instead of six (4 × filter().count +
+        // 2 × reduce) — the codebase's own stated antipattern.
+        var passCount = 0
+        var failCount = 0
+        var errorCount = 0
+        var timeoutCount = 0
+        var totalMs = 0
+        var totalPoints = 0
+        // Weighted, partial-credit-aware: points × score per outcome (a script
+        // with no footer `score` scores 1 on a pass / 0 otherwise, so this equals
+        // the old "sum points for passing tests" for non-partial-credit suites).
+        var earnedPoints = 0.0
+        for outcome in outcomes {
+            switch outcome.status {
+            case .pass: passCount += 1
+            case .fail: failCount += 1
+            case .error: errorCount += 1
+            case .timeout: timeoutCount += 1
+            }
+            totalMs += outcome.executionTimeMs
+            totalPoints += outcome.points
+            earnedPoints += Double(outcome.points) * outcome.score
+        }
 
         let buildStatus: BuildStatus = outcomes.isEmpty ? .failed : .passed
 
@@ -693,74 +685,56 @@ extension WorkerDaemon {
 
 // MARK: - Script output interpretation (pure contract)
 
-/// The status + display strings derived from a single script's raw output.
-/// Extracted from `interpretOutput` so the stdout/stderr/exit-code → result
-/// contract can be unit-tested in isolation and locked against the browser
-/// runner (see Tests/Fixtures/output-contract.json).
-struct InterpretedScriptResult: Equatable {
-    let status: TestStatus
-    let shortResult: String
-    let longResult: String?
+// `InterpretedScriptResult` and `interpretScriptOutput(_:)` now live in
+// RunnerCore (the wasm-safe leaf shared with the browser runner), as does the
+// suite-execution loop itself (`executeSuites` + the `ScriptExecutor` protocol).
+// Reached here via `import Core` (which re-exports RunnerCore).
+
+// MARK: - Suite-run event logging
+
+/// Maps RunnerCore's `SuiteRunEvent`s onto the worker's structured log stream,
+/// preserving the exact event names and fields the loop used to emit inline
+/// (`local_execution_error` / `test_execution_start` / `test_execution_end` /
+/// `timeout`). A free function — not an actor method — so the shared
+/// `executeSuites` loop can invoke it from its own (nonisolated) executor; it
+/// captures only value types.
+private func logSuiteRunEvent(_ event: SuiteRunEvent, runnerID: String, submissionID: String) {
+    switch event {
+    case .missingScript(let script):
+        writeStructuredRunnerLog(
+            event: "local_execution_error",
+            fields: [
+                "runner_id": runnerID,
+                "submission_id": submissionID,
+                "test_id": script,
+                "error_type": "missing_script",
+                "error_message_summary": script,
+            ])
+    case .willRun(let script):
+        writeStructuredRunnerLog(
+            event: "test_execution_start",
+            fields: [
+                "runner_id": runnerID,
+                "submission_id": submissionID,
+                "test_id": script,
+            ])
+    case .didFinish(_, let outcome, let timedOut):
+        writeStructuredRunnerLog(
+            event: timedOut ? "timeout" : "test_execution_end",
+            fields: [
+                "runner_id": runnerID,
+                "submission_id": submissionID,
+                "test_id": normalizedTestID(for: outcome),
+                "status": outcome.status.rawValue,
+                "execution_ms": outcome.executionTimeMs,
+            ])
+    }
 }
 
-/// Pure interpretation of a script's `ScriptOutput` into status + display
-/// strings.  Behaviour MUST stay in lock-step with the browser runner's
-/// `runPyScript` (Public/browser-runner.js) for `status`; the corpus test
-/// documents where the `shortResult`/`longResult` formatting still differs.
-func interpretScriptOutput(_ output: ScriptOutput) -> InterpretedScriptResult {
-    let status: TestStatus
-    if output.timedOut {
-        status = .timeout
-    } else {
-        switch output.exitCode {
-        case 0: status = .pass
-        case 1: status = .fail
-        case 3: status = .fail  // chickadee.py (Marmoset) uses exit 3 for "failed"
-        default: status = .error
-        }
-    }
-
-    // Parse the last non-empty stdout line as optional JSON for score/shortResult.
-    let lastLine = output.stdout
-        .components(separatedBy: "\n")
-        .map { $0.trimmingCharacters(in: .whitespaces) }
-        .last(where: { !$0.isEmpty })
-
-    let shortResult: String
-    if let line = lastLine,
-        let data = line.data(using: .utf8),
-        let json = try? JSONDecoder().decode(ScriptResultJSON.self, from: data)
-    {
-        shortResult = json.shortResult ?? status.defaultShortResult
-        // json.score reserved for Phase 5 gamification
-    } else if let line = lastLine {
-        shortResult = line
-    } else {
-        shortResult = status.defaultShortResult
-    }
-
-    let stderrText = output.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-    // Strip the JSON footer line from stdout before displaying to students.
-    // The footer is the last non-empty line; if it parsed as JSON above we
-    // remove it so only human-readable output appears in longResult.
-    let strippedStdout: String = {
-        guard let line = lastLine,
-            let data = line.data(using: .utf8),
-            (try? JSONDecoder().decode(ScriptResultJSON.self, from: data)) != nil
-        else { return output.stdout }
-        var lines = output.stdout.components(separatedBy: "\n")
-        if let lastIdx = lines.indices.last(where: { !lines[$0].trimmingCharacters(in: .whitespaces).isEmpty }) {
-            lines.remove(at: lastIdx)
-        }
-        return lines.joined(separator: "\n")
-    }()
-    let stdoutText = strippedStdout.trimmingCharacters(in: .whitespacesAndNewlines)
-    let longResult: String? = {
-        var sections: [String] = []
-        if !stdoutText.isEmpty { sections.append("stdout:\n\(stdoutText)") }
-        if !stderrText.isEmpty { sections.append("stderr:\n\(stderrText)") }
-        return sections.isEmpty ? nil : sections.joined(separator: "\n\n")
-    }()
-
-    return InterpretedScriptResult(status: status, shortResult: shortResult, longResult: longResult)
+/// Combines `testClass` + `testName` into the dotted ID used in log events.
+/// Free function so both the `WorkerDaemon` actor and the suite-run event sink
+/// can call it without crossing an isolation boundary.
+func normalizedTestID(for outcome: TestOutcome) -> String {
+    let classPart = outcome.testClass?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return classPart.isEmpty ? outcome.testName : "\(classPart).\(outcome.testName)"
 }

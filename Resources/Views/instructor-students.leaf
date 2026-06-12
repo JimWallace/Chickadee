@@ -6,18 +6,17 @@ Students
 <nav class="instructor-tabs" aria-label="Instructor sections">
     <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
-    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>BrightSpace</a>
+    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
 </nav>
 
-<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-    <h1 style="font-size:1.05rem;font-weight:600;margin:0">Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h1>
+<div class="students-titlebar">
+    <h1 class="students-title">Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h1>
     #if(currentUser.activeCourse):
     #if(!courseIsArchived):
-    <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" style="margin:0">
+    <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" class="students-mode-form">
         #csrfFormField()
-        <label class="form-label" style="font-size:.875rem;margin:0">
-            <select name="enrollmentMode" class="form-input"
-                    style="display:block;font-size:.875rem"
+        <label class="form-label students-mode-label">
+            <select name="enrollmentMode" class="form-input students-mode-select"
                     onchange="this.form.submit()">
                 <option value="open"   #if(courseEnrollmentMode == "open"):selected#endif>Open enrolment</option>
                 <option value="auto"   #if(courseEnrollmentMode == "auto"):selected#endif>Auto enrolment</option>
@@ -27,10 +26,17 @@ Students
     </form>
     <a class="btn action-btn" href="/instructor/enroll-csv">Enrol from CSV</a>
     #endif
+    #if(brightspaceLinkAvailable):
+    <button type="button" class="btn action-btn" id="learn-check-btn"
+            title="Flag enrolled students who are no longer on the LEARN classlist">Check against LEARN</button>
+    <span id="learn-check-status" role="status" aria-live="polite"
+          class="students-learn-status"></span>
     #endif
-    <input id="enrolled-filter" class="form-input" type="search" autocomplete="off"
+    #endif
+    <input id="enrolled-filter" class="form-input filter-input students-filter" type="search" autocomplete="off"
+           style="--filter-width:220px"
            placeholder="Filter by name or username…"
-           style="width:220px;flex:1 1 220px;min-width:220px" aria-label="Filter enrolled students"
+           aria-label="Filter enrolled students"
            readonly onfocus="this.removeAttribute('readonly')">
 </div>
 
@@ -38,28 +44,29 @@ Students
        data-archived="#if(courseIsArchived):true#else:false#endif">
     <thead>
         <tr>
-            <th class="sortable" data-col="0" style="cursor:pointer;user-select:none">Name <span class="sort-icon">⇕</span></th>
-            <th class="sortable" data-col="1" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇕</span></th>
-            <th class="sortable" data-col="2" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇕</span></th>
-            <th class="sortable" data-col="3" style="cursor:pointer;user-select:none">Last Seen <span class="sort-icon">⇕</span></th>
+            <th class="sortable" data-col="0">Name <span class="sort-icon">⇕</span></th>
+            <th class="sortable" data-col="1">Username <span class="sort-icon">⇕</span></th>
+            <th class="sortable" data-col="2">Role <span class="sort-icon">⇕</span></th>
+            <th class="sortable" data-col="3">Last Seen <span class="sort-icon">⇕</span></th>
             <th>Actions</th>
         </tr>
     </thead>
     <tbody>
     #for(student in enrolledStudents):
         <tr class="student-row-link#if(student.isPending): student-row-pending#endif"
+            data-student-id="#(student.id)"
             #if(!student.isPending):data-href="#(student.submissionsURL)"#endif>
             <td>
                 #if(student.isPending):
-                <strong style="color:var(--gray-500)">#(student.displayName)</strong>
-                <span style="font-size:.72rem;color:var(--gray-500);margin-left:.4rem">awaiting first login</span>
+                <strong class="students-pending-name">#(student.displayName)</strong>
+                <span class="students-pending-note">awaiting first login</span>
                 #else:
                 <a href="#(student.submissionsURL)"><strong>#(student.displayName)</strong></a>
                 #endif
             </td>
             <td>
                 #if(student.isPending):
-                <code style="color:var(--gray-500)">#(student.username)</code>
+                <code class="students-pending-username">#(student.username)</code>
                 #else:
                 <a href="#(student.submissionsURL)"><code>#(student.username)</code></a>
                 #endif
@@ -72,10 +79,10 @@ Students
             <td>
                 #if(!courseIsArchived):
                 <form method="post" action="#(student.unenrollURL)"
-                      style="display:inline;margin:0">
+                      class="inline-form">
                     #csrfFormField()
-                    <button class="btn action-btn action-danger" type="submit"
-                            title="Remove from course" aria-label="Remove from course" style="padding:.25rem .35rem"
+                    <button class="btn action-btn action-danger students-unenroll-btn" type="submit"
+                            title="Remove from course" aria-label="Remove from course"
                             onclick="return confirm('Remove @#(student.username) from this course?')">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                     </button>
@@ -89,6 +96,27 @@ Students
 <p class="empty" id="no-students-msg"#if(hasEnrolledStudents): hidden#endif>No students enrolled yet.</p>
 
 <style>
+.students-titlebar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: .75rem;
+}
+.students-title { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.students-mode-form { margin: 0; }
+.students-mode-label { font-size: .875rem; margin: 0; }
+.students-mode-select { display: block; font-size: .875rem; }
+.students-learn-status { font-size: .8rem; color: var(--gray-500); }
+.students-filter { flex: 1 1 220px; }
+.students-pending-name { color: var(--gray-500); }
+.students-pending-note { font-size: .72rem; color: var(--gray-500); margin-left: .4rem; }
+.students-pending-username { color: var(--gray-500); }
+.students-unenroll-btn { padding: .25rem .35rem; }
+#enrolled-students-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
 #enrolled-students-table th.sortable .sort-icon {
     color: var(--gray-500);
     font-size: .75rem;
@@ -104,7 +132,21 @@ Students
 .student-row-link:hover td a code {
     text-decoration: underline;
 }
+.learn-flag {
+    display: inline-block;
+    font-size: .68rem;
+    font-weight: 600;
+    color: #b42318;
+    background: rgba(180, 35, 24, .08);
+    border: 1px solid rgba(180, 35, 24, .25);
+    border-radius: 4px;
+    padding: .05rem .3rem;
+    margin-left: .4rem;
+    white-space: nowrap;
+    vertical-align: middle;
+}
 </style>
+<script src="/relative-time.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -120,44 +162,8 @@ Students
     var sortCol = 3;
     var sortAsc = false;
 
-    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-
-    function formatRelative(isoString) {
-        var date = new Date(isoString);
-        if (Number.isNaN(date.getTime())) return isoString;
-        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
-        var abs = Math.abs(seconds);
-        if (abs < 60) return relativeFormatter.format(seconds, 'second');
-        var minutes = Math.round(seconds / 60);
-        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
-        var hours = Math.round(minutes / 60);
-        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
-        var days = Math.round(hours / 24);
-        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
-        var weeks = Math.round(days / 7);
-        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
-        var months = Math.round(days / 30);
-        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
-        var years = Math.round(days / 365);
-        return relativeFormatter.format(years, 'year');
-    }
-
-    function applyRelativeTimes(root) {
-        (root || document).querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
-            var iso = el.getAttribute('data-iso');
-            if (!iso) return;
-            var date = new Date(iso);
-            if (Number.isNaN(date.getTime())) return;
-            el.textContent = formatRelative(iso);
-            el.title = date.toLocaleString();
-        });
-    }
-
-    function escapeHtml(value) {
-        return String(value == null ? '' : value)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var escapeHtml = ChickadeeUI.escapeHtml;
 
     var deleteIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 
@@ -172,23 +178,24 @@ Students
         var csrfField = '<input type="hidden" name="_csrf" value="' + escapeHtml(csrfToken) + '">';
 
         var nameCell = student.isPending
-            ? '<strong style="color:var(--gray-500)">' + displayName + '</strong>'
-                + '<span style="font-size:.72rem;color:var(--gray-500);margin-left:.4rem">awaiting first login</span>'
+            ? '<strong class="students-pending-name">' + displayName + '</strong>'
+                + '<span class="students-pending-note">awaiting first login</span>'
             : '<a href="' + subURL + '"><strong>' + displayName + '</strong></a>';
         var userCell = student.isPending
-            ? '<code style="color:var(--gray-500)">' + username + '</code>'
+            ? '<code class="students-pending-username">' + username + '</code>'
             : '<a href="' + subURL + '"><code>' + username + '</code></a>';
         var actionCell = '';
         if (!archived) {
-            actionCell = '<form method="post" action="' + unenrollURL + '" style="display:inline;margin:0">'
+            actionCell = '<form method="post" action="' + unenrollURL + '" class="inline-form">'
                 + csrfField
-                + '<button class="btn action-btn action-danger" type="submit" title="Remove from course"'
-                + ' aria-label="Remove from course" style="padding:.25rem .35rem"'
+                + '<button class="btn action-btn action-danger students-unenroll-btn" type="submit" title="Remove from course"'
+                + ' aria-label="Remove from course"'
                 + ' onclick="return confirm(\'Remove @' + username + ' from this course?\')">'
                 + deleteIcon + '</button></form>';
         }
 
         return '<tr class="student-row-link' + (student.isPending ? ' student-row-pending' : '') + '"'
+            + ' data-student-id="' + escapeHtml(student.id) + '"'
             + (student.isPending ? '' : ' data-href="' + subURL + '"') + '>'
             + '<td>' + nameCell + '</td>'
             + '<td>' + userCell + '</td>'
@@ -236,6 +243,60 @@ Students
         });
     }
 
+    // ── LEARN classlist reconciliation ───────────────────────────────
+    // After a "Check against LEARN" run, rows whose student is no longer on
+    // the LEARN classlist get a "not registered on LEARN" badge.  The id set
+    // is kept in memory so the badges survive the 5s poll repaint.
+    var learnNotOnLearn = new Set();
+    var learnBtn = document.getElementById('learn-check-btn');
+    var learnStatus = document.getElementById('learn-check-status');
+
+    function applyLearnFlags() {
+        Array.from(tbody.querySelectorAll('tr')).forEach(function (row) {
+            var nameCell = row.cells[0];
+            if (!nameCell) return;
+            var existing = nameCell.querySelector('.learn-flag');
+            if (existing) existing.remove();
+            var id = row.getAttribute('data-student-id');
+            if (id && learnNotOnLearn.has(id)) {
+                var span = document.createElement('span');
+                span.className = 'learn-flag';
+                span.textContent = 'not registered on LEARN';
+                span.title = 'Not on the LEARN classlist — remove if confirmed dropped';
+                nameCell.appendChild(span);
+            }
+        });
+    }
+
+    async function checkAgainstLearn() {
+        if (learnBtn) learnBtn.disabled = true;
+        if (learnStatus) learnStatus.textContent = 'Checking against LEARN…';
+        try {
+            var res = await fetch('/instructor/students/learn-check', {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            });
+            if (res.redirected || res.status === 401 || res.status === 403) {
+                window.location.reload();
+                return;
+            }
+            if (!res.ok) {
+                if (learnStatus) learnStatus.textContent = 'LEARN check failed (HTTP ' + res.status + ').';
+                return;
+            }
+            var data = await res.json();
+            learnNotOnLearn = new Set(Array.isArray(data.notOnLearn) ? data.notOnLearn : []);
+            applyLearnFlags();
+            if (learnStatus) learnStatus.textContent = data.message || '';
+        } catch (_) {
+            if (learnStatus) learnStatus.textContent = 'LEARN check failed (network error).';
+        } finally {
+            if (learnBtn) learnBtn.disabled = false;
+        }
+    }
+
+    if (learnBtn) learnBtn.addEventListener('click', checkAgainstLearn);
+
     table.querySelectorAll('th.sortable').forEach(function (th) {
         th.addEventListener('click', function () {
             var col = parseInt(th.getAttribute('data-col'), 10);
@@ -264,8 +325,7 @@ Students
 
     function repaint(rows) {
         if (!Array.isArray(rows)) return;
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        var csrfToken = meta ? meta.getAttribute('content') : '';
+        var csrfToken = ChickadeeUI.getCsrfToken();
         tbody.innerHTML = rows.map(function (s) { return buildStudentRow(s, csrfToken); }).join('');
         if (countEl) {
             // Heading counts students + pending pre-enrolments only, matching
@@ -275,16 +335,18 @@ Students
                 return s.role === 'student' || s.role === '(pending)';
             }).length);
         }
-        applyRelativeTimes(tbody);
+        ChickadeeRelativeTime.applyRelativeTimes(tbody);
         sortRows();
         applyFilter();
         updateEmptyState();
+        applyLearnFlags();
     }
 
     // ── Initial paint ────────────────────────────────────────────────
-    applyRelativeTimes(document);
+    ChickadeeRelativeTime.applyRelativeTimes(document);
     sortRows();
     updateEmptyState();
+    applyLearnFlags();
 
     // ── Auto-refresh ─────────────────────────────────────────────────
     // Poll /instructor/students-data every few seconds so last-seen times

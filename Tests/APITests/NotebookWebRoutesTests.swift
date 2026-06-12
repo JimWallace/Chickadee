@@ -131,12 +131,14 @@ import XCTVapor
         testSetupID: String,
         title: String,
         dueAt: Date? = nil,
+        startsAt: Date? = nil,
         isOpen: Bool = true
     ) async throws -> APIAssignment {
         let assignment = APIAssignment(
             testSetupID: testSetupID,
             title: title,
             dueAt: dueAt,
+            startsAt: startsAt,
             isOpen: isOpen,
             courseID: try await makeCourse().requireID()
         )
@@ -366,6 +368,112 @@ import XCTVapor
         }
     }
 
+    @Test func notebookPageNotYetOpenAssignmentRedirectsToDashboard() async throws {
+        try await withApp(app) { _ in
+            // A student following a pre-posted link to an assignment whose open
+            // date is still in the future is bounced to their dashboard rather
+            // than into the notebook — the future `startsAt` holds it closed for
+            // everyone, so the closed-assignment gate fires just as it does for a
+            // past-deadline lab.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_not_yet_open"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Future"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Scheduled Lab",
+                dueAt: Date(timeIntervalSinceNow: 7 * 24 * 3600),
+                startsAt: Date(timeIntervalSinceNow: 24 * 3600),
+                isOpen: false
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                })
+        }
+    }
+
+    @Test func resetOwnNotebookRestoresStarterForOpenAssignment() async throws {
+        try await withApp(app) { _ in
+            // A student self-resets their own working copy: the corrupted copy is
+            // overwritten with the canonical starter and they are bounced back to
+            // the dashboard.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+            let userID = try user.requireID()
+
+            let setupID = "setup_nb_self_reset"
+            let starterMarker = "Original starter cell"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: starterMarker))
+            _ = try await insertAssignment(testSetupID: setupID, title: "Self Reset Lab", isOpen: true)
+
+            // Simulate the student having clobbered their own working copy.
+            let copyPath = workingCopyPath(setupID: setupID, userID: userID)
+            try FileManager.default.createDirectory(
+                atPath: (copyPath as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true)
+            try Data(notebookJSON(markdown: "Broken edits").utf8)
+                .write(to: URL(fileURLWithPath: copyPath))
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                })
+
+            let restored = try String(contentsOf: URL(fileURLWithPath: copyPath), encoding: .utf8)
+            #expect(restored.contains(starterMarker))
+            #expect(restored.contains("Broken edits") == false)
+        }
+    }
+
+    @Test func resetOwnNotebookRejectedForClosedAssignment() async throws {
+        try await withApp(app) { _ in
+            // The self-reset route is gated on the assignment being open to the
+            // student; a past-deadline assignment is refused with 403.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_self_reset_closed"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Starter"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Closed Self Reset Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),
+                isOpen: true
+            )
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+        }
+    }
+
     @Test func notebookPageClosedAssignmentWithSubmissionStaysReachable() async throws {
         try await withApp(app) { _ in
             // Having submitted at least once also counts as "previously opened",
@@ -530,7 +638,7 @@ import XCTVapor
         }
     }
 
-    @Test func notebookPageLinksSupportFilesAndRemovesLegacyNotebookCopies() async throws {
+    @Test func notebookPageLinksSupportFilesAndBootSweepRemovesLegacyNotebookCopies() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsStudent()
             let user = try await studentUser()
@@ -586,6 +694,20 @@ import XCTVapor
             #expect(try FileManager.default.destinationOfSymbolicLink(atPath: supportPath) == sharedDir + "bmi.py")
             #expect(FileManager.default.fileExists(atPath: studentDir + "/test.sh") == false)
 
+            // The legacy sweep no longer runs per-request: the page view above
+            // must leave the planted artifacts alone.
+            for root in legacyRoots {
+                let userDir = root + "users/\(userID.uuidString.lowercased())/"
+                let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
+                #expect(
+                    contents.contains { $0.hasSuffix(".ipynb") },
+                    "Page views must not sweep legacy notebooks from \(userDir)")
+            }
+
+            // The one-time boot sweep (LegacyNotebookCleanupLifecycleHandler)
+            // is what removes them now.
+            removeLegacyUserNotebookCopies(publicDirectory: publicDir, logger: app.logger)
+
             for root in legacyRoots {
                 let userDir = root + "users/\(userID.uuidString.lowercased())/"
                 let contents = (try? FileManager.default.contentsOfDirectory(atPath: userDir)) ?? []
@@ -593,6 +715,10 @@ import XCTVapor
                     contents.contains { $0.hasSuffix(".ipynb") } == false,
                     "Legacy notebooks should be removed from \(userDir)")
             }
+
+            // The sweep only touches flat files in the user root; the current
+            // per-setup working copy must survive it.
+            #expect(FileManager.default.fileExists(atPath: workingCopyPath(setupID: setupID, userID: userID)))
 
         }
     }

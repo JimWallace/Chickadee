@@ -3,14 +3,14 @@
 Import result — Admin
 #endexport
 #export("content"):
-<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem">
-    <h1 style="margin:0">Bundle imported</h1>
+<div class="import-result-head">
+    <h1 class="import-result-title">Bundle imported</h1>
     <span class="tier tier-open">success</span>
 </div>
 
 <section class="admin-section">
     <h2>#(courseCode) — #(courseName)</h2>
-    <table class="results-table" style="max-width:480px">
+    <table class="results-table import-result-table">
         <tbody>
             <tr>
                 <td>Test setups</td>
@@ -38,16 +38,41 @@ Import result — Admin
             </tr>
         </tbody>
     </table>
-    <p style="margin-top:1rem;color:var(--text-secondary);font-size:.9rem">
+    <p class="import-result-note">
         Assignments have been imported as-is (open/closed state preserved).
         Validation status has been reset — re-run validation from the assignment page if needed.
         Newly created user accounts have no password and must log in via SSO or use password reset.
     </p>
-    <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap">
+    <div class="import-result-actions">
         <a href="/admin/courses/#(courseID)" class="btn btn-primary">View course</a>
         <a href="/admin" class="btn">Admin dashboard</a>
     </div>
 </section>
 
+<style>
+.import-result-head {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: 1.5rem;
+}
+.import-result-title {
+    margin: 0;
+}
+.import-result-table {
+    max-width: 480px;
+}
+.import-result-note {
+    margin-top: 1rem;
+    color: var(--text-secondary);
+    font-size: .9rem;
+}
+.import-result-actions {
+    display: flex;
+    gap: .75rem;
+    margin-top: 1.25rem;
+    flex-wrap: wrap;
+}
+</style>
 #endexport
 #endextend

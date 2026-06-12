@@ -2,6 +2,7 @@
 // logic used by both the instructor dashboard and the MCP update_assignment
 // tool.
 
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -115,10 +116,90 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let assignment = try await makeAssignment(on: app)
-            assignment.isOpen = true
+            assignment.visibility = .open
             try await assignment.save(on: app.db)
             try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: app.db)
             #expect(assignment.isOpen == false)
+        }
+    }
+
+    // MARK: - Three-state visibility (Preview)
+
+    @Test func previewNeedsNoValidation() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // Switching to preview is a pure visibility flip — it must not be
+            // gated on validation the way opening to students is.
+            let assignment = try await makeAssignment(on: app, validationStatus: "pending")
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            #expect(assignment.visibility == .preview)
+            // It is not open to students (the derived flag stays false).
+            #expect(assignment.isOpen == false)
+        }
+    }
+
+    @Test func previewIsOpenForStaffAndClosedForStudents() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app, validationStatus: "passed")
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            let staff = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            let student = try await makeTestUser(on: app, username: "stu", role: "student")
+            #expect(try await isAssignmentEffectivelyOpen(assignment, for: staff, on: app.db))
+            #expect(!(try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)))
+        }
+    }
+
+    @Test func previewThenOpenSucceeds() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app, validationStatus: "passed")
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            try await AssignmentAuthoringService.setVisibility(assignment, .open, on: app.db)
+            #expect(assignment.visibility == .open)
+        }
+    }
+
+    @Test func openToPreviewIsAllowed() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // No one-way restriction: an instructor can pull a live assignment
+            // back to staff-only (it just becomes hidden from students again).
+            let assignment = try await makeAssignment(on: app, validationStatus: "passed")
+            try await AssignmentAuthoringService.setVisibility(assignment, .open, on: app.db)
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            #expect(assignment.visibility == .preview)
+        }
+    }
+
+    @Test func scheduledOpenSweepPublishesPreview() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app, validationStatus: "passed")
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            // An open date on a Preview assignment is the staff workflow "test
+            // now, publish to students at this time" — the sweep must open it,
+            // not strand it in the staff-only state past its open date.
+            assignment.startsAt = Date().addingTimeInterval(-3600)
+            try await assignment.save(on: app.db)
+            let opened = try await openScheduledAssignment(assignment, on: app.db, logger: app.logger)
+            #expect(opened)
+            #expect(assignment.visibility == .open)
+            #expect(assignment.startsAt == nil, "Open date is consumed once it fires")
+        }
+    }
+
+    @Test func scheduledOpenSweepHoldsPreviewUntilValidationPasses() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await makeAssignment(on: app, validationStatus: "pending")
+            try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
+            assignment.startsAt = Date().addingTimeInterval(-3600)
+            try await assignment.save(on: app.db)
+            let opened = try await openScheduledAssignment(assignment, on: app.db, logger: app.logger)
+            #expect(opened == false)
+            #expect(assignment.visibility == .preview)
+            #expect(assignment.startsAt != nil, "Open date stays armed so the sweep retries after validation")
         }
     }
 }

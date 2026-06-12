@@ -9,6 +9,20 @@ import Core
 import Fluent
 import Vapor
 
+/// User roles in ascending order of privilege (`student` < `instructor` <
+/// `admin`), plus the out-of-band `mcp` service-account role.
+///
+/// The `role` DB column stays a plain string (no migration); this enum is
+/// the authoritative vocabulary for it.
+enum UserRole: String, Sendable {
+    case student
+    case instructor
+    case admin
+    /// MCP service accounts (admin-provisioned, non-loginable agents).
+    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    case mcp
+}
+
 final class APIUser: Model, Content, @unchecked Sendable {
     // @unchecked Sendable: all mutations happen within Vapor's request context,
     // never across unstructured concurrency.
@@ -69,7 +83,7 @@ final class APIUser: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_user_id")
     var brightspaceUserID: String?
 
-    /// "student" | "instructor" | "admin"
+    /// `UserRole` raw value; column stays a string.
     @Field(key: "role")
     var role: String
 
@@ -126,18 +140,32 @@ final class APIUser: Model, Content, @unchecked Sendable {
 // MARK: - Role helpers
 
 extension APIUser {
-    var isAdmin: Bool { role == "admin" }
-    var isInstructor: Bool { role == "instructor" || role == "admin" }
+    /// The user's role as a typed enum, or nil if the stored string is
+    /// outside the known vocabulary (defensive — should not happen).
+    var roleValue: UserRole? { UserRole(rawValue: role) }
+
+    /// Sets the role from the typed enum.  Prefer this over assigning a
+    /// raw string to `role`.
+    func setRole(_ newRole: UserRole) {
+        role = newRole.rawValue
+    }
+
+    var isAdmin: Bool { roleValue == .admin }
+    var isInstructor: Bool { roleValue == .instructor || roleValue == .admin }
 
     /// True for MCP service accounts (admin-provisioned, non-loginable agents).
     /// `mcp` is its own role — it does NOT imply instructor/admin.
-    var isMCPAgent: Bool { role == "mcp" }
+    var isMCPAgent: Bool { roleValue == .mcp }
 
     /// Roles that may be assigned automatically at first login (local
     /// registration or SSO mapping).  `mcp` is intentionally excluded: MCP
     /// service accounts are created only by an admin, so no auto-provisioning
     /// path can mint an agent identity.
-    static let autoAssignableRoles: Set<String> = ["student", "instructor", "admin"]
+    static let autoAssignableRoles: Set<String> = [
+        UserRole.student.rawValue,
+        UserRole.instructor.rawValue,
+        UserRole.admin.rawValue,
+    ]
 
     /// Drops a proposed auto-assigned role that isn't in `autoAssignableRoles`
     /// (notably `mcp`), returning nil so the caller falls back to `student`.
@@ -268,18 +296,12 @@ extension Request {
     }
 
     private func loadEnrolledCourseContexts(userID: UUID) async throws -> [CourseContext] {
-        let enrollments = try await APICourseEnrollment.query(on: db)
-            .filter(\.$userID == userID)
-            .with(\.$course)
-            .all()
-        return
-            enrollments
-            .compactMap { e -> CourseContext? in
-                guard let id = e.course.id else { return nil }
-                guard !e.course.isArchived else { return nil }  // hide archived courses everywhere
-                return CourseContext(id: id.uuidString, code: e.course.code, name: e.course.name, isActive: false)
-            }
-            .sorted { $0.code < $1.code }
+        // Delegates to the shared visibility resolver so the tab strip and the
+        // MCP listing surface stay in lockstep by construction.
+        try await enrolledCourses(for: userID, on: db).compactMap { course in
+            guard let id = course.id else { return nil }
+            return CourseContext(id: id.uuidString, code: course.code, name: course.name, isActive: false)
+        }
     }
 }
 

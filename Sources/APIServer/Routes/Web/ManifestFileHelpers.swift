@@ -46,8 +46,10 @@ func setupHasAnyTestEntries(manifestJSON: String) throws -> Bool {
 }
 
 /// Returns updated manifest JSON with a new `TestSuiteEntry` appended.
-/// Preserves all existing entries, grading mode, makefile config,
-/// starterNotebook, and pattern families.
+/// Preserves all existing entries (including their `sectionID`,
+/// `generatedByCheck`, and `hint`), grading mode, makefile config,
+/// starterNotebook, pattern families, notebook checks, the `sections`
+/// list, and the assignment-scope global variables/expressions.
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestAddingScript(
     manifestJSON: String,
@@ -66,7 +68,10 @@ func updateManifestAddingScript(
             dependsOn: e.dependsOn,
             points: e.points,
             displayName: e.name,
-            generatedBy: e.generatedBy
+            generatedBy: e.generatedBy,
+            generatedByCheck: e.generatedByCheck,
+            sectionID: e.sectionID,
+            hint: e.hint
         )
     }
     let nextOrder = (existing.map(\.order).max() ?? 0) + 1
@@ -77,7 +82,10 @@ func updateManifestAddingScript(
         dependsOn: entry.dependsOn,
         points: entry.points,
         displayName: entry.displayName,
-        generatedBy: entry.generatedBy
+        generatedBy: entry.generatedBy,
+        generatedByCheck: entry.generatedByCheck,
+        sectionID: entry.sectionID,
+        hint: entry.hint
     )
     let updated = existing + [newEntry]
     return try? makeWorkerManifestJSON(
@@ -85,12 +93,20 @@ func updateManifestAddingScript(
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
         starterNotebook: props.starterNotebook,
-        patternFamilies: props.patternFamilies
+        patternFamilies: props.patternFamilies,
+        notebookChecks: props.notebookChecks,
+        sections: props.sections,
+        globalVariables: props.globalVariables,
+        globalExpressions: props.globalExpressions
     )
 }
 
 /// Returns updated manifest JSON with the entry for `filename` removed.
 /// Also clears references to `filename` in other entries' `dependsOn` arrays.
+/// Preserves the surviving entries' `sectionID` / `generatedByCheck` /
+/// `hint`, plus the manifest's pattern families, notebook checks,
+/// `sections` list, and assignment-scope global variables/expressions —
+/// deleting one script must never drop sections or other suite metadata.
 /// Returns `nil` if the manifest JSON cannot be decoded.
 func updateManifestRemovingScript(manifestJSON: String, filename: String) -> String? {
     guard let props = decodeManifest(fromJSON: manifestJSON)
@@ -109,7 +125,10 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
                 dependsOn: e.dependsOn.filter { $0 != filename },
                 points: e.points,
                 displayName: e.name,
-                generatedBy: e.generatedBy
+                generatedBy: e.generatedBy,
+                generatedByCheck: e.generatedByCheck,
+                sectionID: e.sectionID,
+                hint: e.hint
             )
         }
     return try? makeWorkerManifestJSON(
@@ -117,7 +136,11 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
         starterNotebook: props.starterNotebook,
-        patternFamilies: props.patternFamilies
+        patternFamilies: props.patternFamilies,
+        notebookChecks: props.notebookChecks,
+        sections: props.sections,
+        globalVariables: props.globalVariables,
+        globalExpressions: props.globalExpressions
     )
 }
 
@@ -130,7 +153,10 @@ func makeWorkerManifestJSON(
     notebookChecks: [NotebookCheck] = [],
     sections: [TestSuiteSection] = [],
     globalVariables: [FamilyVariable] = [],
-    globalExpressions: [PersonalizationExpression] = []
+    globalExpressions: [PersonalizationExpression] = [],
+    achievements: [Achievement] = [],
+    disabledBuiltInAwardIDs: [String] = [],
+    builtInAchievementsSeeded: Bool = false
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -170,6 +196,17 @@ func makeWorkerManifestJSON(
     // Slice 2 — assignment-scope expressions (notebook only). Each
     // entry is `{ name, expression }`.
     try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
+    // Display/award-only fields (server-side; `runnerSanitized()` strips them).
+    // Spliced here so a suite rebuild doesn't wipe authored achievements or the
+    // instructor's built-in-award toggles — `makeWorkerManifestJSON` builds a
+    // fresh dict, so anything absent here is lost on the next suite edit.
+    try spliceEncodedArray(into: &manifest, key: "achievements", values: achievements)
+    if !disabledBuiltInAwardIDs.isEmpty {
+        manifest["disabledBuiltInAwardIDs"] = disabledBuiltInAwardIDs
+    }
+    if builtInAchievementsSeeded {
+        manifest["builtInAchievementsSeeded"] = true
+    }
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
     return String(data: data, encoding: .utf8) ?? "{}"
@@ -212,7 +249,11 @@ private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any
     if !entry.dependsOn.isEmpty {
         dict["dependsOn"] = entry.dependsOn
     }
-    if entry.points > 1 {
+    // Emit any non-default points value — including 0.  The decoder
+    // defaults a missing key to 1, so a 0-point entry (e.g. an existence
+    // guard, which gates rather than grades) must be written explicitly or
+    // it round-trips back to 1 and starts counting toward the score.
+    if entry.points != 1 {
         dict["points"] = entry.points
     }
     if let fid = entry.generatedBy, !fid.isEmpty {

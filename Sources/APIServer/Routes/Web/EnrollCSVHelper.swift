@@ -181,10 +181,13 @@ func enrollUsernamesInCourse(
     var seen = Set<String>()
     let uniqueUsernames = usernames.filter { seen.insert($0).inserted }
 
-    let usernameSet = Set(uniqueUsernames)
-    let allUsers = try await APIUser.query(on: db).all()
+    // Look up just the CSV's usernames instead of loading every user row.
+    let matchedUsers =
+        uniqueUsernames.isEmpty
+        ? []
+        : try await APIUser.query(on: db).filter(\.$username ~~ uniqueUsernames).all()
     var byUsername: [String: APIUser] = [:]
-    for u in allUsers where usernameSet.contains(u.username) {
+    for u in matchedUsers {
         byUsername[u.username] = u
     }
 

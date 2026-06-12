@@ -46,6 +46,7 @@ extension InstructorDashboardRoutes {
         var enrolledStudentCount = 0
         var courseEnrollmentMode = CourseEnrollmentMode.open.rawValue
         var courseIsArchived = false
+        var brightspaceLinkAvailable = false
 
         if let activeCourseUUID = courseState.activeCourseUUID {
             let roster = try await loadEnrolledStudentRows(
@@ -60,6 +61,9 @@ extension InstructorDashboardRoutes {
             if let course = try await APICourse.find(activeCourseUUID, on: req.db) {
                 courseEnrollmentMode = course.enrollmentMode.rawValue
                 courseIsArchived = course.isArchived
+                brightspaceLinkAvailable =
+                    req.application.brightSpaceClient != nil
+                    && !((course.brightspaceOrgUnitID ?? "").isEmpty)
             }
         }
 
@@ -70,7 +74,8 @@ extension InstructorDashboardRoutes {
             hasEnrolledStudents: !enrolledStudents.isEmpty,
             enrolledStudentCount: enrolledStudentCount,
             courseEnrollmentMode: courseEnrollmentMode,
-            courseIsArchived: courseIsArchived
+            courseIsArchived: courseIsArchived,
+            brightspaceLinkAvailable: brightspaceLinkAvailable
         )
         return try await req.view.render("instructor-students", ctx).encodeResponse(for: req)
     }
@@ -94,25 +99,5 @@ extension InstructorDashboardRoutes {
             isoFormatter: ISO8601DateFormatter()
         )
         return roster.rows
-    }
-
-    // MARK: - GET /instructor/brightspace
-
-    @Sendable
-    func brightspacePage(req: Request) async throws -> View {
-        let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        let userContext = CurrentUserContext(
-            user: user,
-            activeCourse: courseState.active,
-            enrolledCourses: courseState.all
-        )
-        let ctx = InstructorBrightspaceContext(
-            currentUser: userContext,
-            activeInstructorTab: "brightspace",
-            hasActiveCourse: courseState.active != nil,
-            brightspaceSyncEnabled: req.application.brightSpaceClient != nil
-        )
-        return try await req.view.render("instructor-brightspace", ctx)
     }
 }

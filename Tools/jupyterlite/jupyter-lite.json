@@ -15,6 +15,8 @@
     ],
     "litePluginSettings": {
       "@jupyterlite/pyodide-kernel-extension:kernel": {
+        "pyodideUrl": "/pyodide/pyodide.js",
+        "disablePyPIFallback": true,
         "pipliteUrls": [
           "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=783d01f64a330ecbbd82318ba2fde8842bc8eece502b821b8c0f57cacdde5cdc"
         ]

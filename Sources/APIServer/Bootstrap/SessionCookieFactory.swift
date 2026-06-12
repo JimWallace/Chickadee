@@ -16,6 +16,16 @@
 // Note: browsers with "continue where you left off" / session-restore resurrect
 // session cookies on relaunch, but since logout deletes the server-side row a
 // resurrected cookie no longer maps to a valid session.
+//
+// SameSite policy: `.none` over HTTPS, `.lax` otherwise. The MCP browser OAuth
+// flow runs inside a popup opened by claude.ai (a cross-site opener), so the
+// login POST that resumes /oauth/authorize is treated as cross-site. A `.lax`
+// cookie is not sent on cross-site POSTs, which dropped the session on that hop
+// and broke the flow two ways: the CSRF secret (stored in the session by the
+// CSRF middleware) went missing → 403, and the stashed `mcpOAuthReturnTo` was
+// lost → login fell through to the dashboard instead of minting an auth code.
+// `.none` requires `Secure`, so it is only used when the cookie is already
+// secure; plain-HTTP dev keeps `.lax` (browsers reject `None` without `Secure`).
 
 import Vapor
 
@@ -28,7 +38,7 @@ func chickadeeSessionCookie(sessionID: SessionID, isSecure: Bool) -> HTTPCookies
         path: "/",
         isSecure: isSecure,
         isHTTPOnly: true,
-        sameSite: .lax
+        sameSite: isSecure ? HTTPCookies.SameSitePolicy.none : .lax
     )
 }
 

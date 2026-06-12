@@ -23,7 +23,8 @@ func enqueueRunnerValidationSubmission(
     req: Request,
     setupID: String,
     solutionNotebookData: Data,
-    filename: String = "solution.ipynb"
+    filename: String = "solution.ipynb",
+    submitterUserID: UUID? = nil
 ) async throws -> String {
     let sanitizedFilename = submissionFilenameForStorage(
         uploadedName: filename,
@@ -40,18 +41,174 @@ func enqueueRunnerValidationSubmission(
         .filter(\.$kind == APISubmission.Kind.validation)
         .count()
 
-    let user = try req.auth.require(APIUser.self)
+    // Web callers attribute the submission to the session user; MCP callers
+    // authenticate via a bearer token (no `Request.auth` APIUser) and pass the
+    // resolved subject id explicitly.
+    let resolvedSubmitterID: UUID?
+    if let submitterUserID {
+        resolvedSubmitterID = submitterUserID
+    } else {
+        resolvedSubmitterID = try req.auth.require(APIUser.self).id
+    }
     let submission = APISubmission(
         id: subID,
         testSetupID: setupID,
         zipPath: filePath,
         attemptNumber: priorCount + 1,
         filename: sanitizedFilename,
-        userID: user.id,
+        userID: resolvedSubmitterID,
         kind: APISubmission.Kind.validation
     )
-    try await submission.save(on: req.db)
+
+    // Resolve personalization and write the grading sidecar BEFORE the
+    // submission is saved. Saving makes it `pending` — a polling worker can
+    // claim and download it immediately — so the substituted `.grading` sidecar
+    // and the cached `materializationJSON` MUST already be in place, or the
+    // worker races in and grades the un-substituted template. The returned
+    // token is the only way to persist the row, so the ordering is enforced by
+    // the types, not by this comment. (This resolves personalization once, at
+    // enqueue — an instructor save, which is latency-tolerant — so the worker
+    // poll + download paths never run the personalization evaluator.)
+    let materialized = await materializeValidationGrading(
+        submission: submission,
+        setupID: setupID,
+        templateNotebookData: solutionNotebookData,
+        testSetupsDirectory: req.application.testSetupsDirectory,
+        on: req.db)
+
+    try await materialized.saveClaimable(on: req.db)
     return subID
+}
+
+/// Proof that `materializeValidationGrading` ran for a validation submission:
+/// the grading sidecar and the in-memory `materializationJSON` cache are in
+/// place, so persisting the row — which flips it to `pending` and makes it
+/// claimable by a polling worker — is now safe.  Only constructible by
+/// `materializeValidationGrading`, so "materialize before save" is a compile-
+/// time guarantee at the enqueue site rather than a comment.
+struct MaterializedValidationSubmission {
+    fileprivate let submission: APISubmission
+
+    /// The single save that makes the row claimable.
+    func saveClaimable(on db: any Database) async throws {
+        try await submission.save(on: db)
+    }
+}
+
+/// Resolve a validation submission's personalization ONCE, so the worker poll +
+/// download paths never run `python3` (which the runner times out against on its
+/// 5 s artifact download — the `#869` regression). Produces:
+///
+///   * `<submission.zipPath>.grading` — the solution notebook with `{{name}}`
+///     placeholders substituted, written to disk. `WorkerArtifactRoutes`
+///     streams it verbatim (pure I/O).
+///   * `submission.materializationJSON` set **in memory** — the resolved `=`
+///     expression value map plus the seed everything was resolved against.
+///     `buildJobPayload` reads it instead of re-evaluating; the values become
+///     `_ck_inputs.py`.
+///
+/// Call this BEFORE saving the submission — enforced by the return type: it
+/// deliberately does NOT save, and the `MaterializedValidationSubmission`
+/// token it returns is the only way to persist the row. The submission then
+/// only becomes `pending` (claimable by a polling worker) once the sidecar and
+/// cache are already in place; saving first would open a race where the worker
+/// downloads the un-substituted template before this finishes.
+///
+/// The stored `zipPath` keeps its `{{...}}` template, so `get_solution`, the
+/// editor, and re-validation by another user are unaffected.
+///
+/// Best-effort: never throws out. On any failure the submission is left
+/// un-materialized — the download route then streams the template (grading
+/// fails clearly, but the worker never times out), and `buildJobPayload` falls
+/// back to live resolution.
+func materializeValidationGrading(
+    submission: APISubmission,
+    setupID: String,
+    templateNotebookData: Data,
+    testSetupsDirectory: String,
+    on db: any Database
+) async -> MaterializedValidationSubmission {
+    await resolveAndCacheValidationMaterialization(
+        submission: submission,
+        setupID: setupID,
+        templateNotebookData: templateNotebookData,
+        testSetupsDirectory: testSetupsDirectory,
+        on: db)
+    return MaterializedValidationSubmission(submission: submission)
+}
+
+/// Best-effort body of `materializeValidationGrading`: any early exit leaves
+/// the submission un-materialized, which downstream paths handle (template
+/// streamed verbatim, live fallback in `buildJobPayload`).
+private func resolveAndCacheValidationMaterialization(
+    submission: APISubmission,
+    setupID: String,
+    templateNotebookData: Data,
+    testSetupsDirectory: String,
+    on db: any Database
+) async {
+    do {
+        guard let setup = try await APITestSetup.find(setupID, on: db),
+            let manifestData = setup.manifest.data(using: .utf8),
+            let manifest = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
+        else { return }
+
+        // Non-personalized assignments: nothing to resolve or cache — the
+        // download route streams the stored zip exactly as before.
+        guard manifest.hasPersonalization else { return }
+
+        // Resolve the per-(user, assignment) seed when we can. Literal variables
+        // substitute without a seed; only `=` expressions need one.
+        var seedHex: String?
+        if let userID = submission.userID,
+            let assignment = try await APIAssignment.query(on: db)
+                .filter(\.$testSetupID == setupID)
+                .first(),
+            let assignmentID = assignment.id
+        {
+            seedHex = try? await AssignmentSeedStore.ensureSeed(
+                userID: userID, assignmentID: assignmentID, on: db)
+        }
+
+        let supportDir = testSetupsDirectory + "shared/\(setupID)/"
+        let resolution = await PersonalizationSubstitution.resolve(
+            manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir)
+
+        // Expression-only value map (identical to `gradingInputs`) → _ck_inputs.py.
+        let exprNames = Set(resolution.evaluatedExpressionNames)
+        let inputs = resolution.substitutions.filter { exprNames.contains($0.key) }
+
+        // Substitute the solution notebook once and write the grading sidecar.
+        // Soft-fail substitution: the editor's save-time scan is the
+        // authoritative gate for unknown placeholders.
+        let filename = submission.filename ?? "solution.ipynb"
+        if filename.lowercased().hasSuffix(".ipynb"),
+            !resolution.substitutions.isEmpty,
+            !templateNotebookData.isEmpty,
+            let substituted = try? NotebookSubstitution.apply(
+                notebookData: templateNotebookData,
+                substitutions: resolution.substitutions,
+                strict: false)
+        {
+            try? substituted.write(to: URL(fileURLWithPath: submission.zipPath + ".grading"))
+        }
+
+        let materialization = SubmissionMaterialization(
+            key: manifestHash((seedHex ?? "") + "|" + setup.manifest),
+            seedHex: seedHex,
+            inputs: inputs)
+        if let encoded = try? JSONEncoder().encode(materialization),
+            let json = String(data: encoded, encoding: .utf8)
+        {
+            // Set in-memory only; the caller saves the submission exactly once,
+            // AFTER this returns, so the row never becomes claimable before the
+            // sidecar + cache are ready.
+            submission.materializationJSON = json
+        }
+    } catch {
+        // Best-effort: leave the submission un-materialized; the download route
+        // falls back to streaming the template and buildJobPayload to live eval.
+    }
 }
 
 /// Schedule a validation submission after a suite edit, best-effort.
@@ -82,7 +239,7 @@ func scheduleValidationAfterSuiteEdit(
         let existingPending = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.validation)
-            .filter(\.$status == "pending")
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
             .first()
         if existingPending != nil { return }
 
@@ -151,24 +308,89 @@ func retestAllSubmissionsForSetup(
     on db: Database,
     force: Bool = false
 ) async throws -> Int {
-    let submissions = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
+    try await bulkFlipStudentSubmissionsToPending(
+        setupID: setupID,
+        studentUserID: nil,
+        triggeredBy: userID,
+        force: force,
+        on: db)
+}
 
+/// Re-queues matching `kind == .student` submissions for one setup (optionally
+/// scoped to a single student) in **one** `UPDATE` rather than a save per row.
+///
+/// A deadline-day "Retest all" can touch tens of thousands of submissions; the
+/// previous load-all-then-save-each loop blocked the instructor's request and
+/// left a half-retested set on mid-failure. The bulk update is self-atomic and
+/// constant in round-trips. The returned count is measured with the identical
+/// predicate just before the write so it matches what the UPDATE affects (a
+/// concurrent insert between the two is benign — it's a freshly-pending row
+/// either way).
+@discardableResult
+func bulkFlipStudentSubmissionsToPending(
+    setupID: String,
+    studentUserID: UUID?,
+    triggeredBy userID: UUID?,
+    force: Bool,
+    on db: Database
+) async throws -> Int {
     let now = Date()
-    var touched = 0
-    for submission in submissions
-    where try await flipSubmissionToPending(
-        submission,
+
+    func scoped() -> QueryBuilder<APISubmission> {
+        let query = APISubmission.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+        if let studentUserID {
+            _ = query.filter(\.$userID == studentUserID)
+        }
+        // Skip rows already in flight unless explicitly forced, mirroring
+        // `flipSubmissionToPending`'s idempotency guard.
+        if !force {
+            _ = query.filter(\.$status !~ [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue])
+        }
+        return query
+    }
+
+    let touched = try await scoped().count()
+    guard touched > 0 else { return 0 }
+
+    try await scoped()
+        .set(\.$status, to: SubmissionStatus.pending.rawValue)
+        .set(\.$workerID, to: nil)
+        .set(\.$assignedAt, to: nil)
+        .set(\.$retestedAt, to: now)
+        .set(\.$retestedByUserID, to: userID)
+        .update()
+
+    return touched
+}
+
+/// Re-queues every student submission on `setup` for regrade **iff** the
+/// manifest changed since the last regrade — the shared core of the automatic
+/// "Retest all" behavior, used by both the web suite editor (`PUT /suite`) and
+/// the MCP content-edit tools so the human and agent paths stay in lockstep.
+///
+/// Compares `manifestHash(setup.manifest)` (the post-edit manifest, which
+/// `applyPatternFamilies` has already written onto `setup`) against
+/// `setup.lastRetestedManifestHash`: on a change it retests (`force: false`, so
+/// rows already pending/assigned are skipped) and bumps the stored hash so a
+/// later cosmetic save won't duplicate the work; on no change it's a no-op.
+/// Returns the number of submissions re-queued (0 when unchanged). Throws on a
+/// DB failure — callers that must not fail the edit wrap it best-effort.
+@discardableResult
+func retestSubmissionsIfManifestChanged(
+    setup: APITestSetup, triggeredBy userID: UUID?, on db: any Database
+) async throws -> Int {
+    let currentHash = manifestHash(setup.manifest)
+    guard setup.lastRetestedManifestHash != currentHash else { return 0 }
+    let count = try await retestAllSubmissionsForSetup(
+        setupID: try setup.requireID(),
         triggeredBy: userID,
         on: db,
-        force: force,
-        now: now
-    ) {
-        touched += 1
-    }
-    return touched
+        force: false)
+    setup.lastRetestedManifestHash = currentHash
+    try await setup.save(on: db)
+    return count
 }
 
 /// Retests every `kind == .student` submission on `setupID` for one user
@@ -186,25 +408,12 @@ func retestStudentSubmissionsForSetup(
     on db: Database,
     force: Bool = false
 ) async throws -> Int {
-    let submissions = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$userID == studentUserID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-
-    let now = Date()
-    var touched = 0
-    for submission in submissions
-    where try await flipSubmissionToPending(
-        submission,
+    try await bulkFlipStudentSubmissionsToPending(
+        setupID: setupID,
+        studentUserID: studentUserID,
         triggeredBy: userID,
-        on: db,
         force: force,
-        now: now
-    ) {
-        touched += 1
-    }
-    return touched
+        on: db)
 }
 
 /// Flips one submission back to `pending` for the worker queue.  Returns
@@ -219,10 +428,10 @@ func flipSubmissionToPending(
     force: Bool = false,
     now: Date = Date()
 ) async throws -> Bool {
-    if !force && (submission.status == "pending" || submission.status == "assigned") {
+    if !force && (submission.statusValue == .pending || submission.statusValue == .assigned) {
         return false
     }
-    submission.status = "pending"
+    submission.setStatus(.pending)
     submission.workerID = nil
     submission.assignedAt = nil
     submission.retestedAt = now
@@ -247,7 +456,7 @@ func waitForRunnerValidation(
             throw WebAssignmentError.notFound(resource: "Validation submission")
         }
 
-        if submission.status == "complete" || submission.status == "failed" {
+        if submission.statusValue == .complete || submission.statusValue == .failed {
             guard
                 let result = try await APIResult.query(on: req.db)
                     .filter(\.$submissionID == submissionID)

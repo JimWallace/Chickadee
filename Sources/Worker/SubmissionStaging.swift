@@ -1,0 +1,201 @@
+// Worker/SubmissionStaging.swift
+//
+// Free helper functions used while staging a job's workspace — disk-space
+// precheck, workspace sizing, directory merge, student-module naming,
+// Python-normalization detection, and the test-setup cache key — plus
+// `WorkerDaemonError`.  Split from RunnerDaemon.swift (June 2026 audit).
+
+import Core
+import Foundation
+
+/// Returns the free space (megabytes) reported by the filesystem holding
+/// `path`. Returns nil only if the OS refuses to answer; callers should
+/// treat that as "skip the precheck and let downstream errors surface".
+func freeSpaceMB(at path: URL) -> Int? {
+    guard let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path.path),
+        let free = attrs[.systemFreeSize] as? NSNumber
+    else {
+        return nil
+    }
+    return Int(truncating: free) / (1024 * 1024)
+}
+
+/// Walks `directory` (skipping hidden files) and sums the size of every
+/// regular file. Returns nil if the directory doesn't exist or can't be
+/// enumerated — useful so telemetry can distinguish "0 bytes" (empty
+/// workspace) from "couldn't measure" (cleanup already ran, etc.). Used
+/// as a proxy for a job's peak workspace footprint — accurate enough for
+/// the monotonically-growing workDir we care about.
+func directorySizeBytes(at directory: URL) -> Int? {
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+        isDirectory.boolValue
+    else {
+        return nil
+    }
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+    else {
+        return nil
+    }
+    var total: Int = 0
+    for case let url as URL in enumerator {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+            values.isRegularFile == true,
+            let size = values.fileSize
+        else { continue }
+        total += size
+    }
+    return total
+}
+
+func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory: URL) throws {
+    // Resolve symlinks once on the source root so that the prefix comparison
+    // below works even when callers pass paths through `/var` vs `/private/var`
+    // (macOS) or otherwise-aliased mounts.
+    let sourceRoot = sourceDirectory.resolvingSymlinksInPath().standardizedFileURL
+    let sourceRootComponents = sourceRoot.pathComponents
+
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: sourceRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+    else {
+        return
+    }
+
+    for case let sourceURL as URL in enumerator {
+        let values = try sourceURL.resourceValues(forKeys: [.isRegularFileKey])
+        guard values.isRegularFile == true else { continue }
+
+        let resolved = sourceURL.resolvingSymlinksInPath().standardizedFileURL
+        let entryComponents = resolved.pathComponents
+        guard entryComponents.count > sourceRootComponents.count,
+            Array(entryComponents.prefix(sourceRootComponents.count)) == sourceRootComponents
+        else {
+            // Enumerator handed us something outside the source root — skip
+            // rather than write to an unintended destination.
+            continue
+        }
+        let relativeComponents = Array(entryComponents.dropFirst(sourceRootComponents.count))
+
+        var destinationURL = destinationDirectory
+        for component in relativeComponents {
+            destinationURL.appendPathComponent(component)
+        }
+        try FileManager.default.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: destinationURL)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+    }
+}
+
+func legacyPreferredStudentModuleFilename(submissionFilename: String?) -> String? {
+    guard let submissionFilename, !submissionFilename.isEmpty else { return nil }
+    let submittedName = URL(fileURLWithPath: submissionFilename).lastPathComponent
+    guard !submittedName.isEmpty else { return nil }
+
+    let ext = URL(fileURLWithPath: submittedName).pathExtension.lowercased()
+    if ext == "py" {
+        return submittedName
+    }
+    if ext == "ipynb" {
+        return (submittedName as NSString).deletingPathExtension + ".py"
+    }
+    return nil
+}
+
+func stagedSubmissionDestination(
+    submissionDirectory: URL,
+    submittedFilename: String
+) -> URL {
+    let basename = URL(fileURLWithPath: submittedFilename).lastPathComponent
+    let safeName = basename.isEmpty ? "submission.bin" : basename
+    return submissionDirectory.appendingPathComponent(safeName)
+}
+
+func shouldNormalizePythonSubmission(
+    manifest: TestProperties,
+    submissionFilename: String?,
+    submissionDirectory: URL
+) -> Bool {
+    let requiredPythonFiles = manifest.requiredFiles.filter {
+        URL(fileURLWithPath: $0).pathExtension.lowercased() == "py"
+    }
+    if !requiredPythonFiles.isEmpty { return true }
+
+    if let submissionFilename {
+        let ext = URL(fileURLWithPath: submissionFilename).pathExtension.lowercased()
+        if ["py", "ipynb", "json"].contains(ext) {
+            return true
+        }
+    }
+
+    if manifest.testSuites.contains(where: { URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py" }) {
+        return true
+    }
+
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: submissionDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+    else {
+        return false
+    }
+    for case let fileURL as URL in enumerator {
+        let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
+        guard values?.isRegularFile == true else { continue }
+        let ext = fileURL.pathExtension.lowercased()
+        if ["py", "ipynb", "json"].contains(ext) {
+            return true
+        }
+    }
+    return false
+}
+
+func testSetupCacheKey(for job: Job) -> String {
+    let manifestBytes = (try? ManifestCodec.encoder.encode(job.manifest)) ?? Data()
+    var material = Data()
+    material.append(Data(job.testSetupID.utf8))
+    material.append(0)
+    material.append(Data(job.testSetupURL.absoluteString.utf8))
+    material.append(0)
+    material.append(manifestBytes)
+    let digest = sha256HexDigest(material)
+    return "\(job.testSetupID)-\(digest.prefix(16))"
+}
+
+// The optional last-line JSON result footer is now parsed by RunnerCore
+// (interpretScriptOutput + JSONLite), and `TestStatus.defaultShortResult`
+// lives there too — shared with the browser runner.
+
+// MARK: - Errors
+
+enum WorkerDaemonError: Error, LocalizedError {
+    case downloadFailed(URL)
+    case httpDownloadFailure(statusCode: Int, body: String)
+    case makeFailed(String?)
+    case insufficientDiskSpace(path: String, freeMB: Int, requiredMB: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .downloadFailed(let url): return "Failed to download \(url)"
+        case .httpDownloadFailure(let statusCode, let body):
+            return "HTTP \(statusCode) while downloading artifacts: \(body)"
+        case .makeFailed(let target): return "make \(target ?? "") failed"
+        case .insufficientDiskSpace(let path, let freeMB, let requiredMB):
+            return
+                "Runner workspace at \(path) has \(freeMB) MB free; need at least \(requiredMB) MB before accepting a job"
+        }
+    }
+}
