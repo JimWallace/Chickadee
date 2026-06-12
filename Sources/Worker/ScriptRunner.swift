@@ -1,19 +1,32 @@
 // Worker/ScriptRunner.swift
 //
-// Protocol and Phase 1 (unsandboxed) implementation for running a single
-// test script subprocess. Phase 4 will add SandboxedScriptRunner conforming
-// to the same protocol without changing any callers.
+// Protocol and unsandboxed implementation for running a single test script
+// subprocess. `SandboxedScriptRunner` conforms to the same protocol for the
+// `--sandbox` path without changing any callers.
 
+import Core
 import Foundation
 import Synchronization
+
 #if os(Linux)
 import Glibc
 #endif
 
 /// Runs a single test script and returns raw output.
 /// Implementations are responsible for enforcing the time limit.
+///
+/// `env` is merged on top of an allowlisted subset of the worker's
+/// environment (see `mergedScriptEnvironment`); the daemon's secrets are not
+/// inherited. Empty dictionary = the allowlisted base only.
 protocol ScriptRunner: Sendable {
-    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput
+}
+
+extension ScriptRunner {
+    /// Convenience overload — call sites without per-run env-var needs can omit `env:`.
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
+        await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: [:])
+    }
 }
 
 struct ProcessLaunchConfiguration {
@@ -25,19 +38,42 @@ struct ProcessLaunchConfiguration {
 struct LinuxProcessLaunchConfiguration {
     let executablePath: String
     let arguments: [String]
+    let env: [String: String]
 }
 #endif
 
 private final class CapturedPipeBuffer: Sendable {
-    private let storage = Mutex(Data())
+    /// Per-stream capture cap. A student script printing in a tight loop for
+    /// its whole time limit could otherwise grow this buffer without bound,
+    /// OOM the worker (taking down the other concurrent jobs), and ride the
+    /// blob into `longResult` → JSON → DB (June 2026 audit, P2.1). 1 MB keeps
+    /// every realistic traceback intact.
+    static let maxCapturedBytes = 1_048_576
+
+    private struct State {
+        var data = Data()
+        var truncated = false
+    }
+
+    private let storage = Mutex(State())
 
     func append(_ chunk: Data) {
         guard !chunk.isEmpty else { return }
-        storage.withLock { $0.append(chunk) }
+        storage.withLock { state in
+            guard !state.truncated else { return }
+            let remaining = Self.maxCapturedBytes - state.data.count
+            if chunk.count <= remaining {
+                state.data.append(chunk)
+            } else {
+                if remaining > 0 { state.data.append(chunk.prefix(remaining)) }
+                state.truncated = true
+                state.data.append(Data("\n... output truncated (limit 1 MB) ...\n".utf8))
+            }
+        }
     }
 
     func snapshot() -> Data {
-        storage.withLock { $0 }
+        storage.withLock { $0.data }
     }
 }
 
@@ -78,8 +114,7 @@ func executeScriptProcess(
 
     // Spawn a timeout Task instead of DispatchQueue.asyncAfter so the timeout
     // participates in Swift structured concurrency and supports cooperative
-    // cancellation. The main path still calls waitUntilExit() — acceptable in
-    // the worker daemon context where one thread per active job is expected.
+    // cancellation.
     let timeoutTask: Task<Void, Never>?
     if usesExternalTimeout {
         timeoutTask = nil
@@ -88,11 +123,33 @@ func executeScriptProcess(
             try? await Task.sleep(nanoseconds: UInt64(timeLimitSeconds) * 1_000_000_000)
             guard !Task.isCancelled, proc.isRunning else { return }
             timedOut.withLock { $0 = true }
-            terminateScriptProcess(proc, usesSeparateProcessGroup: usesSeparateProcessGroup)
+            await terminateScriptProcess(proc, usesSeparateProcessGroup: usesSeparateProcessGroup)
         }
     }
 
-    proc.waitUntilExit()
+    // Suspend until exit instead of blocking on waitUntilExit(): the Swift
+    // cooperative pool has ~one thread per core and never grows, so a blocking
+    // wait per running script could pin every pool thread — starving the
+    // heartbeat tasks and (worst case) the timeout Task that is supposed to
+    // kill the hung script (June 2026 audit, P1.5).
+    //
+    // The handler is installed after run(), so guard the already-exited race:
+    // if the process exited before the handler was set the handler never
+    // fires, and if it exits in between both paths may fire — `resumed` keeps
+    // the continuation single-shot either way.
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let resumed = Mutex(false)
+        let resumeOnce: @Sendable () -> Void = {
+            let alreadyResumed = resumed.withLock { wasResumed in
+                let previous = wasResumed
+                wasResumed = true
+                return previous
+            }
+            if !alreadyResumed { continuation.resume() }
+        }
+        proc.terminationHandler = { _ in resumeOnce() }
+        if !proc.isRunning { resumeOnce() }
+    }
     timeoutTask?.cancel()
 
     if usesExternalTimeout && proc.terminationStatus == 124 {
@@ -131,14 +188,14 @@ private func finishPipeCapture(for pipe: Pipe, buffer: CapturedPipeBuffer) -> Da
     return buffer.snapshot()
 }
 
-private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: Bool) {
+private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: Bool) async {
     if usesSeparateProcessGroup {
         _ = kill(-proc.processIdentifier, SIGTERM)
     } else {
         proc.terminate()
     }
 
-    Thread.sleep(forTimeInterval: 0.5)
+    try? await Task.sleep(nanoseconds: 500_000_000)
 
     guard proc.isRunning else { return }
     let signalTarget = usesSeparateProcessGroup ? -proc.processIdentifier : proc.processIdentifier
@@ -148,11 +205,12 @@ private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: B
 /// Phase 1: direct subprocess execution, no sandbox.
 struct UnsandboxedScriptRunner: ScriptRunner {
 
-    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
-#if os(Linux)
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
+        #if os(Linux)
         let launch = configureLinuxUnsandboxedProcess(
             script: script,
-            workDir: workDir
+            workDir: workDir,
+            env: env
         )
 
         return await executeLinuxScriptProcess(
@@ -161,13 +219,14 @@ struct UnsandboxedScriptRunner: ScriptRunner {
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch script"
         )
-#else
+        #else
         let proc = Process()
         let launch = configureUnsandboxedProcess(
             proc,
             script: script,
             workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds
+            timeLimitSeconds: timeLimitSeconds,
+            env: env
         )
 
         return await executeScriptProcess(
@@ -177,7 +236,7 @@ struct UnsandboxedScriptRunner: ScriptRunner {
             usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
             usesExternalTimeout: launch.usesExternalTimeout
         )
-#endif
+        #endif
     }
 }
 
@@ -185,29 +244,90 @@ private func configureUnsandboxedProcess(
     _ proc: Process,
     script: URL,
     workDir: URL,
-    timeLimitSeconds: Int
+    timeLimitSeconds: Int,
+    env: [String: String]
 ) -> ProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
     proc.currentDirectoryURL = workDir
 
     proc.executableURL = invocation.executableURL
     proc.arguments = invocation.arguments
+    proc.environment = mergedScriptEnvironment(overrides: env)
     return ProcessLaunchConfiguration(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
     )
 }
 
+/// Environment keys a test script is allowed to inherit from the worker
+/// process. Everything else — notably `RUNNER_SHARED_SECRET`, DB URLs, and
+/// any other worker credential present in the daemon's environment — is
+/// withheld so a student submission cannot read it back out via stdout/stderr
+/// and forge worker API requests. Per-job values (`CHICKADEE_*`, seed inputs)
+/// arrive through `overrides`, which always win.
+private let scriptEnvironmentAllowlistKeys: Set<String> = [
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TZ", "LANG",
+    "TERM", "PWD",
+]
+
+/// Key prefixes whose every member is safe to inherit (locale + the per-job
+/// Chickadee namespace).
+private let scriptEnvironmentAllowlistPrefixes: [String] = ["LC_", "CHICKADEE_"]
+
+private func isAllowlistedScriptEnvironmentKey(_ key: String) -> Bool {
+    if scriptEnvironmentAllowlistKeys.contains(key) { return true }
+    return scriptEnvironmentAllowlistPrefixes.contains { key.hasPrefix($0) }
+}
+
+/// Build the environment for a test-script subprocess: an allowlisted subset
+/// of the worker's environment, plus `overrides` (which win on collision).
+///
+/// The worker daemon runs with secrets in its environment (`RUNNER_SHARED_SECRET`,
+/// database URLs, OIDC client secrets); inheriting the full environment would
+/// hand those to arbitrary student code. We therefore start from an allowlist
+/// rather than `ProcessInfo.processInfo.environment` wholesale.
+func mergedScriptEnvironment(overrides: [String: String]) -> [String: String] {
+    var base: [String: String] = [:]
+    for (key, value) in ProcessInfo.processInfo.environment
+    where isAllowlistedScriptEnvironmentKey(key) {
+        base[key] = value
+    }
+    for (key, value) in overrides {
+        base[key] = value
+    }
+    return base
+}
+
 #if os(Linux)
 private func configureLinuxUnsandboxedProcess(
     script: URL,
-    workDir: URL
+    workDir: URL,
+    env: [String: String]
 ) -> LinuxProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
     return LinuxProcessLaunchConfiguration(
         executablePath: invocation.executableURL.path,
-        arguments: invocation.arguments
+        arguments: invocation.arguments,
+        env: mergedScriptEnvironment(overrides: env)
     )
+}
+
+/// Holds the per-run pipe pair plus their shared buffers so the parent path
+/// can install capture, hand the write ends to the child, then drain the
+/// read ends after wait.
+private struct LinuxScriptPipes {
+    let stdoutPipe: Pipe
+    let stderrPipe: Pipe
+    let stdoutBuffer: CapturedPipeBuffer
+    let stderrBuffer: CapturedPipeBuffer
+}
+
+/// Result of `waitpid`-loop bookkeeping. `status` is the raw wait status; the
+/// caller maps it to `ScriptOutput.exitCode` after taking the timeout flag
+/// into account.
+private struct LinuxWaitOutcome: Sendable {
+    let status: Int32
+    let timedOut: Bool
 }
 
 func executeLinuxScriptProcess(
@@ -217,84 +337,149 @@ func executeLinuxScriptProcess(
     launchErrorPrefix: String
 ) async -> ScriptOutput {
     let start = Date()
+    let pipes = makeLinuxScriptPipes()
 
-    let stdoutPipe = Pipe()
-    let stderrPipe = Pipe()
-    let stdoutBuffer = CapturedPipeBuffer()
-    let stderrBuffer = CapturedPipeBuffer()
-
-    installPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
-    installPipeCapture(for: stderrPipe, buffer: stderrBuffer)
-
-    let executable = strdup(launch.executablePath)
     let rawArguments = [launch.executablePath] + launch.arguments
+    let executable = strdup(launch.executablePath)
     let argvStorage = rawArguments.map { strdup($0) }
     defer {
-        if let executable {
-            free(executable)
-        }
-        for pointer in argvStorage {
-            if let pointer {
-                free(pointer)
-            }
+        if let executable { free(executable) }
+        for pointer in argvStorage where pointer != nil {
+            free(pointer)
         }
     }
 
     guard let executable else {
-        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        return ScriptOutput(
-            exitCode: 2,
-            stdout: "",
-            stderr: "\(launchErrorPrefix): out of memory",
-            executionTimeMs: elapsed,
-            timedOut: false
+        return linuxLaunchFailure(
+            prefix: launchErrorPrefix,
+            detail: "out of memory",
+            start: start
         )
     }
 
     let pid = fork()
     if pid == -1 {
-        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-        return ScriptOutput(
-            exitCode: 2,
-            stdout: "",
-            stderr: "\(launchErrorPrefix): \(String(cString: strerror(errno)))",
-            executionTimeMs: elapsed,
-            timedOut: false
+        return linuxLaunchFailure(
+            prefix: launchErrorPrefix,
+            detail: String(cString: strerror(errno)),
+            start: start
         )
     }
 
     if pid == 0 {
-        let stdoutRead = stdoutPipe.fileHandleForReading.fileDescriptor
-        let stdoutWrite = stdoutPipe.fileHandleForWriting.fileDescriptor
-        let stderrRead = stderrPipe.fileHandleForReading.fileDescriptor
-        let stderrWrite = stderrPipe.fileHandleForWriting.fileDescriptor
+        linuxChildExec(
+            pipes: pipes,
+            workDir: workDir,
+            envOverrides: launch.env,
+            executable: executable,
+            argvStorage: argvStorage
+        )
+        // execvp never returns on success; the child path _exit()s on error.
+    }
 
-        _ = Glibc.close(stdoutRead)
-        _ = Glibc.close(stderrRead)
+    pipes.stdoutPipe.fileHandleForWriting.closeFile()
+    pipes.stderrPipe.fileHandleForWriting.closeFile()
 
-        if dup2(stdoutWrite, STDOUT_FILENO) == -1 || dup2(stderrWrite, STDERR_FILENO) == -1 {
-            _exit(127)
+    // Run the waitpid poll loop on a dedicated OS thread and suspend here:
+    // the loop blocks (usleep between WNOHANG polls) for up to the full time
+    // limit, and the cooperative pool must not lose a thread per running
+    // script (June 2026 audit, P1.5). One short-lived thread per active job,
+    // bounded by --max-jobs.
+    let wait = await withCheckedContinuation { (continuation: CheckedContinuation<LinuxWaitOutcome, Never>) in
+        Thread.detachNewThread {
+            continuation.resume(returning: linuxWaitForChild(pid: pid, timeLimitSeconds: timeLimitSeconds))
         }
+    }
 
-        _ = Glibc.close(stdoutWrite)
-        _ = Glibc.close(stderrWrite)
+    let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+    let stdoutData = finishPipeCapture(for: pipes.stdoutPipe, buffer: pipes.stdoutBuffer)
+    let stderrData = finishPipeCapture(for: pipes.stderrPipe, buffer: pipes.stderrBuffer)
+    let exitCode = wait.timedOut ? -1 : linuxExitCode(from: wait.status)
 
-        if chdir(workDir.path) == -1 {
-            _exit(127)
-        }
+    return ScriptOutput(
+        exitCode: exitCode,
+        stdout: String(data: stdoutData, encoding: .utf8) ?? "",
+        stderr: String(data: stderrData, encoding: .utf8) ?? "",
+        executionTimeMs: elapsed,
+        timedOut: wait.timedOut
+    )
+}
 
-        if setsid() == -1 {
-            _exit(127)
-        }
+private func makeLinuxScriptPipes() -> LinuxScriptPipes {
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    let stdoutBuffer = CapturedPipeBuffer()
+    let stderrBuffer = CapturedPipeBuffer()
+    installPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
+    installPipeCapture(for: stderrPipe, buffer: stderrBuffer)
+    return LinuxScriptPipes(
+        stdoutPipe: stdoutPipe,
+        stderrPipe: stderrPipe,
+        stdoutBuffer: stdoutBuffer,
+        stderrBuffer: stderrBuffer
+    )
+}
 
-        var argv = argvStorage + [nil]
-        execvp(executable, &argv)
+private func linuxLaunchFailure(prefix: String, detail: String, start: Date) -> ScriptOutput {
+    let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+    return ScriptOutput(
+        exitCode: 2,
+        stdout: "",
+        stderr: "\(prefix): \(detail)",
+        executionTimeMs: elapsed,
+        timedOut: false
+    )
+}
+
+/// Runs in the forked child between `fork()` and `execvp`.  Sets up FDs,
+/// applies env overrides, then execs. Always terminates the child via
+/// `_exit(127)` on any failure path.  Never returns on success.
+private func linuxChildExec(
+    pipes: LinuxScriptPipes,
+    workDir: URL,
+    envOverrides: [String: String],
+    executable: UnsafeMutablePointer<CChar>,
+    argvStorage: [UnsafeMutablePointer<CChar>?]
+) {
+    let stdoutRead = pipes.stdoutPipe.fileHandleForReading.fileDescriptor
+    let stdoutWrite = pipes.stdoutPipe.fileHandleForWriting.fileDescriptor
+    let stderrRead = pipes.stderrPipe.fileHandleForReading.fileDescriptor
+    let stderrWrite = pipes.stderrPipe.fileHandleForWriting.fileDescriptor
+
+    _ = Glibc.close(stdoutRead)
+    _ = Glibc.close(stderrRead)
+
+    if dup2(stdoutWrite, STDOUT_FILENO) == -1 || dup2(stderrWrite, STDERR_FILENO) == -1 {
         _exit(127)
     }
 
-    stdoutPipe.fileHandleForWriting.closeFile()
-    stderrPipe.fileHandleForWriting.closeFile()
+    _ = Glibc.close(stdoutWrite)
+    _ = Glibc.close(stderrWrite)
 
+    if chdir(workDir.path) == -1 {
+        _exit(127)
+    }
+
+    if setsid() == -1 {
+        _exit(127)
+    }
+
+    // Apply env overrides to the child's `environ` before exec.  setenv()
+    // with overwrite=1 mutates the child's copy of the parent env; execvp
+    // then inherits it.
+    for (key, value) in envOverrides {
+        _ = setenv(key, value, 1)
+    }
+
+    var argv = argvStorage + [nil]
+    execvp(executable, &argv)
+    _exit(127)
+}
+
+/// Polls `waitpid` until the child exits or the deadline is hit. On
+/// timeout, sends SIGTERM to the process group, sleeps briefly, then SIGKILL
+/// and reaps.  Returns the final wait status plus a timeout flag.
+private func linuxWaitForChild(pid: pid_t, timeLimitSeconds: Int) -> LinuxWaitOutcome {
     var timedOut = false
     var status: Int32 = 0
     let deadline = Date().addingTimeInterval(TimeInterval(timeLimitSeconds))
@@ -324,18 +509,7 @@ func executeLinuxScriptProcess(
         usleep(50_000)
     }
 
-    let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-    let stdoutData = finishPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
-    let stderrData = finishPipeCapture(for: stderrPipe, buffer: stderrBuffer)
-    let exitCode = timedOut ? -1 : linuxExitCode(from: status)
-
-    return ScriptOutput(
-        exitCode: exitCode,
-        stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-        stderr: String(data: stderrData, encoding: .utf8) ?? "",
-        executionTimeMs: elapsed,
-        timedOut: timedOut
-    )
+    return LinuxWaitOutcome(status: status, timedOut: timedOut)
 }
 
 private func linuxExitCode(from status: Int32) -> Int32 {

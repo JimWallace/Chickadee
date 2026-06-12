@@ -7,9 +7,9 @@
 // which is the standard approach for AJAX-heavy pages (same pattern as
 // Rails, Django, and Laravel).
 
-import Vapor
-import Leaf
 import CSRF
+import Leaf
+import Vapor
 
 struct CSRFTokenTag: UnsafeUnescapedLeafTag {
     func render(_ ctx: LeafContext) throws -> LeafData {

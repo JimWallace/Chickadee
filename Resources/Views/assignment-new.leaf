@@ -4,43 +4,44 @@ Create Assignment
 #endexport
 #export("content"):
 #if(error):
-<div class="error-box" style="margin-bottom:1rem">
+<div class="error-box">
     <h2>Could not create assignment</h2>
-    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+    <p class="card-meta error-detail">#(error)</p>
 </div>
 #endif
 
 #if(notice):
-<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:var(--success-bg)">
-    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+<div class="notice-banner">
+    <p>#(notice)</p>
 </div>
 #endif
 
-<form class="form" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form" novalidate>
+<form class="form form--wide" method="post" action="/instructor/new/save" enctype="multipart/form-data" id="new-assignment-form" novalidate>
     #csrfFormField()
     #if(draftID):
     <input type="hidden" name="draftID" value="#(draftID)">
     #endif
 
     <!-- ── Top header row ─────────────────────────────────────────────── -->
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
-        <div style="flex:1;min-width:16rem">
+    <div class="editor-titlebar">
+        <div class="editor-title-col">
             <label class="visually-hidden" for="assignmentNameInput">Assignment Name</label>
-            <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
+            <input class="form-input assignment-name-input" type="text" name="assignmentName" id="assignmentNameInput" required
                    value="#(assignmentName)"
-                   placeholder="Assignment name"
-                   style="font-size:1.4rem;font-weight:600;border:none;border-bottom:2px solid var(--border,#ddd);border-radius:0;padding:.15rem 0;background:transparent;width:100%">
-            <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-top:.6rem;align-items:center">
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                   placeholder="Assignment name">
+            <div class="assignment-meta-row">
+                <label class="field-inline">
+                    Opens
+                    <input class="form-input input-compact" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)">
+                </label>
+                <label class="field-inline">
                     Due
-                    <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)"
-                           style="font-size:.875rem;padding:.2rem .5rem">
+                    <input class="form-input input-compact" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
                 #if(!sections.isEmpty):
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;white-space:nowrap">
+                <label class="field-inline">
                     Section
-                    <select class="form-input" name="sectionID" id="sectionID"
-                            style="font-size:.875rem;padding:.2rem .5rem">
+                    <select class="form-input input-compact" name="sectionID" id="sectionID">
                         <option value="" #if(!preselectedSectionID):selected#endif>— Ungrouped —</option>
                         #for(section in sections):
                         <option value="#(section.sectionID)"
@@ -51,10 +52,10 @@ Create Assignment
                 </label>
                 #endif
             </div>
-            <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem"></div>
-            <p id="grading-mode-hint" class="card-meta" style="margin-top:.3rem;display:none"></p>
+            <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
+            <p id="grading-mode-hint" class="card-meta grading-mode-hint" style="display:none"></p>
         </div>
-        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
+        <div class="editor-actions">
             <button class="btn btn-primary" type="submit">Create &amp; Validate</button>
             <a class="btn" href="/instructor">Cancel</a>
         </div>
@@ -63,18 +64,30 @@ Create Assignment
     <!-- ── Notebooks ──────────────────────────────────────────────────── -->
 
     <!-- Hidden file inputs triggered by JS buttons -->
-    <input type="file" id="assignment-notebook-file-input" name="assignmentNotebookFile" accept=".ipynb" style="display:none">
-    <input type="file" id="solution-notebook-file-input"   name="solutionNotebookFile"   accept=".ipynb" style="display:none">
+    <input type="file" id="assignment-notebook-file-input" name="assignmentNotebookFile" accept=".ipynb" hidden>
+    <input type="file" id="solution-notebook-file-input"   name="solutionNotebookFile"   accept=".ipynb" hidden>
 
     <!-- Hidden submit buttons for draft notebook actions, fired by JS -->
-    <button id="js-upload-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-assignment-notebook"  style="display:none"></button>
-    <button id="js-upload-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook"    style="display:none"></button>
-    <button id="js-create-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook"  style="display:none"></button>
-    <button id="js-create-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook"    style="display:none"></button>
-    <button id="js-clear-assignment-notebook"   type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook"   style="display:none"></button>
-    <button id="js-clear-solution-notebook"     type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook"     style="display:none"></button>
+    <button id="js-upload-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-assignment-notebook"  hidden></button>
+    <button id="js-upload-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="upload-solution-notebook"    hidden></button>
+    <button id="js-create-assignment-notebook"  type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-assignment-notebook"  hidden></button>
+    <button id="js-create-solution-notebook"    type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-notebook"    hidden></button>
+    <button id="js-create-solution-from-assignment" type="submit" formaction="/instructor/new/draft" name="draftAction" value="create-solution-from-assignment" hidden></button>
+    <button id="js-clear-assignment-notebook"   type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-assignment-notebook"   hidden></button>
+    <button id="js-clear-solution-notebook"     type="submit" formaction="/instructor/new/draft" name="draftAction" value="clear-solution-notebook"     hidden></button>
 
-    <div style="margin:0 0 1.25rem">
+    <div class="editor-block">
+        <div class="editor-block-head">
+            <h2>Files</h2>
+            #if(draftID):
+            <div class="toolbar toolbar--end">
+                <button class="btn action-btn" type="button" id="add-support-file-btn"
+                        title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Add Support File</button>
+                <input type="file" id="support-file-upload-input" hidden multiple>
+                <span id="support-file-upload-status" class="upload-status-inline"></span>
+            </div>
+            #endif
+        </div>
         <table class="results-table" id="notebook-files-table">
             <thead>
                 <tr>
@@ -94,7 +107,7 @@ Create Assignment
                         #endif
                     </td>
                     <td class="time">
-                        <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                        <div class="cell-actions">
                             #if(assignmentNotebook):
                             <a class="btn action-btn" href="#(assignmentNotebook.editURL)">Edit</a>
                             <button class="btn action-btn action-danger" type="button"
@@ -117,7 +130,7 @@ Create Assignment
                         #endif
                     </td>
                     <td class="time">
-                        <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
+                        <div class="cell-actions">
                             #if(solutionNotebook):
                             <a class="btn action-btn" href="#(solutionNotebook.editURL)">Edit</a>
                             <button class="btn action-btn action-danger" type="button"
@@ -126,93 +139,41 @@ Create Assignment
                             <button class="btn action-btn" type="button" id="upload-solution-notebook-btn">Upload</button>
                             <button class="btn action-btn" type="button"
                                     onclick="document.getElementById('js-create-solution-notebook').click()">Create Blank</button>
+                            #if(assignmentNotebook):
+                            <!-- Parity PR 4 of #433: only meaningful once an
+                                 assignment notebook exists; copies its bytes
+                                 into the draft solution path. -->
+                            <button class="btn action-btn" type="button"
+                                    title="Copy the assignment notebook as a starting point for the solution"
+                                    onclick="document.getElementById('js-create-solution-from-assignment').click()">Create from Assignment</button>
+                            #endif
                             #endif
                         </div>
                     </td>
                 </tr>
+                <!-- Support files: data fixtures (CSVs, JSON, etc.) bundled
+                     with the assignment.  Anything in the draft zip that
+                     isn't a test script and isn't a notebook lands here.
+                     v0.4.132 / parity PR 3 of #433. -->
+                #for(supportFile in supportFileRows):
+                <tr data-support-file="#(supportFile.name)">
+                    <td><strong>Support file</strong></td>
+                    <td>
+                        <a href="#(supportFile.url)"><code>#(supportFile.name)</code></a>
+                    </td>
+                    <td class="time">
+                        <button class="btn action-btn action-danger support-file-delete-btn" type="button"
+                                data-filename="#(supportFile.name)">Remove</button>
+                    </td>
+                </tr>
+                #endfor
             </tbody>
         </table>
     </div>
 
-    <!-- ── Test Suite ─────────────────────────────────────────────────── -->
-    <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple style="display:none">
-    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
-
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
-        <h2 style="margin:0">Test Suite</h2>
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
-            <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
-            <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
-        </div>
-    </div>
-
-    <!-- Generate Tests from Solution (hidden; shown when solution file selected) -->
-    <div id="gen-tests-panel" style="display:none;margin-bottom:.75rem;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
-        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem">
-            <span style="font-size:.875rem;font-weight:600">Generate Starter Tests</span>
-            <button class="btn" type="button" id="scan-solution-btn" style="padding:.2rem .6rem;font-size:.8rem">Scan Solution for Functions</button>
-            <span id="scan-status" style="font-size:.8rem;color:var(--meta)"></span>
-        </div>
-        <div id="scan-results" style="display:none">
-            <p class="card-meta" style="margin-bottom:.4rem">Select the functions to generate starter tests for:</p>
-            <div id="fn-checklist" style="display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-bottom:.6rem"></div>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem">
-                <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem">
-                    Template:
-                    <select id="gen-template-select" class="form-input" style="padding:.2rem .5rem;font-size:.8rem">
-                        <option value="py:exists">Function Exists</option>
-                        <option value="py:correctness" selected>Correctness (input/output pairs)</option>
-                        <option value="py:corner_cases">Corner Cases</option>
-                        <option value="py:exception">Exception Handling</option>
-                        <option value="py:type_check">Return Type Check</option>
-                        <option value="py:performance">Performance / Runtime</option>
-                        <option value="py:differential">Differential (reference solution)</option>
-                    </select>
-                </label>
-            </div>
-            <button class="btn btn-primary" type="button" id="add-gen-tests-btn" style="font-size:.8rem;padding:.25rem .6rem">Add Selected Tests to Suite</button>
-        </div>
-    </div>
-
-    <table class="results-table" id="suite-config-table">
-        <thead>
-            <tr>
-                <th title="Student-facing name (edit to override the filename)">Name</th>
-                <th>Visibility</th>
-                <th title="Grade point weight for this test (default 1)">Pts</th>
-                <th class="time">Action</th>
-            </tr>
-        </thead>
-        <tbody id="suite-config-body">
-            #for(row in suiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
-                <td><div class="suite-name-cell">
-                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
-                    <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
-                </div></td>
-                <td>
-                    <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
-                        <option value="support" #if(row.tier == "support"):selected#endif>support</option>
-                        <option value="public"  #if(row.tier == "public"):selected#endif>public</option>
-                        <option value="secret"  #if(row.tier == "secret"):selected#endif>secret</option>
-                        <option value="release" #if(row.tier == "release"):selected#endif>release</option>
-                    </select>
-                </td>
-                <td><input type="number" class="form-input suite-points" min="1" max="100" value="#(row.points)" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>
-                <td class="time">
-                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
-                        <button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>
-                    </div>
-                </td>
-            </tr>
-            #endfor
-        </tbody>
-    </table>
-
     <!-- ── Runner Requirements ────────────────────────────────────────── -->
     #if(!detectedLanguages.isEmpty):
-    <p class="card-meta" style="margin:.75rem 0 .4rem">
+    <p class="card-meta detected-note">
         <strong>Auto-detected:</strong>
         Languages: #(detectedLanguagesCSV)
         #if(!detectedCapabilities.isEmpty):
@@ -220,445 +181,709 @@ Create Assignment
         #endif
     </p>
     #endif
-    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.5rem 0 1.25rem">
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+    <div class="runner-req-row">
+        <label class="req-field">
             Languages
-            <input class="form-input" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
-                   placeholder="python, r" style="font-size:.875rem;padding:.25rem .5rem">
+            <input class="form-input input-sm" type="text" name="requiredLanguagesCSV" value="#(requiredLanguagesCSV)"
+                   placeholder="python, r">
         </label>
-        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;flex:1;min-width:12rem">
+        <label class="req-field">
             Capabilities
-            <input class="form-input" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)"
-                   placeholder="numpy, pandas, shell-bash" style="font-size:.875rem;padding:.25rem .5rem">
+            <input class="form-input input-sm" type="text" name="requiredCapabilitiesCSV" value="#(requiredCapabilitiesCSV)"
+                   placeholder="numpy, pandas, shell-bash">
         </label>
     </div>
 
-    <p class="card-meta" style="margin-bottom:.75rem">
-        The uploaded solution is validated immediately by a runner. The assignment stays closed until validation passes.
-        Once it passes, open it from the Instructor dashboard.
-    </p>
 </form>
 
-<!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
-<div id="script-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
-                    border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div id="editor-title" style="font-weight:600;flex:1">New Test Script</div>
-            <button class="btn-link" id="editor-close-btn" type="button"
-                    aria-label="Close editor" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+<!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form
+     so its nested per-op <form> elements (Add Section, rename section,
+     delete section) parse correctly.  The browser strips nested <form>
+     tags, which is why the v0.4.96 in-form `+ Section` JS button
+     worked but a server-rendered `+ Section` form would not.  Suite
+     edits go through dedicated draft-scoped endpoints (JS PUT
+     /instructor/new/draft/suite for items, POST /instructor/new/draft
+     /suite-sections/* for section CRUD) — none of them rely on the
+     outer form. -->
+
+#if(draftID):
+<label class="visually-hidden" for="suite-files-input">Add test suite files</label>
+<input class="form-input" id="suite-files-input" type="file" multiple hidden>
+
+<div class="form form--wide suite-editor-section">
+    <div class="editor-block-head">
+        <h2>Test Suite</h2>
+        <div class="toolbar toolbar--end">
+            <!-- Add Section — form POST + full page reload, mirrors the
+                 edit-page pattern (assignment-edit.leaf:154-168). -->
+            <details class="add-section-details popup-anchor" id="add-suite-section-details">
+                <summary class="btn action-btn summary-btn">+ Section</summary>
+                <div class="add-section-popup card suite-section-popup">
+                    <form method="post" action="/instructor/new/draft/suite-sections?draftID=#(draftID)" class="form popup-form">
+                        #csrfFormField()
+                        <label class="form-label">
+                            Section name
+                            <input class="form-input editor-input" type="text" name="name" placeholder="e.g. Question 1" required>
+                        </label>
+                        <button class="btn btn-primary btn-compact" type="submit">Create section</button>
+                    </form>
+                </div>
+            </details>
+            <!-- Test authoring is per-section now (each section's inline
+                 "+ Add Test" opens the unified Test Editor modal).  The hidden
+                 Upload button is kept as the file-input trigger wired by
+                 suite-table.js (`#add-test-btn`). -->
+            <button class="btn action-btn" type="button" id="add-test-btn" hidden>Upload</button>
         </div>
-        <!-- New-file controls -->
-        <div id="new-file-controls" style="padding:.75rem 1rem .5rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
-                    Filename
-                    <input type="text" id="new-filename-input" class="form-input"
-                           placeholder="e.g. test_correctness.py"
-                           style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Tier
-                    <select id="new-file-tier" class="form-input" style="padding:.25rem .5rem;font-size:.875rem">
-                        <option value="public">public</option>
-                        <option value="secret">secret</option>
-                        <option value="release">release</option>
-                        <option value="support">support (not graded)</option>
-                    </select>
-                </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Points
-                    <input type="number" id="new-file-points" class="form-input" min="1" max="100" value="1"
-                           style="width:4rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-            </div>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
-                <select id="template-select" class="form-input"
-                        style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
-                    <optgroup label="Python">
+    </div>
+
+    <!-- Generate Tests from Solution (hidden; shown when solution notebook present) -->
+    <div id="gen-tests-panel" class="gen-tests-panel" style="display:none">
+        <div class="gen-tests-row">
+            <span class="gen-tests-title">Generate Starter Tests</span>
+            <button class="btn btn-sm" type="button" id="scan-solution-btn">Scan Solution for Functions</button>
+            <span id="scan-status" class="editor-status"></span>
+        </div>
+        <div id="scan-results" style="display:none">
+            <p class="card-meta gen-tests-prompt">Select the functions to generate starter tests for:</p>
+            <div id="fn-checklist" class="fn-checklist"></div>
+            <div class="gen-template-row">
+                <label class="gen-template-label">
+                    Template:
+                    <select id="gen-template-select" class="form-input select-xs">
                         <option value="py:exists">Function Exists</option>
-                        <option value="py:correctness">Correctness (input/output pairs)</option>
+                        <option value="py:correctness" selected>Correctness (input/output pairs)</option>
                         <option value="py:corner_cases">Corner Cases</option>
                         <option value="py:exception">Exception Handling</option>
                         <option value="py:type_check">Return Type Check</option>
                         <option value="py:performance">Performance / Runtime</option>
                         <option value="py:differential">Differential (reference solution)</option>
-                    </optgroup>
-                    <optgroup label="Shell">
-                        <option value="sh:always_pass">Always Pass (placeholder)</option>
-                        <option value="sh:file_exists">File Exists Check</option>
-                        <option value="sh:command_output">Command Output Check</option>
-                    </optgroup>
-                    <option value="blank">Blank</option>
-                </select>
-                <button class="btn" type="button" id="apply-template-btn" style="padding:.2rem .6rem;font-size:.8rem">Apply</button>
+                        <option value="py:variable_equality">Variable Equality</option>
+                        <option value="py:structural_check">Structural Check (AST properties)</option>
+                    </select>
+                </label>
             </div>
+            <button class="btn btn-primary btn-tiny" type="button" id="add-gen-tests-btn">Add Selected Tests to Suite</button>
         </div>
-        <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
-                    border-top:1px solid var(--border,#ddd);flex-shrink:0">
-            <button class="btn btn-primary" id="editor-save-btn" type="button">Add to Suite</button>
-            <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
-            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
+    </div>
+
+    <!-- Server-rendered section shells (parity with assignment-edit.leaf,
+         #435 / v0.4.132).  Each .section-block owns its own table shell;
+         `suite-table.js` populates the `<tbody data-section-id>` rows from
+         the JSON seed and keeps them in sync via the debounced
+         `PUT /instructor/new/draft/suite`.  Section CRUD goes through the
+         draft-scoped endpoints in AssignmentRoutes+DraftSections.swift. -->
+    <div id="suite-sections">
+    #for(sec in suiteSectionRows):
+        <div class="section-block" data-section-id="#(sec.sectionID)">
+        #if(!sec.isUngrouped):
+            <div class="section-header" draggable="true">
+                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
+
+                <!-- View mode -->
+                <div class="section-view">
+                    <strong>#(sec.name)</strong>
+                    <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+                            title="Edit section" aria-label="Edit section">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </button>
+                    <span class="section-spacer"></span>
+                    <button type="button" class="btn action-btn btn-xs section-var-add"
+                            data-section-id="#(sec.sectionID)">+ Add Input</button>
+                    <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                            data-section-id="#(sec.sectionID)">+ Add Test</button>
+                </div>
+
+                <!-- Edit mode (hidden by default) -->
+                <div class="section-edit" style="display:none">
+                    <form class="section-rename-form" method="post"
+                          action="/instructor/new/draft/suite-sections/#(sec.sectionID)/rename?draftID=#(draftID)">
+                        #csrfFormField()
+                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
+                        <button class="btn btn-primary btn-tiny" type="submit">Save</button>
+                    </form>
+                    <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
+                            data-action="/instructor/new/draft/suite-sections/#(sec.sectionID)/delete?draftID=#(draftID)"
+                            data-name="#(sec.name)">Delete</button>
+                    <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
+                </div>
+            </div>
+
+            <!-- Section variables (shared inputs) form.  Auto-saves on
+                 change (debounced), POSTs JSON to the draft-scoped
+                 variables endpoint. -->
+            <form class="section-vars-form" method="post"
+                  action="/instructor/new/draft/suite-sections/#(sec.sectionID)/variables?draftID=#(draftID)"
+                  data-section-id="#(sec.sectionID)">
+                <table class="results-table section-vars-table">
+                    <tbody class="section-vars-body">
+                        #for(v in sec.variables):
+                        <tr class="section-var-row">
+                            <td class="section-var-namecell">
+                                <span class="section-var-row-valid section-var-valid"></span>
+                                <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
+                            </td>
+                            <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
+                            <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
+                                        title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
+                        </tr>
+                        #endfor
+                    </tbody>
+                </table>
+            </form>
+        #else:
+            <div class="section-create-toolbar"
+                 data-section-id="#(sec.sectionID)">
+                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                        data-section-id="#(sec.sectionID)">+ Add Test</button>
+            </div>
+        #endif
+            <table class="results-table">
+                <tbody data-section-id="#(sec.sectionID)"></tbody>
+            </table>
         </div>
+    #endfor
     </div>
 </div>
 
-<style>
-.suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
-.suite-drag-handle:active { cursor: grabbing; }
-.suite-row-dragging { opacity: .35; }
-tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
-tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
-tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
-.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
-.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
-.suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
-.suite-child-indent { padding-left: 2rem; white-space: nowrap; }
-.suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
-.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
-#suite-config-table td { vertical-align: top; }
-</style>
+<!-- Suite seed (full reconciled GET /suite payload) — same shape the
+     edit page emits.  rawJSON emits the string verbatim so JSON.parse
+     in suite-table.js doesn't choke on HTML-escaped quotes. -->
+<script id="suite-state-seed" type="application/json">#rawJSON(suiteStateJSON)</script>
+#else:
+<!-- Pre-draft state: nothing to author yet.  The notebook upload above
+     creates the draft setup, after which the page reloads with the
+     suite editor visible. -->
+<div class="predraft-note">
+    <strong>Test Suite</strong> — upload an assignment notebook above to begin authoring tests.
+</div>
+#endif
+
+<!-- Pattern families seed — same shape as the edit page's seed.
+     Server renders the current draft's families (empty before first save). -->
+<script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
+<!-- Notebook checks seed (parity PR 2 of #433).  Empty `[]` until a draft
+     exists; the check editor module silently no-ops in that case. -->
+<script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
+<script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
+
+<!-- ── Notebook Check editor ────────────────────────────────────────────
+     Now a body renderer of the unified Test Editor modal
+     (test-editor-modal.js + test-renderer-check.js, wired near the bottom
+     of the page).  The shell owns the chrome + type picker; the renderer
+     builds its per-kind fields from the #check-schema seed.  No standalone
+     overlay. -->
+
+<!-- ── Pattern Family editor body ───────────────────────────────────────────
+     A body renderer of the unified Test Editor modal (the shell owns the
+     chrome).  Shared with assignment-edit via the _family-editor-body partial;
+     the driving module (Public/pattern-family-editor.js) is shared too. -->
+#extend("_family-editor-body")
+
+<!-- Pattern family editor module — same implementation as the edit page,
+     wired to draft-scoped URLs.  After a save, the page reloads so the
+     server-rendered suite table picks up the newly generated scripts. -->
+<script src="/pattern-family-editor.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var draftID = #rawJSON(draftIDJSON);
+    if (!draftID) return;  // No draft yet — user hasn't uploaded a solution notebook
+    var csrfToken = ChickadeeUI.getCsrfToken();
+    var seed = document.getElementById('pattern-families-seed');
+    var initialFamilies = [];
+    if (seed) {
+        try { initialFamilies = JSON.parse(seed.textContent || '[]') || []; }
+        catch (e) { initialFamilies = []; }
+    }
+    window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
+        draftID: draftID,
+        csrfToken: csrfToken,
+        initialFamilies: initialFamilies,
+        urls: {
+            solutionNotebook: function () {
+                return '/instructor/new/draft/solution-notebook?draftID=' + encodeURIComponent(draftID);
+            },
+            scanNotebook: function () { return '/instructor/scan-notebook'; }
+        }
+    });
+})();
+</script>
+
+
+<!-- ── Unified Suite Table ─────────────────────────────────────────────────
+     v0.4.132: the create page now shares `suite-table.js` with the edit
+     page (lines 809-841 in assignment-edit.leaf).  All section CRUD
+     goes through draft-scoped endpoints — see
+     AssignmentRoutes+DraftSections.swift. -->
+#if(draftID):
+<script src="/suite-list.js?v=#appVersion()"></script>
+<script src="/suite-table.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var draftID = #rawJSON(draftIDJSON);
+    if (!draftID) return;
+    var csrfToken = ChickadeeUI.getCsrfToken();
+    var suiteTable = window.initSuiteTable({
+        assignmentID: 'draft:' + draftID,  // diagnostics-only; URL builders below ignore
+        csrfToken: csrfToken,
+        formSelector: 'form#new-assignment-form',
+        urls: {
+            putSuite: function () {
+                return '/instructor/new/draft/suite?draftID=' + encodeURIComponent(draftID);
+            },
+            deleteScript: function (name) {
+                return '/instructor/new/draft/scripts/' + encodeURIComponent(name)
+                     + '?draftID=' + encodeURIComponent(draftID);
+            },
+            uploadScript: function () {
+                return '/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID);
+            }
+        }
+    });
+    // Window globals the Test Editor renderers call to persist through the
+    // single PUT /suite write path.
+    window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
+    window.chickadeeSaveFamiliesViaSuite   = suiteTable.saveFamiliesViaSuite;
+    window.chickadeeSaveChecksViaSuite     = suiteTable.saveChecksViaSuite;
+    window.chickadeeSaveScriptViaSuite     = suiteTable.saveScriptViaSuite;
+    window.chickadeeGetSuiteItems          = suiteTable.getItems;
+})();
+</script>
+
+<!-- Section-variables auto-save (mirrors assignment-edit.leaf:847-1113).
+     Each section gets a Shared Inputs table; rows debounce-POST to
+     /instructor/new/draft/suite-sections/:sid/variables. -->
 <script>
 (function () {
     'use strict';
 
-    var filesInput  = document.getElementById('suite-files-input');
-    var configField = document.getElementById('suite-config-field');
-    var body        = document.getElementById('suite-config-body');
-    if (!filesInput || !configField || !body) return;
+    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
+    var csrf = ChickadeeUI.getCsrfToken;
 
-    // items: { name, source, index?, displayName, isTest, tier, dependsOn[], points, errors? }
-    var items = [];
-    var dragName = null;
-
-    function isLikelyScript(name) {
-        var ext = (name || '').toLowerCase().split('.').pop();
-        return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
+    function isValidPyIdent(s) {
+        return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
     }
 
-    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
-                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
-                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
-
-    function fileErrors(file) {
-        var errs = [];
-        var ext = (file.name || '').toLowerCase().split('.').pop();
-        if (BINARY_EXTS.indexOf(ext) >= 0) errs.push('Binary file — unlikely to work as a test script');
-        if (!file.name.includes('.'))       errs.push('No file extension');
-        if (file.size === 0)                errs.push('Empty file');
-        return errs;
-    }
-
-    function stemOf(filename) {
-        var dot = filename.lastIndexOf('.');
-        return dot > 0 ? filename.slice(0, dot) : filename;
-    }
-
-    function hasChildren(name) {
-        return items.some(function (it) { return it.dependsOn.indexOf(name) >= 0; });
-    }
-
-    function isChild(name) {
-        var it = items.find(function (i) { return i.name === name; });
-        return it ? it.dependsOn.length > 0 : false;
-    }
-
-    function visualOrder() {
-        var result = [];
-        var childMap = {};
-        items.forEach(function (it) {
-            if (it.dependsOn.length > 0) {
-                var p = it.dependsOn[0];
-                childMap[p] = childMap[p] || [];
-                childMap[p].push(it);
-            }
-        });
-        items.filter(function (it) { return it.dependsOn.length === 0; }).forEach(function (root) {
-            result.push({ item: root, depth: 0 });
-            (childMap[root.name] || []).forEach(function (child) {
-                result.push({ item: child, depth: 1 });
-            });
-        });
-        return result;
-    }
-
-    function tierOptions(selected) {
-        return ['support','public','secret','release'].map(function (t) {
-            return '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + t + '</option>';
-        }).join('');
-    }
-
-    function itemIsTest(item) { return item.tier !== 'support'; }
-
-    function rowHTML(item, depth) {
-        var errs     = (item.errors && item.errors.length > 0) ? item.errors : [];
-        var errBadge = errs.length > 0
-            ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
-            : '';
-        var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
-        var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var pts       = item.points || 1;
-        var nameVal   = escAttr(item.displayName || stemOf(item.name));
-        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
-            + '<td' + indent + '><div class="suite-name-cell">'
-            +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
-            +   connector
-            +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
-            +   errBadge
-            + '</div></td>'
-            + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
-            +   tierOptions(item.tier)
-            + '</select></td>'
-            + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-            + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
-            +   '<button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>'
-            + '</div></td>'
-            + '</tr>';
-    }
-
-    function renderTree() {
-        var visual = visualOrder();
-        body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
-    }
-
-    function syncConfig() {
-        var visual = visualOrder();
-        var config = visual.map(function (v, i) {
-            var item = v.item;
-            var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
-            if (row) {
-                var tierEl        = row.querySelector('.suite-tier');
-                var ptsEl         = row.querySelector('.suite-points');
-                var displayNameEl = row.querySelector('.suite-display-name');
-                if (tierEl)        item.tier   = tierEl.value;
-                item.isTest = itemIsTest(item);
-                if (ptsEl)         item.points = Math.max(1, parseInt(ptsEl.value) || 1);
-                if (displayNameEl) {
-                    var val = displayNameEl.value.trim();
-                    item.displayName = (val && val !== stemOf(item.name)) ? val : null;
-                }
-            }
-            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1, displayName: item.displayName || null };
-            if (item.source === 'upload') { base.index = item.index; }
-            else                          { base.name  = item.name;  }
-            return base;
-        });
-        configField.value = JSON.stringify(config);
-    }
-
-    function initFromDOM() {
-        items = [];
-        body.querySelectorAll('tr[data-source="existing"]').forEach(function (row) {
-            var name        = row.getAttribute('data-name') || '';
-            var tier        = row.getAttribute('data-tier') || 'public';
-            var depsRaw     = row.getAttribute('data-depends-on') || '[]';
-            var dependsOn   = [];
-            try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
-            var points      = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
-            var displayName = row.getAttribute('data-display-name') || '';
-            items.push({ name: name, displayName: displayName, source: 'existing', isTest: tier !== 'support', tier: tier, dependsOn: dependsOn, points: points });
-        });
-        renderTree();
-        syncConfig();
-    }
-
-    function addUploadedFiles() {
-        var files = Array.from(filesInput.files || []);
-        items = items.filter(function (it) { return it.source !== 'upload'; });
-        files.forEach(function (file, idx) {
-            var name = file.name;
-            // Don't add if a same-named item already exists from draft
-            if (items.some(function (it) { return it.name === name; })) return;
-            items.push({
-                name:        name,
-                displayName: '',
-                source:      'upload',
-                index:       idx,
-                isTest:      isLikelyScript(name),
-                tier:        isLikelyScript(name) ? 'public' : 'support',
-                dependsOn:   [],
-                points:      1,
-                errors:      fileErrors(file)
-            });
-        });
-        renderTree();
-        syncConfig();
-    }
-
-    // --- Drag & Drop ---
-    body.addEventListener('dragstart', function (e) {
-        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
-        if (!handle) { e.preventDefault(); return; }
-        var row = handle.closest('tr[data-name]');
-        if (!row) { e.preventDefault(); return; }
-        dragName = row.getAttribute('data-name');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragName);
-        row.classList.add('suite-row-dragging');
-    });
-
-    body.addEventListener('dragend', function () {
-        dragName = null;
-        body.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
-        clearDropIndicators();
-    });
-
-    function clearDropIndicators() {
-        body.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover').forEach(function (r) {
-            r.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
-        });
-    }
-
-    body.addEventListener('dragover', function (e) {
-        if (!dragName) return;
-        e.preventDefault();
-        clearDropIndicators();
-        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-        if (rootZone) { rootZone.classList.add('drop-hover'); return; }
-        var target = e.target.closest && e.target.closest('tr[data-name]');
-        if (!target) return;
-        var rect  = target.getBoundingClientRect();
-        var relY  = (e.clientY - rect.top) / rect.height;
-        var tName = target.getAttribute('data-name');
-        if (tName === dragName) return;
-        if (relY < 0.3)       { target.classList.add('drop-before'); }
-        else if (relY > 0.7)  { target.classList.add('drop-after'); }
-        else if (!isChild(tName) && !hasChildren(dragName)) { target.classList.add('drop-adopt'); }
-        else { target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after'); }
-    });
-
-    body.addEventListener('dragleave', function (e) {
-        var row = e.target.closest && e.target.closest('tr');
-        if (row) row.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
-    });
-
-    body.addEventListener('drop', function (e) {
-        e.preventDefault();
-        if (!dragName) return;
-        var dragItem = items.find(function (it) { return it.name === dragName; });
-        if (!dragItem) return;
-        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-        if (rootZone) { dragItem.dependsOn = []; renderTree(); syncConfig(); return; }
-        var target = e.target.closest && e.target.closest('tr[data-name]');
-        if (!target) return;
-        var tName = target.getAttribute('data-name');
-        if (!tName || tName === dragName) return;
-        var rect = target.getBoundingClientRect();
-        var relY = (e.clientY - rect.top) / rect.height;
-        if (relY >= 0.3 && relY <= 0.7 && !isChild(tName) && !hasChildren(dragName)) {
-            dragItem.dependsOn = [tName];
-        } else {
-            dragItem.dependsOn = [];
-            items = items.filter(function (it) { return it.name !== dragName; });
-            var tIdx = items.findIndex(function (it) { return it.name === tName; });
-            items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
+    function tryParseValue(raw) {
+        var t = String(raw == null ? '' : raw).trim();
+        if (!t) return { ok: false, empty: true };
+        if (t === 'True')  return { ok: true, value: true,  strict: true };
+        if (t === 'False') return { ok: true, value: false, strict: true };
+        if (t === 'None')  return { ok: true, value: null,  strict: true };
+        try { return { ok: true, value: JSON.parse(t), strict: true }; }
+        catch (_) {}
+        if (t.indexOf('"') === -1) {
+            var pyish = t.replace(/'/g, '"')
+                         .replace(/\bTrue\b/g, 'true')
+                         .replace(/\bFalse\b/g, 'false')
+                         .replace(/\bNone\b/g, 'null');
+            try { return { ok: true, value: JSON.parse(pyish), strict: false }; }
+            catch (_) {}
         }
-        renderTree(); syncConfig();
+        return { ok: true, value: String(raw), strict: false };
+    }
+
+    function refreshRow(tr) {
+        var name = (tr.querySelector('.section-var-name') || {}).value || '';
+        var rawVal = (tr.querySelector('.section-var-value') || {}).value || '';
+        name = name.trim();
+        var nameOk = name && isValidPyIdent(name);
+        var nameEl = tr.querySelector('.section-var-name');
+        nameEl.style.borderColor = (!name || nameOk) ? '' : 'var(--red)';
+        if (nameOk) {
+            var others = Array.from(tr.parentNode.querySelectorAll('.section-var-name'))
+                .map(function (el) { return el.value.trim(); });
+            if (others.filter(function (n) { return n === name; }).length > 1) {
+                nameEl.style.borderColor = 'var(--red)';
+                nameOk = false;
+            }
+        }
+        var parsed = tryParseValue(rawVal);
+        var valueEl = tr.querySelector('.section-var-value');
+        var valueOk = parsed.ok && !parsed.empty && parsed.strict;
+        valueEl.style.borderColor = (!rawVal || valueOk) ? '' : 'var(--amber)';
+        valueEl.title = (parsed.ok && !parsed.empty && !parsed.strict)
+            ? 'Treated as a bare string. Wrap in quotes for a JSON string, or check syntax for list/dict.' : '';
+        var check = tr.querySelector('.section-var-row-valid');
+        if (check) check.textContent = (nameOk && valueOk) ? '✓' : '';
+    }
+
+    function refreshAllRows(tbody) {
+        Array.from(tbody.querySelectorAll('tr.section-var-row')).forEach(refreshRow);
+    }
+
+    function addEmptyRow(tbody) {
+        var tr = document.createElement('tr');
+        tr.className = 'section-var-row';
+        tr.innerHTML =
+            '<td class="section-var-namecell">'
+          +   '<span class="section-var-row-valid section-var-valid"></span>'
+          +   '<input type="text" class="form-input section-var-name section-var-name-input" value="" placeholder="Input Name">'
+          + '</td>'
+          + '<td><input type="text" class="form-input section-var-value section-var-value-input" value="" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>'
+          + '<td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove" title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button></td>';
+        tbody.appendChild(tr);
+        refreshRow(tr);
+        var input = tr.querySelector('.section-var-name');
+        if (input) input.focus();
+    }
+
+    function buildPayload(form) {
+        var tbody = form.querySelector('tbody.section-vars-body');
+        if (!tbody) return null;
+        var rows = Array.from(tbody.querySelectorAll('tr.section-var-row'));
+        var variables = [];
+        var valid = true;
+        for (var i = 0; i < rows.length; i++) {
+            var tr = rows[i];
+            var name = (tr.querySelector('.section-var-name').value || '').trim();
+            var rawVal = tr.querySelector('.section-var-value').value || '';
+            if (!name && !rawVal.trim()) continue;
+            if (!isValidPyIdent(name)) { valid = false; continue; }
+            var parsed = tryParseValue(rawVal);
+            if (parsed.empty) { valid = false; continue; }
+            variables.push({ name: name, value: parsed.value });
+        }
+        var seen = {};
+        for (var k = 0; k < variables.length; k++) {
+            if (seen[variables[k].name]) { valid = false; break; }
+            seen[variables[k].name] = true;
+        }
+        return valid ? { variables: variables } : null;
+    }
+
+    function wireAutoSave(form) {
+        var tbody = form.querySelector('tbody.section-vars-body');
+        if (!tbody) return { flush: function () { return Promise.resolve(); } };
+
+        var timer = null;
+        var inFlight = null;
+        var pending = false;
+
+        function doPost() {
+            var payload = buildPayload(form);
+            if (!payload) return Promise.resolve();
+            inFlight = fetch(form.action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
+                redirect: 'manual',
+                body: JSON.stringify(payload)
+            }).then(function (r) {
+                if (!r.ok && r.type !== 'opaqueredirect') {
+                    return r.text().catch(function () { return ''; }).then(function (t) {
+                        throw new Error('section-vars save failed: HTTP ' + r.status + ' ' + t.slice(0, 200));
+                    });
+                }
+            }).catch(function (err) {
+                console.error('section-vars auto-save failed:', err);
+            }).finally(function () {
+                inFlight = null;
+                if (pending) { pending = false; doPost(); }
+            });
+            return inFlight;
+        }
+
+        function schedule() {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(function () { timer = null; flushNow(); }, 500);
+        }
+
+        function flushNow() {
+            if (timer) { clearTimeout(timer); timer = null; }
+            if (inFlight) { pending = true; return inFlight; }
+            return doPost() || Promise.resolve();
+        }
+
+        refreshAllRows(tbody);
+
+        form.addEventListener('input', function (e) {
+            var tr = e.target.closest && e.target.closest('tr.section-var-row');
+            if (tr) {
+                refreshAllRows(tbody);
+                schedule();
+            }
+        });
+        form.addEventListener('click', function (e) {
+            var btn = e.target.closest && e.target.closest('.section-var-remove');
+            if (btn && form.contains(btn)) {
+                var tr = btn.closest('tr.section-var-row');
+                if (tr) { tr.remove(); refreshAllRows(tbody); schedule(); }
+            }
+        });
+        form.addEventListener('submit', function (e) { e.preventDefault(); flushNow(); });
+
+        return { flush: flushNow };
+    }
+
+    var forms = Array.from(document.querySelectorAll('form.section-vars-form')).map(wireAutoSave);
+
+    window.chickadeeFlushSectionVars = function () {
+        return Promise.all(forms.map(function (f) { return f.flush(); }));
+    };
+
+    document.querySelectorAll('button.section-var-add').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var sid = btn.getAttribute('data-section-id') || '';
+            var form = document.querySelector('form.section-vars-form[data-section-id="' + sid + '"]');
+            if (!form) return;
+            var tbody = form.querySelector('tbody.section-vars-body');
+            if (tbody) addEmptyRow(tbody);
+        });
     });
 
-    body.addEventListener('click', function (event) {
-        var btn = event.target.closest && event.target.closest('.suite-delete-btn');
-        if (!btn) return;
-        var row = btn.closest('tr[data-name]');
-        if (!row) return;
-        var name = row.getAttribute('data-name');
-        items = items.filter(function (it) { return it.name !== name; });
-        items.forEach(function (it) { it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; }); });
-        renderTree(); syncConfig();
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
+    // into a test-type dropdown by the unified Test Editor modal
+    // (test-editor-modal.js, loaded below); a pick opens the modal in that type.
+
+    // ── Section header view/edit toggle ────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var toggleBtn = e.target.closest && e.target.closest('.section-edit-toggle');
+        var cancelBtn = e.target.closest && e.target.closest('.section-edit-cancel');
+        var deleteBtn = e.target.closest && e.target.closest('.section-delete-btn');
+
+        if (toggleBtn) {
+            var hdr = toggleBtn.closest('.section-header');
+            if (!hdr) return;
+            hdr.querySelector('.section-view').style.display = 'none';
+            hdr.querySelector('.section-edit').style.display = 'flex';
+            var input = hdr.querySelector('.section-name-input');
+            if (input) input.focus();
+        } else if (cancelBtn) {
+            var hdr2 = cancelBtn.closest('.section-header');
+            if (!hdr2) return;
+            hdr2.querySelector('.section-view').style.display = 'flex';
+            hdr2.querySelector('.section-edit').style.display = 'none';
+        } else if (deleteBtn) {
+            var name = deleteBtn.getAttribute('data-name') || 'this section';
+            if (!confirm('Delete section "' + name + '"? Tests in this section move to Ungrouped.')) return;
+            var action = deleteBtn.getAttribute('data-action');
+            if (!action) return;
+            var form = document.createElement('form');
+            form.method = 'post';
+            form.action = action;
+            form.style.display = 'none';
+            var token = ChickadeeUI.getCsrfToken();
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = '_csrf';
+            inp.value = token;
+            form.appendChild(inp);
+            document.body.appendChild(form);
+            form.submit();
+        }
     });
 
-    body.addEventListener('change', function () { syncConfig(); });
-    body.addEventListener('input',  function () { syncConfig(); });
-
-    // Upload button opens the hidden file input
-    var addTestBtn = document.getElementById('add-test-btn');
-    if (addTestBtn) {
-        addTestBtn.addEventListener('click', function () {
-            filesInput.value = '';
-            filesInput.click();
+    // ── Section header drag-reorder ─────────────────────────────────────
+    var sectionContainer = document.getElementById('suite-sections');
+    if (sectionContainer) {
+        var draggingHeader = null;
+        sectionContainer.addEventListener('dragstart', function (e) {
+            var hdr = e.target.closest && e.target.closest('.section-header');
+            if (!hdr) return;
+            draggingHeader = hdr;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', hdr.parentNode.getAttribute('data-section-id') || '');
+            hdr.style.opacity = '.4';
+        });
+        sectionContainer.addEventListener('dragend', function () {
+            if (draggingHeader) draggingHeader.style.opacity = '';
+            draggingHeader = null;
+        });
+        sectionContainer.addEventListener('dragover', function (e) {
+            if (!draggingHeader) return;
+            e.preventDefault();
+        });
+        sectionContainer.addEventListener('drop', function (e) {
+            if (!draggingHeader) return;
+            e.preventDefault();
+            var draggedBlock = draggingHeader.closest('.section-block');
+            var targetBlock = e.target.closest && e.target.closest('.section-block');
+            if (!draggedBlock || !targetBlock || draggedBlock === targetBlock) return;
+            // Don't allow dragging onto the Ungrouped block (it's terminal)
+            if (!targetBlock.querySelector('.section-header')) return;
+            var rect = targetBlock.getBoundingClientRect();
+            var midpoint = rect.top + rect.height / 2;
+            if (e.clientY < midpoint) {
+                sectionContainer.insertBefore(draggedBlock, targetBlock);
+            } else {
+                sectionContainer.insertBefore(draggedBlock, targetBlock.nextSibling);
+            }
+            // Persist new order
+            var ids = Array.from(sectionContainer.querySelectorAll('.section-block'))
+                .map(function (b) { return b.getAttribute('data-section-id') || ''; })
+                .filter(function (s) { return s !== ''; });
+            fetch('/instructor/new/draft/suite-sections/reorder?draftID=' + encodeURIComponent(draftID), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
+                body: JSON.stringify({ sectionIDs: ids })
+            }).catch(function (err) {
+                console.error('section reorder failed:', err);
+            });
         });
     }
-    filesInput.addEventListener('change', addUploadedFiles);
+})();
+</script>
+#endif
 
-    // Notebook upload buttons: open picker, auto-submit draft action on selection
-    function wireNotebookUpload(btnID, inputID, draftBtnID) {
+<!-- ── Form-level helpers (notebook upload, gen-tests, UW dates) ────────── -->
+<script>
+(function () {
+    'use strict';
+
+    var csrfToken = ChickadeeUI.getCsrfToken();
+
+    // Shared implementations (Public/chickadee-ui.js, loaded from base.leaf).
+    var escHtml = ChickadeeUI.escapeHtml;
+    var escAttr = ChickadeeUI.escapeAttr;
+
+    // ── Notebook upload buttons ────────────────────────────────────────
+    // Open hidden file pickers, then submit the main form to the draft
+    // endpoint with a `draftAction` field so the server saves the file
+    // bytes and reloads the page on the same draft.
+    function wireNotebookUpload(btnID, inputID, draftActionValue) {
         var btn       = document.getElementById(btnID);
         var fileInput = document.getElementById(inputID);
-        var draftBtn  = document.getElementById(draftBtnID);
-        if (!btn || !fileInput || !draftBtn) return;
+        if (!btn || !fileInput) return;
         btn.addEventListener('click', function () { fileInput.value = ''; fileInput.click(); });
         fileInput.addEventListener('change', function () {
-            if (fileInput.files.length > 0) draftBtn.click();
+            if (fileInput.files.length === 0) return;
+            var form = document.getElementById('new-assignment-form');
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'draftAction';
+            inp.value = draftActionValue;
+            form.appendChild(inp);
+            form.action = '/instructor/new/draft';
+            form.requestSubmit();
         });
     }
-    wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'js-upload-assignment-notebook');
-    wireNotebookUpload('upload-solution-notebook-btn',   'solution-notebook-file-input',   'js-upload-solution-notebook');
+    wireNotebookUpload('upload-assignment-notebook-btn', 'assignment-notebook-file-input', 'upload-assignment-notebook');
+    wireNotebookUpload('upload-solution-notebook-btn',   'solution-notebook-file-input',   'upload-solution-notebook');
 
-    // Solution file selection shows Generate Tests panel
-    var solutionFileInput = document.getElementById('solution-notebook-file-input');
-    var genPanel          = document.getElementById('gen-tests-panel');
-    if (solutionFileInput && genPanel) {
-        solutionFileInput.addEventListener('change', function () {
-            // Panel shown after draft round-trip; for new uploads trigger via scan button only
+    // ── Support file upload / delete ───────────────────────────────────
+    // Reads each picked file as text and POSTs it to the draft scripts
+    // endpoint with `tier: "support"` (no manifest entry → not a test
+    // script).  Delete fires `DELETE /draft/scripts/:filename`.  Mirrors
+    // assignment-edit.leaf:1577-1662; same flow, draft-scoped URLs.
+    (function () {
+        var draftID = #rawJSON(draftIDJSON);
+        var addBtn  = document.getElementById('add-support-file-btn');
+        var fileEl  = document.getElementById('support-file-upload-input');
+        var statusEl = document.getElementById('support-file-upload-status');
+
+        function setStatus(msg, isError) {
+            if (!statusEl) return;
+            statusEl.textContent = msg;
+            statusEl.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
+        }
+
+        function readAsText(file) {
+            return new Promise(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onload  = function () { resolve(reader.result); };
+                reader.onerror = function () { reject(new Error('Could not read ' + file.name)); };
+                reader.readAsText(file);
+            });
+        }
+
+        async function uploadSupportFile(file) {
+            var content = await readAsText(file);
+            var resp = await fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    filename: file.name,
+                    content:  content,
+                    tier:     'support',
+                    isTest:   false
+                })
+            });
+            if (!resp.ok) {
+                var errText = await resp.text();
+                throw new Error(resp.status + ': ' + errText);
+            }
+        }
+
+        if (draftID && addBtn && fileEl) {
+            addBtn.addEventListener('click', function () { fileEl.click(); });
+            fileEl.addEventListener('change', async function () {
+                if (!fileEl.files || fileEl.files.length === 0) return;
+                setStatus('Uploading…', false);
+                try {
+                    for (var i = 0; i < fileEl.files.length; i++) {
+                        await uploadSupportFile(fileEl.files[i]);
+                    }
+                    setStatus('Uploaded.', false);
+                    window.location.reload();
+                } catch (e) {
+                    setStatus('Upload failed — ' + e.message, true);
+                } finally {
+                    fileEl.value = '';
+                }
+            });
+        }
+
+        // Delegated delete handler — works whether or not a draft exists
+        // (rows only render when one does, but defensive nonetheless).
+        document.body.addEventListener('click', async function (ev) {
+            var btn = ev.target.closest && ev.target.closest('.support-file-delete-btn');
+            if (!btn) return;
+            var filename = btn.getAttribute('data-filename');
+            if (!filename || !draftID) return;
+            if (!confirm('Remove support file "' + filename + '"? Tests that read it will fail until you re-add it.')) return;
+            try {
+                var resp = await fetch(
+                    '/instructor/new/draft/scripts/' + encodeURIComponent(filename)
+                        + '?draftID=' + encodeURIComponent(draftID),
+                    { method: 'DELETE', headers: { 'x-csrf-token': csrfToken }, credentials: 'same-origin' }
+                );
+                if (!resp.ok) {
+                    var errText = await resp.text();
+                    alert('Remove failed: ' + resp.status + ' ' + errText);
+                    return;
+                }
+                window.location.reload();
+            } catch (e) {
+                alert('Remove failed: ' + e.message);
+            }
         });
-    }
+    })();
 
-    var form = document.getElementById('new-assignment-form');
-    if (form) {
-        form.addEventListener('submit', function () { syncConfig(); });
-        form.addEventListener('chickadee:before-multipart-submit', function () { syncConfig(); });
-    }
-
-    function escHtml(v) {
-        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-    }
-    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
-
-    initFromDOM();
-
-    // ── Generate Tests from Solution ─────────────────────────────────────────
-
-    var csrfToken       = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    // ── Generate Tests from Solution ──────────────────────────────────
+    // Each generated script is POSTed to the draft scripts endpoint and
+    // then handed to suite-table.js via `chickadeeAddExistingSuiteScript`
+    // so it appears in the appropriate section's tbody without a reload.
     var scanBtn         = document.getElementById('scan-solution-btn');
     var scanStatus      = document.getElementById('scan-status');
     var scanResults     = document.getElementById('scan-results');
     var fnChecklist     = document.getElementById('fn-checklist');
     var genTplSelect    = document.getElementById('gen-template-select');
     var addGenTestsBtn  = document.getElementById('add-gen-tests-btn');
+    var genPanel        = document.getElementById('gen-tests-panel');
     var scannedFunctions = [];
 
-    // Show gen-tests panel if solution notebook already in draft
     #if(solutionNotebook):
     if (genPanel) genPanel.style.display = '';
     #endif
 
-    function genPyTemplate(type, fnName, paramNames) {
-        var argList = paramNames.join(', ');
-        switch (type) {
-        case 'py:exists':
-            var numArgs = paramNames.length ? ', num_args=' + paramNames.length : '';
-            return '# Test: ' + fnName + ' is defined and callable\nrequire_function("' + fnName + '"' + numArgs + ')\npassed("' + fnName + ' is defined and callable")\n';
-        case 'py:correctness':
-            var argTuple = paramNames.length === 0 ? '()' : paramNames.length === 1 ? '(' + paramNames[0] + ',)' : '(' + argList + ')';
-            return '# Test: ' + fnName + ' returns the correct output for known inputs\ntest_cases = [\n    (' + argTuple + ', None),  # TODO: replace None with expected output\n]\nfailures = []\nfor args, expected in test_cases:\n    result = student_module.' + fnName + '(*args)\n    if result != expected:\n        failures.append(f"  ' + fnName + '{args} = {result!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_cases)} case(s) passed")\n';
-        default:
-            return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
+    function genPyTemplate(type, fnName) {
+        var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
+        if (fn && Array.isArray(fn.templates)) {
+            var key = type.indexOf(':') === -1 ? type : type.split(':')[1];
+            var tpl = fn.templates.find(function (t) { return t.id === key; });
+            if (tpl && typeof tpl.content === 'string') return tpl.content;
         }
+        return '# Test: ' + fnName + '\n# TODO: implement test\npassed("placeholder")\n';
     }
 
     if (scanBtn) {
         scanBtn.addEventListener('click', function () {
             var solInput = document.getElementById('solution-notebook-file-input');
-            // After a draft save the solution file input is empty; fetch from draft
             #if(solutionNotebook):
             if (!solInput || solInput.files.length === 0) {
-                fetch('/instructor/new/draft/solution-notebook', { headers: { 'x-csrf-token': csrfToken } })
+                fetch('/instructor/new/draft/solution-notebook?draftID=#(draftID)', { headers: { 'x-csrf-token': csrfToken } })
                     .then(function (r) { return r.ok ? r.text() : Promise.reject(r.statusText); })
                     .then(function (text) { runScan(text); })
                     .catch(function (err) { if (scanStatus) scanStatus.textContent = 'Scan failed: ' + err; });
@@ -690,7 +915,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
             if (fnChecklist) fnChecklist.innerHTML = scannedFunctions.map(function (fn) {
                 var id = 'fn-chk-' + fn.name;
                 var label = fn.name + '(' + (fn.paramNames || []).join(', ') + ')';
-                return '<label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer">'
+                return '<label class="fn-check-item">'
                     + '<input type="checkbox" id="' + escAttr(id) + '" value="' + escAttr(fn.name) + '" checked>'
                     + '<code>' + escHtml(label) + '</code></label>';
             }).join('');
@@ -701,27 +926,42 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
 
     if (addGenTestsBtn) {
         addGenTestsBtn.addEventListener('click', function () {
+            #if(draftID):
+            var draftID = #rawJSON(draftIDJSON);
+            if (!draftID) { if (scanStatus) scanStatus.textContent = 'No draft to save into.'; return; }
             var tplType = genTplSelect ? genTplSelect.value : 'py:correctness';
             var checked = Array.from(fnChecklist.querySelectorAll('input[type=checkbox]:checked'));
             if (checked.length === 0) { if (scanStatus) scanStatus.textContent = 'Select at least one function.'; return; }
-            var dt = new DataTransfer();
-            for (var i = 0; i < filesInput.files.length; i++) dt.items.add(filesInput.files[i]);
-            checked.forEach(function (chk) {
-                var fnName = chk.value;
-                var fn = scannedFunctions.find(function (f) { return f.name === fnName; });
-                var params = fn ? (fn.paramNames || []) : [];
-                var content = genPyTemplate(tplType, fnName, params);
+            if (scanStatus) scanStatus.textContent = 'Saving ' + checked.length + ' test(s)…';
+            // POST each generated script in series to the draft scripts
+            // endpoint, then hand it to suite-table.js for in-place add.
+            var ops = checked.map(function (chk) {
+                var fnName   = chk.value;
+                var content  = genPyTemplate(tplType, fnName);
                 var filename = 'test_' + fnName + '.py';
-                dt.items.add(new File([content], filename, { type: 'text/plain' }));
+                return fetch('/instructor/new/draft/scripts?draftID=' + encodeURIComponent(draftID), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                    body: JSON.stringify({ filename: filename, content: content, tier: 'public', points: 1, isTest: true })
+                }).then(function (r) {
+                    return r.ok ? r.json() : r.text().then(function (t) { return Promise.reject(t || ('HTTP ' + r.status)); });
+                }).then(function (data) {
+                    if (window.chickadeeAddExistingSuiteScript) window.chickadeeAddExistingSuiteScript(data);
+                });
             });
-            filesInput.files = dt.files;
-            filesInput.dispatchEvent(new Event('change'));
-            if (scanStatus) scanStatus.textContent = checked.length + ' test file(s) added to suite.';
-            if (scanResults) scanResults.style.display = 'none';
+            Promise.all(ops).then(function () {
+                if (scanStatus) scanStatus.textContent = checked.length + ' test file(s) added to suite.';
+                if (scanResults) scanResults.style.display = 'none';
+            }).catch(function (err) {
+                if (scanStatus) scanStatus.textContent = 'Could not add generated tests: ' + err;
+            });
+            #else:
+            if (scanStatus) scanStatus.textContent = 'Upload a notebook first to start a draft.';
+            #endif
         });
     }
 
-    // UWaterloo important-date proximity warning
+    // ── UWaterloo important-date proximity warning ────────────────────
     (function () {
         var dueAtInput = document.getElementById('dueAt');
         var warning    = document.getElementById('uw-date-warning');
@@ -729,7 +969,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         dueAtInput.addEventListener('change', function () { checkUWDates(dueAtInput.value, warning); });
     })();
 
-    // Grading mode hint
+    // ── Grading mode hint ─────────────────────────────────────────────
     (function () {
         var sectionSelect = document.getElementById('sectionID');
         var hint = document.getElementById('grading-mode-hint');
@@ -737,172 +977,14 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
         function updateHint() {
             var selected = sectionSelect.options[sectionSelect.selectedIndex];
             var mode = selected ? selected.getAttribute('data-grading-mode') : null;
-            if (mode === 'browser') { hint.textContent = '\u24d8 This section uses Student Browser grading by default.'; hint.style.display = ''; }
-            else if (mode === 'worker') { hint.textContent = '\u24d8 This section uses Chickadee grading by default.'; hint.style.display = ''; }
+            if (mode === 'browser') { hint.textContent = 'ⓘ This section uses Student Browser grading by default.'; hint.style.display = ''; }
+            else if (mode === 'worker') { hint.textContent = 'ⓘ This section uses Chickadee grading by default.'; hint.style.display = ''; }
             else { hint.style.display = 'none'; }
         }
         sectionSelect.addEventListener('change', updateHint);
         updateHint();
     })();
-
 })();
-</script>
-<style>
-#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
-#cm-editor-mount .cm-scroller { overflow: auto; }
-@media (prefers-color-scheme: dark) {
-    #cm-editor-mount .cm-editor    { background: var(--gray-100); }
-    #cm-editor-mount .cm-gutters   { background: var(--gray-200); border-color: var(--gray-200); color: var(--gray-500); }
-    #cm-editor-mount .cm-content   { color: var(--gray-900); caret-color: var(--gray-900); }
-    #cm-editor-mount .cm-activeLine { background: var(--gray-200); }
-    #cm-editor-mount .cm-selectionBackground, #cm-editor-mount ::selection { background: var(--hover-bg) !important; }
-    #cm-editor-mount .cm-cursor    { border-left-color: var(--gray-900); }
-    #script-editor-overlay input, #script-editor-overlay select { background: var(--gray-100); color: var(--gray-900); border-color: var(--gray-200); }
-}
-</style>
-<script type="module">
-// ── CodeMirror 6 script creator (new scripts added client-side via DataTransfer) ──
-import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6';
-import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6';
-import { defaultKeymap, history, historyKeymap, indentWithTab }
-                                      from 'https://esm.sh/@codemirror/commands@6';
-import { syntaxHighlighting, defaultHighlightStyle }
-                                      from 'https://esm.sh/@codemirror/language@6';
-import { python }                     from 'https://esm.sh/@codemirror/lang-python@6';
-import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6';
-import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell';
-import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r';
-
-const langComp = new Compartment();
-
-function langExtensionFor(filename) {
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    if (ext === 'py') return python();
-    if (ext === 'r')  return StreamLanguage.define(r);
-    return StreamLanguage.define(shell);
-}
-
-function makeEditorState(content, filename) {
-    return EditorState.create({
-        doc: content,
-        extensions: [
-            lineNumbers(), highlightActiveLine(), drawSelection(), dropCursor(),
-            history(), syntaxHighlighting(defaultHighlightStyle),
-            keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-            langComp.of(langExtensionFor(filename)),
-            EditorView.lineWrapping,
-            EditorView.theme({ '&': { height: '100%' } })
-        ]
-    });
-}
-
-const overlay      = document.getElementById('script-editor-overlay');
-const mount        = document.getElementById('cm-editor-mount');
-const titleEl      = document.getElementById('editor-title');
-const statusEl     = document.getElementById('editor-status');
-const saveBtn      = document.getElementById('editor-save-btn');
-const cancelBtn    = document.getElementById('editor-cancel-btn');
-const closeBtn     = document.getElementById('editor-close-btn');
-const newControls  = document.getElementById('new-file-controls');
-const newNameInput = document.getElementById('new-filename-input');
-const tierSelect   = document.getElementById('new-file-tier');
-const pointsInput  = document.getElementById('new-file-points');
-const templateSel  = document.getElementById('template-select');
-const applyTplBtn  = document.getElementById('apply-template-btn');
-const newScriptBtn = document.getElementById('new-script-btn');
-const filesInput   = document.getElementById('suite-files-input');
-const csrfToken    = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-
-let view = null;
-
-function initView(content, filename) {
-    if (view) { view.destroy(); view = null; }
-    try { view = new EditorView({ state: makeEditorState(content, filename), parent: mount }); }
-    catch (e) { if (statusEl) statusEl.textContent = 'Editor failed to load: ' + e.message; }
-}
-
-function openCreator() {
-    if (titleEl)  titleEl.textContent  = 'New Test Script';
-    if (statusEl) statusEl.textContent = '';
-    if (newControls) newControls.style.display = '';
-    if (newNameInput) newNameInput.value = '';
-    overlay.style.display = 'flex';
-    initView('', '');
-    if (newNameInput) newNameInput.focus();
-}
-
-function closeEditor() {
-    overlay.style.display = 'none';
-    if (view) { view.destroy(); view = null; }
-}
-
-if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
-if (closeBtn)     closeBtn.addEventListener('click',   closeEditor);
-if (cancelBtn)    cancelBtn.addEventListener('click',  closeEditor);
-
-overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
-
-// Save: create a File blob and inject it into the suite files input via DataTransfer
-if (saveBtn) {
-    saveBtn.addEventListener('click', function () {
-        const filename = newNameInput ? newNameInput.value.trim() : '';
-        if (!filename) { if (statusEl) statusEl.textContent = 'Enter a filename.'; if (newNameInput) newNameInput.focus(); return; }
-        const content  = view ? view.state.doc.toString() : '';
-        const file     = new File([content], filename, { type: 'text/plain' });
-
-        const dt = new DataTransfer();
-        for (let i = 0; i < filesInput.files.length; i++) dt.items.add(filesInput.files[i]);
-        // Replace if same name already exists; otherwise append
-        let replaced = false;
-        const existing = Array.from(dt.files);
-        const dt2 = new DataTransfer();
-        existing.forEach(function (f) { if (f.name !== filename) dt2.items.add(f); else replaced = true; });
-        dt2.items.add(file);
-
-        filesInput.files = dt2.files;
-        filesInput.dispatchEvent(new Event('change'));
-        closeEditor();
-    });
-}
-
-// Template apply
-let templateCache = null;
-
-function fetchTemplates() {
-    if (templateCache) return Promise.resolve(templateCache);
-    return fetch('/instructor/script-templates', { headers: { 'x-csrf-token': csrfToken } })
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
-        .then(data => { templateCache = data; return data; });
-}
-
-if (applyTplBtn) {
-    applyTplBtn.addEventListener('click', function () {
-        const tpl = templateSel ? templateSel.value : 'blank';
-        if (tpl === 'blank') {
-            if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
-            if (newNameInput && !newNameInput.value) newNameInput.focus();
-            return;
-        }
-        fetchTemplates()
-            .then(templates => {
-                const content = templates[tpl] || '';
-                if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
-                const ext = tpl.startsWith('sh:') ? '.sh' : tpl.startsWith('r:') ? '.R' : '.py';
-                if (newNameInput && !newNameInput.value) newNameInput.value = 'test_' + tpl.split(':').pop() + ext;
-                // Update language
-                if (view) view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput ? newNameInput.value : '')) });
-            })
-            .catch(err => { if (statusEl) statusEl.textContent = 'Could not load template: ' + err; });
-    });
-}
-
-// Update language highlighting as filename is typed
-if (newNameInput) {
-    newNameInput.addEventListener('input', function () {
-        if (view) view.dispatch({ effects: langComp.reconfigure(langExtensionFor(newNameInput.value)) });
-    });
-}
 </script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
@@ -929,6 +1011,52 @@ function checkUWDates(dateTimeValue, warningEl) {
         }
     }).catch(function () {});
 }
+</script>
+
+<!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
+     One modal for "+ Add Test"; picking a type morphs the body in place.
+     The notebook-check form is a body renderer (test-renderer-check.js, fed
+     by the #check-schema seed); family + script types delegate to their
+     existing overlays during the staged rollout (the shell shows a
+     "Continue →" button for those).  Renderer scripts load before the shell
+     so they self-register first. -->
+<script>
+// Per-page config for the script renderer.  New-assignment draft: creating
+// scripts only (editing a saved script isn't a draft-page flow → no content
+// URL); the body persists via PUT /suite (suite-table's saveScriptViaSuite).
+window.ChickadeeScriptRendererConfig = {
+    csrfToken: ChickadeeUI.getCsrfToken(),
+    scriptContentURL: null,
+    uploadFilesInputID: null
+};
+</script>
+<script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
+<script src="/test-editor-modal.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var csrfToken = ChickadeeUI.getCsrfToken();
+    window.initTestEditorModal({ csrfToken: csrfToken });
+    var modal = window.__chickadeeTestEditorModal;
+
+    // Edit an existing notebook check → shell, pre-populated from the suite row.
+    document.body.addEventListener('click', function (ev) {
+        var el = ev.target.closest && ev.target.closest('[data-edit-check-id]');
+        if (!el) return;
+        ev.preventDefault();
+        var id = el.getAttribute('data-edit-check-id');
+        var item = null;
+        if (typeof window.chickadeeGetSuiteItems === 'function') {
+            var match = window.chickadeeGetSuiteItems().find(function (i) {
+                return i.kind === 'check' && i.check && i.check.id === id;
+            });
+            item = match ? match.check : null;
+        }
+        if (item && modal) {
+            modal.open({ editing: { mechanism: 'check', id: id, item: item } });
+        }
+    });
+})();
 </script>
 #endexport
 #endextend

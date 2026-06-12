@@ -2,204 +2,479 @@
 //
 // Integration tests for Phase 6 authentication routes.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
 import Foundation
+import Testing
+import XCTVapor
 
-final class AuthRoutesTests: XCTestCase {
+@testable import APIServer
 
-    private var app: Application!
-    private var tmpDir: String!
+@Suite struct AuthRoutesTests {
 
-    override func setUp() async throws {
-        app = try await Application.make(.testing)
-
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-auth-\(UUID().uuidString)", isDirectory: true)
-            .path + "/"
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs { try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true) }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        // Sessions required for auth routes.
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
-    }
-
-    override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+    private func makeApp() async throws -> Application {
+        let app = try await makeTestApp(prefix: "chickadee-auth")
+        return app
     }
 
     // MARK: - Registration
 
-    func testRegisterFirstUserBecomesAdmin() async throws {
-        let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            try req.content.encode(["username": "jim", "password": "secret123", "_csrf": token], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/")
-        })
+    @Test func registerFirstUserBecomesAdmin() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/register", on: app)
+            try await app.asyncTest(
+                .POST, "/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "jim", "password": "secret123", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                })
 
-        let user = try await APIUser.query(on: app.db).first()
-        XCTAssertNotNil(user)
-        XCTAssertEqual(user?.username, "jim")
-        XCTAssertEqual(user?.role, "admin")
+            let user = try await APIUser.query(on: app.db).first()
+            #expect(user != nil)
+            #expect(user?.username == "jim")
+            #expect(user?.role == "admin")
+
+        }
     }
 
-    func testRegisterSecondUserBecomesStudent() async throws {
-        // Seed an existing admin.
-        let hash = try Bcrypt.hash("password1")
-        let admin = APIUser(username: "admin", passwordHash: hash, role: "admin")
-        try await admin.save(on: app.db)
+    @Test func registerSecondUserBecomesStudent() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Seed an existing admin.
+            let hash = try Bcrypt.hash("password1")
+            let admin = APIUser(username: "admin", passwordHash: hash, role: "admin")
+            try await admin.save(on: app.db)
 
-        let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            try req.content.encode(["username": "student1", "password": "password2", "_csrf": token], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-        })
+            let (token, cookie) = try await csrfFields(for: "/register", on: app)
+            try await app.asyncTest(
+                .POST, "/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "student1", "password": "password2", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
 
-        let student = try await APIUser.query(on: app.db)
-            .filter(\.$username == "student1")
-            .first()
-        XCTAssertEqual(student?.role, "student")
+            let student = try await APIUser.query(on: app.db)
+                .filter(\.$username == "student1")
+                .first()
+            #expect(student?.role == "student")
+
+        }
     }
 
-    func testRegisterDuplicateUsernameRedirectsWithError() async throws {
-        let hash = try Bcrypt.hash("password1")
-        let existing = APIUser(username: "jim", passwordHash: hash, role: "admin")
-        try await existing.save(on: app.db)
+    @Test func registerDuplicateUsernameRedirectsWithError() async throws {
+        try await withApp(try await makeApp()) { app in
+            let hash = try Bcrypt.hash("password1")
+            let existing = APIUser(username: "jim", passwordHash: hash, role: "admin")
+            try await existing.save(on: app.db)
 
-        let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            try req.content.encode(["username": "jim", "password": "password2", "_csrf": token], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            // PRG: redirect back to form with error param.
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/register?error=taken")
-        })
+            let (token, cookie) = try await csrfFields(for: "/register", on: app)
+            try await app.asyncTest(
+                .POST, "/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "jim", "password": "password2", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    // PRG: redirect back to form with error param.
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/register?error=taken")
+                })
+
+        }
     }
 
-    func testRegisterShortPasswordRedirectsWithError() async throws {
-        let (token, cookie) = try await csrfFields(for: "/register", on: app)
-        try await app.asyncTest(.POST, "/register", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            try req.content.encode(["username": "jim", "password": "short", "_csrf": token], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/register?error=password_short")
-        })
+    @Test func registerShortPasswordRedirectsWithError() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/register", on: app)
+            try await app.asyncTest(
+                .POST, "/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "jim", "password": "short", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/register?error=password_short")
+                })
+
+        }
     }
 
     // MARK: - Login
 
-    func testLoginWithCorrectCredentialsRedirects() async throws {
-        let hash = try Bcrypt.hash("mypassword")
-        let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
-        try await user.save(on: app.db)
+    @Test func loginWithCorrectCredentialsRedirects() async throws {
+        try await withApp(try await makeApp()) { app in
+            let hash = try Bcrypt.hash("mypassword")
+            let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
+            try await user.save(on: app.db)
 
-        let (token, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            try req.content.encode(["username": "jim", "password": "mypassword", "_csrf": token], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/")
-            // Session cookie should be set.
-            XCTAssertNotNil(res.headers.first(name: .setCookie))
-        })
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "jim", "password": "mypassword", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/")
+                    // Session cookie should be set.
+                    #expect(res.headers.first(name: .setCookie) != nil)
+                })
+
+        }
     }
 
-    func testLoginWithWrongPasswordRedirectsWithError() async throws {
-        let hash = try Bcrypt.hash("mypassword")
-        let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
-        try await user.save(on: app.db)
+    @Test func loginRotatesSessionID() async throws {
+        // Session-fixation defense: the authenticated session must get a fresh
+        // id, different from the pre-login one.
+        func sessionValue(_ header: String) -> String? {
+            for part in header.split(separator: ";") {
+                let kv = part.split(separator: "=", maxSplits: 1)
+                if kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces) == "vapor-session" {
+                    return String(kv[1])
+                }
+            }
+            return nil
+        }
+        try await withApp(try await makeApp()) { app in
+            let hash = try Bcrypt.hash("pass1234")
+            try await APIUser(username: "rot", passwordHash: hash, role: "student").save(on: app.db)
 
-        let (token, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            try req.content.encode(["username": "jim", "password": "wrong", "_csrf": token], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/login?error=invalid")
-        })
+            let (token, preCookie) = try await csrfFields(for: "/login", on: app)
+            let preID = sessionValue(preCookie)
+            #expect(preID != nil)
+
+            var postID: String?
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: preCookie)
+                    try req.content.encode(
+                        ["username": "rot", "password": "pass1234", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    for sc in res.headers[.setCookie] where sessionValue(sc) != nil {
+                        postID = sessionValue(sc)
+                    }
+                })
+            #expect(postID != nil)
+            #expect(postID != preID, "session id must rotate on login (fixation defense)")
+        }
     }
 
-    func testLoginWithUnknownUserRedirectsWithError() async throws {
-        let (token, cookie) = try await csrfFields(for: "/login", on: app)
-        try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: cookie)
-            try req.content.encode(["username": "nobody", "password": "password", "_csrf": token], as: .urlEncodedForm)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/login?error=invalid")
-        })
+    @Test func loginWithWrongPasswordRedirectsWithError() async throws {
+        try await withApp(try await makeApp()) { app in
+            let hash = try Bcrypt.hash("mypassword")
+            let user = APIUser(username: "jim", passwordHash: hash, role: "admin")
+            try await user.save(on: app.db)
+
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "jim", "password": "wrong", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?error=invalid")
+                })
+
+        }
+    }
+
+    @Test func loginWithUnknownUserRedirectsWithError() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "nobody", "password": "password", "_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?error=invalid")
+                })
+
+        }
+    }
+
+    @Test func loginWithUnknownUserStillRunsBcryptVerify() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Regression for issue #559 (account-enumeration timing).  The
+            // user-not-found path must run a bcrypt verify against a dummy
+            // hash so its wall-clock time matches the user-found-wrong-
+            // password path.  bcrypt cost 12 takes ≥100 ms on any reasonable
+            // host; without the equalizer the miss returns in <10 ms.
+            //
+            // Warm-up POST primes the timing-equalizer hash cache so we
+            // measure verify time, not the one-shot hash+verify cost of the
+            // first-ever miss.
+            let warmupCSRF = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: warmupCSRF.1)
+                    try req.content.encode(
+                        ["username": "warmup_user", "password": "x", "_csrf": warmupCSRF.0],
+                        as: .urlEncodedForm)
+                }, afterResponse: { _ in })
+
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            let start = Date()
+            try await app.asyncTest(
+                .POST, "/login",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(
+                        ["username": "still_no_such_user", "password": "x", "_csrf": token],
+                        as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+            let elapsed = Date().timeIntervalSince(start)
+            XCTAssertGreaterThan(
+                elapsed, 0.05,
+                "User-not-found login completed in \(elapsed)s; bcrypt verify likely skipped (cost 12 is ≥100 ms).")
+
+        }
+    }
+
+    // MARK: - Logout
+
+    @Test func logoutRedirectsToLoginWithSignedOutNotice() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?loggedout=1")
+                })
+        }
+    }
+
+    @Test func logoutSetsReauthMarkerCookie() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    // Logout arms the next sign-in for forced IdP re-auth so a
+                    // logout can't be silently undone by a live SSO session.
+                    let setCookies = res.headers[.setCookie]
+                    let armed = setCookies.contains { $0.contains("chickadee_reauth=1") }
+                    #expect(armed, "expected logout to set the re-auth marker, got: \(setCookies)")
+                })
+        }
+    }
+
+    @Test func logoutWithTimeoutReasonRedirectsToTimeoutMessage() async throws {
+        try await withApp(try await makeApp()) { app in
+            let (token, cookie) = try await csrfFields(for: "/login", on: app)
+            try await app.asyncTest(
+                .POST, "/logout?reason=timeout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?error=timeout")
+                })
+        }
+    }
+
+    @Test func logoutWithoutCSRFTokenStillSucceeds() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Logout is CSRF-exempt: a stale browser tab whose session (and CSRF
+            // secret) is already gone must still log out cleanly rather than 403.
+            try await app.asyncTest(
+                .POST, "/logout",
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?loggedout=1")
+                })
+        }
+    }
+
+    @Test func logoutTimeoutWithStaleCSRFTokenRedirectsNotForbidden() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Reproduces the idle-logout bug: the inactivity watchdog POSTs
+            // /logout?reason=timeout with the token minted at page load, but the
+            // server-side secret has since been torn down so the token is stale.
+            // Must redirect to the timeout notice, not 403.
+            try await app.asyncTest(
+                .POST, "/logout?reason=timeout",
+                beforeRequest: { req in
+                    try req.content.encode(["_csrf": "stale-token"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login?error=timeout")
+                })
+        }
+    }
+
+    @Test func logoutInvalidatesServerSideSession() async throws {
+        try await withApp(try await makeApp()) { app in
+            let authCookie = try await loginUser(
+                username: "instr", password: "pass1234", role: "instructor", on: app)
+
+            // Sanity: the session cookie authenticates the dashboard.
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: authCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+            // CSRF token bound to the authenticated session.
+            let (token, csrfCookie) = try await csrfFields(for: "/", cookie: authCookie, on: app)
+            let logoutCookie = csrfCookie.isEmpty ? authCookie : csrfCookie
+
+            try await app.asyncTest(
+                .POST, "/logout",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: logoutCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            // Re-using the same session cookie must NOT be authenticated.
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: logoutCookie) },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login")
+                })
+        }
+    }
+
+    @Test func loginPageShowsSignedOutNotice() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/login?loggedout=1",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("You have been signed out"))
+                })
+        }
+    }
+
+    @Test func loginPageShowsChickadeeLogo() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/login",
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(body.contains("class=\"auth-logo\""))
+                    #expect(body.contains("/images/chickadee-icon-alt.png"))
+                })
+        }
     }
 
     // MARK: - Access control
 
-    func testUnauthenticatedHomeRedirectsToLogin() async throws {
-        try await app.asyncTest(.GET, "/", afterResponse: { res in
-            XCTAssertEqual(res.status, .seeOther)
-            XCTAssertEqual(res.headers.first(name: .location), "/login")
-        })
+    @Test func unauthenticatedHomeRedirectsToLogin() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.asyncTest(
+                .GET, "/",
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/login")
+                })
+
+        }
     }
 
-    func testStudentCannotAccessTestSetupNew() async throws {
-        // Create a student, get a session cookie, then try to access instructor-only page.
-        let hash = try Bcrypt.hash("pass1234")
-        let student = APIUser(username: "student", passwordHash: hash, role: "student")
-        try await student.save(on: app.db)
+    @Test func studentCannotAccessTestSetupNew() async throws {
+        try await withApp(try await makeApp()) { app in
+            // Create a student, get a session cookie, then try to access instructor-only page.
+            let hash = try Bcrypt.hash("pass1234")
+            let student = APIUser(username: "student", passwordHash: hash, role: "student")
+            try await student.save(on: app.db)
 
-        let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
+            let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
 
-        try await app.asyncTest(.GET, "/testsetups/new", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+            try await app.asyncTest(
+                .GET, "/testsetups/new",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+        }
     }
 
-    func testStudentCannotAccessAdminPage() async throws {
-        let hash = try Bcrypt.hash("pass1234")
-        let student = APIUser(username: "student", passwordHash: hash, role: "student")
-        try await student.save(on: app.db)
+    @Test func studentCannotAccessAdminPage() async throws {
+        try await withApp(try await makeApp()) { app in
+            let hash = try Bcrypt.hash("pass1234")
+            let student = APIUser(username: "student", passwordHash: hash, role: "student")
+            try await student.save(on: app.db)
 
-        let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
+            let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
 
-        try await app.asyncTest(.GET, "/admin", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+            try await app.asyncTest(
+                .GET, "/admin",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+        }
     }
 
-    func testStudentCannotAccessAssignmentsPage() async throws {
-        let hash = try Bcrypt.hash("pass1234")
-        let student = APIUser(username: "student2", passwordHash: hash, role: "student")
-        try await student.save(on: app.db)
+    @Test func studentCannotAccessAssignmentsPage() async throws {
+        try await withApp(try await makeApp()) { app in
+            let hash = try Bcrypt.hash("pass1234")
+            let student = APIUser(username: "student2", passwordHash: hash, role: "student")
+            try await student.save(on: app.db)
 
-        let sessionCookie = try await loginUser(username: "student2", password: "pass1234", role: "student", on: app)
+            let sessionCookie = try await loginUser(
+                username: "student2", password: "pass1234", role: "student", on: app)
 
-        try await app.asyncTest(.GET, "/instructor", beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .forbidden)
-        })
+            try await app.asyncTest(
+                .GET, "/instructor",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+        }
     }
 }

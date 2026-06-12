@@ -4,11 +4,21 @@ Log in
 #endexport
 #export("content"):
 <div class="auth-box">
+    <img class="auth-logo" src="/images/chickadee-icon-alt.png?v=#appVersion()" alt="" width="200" height="200">
     <h1>Log in to Chickadee</h1>
+    #if(loggedOut && !error):
+    <div class="notice-box">
+        <p>You have been signed out.</p>
+    </div>
+    #endif
     #if(error):
-    <div class="error-box" style="margin-bottom:1rem">
+    <div class="error-box">
         #if(error == "invalid"):
         <p>Invalid username or password.</p>
+        #elseif(error == "locked"):
+        <p>Too many failed sign-in attempts. Please try again in a few minutes.</p>
+        #elseif(error == "timeout"):
+        <p>You were signed out after a period of inactivity. Please log in again.</p>
         #elseif(error == "sso_denied"):
         <p>UWaterloo sign-in was canceled or denied.</p>
         #elseif(error == "sso_not_configured"):
@@ -21,9 +31,9 @@ Log in
     </div>
     #endif
     #if(showSSOLogin):
-    <form class="form" method="get" action="/auth/sso/start">
-        <button class="btn btn-primary" type="submit">Login with UWaterloo</button>
-    </form>
+    <div class="form">
+        <a class="btn btn-primary btn--center" href="/auth/sso/start">Login with UWaterloo</a>
+    </div>
     #endif
     #if(showLocalLogin):
     <form class="form" method="post" action="/login">

@@ -1,0 +1,13 @@
+# Child SwiftLint config for Tests/. Inherits the repo-root .swiftlint.yml
+# and only overrides what differs for test code.
+
+parent_config: ../.swiftlint.yml
+
+disabled_rules:
+  # `type_body_length` is disabled for tests: large suites
+  # (WorkerDaemonTests at 800 lines, AssignmentRoutesPublishTests at
+  # 700+, etc.) group dozens of related tests by area.  Splitting them
+  # would scatter cohesive test fixtures across many files without
+  # making the code easier to maintain.  The rule still applies to
+  # Sources/.
+  - type_body_length

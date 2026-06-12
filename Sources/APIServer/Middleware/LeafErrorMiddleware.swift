@@ -4,6 +4,13 @@
 // renders a branded HTML error page for browser requests.  API and worker
 // endpoints (/api/…, /worker/…) still receive a plain JSON error response so
 // machine clients are not broken.
+//
+// Both typed errors (`WebAssignmentError`, etc.) and bare `Abort(...)` flow
+// through here via the `AbortError` protocol.  When a bare `Abort` provides
+// no `reason:`, the protocol default returns the HTTP reason phrase (e.g.,
+// "Not Found"), which renders as a terse, unfriendly page.  `friendlyReason`
+// below substitutes a more humane default in that case, so the user-facing
+// output is consistent regardless of which error style the handler used.
 
 import Vapor
 
@@ -18,17 +25,37 @@ struct LeafErrorMiddleware: AsyncMiddleware {
             switch error {
             case let abort as AbortError:
                 status = abort.status
-                reason  = abort.reason
+                reason = friendlyReason(status: abort.status, reason: abort.reason)
             default:
                 status = .internalServerError
-                reason  = "Something went wrong."
+                reason = friendlyReason(status: .internalServerError, reason: "")
                 request.logger.report(error: error)
             }
+
+            // A CSRF rejection (the CSRF middleware aborts with a reason that
+            // names the token) means the page's token no longer matches the
+            // live session. Because tokens are derived from the session secret
+            // and don't expire while the session is alive, this only happens
+            // when the session was replaced under a still-open page (an
+            // idle-timeout re-auth, or a re-login in another tab). The bare
+            // "Invalid CSRF token." 403 is a confusing dead-end that discards
+            // the user's input, so give browser users an actionable,
+            // recoverable message instead.
+            let isCSRFFailure =
+                status == .forbidden
+                && reason.range(of: "csrf", options: .caseInsensitive) != nil
+            let title = isCSRFFailure ? "Session refreshed" : status.reasonPhrase
+            let message =
+                isCSRFFailure
+                ? "Your session was refreshed since this page was opened, so your "
+                    + "change wasn't saved. Please go back, reload the page, and try again."
+                : reason
 
             // Machine clients (API / runner) get a compact JSON error.
             let path = request.url.path
             if path.hasPrefix("/api/") || path.hasPrefix("/worker/") {
-                let escaped = reason
+                let escaped =
+                    reason
                     .replacingOccurrences(of: "\\", with: "\\\\")
                     .replacingOccurrences(of: "\"", with: "\\\"")
                 var headers = HTTPHeaders()
@@ -36,17 +63,18 @@ struct LeafErrorMiddleware: AsyncMiddleware {
                 return Response(
                     status: status,
                     headers: headers,
-                    body: .init(string: #"{"error":true,"reason":"\#(escaped)"}"#)
+                    body: .init(
+                        string: #"{"error":true,"status":\#(status.code),"reason":"\#(escaped)"}"#
+                    )
                 )
             }
 
             // Browser routes get a Leaf-rendered error page.
             let ctx = ErrorPageContext(
                 currentUser: request.currentUserContext,
-                status:      Int(status.code),
-                title:       status.reasonPhrase,
-                message:     reason,
-                isNotFound:  status == .notFound
+                status: Int(status.code),
+                title: title,
+                message: message
             )
 
             do {
@@ -62,12 +90,53 @@ struct LeafErrorMiddleware: AsyncMiddleware {
     }
 }
 
+/// Returns a humane user-facing message for an HTTP error.  When the caller
+/// supplied an explicit `reason:` (i.e., not the HTTP status reason phrase),
+/// the reason is returned verbatim — typed errors like
+/// `WebAssignmentError.forbidden(action:)` already produce friendly text and
+/// we don't want to clobber them.  When the reason is empty or matches the
+/// generic reason phrase (i.e., a bare `Abort(.notFound)` with no message),
+/// substitute a status-appropriate friendly default.
+func friendlyReason(status: HTTPStatus, reason: String) -> String {
+    let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmed.isEmpty && trimmed != status.reasonPhrase {
+        return trimmed
+    }
+    switch status {
+    case .badRequest:
+        return "We couldn't understand that request."
+    case .unauthorized:
+        return "Please sign in to continue."
+    case .forbidden:
+        return "You don't have permission to view this page."
+    case .notFound:
+        return "We couldn't find that page."
+    case .methodNotAllowed:
+        return "That action isn't allowed here."
+    case .conflict:
+        return "That action conflicts with the current state of the resource."
+    case .gone:
+        return "That page is no longer available."
+    case .payloadTooLarge:
+        return "The upload was too large."
+    case .unprocessableEntity:
+        return "We couldn't process that request."
+    case .tooManyRequests:
+        return "Too many requests — please slow down and try again in a moment."
+    case .internalServerError:
+        return "Something went wrong on our end."
+    case .badGateway, .serviceUnavailable, .gatewayTimeout:
+        return "The service is temporarily unavailable — please try again shortly."
+    default:
+        return trimmed.isEmpty ? "Something went wrong." : trimmed
+    }
+}
+
 // MARK: - View context
 
 private struct ErrorPageContext: Encodable {
     let currentUser: CurrentUserContext?
-    let status:      Int
-    let title:       String
-    let message:     String
-    let isNotFound:  Bool
+    let status: Int
+    let title: String
+    let message: String
 }

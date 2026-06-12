@@ -6,13 +6,13 @@
 //   POST /enroll                        → save selections → redirect to /
 //   POST /courses/:courseID/activate    → switch active course tab → redirect back
 
-import Vapor
-import Fluent
 import Core
+import Fluent
+import Vapor
 
 struct EnrollmentRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        routes.get("enroll",  use: enrollPage)
+        routes.get("enroll", use: enrollPage)
         routes.post("enroll", use: saveEnrollment)
         routes.post("courses", ":courseID", "activate", use: activateCourse)
     }
@@ -47,10 +47,12 @@ struct EnrollmentRoutes: RouteCollection {
             )
         }
 
-        return try await req.view.render("enroll", EnrollContext(
-            currentUser: req.currentUserContext,
-            courses: rows
-        ))
+        return try await req.view.render(
+            "enroll",
+            EnrollContext(
+                currentUser: req.currentUserContext,
+                courses: rows
+            ))
     }
 
     // MARK: - POST /enroll
@@ -67,7 +69,8 @@ struct EnrollmentRoutes: RouteCollection {
         let selectedIDs = Set((body.courseIDs ?? []).compactMap { UUID(uuidString: $0) })
 
         // Look up valid (non-archived) courses from the submitted IDs.
-        let validCourses = selectedIDs.isEmpty
+        let validCourses =
+            selectedIDs.isEmpty
             ? []
             : try await APICourse.query(on: req.db)
                 .filter(\.$id ~~ selectedIDs)

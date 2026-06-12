@@ -2,11 +2,15 @@
 //
 // Tier-visibility helpers shared between the web UI and the JSON API.
 //
-// Visibility rules:
-//   public   — always visible to students and instructors
-//   release  — visible to students only after the assignment deadline passes
-//              (or immediately when the assignment has no deadline)
-//   secret   — never visible to students; always visible to instructors/admins
+// The grade is always computed over every tier, so the percentage is identical
+// on the dashboard and the submission page and does not jump at the deadline.
+// What the deadline (and tier) gate is *presentation*:
+//   public   — listed by name with full output, always
+//   release  — listed by name always (so a student knows which hidden tests
+//              they're failing), but the per-test output is hidden until the
+//              deadline passes (or immediately when there is no deadline)
+//   secret   — never itemized; shown to students only as an aggregate pass/fail
+//              count.  Always fully visible to instructors/admins.
 
 import Core
 import Foundation
@@ -19,36 +23,70 @@ extension TestOutcomeCollection {
     func filtering(tiers: Set<String>) -> TestOutcomeCollection {
         let filtered = outcomes.filter { tiers.contains($0.tier.rawValue) }
         return TestOutcomeCollection(
-            submissionID:    submissionID,
-            testSetupID:     testSetupID,
-            attemptNumber:   attemptNumber,
-            buildStatus:     buildStatus,
-            compilerOutput:  compilerOutput,
-            outcomes:        filtered,
-            totalTests:      filtered.count,
-            passCount:       filtered.filter { $0.status == .pass    }.count,
-            failCount:       filtered.filter { $0.status == .fail    }.count,
-            errorCount:      filtered.filter { $0.status == .error   }.count,
-            timeoutCount:    filtered.filter { $0.status == .timeout }.count,
+            submissionID: submissionID,
+            testSetupID: testSetupID,
+            attemptNumber: attemptNumber,
+            buildStatus: buildStatus,
+            compilerOutput: compilerOutput,
+            outcomes: filtered,
+            totalTests: filtered.count,
+            passCount: filtered.filter { $0.status == .pass }.count,
+            failCount: filtered.filter { $0.status == .fail }.count,
+            errorCount: filtered.filter { $0.status == .error }.count,
+            timeoutCount: filtered.filter { $0.status == .timeout }.count,
             executionTimeMs: executionTimeMs,
-            totalPoints:     filtered.reduce(0) { $0 + $1.points },
-            earnedPoints:    filtered.filter { $0.status == .pass }.reduce(0) { $0 + $1.points },
-            warnings:        warnings,
-            jobStartedAt:    jobStartedAt,
-            runnerVersion:   runnerVersion,
-            timestamp:       timestamp
+            totalPoints: filtered.reduce(0) { $0 + $1.points },
+            earnedPoints: filtered.reduce(0.0) { $0 + Double($1.points) * $1.score },
+            warnings: warnings,
+            jobStartedAt: jobStartedAt,
+            runnerVersion: runnerVersion,
+            timestamp: timestamp
+        )
+    }
+
+    /// Returns a copy with `outcomes` swapped out but every aggregate field
+    /// (counts, points, build status, metadata) left intact.  Used by the
+    /// results API so the response carries the real all-tier grade while
+    /// listing only the caller-visible outcomes — the aggregates therefore may
+    /// not sum to `outcomes`, by design.
+    func replacingOutcomes(with newOutcomes: [TestOutcome]) -> TestOutcomeCollection {
+        TestOutcomeCollection(
+            submissionID: submissionID,
+            testSetupID: testSetupID,
+            attemptNumber: attemptNumber,
+            buildStatus: buildStatus,
+            compilerOutput: compilerOutput,
+            outcomes: newOutcomes,
+            totalTests: totalTests,
+            passCount: passCount,
+            failCount: failCount,
+            errorCount: errorCount,
+            timeoutCount: timeoutCount,
+            executionTimeMs: executionTimeMs,
+            totalPoints: totalPoints,
+            earnedPoints: earnedPoints,
+            warnings: warnings,
+            jobStartedAt: jobStartedAt,
+            runnerVersion: runnerVersion,
+            timestamp: timestamp
         )
     }
 }
 
 // MARK: - Tier visibility policy
 
-/// Returns the set of tier raw-value strings that `user` is permitted to see
-/// for the given assignment (or nil assignment = no deadline context).
+/// Returns the set of tier raw-value strings whose *individual outcomes* a
+/// caller may receive verbatim through the raw results API for the given
+/// assignment.  This is the conservative "may hand back full detail" gate used
+/// by `GET /api/v1/submissions/:id/results`:
 ///
 /// - Instructors and admins always see all three tiers.
 /// - Students see `public` always, `release` after the deadline passes
 ///   (or immediately when there is no deadline), and never `secret`.
+///
+/// The student *web* view is more nuanced — it lists release tests by name
+/// before the deadline but redacts their output — so it uses `itemizedTiers`
+/// and `releaseOutputVisible` instead.
 func visibleTiers(for user: APIUser, assignment: APIAssignment?) -> Set<String> {
     if user.isInstructor {
         return ["public", "release", "secret"]
@@ -58,19 +96,38 @@ func visibleTiers(for user: APIUser, assignment: APIAssignment?) -> Set<String> 
     return releaseVisible ? ["public", "release"] : ["public"]
 }
 
-func visibleCollection(
-    from collectionJSON: String,
-    for user: APIUser,
-    assignment: APIAssignment?
-) -> TestOutcomeCollection? {
+/// Tiers whose individual test rows are itemized (listed by name) in the
+/// student submission view.  Students always see `public` and `release` rows —
+/// release names are shown even before the deadline so a student knows which
+/// hidden tests they are failing — but `secret` is never itemized.  Instructors
+/// see every tier.  The grade is computed over *all* tiers regardless of this
+/// set, so the number is stable across the deadline; only release *output* is
+/// additionally gated (see `releaseOutputVisible`).
+func itemizedTiers(for user: APIUser) -> Set<String> {
+    user.isInstructor ? ["public", "release", "secret"] : ["public", "release"]
+}
+
+/// Whether release-tier *output* (the result message + stderr/traceback panel)
+/// is shown to `user`.  Release rows are always listed by name for students,
+/// but their detailed output stays hidden until the deadline passes so students
+/// can't read the expected/actual values early.  Instructors always see it.
+func releaseOutputVisible(for user: APIUser, assignment: APIAssignment?) -> Bool {
+    if user.isInstructor { return true }
+    return assignment?.dueAt.map { $0 <= Date() } ?? true
+}
+
+/// Decodes a stored collection JSON with no tier filtering — the full,
+/// all-tier collection the runner reported.  Used wherever the *grade* is
+/// needed (it is computed over every tier), as opposed to the tier-filtered
+/// itemized rows.
+func decodedCollection(from collectionJSON: String) -> TestOutcomeCollection? {
     guard let data = collectionJSON.data(using: .utf8) else { return nil }
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
-    guard let collection = try? decoder.decode(TestOutcomeCollection.self, from: data) else { return nil }
-    return collection.filtering(tiers: visibleTiers(for: user, assignment: assignment))
+    return try? decoder.decode(TestOutcomeCollection.self, from: data)
 }
 
 func gradePercent(from collection: TestOutcomeCollection) -> Int? {
     guard collection.totalPoints > 0 else { return nil }
-    return Int((Double(collection.earnedPoints) / Double(collection.totalPoints) * 100).rounded())
+    return Int((collection.earnedPoints / Double(collection.totalPoints) * 100).rounded())
 }

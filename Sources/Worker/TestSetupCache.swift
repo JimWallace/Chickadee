@@ -17,9 +17,9 @@ import Foundation
 actor TestSetupCache {
 
     static let defaultMaxEntries = 16
-    static let defaultCacheRoot  = URL(fileURLWithPath: "/tmp/chickadee-runner-cache")
+    static let defaultCacheRoot = URL(fileURLWithPath: "/tmp/chickadee-runner-cache")
 
-    private let cacheRoot:  URL
+    private let cacheRoot: URL
     private let maxEntries: Int
 
     /// LRU order — index 0 is least-recently-used, last is most-recently-used.
@@ -29,11 +29,42 @@ actor TestSetupCache {
     private var inProgress: [String: Task<URL, Error>] = [:]
 
     init(
-        cacheRoot:  URL = TestSetupCache.defaultCacheRoot,
+        cacheRoot: URL = TestSetupCache.defaultCacheRoot,
         maxEntries: Int = TestSetupCache.defaultMaxEntries
     ) {
-        self.cacheRoot  = cacheRoot
+        self.cacheRoot = cacheRoot
         self.maxEntries = maxEntries
+        // Reconcile with what's already on disk: the LRU list used to be
+        // memory-only, so entries surviving a daemon restart were never
+        // tracked — they served hits but could never be evicted, growing
+        // /tmp without bound across restarts and manifest edits (June 2026
+        // audit, P2.4). Seed oldest-first so eviction order approximates LRU.
+        lruKeys = Self.existingEntryKeysSortedByAge(cacheRoot: cacheRoot)
+    }
+
+    /// Keys of committed cache entries already on disk, oldest modification
+    /// first. `.tmp` staging leftovers are ignored (and cleaned by the next
+    /// populate of their key).
+    private static func existingEntryKeysSortedByAge(cacheRoot: URL) -> [String] {
+        let fm = FileManager.default
+        guard
+            let entries = try? fm.contentsOfDirectory(
+                at: cacheRoot, includingPropertiesForKeys: [.contentModificationDateKey])
+        else { return [] }
+        return
+            entries
+            .filter { !$0.lastPathComponent.hasSuffix(".tmp") }
+            .filter { fm.fileExists(atPath: $0.appendingPathComponent("prepared").path) }
+            .sorted { lhs, rhs in
+                let lhsDate =
+                    (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                let rhsDate =
+                    (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                return lhsDate < rhsDate
+            }
+            .map(\.lastPathComponent)
     }
 
     // MARK: - Public interface
@@ -50,40 +81,81 @@ actor TestSetupCache {
     ///               into a staging directory and returns that directory URL.
     ///               Called at most once per key; concurrent callers await the
     ///               same in-flight task.
-    func acquire(
+    /// Result of an `acquire` call.  `directory` is the per-job scratch copy
+    /// the caller owns; `didHit` distinguishes a fresh-from-disk hit (true)
+    /// from a miss that triggered a populate or an await-in-progress (false),
+    /// so the worker can persist the cache effectiveness alongside the
+    /// existing `testSetupAcquireMs` stage timing.
+    struct AcquireResult: Sendable {
+        let directory: URL
+        let didHit: Bool
+    }
+
+    nonisolated func acquire(
         testSetupID: String,
         populate: @escaping @Sendable () async throws -> URL
-    ) async throws -> URL {
+    ) async throws -> AcquireResult {
+        // The scratch copy of a multi-MB prepared directory runs OUTSIDE actor
+        // isolation so concurrent acquires for other setups don't serialize
+        // behind file I/O (June 2026 audit, P2.4). The committed source dir is
+        // immutable, so the only hazard is eviction racing the copy — rare
+        // (needs 16+ distinct setups churning), and retried once below: with
+        // the entry gone, the retry takes the populate path.
+        do {
+            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
+            let scratch = try Self.copyToScratch(source: source.directory, label: testSetupID)
+            return AcquireResult(directory: scratch, didHit: source.didHit)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            let source = try await acquireSource(testSetupID: testSetupID, populate: populate)
+            let scratch = try Self.copyToScratch(source: source.directory, label: testSetupID)
+            return AcquireResult(directory: scratch, didHit: source.didHit)
+        }
+    }
+
+    /// Actor-isolated bookkeeping half of `acquire`: returns the committed
+    /// prepared directory (populating it if needed) without copying it.
+    private func acquireSource(
+        testSetupID: String,
+        populate: @escaping @Sendable () async throws -> URL
+    ) async throws -> AcquireResult {
 
         let preparedDir = entryPreparedDir(for: testSetupID)
 
         // ── Cache hit ────────────────────────────────────────────────────────
         if FileManager.default.fileExists(atPath: preparedDir.path) {
             touchLRU(key: testSetupID)
-            writeStructuredRunnerLog(event: "test_setup_cache_hit", fields: [
-                "test_setup_id": testSetupID,
-            ])
-            return try copyToScratch(source: preparedDir, label: testSetupID)
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_hit",
+                fields: [
+                    "test_setup_id": testSetupID
+                ])
+            return AcquireResult(directory: preparedDir, didHit: true)
         }
 
         // ── Already populating — await in-flight task ─────────────────────
         if let task = inProgress[testSetupID] {
-            writeStructuredRunnerLog(event: "test_setup_cache_await_in_progress", fields: [
-                "test_setup_id": testSetupID,
-            ])
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_await_in_progress",
+                fields: [
+                    "test_setup_id": testSetupID
+                ])
             let populated = try await task.value
             // Another caller may have already registered this key in lruKeys;
             // touchLRU is idempotent and safe to call from any code path.
             touchLRU(key: testSetupID)
-            return try copyToScratch(source: populated, label: testSetupID)
+            // Awaiting an in-flight populate is a miss from the caller's
+            // perspective — work was still being done on their behalf.
+            return AcquireResult(directory: populated, didHit: false)
         }
 
         // ── Cache miss — start population ────────────────────────────────────
-        writeStructuredRunnerLog(event: "test_setup_cache_miss", fields: [
-            "test_setup_id": testSetupID,
-        ])
+        writeStructuredRunnerLog(
+            event: "test_setup_cache_miss",
+            fields: [
+                "test_setup_id": testSetupID
+            ])
 
-        let cacheRoot   = self.cacheRoot          // capture value type, not actor ref
+        let cacheRoot = self.cacheRoot  // capture value type, not actor ref
         let populateTask = Task<URL, Error> {
             let stagingDir = try await populate()
             return try Self.commit(stagingDir: stagingDir, testSetupID: testSetupID, cacheRoot: cacheRoot)
@@ -98,17 +170,21 @@ actor TestSetupCache {
             // never evict unnecessarily or double-register.
             evictIfNeededForNew(key: testSetupID)
             touchLRU(key: testSetupID)
-            writeStructuredRunnerLog(event: "test_setup_cache_populated", fields: [
-                "test_setup_id": testSetupID,
-            ])
-            return try copyToScratch(source: populated, label: testSetupID)
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_populated",
+                fields: [
+                    "test_setup_id": testSetupID
+                ])
+            return AcquireResult(directory: populated, didHit: false)
         } catch {
             inProgress.removeValue(forKey: testSetupID)
             cleanupPartialEntry(testSetupID: testSetupID)
-            writeStructuredRunnerLog(event: "test_setup_cache_populate_failed", fields: [
-                "test_setup_id":         testSetupID,
-                "error_message_summary": String(describing: error),
-            ])
+            writeStructuredRunnerLog(
+                event: "test_setup_cache_populate_failed",
+                fields: [
+                    "test_setup_id": testSetupID,
+                    "error_message_summary": String(describing: error),
+                ])
             throw error
         }
     }
@@ -132,10 +208,23 @@ actor TestSetupCache {
         while lruKeys.count >= maxEntries {
             let evicted = lruKeys.removeFirst()
             let evictedRoot = cacheRoot.appendingPathComponent(evicted)
-            try? FileManager.default.removeItem(at: evictedRoot)
-            writeStructuredRunnerLog(event: "test_setup_cache_evicted", fields: [
-                "test_setup_id": evicted,
-            ])
+            do {
+                try FileManager.default.removeItem(at: evictedRoot)
+                writeStructuredRunnerLog(
+                    event: "test_setup_cache_evicted",
+                    fields: [
+                        "test_setup_id": evicted
+                    ])
+            } catch {
+                writeStructuredRunnerLog(
+                    event: "test_setup_cache_evict_failed",
+                    fields: [
+                        "test_setup_id": evicted,
+                        "path": evictedRoot.path,
+                        "error_type": String(describing: type(of: error)),
+                        "error_message_summary": error.localizedDescription,
+                    ])
+            }
         }
     }
 
@@ -150,8 +239,8 @@ actor TestSetupCache {
     // MARK: - File operations
 
     /// Copy the prepared cache entry into a fresh temporary directory that
-    /// the caller owns exclusively.
-    private func copyToScratch(source: URL, label: String) throws -> URL {
+    /// the caller owns exclusively. Static (non-isolated) — see `acquire`.
+    private static func copyToScratch(source: URL, label: String) throws -> URL {
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "chickadee_ts_\(label)_\(UUID().uuidString)",
@@ -167,9 +256,9 @@ actor TestSetupCache {
     /// Uses a `<testSetupID>.tmp` intermediate to ensure the final entry is
     /// never partially visible.
     private static func commit(stagingDir: URL, testSetupID: String, cacheRoot: URL) throws -> URL {
-        let tmpRoot     = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
+        let tmpRoot = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
         let tmpPrepared = tmpRoot.appendingPathComponent("prepared")
-        let entryRoot   = cacheRoot.appendingPathComponent(testSetupID)
+        let entryRoot = cacheRoot.appendingPathComponent(testSetupID)
         let preparedDir = entryRoot.appendingPathComponent("prepared")
 
         // Remove any leftover from a previous failed attempt.
@@ -189,7 +278,7 @@ actor TestSetupCache {
     /// Remove any partial cache artefacts left by a failed population.
     private func cleanupPartialEntry(testSetupID: String) {
         let entryRoot = cacheRoot.appendingPathComponent(testSetupID)
-        let tmpRoot   = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
+        let tmpRoot = cacheRoot.appendingPathComponent("\(testSetupID).tmp")
         try? FileManager.default.removeItem(at: entryRoot)
         try? FileManager.default.removeItem(at: tmpRoot)
     }

@@ -1,188 +1,124 @@
 // APIServer/APIServerApp.swift
 
-import Vapor
-import Fluent
-import Leaf
 import CSRF
 import Core
+import Fluent
 import Foundation
+import Leaf
+import Vapor
 
-@main
-struct APIServerApp {
-    static func main() async throws {
-        var env = try Environment.detect()
-        let cliWorkerSecret = extractWorkerSecretArgument(from: &env)
-        try LoggingSystem.bootstrap(from: &env)
+/// Library entry point invoked by the `chickadee-server` executable target.
+/// Lives in `APIServer` (a library) so test targets can compile against the
+/// same module without pulling in `@main` semantics.
+public func runAPIServer() async throws {
+    var env = try Environment.detect()
+    let cliWorkerSecret = extractWorkerSecretArgument(from: &env)
+    try LoggingSystem.bootstrap(from: &env)
 
-        let app = try await Application.make(env)
-        app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
-        
-        do {
-            try configure(app, cliWorkerSecret: cliWorkerSecret)
+    let app = try await Application.make(env)
+    app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
 
-            // Load OIDC configuration after configure() so app.client is ready.
-            if app.authMode != .local {
-                let oidcConfig = try await OIDCConfiguration.load(from: app)
-                app.oidcConfig = oidcConfig
-            }
+    do {
+        try configure(app, cliWorkerSecret: cliWorkerSecret)
 
-            try await app.execute()
-        } catch {
-            await app.localRunnerManager.stopIfRunning(logger: app.logger)
-            try await app.asyncShutdown()
-            throw error
+        // Load OIDC configuration after configure() so app.client is ready.
+        if app.authMode != .local {
+            let oidcConfig = try await OIDCConfiguration.load(from: app)
+            app.oidcConfig = oidcConfig
         }
-        
+
+        // Load the MCP signing-key authority (auto-generating it on first run)
+        // when the content-authoring MCP endpoint is mounted (read_only or
+        // read_write — read_only still needs to verify tokens).  The routes are
+        // already mounted by configure(); the bearer middleware reads this
+        // authority per-request, so it only needs to exist before app.execute().
+        if app.appConfig.mcp.mode.isMounted {
+            app.mcpTokenAuthority = try await MCPTokenAuthority.loadOrGenerate(
+                path: app.appConfig.mcp.signingKeyPath, keyID: "mcp-1")
+            app.logger.info("MCP token authority ready (signing key: \(app.appConfig.mcp.signingKeyPath)).")
+        }
+
+        try await app.execute()
+    } catch {
         await app.localRunnerManager.stopIfRunning(logger: app.logger)
         try await app.asyncShutdown()
+        throw error
     }
+
+    await app.localRunnerManager.stopIfRunning(logger: app.logger)
+    try await app.asyncShutdown()
 }
 
 func configure(_ app: Application, cliWorkerSecret: String?, authModeOverride: AuthMode? = nil) throws {
     let workDir = DirectoryConfiguration.detect().workingDirectory
-    let workerSecretFile = workDir + ".worker-secret"
-    let workerSecretWordlistFile = workDir + "Resources/wordlists/eff_large_wordlist.txt"
-    let localRunnerAutoStartFile = workDir + ".local-runner-autostart"
-    let requestedAuthMode = AuthMode.fromEnvironment()
-    let nonSSOModesEnabled = environmentBool("ENABLE_NON_SSO_AUTH_MODES") ?? false
-    let authMode = authModeOverride ?? resolvedAuthMode(
-        requestedMode: requestedAuthMode,
-        nonSSOModesEnabled: nonSSOModesEnabled
+
+    let appConfig = try resolveAppConfig(
+        app: app,
+        workDir: workDir,
+        authModeOverride: authModeOverride
     )
-    let securityConfiguration = AppSecurityConfiguration.fromEnvironment(authMode: authMode)
-    let ssoAdminUsers = parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS"))
-    let ssoInstructorUsers = parseSSOIdentityAllowlist(Environment.get("SSO_INSTRUCTOR_USERS"))
+    app.appConfig = appConfig
 
-    // MARK: - Directories
+    // Route the shared outbound HTTP client (OIDC discovery/JWKS/token,
+    // BrightSpace) through a proxy when configured. Must happen before the first
+    // `app.client` use (the OIDC discovery fetch in `runAPIServer`), since the
+    // shared client is built lazily from this configuration.
+    applyOutboundProxy(app, appConfig.outboundProxy)
 
-    let resultsDir    = workDir + "results/"
-    let setupsDir     = workDir + "testsetups/"
-    let submissionsDir = workDir + "submissions/"
-
-    for dir in [resultsDir, setupsDir, submissionsDir] {
-        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-    }
-
-    app.storage[ResultsDirectoryKey.self]     = resultsDir
-    app.storage[TestSetupsDirectoryKey.self]  = setupsDir
-    app.storage[SubmissionsDirectoryKey.self] = submissionsDir
-    app.storage[WorkerSecretFilePathKey.self] = workerSecretFile
-    app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
-    let startupWorkerSecret = resolveStartupWorkerSecret(
-        cliWorkerSecret: cliWorkerSecret,
-        workerSecretFilePath: workerSecretFile,
-        workerSecretWordlistPath: workerSecretWordlistFile
-    )
-    let localRunnerAutoStartEnabled = readLocalRunnerAutoStartFromDisk(
-        filePath: localRunnerAutoStartFile
-    ) ?? false
-    app.storage[WorkerClaimQueueKey.self]      = WorkerClaimQueue()
-    app.storage[WorkerSecretStoreKey.self]    = WorkerSecretStore(initialOverride: startupWorkerSecret)
-    app.storage[WorkerActivityStoreKey.self]  = WorkerActivityStore()
-    app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
-        initialEnabled: localRunnerAutoStartEnabled
-    )
-    app.storage[LocalRunnerManagerKey.self] = LocalRunnerManager()
-    app.storage[AuthModeKey.self] = authMode
-    app.storage[SecurityConfigurationKey.self] = securityConfiguration
-    app.storage[SSOAdminUsersKey.self] = ssoAdminUsers
-    app.storage[SSOInstructorUsersKey.self] = ssoInstructorUsers
-    app.authProvider = LocalAuthProvider()
-
-    // MARK: - Sessions (Fluent-backed; persisted in the database)
-
-    app.sessions.use(.fluent)
-    var sessionConfig = app.sessions.configuration
-    sessionConfig.cookieFactory = { sessionID in
-        HTTPCookies.Value(
-            string: sessionID.string,
-            expires: Date(timeIntervalSinceNow: 60 * 60 * 24 * 7), // one week
-            maxAge: nil,
-            domain: nil,
-            path: "/",
-            isSecure: securityConfiguration.sessionCookieSecure,
-            isHTTPOnly: true,
-            sameSite: .lax
-        )
-    }
-    app.sessions.configuration = sessionConfig
-    // Error page middleware must be outermost so it catches errors from all
-    // subsequent middleware and route handlers.
-    app.middleware.use(LeafErrorMiddleware())
-    if securityConfiguration.enforceHTTPS {
-        app.middleware.use(HTTPSRedirectMiddleware(configuration: securityConfiguration))
-    }
-    app.middleware.use(app.sessions.middleware)
-    app.middleware.use(UserSessionAuthenticator())
-    app.middleware.use(UserFileNamespaceMiddleware())
-    // Allow notebook uploads from the assignment-creation flow.
-    app.routes.defaultMaxBodySize = "10mb"
-
-    // MARK: - Views + static files
-
-    app.views.use(.leaf)
-    app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
-    app.leaf.tags["csrfToken"] = CSRFTokenTag()
-    app.leaf.tags["appVersion"] = AppVersionTag()
-    // FileMiddleware is registered first so static files are served directly.
-    // It short-circuits the responder chain (returns without calling next), so
-    // middleware registered after it only runs for dynamic Leaf-rendered pages.
-    // This is intentional: JupyterLite's static files must NOT receive COEP
-    // require-corp because JupyterLite's service worker produces synthetic
-    // responses (virtual filesystem, contents API) that lack Cross-Origin-
-    // Resource-Policy headers.  COEP on the page would block those responses
-    // and prevent the app from initialising.  Modern Pyodide (0.27+) does not
-    // require SharedArrayBuffer — it uses a service-worker-based synchronisation
-    // fallback — so cross-origin isolation on the iframe document is unnecessary.
-    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.middleware.use(COEPMiddleware())
-    app.middleware.use(SecurityHeadersMiddleware())
-
-    // MARK: - Database
-
-    let databaseSettings = try DatabaseSettings.fromEnvironment(
-        defaultSQLitePath: workDir + "chickadee.sqlite"
-    )
-    try configureDatabase(app, settings: databaseSettings)
-    registerMigrations(on: app)
-
-    try app.autoMigrate().wait()
-    app.lifecycle.use(ObservabilityLifecycleHandler())
-    app.lifecycle.use(AssignmentDeadlineLifecycleHandler())
-
-    if authMode != .local {
-        if !nonSSOModesEnabled {
-            app.logger.info(
-                "Default auth mode is SSO. Set ENABLE_NON_SSO_AUTH_MODES=true to allow local/dual AUTH_MODE values."
-            )
-        }
-        if let requestedAuthMode,
-           requestedAuthMode != .sso,
-           !nonSSOModesEnabled {
-            app.logger.warning(
-                "AUTH_MODE=\(requestedAuthMode.rawValue) ignored because ENABLE_NON_SSO_AUTH_MODES is not enabled; using sso."
-            )
-        }
-        if securityConfiguration.publicBaseURL == nil {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but PUBLIC_BASE_URL is not set.")
-        } else if securityConfiguration.publicBaseURL?.scheme?.lowercased() != "https" {
-            let configured = securityConfiguration.publicBaseURL?.absoluteString ?? "(unset)"
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but PUBLIC_BASE_URL is not https: \(configured)")
-        }
-        if !securityConfiguration.sessionCookieSecure {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but session cookies are not marked Secure.")
-        }
-        if Environment.get("OIDC_CLIENT_ID")?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_ID is not set.")
-        }
-        if Environment.get("OIDC_CLIENT_SECRET")?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-            app.logger.warning("AUTH_MODE is \(authMode.rawValue), but OIDC_CLIENT_SECRET is not set.")
-        }
-    }
-
-    // MARK: - Routes
+    try bootstrapAppDirectories(app, workDir: workDir, cliWorkerSecret: cliWorkerSecret)
+    bootstrapAppMiddleware(app, appConfig: appConfig)
+    try bootstrapAppServices(app, appConfig: appConfig)
 
     try routes(app)
+}
+
+/// Routes Vapor's shared outbound HTTP client through `proxy` when set; no-op
+/// otherwise. Vapor builds `app.http.client.shared` lazily from this
+/// configuration, so this must run before the first `app.client` request.
+private func applyOutboundProxy(_ app: Application, _ proxy: OutboundProxyConfig?) {
+    guard let proxy else { return }
+    app.http.client.configuration.proxy = .server(host: proxy.host, port: proxy.port)
+    app.logger.info("Outbound HTTP client routed through proxy \(proxy.host):\(proxy.port)")
+}
+
+/// Either resolves the env-derived `AppConfig`, or, if a test has preloaded
+/// one via `app.preloadedAppConfig`, uses that verbatim (applying the
+/// `authModeOverride` on top if any).  Both paths return a fully-formed
+/// config ready to be stored on `app.appConfig`.
+private func resolveAppConfig(
+    app: Application,
+    workDir: String,
+    authModeOverride: AuthMode?
+) throws -> AppConfig {
+    if let preloaded = app.preloadedAppConfig {
+        return authModeOverride.map { override in
+            var auth = preloaded.auth
+            auth = AuthConfig(
+                mode: override,
+                requestedMode: auth.requestedMode,
+                nonSSOModesEnabled: auth.nonSSOModesEnabled,
+                ssoAdminUsers: auth.ssoAdminUsers,
+                ssoInstructorUsers: auth.ssoInstructorUsers
+            )
+            return AppConfig(
+                auth: auth,
+                oidc: preloaded.oidc,
+                security: preloaded.security,
+                scanMode: preloaded.scanMode,
+                database: preloaded.database,
+                lockout: preloaded.lockout,
+                workers: preloaded.workers,
+                brightspace: preloaded.brightspace,
+                diagnostics: preloaded.diagnostics,
+                alerts: preloaded.alerts,
+                outboundProxy: preloaded.outboundProxy,
+                mcp: preloaded.mcp
+            )
+        } ?? preloaded
+    }
+    let appConfig = try AppConfig.fromEnvironment(workDir: workDir, authModeOverride: authModeOverride)
+    appConfig.logSummary(to: app.logger)
+    return appConfig
 }
 
 // MARK: - Storage keys
@@ -220,37 +156,12 @@ struct AuthModeKey: StorageKey {
 struct SecurityConfigurationKey: StorageKey {
     typealias Value = AppSecurityConfiguration
 }
+// Storage key for ScanModeConfigurationKey lives in ScanModeMiddleware.swift.
 struct SSOAdminUsersKey: StorageKey {
     typealias Value = Set<String>
 }
 struct SSOInstructorUsersKey: StorageKey {
     typealias Value = Set<String>
-}
-
-enum AuthMode: String, Sendable {
-    case local
-    case sso
-    case dual
-
-    static func fromEnvironment() -> Self? {
-        guard let raw = Environment.get("AUTH_MODE")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(),
-            !raw.isEmpty
-        else {
-            return nil
-        }
-        return Self(rawValue: raw)
-    }
-}
-
-func resolvedAuthMode(
-    requestedMode: AuthMode?,
-    nonSSOModesEnabled: Bool
-) -> AuthMode {
-    let requested = requestedMode ?? .sso
-    guard requested != .sso else { return .sso }
-    return nonSSOModesEnabled ? requested : .sso
 }
 
 extension Application {
@@ -273,345 +184,6 @@ extension Application {
         get { storage[SSOInstructorUsersKey.self] ?? [] }
         set { storage[SSOInstructorUsersKey.self] = newValue }
     }
-}
-
-struct AppSecurityConfiguration: Sendable {
-    let publicBaseURL: URL?
-    let enforceHTTPS: Bool
-    let trustForwardedProto: Bool
-    let sessionCookieSecure: Bool
-
-    static let `default` = AppSecurityConfiguration(
-        publicBaseURL: nil,
-        enforceHTTPS: false,
-        trustForwardedProto: true,
-        sessionCookieSecure: false
-    )
-
-    static func fromEnvironment(authMode: AuthMode) -> Self {
-        let publicBaseURL = Environment.get("PUBLIC_BASE_URL")
-            .flatMap { raw -> URL? in
-                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? nil : URL(string: trimmed)
-            }
-        let publicBaseIsHTTPS = (publicBaseURL?.scheme?.lowercased() == "https")
-
-        let enforceHTTPS = environmentBool("ENFORCE_HTTPS")
-            ?? (authMode != .local && publicBaseIsHTTPS)
-        let trustForwardedProto = environmentBool("TRUST_X_FORWARDED_PROTO") ?? true
-        let sessionCookieSecure = environmentBool("SESSION_COOKIE_SECURE")
-            ?? (publicBaseIsHTTPS || authMode != .local)
-
-        return AppSecurityConfiguration(
-            publicBaseURL: publicBaseURL,
-            enforceHTTPS: enforceHTTPS,
-            trustForwardedProto: trustForwardedProto,
-            sessionCookieSecure: sessionCookieSecure
-        )
-    }
-}
-
-actor WorkerSecretStore {
-    private var runtimeOverride: String?
-
-    init(initialOverride: String? = nil) {
-        self.runtimeOverride = initialOverride
-    }
-
-    func setRuntimeOverride(_ secret: String?) {
-        runtimeOverride = secret
-    }
-
-    func runtimeOverrideValue() -> String? {
-        runtimeOverride
-    }
-
-    func effectiveSecret() -> String? {
-        runtimeOverride ?? runnerSharedSecretFromEnvironment()
-    }
-}
-
-struct WorkerActivitySnapshot: Sendable {
-    let workerID: String
-    let lastActive: Date
-    let hostname: String
-    let runnerVersion: String
-    let maxConcurrentJobs: Int
-    let activeJobs: Int
-    let lastPollAt: Date?
-    let lastHeartbeatAt: Date?
-    let serverAssignedJobCountSinceStart: Int
-}
-
-actor WorkerActivityStore {
-    private struct Entry: Sendable {
-        let lastSeen: Date
-        let hostname: String
-        let runnerVersion: String
-        let maxConcurrentJobs: Int
-        let activeJobs: Int
-        let lastPollAt: Date?
-        let lastHeartbeatAt: Date?
-        let serverAssignedJobCountSinceStart: Int
-    }
-    private var entries: [String: Entry] = [:]
-
-    /// Record activity for `workerID`. Empty/zero values for `hostname`,
-    /// `runnerVersion`, and `maxConcurrentJobs` are treated as "no update" —
-    /// the existing values are preserved so that HMAC middleware keep-alive
-    /// touches do not clobber fields set by the job-request body handler.
-    func markActive(
-        workerID: String,
-        hostname: String,
-        runnerVersion: String = "",
-        maxConcurrentJobs: Int = 0,
-        activeJobs: Int? = nil,
-        lastPollAt: Date? = nil,
-        lastHeartbeatAt: Date? = nil,
-        at date: Date = Date()
-    ) {
-        guard !workerID.isEmpty else { return }
-        let prev = entries[workerID]
-        let effectiveHostname = hostname.isEmpty ? (prev?.hostname ?? "") : hostname
-        let effectiveVersion = runnerVersion.isEmpty ? (prev?.runnerVersion ?? "") : runnerVersion
-        let effectiveConcurrency = maxConcurrentJobs == 0 ? (prev?.maxConcurrentJobs ?? 0) : maxConcurrentJobs
-        let effectiveActiveJobs = max(0, activeJobs ?? (prev?.activeJobs ?? 0))
-        entries[workerID] = Entry(
-            lastSeen: date,
-            hostname: effectiveHostname,
-            runnerVersion: effectiveVersion,
-            maxConcurrentJobs: effectiveConcurrency,
-            activeJobs: effectiveActiveJobs,
-            lastPollAt: lastPollAt ?? prev?.lastPollAt,
-            lastHeartbeatAt: lastHeartbeatAt ?? prev?.lastHeartbeatAt,
-            serverAssignedJobCountSinceStart: prev?.serverAssignedJobCountSinceStart ?? 0
-        )
-    }
-
-    func incrementAssignedJobs(for workerID: String) {
-        guard let entry = entries[workerID] else { return }
-        entries[workerID] = Entry(
-            lastSeen: entry.lastSeen,
-            hostname: entry.hostname,
-            runnerVersion: entry.runnerVersion,
-            maxConcurrentJobs: entry.maxConcurrentJobs,
-            activeJobs: entry.activeJobs,
-            lastPollAt: entry.lastPollAt,
-            lastHeartbeatAt: entry.lastHeartbeatAt,
-            serverAssignedJobCountSinceStart: entry.serverAssignedJobCountSinceStart + 1
-        )
-    }
-
-    func snapshot(for workerID: String) -> WorkerActivitySnapshot? {
-        guard let entry = entries[workerID] else { return nil }
-        return WorkerActivitySnapshot(
-            workerID: workerID,
-            lastActive: entry.lastSeen,
-            hostname: entry.hostname,
-            runnerVersion: entry.runnerVersion,
-            maxConcurrentJobs: entry.maxConcurrentJobs,
-            activeJobs: entry.activeJobs,
-            lastPollAt: entry.lastPollAt,
-            lastHeartbeatAt: entry.lastHeartbeatAt,
-            serverAssignedJobCountSinceStart: entry.serverAssignedJobCountSinceStart
-        )
-    }
-
-    /// Returns true when `workerID` has been seen within `ttlSeconds` AND the
-    /// stored hostname differs from `hostname`. Same hostname = restart of the
-    /// same runner process, which is not treated as a conflict.
-    func isConflict(workerID: String, hostname: String, ttlSeconds: TimeInterval, now: Date = Date()) -> Bool {
-        guard let entry = entries[workerID] else { return false }
-        let withinTTL = now.timeIntervalSince(entry.lastSeen) <= ttlSeconds
-        return withinTTL && !entry.hostname.isEmpty && entry.hostname != hostname
-    }
-
-    /// Returns snapshots for runners seen within `cutoff` seconds, pruning
-    /// stale entries from the in-memory store at the same time.  Runners that
-    /// have not contacted the server for more than an hour are dropped so they
-    /// don't accumulate forever after a rename or permanent shutdown.
-    func snapshotsSortedByRecent(cutoff: TimeInterval = 3600, now: Date = Date()) -> [WorkerActivitySnapshot] {
-        // Prune any entry that hasn't been seen within the cutoff window.
-        entries = entries.filter { now.timeIntervalSince($0.value.lastSeen) <= cutoff }
-        return entries
-            .map { WorkerActivitySnapshot(
-                workerID: $0.key,
-                lastActive: $0.value.lastSeen,
-                hostname: $0.value.hostname,
-                runnerVersion: $0.value.runnerVersion,
-                maxConcurrentJobs: $0.value.maxConcurrentJobs,
-                activeJobs: $0.value.activeJobs,
-                lastPollAt: $0.value.lastPollAt,
-                lastHeartbeatAt: $0.value.lastHeartbeatAt,
-                serverAssignedJobCountSinceStart: $0.value.serverAssignedJobCountSinceStart
-            ) }
-            .sorted { $0.lastActive > $1.lastActive }
-    }
-
-    func hasRecentActivity(within seconds: TimeInterval, now: Date = Date()) -> Bool {
-        entries.values.contains { now.timeIntervalSince($0.lastSeen) <= seconds }
-    }
-}
-
-actor LocalRunnerAutoStartStore {
-    private var enabled: Bool
-
-    init(initialEnabled: Bool) {
-        self.enabled = initialEnabled
-    }
-
-    func isEnabled() -> Bool {
-        enabled
-    }
-
-    func setEnabled(_ newValue: Bool) {
-        enabled = newValue
-    }
-}
-
-actor LocalRunnerManager {
-    private var process: Process?
-    private var logHandle: FileHandle?
-
-    func ensureRunning(app: Application, logger: Logger) async {
-        if let existing = process, existing.isRunning {
-            return
-        }
-
-        let secret = (await app.workerSecretStore.runtimeOverrideValue() ?? "").trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        guard !secret.isEmpty else {
-            logger.warning("Local runner autostart is enabled, but worker secret is empty.")
-            return
-        }
-
-        let workDir = DirectoryConfiguration.detect().workingDirectory
-        let host = normalizedHost(app.http.server.configuration.hostname)
-        let port = app.http.server.configuration.port
-        let apiBaseURL = "http://\(host):\(port)"
-        let workerID = "autospawn-\(UUID().uuidString.lowercased().prefix(8))"
-        let runnerBinary = workDir + ".build/debug/chickadee-runner"
-        let launchViaBinary = FileManager.default.isExecutableFile(atPath: runnerBinary)
-        let argsPrefix = launchViaBinary ? [runnerBinary] : ["swift", "run", "chickadee-runner"]
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = argsPrefix + [
-            "--api-base-url", apiBaseURL,
-            "--worker-id", workerID,
-            "--max-jobs", "1",
-            "--sandbox"
-        ]
-        var childEnvironment = ProcessInfo.processInfo.environment
-        childEnvironment["RUNNER_SHARED_SECRET"] = secret
-        // Keep legacy name for older runners until all environments migrate.
-        childEnvironment["WORKER_SHARED_SECRET"] = secret
-        proc.environment = childEnvironment
-        proc.currentDirectoryURL = URL(fileURLWithPath: workDir)
-
-        let logPath = workDir + "results/local-runner.log"
-        if !FileManager.default.fileExists(atPath: logPath) {
-            _ = FileManager.default.createFile(atPath: logPath, contents: nil)
-        }
-        if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
-            _ = try? handle.seekToEnd()
-            proc.standardOutput = handle
-            proc.standardError = handle
-            logHandle = handle
-        }
-
-        do {
-            try proc.run()
-            process = proc
-            logger.info("Started local runner \(workerID) (\(launchViaBinary ? "binary" : "swift run"))")
-        } catch {
-            logger.error("Failed to start local runner: \(error)")
-            process = nil
-            if let handle = logHandle {
-                try? handle.close()
-                logHandle = nil
-            }
-        }
-    }
-
-    func stopIfRunning(logger: Logger) async {
-        guard let proc = process else {
-            if let handle = logHandle {
-                try? handle.close()
-                logHandle = nil
-            }
-            return
-        }
-
-        if proc.isRunning {
-            logger.info("Stopping local runner process...")
-            proc.terminate()
-            for _ in 0..<20 where proc.isRunning {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-            if proc.isRunning {
-                proc.interrupt()
-                for _ in 0..<10 where proc.isRunning {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
-                }
-            }
-        }
-
-        if let handle = logHandle {
-            try? handle.close()
-            logHandle = nil
-        }
-        process = nil
-    }
-}
-
-func normalizedHost(_ raw: String) -> String {
-    let host = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    if host.isEmpty || host == "0.0.0.0" || host == "::" {
-        return "localhost"
-    }
-    return host
-}
-
-func runnerSharedSecretFromEnvironment() -> String? {
-    let primary = Environment.get("RUNNER_SHARED_SECRET")?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    if let primary, !primary.isEmpty { return primary }
-
-    let legacy = Environment.get("WORKER_SHARED_SECRET")?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    if let legacy, !legacy.isEmpty { return legacy }
-
-    return nil
-}
-
-func environmentBool(_ key: String) -> Bool? {
-    guard let raw = Environment.get(key)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .lowercased(),
-        !raw.isEmpty
-    else {
-        return nil
-    }
-
-    switch raw {
-    case "1", "true", "yes", "on":
-        return true
-    case "0", "false", "no", "off":
-        return false
-    default:
-        return nil
-    }
-}
-
-func parseSSOIdentityAllowlist(_ raw: String?) -> Set<String> {
-    guard let raw else { return [] }
-    let values = raw
-        .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isNewline })
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        .filter { !$0.isEmpty }
-    return Set(values)
 }
 
 extension Application {
@@ -657,7 +229,10 @@ extension Application {
     }
 
     var workerSecretFilePath: String {
-        get { storage[WorkerSecretFilePathKey.self] ?? (DirectoryConfiguration.detect().workingDirectory + ".worker-secret") }
+        get {
+            storage[WorkerSecretFilePathKey.self]
+                ?? (DirectoryConfiguration.detect().workingDirectory + ".worker-secret")
+        }
         set { storage[WorkerSecretFilePathKey.self] = newValue }
     }
 
@@ -692,141 +267,4 @@ extension Application {
         }
         set { storage[LocalRunnerManagerKey.self] = newValue }
     }
-}
-
-func extractWorkerSecretArgument(from env: inout Environment) -> String? {
-    let args = env.arguments
-    guard !args.isEmpty else { return nil }
-
-    var found: String?
-    var cleaned: [String] = []
-    cleaned.reserveCapacity(args.count)
-    cleaned.append(args[0]) // executable path
-
-    var i = 1
-    while i < args.count {
-        let arg = args[i]
-        if arg == "--worker-secret" {
-            if i + 1 < args.count {
-                let value = args[i + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-                if !value.isEmpty { found = value }
-                i += 2
-                continue
-            }
-            i += 1
-            continue
-        }
-        if arg.hasPrefix("--worker-secret=") {
-            let raw = String(arg.dropFirst("--worker-secret=".count))
-            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !value.isEmpty { found = value }
-            i += 1
-            continue
-        }
-        cleaned.append(arg)
-        i += 1
-    }
-
-    env.arguments = cleaned
-    return found
-}
-
-func resolveStartupWorkerSecret(
-    cliWorkerSecret: String?,
-    workerSecretFilePath: String,
-    workerSecretWordlistPath: String
-) -> String {
-    // 1. Explicit CLI argument — highest priority.
-    if let cli = cliWorkerSecret?.trimmingCharacters(in: .whitespacesAndNewlines),
-       !cli.isEmpty,
-       !isPlaceholderWorkerSecret(cli) {
-        writeWorkerSecretToDisk(secret: cli, workerSecretFilePath: workerSecretFilePath)
-        return cli
-    }
-    // 2. RUNNER_SHARED_SECRET environment variable — how Docker Compose and systemd
-    //    configure the secret.  Checked before the disk file so that setting the env
-    //    var is always sufficient to sync the server and runner; the disk file is only
-    //    used when no env var is present (development / auto-generated mode).
-    if let envSecret = runnerSharedSecretFromEnvironment(),
-       !isPlaceholderWorkerSecret(envSecret) {
-        return envSecret
-    }
-    // 3. Previously persisted secret on disk (written by auto-generate or admin panel).
-    if let previous = readWorkerSecretFromDisk(workerSecretFilePath: workerSecretFilePath),
-       !previous.isEmpty,
-       !isPlaceholderWorkerSecret(previous) {
-        return previous
-    }
-    // 4. Auto-generate a diceware passphrase (dev / first-time startup with no env var).
-    let generated = randomWorkerPassphrase(workerSecretWordlistPath: workerSecretWordlistPath)
-    writeWorkerSecretToDisk(secret: generated, workerSecretFilePath: workerSecretFilePath)
-    return generated
-}
-
-func readWorkerSecretFromDisk(workerSecretFilePath: String) -> String? {
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: workerSecretFilePath)),
-          let text = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-          !text.isEmpty else {
-        return nil
-    }
-    return text
-}
-
-func writeWorkerSecretToDisk(secret: String, workerSecretFilePath: String) {
-    let value = secret.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !value.isEmpty else { return }
-    let url = URL(fileURLWithPath: workerSecretFilePath)
-    try? value.write(to: url, atomically: true, encoding: .utf8)
-}
-
-func randomWorkerPassphrase(workerSecretWordlistPath: String) -> String {
-    let fallbackWords = [
-        "oak", "river", "falcon", "amber", "lumen", "cedar", "thunder", "pebble",
-        "meadow", "quartz", "north", "willow", "harbor", "maple", "breeze",
-        "summit", "pixel", "cipher", "comet", "forest", "frost", "sparrow",
-        "orbit", "cobalt", "dawn", "ember", "ridge", "tunnel", "canyon", "signal"
-    ]
-    let words = loadDicewareWords(from: workerSecretWordlistPath)
-    let source = words.count >= 2048 ? words : fallbackWords
-    return (0..<3).compactMap { _ in source.randomElement() }.joined(separator: "-")
-}
-
-func isPlaceholderWorkerSecret(_ value: String) -> Bool {
-    value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "cli-arg-secret"
-}
-
-func loadDicewareWords(from path: String) -> [String] {
-    guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
-        return []
-    }
-
-    var words: [String] = []
-    words.reserveCapacity(8000)
-    for line in raw.split(whereSeparator: \.isNewline) {
-        let trimmed = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { continue }
-        let parts = trimmed.split(maxSplits: 1, omittingEmptySubsequences: true, whereSeparator: \.isWhitespace)
-        guard parts.count == 2 else { continue }
-        let token = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else { continue }
-        words.append(token)
-    }
-    return words
-}
-
-func readLocalRunnerAutoStartFromDisk(filePath: String) -> Bool? {
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
-          let text = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(),
-          !text.isEmpty else {
-        return nil
-    }
-    return text == "1" || text == "true" || text == "yes" || text == "on"
-}
-
-func writeLocalRunnerAutoStartToDisk(enabled: Bool, filePath: String) {
-    let value = enabled ? "1" : "0"
-    try? value.write(to: URL(fileURLWithPath: filePath), atomically: true, encoding: .utf8)
 }

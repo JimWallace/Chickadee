@@ -1,9 +1,9 @@
-import Vapor
 import Fluent
-import FluentSQLiteDriver
 import FluentPostgresDriver
-import SQLKit
+import FluentSQLiteDriver
 import Foundation
+import SQLKit
+import Vapor
 
 enum DatabaseBackend: String, Sendable {
     case sqlite
@@ -19,13 +19,11 @@ struct DatabaseSettings: Sendable {
     let postgresDatabase: String?
     let postgresUsername: String?
     let postgresPassword: String?
+    let postgresSearchPath: [String]?
 
     static func fromEnvironment(defaultSQLitePath: String) throws -> Self {
         let backend: DatabaseBackend
-        if let configuredBackend = Environment.get("DATABASE_BACKEND")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(),
-           !configuredBackend.isEmpty {
+        if let configuredBackend = trimmedEnv("DATABASE_BACKEND")?.lowercased() {
             guard let parsed = DatabaseBackend(rawValue: configuredBackend) else {
                 throw DatabaseConfigurationError.invalidSettings(
                     "DATABASE_BACKEND must be one of: sqlite, postgres"
@@ -38,39 +36,33 @@ struct DatabaseSettings: Sendable {
 
         switch backend {
         case .sqlite:
-            let sqlitePath = Environment.get("SQLITE_PATH")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .flatMap { $0.isEmpty ? nil : $0 }
-                ?? defaultSQLitePath
-            return .sqlite(path: sqlitePath)
+            return .sqlite(path: trimmedEnv("SQLITE_PATH") ?? defaultSQLitePath)
         case .postgres:
-            let host = Environment.get("DATABASE_HOST")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let database = Environment.get("DATABASE_NAME")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let username = Environment.get("DATABASE_USER")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let password = Environment.get("DATABASE_PASSWORD")?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let port = Environment.get("DATABASE_PORT")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .flatMap { $0.isEmpty ? nil : Int($0) }
+            let host = trimmedEnv("DATABASE_HOST")
+            let database = trimmedEnv("DATABASE_NAME")
+            let username = trimmedEnv("DATABASE_USER")
+            let password = trimmedEnv("DATABASE_PASSWORD")
+            let port = environmentInt("DATABASE_PORT")
 
             var missing: [String] = []
-            if host?.isEmpty != false { missing.append("DATABASE_HOST") }
-            if database?.isEmpty != false { missing.append("DATABASE_NAME") }
-            if username?.isEmpty != false { missing.append("DATABASE_USER") }
-            if password?.isEmpty != false { missing.append("DATABASE_PASSWORD") }
+            if host == nil { missing.append("DATABASE_HOST") }
+            if database == nil { missing.append("DATABASE_NAME") }
+            if username == nil { missing.append("DATABASE_USER") }
+            if password == nil { missing.append("DATABASE_PASSWORD") }
             if port == nil { missing.append("DATABASE_PORT") }
 
-            guard missing.isEmpty else {
+            guard let host, let database, let username, let password, let port else {
                 throw DatabaseConfigurationError.invalidSettings(
                     "DATABASE_BACKEND=postgres requires: \(missing.joined(separator: ", "))"
                 )
             }
 
             return .postgres(
-                host: host!,
-                port: port!,
-                database: database!,
-                username: username!,
-                password: password!
+                host: host,
+                port: port,
+                database: database,
+                username: username,
+                password: password
             )
         }
     }
@@ -84,7 +76,8 @@ struct DatabaseSettings: Sendable {
             postgresPort: nil,
             postgresDatabase: nil,
             postgresUsername: nil,
-            postgresPassword: nil
+            postgresPassword: nil,
+            postgresSearchPath: nil
         )
     }
 
@@ -97,7 +90,8 @@ struct DatabaseSettings: Sendable {
             postgresPort: nil,
             postgresDatabase: nil,
             postgresUsername: nil,
-            postgresPassword: nil
+            postgresPassword: nil,
+            postgresSearchPath: nil
         )
     }
 
@@ -106,7 +100,8 @@ struct DatabaseSettings: Sendable {
         port: Int,
         database: String,
         username: String,
-        password: String
+        password: String,
+        searchPath: [String]? = nil
     ) -> Self {
         .init(
             backend: .postgres,
@@ -116,7 +111,8 @@ struct DatabaseSettings: Sendable {
             postgresPort: port,
             postgresDatabase: database,
             postgresUsername: username,
-            postgresPassword: password
+            postgresPassword: password,
+            postgresSearchPath: searchPath
         )
     }
 }
@@ -161,7 +157,7 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             )
         }
 
-        let configuration = SQLPostgresConfiguration(
+        var configuration = SQLPostgresConfiguration(
             hostname: host,
             port: port,
             username: username,
@@ -169,6 +165,14 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             database: database,
             tls: .disable
         )
+        // Per-connection `SET search_path TO ...` so tests can isolate themselves
+        // by schema and run in parallel against a single shared Postgres
+        // database.  Postgres tolerates a non-existent name in search_path until
+        // an unqualified reference resolves to it, so the bootstrap path can
+        // configure first, then `CREATE SCHEMA`, then run migrations.
+        if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
+            configuration.searchPath = searchPath
+        }
         app.databases.use(
             .postgres(configuration: configuration),
             as: .chickadee,
@@ -178,26 +182,78 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
 }
 
 func registerMigrations(on app: Application) {
+    // Note: 13 historical `Add*` migrations were consolidated into the
+    // corresponding `Create*` files in PR #502 (v0.4.171), and their
+    // no-op stubs were removed in v0.5.0.  Production DBs that already
+    // applied those migrations still carry the names in
+    // `_fluent_migrations`; Fluent ignores history rows whose struct
+    // names are no longer registered, so this is harmless.  Fresh
+    // deploys produce the same final schema from the `Create*` files
+    // alone.  `AddSessionsCreatedAt` is NOT consolidated — it's a real
+    // migration against Vapor's `_fluent_sessions` table (not one of
+    // our own).
     app.migrations.add(CreateUsers())
     app.migrations.add(CreateCourses())
+    // Must precede any migration that queries the APICourse *model* (e.g.
+    // AddCourseArchivedAt's backfill). Fluent's model query SELECTs every
+    // declared column, so the column has to exist before those run on a
+    // fresh DB. Existing prod is unaffected — only this new migration runs.
+    app.migrations.add(AddBrightSpaceOrgUnitName())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
     app.migrations.add(CreateResults())
     app.migrations.add(CreateAssignments())
     app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourseSections())
-    app.migrations.add(AddCourseOpenEnrollment())
-    app.migrations.add(AddCourseEnrollmentMode())
     app.migrations.add(CreateSubmissionDiagnostics())
     app.migrations.add(CreateRequestMetrics())
     app.migrations.add(CreateJobExecutionMetrics())
-    app.migrations.add(AddJobExecutionStageTimings())
     app.migrations.add(CreateRunnerSnapshots())
     app.migrations.add(CreateRunnerProfiles())
     app.migrations.add(CreateAssignmentRequirements())
-    app.migrations.add(AddSubmissionRetestedAt())
-    app.migrations.add(AddAssignmentDeadlineOverrideActive())
     app.migrations.add(CreateClassAchievements())
+    app.migrations.add(CreateAchievementResults())
+    app.migrations.add(CreatePreEnrollments())
     app.migrations.add(SessionRecord.migration)
+    app.migrations.add(CreateClientDiagnostics())
+    app.migrations.add(CreateAssignmentPersonalizationSeeds())
+    app.migrations.add(AddSessionsCreatedAt())
+    app.migrations.add(CreateAuditLog())
+    app.migrations.add(CreateAssignmentExtensions())
+    app.migrations.add(CreateAssignmentParticipations())
+    app.migrations.add(AddUrlTokenToUsers())
+    app.migrations.add(AddUserFKConstraints())
+    app.migrations.add(AddCourseArchivedAt())
+    // MCP OAuth authorization-server tables (Phase 2). FKs reference `users`.
+    app.migrations.add(CreateMCPOAuthClients())
+    app.migrations.add(CreateMCPAuthorizationCodes())
+    app.migrations.add(CreateMCPGrants())
+    app.migrations.add(AddPreviousRefreshTokenHashToGrants())
+    app.migrations.add(AddAssignmentStartsAt())
+    app.migrations.add(CreateBrightSpaceSyncLog())
+    // Single-use consent requests for the browser OAuth flow (cookie-less
+    // POST /oauth/authorize). FK references `users`.
+    app.migrations.add(CreateMCPConsentRequests())
+    // Per-student grade overrides. FKs reference `users` and `test_setups`.
+    app.migrations.add(CreateGradeOverrides())
+    // Index migrations run last: they reference tables created above
+    // (runner_snapshots, job_execution_metrics) and only add indexes.
+    app.migrations.add(CreateHotPathIndexes())
+    app.migrations.add(AddGrantPreviousRefreshTokenHashIndex())
+    // Replaces assignments.is_open (bool) with assignments.visibility (enum
+    // string). Runs after CreateAssignments on every deploy.
+    app.migrations.add(ChangeAssignmentIsOpenToVisibility())
+
+    // Adds submissions.materialization_json — cached once-at-enqueue
+    // personalization for validation submissions, so worker poll + download
+    // stay eval-free.
+    app.migrations.add(AddSubmissionMaterialization())
+
+    // Audit-followup indexes (June 2026): request_metrics(finished_at) and
+    // other uncovered hot-path filters. Index-only, runs last.
+    app.migrations.add(CreateAuditFollowupIndexes())
+
+    // Denormalized grade columns on results + one-time backfill from the
+    // collection_json blob (June 2026 audit, P1.1).
+    app.migrations.add(AddResultGradeColumns())
 }

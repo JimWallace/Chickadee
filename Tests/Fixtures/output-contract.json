@@ -1,0 +1,119 @@
+{
+  "_comment": "Shared output-interpretation contract for the two grading runners. The INPUT fields (stdout/stderr/exitCode) are fed to RunnerCore's interpretScriptOutput, which BOTH runners now use (the worker directly; the browser via the wasm executeSuites bridge). `native` records the exact display strings + partial-credit `score` interpretScriptOutput produces and is the single source of truth — Tests/WorkerTests/OutputContractTests.swift asserts the native build matches it, and Tests/BrowserRunnerJSTests/output-contract.test.mjs drives the REAL vendored wasm and asserts it matches too, so the two runners are byte-identical (status, shortResult, longResult, score). interpretScriptOutput strips a leading `<test>: ` label from shortResult (when the footer carries a `test` field) and surfaces a footer `traceback` field as longResult. `score` is the fraction of the test's points earned, in 0...1: an explicit footer `score` wins (clamped, orthogonal to the exit-code status), else 1 on a pass and 0 otherwise. NOTE: the wasm side only asserts `score` once the vendored artifact carries it (re-vendored on main by runner-wasm-vendor.yml); the native side always asserts it.",
+  "cases": [
+    {
+      "name": "pass with JSON footer only",
+      "stdout": "{\"shortResult\":\"t: passed\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "t: passed", "score": 1, "longResult": null }
+    },
+    {
+      "name": "fail with human message then JSON footer",
+      "stdout": "msg line1\nmsg line2\n{\"shortResult\":\"t: msg line1\",\"status\":\"fail\",\"test\":\"t\",\"error\":\"msg line1\"}\n",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "msg line1", "score": 0, "longResult": "stdout:\nmsg line1\nmsg line2" }
+    },
+    {
+      "name": "error with JSON footer",
+      "stdout": "{\"shortResult\":\"t: boom\",\"status\":\"error\",\"test\":\"t\",\"error\":\"boom\"}\n",
+      "stderr": "",
+      "exitCode": 2,
+      "status": "error",
+      "native": { "shortResult": "boom", "score": 0, "longResult": null }
+    },
+    {
+      "name": "error with footer traceback field (surfaced as longResult)",
+      "stdout": "Could not test calculate_bmi\n{\"shortResult\":\"Q1: Could not test calculate_bmi\",\"status\":\"error\",\"test\":\"Q1\",\"error\":\"Could not test calculate_bmi\",\"traceback\":\"Traceback (most recent call last):\\n  File \\\"t.py\\\", line 3\\nNotImplementedError\"}\n",
+      "stderr": "",
+      "exitCode": 2,
+      "status": "error",
+      "native": { "shortResult": "Could not test calculate_bmi", "score": 0, "longResult": "Traceback (most recent call last):\n  File \"t.py\", line 3\nNotImplementedError" }
+    },
+    {
+      "name": "plain-text last line (no JSON)",
+      "stdout": "all good\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "all good", "score": 1, "longResult": "stdout:\nall good" }
+    },
+    {
+      "name": "exit code 3 maps to fail (Marmoset convention), stderr only",
+      "stdout": "",
+      "stderr": "boom\n",
+      "exitCode": 3,
+      "status": "fail",
+      "native": { "shortResult": "failed", "score": 0, "longResult": "stderr:\nboom" }
+    },
+    {
+      "name": "empty output, exit 1",
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "failed", "score": 0, "longResult": null }
+    },
+    {
+      "name": "partial-credit score field present (pass)",
+      "stdout": "{\"score\":0.75,\"shortResult\":\"3/4 cases passed\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "3/4 cases passed", "score": 0.75, "longResult": null }
+    },
+    {
+      "name": "partial-credit score on a failing exit code (score is orthogonal to status)",
+      "stdout": "{\"score\":0.5,\"shortResult\":\"1 of 2 cases passed\",\"status\":\"fail\"}\n",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "1 of 2 cases passed", "score": 0.5, "longResult": null }
+    },
+    {
+      "name": "out-of-range footer score is clamped to 0...1",
+      "stdout": "{\"score\":1.5,\"shortResult\":\"over the top\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "over the top", "score": 1, "longResult": null }
+    },
+    {
+      "name": "JSON footer followed by trailing blank lines (last-non-empty-line robustness)",
+      "stdout": "partial output\n{\"shortResult\":\"t: 2 of 3\",\"status\":\"fail\"}\n\n  \n",
+      "stderr": "",
+      "exitCode": 1,
+      "status": "fail",
+      "native": { "shortResult": "t: 2 of 3", "score": 0, "longResult": "stdout:\npartial output" }
+    },
+    {
+      "name": "pass with human stdout then JSON footer (footer stripped on the pass path)",
+      "stdout": "Nice work!\n{\"shortResult\":\"t: passed\",\"status\":\"pass\"}\n",
+      "stderr": "",
+      "exitCode": 0,
+      "status": "pass",
+      "native": { "shortResult": "t: passed", "score": 1, "longResult": "stdout:\nNice work!" }
+    },
+    {
+      "name": "timeout wins over exit code (SIGKILL after the limit, empty output)",
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 0,
+      "timedOut": true,
+      "status": "timeout",
+      "native": { "shortResult": "timed out", "score": 0, "longResult": null }
+    },
+    {
+      "name": "timeout with partial stderr surfaced (exit -1 SIGKILL)",
+      "stdout": "",
+      "stderr": "still running when killed\n",
+      "exitCode": -1,
+      "timedOut": true,
+      "status": "timeout",
+      "native": { "shortResult": "timed out", "score": 0, "longResult": "stderr:\nstill running when killed" }
+    }
+  ]
+}

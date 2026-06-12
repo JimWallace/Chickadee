@@ -11,10 +11,10 @@
 //   notebook    — raw bytes of the student's .ipynb file
 //   testSetupID — ID of the test setup this submission targets
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct BrowserResultRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -32,11 +32,11 @@ struct BrowserResultRoutes: RouteCollection {
 
         // Validate the referenced test setup exists.
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID")
+            throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-        _ = try await requireOpenStudentAssignment(for: body.testSetupID, on: req)
+        _ = try await requireOpenStudentAssignment(for: body.testSetupID, user: caller, on: req)
 
         // Decode the TestOutcomeCollection the browser sent.
         let decoder = JSONDecoder()
@@ -44,62 +44,68 @@ struct BrowserResultRoutes: RouteCollection {
         let collection: TestOutcomeCollection
         do {
             guard let data = body.collection.data(using: .utf8) else {
-                throw Abort(.badRequest, reason: "collection is not valid UTF-8")
+                throw AppError.invalidParameter(name: "collection", reason: "not valid UTF-8")
             }
             collection = try decoder.decode(TestOutcomeCollection.self, from: data)
         } catch let e as DecodingError {
-            throw Abort(.unprocessableEntity, reason: "Invalid TestOutcomeCollection: \(e)")
+            throw AppError.unprocessable(reason: "Invalid TestOutcomeCollection: \(e)")
         }
 
-        // Persist the notebook to disk as the submission artifact.
-        // Merge the student's notebook with the instructor's canonical notebook
-        // so that hidden test cells (secret, release) are re-injected before
-        // the worker runs the full authoritative test suite.
-        let subsDir        = req.application.submissionsDirectory
-        let subID          = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let nbPath         = subsDir + "\(subID).ipynb"
+        // Persist the notebook to disk as the submission artifact.  Merge the
+        // student's notebook with the instructor's canonical notebook so the
+        // hidden test cells (secret, release) are present in the stored artifact:
+        // no native worker runs here (browser results are stored as-is), but if
+        // this submission is later re-graded by a worker (a retest, or the
+        // browser-mode backstop) the authoritative suite has its cells.
+        let subsDir = req.application.submissionsDirectory
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let nbPath = subsDir + "\(subID).ipynb"
         let instructorData: Data
         do {
             instructorData = try notebookData(for: setup)
         } catch {
-            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            req.logger.warning(
+                "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
+            )
             instructorData = body.notebook
         }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
-        // Count prior submissions to derive the attempt number.
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setup.id!)
-            .filter(\.$userID == caller.id)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-        let attemptNumber = priorCount + 1
-
         // Create the submission record as "complete" immediately — browser
         // results are authoritative and no native worker re-run is queued.
+        // The attempt number is assigned race-free inside one transaction.
         let submission = APISubmission(
-            id:            subID,
-            testSetupID:   setup.id!,
-            zipPath:       nbPath,
-            attemptNumber: attemptNumber,
-            status:        "complete",
-            filename:      "\(subID).ipynb",
-            userID:        caller.id,
-            kind:          APISubmission.Kind.student
+            id: subID,
+            testSetupID: body.testSetupID,
+            zipPath: nbPath,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
+            status: SubmissionStatus.complete.rawValue,
+            filename: "\(subID).ipynb",
+            userID: caller.id,
+            kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
+        let attemptNumber = submission.attemptNumber ?? 1
 
-        // Persist the browser result, tagged source="browser".
+        // Persist the browser result, tagged source="browser".  The browser
+        // builds its collection before it knows the server-authoritative attempt
+        // number, so it always stamps attemptNumber=1 (and isFirstPassSuccess for
+        // every pass).  Reconcile those fields — and the submission ID — from the
+        // values the server derived above so the stored result agrees with the
+        // submission row and the First-Try-Perfect badge / per-attempt analytics
+        // stay correct for browser-graded assignments.
+        let reconciled = Self.reconcileBrowserCollection(
+            collection, submissionID: subID, attemptNumber: attemptNumber)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        let collectionJSON = try String(data: encoder.encode(collection), encoding: .utf8) ?? "{}"
+        let collectionJSON = try String(data: encoder.encode(reconciled), encoding: .utf8) ?? "{}"
 
         let browserResult = APIResult(
-            id:             "res_\(UUID().uuidString.lowercased().prefix(8))",
-            submissionID:   subID,
+            id: "res_\(UUID().uuidString.lowercased().prefix(8))",
+            submissionID: subID,
             collectionJSON: collectionJSON,
-            source:         "browser"
+            source: "browser"
         )
         try await browserResult.save(on: req.db)
 
@@ -115,7 +121,7 @@ struct BrowserResultRoutes: RouteCollection {
         if let userID = caller.id {
             _ = try? await ensureUserNotebookWorkingCopy(
                 req: req,
-                setupID: setup.id!,
+                setupID: body.testSetupID,
                 userID: userID,
                 fallbackSetup: setup,
                 overwriteWith: body.notebook
@@ -133,62 +139,111 @@ struct BrowserResultRoutes: RouteCollection {
         let body = try req.content.decode(RunnerSubmitBody.self)
 
         guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
-            throw Abort(.badRequest, reason: "Unknown testSetupID")
+            throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-        _ = try await requireOpenStudentAssignment(for: body.testSetupID, on: req)
+        _ = try await requireOpenStudentAssignment(for: body.testSetupID, user: caller, on: req)
 
         let manifestData = Data(setup.manifest.utf8)
-        if let manifest = try? JSONDecoder().decode(TestProperties.self, from: manifestData),
-           manifest.gradingMode == .browser {
-            throw Abort(.badRequest, reason: "Browser-graded assignments must be submitted through the browser runner.")
+        if let manifest = decodeManifest(from: manifestData),
+            manifest.gradingMode == .browser
+        {
+            throw AppError.badRequest(
+                reason: "Browser-graded assignments must be submitted through the browser runner.")
         }
 
         let subsDir = req.application.submissionsDirectory
-        let subID   = "sub_\(UUID().uuidString.lowercased().prefix(8))"
-        let nbPath  = subsDir + "\(subID).ipynb"
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let nbPath = subsDir + "\(subID).ipynb"
 
         // Always merge with canonical instructor notebook so hidden tests are present.
         let instructorData: Data
         do {
             instructorData = try notebookData(for: setup)
         } catch {
-            req.logger.warning("Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected")
+            req.logger.warning(
+                "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
+            )
             instructorData = body.notebook
         }
         let notebookToSave = mergeNotebook(student: body.notebook, instructor: instructorData)
         try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
 
-        let priorCount = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == setup.id!)
-            .filter(\.$userID == caller.id)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .count()
-
         let submittedFilename = normalizedNotebookFilename(body.filename)
         let submission = APISubmission(
-            id:            subID,
-            testSetupID:   setup.id!,
-            zipPath:       nbPath,
-            attemptNumber: priorCount + 1,
-            status:        "pending",
-            filename:      submittedFilename,
-            userID:        caller.id,
-            kind:          APISubmission.Kind.student
+            id: subID,
+            testSetupID: body.testSetupID,
+            zipPath: nbPath,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
+            status: SubmissionStatus.pending.rawValue,
+            filename: submittedFilename,
+            userID: caller.id,
+            kind: APISubmission.Kind.student
         )
-        try await submission.save(on: req.db)
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
 
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing
         // (WorkerJobRoutes filters out browser-mode submissions).
-        let isWorkerMode = (try? JSONDecoder().decode(TestProperties.self, from: manifestData))
+        let isWorkerMode =
+            (decodeManifest(from: manifestData))
             .map { $0.gradingMode == .worker } ?? true
         if isWorkerMode {
             await ensureLocalRunnerForSubmissionIfNeeded(req: req)
         }
 
         return RunnerSubmissionResponse(submissionID: subID)
+    }
+
+    /// Rewrites a browser-supplied collection with the server-authoritative
+    /// submission ID and attempt number, recomputing `isFirstPassSuccess` from
+    /// the true attempt (a pass only counts as a first-pass success on attempt
+    /// 1).  Everything else is carried through verbatim.
+    static func reconcileBrowserCollection(
+        _ collection: TestOutcomeCollection, submissionID: String, attemptNumber: Int
+    ) -> TestOutcomeCollection {
+        let outcomes = collection.outcomes.map { o in
+            TestOutcome(
+                testName: o.testName,
+                testClass: o.testClass,
+                tier: o.tier,
+                status: o.status,
+                shortResult: o.shortResult,
+                longResult: o.longResult,
+                score: o.score,
+                points: o.points,
+                executionTimeMs: o.executionTimeMs,
+                memoryUsageBytes: o.memoryUsageBytes,
+                attemptNumber: attemptNumber,
+                isFirstPassSuccess: attemptNumber == 1 && o.status == .pass)
+        }
+        // Recompute the weighted, partial-credit grade server-side rather than
+        // trusting the browser's aggregate — older browser artifacts omit it (so
+        // it would default to the unweighted passCount), and once the wasm is
+        // re-vendored each outcome carries its own `score`.  totalPoints sums the
+        // weights; earnedPoints sums points × score.
+        let totalPoints = outcomes.reduce(0) { $0 + $1.points }
+        let earnedPoints = outcomes.reduce(0.0) { $0 + Double($1.points) * $1.score }
+        return TestOutcomeCollection(
+            submissionID: submissionID,
+            testSetupID: collection.testSetupID,
+            attemptNumber: attemptNumber,
+            buildStatus: collection.buildStatus,
+            compilerOutput: collection.compilerOutput,
+            outcomes: outcomes,
+            totalTests: collection.totalTests,
+            passCount: collection.passCount,
+            failCount: collection.failCount,
+            errorCount: collection.errorCount,
+            timeoutCount: collection.timeoutCount,
+            executionTimeMs: collection.executionTimeMs,
+            totalPoints: totalPoints,
+            earnedPoints: earnedPoints,
+            warnings: collection.warnings,
+            jobStartedAt: collection.jobStartedAt,
+            runnerVersion: collection.runnerVersion,
+            timestamp: collection.timestamp)
     }
 }
 

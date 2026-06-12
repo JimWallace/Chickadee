@@ -1,0 +1,355 @@
+// APIServer/Routes/Web/ManifestFileHelpers.swift
+//
+// Read, mutate, and serialize `TestProperties` manifest JSON: dependent
+// lookups, generated-by checks, add/remove script entries, the worker-
+// facing manifest builder, topological sort, and the hash used as the
+// auto-retest dedup key.  Extracted from AssignmentHelpers.swift
+// (issue #442) — no behaviour changes.
+
+import Core
+import Foundation
+import Vapor
+
+/// Returns the scripts in the manifest that list `filename` in their `dependsOn`.
+func manifestDependents(manifestJSON: String, filename: String) -> [String] {
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
+    else {
+        return []
+    }
+    return props.testSuites
+        .filter { $0.dependsOn.contains(filename) }
+        .map(\.script)
+}
+
+/// If the manifest entry for `filename` was produced by a pattern family,
+/// returns that family id.  Returns nil for hand-written scripts or missing
+/// entries.  Used by the raw-script edit/delete endpoints to reject edits
+/// that must instead go through the family editor.
+func generatedByFamilyID(manifestJSON: String, filename: String) -> String? {
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
+    else {
+        return nil
+    }
+    return props.testSuites.first(where: { $0.script == filename })?.generatedBy
+}
+
+/// Returns true when the setup's manifest has at least one test entry
+/// (raw script or generated-by-family).  Used by `saveEditedAssignment`
+/// to refuse saving an empty suite.
+func setupHasAnyTestEntries(manifestJSON: String) throws -> Bool {
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
+    else { return false }
+    return !props.testSuites.isEmpty
+}
+
+/// Returns updated manifest JSON with a new `TestSuiteEntry` appended.
+/// Preserves all existing entries (including their `sectionID`,
+/// `generatedByCheck`, and `hint`), grading mode, makefile config,
+/// starterNotebook, pattern families, notebook checks, the `sections`
+/// list, and the assignment-scope global variables/expressions.
+/// Returns `nil` if the manifest JSON cannot be decoded.
+func updateManifestAddingScript(
+    manifestJSON: String,
+    entry: ConfiguredSuiteEntry
+) -> String? {
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
+    else {
+        return nil
+    }
+    let existing = props.testSuites.enumerated().map { idx, e in
+        ConfiguredSuiteEntry(
+            script: e.script,
+            tier: e.tier.rawValue,
+            order: idx + 1,
+            dependsOn: e.dependsOn,
+            points: e.points,
+            displayName: e.name,
+            generatedBy: e.generatedBy,
+            generatedByCheck: e.generatedByCheck,
+            sectionID: e.sectionID,
+            hint: e.hint
+        )
+    }
+    let nextOrder = (existing.map(\.order).max() ?? 0) + 1
+    let newEntry = ConfiguredSuiteEntry(
+        script: entry.script,
+        tier: entry.tier,
+        order: nextOrder,
+        dependsOn: entry.dependsOn,
+        points: entry.points,
+        displayName: entry.displayName,
+        generatedBy: entry.generatedBy,
+        generatedByCheck: entry.generatedByCheck,
+        sectionID: entry.sectionID,
+        hint: entry.hint
+    )
+    let updated = existing + [newEntry]
+    return try? makeWorkerManifestJSON(
+        testSuites: updated,
+        includeMakefile: props.makefile != nil,
+        gradingMode: props.gradingMode.rawValue,
+        starterNotebook: props.starterNotebook,
+        patternFamilies: props.patternFamilies,
+        notebookChecks: props.notebookChecks,
+        sections: props.sections,
+        globalVariables: props.globalVariables,
+        globalExpressions: props.globalExpressions
+    )
+}
+
+/// Returns updated manifest JSON with the entry for `filename` removed.
+/// Also clears references to `filename` in other entries' `dependsOn` arrays.
+/// Preserves the surviving entries' `sectionID` / `generatedByCheck` /
+/// `hint`, plus the manifest's pattern families, notebook checks,
+/// `sections` list, and assignment-scope global variables/expressions —
+/// deleting one script must never drop sections or other suite metadata.
+/// Returns `nil` if the manifest JSON cannot be decoded.
+func updateManifestRemovingScript(manifestJSON: String, filename: String) -> String? {
+    guard let props = decodeManifest(fromJSON: manifestJSON)
+
+    else {
+        return nil
+    }
+    let updated = props.testSuites
+        .filter { $0.script != filename }
+        .enumerated()
+        .map { idx, e in
+            ConfiguredSuiteEntry(
+                script: e.script,
+                tier: e.tier.rawValue,
+                order: idx + 1,
+                dependsOn: e.dependsOn.filter { $0 != filename },
+                points: e.points,
+                displayName: e.name,
+                generatedBy: e.generatedBy,
+                generatedByCheck: e.generatedByCheck,
+                sectionID: e.sectionID,
+                hint: e.hint
+            )
+        }
+    return try? makeWorkerManifestJSON(
+        testSuites: updated,
+        includeMakefile: props.makefile != nil,
+        gradingMode: props.gradingMode.rawValue,
+        starterNotebook: props.starterNotebook,
+        patternFamilies: props.patternFamilies,
+        notebookChecks: props.notebookChecks,
+        sections: props.sections,
+        globalVariables: props.globalVariables,
+        globalExpressions: props.globalExpressions
+    )
+}
+
+func makeWorkerManifestJSON(
+    testSuites: [ConfiguredSuiteEntry],
+    includeMakefile: Bool,
+    gradingMode: String = "worker",
+    starterNotebook: String? = "assignment.ipynb",
+    patternFamilies: [PatternFamily] = [],
+    notebookChecks: [NotebookCheck] = [],
+    sections: [TestSuiteSection] = [],
+    globalVariables: [FamilyVariable] = [],
+    globalExpressions: [PersonalizationExpression] = [],
+    achievements: [Achievement] = [],
+    disabledBuiltInAwardIDs: [String] = [],
+    builtInAchievementsSeeded: Bool = false
+) throws -> String {
+    // Topologically sort so the runner can process dependencies with a single
+    // linear pass (parents always appear before children in the array).
+    let sorted = topologicallySorted(testSuites)
+    let testSuiteJSON: [[String: Any]] = sorted.map(testSuiteEntryToDict)
+
+    var manifest: [String: Any] = [
+        "schemaVersion": 1,
+        "gradingMode": gradingMode,
+        "requiredFiles": [],
+        "testSuites": testSuiteJSON,
+        "timeLimitSeconds": 10,
+        "makefile": includeMakefile ? ["target": NSNull()] : NSNull(),
+    ]
+    if let starterNotebook {
+        manifest["starterNotebook"] = starterNotebook
+    }
+    try spliceEncodedArray(into: &manifest, key: "patternFamilies", values: patternFamilies)
+    try spliceEncodedArray(into: &manifest, key: "notebookChecks", values: notebookChecks)
+    // Unified, canonical test-item list.  Built in authored order by
+    // walking the (pre-topo-sort) testSuites and emitting each family /
+    // check at its first generated entry; specs not referenced by any
+    // generated entry are appended.  The `patternFamilies` /
+    // `notebookChecks` keys above stay mirrored for cross-version readers
+    // (see `TestProperties.encode`).
+    try spliceEncodedArray(
+        into: &manifest, key: "testItems",
+        values: orderedTestItems(
+            testSuites: testSuites, patternFamilies: patternFamilies, notebookChecks: notebookChecks))
+    // Route sections through JSONEncoder so all fields — including
+    // `variables` (v0.4.100+) — round-trip through the manifest.
+    // Pre-v0.4.102 we hand-rolled a minimal `[id, name]` dict that
+    // silently dropped the section's variables on every save.
+    try spliceEncodedArray(into: &manifest, key: "sections", values: sections)
+    // Slice 1 — assignment-scope variables.
+    try spliceEncodedArray(into: &manifest, key: "globalVariables", values: globalVariables)
+    // Slice 2 — assignment-scope expressions (notebook only). Each
+    // entry is `{ name, expression }`.
+    try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
+    // Display/award-only fields (server-side; `runnerSanitized()` strips them).
+    // Spliced here so a suite rebuild doesn't wipe authored achievements or the
+    // instructor's built-in-award toggles — `makeWorkerManifestJSON` builds a
+    // fresh dict, so anything absent here is lost on the next suite edit.
+    try spliceEncodedArray(into: &manifest, key: "achievements", values: achievements)
+    if !disabledBuiltInAwardIDs.isEmpty {
+        manifest["disabledBuiltInAwardIDs"] = disabledBuiltInAwardIDs
+    }
+    if builtInAchievementsSeeded {
+        manifest["builtInAchievementsSeeded"] = true
+    }
+
+    let data = try JSONSerialization.data(withJSONObject: manifest)
+    return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+/// Builds the unified `[TestItem]` list in authored order for the manifest.
+/// `testSuites` is expected pre-topological-sort (i.e. authored order); each
+/// family / check is emitted once, at its first generated entry, with any
+/// unreferenced specs appended so nothing is dropped.
+private func orderedTestItems(
+    testSuites: [ConfiguredSuiteEntry],
+    patternFamilies: [PatternFamily],
+    notebookChecks: [NotebookCheck]
+) -> [TestItem] {
+    let familyByID = Dictionary(patternFamilies.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let checkByID = Dictionary(notebookChecks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    var items: [TestItem] = []
+    var seen = Set<String>()
+    for entry in testSuites {
+        if let fid = entry.generatedBy, let fam = familyByID[fid], seen.insert(fid).inserted {
+            items.append(.family(fam))
+        } else if let cid = entry.generatedByCheck, let chk = checkByID[cid], seen.insert(cid).inserted {
+            items.append(.check(chk))
+        }
+    }
+    for fam in patternFamilies where seen.insert(fam.id).inserted {
+        items.append(.family(fam))
+    }
+    for chk in notebookChecks where seen.insert(chk.id).inserted {
+        items.append(.check(chk))
+    }
+    return items
+}
+
+private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any] {
+    var dict: [String: Any] = ["tier": entry.tier, "script": entry.script]
+    if let n = entry.displayName, !n.isEmpty {
+        dict["name"] = n
+    }
+    if !entry.dependsOn.isEmpty {
+        dict["dependsOn"] = entry.dependsOn
+    }
+    // Emit any non-default points value — including 0.  The decoder
+    // defaults a missing key to 1, so a 0-point entry (e.g. an existence
+    // guard, which gates rather than grades) must be written explicitly or
+    // it round-trips back to 1 and starts counting toward the score.
+    if entry.points != 1 {
+        dict["points"] = entry.points
+    }
+    if let fid = entry.generatedBy, !fid.isEmpty {
+        dict["generatedBy"] = fid
+    }
+    if let cid = entry.generatedByCheck, !cid.isEmpty {
+        dict["generatedByCheck"] = cid
+    }
+    if let sid = entry.sectionID, !sid.isEmpty {
+        dict["sectionID"] = sid
+    }
+    if let hint = entry.hint, !hint.isEmpty {
+        dict["hint"] = hint
+    }
+    return dict
+}
+
+/// Encodes a typed `Encodable` array with `JSONEncoder` (keys sorted for
+/// reproducibility), then reparses with `JSONSerialization` so the
+/// values splice into the dictionary-of-Any manifest under `key`.
+/// No-op when `values` is empty.
+private func spliceEncodedArray<T: Encodable>(
+    into manifest: inout [String: Any],
+    key: String,
+    values: [T]
+) throws {
+    guard !values.isEmpty else { return }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = try encoder.encode(values)
+    if let parsed = try JSONSerialization.jsonObject(with: data) as? [Any] {
+        manifest[key] = parsed
+    }
+}
+
+/// Returns `entries` in topological order (prerequisites before dependents)
+/// while honouring authored position as tightly as the dependency graph
+/// allows.
+///
+/// Uses Kahn's algorithm but with an **authored-position priority queue**
+/// instead of FIFO.  At each step we emit the ready node (inDegree == 0)
+/// with the smallest original index.  This preserves the instructor's
+/// suite-editor order whenever the dependency graph doesn't force a
+/// different ordering — e.g. a family that depends on `publictest_a.py`
+/// and is authored right after it stays right after it, rather than
+/// being demoted to the tail by a FIFO queue that processes trailing
+/// no-dep scripts before satisfied dependents re-enter.
+///
+/// Regression guard: `testApply_familyWithDependencyStaysInlineAfterPrereq`
+/// (v0.4.95).
+private func topologicallySorted(_ entries: [ConfiguredSuiteEntry]) -> [ConfiguredSuiteEntry] {
+    var inDegree: [String: Int] = [:]
+    var dependents: [String: [String]] = [:]
+    var byScript: [String: ConfiguredSuiteEntry] = [:]
+    var origIdx: [String: Int] = [:]
+
+    for (i, entry) in entries.enumerated() {
+        byScript[entry.script] = entry
+        origIdx[entry.script] = i
+        inDegree[entry.script, default: 0] += 0
+        for dep in entry.dependsOn {
+            dependents[dep, default: []].append(entry.script)
+            inDegree[entry.script, default: 0] += 1
+        }
+    }
+
+    var ready: Set<String> = Set(
+        entries.filter { inDegree[$0.script, default: 0] == 0 }.map(\.script)
+    )
+    var result: [ConfiguredSuiteEntry] = []
+    result.reserveCapacity(entries.count)
+    while !ready.isEmpty {
+        // Pop the ready node with the smallest authored index — that's
+        // what keeps a family in-line with its prereq rather than
+        // letting downstream no-dep scripts jump ahead of it.
+        guard
+            let nodeName = ready.min(by: {
+                (origIdx[$0] ?? 0) < (origIdx[$1] ?? 0)
+            }), let entry = byScript[nodeName]
+        else { break }
+        ready.remove(nodeName)
+        result.append(entry)
+        for dependent in dependents[nodeName] ?? [] {
+            inDegree[dependent, default: 1] -= 1
+            if inDegree[dependent, default: 0] == 0 {
+                ready.insert(dependent)
+            }
+        }
+    }
+    // Fall back to original order if a cycle somehow slipped through
+    // upstream validation.
+    return result.count == entries.count ? result : entries
+}
+
+/// SHA-256 hex digest of `setup.manifest`.  Used by the auto-retest
+/// trigger as the dedup key for "manifest unchanged since last retest".
+func manifestHash(_ manifestJSON: String) -> String {
+    sha256HexDigest(manifestJSON)
+}

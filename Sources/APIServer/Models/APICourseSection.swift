@@ -39,12 +39,14 @@ final class APICourseSection: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: UUID? = nil, name: String, defaultGradingMode: String = "worker",
-         sortOrder: Int, courseID: UUID) {
-        self.id                 = id
-        self.name               = name
+    init(
+        id: UUID? = nil, name: String, defaultGradingMode: String = "worker",
+        sortOrder: Int, courseID: UUID
+    ) {
+        self.id = id
+        self.name = name
         self.defaultGradingMode = defaultGradingMode
-        self.sortOrder          = sortOrder
-        self.courseID           = courseID
+        self.sortOrder = sortOrder
+        self.courseID = courseID
     }
 }

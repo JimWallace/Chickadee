@@ -1,10 +1,11 @@
-import XCTest
-import XCTVapor
 import Crypto
-@testable import chickadee_server
 import Fluent
+import Testing
+import XCTVapor
 
-final class WorkerHMACAuthMiddlewareTests: XCTestCase {
+@testable import APIServer
+
+@Suite struct WorkerHMACAuthMiddlewareTests {
     private let sharedSecret = "test-shared-secret"
     private let workerID = "worker-a"
 
@@ -34,7 +35,7 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
             path,
             bodyHash,
             String(timestamp),
-            nonce
+            nonce,
         ].joined(separator: "\n")
         let signature = hmacSHA256Hex(message: payload, secret: sharedSecret)
 
@@ -48,7 +49,7 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         return headers
     }
 
-    func testAcceptsValidSignature() async throws {
+    @Test func acceptsValidSignature() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let body = ByteBuffer(string: #"{"ok":true}"#)
@@ -61,27 +62,33 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.POST, path, beforeRequest: { req async in
-                req.headers = headers
-                req.body = body
-            }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .ok)
-            })
+            try await app.testable().test(
+                .POST, path,
+                beforeRequest: { req async in
+                    req.headers = headers
+                    req.body = body
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .ok)
+                })
         }
     }
 
-    func testRejectsMissingHeaders() async throws {
+    @Test func rejectsMissingHeaders() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.POST, "/internal/worker/ping", beforeRequest: { req async in
-                req.headers.contentType = .json
-                req.body = ByteBuffer(string: #"{"ok":true}"#)
-            }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .unauthorized)
-            })
+            try await app.testable().test(
+                .POST, "/internal/worker/ping",
+                beforeRequest: { req async in
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"ok":true}"#)
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .unauthorized)
+                })
         }
     }
 
-    func testRejectsStaleTimestamp() async throws {
+    @Test func rejectsStaleTimestamp() async throws {
         let path = "/internal/worker/ping"
         let old = Int64(Date().timeIntervalSince1970) - 10_000
         let body = ByteBuffer(string: #"{"ok":true}"#)
@@ -94,16 +101,19 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.POST, path, beforeRequest: { req async in
-                req.headers = headers
-                req.body = body
-            }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .unauthorized)
-            })
+            try await app.testable().test(
+                .POST, path,
+                beforeRequest: { req async in
+                    req.headers = headers
+                    req.body = body
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .unauthorized)
+                })
         }
     }
 
-    func testRejectsReplayNonce() async throws {
+    @Test func rejectsReplayNonce() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let nonce = UUID().uuidString
@@ -117,23 +127,29 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.POST, path, beforeRequest: { req async in
-                req.headers = headers
-                req.body = body
-            }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .ok)
-            })
+            try await app.testable().test(
+                .POST, path,
+                beforeRequest: { req async in
+                    req.headers = headers
+                    req.body = body
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .ok)
+                })
 
-            try await app.testable().test(.POST, path, beforeRequest: { req async in
-                req.headers = headers
-                req.body = body
-            }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .unauthorized)
-            })
+            try await app.testable().test(
+                .POST, path,
+                beforeRequest: { req async in
+                    req.headers = headers
+                    req.body = body
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .unauthorized)
+                })
         }
     }
 
-    func testRejectsBadSignature() async throws {
+    @Test func rejectsBadSignature() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let body = ByteBuffer(string: #"{"ok":true}"#)
@@ -147,19 +163,22 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
         headers.replaceOrAdd(name: "X-Worker-Signature", value: "deadbeef")
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.POST, path, beforeRequest: { req async in
-                req.headers = headers
-                req.body = body
-            }, afterResponse: { res async in
-                XCTAssertEqual(res.status, .unauthorized)
-            })
+            try await app.testable().test(
+                .POST, path,
+                beforeRequest: { req async in
+                    req.headers = headers
+                    req.body = body
+                },
+                afterResponse: { res async in
+                    #expect(res.status == .unauthorized)
+                })
         }
     }
 
     /// Regression test: sends a real HTTP request through Vapor's HTTP server
     /// to verify the middleware accepts signed requests without touching the
     /// streamed body.
-    func testAcceptsValidSignatureOverRealHTTP() async throws {
+    @Test func acceptsValidSignatureOverRealHTTP() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let body = ByteBuffer(string: #"{"workerID":"test","hostname":"localhost"}"#)
@@ -178,13 +197,12 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
                 headers: headers,
                 body: body
             ) { res async in
-                XCTAssertEqual(res.status, .ok,
-                    "HMAC with non-empty body must succeed over real HTTP")
+                #expect(res.status == .ok, "HMAC with non-empty body must succeed over real HTTP")
             }
         }
     }
 
-    func testAcceptsLargeValidSignatureOverRealHTTP() async throws {
+    @Test func acceptsLargeValidSignatureOverRealHTTP() async throws {
         let path = "/internal/worker/ping"
         let now = Int64(Date().timeIntervalSince1970)
         let largeValue = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
@@ -204,11 +222,7 @@ final class WorkerHMACAuthMiddlewareTests: XCTestCase {
                 headers: headers,
                 body: body
             ) { res async in
-                XCTAssertEqual(
-                    res.status,
-                    .ok,
-                    "HMAC with a large streamed body must succeed over real HTTP"
-                )
+                #expect(res.status == .ok, "HMAC with a large streamed body must succeed over real HTTP")
             }
         }
     }

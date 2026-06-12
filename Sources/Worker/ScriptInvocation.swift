@@ -1,4 +1,5 @@
 import Foundation
+import RunnerCore
 
 struct ScriptInvocation {
     let executableURL: URL
@@ -6,33 +7,33 @@ struct ScriptInvocation {
 }
 
 private let pythonBootstrap = """
-import builtins
-import runpy
-import sys
+    import builtins
+    import runpy
+    import sys
 
-import test_runtime as _tr
+    import test_runtime as _tr
 
-builtins.passed = _tr.passed
-builtins.failed = _tr.failed
-builtins.errored = _tr.errored
-builtins.require_function = _tr.require_function
+    builtins.passed = _tr.passed
+    builtins.failed = _tr.failed
+    builtins.errored = _tr.errored
+    builtins.require_function = _tr.require_function
 
-_student_module = _tr.load_student_module()
-builtins.student_module = _student_module
-if _student_module is not None:
-    for _name, _value in vars(_student_module).items():
-        if _name.startswith("_"):
-            continue
-        if callable(_value) and not hasattr(builtins, _name):
-            setattr(builtins, _name, _value)
+    _student_module = _tr.load_student_module()
+    builtins.student_module = _student_module
+    if _student_module is not None:
+        for _name, _value in vars(_student_module).items():
+            if _name.startswith("_"):
+                continue
+            if callable(_value) and not hasattr(builtins, _name):
+                setattr(builtins, _name, _value)
 
-# Shift sys.argv so sys.argv[0] is the script path, matching the behaviour of
-# a direct `python3 script.py` invocation.  Test frameworks that inspect
-# sys.argv[0] to locate the test file (e.g. the Marmoset-era chickadee.py
-# helper) break when sys.argv[0] is left as '-c'.
-sys.argv = sys.argv[1:]
-runpy.run_path(sys.argv[0], run_name="__main__")
-"""
+    # Shift sys.argv so sys.argv[0] is the script path, matching the behaviour of
+    # a direct `python3 script.py` invocation.  Test frameworks that inspect
+    # sys.argv[0] to locate the test file (e.g. the Marmoset-era chickadee.py
+    # helper) break when sys.argv[0] is left as '-c'.
+    sys.argv = sys.argv[1:]
+    runpy.run_path(sys.argv[0], run_name="__main__")
+    """
 
 private func pythonInvocation(for script: URL) -> ScriptInvocation {
     ScriptInvocation(
@@ -41,91 +42,48 @@ private func pythonInvocation(for script: URL) -> ScriptInvocation {
     )
 }
 
+private func envInvocation(interpreter: String, script: URL) -> ScriptInvocation {
+    ScriptInvocation(
+        executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+        arguments: [interpreter, script.path]
+    )
+}
+
+private func shInvocation(for script: URL) -> ScriptInvocation {
+    ScriptInvocation(executableURL: URL(fileURLWithPath: "/bin/sh"), arguments: [script.path])
+}
+
+/// Build the subprocess invocation for a test script. Classification (the
+/// drift-prone "which interpreter?" decision) lives in RunnerCore and is shared
+/// with the browser runner; this maps the interpreter to a concrete command and
+/// owns the substrate-only bits (reading the file, the executable-bit fallback).
 func scriptInvocation(for script: URL) -> ScriptInvocation {
-    let ext = script.pathExtension.lowercased()
-    switch ext {
-    case "sh":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/bin/sh"), arguments: [script.path])
-    case "bash":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["bash", script.path])
-    case "zsh":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["zsh", script.path])
-    case "py":
-        return pythonInvocation(for: script)
-    case "rb":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["ruby", script.path])
-    case "pl":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["perl", script.path])
-    case "js":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node", script.path])
-    case "php":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["php", script.path])
-    case "r":
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["Rscript", script.path])
-    default:
-        if let shebang = shebangLine(for: script) {
-            if shebang.contains("python") {
-                return pythonInvocation(for: script)
-            }
-            if shebang.contains("node") || shebang.contains("javascript") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["node", script.path])
-            }
-            if shebang.contains("ruby") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["ruby", script.path])
-            }
-            if shebang.contains("perl") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["perl", script.path])
-            }
-            if shebang.contains("bash") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["bash", script.path])
-            }
-            if shebang.contains("zsh") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: ["zsh", script.path])
-            }
-            if shebang.contains("sh") {
-                return ScriptInvocation(executableURL: URL(fileURLWithPath: "/bin/sh"), arguments: [script.path])
-            }
-        }
+    // Leading source for shebang / content classification (substrate I/O).
+    // Bounded read: only the first 2 KB matter, so don't pull a large support
+    // file fully into memory just to classify it.
+    let source: String
+    if let handle = try? FileHandle(forReadingFrom: script) {
+        defer { try? handle.close() }
+        let data = try? handle.read(upToCount: 2048)
+        source = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    } else {
+        source = ""
+    }
 
-        if looksLikePythonScript(script) {
-            return pythonInvocation(for: script)
-        }
-
+    switch classifyScriptInterpreter(name: script.lastPathComponent, source: source) {
+    case .python: return pythonInvocation(for: script)
+    case .sh: return shInvocation(for: script)
+    case .bash: return envInvocation(interpreter: "bash", script: script)
+    case .zsh: return envInvocation(interpreter: "zsh", script: script)
+    case .ruby: return envInvocation(interpreter: "ruby", script: script)
+    case .perl: return envInvocation(interpreter: "perl", script: script)
+    case .node: return envInvocation(interpreter: "node", script: script)
+    case .php: return envInvocation(interpreter: "php", script: script)
+    case .rscript: return envInvocation(interpreter: "Rscript", script: script)
+    case .unknown:
         if FileManager.default.isExecutableFile(atPath: script.path) {
             return ScriptInvocation(executableURL: script, arguments: [])
         }
-        // Fallback for extension-less shell scripts.
-        return ScriptInvocation(executableURL: URL(fileURLWithPath: "/bin/sh"), arguments: [script.path])
-    }
-}
-
-private func shebangLine(for script: URL) -> String? {
-    guard let data = try? Data(contentsOf: script),
-          let text = String(data: data.prefix(512), encoding: .utf8) else {
-        return nil
-    }
-    let firstLine = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
-    guard let firstLine, firstLine.hasPrefix("#!") else { return nil }
-    return firstLine.lowercased()
-}
-
-private func looksLikePythonScript(_ script: URL) -> Bool {
-    guard let data = try? Data(contentsOf: script),
-          let text = String(data: data.prefix(2048), encoding: .utf8) else {
-        return false
-    }
-    let lines = text
-        .split(separator: "\n")
-        .map { $0.trimmingCharacters(in: .whitespaces) }
-        .filter { !$0.isEmpty && !$0.hasPrefix("#") }
-        .prefix(5)
-
-    guard !lines.isEmpty else { return false }
-    return lines.contains { line in
-        line.hasPrefix("import ")
-            || line.hasPrefix("from ")
-            || line.hasPrefix("def ")
-            || line.hasPrefix("class ")
-            || line.hasPrefix("if __name__ == ")
+        return shInvocation(for: script)  // extensionless shell-script fallback
     }
 }

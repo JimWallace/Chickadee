@@ -2,11 +2,12 @@
 //
 // Posts a completed TestOutcomeCollection back to the API server.
 
+import Core
 import Foundation
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking  // URLSession, URLRequest on Linux
 #endif
-import Core
 
 protocol Reporting: Sendable {
     func report(_ report: WorkerExecutionReport) async throws(ReporterError)
@@ -19,27 +20,30 @@ struct Reporter: Sendable {
     private let signer: WorkerRequestSigner
     private let heartbeatRetryPolicy: RunnerRetryPolicy
     private let resultUploadRetryPolicy: RunnerRetryPolicy
+    private let session: URLSession
 
     init(
         apiBaseURL: URL,
         workerID: String,
         workerSecret: String,
         heartbeatRetryPolicy: RunnerRetryPolicy = .heartbeat(),
-        resultUploadRetryPolicy: RunnerRetryPolicy = .resultUpload()
+        resultUploadRetryPolicy: RunnerRetryPolicy = .resultUpload(),
+        session: URLSession = Reporter.defaultSession()
     ) {
         self.apiBaseURL = apiBaseURL
-        self.workerID   = workerID
-        self.signer     = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
+        self.workerID = workerID
+        self.signer = WorkerRequestSigner(sharedSecret: workerSecret, workerID: workerID)
         self.heartbeatRetryPolicy = heartbeatRetryPolicy
         self.resultUploadRetryPolicy = resultUploadRetryPolicy
+        self.session = session
     }
 
-    private static let session: URLSession = {
+    static func defaultSession() -> URLSession {
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest  = 30
+        cfg.timeoutIntervalForRequest = 30
         cfg.timeoutIntervalForResource = 60
         return URLSession(configuration: cfg)
-    }()
+    }
 
     func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
         let url = apiBaseURL.appendingPathComponent("api/v1/worker/results")
@@ -82,42 +86,45 @@ struct Reporter: Sendable {
     ) async throws(ReporterError) {
         do {
             try await withRunnerRetry(
-            stage: stage,
-            policy: policy,
-            shouldRetry: { error in
-                guard let reporterError = error as? ReporterError else {
-                    return .terminal(String(describing: error))
+                stage: stage,
+                policy: policy,
+                shouldRetry: { error in
+                    guard let reporterError = error as? ReporterError else {
+                        return .terminal(String(describing: error))
+                    }
+                    switch reporterError {
+                    case .transportError(let underlying):
+                        return .retryable(underlying.localizedDescription)
+                    case .httpError(let statusCode, let body):
+                        return classifyHTTPRetry(statusCode: statusCode, body: body)
+                    case .unexpectedResponse:
+                        return .terminal("unexpected response")
+                    }
+                },
+                onRetry: { context in
+                    let event = context.stage == .heartbeat ? "heartbeat_retry_scheduled" : "network_retry_scheduled"
+                    writeStructuredRunnerLog(
+                        event: event,
+                        fields: [
+                            "runner_id": self.workerID,
+                            "failure_stage": context.stage.rawValue,
+                            "attempt": context.attempt,
+                            "max_attempts": context.maxAttempts,
+                            "retry_in_seconds": context.retryInSeconds ?? 0,
+                            "retryable": context.retryable,
+                            "error_message_summary": context.message,
+                        ])
+                },
+                operation: {
+                    let result = await Self.attemptReport(session: session, request: request, expectedStatus: 200)
+                    switch result {
+                    case .success:
+                        return ()
+                    case .failure(let error):
+                        throw error
+                    }
                 }
-                switch reporterError {
-                case .transportError(let underlying):
-                    return .retryable(underlying.localizedDescription)
-                case .httpError(let statusCode, let body):
-                    return classifyHTTPRetry(statusCode: statusCode, body: body)
-                case .unexpectedResponse:
-                    return .terminal("unexpected response")
-                }
-            },
-            onRetry: { context in
-                let event = context.stage == .heartbeat ? "heartbeat_retry_scheduled" : "network_retry_scheduled"
-                writeStructuredRunnerLog(event: event, fields: [
-                    "runner_id": self.workerID,
-                    "failure_stage": context.stage.rawValue,
-                    "attempt": context.attempt,
-                    "max_attempts": context.maxAttempts,
-                    "retry_in_seconds": context.retryInSeconds ?? 0,
-                    "retryable": context.retryable,
-                    "error_message_summary": context.message,
-                ])
-            }
-        ) {
-            let result = await Self.attemptReport(request: request, expectedStatus: 200)
-            switch result {
-            case .success:
-                return ()
-            case .failure(let error):
-                throw error
-            }
-        }
+            )
         } catch let reporterError as ReporterError {
             throw reporterError
         } catch {
@@ -135,11 +142,12 @@ extension Reporting {
 }
 
 private extension Reporter {
-    static func attemptReport(request: URLRequest, expectedStatus: Int) async -> Result<Void, ReporterError> {
+    static func attemptReport(
+        session: URLSession, request: URLRequest, expectedStatus: Int
+    ) async -> Result<Void, ReporterError> {
         let data: Data
         let response: URLResponse
-        do { (data, response) = try await Self.session.data(for: request) }
-        catch { return .failure(.transportError(error)) }
+        do { (data, response) = try await session.data(for: request) } catch { return .failure(.transportError(error)) }
         guard let http = response as? HTTPURLResponse else { return .failure(.unexpectedResponse) }
         guard http.statusCode == expectedStatus else {
             let body = String(data: data, encoding: .utf8) ?? "<binary>"

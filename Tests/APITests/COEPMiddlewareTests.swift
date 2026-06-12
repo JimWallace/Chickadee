@@ -1,9 +1,10 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
+import Testing
+import XCTVapor
 
-final class COEPMiddlewareTests: XCTestCase {
+@testable import APIServer
+
+@Suite struct COEPMiddlewareTests {
 
     private func makeApp() async throws -> Application {
         let app = try await Application.make(.testing)
@@ -22,32 +23,32 @@ final class COEPMiddlewareTests: XCTestCase {
         return app
     }
 
-    func testNotebookPageDoesNotReceiveCOEPHeaders() async throws {
+    @Test func notebookPageDoesNotReceiveCOEPHeaders() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/testsetups/setup_123/notebook") { res async in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertNil(res.headers.first(name: "Cross-Origin-Opener-Policy"))
-                XCTAssertNil(res.headers.first(name: "Cross-Origin-Embedder-Policy"))
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
         }
     }
 
-    func testValidatePageStillReceivesCOEPHeaders() async throws {
+    @Test func validatePageStillReceivesCOEPHeaders() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/instructor/assignment_123/validate") { res async in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertEqual(res.headers.first(name: "Cross-Origin-Opener-Policy"), "same-origin")
-                XCTAssertEqual(res.headers.first(name: "Cross-Origin-Embedder-Policy"), "require-corp")
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
             }
         }
     }
 
-    func testUnrelatedPageDoesNotReceiveCOEPHeaders() async throws {
+    @Test func unrelatedPageDoesNotReceiveCOEPHeaders() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/plain") { res async in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertNil(res.headers.first(name: "Cross-Origin-Opener-Policy"))
-                XCTAssertNil(res.headers.first(name: "Cross-Origin-Embedder-Policy"))
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
         }
     }

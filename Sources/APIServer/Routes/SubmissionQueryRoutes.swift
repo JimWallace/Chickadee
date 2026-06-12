@@ -6,10 +6,10 @@
 //   GET /api/v1/submissions/:id               — submission status
 //   GET /api/v1/submissions/:id/results       — grading results (with optional tier filter)
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct SubmissionQueryRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -24,6 +24,12 @@ struct SubmissionQueryRoutes: RouteCollection {
     @Sendable
     func listSubmissions(req: Request) async throws -> SubmissionListResponse {
         let caller = try req.auth.require(APIUser.self)
+
+        // Pagination: ?limit= (default 500, clamped to 1...5000) and
+        // ?offset= (default 0, min 0), newest-first.
+        let limit = min(max(req.query[Int.self, at: "limit"] ?? 500, 1), 5000)
+        let offset = max(req.query[Int.self, at: "offset"] ?? 0, 0)
+
         var query = APISubmission.query(on: req.db)
             .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
@@ -35,7 +41,7 @@ struct SubmissionQueryRoutes: RouteCollection {
             query = query.filter(\.$userID == caller.id)
         }
 
-        let submissions = try await query.all()
+        let submissions = try await query.range(offset..<(offset + limit)).all()
         return SubmissionListResponse(
             submissions: submissions.map(SubmissionSummary.init)
         )
@@ -73,39 +79,52 @@ struct SubmissionQueryRoutes: RouteCollection {
             throw Abort(.forbidden)
         }
 
-        guard let result = try await APIResult.query(on: req.db)
-            .filter(\.$submissionID == subID)
-            .sort(\.$receivedAt, .descending)
-            .first()
+        guard
+            let result = try await APIResult.query(on: req.db)
+                .filter(\.$submissionID == subID)
+                .sort(\.$receivedAt, .descending)
+                .first()
         else {
-            throw Abort(.notFound, reason: "No results available yet for submission \(subID)")
+            throw AppError.notFound(resource: "Results for submission '\(subID)' (none available yet)")
         }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard
             let data = result.collectionJSON.data(using: .utf8),
-            var collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            let fullCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
         else {
-            throw Abort(.internalServerError, reason: "Stored result is corrupt")
+            throw AppError.internalFailure(reason: "Stored result is corrupt")
         }
 
-        // Enforce deadline-based tier visibility first, then honour any ?tiers= filter.
+        // `fullCollection` carries the real grade across every tier.  The caller
+        // may only *inspect* certain outcomes: secret never, release after the
+        // deadline (instructors see all tiers).
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
-        collection = collection.filtering(tiers: visibleTiers(for: caller, assignment: assignment))
+        let visible = fullCollection.filtering(tiers: visibleTiers(for: caller, assignment: assignment))
 
-        // Optional additional tier filter: ?tiers=public,release
+        let responseCollection: TestOutcomeCollection
         if let tiersParam = req.query[String.self, at: "tiers"] {
+            // Explicit tier slice (?tiers=public,release): return a
+            // self-consistent sub-collection — aggregates recomputed over the
+            // requested ∩ visible tiers.
             let requested = Set(tiersParam.split(separator: ",").map(String.init))
-            collection = collection.filtering(tiers: requested)
+            responseCollection = visible.filtering(tiers: requested)
+        } else {
+            // Default: aggregates report the full all-tier grade (matching the
+            // dashboard and submission page), while `outcomes` lists only the
+            // results the caller may inspect.  The counts can exceed
+            // `outcomes.count` — the intended "real grade, partial detail" shape,
+            // identical to the web view.
+            responseCollection = fullCollection.replacingOutcomes(with: visible.outcomes)
         }
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = .sortedKeys
-        let responseData = try encoder.encode(collection)
+        let responseData = try encoder.encode(responseCollection)
 
         return Response(
             status: .ok,
@@ -134,11 +153,11 @@ struct SubmissionSummary: Content {
     let submittedAt: Date?
 
     init(_ submission: APISubmission) {
-        self.submissionID  = submission.id ?? ""
-        self.testSetupID   = submission.testSetupID
-        self.status        = submission.status
+        self.submissionID = submission.id ?? ""
+        self.testSetupID = submission.testSetupID
+        self.status = submission.status
         self.attemptNumber = submission.attemptNumber ?? 1
-        self.submittedAt   = submission.submittedAt
+        self.submittedAt = submission.submittedAt
     }
 }
 
@@ -151,11 +170,11 @@ struct SubmissionStatusResponse: Content {
     let assignedAt: Date?
 
     init(submission: APISubmission) {
-        self.submissionID  = submission.id ?? ""
-        self.testSetupID   = submission.testSetupID
-        self.status        = submission.status
+        self.submissionID = submission.id ?? ""
+        self.testSetupID = submission.testSetupID
+        self.status = submission.status
         self.attemptNumber = submission.attemptNumber ?? 1
-        self.submittedAt   = submission.submittedAt
-        self.assignedAt    = submission.assignedAt
+        self.submittedAt = submission.submittedAt
+        self.assignedAt = submission.assignedAt
     }
 }

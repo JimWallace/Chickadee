@@ -9,15 +9,19 @@
 //   POST /admin/runner-secret                → set/clear runtime runner secret
 //   POST /admin/courses/:courseID/copy       → duplicate course (setups + assignments, no enrolments)
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import SQLKit
+import Vapor
 
 struct AdminRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get(use: dashboard)
+        admin.get("users", use: usersPage)
+        admin.get("users-data", use: usersData)
+        admin.get("storage", use: storagePage)
         admin.get("runners", use: runners)
         admin.get("runners", ":runnerID", use: runnerDetail)
         admin.get("workers", use: workers)
@@ -25,30 +29,116 @@ struct AdminRoutes: RouteCollection {
         admin.post("runner-secret", use: updateWorkerSecret)
         admin.post("worker-secret", use: updateWorkerSecret)
         admin.post("runner-autostart", use: updateLocalRunnerAutoStart)
+        admin.get("audit", use: auditPage)
+        admin.get("retention", use: retentionPage)
+        admin.get("alerts", use: alertsPage)
+        admin.post("alerts", "config", use: updateAlertsConfig)
+        admin.post("alerts", "test", use: sendTestAlert)
         admin.get("courses", "new", use: newCourseForm)
         admin.post("courses", use: createCourse)
         admin.get("courses", ":courseID", use: courseDetail)
         admin.post("courses", ":courseID", "edit", use: editCourse)
         admin.post("courses", ":courseID", "archive", use: toggleCourseArchive)
-        admin.post("courses", ":courseID", "copy",    use: copyCourse)
-        admin.post("courses", ":courseID", "delete",  use: deleteCourse)
+        admin.post("courses", ":courseID", "copy", use: copyCourse)
+        admin.post("courses", ":courseID", "delete", use: deleteCourse)
         admin.post("courses", ":courseID", "enrollment-mode", use: setEnrollmentMode)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
         admin.get("users", ":userID", use: userDetail)
+        admin.post("users", ":userID", "delete", use: deleteUser)
         admin.post("users", ":userID", "enroll", use: adminEnrollUser)
         admin.post("users", ":userID", "unenroll", ":courseID", use: adminUnenrollUser)
+        admin.get("mcp", use: mcpPage)
+        admin.post("mcp", "accounts", use: createMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "token", use: mintMCPToken)
+        admin.post("mcp", "accounts", ":userID", "delete", use: deleteMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "enroll", use: enrollMCPAccount)
+        admin.post("mcp", "accounts", ":userID", "unenroll", use: unenrollMCPAccount)
     }
 
     // MARK: - GET /admin
 
     @Sendable
     func dashboard(req: Request) async throws -> View {
-        let users = try await APIUser.query(on: req.db)
+        let workerRows = try await makeWorkerRows(req: req)
+        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
+
+        // Course management data — all three queries are independent so run in parallel.
+        async let coursesFetch = APICourse.query(on: req.db).sort(\.$createdAt).all()
+        async let enrollmentsFetch = enrolledStudentCountsByCourse(on: req.db)
+        async let assignmentsFetch = assignmentCountsByCourse(on: req.db)
+        let (allCourses, enrollmentCounts, assignmentCounts) =
+            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
+        // Submission counts need the (active) course IDs, so they run after the
+        // course fetch resolves.
+        let activeCourseIDs = allCourses.filter { !$0.isArchived }.compactMap { $0.id }
+        let submissionCounts = try await SubmissionRetentionService.submissionCountsByCourse(
+            courseIDs: activeCourseIDs, on: req.db)
+        let bsSyncEnabled = req.application.brightSpaceClient != nil
+        // Archived courses move out of Overview and live on the Retention tab.
+        let iso = ISO8601DateFormatter()
+        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
+            guard let id = course.id, !course.isArchived else { return nil }
+            return AdminCourseRow(
+                id: id.uuidString,
+                code: course.code,
+                name: course.name,
+                isArchived: course.isArchived,
+                enrollmentMode: course.enrollmentMode.rawValue,
+                enrollmentCount: enrollmentCounts[id] ?? 0,
+                assignmentCount: assignmentCounts[id] ?? 0,
+                submissionCount: submissionCounts[id] ?? 0,
+                createdAt: course.createdAt.map { iso.string(from: $0) } ?? "—",
+                brightspaceOrgUnitID: course.brightspaceOrgUnitID,
+                brightspaceSyncEnabled: bsSyncEnabled
+            )
+        }
+
+        let ctx = AdminContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "overview",
+            workers: workerRows,
+            workerSecret: effectiveSecret,
+            courses: courseRows,
+            version: ChickadeeVersion.current
+        )
+        return try await req.view.render("admin", ctx)
+    }
+
+    // MARK: - GET /admin/users
+
+    @Sendable
+    func usersPage(req: Request) async throws -> View {
+        let userRows = try await fetchUserRows(on: req.db)
+        let ctx = AdminUsersContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "users",
+            users: userRows
+        )
+        return try await req.view.render("admin-users", ctx)
+    }
+
+    // MARK: - GET /admin/users-data
+    //
+    // JSON feed backing the Users tab's auto-refresh poll.  Returns the same
+    // rows `usersPage` renders so the client can repaint the table in place.
+    // Polls send the `X-Background-Refresh` header so they don't count as
+    // session activity (see UserActivityMiddleware).
+
+    @Sendable
+    func usersData(req: Request) async throws -> [AdminUserRow] {
+        try await fetchUserRows(on: req.db)
+    }
+
+    /// Loads every user, ordered most-recently-seen first (NULL last_seen
+    /// rows sink to the bottom, then username, then join date), and maps
+    /// them to the wire/template row shape.
+    private func fetchUserRows(on db: Database) async throws -> [AdminUserRow] {
+        let users = try await APIUser.query(on: db)
             .all()
             .sorted { lhs, rhs in
-                switch (lhs.lastLoginAt, rhs.lastLoginAt) {
-                case let (l?, r?):
+                switch (lhs.lastSeenAt, rhs.lastSeenAt) {
+                case (let l?, let r?):
                     if l != r { return l > r }
                 case (.some, nil):
                     return true
@@ -67,223 +157,141 @@ struct AdminRoutes: RouteCollection {
                 return lhsCreated < rhsCreated
             }
 
-        let userRows = users.map { u in
+        let iso = ISO8601DateFormatter()
+        return users.map { u in
             AdminUserRow(
-                id:        u.id?.uuidString ?? "",
+                id: u.id?.uuidString ?? "",
                 displayName: u.displayName,
-                username:  u.username,
-                role:      u.role,
-                createdAt: u.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
-                lastLoginAt: u.lastLoginAt.map { ISO8601DateFormatter().string(from: $0) }
+                username: u.username,
+                role: u.role,
+                createdAt: u.createdAt.map { iso.string(from: $0) } ?? "—",
+                lastSeenAt: u.lastSeenAt.map { iso.string(from: $0) }
             )
         }
+    }
 
-        let workerRows = try await makeWorkerRows(req: req)
-        let effectiveSecret = await req.application.workerSecretStore.effectiveSecret() ?? ""
-        let localRunnerAutoStartEnabled = await req.application.localRunnerAutoStartStore.isEnabled()
+    // MARK: - GET /admin/storage
 
-        // Course management data — all three queries are independent so run in parallel.
-        async let coursesFetch      = APICourse.query(on: req.db).sort(\.$createdAt).all()
-        async let enrollmentsFetch  = enrollmentCountsByCourse(on: req.db)
-        async let assignmentsFetch  = assignmentCountsByCourse(on: req.db)
-        let (allCourses, enrollmentCounts, assignmentCounts) =
-            try await (coursesFetch, enrollmentsFetch, assignmentsFetch)
-        let courseRows = allCourses.compactMap { course -> AdminCourseRow? in
-            guard let id = course.id else { return nil }
-            return AdminCourseRow(
-                id: id.uuidString,
-                code: course.code,
-                name: course.name,
-                isArchived: course.isArchived,
-                enrollmentMode: course.enrollmentMode.rawValue,
-                enrollmentCount: enrollmentCounts[id] ?? 0,
-                assignmentCount: assignmentCounts[id] ?? 0,
-                createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
-            )
-        }
-
-        let ctx = AdminContext(
+    @Sendable
+    func storagePage(req: Request) async throws -> View {
+        let storage = try await makeStorageContext(req: req)
+        let ctx = AdminStoragePageContext(
             currentUser: req.currentUserContext,
-            users:       userRows,
-            workers:     workerRows,
-            workerSecret: effectiveSecret,
-            localRunnerAutoStartEnabled: localRunnerAutoStartEnabled,
-            courses: courseRows,
-            version: ChickadeeVersion.current
+            activeAdminTab: "storage",
+            storage: storage
         )
-        return try await req.view.render("admin", ctx)
+        return try await req.view.render("admin-storage", ctx)
     }
 
-    // MARK: - GET /admin/runners
+    // MARK: - Storage breakdown
 
-    @Sendable
-    func runners(req: Request) async throws -> [AdminWorkerRow] {
-        try await makeWorkerRows(req: req)
-    }
+    /// Measures the persistent-volume sinks (submission/test-setup uploads,
+    /// the results+logs dir, the static asset tree) and the database so an
+    /// admin can see where disk is going.  Directory walks are blocking, so
+    /// they run on the thread pool off the event loop.
+    private func makeStorageContext(req: Request) async throws -> AdminStorageContext {
+        let submissionsDir = req.application.submissionsDirectory
+        let testSetupsDir = req.application.testSetupsDirectory
+        let resultsDir = req.application.resultsDirectory
+        let publicDir = req.application.directory.publicDirectory
 
-    // MARK: - GET /admin/workers (compat alias)
-
-    @Sendable
-    func workers(req: Request) async throws -> [AdminWorkerRow] {
-        try await makeWorkerRows(req: req)
-    }
-
-    // MARK: - GET /admin/runners/:runnerID
-
-    @Sendable
-    func runnerDetail(req: Request) async throws -> View {
-        guard let runnerID = req.parameters.get("runnerID"), !runnerID.isEmpty else {
-            throw Abort(.notFound)
+        func dirSize(_ path: String) async throws -> Int {
+            try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
+                directorySizeBytes(at: path)
+            }.get()
         }
 
-        let workerRows = try await makeWorkerRows(req: req)
-        let worker: AdminWorkerRow
-        if let found = workerRows.first(where: { $0.workerID == runnerID }) {
-            worker = found
-        } else {
-            // Runner was pruned from the in-memory store (offline >60 min).
-            // Reconstruct a minimal row from the most recent DB snapshot so
-            // the detail page can still render historical data instead of 404.
-            guard let latestSnapshot = try await RunnerSnapshot.query(on: req.db)
-                .filter(\.$runnerID == runnerID)
-                .sort(\.$recordedAt, .descending)
-                .first()
-            else {
-                throw Abort(.notFound)
+        // Per-id footprints feed both the aggregate cards and the per-assignment
+        // breakdown.  Submissions are stored flat (`<id>.<ext>`), so the
+        // top-level sum equals a full recursive walk — we reuse it for the
+        // "Submissions" card to avoid scanning that (potentially large) dir
+        // twice.  Test setups have `shared/`+`notebooks/` subtrees, so the
+        // card keeps an authoritative recursive walk.
+        async let submissionSizesFetch = req.application.threadPool.runIfActive(
+            eventLoop: req.eventLoop
+        ) { topLevelFileSizesByID(inDirectory: submissionsDir) }.get()
+        async let setupSizesFetch = req.application.threadPool.runIfActive(
+            eventLoop: req.eventLoop
+        ) { testSetupSizesByID(testSetupsDirectory: testSetupsDir) }.get()
+
+        async let testSetupsBytes = dirSize(testSetupsDir)
+        async let resultsBytes = dirSize(resultsDir)
+        async let publicBytes = dirSize(publicDir)
+        async let dbBytes = databaseSizeBytes(
+            on: req.db, settings: req.application.appConfig.database)
+
+        // Mapping rows for the per-assignment breakdown.
+        async let assignmentsFetch = APIAssignment.query(on: req.db).all()
+        async let coursesFetch = APICourse.query(on: req.db).all()
+        async let submissionLinksFetch = APISubmission.query(on: req.db)
+            .field(\.$id).field(\.$testSetupID).all()
+
+        let submissionSizesByID = try await submissionSizesFetch
+        let setupSizesByID = try await setupSizesFetch
+        let testSetups = try await testSetupsBytes
+        let results = try await resultsBytes
+        let publicAssets = try await publicBytes
+        let database = await dbBytes
+        let submissions = submissionSizesByID.values.reduce(0, +)
+
+        var rows = [
+            AdminStorageRow(label: "Submissions", formatted: humanReadableBytes(submissions)),
+            AdminStorageRow(label: "Test Setups", formatted: humanReadableBytes(testSetups)),
+            AdminStorageRow(label: "Results & Logs", formatted: humanReadableBytes(results)),
+            AdminStorageRow(label: "Static Assets", formatted: humanReadableBytes(publicAssets)),
+        ]
+        rows.append(
+            AdminStorageRow(
+                label: "Database",
+                formatted: database.map(humanReadableBytes) ?? "—"))
+
+        let total = submissions + testSetups + results + publicAssets + (database ?? 0)
+
+        let assignments = try await assignmentsFetch
+        let courses = try await coursesFetch
+        let submissionLinks = try await submissionLinksFetch
+
+        // Tally submission count + bytes per test setup.
+        var submissionCountBySetup: [String: Int] = [:]
+        var submissionBytesBySetup: [String: Int] = [:]
+        for link in submissionLinks {
+            submissionCountBySetup[link.testSetupID, default: 0] += 1
+            if let subID = link.id {
+                submissionBytesBySetup[link.testSetupID, default: 0] +=
+                    submissionSizesByID[subID] ?? 0
             }
-            let iso = ISO8601DateFormatter()
-            let processedCount = try await APISubmission.query(on: req.db)
-                .filter(\.$workerID == runnerID)
-                .filter(\.$status ~~ ["complete", "failed"])
-                .count()
-            let avgData = try? await req.application.diagnostics.rollingAverages(
-                for: [runnerID], sampleSize: 50, on: req.db
-            )
-            let avg = avgData?[runnerID]
-            worker = AdminWorkerRow(
-                workerID: runnerID,
-                hostname: latestSnapshot.hostname ?? "",
-                runnerVersion: latestSnapshot.runnerVersion ?? "",
-                maxConcurrentJobs: latestSnapshot.maxJobs,
-                lastActive: iso.string(from: latestSnapshot.recordedAt),
-                assignedJobs: 0,
-                jobsProcessed: processedCount,
-                avgExecutionMs: avg?.avgExecutionMs,
-                avgQueueWaitMs: avg?.avgQueueWaitMs,
-                avgExecutionFormatted: avg?.avgExecutionMs.map(formatMs),
-                avgQueueWaitFormatted: avg?.avgQueueWaitMs.map(formatMs)
-            )
         }
-        let runnerProfile = try? await req.application.runnerProfiles.profile(for: runnerID, on: req.db)
+        let codeByCourse = Dictionary(
+            courses.compactMap { course in course.id.map { ($0, course.code) } },
+            uniquingKeysWith: { first, _ in first })
 
-        let snapshots = try await RunnerSnapshot.query(on: req.db)
-            .filter(\.$runnerID == runnerID)
-            .sort(\.$recordedAt, .descending)
-            .limit(50)
-            .all()
+        let assignmentRows =
+            assignments
+            .map { assignment -> AdminAssignmentStorageRow in
+                let suiteBytes = setupSizesByID[assignment.testSetupID] ?? 0
+                let subBytes = submissionBytesBySetup[assignment.testSetupID] ?? 0
+                let count = submissionCountBySetup[assignment.testSetupID] ?? 0
+                let rowTotal = suiteBytes + subBytes
+                return AdminAssignmentStorageRow(
+                    assignmentTitle: assignment.title,
+                    courseCode: codeByCourse[assignment.courseID] ?? "—",
+                    testSuiteFormatted: humanReadableBytes(suiteBytes),
+                    submissionsFormatted: humanReadableBytes(subBytes),
+                    submissionCount: count,
+                    totalFormatted: humanReadableBytes(rowTotal),
+                    testSuiteBytes: suiteBytes,
+                    submissionsBytes: subBytes,
+                    totalBytes: rowTotal
+                )
+            }
+            .sorted { $0.totalBytes > $1.totalBytes }
 
-        let recentJobs = try await JobExecutionMetric.query(on: req.db)
-            .filter(\.$runnerID == runnerID)
-            .sort(\.$completedAt, .descending)
-            .limit(50)
-            .all()
-
-        // Batch-fetch usernames for all distinct user IDs in recent jobs.
-        let userIDs = Array(Set(recentJobs.compactMap { $0.userID }))
-        let users = userIDs.isEmpty ? [] : try await APIUser.query(on: req.db)
-            .filter(\.$id ~~ userIDs)
-            .all()
-        let usernameByID: [UUID: String] = Dictionary(uniqueKeysWithValues: users.compactMap {
-            guard let id = $0.id else { return nil }
-            return (id, $0.username)
-        })
-
-        // Earliest snapshot for this runner tells us how long it's been online.
-        let firstSnapshot = try await RunnerSnapshot.query(on: req.db)
-            .filter(\.$runnerID == runnerID)
-            .sort(\.$recordedAt, .ascending)
-            .first()
-        let firstSeenAt = firstSnapshot.map { iso8601String($0.recordedAt) }
-
-        var statusCounts: [String: Int] = [:]
-        for job in recentJobs {
-            guard let status = job.finalStatus else { continue }
-            statusCounts[status, default: 0] += 1
-        }
-
-        let snapshotRows = snapshots.map {
-            let utilizationPercent = $0.maxJobs > 0
-                ? Int((Double($0.activeJobs) / Double($0.maxJobs) * 100).rounded())
-                : 0
-            return AdminRunnerSnapshotRow(
-                recordedAt: iso8601String($0.recordedAt),
-                activeJobs: $0.activeJobs,
-                maxJobs: $0.maxJobs,
-                activeJobsLabel: "\($0.activeJobs) / \($0.maxJobs)",
-                utilizationPercent: utilizationPercent,
-                lastPollAt: $0.lastPollAt.map(iso8601String)
-            )
-        }
-
-        let overheadSamples = recentJobs.compactMap { overheadMs(for: $0) }
-        let stageBreakdowns = recentJobs.map(stageBreakdown(for:))
-        let jobRows = recentJobs.map {
-            AdminRunnerJobRow(
-                submissionID: $0.submissionID,
-                assignmentID: $0.assignmentID?.uuidString,
-                username: $0.userID.flatMap { usernameByID[$0] },
-                finalStatus: $0.finalStatus ?? "unknown",
-                queueWaitMs: $0.queueWaitMs,
-                executionMs: $0.executionMs,
-                overheadMs: overheadMs(for: $0),
-                queueWaitFormatted: $0.queueWaitMs.map(formatMs),
-                executionFormatted: $0.executionMs.map(formatMs),
-                overheadFormatted: overheadMs(for: $0).map(formatMs),
-                totalProcessingMs: $0.totalProcessingMs,
-                totalProcessingFormatted: $0.totalProcessingMs.map(formatMs),
-                completedAt: $0.completedAt.map(iso8601String)
-            )
-        }
-
-        let summary = AdminRunnerSummary(
-            activeJobs: worker.assignedJobs,
-            maxJobs: worker.maxConcurrentJobs,
-            jobsProcessed: worker.jobsProcessed,
-            avgExecutionFormatted: worker.avgExecutionFormatted,
-            avgQueueWaitFormatted: worker.avgQueueWaitFormatted,
-            avgOverheadFormatted: average(overheadSamples).map(formatMs),
-            avgCacheAcquireFormatted: average(stageBreakdowns.compactMap { $0?.cacheAcquireMs }).map(formatMs),
-            avgDownloadFormatted: average(stageBreakdowns.compactMap { $0?.downloadMs }).map(formatMs),
-            avgPrepFormatted: average(stageBreakdowns.compactMap { $0?.prepMs }).map(formatMs),
-            passedCount: statusCounts["passed", default: 0],
-            failedCount: statusCounts["failed", default: 0],
-            errorCount: statusCounts["error", default: 0],
-            timeoutCount: statusCounts["timeout", default: 0]
+        return AdminStorageContext(
+            rows: rows,
+            totalFormatted: humanReadableBytes(total),
+            dbBackend: req.application.appConfig.database.backend.rawValue,
+            assignments: assignmentRows
         )
-
-        let tags: [String] = {
-            guard let profile = runnerProfile?.capabilityProfile else { return [] }
-            var values: [String] = []
-            if !profile.platform.isEmpty {
-                values.append(profile.platform)
-            }
-            if !profile.architecture.isEmpty {
-                values.append(profile.architecture)
-            }
-            values.append(contentsOf: profile.languageVersions.map { "\($0.language) \($0.version)" })
-            values.append(contentsOf: profile.capabilities.map(\.name))
-            return values
-        }()
-
-        return try await req.view.render("admin-runner", AdminRunnerDetailContext(
-            currentUser: req.currentUserContext,
-            runner: worker,
-            tags: tags,
-            summary: summary,
-            recentJobs: jobRows,
-            snapshots: snapshotRows,
-            firstSeenAt: firstSeenAt
-        ))
     }
 
     // MARK: - POST /admin/users/:id/role
@@ -294,19 +302,36 @@ struct AdminRoutes: RouteCollection {
 
         guard
             let idString = req.parameters.get("userID"),
-            let uuid     = UUID(uuidString: idString),
-            let user     = try await APIUser.find(uuid, on: req.db)
+            let uuid = UUID(uuidString: idString),
+            let user = try await APIUser.find(uuid, on: req.db)
         else {
             throw Abort(.notFound)
         }
 
         let body = try req.content.decode(RoleBody.self)
-        guard ["student", "instructor", "admin"].contains(body.role) else {
-            throw Abort(.badRequest, reason: "Invalid role: \(body.role)")
+        guard
+            [UserRole.student.rawValue, UserRole.instructor.rawValue, UserRole.admin.rawValue]
+                .contains(body.role)
+        else {
+            throw AppError.invalidParameter(
+                name: "role",
+                reason: "must be student, instructor, or admin (got '\(body.role)')")
         }
 
+        let previousRole = user.role
         user.role = body.role
         try await user.save(on: req.db)
+        await AuditLogger.record(
+            action: .userRoleChanged,
+            targetType: .user,
+            targetID: idString,
+            metadata: [
+                "subject_username": user.username,
+                "previous_role": previousRole,
+                "new_role": body.role,
+            ],
+            on: req
+        )
         return req.redirect(to: "/admin")
     }
 
@@ -318,6 +343,7 @@ struct AdminRoutes: RouteCollection {
         let body = try req.content.decode(WorkerSecretBody.self)
         let trimmed = body.secret.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let action: String
         if trimmed.isEmpty {
             await req.application.workerSecretStore.setRuntimeOverride(nil)
             if let persisted = readWorkerSecretFromDisk(workerSecretFilePath: req.application.workerSecretFilePath) {
@@ -325,11 +351,19 @@ struct AdminRoutes: RouteCollection {
                 req.logger.info("Admin reset runtime runner secret to persisted value.")
             }
             req.logger.info("Admin cleared runtime runner secret override.")
+            action = "cleared"
         } else {
             await req.application.workerSecretStore.setRuntimeOverride(trimmed)
             writeWorkerSecretToDisk(secret: trimmed, workerSecretFilePath: req.application.workerSecretFilePath)
             req.logger.info("Admin updated runtime runner secret override.")
+            action = "rotated"
         }
+        await AuditLogger.record(
+            action: .runnerSecretRotated,
+            targetType: .runner,
+            metadata: ["change": action],
+            on: req
+        )
         return req.redirect(to: "/admin")
     }
 
@@ -349,7 +383,102 @@ struct AdminRoutes: RouteCollection {
             filePath: req.application.localRunnerAutoStartFilePath
         )
         req.logger.info("Admin updated local runner autostart setting: \(enabled)")
+        await AuditLogger.record(
+            action: .runnerAutostartChanged,
+            targetType: .runner,
+            metadata: ["enabled": enabled ? "true" : "false"],
+            on: req
+        )
         return req.redirect(to: "/admin")
+    }
+
+    // MARK: - GET /admin/alerts
+
+    @Sendable
+    func alertsPage(req: Request) async throws -> View {
+        struct FlashQuery: Content {
+            var ok: String?
+            var error: String?
+        }
+        let query = (try? req.query.decode(FlashQuery.self)) ?? FlashQuery()
+
+        let configuration = req.application.serverHealthAlertConfiguration
+        let monitor = req.application.serverHealthAlertMonitor
+        let effectiveURL = await monitor.effectiveWebhookURL() ?? ""
+        let envURL = configuration.webhookURLFromEnvironment ?? ""
+        let states = await monitor.currentRuleStates()
+        let recent = await monitor.recentFiringsSnapshot()
+
+        let iso = ISO8601DateFormatter()
+        let ruleRows = HealthRule.allCases.map { rule -> AdminAlertsRuleRow in
+            let state = states[rule] ?? .initial
+            return AdminAlertsRuleRow(
+                rule: rule.rawValue,
+                humanReadable: rule.humanReadable,
+                isFiring: state.isFiring,
+                lastFiredAt: state.lastFiredAt.map { iso.string(from: $0) }
+            )
+        }
+
+        let ctx = AdminAlertsContext(
+            currentUser: req.currentUserContext,
+            activeAdminTab: "alerts",
+            enabled: configuration.enabled,
+            webhookURL: effectiveURL,
+            webhookURLFromEnvironment: !envURL.isEmpty,
+            checkIntervalSeconds: Int(configuration.checkIntervalSeconds),
+            cooldownSeconds: Int(configuration.cooldownSeconds),
+            runnerOfflineSeconds: Int(configuration.runnerOfflineSeconds),
+            queueDepthThreshold: configuration.queueDepthThreshold,
+            oldestPendingSeconds: Int(configuration.oldestPendingSeconds),
+            errorRatePercent: Int((configuration.errorRateThreshold * 100).rounded()),
+            rules: ruleRows,
+            recentFirings: recent,
+            flashSuccess: query.ok,
+            flashError: query.error
+        )
+        return try await req.view.render("alerts", ctx)
+    }
+
+    // MARK: - POST /admin/alerts/config
+
+    @Sendable
+    func updateAlertsConfig(req: Request) async throws -> Response {
+        struct AlertsConfigBody: Content { var webhookURL: String? }
+        let body = try req.content.decode(AlertsConfigBody.self)
+        let trimmed = (body.webhookURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmed.isEmpty {
+            guard let parsed = URL(string: trimmed),
+                let scheme = parsed.scheme?.lowercased(),
+                scheme == "http" || scheme == "https"
+            else {
+                return req.redirect(to: alertsRedirect(error: "Webhook URL must start with http:// or https://"))
+            }
+        }
+
+        await req.application.serverHealthAlertMonitor.setWebhookURL(trimmed)
+        req.logger.info("Admin updated alerts webhook URL (\(trimmed.isEmpty ? "cleared" : "set"))")
+        return req.redirect(to: alertsRedirect(ok: trimmed.isEmpty ? "Webhook cleared." : "Webhook saved."))
+    }
+
+    // MARK: - POST /admin/alerts/test
+
+    @Sendable
+    func sendTestAlert(req: Request) async throws -> Response {
+        let monitor = req.application.serverHealthAlertMonitor
+        let effectiveURL = await monitor.effectiveWebhookURL() ?? ""
+
+        if effectiveURL.isEmpty {
+            return req.redirect(to: alertsRedirect(error: "No webhook URL configured. Set one above first."))
+        }
+
+        do {
+            _ = try await monitor.dispatchTestAlert(application: req.application)
+            return req.redirect(to: alertsRedirect(ok: "Test alert dispatched to webhook."))
+        } catch {
+            return req.redirect(to: alertsRedirect(error: "Test alert failed: \(error)"))
+        }
     }
 
     // MARK: - GET /admin/users/:userID
@@ -358,8 +487,8 @@ struct AdminRoutes: RouteCollection {
     func userDetail(req: Request) async throws -> View {
         guard
             let idString = req.parameters.get("userID"),
-            let userID   = UUID(uuidString: idString),
-            let user     = try await APIUser.find(userID, on: req.db)
+            let userID = UUID(uuidString: idString),
+            let user = try await APIUser.find(userID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -376,7 +505,8 @@ struct AdminRoutes: RouteCollection {
 
         let enrolledIDs = Set(enrollments.map { $0.$course.id })
 
-        let enrolledRows = enrollments
+        let enrolledRows =
+            enrollments
             .compactMap { e -> AdminUserCourseRow? in
                 guard let id = e.course.id else { return nil }
                 return AdminUserCourseRow(id: id.uuidString, code: e.course.code, name: e.course.name)
@@ -388,175 +518,105 @@ struct AdminRoutes: RouteCollection {
             return AdminUserCourseRow(id: id.uuidString, code: c.code, name: c.name)
         }
 
-        return try await req.view.render("admin-user", AdminUserDetailContext(
-            currentUser:      req.currentUserContext,
-            targetUserID:     idString,
-            displayName:      user.displayName,
-            username:         user.username,
-            role:             user.role,
-            enrolledCourses:  enrolledRows,
-            availableCourses: availableRows
-        ))
+        return try await req.view.render(
+            "admin-user",
+            AdminUserDetailContext(
+                currentUser: req.currentUserContext,
+                targetUserID: idString,
+                displayName: user.displayName,
+                username: user.username,
+                role: user.role,
+                enrolledCourses: enrolledRows,
+                availableCourses: availableRows
+            ))
     }
 
-}
+    // MARK: - POST /admin/users/:userID/delete
 
-private func makeWorkerRows(req: Request) async throws -> [AdminWorkerRow] {
-    let iso = ISO8601DateFormatter()
-    let workers = await req.application.workerActivityStore.snapshotsSortedByRecent()
-    let submissions = try await APISubmission.query(on: req.db).all()
-
-    var assignedByWorkerID: [String: Int] = [:]
-    var processedByWorkerID: [String: Int] = [:]
-    for submission in submissions {
-        guard let workerID = submission.workerID, !workerID.isEmpty else { continue }
-        if submission.status == "assigned" {
-            assignedByWorkerID[workerID, default: 0] += 1
+    @Sendable
+    func deleteUser(req: Request) async throws -> Response {
+        guard
+            let idString = req.parameters.get("userID"),
+            let uuid = UUID(uuidString: idString),
+            let user = try await APIUser.find(uuid, on: req.db)
+        else {
+            throw Abort(.notFound)
         }
-        if submission.status == "complete" || submission.status == "failed" {
-            processedByWorkerID[workerID, default: 0] += 1
-        }
-    }
 
-    // Fetch rolling averages (last 50 jobs per runner) via the diagnostics service.
-    let runnerIDs = workers.map(\.workerID).filter { !$0.isEmpty }
-    let averages = (try? await req.application.diagnostics.rollingAverages(
-        for: runnerIDs, sampleSize: 50, on: req.db
-    )) ?? [:]
+        let deletedUsername = user.username
+        let deletedRole = user.role
 
-    return workers.map { snapshot in
-        let assigned  = assignedByWorkerID[snapshot.workerID,  default: 0]
-        let processed = processedByWorkerID[snapshot.workerID, default: 0]
-        let avg = averages[snapshot.workerID]
-        let avgExec = avg?.avgExecutionMs
-        let avgWait = avg?.avgQueueWaitMs
-        return AdminWorkerRow(
-            workerID:              snapshot.workerID,
-            hostname:              snapshot.hostname,
-            runnerVersion:         snapshot.runnerVersion,
-            maxConcurrentJobs:     snapshot.maxConcurrentJobs,
-            lastActive:            iso.string(from: snapshot.lastActive),
-            assignedJobs:          assigned,
-            jobsProcessed:         processed,
-            avgExecutionMs:        avgExec,
-            avgQueueWaitMs:        avgWait,
-            avgExecutionFormatted: avgExec.map(formatMs),
-            avgQueueWaitFormatted: avgWait.map(formatMs)
+        // Application-layer enforcement of the FK cascade behaviour
+        // documented in docs/operational-diagnostics.md ("User-row FK
+        // cascade").  Two rows here lack a DB-level constraint on
+        // SQLite (the AddUserFKConstraints migration only adds the
+        // constraints on Postgres because SQLite can't `ALTER TABLE
+        // ADD CONSTRAINT FOREIGN KEY` post-hoc), so we enforce them
+        // explicitly here.  Same logic runs on Postgres too — it just
+        // becomes a no-op because the DB-level cascade already cleared
+        // the same rows.
+        try await APIClassAchievement.query(on: req.db)
+            .filter(\.$userID == uuid)
+            .delete()
+        try await APISubmission.query(on: req.db)
+            .filter(\.$retestedByUserID == uuid)
+            .set(\.$retestedByUserID, to: nil)
+            .update()
+
+        try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$userID == uuid)
+            .delete()
+        try await user.delete(on: req.db)
+        await AuditLogger.record(
+            action: .userDeleted,
+            targetType: .user,
+            targetID: idString,
+            metadata: [
+                "subject_username": deletedUsername,
+                "subject_role": deletedRole,
+            ],
+            on: req
         )
-    }
-    .sorted { lhs, rhs in
-        let compare = lhs.workerID.localizedStandardCompare(rhs.workerID)
-        if compare == .orderedSame {
-            return lhs.hostname.localizedStandardCompare(rhs.hostname) == .orderedAscending
-        }
-        return compare == .orderedAscending
-    }
-}
-
-private func formatMs(_ ms: Int) -> String {
-    if ms < 1000 {
-        return "\(ms)ms"
+        return req.redirect(to: "/admin")
     }
 
-    let totalSeconds = ms / 1000
-    if totalSeconds < 60 {
-        return "\(totalSeconds)s"
+}
+
+private func alertsRedirect(ok: String? = nil, error: String? = nil) -> String {
+    var pairs: [String] = []
+    if let okValue = ok?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+        pairs.append("ok=\(okValue)")
     }
-
-    let hours = totalSeconds / 3600
-    let minutes = (totalSeconds % 3600) / 60
-    let seconds = totalSeconds % 60
-
-    if hours > 0 {
-        if seconds == 0 {
-            return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
-        }
-        return "\(hours)h \(minutes)m"
+    if let errorValue = error?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+        pairs.append("error=\(errorValue)")
     }
-
-    return seconds == 0 ? "\(minutes)m" : "\(minutes)m \(seconds)s"
-}
-
-private func overheadMs(for metric: JobExecutionMetric) -> Int? {
-    guard
-        let total = metric.totalProcessingMs,
-        let queueWait = metric.queueWaitMs,
-        let execution = metric.executionMs
-    else {
-        return nil
-    }
-
-    return max(0, total - queueWait - execution)
-}
-
-private struct StageBreakdown {
-    let cacheAcquireMs: Int?
-    let downloadMs: Int?
-    let prepMs: Int?
-    let makeMs: Int?
-    let formatted: String?
-}
-
-private func stageBreakdown(for metric: JobExecutionMetric) -> StageBreakdown? {
-    let cacheAcquireMs = metric.testSetupAcquireMs
-    let downloadMs = metric.submissionDownloadMs
-    let prepMs = sum([
-        metric.workdirSetupMs,
-        metric.submissionDirSetupMs,
-        metric.submissionUnpackMs,
-        metric.starterCleanupMs,
-        metric.submissionPrepareMs,
-        metric.runtimeHelperSetupMs,
-    ])
-    let makeMs = metric.makeStepMs
-
-    let parts = [
-        cacheAcquireMs.map { "cache \(formatMs($0))" },
-        downloadMs.map { "dl \(formatMs($0))" },
-        prepMs.map { "prep \(formatMs($0))" },
-        makeMs.map { "make \(formatMs($0))" },
-    ].compactMap { $0 }
-
-    guard !parts.isEmpty else { return nil }
-    return StageBreakdown(
-        cacheAcquireMs: cacheAcquireMs,
-        downloadMs: downloadMs,
-        prepMs: prepMs,
-        makeMs: makeMs,
-        formatted: parts.joined(separator: " · ")
-    )
-}
-
-private func average(_ values: [Int]) -> Int? {
-    guard !values.isEmpty else { return nil }
-    return values.reduce(0, +) / values.count
-}
-
-private func sum(_ values: [Int?]) -> Int? {
-    let present = values.compactMap { $0 }
-    guard !present.isEmpty else { return nil }
-    return present.reduce(0, +)
-}
-
-private func iso8601String(_ date: Date) -> String {
-    ISO8601DateFormatter().string(from: date)
-}
-
-func enrollmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    let enrollments = try await APICourseEnrollment.query(on: db).all()
-    var counts: [UUID: Int] = [:]
-    for e in enrollments {
-        counts[e.$course.id, default: 0] += 1
-    }
-    return counts
+    return pairs.isEmpty ? "/admin/alerts" : "/admin/alerts?" + pairs.joined(separator: "&")
 }
 
 func assignmentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    let assignments = try await APIAssignment.query(on: db).all()
-    var counts: [UUID: Int] = [:]
-    for a in assignments {
-        let cid = a.courseID
-        counts[cid, default: 0] += 1
+    // DB-side grouped COUNT rather than loading every assignment row into
+    // memory and tallying in Swift. Falls back to the in-memory tally on the
+    // (currently nonexistent) non-SQL driver.
+    guard let sql = db as? SQLDatabase else {
+        let assignments = try await APIAssignment.query(on: db).all()
+        return assignments.reduce(into: [:]) { $0[$1.courseID, default: 0] += 1 }
     }
-    return counts
+
+    let rows = try await sql.select()
+        .column("course_id")
+        .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+        .from("assignments")
+        .groupBy("course_id")
+        .all(decoding: CourseAssignmentCountRow.self)
+    return rows.reduce(into: [:]) { $0[$1.courseID] = $1.total }
+}
+
+private struct CourseAssignmentCountRow: Decodable {
+    let courseID: UUID
+    let total: Int
+
+    enum CodingKeys: String, CodingKey {
+        case courseID = "course_id"
+        case total
+    }
 }

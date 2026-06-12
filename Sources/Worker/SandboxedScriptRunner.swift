@@ -13,15 +13,17 @@
 // Callers interact through the ScriptRunner protocol; no change is needed at
 // call sites compared to UnsandboxedScriptRunner.
 
+import Core
 import Foundation
 
 struct SandboxedScriptRunner: ScriptRunner {
 
-    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
-#if os(Linux)
+    func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
+        #if os(Linux)
         let launch = configureLinuxSandboxedProcess(
             script: script,
-            workDir: workDir
+            workDir: workDir,
+            env: env
         )
 
         return await executeLinuxScriptProcess(
@@ -30,13 +32,14 @@ struct SandboxedScriptRunner: ScriptRunner {
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: "Failed to launch sandboxed script"
         )
-#else
+        #else
         let proc = Process()
         let launch = configureSandboxedProcess(
             proc,
             script: script,
             workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds
+            timeLimitSeconds: timeLimitSeconds,
+            env: env
         )
 
         return await executeScriptProcess(
@@ -46,7 +49,7 @@ struct SandboxedScriptRunner: ScriptRunner {
             usesSeparateProcessGroup: launch.usesSeparateProcessGroup,
             usesExternalTimeout: launch.usesExternalTimeout
         )
-#endif
+        #endif
     }
 }
 
@@ -56,29 +59,32 @@ private func configureSandboxedProcess(
     _ proc: Process,
     script: URL,
     workDir: URL,
-    timeLimitSeconds: Int
+    timeLimitSeconds: Int,
+    env: [String: String]
 ) -> ProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
-#if os(macOS)
+    #if os(macOS)
     let profile = macOSSandboxProfile(workDir: workDir)
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
     proc.arguments = ["-p", profile, invocation.executableURL.path] + invocation.arguments
     proc.currentDirectoryURL = workDir
+    proc.environment = mergedScriptEnvironment(overrides: env)
     return ProcessLaunchConfiguration(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
     )
-#else
+    #else
     // Fallback: unsandboxed (unknown platform). Matches UnsandboxedScriptRunner
     // behaviour so the worker remains functional on unexpected targets.
     proc.executableURL = invocation.executableURL
     proc.arguments = invocation.arguments
     proc.currentDirectoryURL = workDir
+    proc.environment = mergedScriptEnvironment(overrides: env)
     return ProcessLaunchConfiguration(
         usesSeparateProcessGroup: false,
         usesExternalTimeout: false
     )
-#endif
+    #endif
 }
 
 // MARK: - macOS sandbox profile
@@ -86,9 +92,13 @@ private func configureSandboxedProcess(
 #if os(Linux)
 private func configureLinuxSandboxedProcess(
     script: URL,
-    workDir: URL
+    workDir: URL,
+    env: [String: String]
 ) -> LinuxProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
+    // `unshare` inherits envp from the parent on Linux, but we drive the child
+    // through execvpe directly (see executeLinuxScriptProcess) so the env in
+    // the LinuxProcessLaunchConfiguration is what reaches the script.
     return LinuxProcessLaunchConfiguration(
         executablePath: "/usr/bin/unshare",
         arguments: [
@@ -97,8 +107,9 @@ private func configureLinuxSandboxedProcess(
             "--user",
             "--net",
             "--map-root-user",
-            invocation.executableURL.path
-        ] + invocation.arguments
+            invocation.executableURL.path,
+        ] + invocation.arguments,
+        env: mergedScriptEnvironment(overrides: env)
     )
 }
 #endif
@@ -121,19 +132,19 @@ private func macOSSandboxProfile(workDir: URL) -> String {
         return String(cString: buf)
     }
     return """
-    (version 1)
-    (deny default)
-    (allow file-read* (subpath "/"))
-    (allow file-write*
-        (subpath "\(wd)")
-        (literal "/dev/null")
-        (literal "/dev/stdout")
-        (literal "/dev/stderr"))
-    (allow process-exec process-fork)
-    (allow signal)
-    (allow sysctl-read)
-    (allow mach-lookup)
-    (deny network* (remote ip))
-    """
+        (version 1)
+        (deny default)
+        (allow file-read* (subpath "/"))
+        (allow file-write*
+            (subpath "\(wd)")
+            (literal "/dev/null")
+            (literal "/dev/stdout")
+            (literal "/dev/stderr"))
+        (allow process-exec process-fork)
+        (allow signal)
+        (allow sysctl-read)
+        (allow mach-lookup)
+        (deny network* (remote ip))
+        """
 }
 #endif

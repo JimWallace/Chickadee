@@ -7,45 +7,20 @@
 //
 // Closes #69 and #70.
 
-import XCTest
-import XCTVapor
-@testable import chickadee_server
+import Core
 import Fluent
 import Foundation
-import Core
+import Testing
+import XCTVapor
 
-final class CourseBundleTests: XCTestCase {
+@testable import APIServer
 
-    private var app: Application!
-    private var tmpDir: String!
+@Suite(.serialized) final class CourseBundleTests {
 
-    override func setUp() async throws {
-        app = try await Application.make(.testing)
+    let app: Application
 
-        tmpDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-cbtest-\(UUID().uuidString)/")
-            .path
-
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
-        for dir in dirs {
-            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-        app.resultsDirectory     = dirs[0]
-        app.testSetupsDirectory  = dirs[1]
-        app.submissionsDirectory = dirs[2]
-
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
-
-        try await configureTestDatabase(app)
-
-        configureLeaf(app)
-        try routes(app)
-    }
-
-    override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpDir)
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-cbtest")
     }
 
     // MARK: - Auth helpers
@@ -73,9 +48,9 @@ final class CourseBundleTests: XCTestCase {
     @discardableResult
     private func insertSetupWithZip(id: String, courseID: UUID) async throws -> APITestSetup {
         let manifest = """
-        {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-        """
-        let zipPath = tmpDir + "testsetups/\(id).zip"
+            {"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
+            """
+        let zipPath = app.testSetupsDirectory + "\(id).zip"
         // Minimal valid ZIP end-of-central-directory record (22 bytes)
         try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
             .write(to: URL(fileURLWithPath: zipPath))
@@ -85,10 +60,13 @@ final class CourseBundleTests: XCTestCase {
     }
 
     @discardableResult
-    private func insertAssignment(testSetupID: String, title: String = "Test Lab",
-                                  courseID: UUID) async throws -> APIAssignment {
-        let a = APIAssignment(testSetupID: testSetupID, title: title,
-                              dueAt: nil, isOpen: true, courseID: courseID)
+    private func insertAssignment(
+        testSetupID: String, title: String = "Test Lab",
+        courseID: UUID
+    ) async throws -> APIAssignment {
+        let a = APIAssignment(
+            testSetupID: testSetupID, title: title,
+            dueAt: nil, isOpen: true, courseID: courseID)
         try await a.save(on: app.db)
         return a
     }
@@ -115,24 +93,26 @@ final class CourseBundleTests: XCTestCase {
 
         let setupOrigID = "setup_mintest"
         let manifest = CourseBundleManifest(
-            exportedAt:            Date(),
-            exportedBy:            "test-admin",
-            chickadeeVersion:      "0.2.0",
-            course:                BundledCourse(code: courseCode, name: "Minimal Import Course"),
-            users:                 [],
+            exportedAt: Date(),
+            exportedBy: "test-admin",
+            chickadeeVersion: "0.2.0",
+            course: BundledCourse(code: courseCode, name: "Minimal Import Course"),
+            users: [],
             enrolledUserBundleIDs: [],
             assignments: [
-                BundledAssignment(bundleID: "assign_1", title: "Lab 1",
-                                  dueAt: nil, isOpen: false, sortOrder: nil,
-                                  testSetupBundleID: "setup_1")
+                BundledAssignment(
+                    bundleID: "assign_1", title: "Lab 1",
+                    dueAt: nil, isOpen: false, sortOrder: nil,
+                    testSetupBundleID: "setup_1")
             ],
             testSetups: [
-                BundledTestSetup(bundleID: "setup_1", originalID: setupOrigID,
-                                 manifest: Self.workerManifestJSON,
-                                 zipFilename: "testsetups/\(setupOrigID).zip")
+                BundledTestSetup(
+                    bundleID: "setup_1", originalID: setupOrigID,
+                    manifest: Self.workerManifestJSON,
+                    zipFilename: "testsetups/\(setupOrigID).zip")
             ],
             submissions: [],
-            results:     []
+            results: []
         )
 
         let encoder = JSONEncoder()
@@ -171,21 +151,25 @@ final class CourseBundleTests: XCTestCase {
     }
 
     /// Posts a bundle ZIP to /admin/courses/import, including a valid CSRF token.
-    private func postImport(cookie: String, zipData: Data) async throws
+    private func postImport(
+        cookie: String, zipData: Data
+    ) async throws
         -> (status: HTTPStatus, body: String)
     {
         // Fetch a CSRF token bound to this session before submitting the form.
         let (csrf, sessionCookie) = try await csrfFields(for: "/admin", cookie: cookie, on: app)
         let boundary = "cb-boundary-\(UUID().uuidString)"
         var result: (HTTPStatus, String) = (.internalServerError, "")
-        try await app.asyncTest(.POST, "/admin/courses/import",
+        try await app.asyncTest(
+            .POST, "/admin/courses/import",
             beforeRequest: { req in
                 req.headers.add(name: .cookie, value: sessionCookie)
                 req.headers.contentType = HTTPMediaType(
                     type: "multipart", subType: "form-data",
                     parameters: ["boundary": boundary])
                 req.body = self.makeMultipartBody(fileData: zipData, boundary: boundary, csrfToken: csrf)
-            }, afterResponse: { res in
+            },
+            afterResponse: { res in
                 result = (res.status, res.body.string)
             }
         )
@@ -194,422 +178,489 @@ final class CourseBundleTests: XCTestCase {
 
     // MARK: - GET /admin/courses/:courseID/export
 
-    func testExportRequiresAdmin() async throws {
-        let cookie = try await loginAsStudent()
-        let course = try await makeTestCourse(code: "EXP_AUTH")
-        let id = try course.requireID().uuidString
+    @Test func exportRequiresAdmin() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let course = try await makeTestCourse(code: "EXP_AUTH")
+            let id = try course.requireID().uuidString
 
-        try await app.asyncTest(.GET, "/admin/courses/\(id)/export",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in XCTAssertEqual(res.status, .forbidden) }
-        )
-    }
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(id)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.status == .forbidden) }
+            )
 
-    func testExportNotFoundForUnknownCourse() async throws {
-        let cookie = try await loginAsAdmin()
-        try await app.asyncTest(.GET, "/admin/courses/\(UUID().uuidString)/export",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in XCTAssertEqual(res.status, .notFound) }
-        )
-    }
-
-    func testExportEmptyCourseReturnsZip() async throws {
-        let cookie = try await loginAsAdmin()
-        let course = try await makeTestCourse(code: "EXP_EMPTY")
-        let id = try course.requireID().uuidString
-
-        try await app.asyncTest(.GET, "/admin/courses/\(id)/export",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                XCTAssertTrue(
-                    res.headers.first(name: .contentType)?.contains("zip") == true,
-                    "Expected application/zip, got: \(res.headers.first(name: .contentType) ?? "(none)")"
-                )
-                XCTAssertTrue(res.headers.first(name: .contentDisposition)?.contains(".zip") == true)
-            }
-        )
-    }
-
-    func testExportManifestContainsCorrectCounts() async throws {
-        let cookie = try await loginAsAdmin()
-        let course = try await makeTestCourse(code: "EXP_COUNTS")
-        let courseID = try course.requireID()
-
-        let setup = try await insertSetupWithZip(id: "setup_exp_c1", courseID: courseID)
-        try await insertAssignment(testSetupID: setup.id!, courseID: courseID)
-
-        var zipData = Data()
-        try await app.asyncTest(.GET, "/admin/courses/\(courseID.uuidString)/export",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                zipData = Data(res.body.readableBytesView)
-            }
-        )
-
-        // Extract the ZIP and parse bundle.json
-        let zipPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("exp-verify-\(UUID().uuidString).zip").path
-        let extractDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("exp-extract-\(UUID().uuidString)", isDirectory: true)
-        defer {
-            try? FileManager.default.removeItem(atPath: zipPath)
-            try? FileManager.default.removeItem(at: extractDir)
         }
+    }
 
-        try zipData.write(to: URL(fileURLWithPath: zipPath))
-        try await extractZipArchive(zipPath: zipPath, into: extractDir)
+    @Test func exportNotFoundForUnknownCourse() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(UUID().uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in #expect(res.status == .notFound) }
+            )
 
-        let manifestData = try Data(contentsOf: extractDir.appendingPathComponent("bundle.json"))
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+        }
+    }
 
-        XCTAssertEqual(manifest.schemaVersion, 1)
-        XCTAssertEqual(manifest.course.code, "EXP_COUNTS")
-        XCTAssertEqual(manifest.testSetups.count, 1)
-        XCTAssertEqual(manifest.assignments.count, 1)
-        XCTAssertEqual(manifest.assignments.first?.title, "Test Lab")
-        XCTAssertEqual(manifest.submissions.count, 0)
+    @Test func exportEmptyCourseReturnsZip() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "EXP_EMPTY")
+            let id = try course.requireID().uuidString
+
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(id)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.headers.first(name: .contentType)?.contains("zip") == true,
+                        "Expected application/zip, got: \(res.headers.first(name: .contentType) ?? "(none)")"
+                    )
+                    #expect(res.headers.first(name: .contentDisposition)?.contains(".zip") == true)
+                }
+            )
+
+        }
+    }
+
+    @Test func exportManifestContainsCorrectCounts() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "EXP_COUNTS")
+            let courseID = try course.requireID()
+
+            let setup = try await insertSetupWithZip(id: "setup_exp_c1", courseID: courseID)
+            try await insertAssignment(testSetupID: (try setup.requireID()), courseID: courseID)
+
+            var zipData = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    zipData = Data(res.body.readableBytesView)
+                }
+            )
+
+            // Extract the ZIP and parse bundle.json
+            let zipPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("exp-verify-\(UUID().uuidString).zip").path
+            let extractDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("exp-extract-\(UUID().uuidString)", isDirectory: true)
+            defer {
+                try? FileManager.default.removeItem(atPath: zipPath)
+                try? FileManager.default.removeItem(at: extractDir)
+            }
+
+            try zipData.write(to: URL(fileURLWithPath: zipPath))
+            try await extractZipArchive(zipPath: zipPath, into: extractDir)
+
+            let manifestData = try Data(contentsOf: extractDir.appendingPathComponent("bundle.json"))
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+
+            #expect(manifest.schemaVersion == 1)
+            #expect(manifest.course.code == "EXP_COUNTS")
+            #expect(manifest.testSetups.count == 1)
+            #expect(manifest.assignments.count == 1)
+            #expect(manifest.assignments.first?.title == "Test Lab")
+            #expect(manifest.submissions.isEmpty)
+
+        }
     }
 
     // MARK: - POST /admin/courses/import — access control
 
-    func testImportRequiresAdmin() async throws {
-        let cookie = try await loginAsStudent()
-        let zipData = try await makeMinimalBundleZip(courseCode: "IMP_AUTH")
-        let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .forbidden)
+    @Test func importRequiresAdmin() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent()
+            let zipData = try await makeMinimalBundleZip(courseCode: "IMP_AUTH")
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .forbidden)
+
+        }
     }
 
     // MARK: - POST /admin/courses/import — validation errors
 
-    func testImportRejectsMissingBundleJSON() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func importRejectsMissingBundleJSON() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        let stagingDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cb-no-manifest-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-        try "placeholder".write(to: stagingDir.appendingPathComponent("readme.txt"),
-                                atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: stagingDir) }
+            let stagingDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("cb-no-manifest-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+            try "placeholder".write(
+                to: stagingDir.appendingPathComponent("readme.txt"),
+                atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: stagingDir) }
 
-        let zipData = try await zipDir(stagingDir)
-        let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+            let zipData = try await zipDir(stagingDir)
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .badRequest)
+
+        }
     }
 
-    func testImportRejectsInvalidBundleJSON() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func importRejectsInvalidBundleJSON() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        let stagingDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cb-bad-json-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-        try "this is not json!!!".write(to: stagingDir.appendingPathComponent("bundle.json"),
-                                        atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: stagingDir) }
+            let stagingDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("cb-bad-json-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+            try "this is not json!!!".write(
+                to: stagingDir.appendingPathComponent("bundle.json"),
+                atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: stagingDir) }
 
-        let zipData = try await zipDir(stagingDir)
-        let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+            let zipData = try await zipDir(stagingDir)
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .badRequest)
+
+        }
     }
 
-    func testImportRejectsWrongSchemaVersion() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func importRejectsWrongSchemaVersion() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        let badJSON = """
-        {"schemaVersion":99,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
-         "chickadeeVersion":"0.2.0","course":{"code":"BADVER","name":"X"},
-         "users":[],"enrolledUserBundleIDs":[],"assignments":[],
-         "testSetups":[],"submissions":[],"results":[]}
-        """
-        let stagingDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cb-bad-ver-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-        try badJSON.write(to: stagingDir.appendingPathComponent("bundle.json"),
-                         atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: stagingDir) }
+            let badJSON = """
+                {"schemaVersion":99,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
+                 "chickadeeVersion":"0.2.0","course":{"code":"BADVER","name":"X"},
+                 "users":[],"enrolledUserBundleIDs":[],"assignments":[],
+                 "testSetups":[],"submissions":[],"results":[]}
+                """
+            let stagingDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("cb-bad-ver-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+            try badJSON.write(
+                to: stagingDir.appendingPathComponent("bundle.json"),
+                atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: stagingDir) }
 
-        let zipData = try await zipDir(stagingDir)
-        let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+            let zipData = try await zipDir(stagingDir)
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .badRequest)
+
+        }
     }
 
-    func testImportRejectsMissingSetupFile() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func importRejectsMissingSetupFile() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        // Manifest references a setup zip that isn't in the archive
-        let badJSON = """
-        {"schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
-         "chickadeeVersion":"0.2.0","course":{"code":"MISSING_FILE","name":"X"},
-         "users":[],"enrolledUserBundleIDs":[],"assignments":[],
-         "testSetups":[{"bundleID":"setup_1","originalID":"setup_ghost",
-                        "manifest":"{}","zipFilename":"testsetups/setup_ghost.zip"}],
-         "submissions":[],"results":[]}
-        """
-        let stagingDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cb-missing-file-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-        // Deliberately NOT writing testsetups/setup_ghost.zip
-        try badJSON.write(to: stagingDir.appendingPathComponent("bundle.json"),
-                         atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: stagingDir) }
+            // Manifest references a setup zip that isn't in the archive
+            let badJSON = """
+                {"schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
+                 "chickadeeVersion":"0.2.0","course":{"code":"MISSING_FILE","name":"X"},
+                 "users":[],"enrolledUserBundleIDs":[],"assignments":[],
+                 "testSetups":[{"bundleID":"setup_1","originalID":"setup_ghost",
+                                "manifest":"{}","zipFilename":"testsetups/setup_ghost.zip"}],
+                 "submissions":[],"results":[]}
+                """
+            let stagingDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("cb-missing-file-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+            // Deliberately NOT writing testsetups/setup_ghost.zip
+            try badJSON.write(
+                to: stagingDir.appendingPathComponent("bundle.json"),
+                atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: stagingDir) }
 
-        let zipData = try await zipDir(stagingDir)
-        let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .badRequest)
+            let zipData = try await zipDir(stagingDir)
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .badRequest)
+
+        }
     }
 
-    func testImportRejectsActiveCourseDuplicate() async throws {
-        let cookie = try await loginAsAdmin()
-        _ = try await makeTestCourse(code: "DUPLICATE101") // active course
+    @Test func importRejectsActiveCourseDuplicate() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            _ = try await makeTestCourse(code: "DUPLICATE101")  // active course
 
-        let zipData = try await makeMinimalBundleZip(courseCode: "DUPLICATE101")
-        let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertEqual(status, .conflict)
+            let zipData = try await makeMinimalBundleZip(courseCode: "DUPLICATE101")
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status == .conflict)
+
+        }
     }
 
-    func testImportAllowsArchivedCourseDuplicate() async throws {
-        let cookie = try await loginAsAdmin()
-        let archived = try await makeTestCourse(code: "ARCHIVED_IMP")
-        archived.isArchived = true
-        try await archived.save(on: app.db)
+    @Test func importAllowsArchivedCourseDuplicate() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let archived = try await makeTestCourse(code: "ARCHIVED_IMP")
+            archived.isArchived = true
+            try await archived.save(on: app.db)
 
-        let zipData = try await makeMinimalBundleZip(courseCode: "ARCHIVED_IMP")
-        let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
-        // 500 expected (Leaf not configured), but NOT a 4xx rejection
-        XCTAssertNotEqual(status, .conflict)
-        XCTAssertNotEqual(status, .forbidden)
-        XCTAssertNotEqual(status, .badRequest)
+            let zipData = try await makeMinimalBundleZip(courseCode: "ARCHIVED_IMP")
+            let (status, _) = try await postImport(cookie: cookie, zipData: zipData)
+            // 500 expected (Leaf not configured), but NOT a 4xx rejection
+            #expect(status != .conflict)
+            #expect(status != .forbidden)
+            #expect(status != .badRequest)
+
+        }
     }
 
     // MARK: - POST /admin/courses/import — DB record creation
 
-    func testImportCreatesExpectedDBRecords() async throws {
-        let cookie = try await loginAsAdmin()
-        let zipData = try await makeMinimalBundleZip(courseCode: "IMP_RECORDS")
+    @Test func importCreatesExpectedDBRecords() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let zipData = try await makeMinimalBundleZip(courseCode: "IMP_RECORDS")
 
-        let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertNotEqual(status, .badRequest, "Import failed: \(body.prefix(200))")
-        XCTAssertNotEqual(status, .conflict)
-        XCTAssertNotEqual(status, .forbidden)
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "Import failed: \(body.prefix(200))")
+            #expect(status != .conflict)
+            #expect(status != .forbidden)
 
-        guard let course = try await APICourse.query(on: app.db)
-            .filter(\.$code == "IMP_RECORDS").first()
-        else {
-            XCTFail("Imported course should exist in DB")
-            return
+            guard
+                let course = try await APICourse.query(on: app.db)
+                    .filter(\.$code == "IMP_RECORDS").first()
+            else {
+                XCTFail("Imported course should exist in DB")
+                return
+            }
+            let courseID = try course.requireID()
+            let setups = try await APITestSetup.query(on: app.db)
+                .filter(\.$courseID == courseID).all()
+            #expect(setups.count == 1, "Expected 1 imported test setup")
+
+            let assignments = try await APIAssignment.query(on: app.db)
+                .filter(\.$courseID == courseID).all()
+            #expect(assignments.count == 1, "Expected 1 imported assignment")
+            #expect(assignments.first?.title == "Lab 1")
+            #expect(assignments.first?.isOpen == false)  // bundle sets isOpen: false
+
         }
-        let courseID = try course.requireID()
-        let setups = try await APITestSetup.query(on: app.db)
-            .filter(\.$courseID == courseID).all()
-        XCTAssertEqual(setups.count, 1, "Expected 1 imported test setup")
-
-        let assignments = try await APIAssignment.query(on: app.db)
-            .filter(\.$courseID == courseID).all()
-        XCTAssertEqual(assignments.count, 1, "Expected 1 imported assignment")
-        XCTAssertEqual(assignments.first?.title, "Lab 1")
-        XCTAssertEqual(assignments.first?.isOpen, false) // bundle sets isOpen: false
     }
 
-    func testImportMatchesExistingUser() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func importMatchesExistingUser() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        // Pre-create the user that the bundle will reference
-        let hash = try Bcrypt.hash("existing-pw")
-        let existingUser = APIUser(username: "cb_existing_student", passwordHash: hash, role: "student")
-        try await existingUser.save(on: app.db)
-        let existingID = try existingUser.requireID()
-        let userCountBefore = try await APIUser.query(on: app.db).count()
+            // Pre-create the user that the bundle will reference
+            let hash = try Bcrypt.hash("existing-pw")
+            let existingUser = APIUser(username: "cb_existing_student", passwordHash: hash, role: "student")
+            try await existingUser.save(on: app.db)
+            let existingID = try existingUser.requireID()
+            let userCountBefore = try await APIUser.query(on: app.db).count()
 
-        let zipData = try await makeBundleZipWithUser(
-            courseCode: "USERMATCH_CB",
-            username: "cb_existing_student"
-        )
-        let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertNotEqual(status, .forbidden, body)
-        XCTAssertNotEqual(status, .badRequest, body)
+            let zipData = try await makeBundleZipWithUser(
+                courseCode: "USERMATCH_CB",
+                username: "cb_existing_student"
+            )
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .forbidden, "\(body)")
+            #expect(status != .badRequest, "\(body)")
 
-        // No new user should have been created
-        let userCountAfter = try await APIUser.query(on: app.db).count()
-        XCTAssertEqual(userCountAfter, userCountBefore,
-                       "No new user should be created when username already exists")
+            // No new user should have been created
+            let userCountAfter = try await APIUser.query(on: app.db).count()
+            #expect(userCountAfter == userCountBefore, "No new user should be created when username already exists")
 
-        // The enrollment should reference the pre-existing user
-        let course = try await APICourse.query(on: app.db)
-            .filter(\.$code == "USERMATCH_CB").first()
-        XCTAssertNotNil(course)
-        guard let courseID2 = try course?.requireID() else {
-            XCTFail("Imported course USERMATCH_CB not found in DB")
-            return
+            // The enrollment should reference the pre-existing user
+            let course = try await APICourse.query(on: app.db)
+                .filter(\.$code == "USERMATCH_CB").first()
+            #expect(course != nil)
+            guard let courseID2 = try course?.requireID() else {
+                XCTFail("Imported course USERMATCH_CB not found in DB")
+                return
+            }
+            let enrollment = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == courseID2).first()
+            #expect(enrollment?.userID == existingID, "Enrollment should point to the pre-existing user")
+
         }
-        let enrollment = try await APICourseEnrollment.query(on: app.db)
-            .filter(\.$course.$id == courseID2).first()
-        XCTAssertEqual(enrollment?.userID, existingID,
-                       "Enrollment should point to the pre-existing user")
     }
 
-    func testImportCreatesPlaceholderUser() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func importCreatesPlaceholderUser() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        let zipData = try await makeBundleZipWithUser(
-            courseCode: "PLACEHOLDER_CB",
-            username: "cb_brand_new_user"
-        )
-        let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
-        XCTAssertNotEqual(status, .forbidden, body)
-        XCTAssertNotEqual(status, .badRequest, body)
+            let zipData = try await makeBundleZipWithUser(
+                courseCode: "PLACEHOLDER_CB",
+                username: "cb_brand_new_user"
+            )
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .forbidden, "\(body)")
+            #expect(status != .badRequest, "\(body)")
 
-        let placeholder = try await APIUser.query(on: app.db)
-            .filter(\.$username == "cb_brand_new_user").first()
-        XCTAssertNotNil(placeholder, "Placeholder user should be created")
-        XCTAssertEqual(placeholder?.passwordHash, "",
-                       "Placeholder user should have empty passwordHash (inert account)")
+            let placeholder = try await APIUser.query(on: app.db)
+                .filter(\.$username == "cb_brand_new_user").first()
+            #expect(placeholder != nil, "Placeholder user should be created")
+            #expect(
+                placeholder?.passwordHash.isEmpty == true,
+                "Placeholder user should have empty passwordHash (inert account)"
+            )
+
+        }
     }
 
     // MARK: - Round-trip: export → import
 
-    func testRoundTripExportImport() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func roundTripExportImport() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        // Set up source course
-        let course = try await makeTestCourse(code: "ROUNDTRIP_CB")
-        let courseID = try course.requireID()
-        let setup = try await insertSetupWithZip(id: "setup_rt_cb1", courseID: courseID)
-        try await insertAssignment(testSetupID: setup.id!, title: "RT Lab", courseID: courseID)
+            // Set up source course
+            let course = try await makeTestCourse(code: "ROUNDTRIP_CB")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_rt_cb1", courseID: courseID)
+            try await insertAssignment(testSetupID: (try setup.requireID()), title: "RT Lab", courseID: courseID)
 
-        // Export
-        var exportedZip = Data()
-        try await app.asyncTest(.GET, "/admin/courses/\(courseID.uuidString)/export",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                exportedZip = Data(res.body.readableBytesView)
+            // Export
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    exportedZip = Data(res.body.readableBytesView)
+                }
+            )
+            #expect(exportedZip.isEmpty == false, "Exported ZIP should not be empty")
+
+            // Archive the original so the import does not hit a 409
+            course.isArchived = true
+            try await course.save(on: app.db)
+
+            // Import the exported ZIP
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "Import should not fail: \(body.prefix(300))")
+            #expect(status != .conflict, "\(body)")
+            #expect(status != .forbidden, "\(body)")
+
+            // Verify the imported course has the same structure
+            guard
+                let imported = try await APICourse.query(on: app.db)
+                    .filter(\.$code == "ROUNDTRIP_CB")
+                    .filter(\.$isArchived == false)
+                    .first()
+            else {
+                XCTFail("Imported course should exist and be active")
+                return
             }
-        )
-        XCTAssertFalse(exportedZip.isEmpty, "Exported ZIP should not be empty")
+            let importedID = try imported.requireID()
+            let importedSetups = try await APITestSetup.query(on: app.db)
+                .filter(\.$courseID == importedID).all()
+            #expect(importedSetups.count == 1, "Round-trip: expected 1 test setup")
 
-        // Archive the original so the import does not hit a 409
-        course.isArchived = true
-        try await course.save(on: app.db)
+            let importedAssignments = try await APIAssignment.query(on: app.db)
+                .filter(\.$courseID == importedID).all()
+            #expect(importedAssignments.count == 1, "Round-trip: expected 1 assignment")
+            #expect(importedAssignments.first?.title == "RT Lab")
 
-        // Import the exported ZIP
-        let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
-        XCTAssertNotEqual(status, .badRequest,  "Import should not fail: \(body.prefix(300))")
-        XCTAssertNotEqual(status, .conflict,    body)
-        XCTAssertNotEqual(status, .forbidden,   body)
-
-        // Verify the imported course has the same structure
-        guard let imported = try await APICourse.query(on: app.db)
-            .filter(\.$code == "ROUNDTRIP_CB")
-            .filter(\.$isArchived == false)
-            .first()
-        else {
-            XCTFail("Imported course should exist and be active")
-            return
         }
-        let importedID = try imported.requireID()
-        let importedSetups = try await APITestSetup.query(on: app.db)
-            .filter(\.$courseID == importedID).all()
-        XCTAssertEqual(importedSetups.count, 1, "Round-trip: expected 1 test setup")
-
-        let importedAssignments = try await APIAssignment.query(on: app.db)
-            .filter(\.$courseID == importedID).all()
-        XCTAssertEqual(importedAssignments.count, 1, "Round-trip: expected 1 assignment")
-        XCTAssertEqual(importedAssignments.first?.title, "RT Lab")
     }
 
     // MARK: - Round-trip: sections preserved through export → import
 
-    func testRoundTripPreservesSections() async throws {
-        let cookie = try await loginAsAdmin()
+    @Test func roundTripPreservesSections() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
 
-        let course   = try await makeTestCourse(code: "RT_SECTS")
-        let courseID = try course.requireID()
+            let course = try await makeTestCourse(code: "RT_SECTS")
+            let courseID = try course.requireID()
 
-        // Two sections with distinct grading modes
-        let browserSec = APICourseSection(name: "Browser Labs", defaultGradingMode: "browser",
-                                          sortOrder: 1, courseID: courseID)
-        try await browserSec.save(on: app.db)
-        let workerSec = APICourseSection(name: "Worker Labs", defaultGradingMode: "worker",
-                                         sortOrder: 2, courseID: courseID)
-        try await workerSec.save(on: app.db)
+            // Two sections with distinct grading modes.
+            let browserSec = APICourseSection(
+                name: "Browser Labs", defaultGradingMode: "browser",
+                sortOrder: 1, courseID: courseID)
+            try await browserSec.save(on: app.db)
+            let workerSec = APICourseSection(
+                name: "Worker Labs", defaultGradingMode: "worker",
+                sortOrder: 2, courseID: courseID)
+            try await workerSec.save(on: app.db)
 
-        let setup1 = try await insertSetupWithZip(id: "rt_sects_s1", courseID: courseID)
-        let setup2 = try await insertSetupWithZip(id: "rt_sects_s2", courseID: courseID)
+            let setup1 = try await insertSetupWithZip(id: "rt_sects_s1", courseID: courseID)
+            let setup2 = try await insertSetupWithZip(id: "rt_sects_s2", courseID: courseID)
 
-        let a1 = APIAssignment(testSetupID: setup1.id!, title: "Browser Lab",
-                               isOpen: false, sectionID: try browserSec.requireID(),
-                               courseID: courseID)
-        try await a1.save(on: app.db)
-        let a2 = APIAssignment(testSetupID: setup2.id!, title: "Worker Lab",
-                               isOpen: false, sectionID: try workerSec.requireID(),
-                               courseID: courseID)
-        try await a2.save(on: app.db)
+            let a1 = APIAssignment(
+                testSetupID: try #require(setup1.id), title: "Browser Lab",
+                isOpen: false, sectionID: try browserSec.requireID(),
+                courseID: courseID)
+            try await a1.save(on: app.db)
+            let a2 = APIAssignment(
+                testSetupID: try #require(setup2.id), title: "Worker Lab",
+                isOpen: false, sectionID: try workerSec.requireID(),
+                courseID: courseID)
+            try await a2.save(on: app.db)
 
-        // Export
-        var exportedZip = Data()
-        try await app.asyncTest(.GET, "/admin/courses/\(courseID.uuidString)/export",
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in
-                XCTAssertEqual(res.status, .ok)
-                exportedZip = Data(res.body.readableBytesView)
-            }
-        )
-        XCTAssertFalse(exportedZip.isEmpty)
+            // Export.
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    exportedZip = Data(res.body.readableBytesView)
+                })
+            #expect(!exportedZip.isEmpty)
 
-        // Inspect the raw manifest to confirm sections and sectionBundleIDs are present
-        let zipVerifyPath = tmpDir + "testsetups/rt_sects_verify.zip"
-        let extractDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("rt-sects-ext-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: extractDir) }
-        try exportedZip.write(to: URL(fileURLWithPath: zipVerifyPath))
-        try await extractZipArchive(zipPath: zipVerifyPath, into: extractDir)
+            // Inspect the raw manifest to confirm sections + sectionBundleIDs.
+            let extractDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-sects-ext-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: extractDir) }
+            let zipVerifyPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-sects-\(UUID().uuidString).zip").path
+            defer { try? FileManager.default.removeItem(atPath: zipVerifyPath) }
+            try exportedZip.write(to: URL(fileURLWithPath: zipVerifyPath))
+            try await extractZipArchive(zipPath: zipVerifyPath, into: extractDir)
 
-        let manifestData = try Data(contentsOf: extractDir.appendingPathComponent("bundle.json"))
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+            let manifestData = try Data(contentsOf: extractDir.appendingPathComponent("bundle.json"))
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
 
-        XCTAssertEqual(manifest.sections?.count, 2, "Manifest should include 2 sections")
-        XCTAssertTrue(manifest.assignments.allSatisfy { $0.sectionBundleID != nil },
-                      "Every assignment in the manifest should carry a sectionBundleID")
+            #expect(manifest.sections?.count == 2, "Manifest should include 2 sections")
+            #expect(
+                manifest.assignments.allSatisfy { $0.sectionBundleID != nil },
+                "Every assignment in the manifest should carry a sectionBundleID")
 
-        // Archive original so import doesn't collide
-        course.isArchived = true
-        try await course.save(on: app.db)
+            // Archive the original so import doesn't collide.
+            course.isArchived = true
+            try await course.save(on: app.db)
 
-        // Import
-        let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
-        XCTAssertNotEqual(status, .badRequest, "Import should not fail: \(body.prefix(300))")
-        XCTAssertNotEqual(status, .conflict, body)
+            // Import.
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "Import should not fail: \(body.prefix(300))")
+            #expect(status != .conflict, "\(body.prefix(300))")
 
-        guard let imported = try await APICourse.query(on: app.db)
-            .filter(\.$code == "RT_SECTS")
-            .filter(\.$isArchived == false)
-            .first()
-        else { XCTFail("Imported course not found"); return }
-        let importedID = try imported.requireID()
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "RT_SECTS")
+                    .filter(\.$isArchived == false)
+                    .first(),
+                "Imported course not found")
+            let importedID = try imported.requireID()
 
-        // Sections should be recreated with correct names and grading modes
-        let importedSections = try await APICourseSection.query(on: app.db)
-            .filter(\.$courseID == importedID)
-            .sort(\.$sortOrder)
-            .all()
-        XCTAssertEqual(importedSections.count, 2, "Imported course should have 2 sections")
-        XCTAssertEqual(importedSections.first?.name, "Browser Labs")
-        XCTAssertEqual(importedSections.first?.defaultGradingMode, "browser")
-        XCTAssertEqual(importedSections.last?.name, "Worker Labs")
-        XCTAssertEqual(importedSections.last?.defaultGradingMode, "worker")
+            // Sections recreated with correct names and grading modes.
+            let importedSections = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == importedID)
+                .sort(\.$sortOrder)
+                .all()
+            #expect(importedSections.count == 2, "Imported course should have 2 sections")
+            #expect(importedSections.first?.name == "Browser Labs")
+            #expect(importedSections.first?.defaultGradingMode == "browser")
+            #expect(importedSections.last?.name == "Worker Labs")
+            #expect(importedSections.last?.defaultGradingMode == "worker")
 
-        // All assignments should be placed in a section, not ungrouped
-        let importedAssignments = try await APIAssignment.query(on: app.db)
-            .filter(\.$courseID == importedID)
-            .all()
-        XCTAssertEqual(importedAssignments.count, 2)
-        XCTAssertTrue(importedAssignments.allSatisfy { $0.sectionID != nil },
-                      "All imported assignments should have a sectionID")
+            // All assignments placed in a section, not ungrouped.
+            let importedAssignments = try await APIAssignment.query(on: app.db)
+                .filter(\.$courseID == importedID)
+                .all()
+            #expect(importedAssignments.count == 2)
+            #expect(
+                importedAssignments.allSatisfy { $0.sectionID != nil },
+                "All imported assignments should have a sectionID")
+        }
     }
 
     // MARK: - Bundle builder with a user (used by user-matching tests)
@@ -627,19 +678,25 @@ final class CourseBundleTests: XCTestCase {
 
         let setupOrigID = "setup_usrtest"
         let manifest = CourseBundleManifest(
-            exportedAt:            Date(),
-            exportedBy:            "test-admin",
-            chickadeeVersion:      "0.2.0",
-            course:                BundledCourse(code: courseCode, name: "User Test Course"),
-            users:                 [BundledUser(bundleID: "user_1", username: username,
-                                                displayName: nil, email: nil, role: "student")],
+            exportedAt: Date(),
+            exportedBy: "test-admin",
+            chickadeeVersion: "0.2.0",
+            course: BundledCourse(code: courseCode, name: "User Test Course"),
+            users: [
+                BundledUser(
+                    bundleID: "user_1", username: username,
+                    displayName: nil, email: nil, role: "student")
+            ],
             enrolledUserBundleIDs: ["user_1"],
-            assignments:           [],
-            testSetups:            [BundledTestSetup(bundleID: "setup_1", originalID: setupOrigID,
-                                                     manifest: Self.workerManifestJSON,
-                                                     zipFilename: "testsetups/\(setupOrigID).zip")],
-            submissions:           [],
-            results:               []
+            assignments: [],
+            testSetups: [
+                BundledTestSetup(
+                    bundleID: "setup_1", originalID: setupOrigID,
+                    manifest: Self.workerManifestJSON,
+                    zipFilename: "testsetups/\(setupOrigID).zip")
+            ],
+            submissions: [],
+            results: []
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

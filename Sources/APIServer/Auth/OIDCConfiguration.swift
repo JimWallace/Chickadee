@@ -13,9 +13,9 @@
 //   OIDC_EMAIL_CLAIM      — JWT claim used as the email address
 //                           (default: "email")
 
-import Vapor
-import JWT
 import Foundation
+import JWT
+import Vapor
 
 // MARK: - OIDC Discovery Response
 
@@ -33,10 +33,10 @@ struct OIDCDiscovery: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case issuer
         case authorizationEndpoint = "authorization_endpoint"
-        case tokenEndpoint         = "token_endpoint"
-        case jwksURI               = "jwks_uri"
-        case revocationEndpoint    = "revocation_endpoint"
-        case endSessionEndpoint    = "end_session_endpoint"
+        case tokenEndpoint = "token_endpoint"
+        case jwksURI = "jwks_uri"
+        case revocationEndpoint = "revocation_endpoint"
+        case endSessionEndpoint = "end_session_endpoint"
     }
 }
 
@@ -51,10 +51,10 @@ struct OIDCTokenResponse: Codable, Sendable {
     let refreshToken: String?
 
     enum CodingKeys: String, CodingKey {
-        case accessToken  = "access_token"
-        case idToken      = "id_token"
-        case tokenType    = "token_type"
-        case expiresIn    = "expires_in"
+        case accessToken = "access_token"
+        case idToken = "id_token"
+        case tokenType = "token_type"
+        case expiresIn = "expires_in"
         case refreshToken = "refresh_token"
     }
 }
@@ -64,7 +64,7 @@ struct OIDCTokenResponse: Codable, Sendable {
 // MARK: - Claim configuration
 
 /// Which JWT claim names to use for user identity fields.
-/// Configured via env vars; defaults match standard OIDC claims.
+/// Built from `OIDCEnvConfig`; defaults match standard OIDC claims.
 struct OIDCClaimConfig: Sendable {
     /// JWT claim used as the Chickadee username. Default: `preferred_username`.
     /// UWaterloo DUO: set to `winaccountname`.
@@ -78,18 +78,7 @@ struct OIDCClaimConfig: Sendable {
         emailClaim: String = "email"
     ) {
         self.usernameClaim = usernameClaim
-        self.emailClaim    = emailClaim
-    }
-
-    static func load() -> OIDCClaimConfig {
-        let username = Environment.get("OIDC_USERNAME_CLAIM")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let email = Environment.get("OIDC_EMAIL_CLAIM")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return OIDCClaimConfig(
-            usernameClaim: username?.isEmpty == false ? username! : "preferred_username",
-            emailClaim:    email?.isEmpty    == false ? email!    : "email"
-        )
+        self.emailClaim = emailClaim
     }
 }
 
@@ -113,40 +102,33 @@ struct OIDCConfiguration: Sendable {
     /// if either network request fails. Intended to be called once from `main()`
     /// before the server begins serving requests.
     static func load(from app: Application) async throws -> OIDCConfiguration {
-        guard
-            let clientID = Environment.get("OIDC_CLIENT_ID")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !clientID.isEmpty
-        else {
+        let env = app.appConfig.oidc
+        guard let clientID = env.clientID else {
             throw Abort(
                 .internalServerError,
                 reason: "OIDC_CLIENT_ID is required when AUTH_MODE is not 'local'"
             )
         }
 
-        guard
-            let clientSecret = Environment.get("OIDC_CLIENT_SECRET")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !clientSecret.isEmpty
-        else {
+        guard let clientSecret = env.clientSecret else {
             throw Abort(
                 .internalServerError,
                 reason: "OIDC_CLIENT_SECRET is required when AUTH_MODE is not 'local'"
             )
         }
 
-        let baseURL = app.securityConfiguration.publicBaseURL?.absoluteString
+        // Honour `app.securityConfiguration` (legacy accessor with a per-test
+        // override path) before falling back to `appConfig.security`, so tests
+        // that set `app.securityConfiguration = ...` directly still steer the
+        // redirect URI.
+        let baseURL =
+            app.securityConfiguration.publicBaseURL?.absoluteString
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             ?? "http://localhost:8080"
-        let callbackPath = normalizedCallbackPath(Environment.get("OIDC_CALLBACK"))
-        let redirectURI = baseURL + callbackPath
+        let redirectURI = baseURL + env.callbackPath
 
-        // Fetch discovery document
         let discoveryURL: String = {
-            if let configured = Environment.get("OIDC_AUTH_SERVER")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !configured.isEmpty
-            {
+            if let configured = env.authServerOverride {
                 let trimmed = configured.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 if trimmed.hasSuffix(".well-known/openid-configuration") {
                     return trimmed
@@ -155,6 +137,15 @@ struct OIDCConfiguration: Sendable {
             }
             return "https://sso-4ccc589b.sso.duosecurity.com/oidc/\(clientID)/.well-known/openid-configuration"
         }()
+
+        // Defense in depth against a fat-fingered OIDC_AUTH_SERVER pointing
+        // at an internal service or going out over plain HTTP.  Operator-
+        // settable, so not strictly a remote-attacker SSRF, but the failure
+        // mode without this check (server happily fetches from
+        // http://localhost:6379) is bad enough that failing loud at
+        // startup beats a confusing runtime error.
+        try validateOIDCDiscoveryURL(discoveryURL, allowInsecure: env.allowInsecure)
+
         app.logger.info("Fetching OIDC discovery document: \(discoveryURL)")
         let discoveryResponse = try await app.client.get(URI(string: discoveryURL))
         guard discoveryResponse.status == .ok else {
@@ -178,7 +169,10 @@ struct OIDCConfiguration: Sendable {
         let jwksJSON = jwksBuffer.readString(length: jwksBuffer.readableBytes) ?? ""
         try await app.jwt.keys.add(jwksJSON: jwksJSON)
 
-        let claimConfig = OIDCClaimConfig.load()
+        let claimConfig = OIDCClaimConfig(
+            usernameClaim: env.usernameClaim,
+            emailClaim: env.emailClaim
+        )
         app.logger.info(
             "OIDC configured: issuer=\(discovery.issuer), redirectURI=\(redirectURI), usernameClaim=\(claimConfig.usernameClaim), emailClaim=\(claimConfig.emailClaim)"
         )
@@ -193,11 +187,72 @@ struct OIDCConfiguration: Sendable {
     }
 }
 
-private func normalizedCallbackPath(_ raw: String?) -> String {
-    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    guard !trimmed.isEmpty else { return "/auth/sso/callback" }
-    let withLeadingSlash = trimmed.hasPrefix("/") ? trimmed : "/" + trimmed
-    return withLeadingSlash
+// MARK: - Discovery URL validation
+
+enum OIDCDiscoveryURLError: Error, CustomStringConvertible {
+    case malformed(url: String)
+    case insecureScheme(url: String)
+    case privateHost(host: String)
+
+    var description: String {
+        switch self {
+        case .malformed(let url):
+            return "OIDC_AUTH_SERVER is not a valid URL: \(url)"
+        case .insecureScheme(let url):
+            return
+                "OIDC_AUTH_SERVER must use https:// (got \(url)); set OIDC_ALLOW_INSECURE=true to override (development only)"
+        case .privateHost(let host):
+            return
+                "OIDC_AUTH_SERVER host \(host) resolves into a loopback / private IP range; set OIDC_ALLOW_INSECURE=true to override (development only)"
+        }
+    }
+}
+
+/// Throws if `urlString` would have the discovery fetch land on plaintext or
+/// at a loopback / private-range host without an explicit `allowInsecure`
+/// override.  Intentionally string-based: we don't resolve DNS here, only
+/// reject hosts that are syntactically private — operators with a private
+/// IdP behind a domain name continue to work as long as the hostname isn't
+/// itself a private literal.
+func validateOIDCDiscoveryURL(_ urlString: String, allowInsecure: Bool) throws {
+    guard let url = URL(string: urlString), let scheme = url.scheme?.lowercased(),
+        let host = url.host?.lowercased()
+    else {
+        throw OIDCDiscoveryURLError.malformed(url: urlString)
+    }
+    if !allowInsecure {
+        guard scheme == "https" else {
+            throw OIDCDiscoveryURLError.insecureScheme(url: urlString)
+        }
+        if isPrivateOrLoopbackHost(host) {
+            throw OIDCDiscoveryURLError.privateHost(host: host)
+        }
+    }
+}
+
+private func isPrivateOrLoopbackHost(_ host: String) -> Bool {
+    if host == "localhost" || host.hasSuffix(".localhost") { return true }
+    if host == "0.0.0.0" { return true }
+    // IPv6 loopback.
+    if host == "::1" || host == "[::1]" { return true }
+    // IPv4 ranges: 10/8, 127/8, 172.16/12, 192.168/16.
+    let parts = host.split(separator: ".").map(String.init)
+    if parts.count == 4, let a = Int(parts[0]), let b = Int(parts[1]),
+        Int(parts[2]) != nil, Int(parts[3]) != nil
+    {
+        if a == 10 || a == 127 { return true }
+        if a == 192, b == 168 { return true }
+        if a == 172, (16...31).contains(b) { return true }
+        if a == 169, b == 254 { return true }  // link-local
+    }
+    // IPv6 unique-local fc00::/7 (literal form, post-bracket-strip).
+    let trimmedHost = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+    if trimmedHost.hasPrefix("fc") || trimmedHost.hasPrefix("fd") {
+        // Conservative: any host starting with fc/fd that contains a colon
+        // looks like an IPv6 unique-local literal.
+        if trimmedHost.contains(":") { return true }
+    }
+    return false
 }
 
 // MARK: - Application Storage

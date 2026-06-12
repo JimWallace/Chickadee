@@ -2,69 +2,87 @@
 //
 // Shared helpers for integration tests that involve session auth and CSRF.
 
-import XCTest
-import XCTVapor
 import CSRF
+import Core
 import Crypto
-import Leaf
-import LeafKit
-@testable import chickadee_server
 import Fluent
 import FluentPostgresDriver
 import Foundation
+import Leaf
+import LeafKit
 import SQLKit
+import Testing
+import XCTVapor
 
-struct TestDatabaseOptions: Sendable {
-    let includeObservability: Bool
-    let includeRunnerCompatibility: Bool
+@testable import APIServer
 
-    static let `default` = TestDatabaseOptions(
-        includeObservability: false,
-        includeRunnerCompatibility: false
-    )
+func configureTestDatabase(_ app: Application) async throws {
+    // Read env vars while holding the async env lock so we don't see a
+    // transient `TEST_DATABASE_BACKEND=postgres` set by a concurrently-
+    // running env-mutating test in another suite.
+    var settings = try await withAsyncEnvLock {
+        try testDatabaseSettingsFromEnvironment()
+    }
 
-    static let observability = TestDatabaseOptions(
-        includeObservability: true,
-        includeRunnerCompatibility: false
-    )
+    // Per-test isolated schema for Postgres so `swift test --parallel` can
+    // run XCTestCase subclasses concurrently against one shared database.
+    // Each `Application` gets its own schema + `search_path`, so migrations
+    // and queries on one app can't trample another.  Replaces the old
+    // `DROP SCHEMA public CASCADE; CREATE SCHEMA public` reset.
+    if settings.backend == .postgres {
+        let schemaName = "test_\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "").prefix(12))"
+        settings = .postgres(
+            host: try #require(settings.postgresHost),
+            port: try #require(settings.postgresPort),
+            database: try #require(settings.postgresDatabase),
+            username: try #require(settings.postgresUsername),
+            password: try #require(settings.postgresPassword),
+            searchPath: [schemaName]
+        )
+        app.storage[TestPostgresSchemaKey.self] = schemaName
+    }
 
-    static let runnerCompatibility = TestDatabaseOptions(
-        includeObservability: true,
-        includeRunnerCompatibility: true
-    )
-}
-
-func configureTestDatabase(
-    _ app: Application,
-    options: TestDatabaseOptions = .default
-) async throws {
-    let settings = try testDatabaseSettingsFromEnvironment()
     try configureDatabase(app, settings: settings)
 
-    if settings.backend == .postgres {
-        try await resetPostgresTestSchema(app)
+    if let schemaName = app.storage[TestPostgresSchemaKey.self] {
+        try await createPostgresTestSchema(app, schemaName: schemaName)
     }
 
-    registerBaseTestMigrations(on: app)
-    if options.includeObservability {
-        registerObservabilityTestMigrations(on: app)
-    }
-    if options.includeRunnerCompatibility {
-        registerRunnerCompatibilityTestMigrations(on: app)
-    }
+    registerMigrations(on: app)
 
     try await app.autoMigrate()
 }
 
-private func resetPostgresTestSchema(_ app: Application) async throws {
-    guard let sql = app.db as? SQLDatabase else { return }
+struct TestPostgresSchemaKey: StorageKey {
+    typealias Value = String
+}
 
-    try await sql.raw("DROP SCHEMA IF EXISTS public CASCADE").run()
-    try await sql.raw("CREATE SCHEMA public").run()
+/// Quotes an identifier for safe interpolation into raw SQL.  Test schema
+/// names are generated from a UUID so they shouldn't contain `"` themselves,
+/// but escape anyway — defense in depth, no perf cost.
+private func quotedIdentifier(_ raw: String) -> String {
+    "\"" + raw.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+}
+
+private func createPostgresTestSchema(_ app: Application, schemaName: String) async throws {
+    guard let sql = app.db as? SQLDatabase else { return }
+    // CREATE SCHEMA is global and doesn't depend on search_path, so this
+    // runs cleanly even though the freshly-configured connection has its
+    // search_path pointing at the not-yet-existent schema.
+    let quoted = quotedIdentifier(schemaName)
+    try await sql.raw("CREATE SCHEMA \(unsafeRaw: quoted)").run()
+}
+
+func dropPostgresTestSchema(_ app: Application) async throws {
+    guard let schemaName = app.storage[TestPostgresSchemaKey.self] else { return }
+    guard let sql = app.db as? SQLDatabase else { return }
+    let quoted = quotedIdentifier(schemaName)
+    try await sql.raw("DROP SCHEMA IF EXISTS \(unsafeRaw: quoted) CASCADE").run()
 }
 
 func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
-    let backend = Environment.get("TEST_DATABASE_BACKEND")
+    let backend =
+        Environment.get("TEST_DATABASE_BACKEND")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
         .flatMap(DatabaseBackend.init(rawValue:))
         ?? .sqlite
@@ -110,34 +128,39 @@ func testDatabaseSettingsFromEnvironment() throws -> DatabaseSettings {
     }
 }
 
-private func registerBaseTestMigrations(on app: Application) {
-    app.migrations.add(CreateUsers())
-    app.migrations.add(CreateCourses())
-    app.migrations.add(CreateCourseEnrollments())
-    app.migrations.add(CreateTestSetups())
-    app.migrations.add(CreateSubmissions())
-    app.migrations.add(CreateResults())
-    app.migrations.add(CreateAssignments())
-    app.migrations.add(CreatePerformanceIndexes())
-    app.migrations.add(AddCourseSections())
-    app.migrations.add(AddCourseOpenEnrollment())
-    app.migrations.add(AddCourseEnrollmentMode())
-    app.migrations.add(AddSubmissionRetestedAt())
-    app.migrations.add(AddAssignmentDeadlineOverrideActive())
-    app.migrations.add(CreateClassAchievements())
+// MARK: - Course fixture helper
+
+private struct TestCourseIDsKey: StorageKey {
+    typealias Value = [String: UUID]
 }
 
-private func registerObservabilityTestMigrations(on app: Application) {
-    app.migrations.add(CreateSubmissionDiagnostics())
-    app.migrations.add(CreateRequestMetrics())
-    app.migrations.add(CreateJobExecutionMetrics())
-    app.migrations.add(AddJobExecutionStageTimings())
-    app.migrations.add(CreateRunnerSnapshots())
-    app.migrations.add(CreateRunnerProfiles())
-}
-
-private func registerRunnerCompatibilityTestMigrations(on app: Application) {
-    app.migrations.add(CreateAssignmentRequirements())
+extension Application {
+    /// Returns the UUID of a test `APICourse` with `code`, creating it on first
+    /// call.  Memoized per `Application` in `storage` so repeat callers don't
+    /// re-query the database.  Six test classes previously each carried a
+    /// private copy of this helper; consolidating here matches the same
+    /// drift-avoidance rationale as `makeTestApp` / `registerMigrations`.
+    func testCourseID(
+        code: String = "TEST101",
+        name: String = "Test Course",
+        enrollmentMode: CourseEnrollmentMode = .open
+    ) async throws -> UUID {
+        if let cached = storage[TestCourseIDsKey.self]?[code] {
+            return cached
+        }
+        let course: APICourse
+        if let existing = try await APICourse.query(on: db).filter(\.$code == code).first() {
+            course = existing
+        } else {
+            course = APICourse(code: code, name: name, enrollmentMode: enrollmentMode)
+            try await course.save(on: db)
+        }
+        let id = try course.requireID()
+        var cache = storage[TestCourseIDsKey.self] ?? [:]
+        cache[code] = id
+        storage[TestCourseIDsKey.self] = cache
+        return id
+    }
 }
 
 // MARK: - Async app lifecycle
@@ -150,6 +173,110 @@ func withApp(_ app: Application, _ body: (Application) async throws -> Void) asy
     } catch {
         try? await app.asyncShutdown()
         throw error
+    }
+}
+
+/// Creates a `.testing` Vapor Application and runs `setup`, returning the
+/// fully-configured app to the caller.  If `setup` throws, the partial
+/// Application is `asyncShutdown`-d before the error is rethrown.
+///
+/// This is the safe replacement for the bare pattern
+///
+///     let app = try await Application.make(.testing)
+///     /* setup that may throw */
+///     return app
+///
+/// which leaks a half-built `Application` on throw.  `Application.deinit`
+/// then calls the *synchronous* `shutdown()`, and on a testing app with
+/// NIO event loops + FluentKit pools that trips an assertion in
+/// `ServeCommand.deinit` → SIGILL on Linux.  That terminates the whole
+/// xctest process and kills every other concurrent test.
+func makeTestingApplication(
+    setup: (Application) async throws -> Void
+) async throws -> Application {
+    let app = try await Application.make(.testing)
+    do {
+        try await setup(app)
+        return app
+    } catch {
+        try? await app.asyncShutdown()
+        throw error
+    }
+}
+
+// MARK: - Standard test app
+
+private struct TestDataDirectoryKey: StorageKey {
+    typealias Value = String
+}
+
+extension Application {
+    /// Filesystem directory created by `makeTestApp` for this app's
+    /// results/testsetups/submissions trees. Nil if the app wasn't built
+    /// via `makeTestApp`.
+    var testDataDirectory: String? {
+        storage[TestDataDirectoryKey.self]
+    }
+
+    /// Shuts the app down and removes the temp directory created by
+    /// `makeTestApp`. Use in tearDown for any app obtained from
+    /// `makeTestApp`.
+    func tearDownTestApp() async throws {
+        let dir = storage[TestDataDirectoryKey.self]
+        try? await dropPostgresTestSchema(self)
+        try await asyncShutdown()
+        if let dir {
+            try? FileManager.default.removeItem(atPath: dir)
+        }
+    }
+}
+
+/// Builds a `.testing` Vapor application with the standard test wiring:
+/// per-app temp directories for results/testsetups/submissions,
+/// in-memory sessions, the production migration list, Leaf views, and
+/// the full route tree mounted.
+///
+/// Caller owns the lifecycle — pair with `app.tearDownTestApp()` in
+/// tearDown.  For unit tests that need a bare app (single-middleware
+/// isolation, custom auth modes, custom database configuration), use
+/// `Application.make(.testing)` directly.
+func makeTestApp(
+    prefix: String = "chickadee-test",
+    authMode: AuthMode = .local,
+    appConfig: AppConfig? = nil
+) async throws -> Application {
+    try await makeTestingApplication { app in
+        app.authMode = authMode
+        // Seed AppConfig so code that reads `app.appConfig.<sub>` (e.g.
+        // workerJobRoutes' public-base-URL resolver, OIDC redirect builder) sees
+        // sane defaults during integration tests. Callers can pass a custom
+        // `appConfig` to exercise specific config branches.
+        app.appConfig = appConfig ?? AppConfig.testDefaults(authMode: authMode)
+
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
+            .path
+        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
+        for dir in dirs {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        }
+        app.resultsDirectory = dirs[0]
+        app.testSetupsDirectory = dirs[1]
+        app.submissionsDirectory = dirs[2]
+        // Seed the worker-secret and local-runner-autostart paths into the
+        // per-test temp directory so admin/worker-management tests don't
+        // collide with each other or with the dev .worker-secret on disk.
+        app.workerSecretFilePath = tmpDir + ".worker-secret"
+        app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
+        app.storage[TestDataDirectoryKey.self] = tmpDir
+
+        app.sessions.use(.memory)
+        app.middleware.use(app.sessions.middleware)
+
+        try await configureTestDatabase(app)
+
+        configureLeaf(app)
+        try routes(app)
     }
 }
 
@@ -224,7 +351,7 @@ extension Application {
             beforeRequest: beforeRequest,
             afterResponse: { captured = $0 }
         )
-        return captured!
+        return try #require(captured)
     }
 }
 
@@ -247,6 +374,17 @@ func configureLeaf(_ app: Application) {
     }
     app.views.use(.leaf)
     app.leaf.tags["csrfFormField"] = CSRFFormFieldTag()
+    // rawJSON is safe to register in tests (pure string passthrough).
+    // csrfToken / appVersion are intentionally NOT registered here — they
+    // trigger CSRF.createToken / version lookups that assume a more complete
+    // middleware stack than the minimal test app.  Pages that embed
+    // `#csrfToken()` or `#appVersion()` will render those tokens verbatim;
+    // no existing test asserts on that markup.
+    app.leaf.tags["rawJSON"] = RawJSONTag()
+    // Safe in the minimal test app: reads only securityConfiguration, which
+    // falls back to `.default` (30 min) when unset.
+    app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
+    app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
 }
 
 // MARK: - CSRF token extraction
@@ -271,12 +409,15 @@ func csrfFields(
 ) async throws -> (token: String, cookie: String) {
     var outToken = ""
     var outCookie = cookie
-    try await app.asyncTest(.GET, path, beforeRequest: { req in
-        if !cookie.isEmpty { req.headers.add(name: .cookie, value: cookie) }
-    }, afterResponse: { res in
-        if let c = res.headers.first(name: .setCookie) { outCookie = c }
-        outToken = extractCSRFToken(from: res.body.string)
-    })
+    try await app.asyncTest(
+        .GET, path,
+        beforeRequest: { req in
+            if !cookie.isEmpty { req.headers.add(name: .cookie, value: cookie) }
+        },
+        afterResponse: { res in
+            if let c = res.headers.first(name: .setCookie) { outCookie = c }
+            outToken = extractCSRFToken(from: res.body.string)
+        })
     return (outToken, outCookie)
 }
 
@@ -303,7 +444,7 @@ func workerHMACHeaders(
         path,
         bodyHash,
         String(timestamp),
-        nonce
+        nonce,
     ].joined(separator: "\n")
 
     let key = SymmetricKey(data: Data(workerSecret.utf8))
@@ -312,10 +453,10 @@ func workerHMACHeaders(
 
     var headers = HTTPHeaders()
     headers.add(name: "X-Worker-Timestamp", value: String(timestamp))
-    headers.add(name: "X-Worker-Nonce",     value: nonce)
+    headers.add(name: "X-Worker-Nonce", value: nonce)
     headers.add(name: "X-Worker-Body-SHA256", value: bodyHash)
     headers.add(name: "X-Worker-Signature", value: signature)
-    headers.add(name: "X-Worker-Id",        value: workerID)
+    headers.add(name: "X-Worker-Id", value: workerID)
     headers.contentType = .json
     return headers
 }
@@ -349,15 +490,27 @@ func loginUser(
 
     // Step 2: POST /login with the CSRF token bound to that session.
     var authCookie = sessionCookie
-    try await app.asyncTest(.POST, "/login", beforeRequest: { req in
-        req.headers.add(name: .cookie, value: sessionCookie)
-        try req.content.encode(
-            ["username": username, "password": password, "_csrf": token],
-            as: .urlEncodedForm
-        )
-    }, afterResponse: { res in
-        // Use the new cookie if the session was rotated, otherwise keep the old one.
-        if let c = res.headers.first(name: .setCookie) { authCookie = c }
-    })
+    try await app.asyncTest(
+        .POST, "/login",
+        beforeRequest: { req in
+            req.headers.add(name: .cookie, value: sessionCookie)
+            try req.content.encode(
+                ["username": username, "password": password, "_csrf": token],
+                as: .urlEncodedForm
+            )
+        },
+        afterResponse: { res in
+            // Use the new cookie if the session was rotated, otherwise keep the old one.
+            if let c = res.headers.first(name: .setCookie) { authCookie = c }
+        })
     return authCookie
+}
+
+/// Wraps a runtime skip-or-fail condition as a throwable error.  Use
+/// from sync/async helpers where the test cannot proceed; the test
+/// will surface the message and fail.
+struct IssueRecorded: Error, CustomStringConvertible {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var description: String { message }
 }

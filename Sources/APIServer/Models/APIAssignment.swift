@@ -8,6 +8,7 @@
 //   - Due dates (isOpen flips to false automatically when due — future work)
 //   - Per-student overrides later (another join table)
 
+import Core
 import Fluent
 import Vapor
 
@@ -31,13 +32,40 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @Field(key: "title")
     var title: String
 
+    /// Stable, course-scoped vanity URL slug.
+    @Field(key: "slug")
+    var slug: String
+
     /// Optional deadline. nil = no deadline.
     @OptionalField(key: "due_at")
     var dueAt: Date?
 
-    /// false = published but closed (students can no longer submit).
-    @Field(key: "is_open")
-    var isOpen: Bool
+    /// Optional automatic open date. nil = open as soon as published.
+    /// When set and still in the future, students cannot access or submit
+    /// even if `isOpen` is true; the assignment becomes submittable on its
+    /// own once this time passes (gated live, no background job).
+    @OptionalField(key: "starts_at")
+    var startsAt: Date?
+
+    /// Student-visibility / submission state, stored as the raw
+    /// `AssignmentVisibility` string ("closed" | "preview" | "open"). Use the
+    /// typed `visibility` accessor. Replaces the historical `is_open` boolean.
+    @Field(key: "visibility")
+    var visibilityRaw: String
+
+    /// Typed accessor for `visibilityRaw`. Defaults to `.closed` (hidden from
+    /// students) if the stored value is unrecognised — the safe direction.
+    var visibility: AssignmentVisibility {
+        get { AssignmentVisibility(rawValue: visibilityRaw) ?? .closed }
+        set { visibilityRaw = newValue.rawValue }
+    }
+
+    /// Read-only derived convenience: true only in `.open`. Most student-facing
+    /// checks are two-way ("is it open for students?"), and `.preview` is
+    /// deliberately equivalent to `.closed` for students, so these keep working
+    /// unchanged. The stored source of truth is `visibility`; this never widens
+    /// it (it cannot represent `.preview`).
+    var isOpen: Bool { visibility == .open }
 
     /// True when an instructor manually re-opened a past-due assignment.
     /// Nil/false means normal deadline auto-close behavior applies.
@@ -61,6 +89,10 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "section_id")
     var sectionID: UUID?
 
+    /// D2L BrightSpace grade item (grade object) ID for grade sync (instructor-entered).
+    @OptionalField(key: "brightspace_grade_object_id")
+    var brightspaceGradeObjectID: String?
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID
@@ -73,28 +105,57 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     static func generatePublicID(length: Int = APIAssignment.publicIDLength) -> String {
         let alphabet = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         var rng = SystemRandomNumberGenerator()
-        return String((0..<length).map { _ in alphabet.randomElement(using: &rng)! })
+        return String((0..<length).compactMap { _ in alphabet.randomElement(using: &rng) })
     }
 
-    init(id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
-         dueAt: Date? = nil, isOpen: Bool = true,
-         deadlineOverrideActive: Bool = false,
-         sortOrder: Int? = nil,
-         validationStatus: String? = nil,
-         validationSubmissionID: String? = nil,
-         sectionID: UUID? = nil,
-         courseID: UUID) {
-        self.id          = id
-        self.publicID    = publicID
+    init(
+        id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String, title: String,
+        slug: String? = nil,
+        dueAt: Date? = nil, startsAt: Date? = nil, visibility: AssignmentVisibility = .open,
+        deadlineOverrideActive: Bool = false,
+        sortOrder: Int? = nil,
+        validationStatus: String? = nil,
+        validationSubmissionID: String? = nil,
+        sectionID: UUID? = nil,
+        courseID: UUID
+    ) {
+        self.id = id
+        self.publicID = publicID
         self.testSetupID = testSetupID
-        self.title       = title
-        self.dueAt       = dueAt
-        self.isOpen      = isOpen
+        self.title = title
+        self.slug = slug ?? VanityURLRoutes.slugify(title)
+        self.dueAt = dueAt
+        self.startsAt = startsAt
+        self.visibilityRaw = visibility.rawValue
         self.deadlineOverrideActive = deadlineOverrideActive
-        self.sortOrder   = sortOrder
+        self.sortOrder = sortOrder
         self.validationStatus = validationStatus
         self.validationSubmissionID = validationSubmissionID
-        self.sectionID   = sectionID
-        self.courseID    = courseID
+        self.sectionID = sectionID
+        self.courseID = courseID
+    }
+
+    /// Back-compat convenience: construct with the legacy `isOpen` boolean
+    /// (true ⇒ `.open`, false ⇒ `.closed`). `.preview` is only reachable via
+    /// `AssignmentAuthoringService.setVisibility`, never at construction, so a
+    /// boolean is sufficient here. `isOpen` is intentionally not defaulted so
+    /// this never collides with the visibility-based initializer above.
+    convenience init(
+        id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String,
+        title: String, slug: String? = nil,
+        dueAt: Date? = nil, startsAt: Date? = nil, isOpen: Bool,
+        deadlineOverrideActive: Bool = false,
+        sortOrder: Int? = nil,
+        validationStatus: String? = nil,
+        validationSubmissionID: String? = nil,
+        sectionID: UUID? = nil,
+        courseID: UUID
+    ) {
+        self.init(
+            id: id, publicID: publicID, testSetupID: testSetupID, title: title, slug: slug,
+            dueAt: dueAt, startsAt: startsAt, visibility: isOpen ? .open : .closed,
+            deadlineOverrideActive: deadlineOverrideActive, sortOrder: sortOrder,
+            validationStatus: validationStatus, validationSubmissionID: validationSubmissionID,
+            sectionID: sectionID, courseID: courseID)
     }
 }

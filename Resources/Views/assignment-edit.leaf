@@ -4,62 +4,76 @@
 #endexport
 #export("content"):
 #if(error):
-<div class="error-box" style="margin-bottom:1rem">
+<div class="error-box">
     <h2>Could not update assignment</h2>
-    <p class="card-meta" style="margin-top:.5rem">#(error)</p>
+    <p class="card-meta error-detail">#(error)</p>
 </div>
 #endif
 
 #if(notice):
-<div style="margin-bottom:1rem;padding:1rem;border:1px solid var(--green);border-radius:.5rem;background:var(--success-bg)">
-    <p style="margin:0;color:var(--green);font-weight:600">#(notice)</p>
+<div class="notice-banner">
+    <p>#(notice)</p>
 </div>
 #endif
 
-<form class="form" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
+<form class="form form--wide" method="post" action="/instructor/#(assignmentID)/edit/save" enctype="multipart/form-data" novalidate>
     #csrfFormField()
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem">
-        <div style="flex:1;min-width:16rem">
+    <div class="editor-titlebar">
+        <div class="editor-title-col">
             <!-- View mode header -->
-            <div id="assign-header-view" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <h1 style="margin:0">#(assignmentName)</h1>
-                <span class="card-meta" id="assign-due-display" style="font-size:.9rem"></span>
-                <button class="btn-link" id="assign-edit-toggle" type="button"
-                        title="Edit name and due date" aria-label="Edit assignment name and due date"
-                        style="display:inline-flex;align-items:center;padding:.1rem .25rem;color:var(--gray-500)">
+            <div id="assign-header-view" class="assign-header-view">
+                <h1>#(assignmentName)</h1>
+                <span class="card-meta fine-print" id="assign-due-display"></span>
+                <button class="btn-link icon-btn-text" id="assign-edit-toggle" type="button"
+                        title="Edit name and due date" aria-label="Edit assignment name and due date">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                 </button>
             </div>
 
             <!-- Inline edit mode (hidden by default; shown when pencil clicked) -->
-            <div id="assign-header-edit" style="display:none;padding:.75rem 1rem;border:1px solid var(--border,#ddd);border-radius:.5rem;background:var(--gray-50,#fafafa)">
-                <div style="display:flex;align-items:center;margin-bottom:.6rem">
-                    <strong style="font-size:.875rem">Name &amp; Due Date</strong>
-                    <button class="btn-link" id="assign-edit-cancel" type="button"
-                            aria-label="Cancel" title="Cancel"
-                            style="margin-left:auto;font-size:.85rem;padding:.1rem .25rem;color:var(--gray-500)">✕</button>
+            <div id="assign-header-edit" class="assign-header-edit" style="display:none">
+                <div class="assign-header-edit-top">
+                    <strong class="subhead-label">Name &amp; Due Date</strong>
+                    <button class="btn-link icon-btn-text" id="assign-edit-cancel" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
                 </div>
-                <label class="form-label" style="margin-bottom:.5rem">
+                <label class="form-label field-gap">
                     Assignment Name
                     <input class="form-input" type="text" name="assignmentName" id="assignmentNameInput" required
                            value="#(assignmentName)"
                            placeholder="e.g. Lab 2 - Linked Lists">
                 </label>
-                <label class="form-label" style="margin:0">
+                <label class="form-label field-gap">
+                    Open Date (optional)
+                    <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)">
+                </label>
+                <label class="form-label">
                     Due Date (optional)
                     <input class="form-input" type="datetime-local" name="dueAt" id="dueAt" value="#(dueAt)">
                 </label>
-                <div id="uw-date-warning" class="card-meta" style="display:none;color:#c05000;margin-top:.4rem;margin-bottom:0"></div>
+                <div id="uw-date-warning" class="card-meta date-warning" style="display:none"></div>
             </div>
         </div>
 
-        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;justify-content:flex-end">
-            <button class="btn btn-primary" type="submit">Save</button>
+        <div class="editor-actions">
+            <button class="btn btn-primary" type="submit"
+                    title="Save assignment metadata (name, due date, notebooks) and re-validate. Suite edits are saved live as you make them.">
+                Save &amp; Validate
+            </button>
             <a class="btn" href="/instructor">Cancel</a>
         </div>
     </div>
 
-    <div style="margin:0 0 1.25rem">
+    <div class="editor-block">
+        <div class="editor-block-head">
+            <h2>Files</h2>
+            <div class="toolbar toolbar--end">
+                <button class="btn action-btn" type="button" id="add-support-file-btn"
+                        title="Upload a data file (CSV, JSON, etc.) bundled with the assignment">+ Add Support File</button>
+                <input type="file" id="support-file-upload-input" hidden multiple>
+                <span id="support-file-upload-status" class="upload-status-inline"></span>
+            </div>
+        </div>
         <table class="results-table" id="notebook-files-table">
             <thead>
                 <tr>
@@ -91,154 +105,360 @@
                         #if(solutionNotebookEditURL):
                         <a class="btn action-btn" id="solution-notebook-edit-btn" href="#(solutionNotebookEditURL)">Edit</a>
                         #else:
-                        <span class="card-meta">—</span>
+                        <form method="post" action="/instructor/#(assignmentID)/create-solution" class="inline-form">
+                            #csrfFormField()
+                            <button class="btn action-btn" type="submit"
+                                    title="Copy the assignment notebook as a starting point for the solution">Create solution</button>
+                        </form>
                         #endif
                     </td>
                 </tr>
+                <!-- Support files: data fixtures (CSVs, JSON, etc.) bundled
+                     with the assignment.  Anything in the zip that isn't a
+                     test script and isn't a notebook lands here.  v0.4.114+. -->
+                #for(supportFile in supportFileRows):
+                <tr data-support-file="#(supportFile.name)">
+                    <td><strong>Support file</strong></td>
+                    <td>
+                        <a href="#(supportFile.url)"><code>#(supportFile.name)</code></a>
+                    </td>
+                    <td class="time">
+                        <button class="btn action-btn action-danger support-file-delete-btn" type="button"
+                                data-filename="#(supportFile.name)">Remove</button>
+                    </td>
+                </tr>
+                #endfor
             </tbody>
         </table>
     </div>
+</form>
 
-    <label class="visually-hidden" for="suite-files-input">Add test suite files</label>
-    <input class="form-input" id="suite-files-input" type="file" name="suiteFiles[]" multiple style="display:none">
-    <input type="hidden" id="suite-config-field" name="suiteConfig" value="">
-
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1.25rem 0 .75rem">
-        <h2 style="margin:0">Test Suite</h2>
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
-            <button class="btn action-btn" type="button" id="new-script-btn">New Script</button>
-            <button class="btn action-btn" type="button" id="add-test-btn">Upload</button>
+<!-- ── Global Inputs (Slice 1 of #461) ─────────────────────────────────
+     Assignment-scope named values, inlined at save time everywhere they
+     can be referenced: pattern-family case args (`$name`), prepended to
+     raw Python test scripts, and substituted into the starter notebook
+     wherever an instructor writes `{{name}}`.  Lives OUTSIDE the
+     multipart Save & Validate form because it persists via its own
+     PUT endpoint (`/instructor/:id/global-variables`) and re-renders
+     through `applyPatternFamilies`.
+-->
+<section id="global-inputs-block"
+         data-assignment-id="#(assignmentID)"
+         class="editor-block">
+    <div class="editor-block-head">
+        <h2>Global Inputs</h2>
+        <div class="toolbar toolbar--end">
+            <button type="button" class="btn action-btn" id="global-input-add">+ Add Input</button>
+            <span id="global-inputs-status" class="upload-status-inline"></span>
         </div>
     </div>
-    <table class="results-table" id="suite-config-table">
-        <thead>
-            <tr>
-                <th title="Student-facing name (edit to override the filename)">Name</th>
-                <th>Visibility</th>
-                <th title="Grade point weight for this test (default 1)">Pts</th>
-                <th class="time">Action</th>
-            </tr>
-        </thead>
-        <tbody id="suite-config-body">
-            #for(row in existingSuiteRows):
-            <tr data-source="existing" data-name="#(row.name)" data-display-name="#(row.displayNameOrEmpty)" data-is-test="#(row.isTest)" data-tier="#(row.tier)" data-order="#(row.order)" data-depends-on="#(row.dependsOnJSON)" data-points="#(row.points)">
-                <td><div class="suite-name-cell">
-                    <span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>
-                    <input type="text" class="form-input suite-display-name" value="#(row.displayNameOrStem)" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">
-                </div></td>
-                <td>
-                    <select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">
-                        <option value="support" #if(row.tier == "support"):selected#endif>support</option>
-                        <option value="public" #if(row.tier == "public"):selected#endif>public</option>
-                        <option value="secret" #if(row.tier == "secret"):selected#endif>secret</option>
-                        <option value="release" #if(row.tier == "release"):selected#endif>release</option>
-                    </select>
+    <table class="results-table" id="global-inputs-table">
+        <tbody class="global-inputs-body">
+            #for(v in globalVariableRows):
+            <tr class="global-input-row">
+                <td class="section-var-namecell">
+                    <span class="global-input-row-valid section-var-valid"></span>
+                    <input type="text" class="form-input global-input-name global-input-name-input"
+                           value="#(v.name)" placeholder="Input Name">
                 </td>
-                <td><input type="number" class="form-input suite-points" min="1" max="100" value="#(row.points)" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>
+                <td>
+                    <input type="text" class="form-input global-input-value global-input-value-input"
+                           value="#(v.valueJSON)"
+                           placeholder='12, "hello", [1, 2, 3], or = seed % 26'>
+                </td>
                 <td class="time">
-                    <div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">
-                        <button class="btn action-btn suite-edit-btn" type="button" data-filename="#(row.name)">Edit</button>
-                        <button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>
-                    </div>
+                    <button type="button" class="btn action-btn action-danger global-input-remove"
+                            title="Remove input" aria-label="Remove input">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/>
+                            <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                    </button>
                 </td>
             </tr>
             #endfor
         </tbody>
     </table>
-</form>
+</section>
 
-<!-- ── Script Editor Modal ──────────────────────────────────────────────── -->
-<div id="script-editor-overlay"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--surface);color:var(--gray-900);border-radius:.5rem;width:min(860px,96vw);max-height:90vh;
-                display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
-
-        <!-- Header -->
-        <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;
-                    border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div id="editor-title" style="font-weight:600;flex:1"></div>
-            <button class="btn-link" id="editor-close-btn" type="button"
-                    aria-label="Close editor" title="Close"
-                    style="font-size:1.1rem;color:var(--gray-500)">✕</button>
+#if(brightspaceSyncEnabled):
+<!-- ── BrightSpace grade sync ─────────────────────────── -->
+<div class="editor-block">
+    <details>
+        <summary class="bs-summary">BrightSpace Grade Sync</summary>
+        <div class="bs-body">
+            <form method="post" action="/instructor/#(assignmentID)/brightspace">
+                #csrfFormField()
+                <label class="form-label field-gap">
+                    BrightSpace Grade Item ID
+                    <input class="form-input input-block" type="text" name="gradeObjectID"
+                           value="#(brightspaceGradeObjectID)"
+                           placeholder="e.g. 78901">
+                </label>
+                <p class="card-meta bs-note">
+                    Enter the D2L grade item (grade object) ID for this assignment.
+                    Find it in BrightSpace → Grades → hover the column → Properties → Grade Object ID in the URL.
+                    Leave blank to disable sync for this assignment.
+                </p>
+                <button class="btn btn-primary" type="submit">Save grade item ID</button>
+            </form>
         </div>
+    </details>
+</div>
+#endif
 
-        <!-- New-file controls (hidden when editing existing) -->
-        <div id="new-file-controls" style="display:none;padding:.75rem 1rem .5rem;border-bottom:1px solid var(--border,#ddd);flex-shrink:0">
-            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
-                    Filename
-                    <input type="text" id="new-filename-input" class="form-input"
-                           placeholder="e.g. test_correctness.py"
-                           style="width:18rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Tier
-                    <select id="new-file-tier" class="form-input" style="padding:.25rem .5rem;font-size:.875rem">
-                        <option value="public">public</option>
-                        <option value="secret">secret</option>
-                        <option value="release">release</option>
-                        <option value="support">support (not graded)</option>
-                    </select>
-                </label>
-                <label style="font-size:.875rem;display:flex;align-items:center;gap:.4rem">
-                    Points
-                    <input type="number" id="new-file-points" class="form-input" min="1" max="100" value="1"
-                           style="width:4rem;padding:.25rem .5rem;font-size:.875rem">
-                </label>
-            </div>
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <span style="font-size:.8rem;color:var(--gray-500)">Template:</span>
-                <select id="template-select" class="form-input"
-                        style="padding:.25rem .5rem;font-size:.8rem;max-width:28rem">
-                    <optgroup label="Python">
-                        <option value="py:exists">Function Exists</option>
-                        <option value="py:correctness">Correctness (input/output pairs)</option>
-                        <option value="py:corner_cases">Corner Cases</option>
-                        <option value="py:exception">Exception Handling</option>
-                        <option value="py:type_check">Return Type Check</option>
-                        <option value="py:performance">Performance / Runtime</option>
-                        <option value="py:differential">Differential (reference solution)</option>
-                    </optgroup>
-                    <optgroup label="Shell">
-                        <option value="sh:always_pass">Always Pass (placeholder)</option>
-                        <option value="sh:file_exists">File Exists Check</option>
-                        <option value="sh:command_output">Command Output Check</option>
-                    </optgroup>
-                    <option value="blank">Blank</option>
-                </select>
-                <button class="btn" type="button" id="apply-template-btn" style="padding:.2rem .6rem;font-size:.8rem">Apply</button>
-            </div>
-        </div>
+<!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form
+     so its nested per-op <form> elements (Add Section, rename section,
+     delete section) parse correctly.  The browser strips nested <form>
+     tags, which is why v0.4.96's in-form `+ Section` JS button worked
+     but v0.4.98's server-rendered `+ Section` form would not.  Suite
+     edits go through dedicated endpoints (JS `PUT /suite` for items,
+     `POST /suite-sections/*` for section CRUD) — none of them rely on
+     the outer form. -->
 
-        <!-- CodeMirror editor mount -->
-        <div id="cm-editor-mount" style="flex:1;overflow:auto;min-height:240px;font-size:.875rem"></div>
+<label class="visually-hidden" for="suite-files-input">Add test suite files</label>
+<input class="form-input" id="suite-files-input" type="file" multiple hidden>
 
-        <!-- Footer -->
-        <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;
-                    border-top:1px solid var(--border,#ddd);flex-shrink:0">
-            <button class="btn btn-primary" id="editor-save-btn" type="button">Save</button>
-            <button class="btn" id="editor-cancel-btn" type="button">Cancel</button>
-            <span id="editor-status" style="font-size:.8rem;color:var(--gray-500);margin-left:.5rem"></span>
+<div class="suite-editor-section">
+    <div class="editor-block-head">
+        <h2>Test Suite</h2>
+        <div class="toolbar toolbar--end">
+            <!-- Add Section — form POST + full page reload.  Mirrors the
+                 dashboard pattern (Resources/Views/assignments.leaf:29-51)
+                 so section CRUD doesn't ride the fragile whole-state
+                 `PUT /suite` pipeline. -->
+            <details class="add-section-details popup-anchor" id="add-suite-section-details">
+                <summary class="btn action-btn summary-btn">+ Section</summary>
+                <div class="add-section-popup card suite-section-popup">
+                    <form method="post" action="/instructor/#(assignmentID)/suite-sections" class="form popup-form">
+                        #csrfFormField()
+                        <label class="form-label">
+                            Section name
+                            <input class="form-input editor-input" type="text" name="name" placeholder="e.g. Question 1" required>
+                        </label>
+                        <button class="btn btn-primary btn-compact" type="submit">Create section</button>
+                    </form>
+                </div>
+            </details>
+            <!-- Test authoring is per-section now (each section's inline
+                 "+ Add Test" opens the unified Test Editor modal).  The hidden
+                 Upload button is kept as the file-input trigger wired by
+                 suite-table.js (`#add-test-btn`). -->
+            <button class="btn action-btn" type="button" id="add-test-btn" hidden>Upload</button>
         </div>
     </div>
+
+    <!-- Server-rendered section shells (v0.4.98).  Each .section-block owns
+         its own <table> shell; `suite-table.js` populates the `<tbody
+         data-section-id>` rows from the JSON seed and keeps them in sync
+         via the debounced `PUT /suite`.  Section CRUD (create / rename /
+         delete / reorder) goes through dedicated endpoints — see
+         AssignmentRoutes+SuiteSections.swift. -->
+    <div id="suite-sections">
+    #for(sec in suiteSectionRows):
+        <div class="section-block" data-section-id="#(sec.sectionID)">
+        #if(!sec.isUngrouped):
+            <div class="section-header" draggable="true">
+                <span class="section-drag-handle" title="Drag to reorder section" aria-hidden="true">⋮⋮</span>
+
+                <!-- View mode -->
+                <div class="section-view">
+                    <strong>#(sec.name)</strong>
+                    <button class="btn-link section-edit-toggle icon-btn-text" type="button"
+                            title="Edit section" aria-label="Edit section">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </button>
+                    <!-- Inline section action buttons (v0.4.103).  Add Input
+                         lives inside section-view so it sits beside the
+                         name; the section-vars-form below just renders the
+                         tbody and keeps its action= for the auto-save POST. -->
+                    <span class="section-spacer"></span>
+                    <button type="button" class="btn action-btn btn-xs section-var-add"
+                            data-section-id="#(sec.sectionID)">+ Add Input</button>
+                    <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                            data-section-id="#(sec.sectionID)">+ Add Test</button>
+                </div>
+
+                <!-- Edit mode (hidden by default) -->
+                <div class="section-edit" style="display:none">
+                    <form class="section-rename-form" method="post"
+                          action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/rename">
+                        #csrfFormField()
+                        <input class="form-input section-name-input" type="text" name="name" value="#(sec.name)" required>
+                        <button class="btn btn-primary btn-tiny" type="submit">Save</button>
+                    </form>
+                    <button class="btn action-btn action-danger btn-tiny section-delete-btn" type="button"
+                            data-action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/delete"
+                            data-name="#(sec.name)">Delete</button>
+                    <button class="btn-link section-edit-cancel icon-btn-text" type="button"
+                            aria-label="Cancel" title="Cancel">✕</button>
+                </div>
+            </div>
+
+            <!-- Section variables (v0.4.100, restructured v0.4.101).
+                 Fixed Inputs table above the Tests table.  Every pattern
+                 family in the section can reference these via `$name`;
+                 family-level variables shadow same-named section vars.
+                 Auto-saves on change (debounced); explicit Save button
+                 removed — the whole list also flushes when the main
+                 Save & Validate button is clicked. -->
+            <form class="section-vars-form" method="post"
+                  action="/instructor/#(assignmentID)/suite-sections/#(sec.sectionID)/variables"
+                  data-section-id="#(sec.sectionID)">
+                <table class="results-table section-vars-table">
+                    <tbody class="section-vars-body">
+                        #for(v in sec.variables):
+                        <tr class="section-var-row">
+                            <td class="section-var-namecell">
+                                <span class="section-var-row-valid section-var-valid"></span>
+                                <input type="text" class="form-input section-var-name section-var-name-input" value="#(v.name)" placeholder="Input Name">
+                            </td>
+                            <td><input type="text" class="form-input section-var-value section-var-value-input" value="#(v.valueJSON)" placeholder="[{...}, {...}] or {&quot;k&quot;: 1}"></td>
+                            <td class="section-var-removecell"><button type="button" class="btn action-btn action-danger icon-btn-xs section-var-remove"
+                                        title="Remove input" aria-label="Remove input"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td>
+                        </tr>
+                        #endfor
+                    </tbody>
+                </table>
+            </form>
+        #else:
+            <!-- Ungrouped block has no header to host inline buttons —
+                 keep a slim per-section toolbar (no Upload, v0.4.103).
+                 The global Upload button at the page top still handles
+                 zip uploads. -->
+            <div class="section-create-toolbar"
+                 data-section-id="#(sec.sectionID)">
+                <button type="button" class="btn action-btn btn-xs section-add-test-btn"
+                        data-section-id="#(sec.sectionID)">+ Add Test</button>
+            </div>
+        #endif
+            <table class="results-table">
+                <tbody data-section-id="#(sec.sectionID)"></tbody>
+            </table>
+        </div>
+    #endfor
+    </div>
 </div>
-<style>
-.suite-drag-handle { cursor: grab; user-select: none; color: var(--meta); padding: 0 .3rem; }
-.suite-drag-handle:active { cursor: grabbing; }
-.suite-row-dragging { opacity: .35; }
-tr.drop-before td:first-child { border-top: 2px solid var(--blue,#0070c9); }
-tr.drop-after  td:first-child { border-bottom: 2px solid var(--blue,#0070c9); }
-tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
-.suite-name-cell { display: flex; align-items: center; gap: .4rem; }
-.suite-root-drop { height: 2rem; text-align: center; font-size: .75rem; color: var(--meta); cursor: default; }
-.suite-root-drop.drop-hover { background: var(--hover-bg, #f5f5f5); }
-.suite-child-indent { padding-left: 2rem; white-space: nowrap; }
-.suite-child-connector { color: var(--meta); margin-right: .25rem; font-size: .85em; }
-.suite-upload-error { font-size: .78rem; color: var(--red,#c0392b); margin-top: .2rem; }
-.suite-file-hint { font-size: .75rem; color: var(--meta); margin-top: .2rem; }
-.suite-file-hint a { color: inherit; }
-#suite-config-table td { vertical-align: top; }
-</style>
+
+<!-- ── Achievements ──────────────────────────────────────────────────
+     The single Achievements table (class goals, individual badges, and
+     the built-in awards) as first-class editable rows.  Persists via
+     PUT /instructor/:id/achievements (the unified `achievements` list).
+     Lives outside the Save form; rows are edited in the <dialog> below. -->
+<section id="achievements-block"
+         data-assignment-id="#(assignmentID)"
+         class="editor-block">
+    <div class="editor-block-head">
+        <h2>Achievements</h2>
+        <div class="toolbar toolbar--end">
+            <button type="button" class="btn action-btn" id="achievement-add">+ Add Achievement</button>
+            <button type="button" class="btn action-btn" id="achievements-save">Save Achievements</button>
+            <span id="achievements-status" class="upload-status-inline"></span>
+        </div>
+    </div>
+    <table class="results-table" id="achievements-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Kind</th>
+                <th>Earned when</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody class="achievements-body"></tbody>
+    </table>
+
+    <dialog id="achievement-modal">
+        <form method="dialog" id="achievement-modal-form">
+            <h3 id="achievement-modal-title" class="subhead-label">Edit Achievement</h3>
+            <label class="form-label field-gap">
+                Name
+                <input type="text" class="form-input" id="am-name" placeholder="e.g. 80% Mastery">
+            </label>
+            <label class="form-label field-gap">
+                Kind
+                <!-- Options render from AchievementKindPresentation (the one
+                     source of truth for kinds); achievements-editor.js reads
+                     each option's data-label for its table Kind column. -->
+                <select class="form-input" id="am-kind">
+                    #for(opt in achievementKindOptions):
+                    <option value="#(opt.value)" data-label="#(opt.label)">#(opt.label) — #(opt.detail)</option>
+                    #endfor
+                </select>
+            </label>
+            <label class="form-label field-gap am-field" data-field="thresholdPercent" style="display:none">
+                Grade ≥ (%)
+                <input type="number" class="form-input" id="am-thresholdPercent" min="0" max="100">
+            </label>
+            <label class="form-label field-gap am-field" data-field="classPercent" style="display:none">
+                Class share ≥ (%)
+                <input type="number" class="form-input" id="am-classPercent" min="0" max="100">
+            </label>
+            <label class="form-label field-gap am-field" data-field="points" style="display:none">
+                Bonus points
+                <input type="number" class="form-input" id="am-points" min="0">
+            </label>
+            <label class="form-label field-gap am-field" data-field="testName" style="display:none">
+                Test filename that must pass
+                <input type="text" class="form-input" id="am-testName" placeholder="secrettest_x.py">
+            </label>
+            <label class="form-label field-gap am-field" data-field="recordDimension" style="display:none">
+                Ranked by
+                <select class="form-input" id="am-recordDimension">
+                    <option value="firstToSubmit">First to submit</option>
+                    <option value="firstToSolve">First to 100%</option>
+                    <option value="fastest">Fastest run</option>
+                    <option value="shortest">Fewest attempts</option>
+                </select>
+            </label>
+            <label class="form-label field-gap am-field" data-field="attemptThreshold" style="display:none">
+                Attempts
+                <input type="number" class="form-input" id="am-attemptThreshold" min="1">
+            </label>
+            <label class="form-label field-gap am-field" data-field="timeThresholdMs" style="display:none">
+                Under (ms)
+                <input type="number" class="form-input" id="am-timeThresholdMs" min="1">
+            </label>
+            <label class="form-label field-gap am-field" data-field="jumpThresholdPercent" style="display:none">
+                Grade jump ≥ (points)
+                <input type="number" class="form-input" id="am-jumpThresholdPercent" min="1">
+            </label>
+            <div class="toolbar toolbar--end field-gap">
+                <button type="submit" class="btn btn-primary" value="done">Done</button>
+                <button type="submit" class="btn" value="cancel">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+</section>
+
+<!-- Seed data: current suite state (scripts + families in authored form)
+     and families as JSON.  rawJSON emits the string verbatim because the
+     default Leaf variable tag HTML-escapes quotes, which would break
+     JSON.parse in the client. -->
+<script id="suite-state-seed" type="application/json">#rawJSON(suiteStateJSON)</script>
+<script id="pattern-families-seed" type="application/json">#rawJSON(patternFamiliesJSON)</script>
+<script id="notebook-checks-seed" type="application/json">#rawJSON(notebookChecksJSON)</script>
+<script id="check-schema" type="application/json">#rawJSON(checkSchemaJSON)</script>
+
+<!-- ── Notebook Check editor ────────────────────────────────────────────
+     The notebook-check form is now a body renderer of the unified Test
+     Editor modal (test-editor-modal.js + test-renderer-check.js): the
+     shell owns the chrome + type picker, and the renderer builds its
+     per-kind fields from the #check-schema seed.  No standalone overlay. -->
+
+<!-- ── Pattern Family editor body ───────────────────────────────────────────
+     v0.4.238: the family form is a body renderer of the unified Test Editor
+     modal (pattern-family-editor.js registers window.ChickadeeTestRenderers
+     .family).  The shell owns the chrome (title / Save / close); this hidden
+     body is relocated into the shell panel by the renderer's mount(). -->
+#extend("_family-editor-body")
+
+<script src="/suite-list.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -292,607 +512,65 @@ tr.drop-adopt  { outline: 2px solid var(--blue,#0070c9); outline-offset: -2px; }
     // Initialise the due-date display on load
     refreshDueDisplay();
 
-    // ── Suite file management ─────────────────────────────────────────────────
-
-    var filesInput  = document.getElementById('suite-files-input');
-    var configField = document.getElementById('suite-config-field');
-    var body        = document.getElementById('suite-config-body');
-    if (!filesInput || !configField || !body) return;
-
-    // items: { name, source, index?, isTest, tier, dependsOn[], points, url? }
-    var items = [];
-    var dragName = null;
-    function isLikelyScript(name) {
-        var ext = (name || '').toLowerCase().split('.').pop();
-        return ['sh','bash','zsh','py','r','rb','pl','js','php'].indexOf(ext) >= 0;
-    }
-
-    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
-                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
-                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
-
-    function fileErrors(file) {
-        var errs = [];
-        var ext = (file.name || '').toLowerCase().split('.').pop();
-        if (BINARY_EXTS.indexOf(ext) >= 0) errs.push('Binary file — unlikely to work as a test script');
-        if (!file.name.includes('.'))       errs.push('No file extension');
-        if (file.size === 0)                errs.push('Empty file');
-        return errs;
-    }
-
-    function hasChildren(name) {
-        return items.some(function (it) { return it.dependsOn.indexOf(name) >= 0; });
-    }
-
-    function isChild(name) {
-        var it = items.find(function (i) { return i.name === name; });
-        return it ? it.dependsOn.length > 0 : false;
-    }
-
-    function visualOrder() {
-        var result = [];
-        var childMap = {};
-        items.forEach(function (it) {
-            if (it.dependsOn.length > 0) {
-                var p = it.dependsOn[0];
-                childMap[p] = childMap[p] || [];
-                childMap[p].push(it);
-            }
-        });
-        items.filter(function (it) { return it.dependsOn.length === 0; }).forEach(function (root) {
-            result.push({ item: root, depth: 0 });
-            (childMap[root.name] || []).forEach(function (child) {
-                result.push({ item: child, depth: 1 });
-            });
-        });
-        return result;
-    }
-
-    function tierOptions(selected) {
-        return ['support','public','secret','release'].map(function (t) {
-            return '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + t + '</option>';
-        }).join('');
-    }
-
-    function stemOf(filename) {
-        var dot = filename.lastIndexOf('.');
-        return dot > 0 ? filename.slice(0, dot) : filename;
-    }
-
-    function itemIsTest(item) {
-        return item.tier !== 'support';
-    }
-
-    function rowHTML(item, depth) {
-        var isNew    = item.source === 'upload';
-        var errs     = (item.errors && item.errors.length > 0) ? item.errors : [];
-        var errBadge = errs.length > 0
-            ? '<div class="suite-upload-error">\u26a0 ' + errs.map(escHtml).join(' · ') + '</div>'
-            : '';
-        var fileHint = isNew ? errBadge : '';
-        var indent    = depth > 0 ? ' class="suite-child-indent"' : '';
-        var connector = depth > 0 ? '<span class="suite-child-connector">&#9492;</span>' : '';
-        var pts       = item.points || 1;
-        // Default input value to display name if set, otherwise the filename stem
-        var nameVal   = escAttr(item.displayName || stemOf(item.name));
-        return '<tr data-name="' + escAttr(item.name) + '" data-source="' + escAttr(item.source) + '">'
-            + '<td' + indent + '><div class="suite-name-cell">'
-            +   '<span class="suite-drag-handle" draggable="true" title="Drag to reorder or adopt">⋮⋮</span>'
-            +   connector
-            +   '<input type="text" class="form-input suite-display-name" value="' + nameVal + '" style="width:12rem;padding:.25rem .5rem;font-size:.8rem">'
-            +   fileHint
-            + '</div></td>'
-            + '<td><select class="form-input suite-tier" style="padding:.25rem .5rem;font-size:.8rem">'
-            +   tierOptions(item.tier)
-            + '</select></td>'
-            + '<td><input type="number" class="form-input suite-points" min="1" max="100" value="' + pts + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-            + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
-            +   (isNew ? '' : '<button class="btn action-btn suite-edit-btn" type="button" data-filename="' + escAttr(item.name) + '">Edit</button>')
-            +   '<button class="btn action-btn action-danger suite-delete-btn" type="button">Delete</button>'
-            + '</div></td>'
-            + '</tr>';
-    }
-
-    function renderTree() {
-        var visual = visualOrder();
-        body.innerHTML = visual.map(function (v) { return rowHTML(v.item, v.depth); }).join('')
-            + '<tr class="suite-root-drop"><td colspan="4">&#9660; Drop here to remove dependency</td></tr>';
-    }
-
-    function syncConfig() {
-        var visual = visualOrder();
-        var config = visual.map(function (v, i) {
-            var item = v.item;
-            var row  = body.querySelector('tr[data-name="' + CSS.escape(item.name) + '"]');
-            if (row) {
-                var tierEl        = row.querySelector('.suite-tier');
-                var ptsEl         = row.querySelector('.suite-points');
-                var displayNameEl = row.querySelector('.suite-display-name');
-                if (tierEl)        item.tier        = tierEl.value;
-                item.isTest = itemIsTest(item);
-                if (ptsEl)         item.points      = Math.max(1, parseInt(ptsEl.value) || 1);
-                if (displayNameEl) {
-                    var val = displayNameEl.value.trim();
-                    // Null out when the instructor left the default (equals the filename stem)
-                    item.displayName = (val && val !== stemOf(item.name)) ? val : null;
-                }
-            }
-            var base = { source: item.source, isIncluded: true, isTest: item.isTest, tier: item.tier, order: i + 1, dependsOn: item.dependsOn, points: item.points || 1, displayName: item.displayName || null };
-            if (item.source === 'upload') { base.index = item.index; }
-            else                          { base.name  = item.name;  }
-            return base;
-        });
-        configField.value = JSON.stringify(config);
-    }
-
-    // Initialize items from server-rendered existing rows
-    function initFromDOM() {
-        items = [];
-        body.querySelectorAll('tr[data-source="existing"]').forEach(function (row) {
-            var name      = row.getAttribute('data-name') || '';
-            var isTest    = row.getAttribute('data-is-test') === 'true';
-            var tier      = row.getAttribute('data-tier') || 'public';
-            var url       = row.querySelector('a') ? row.querySelector('a').getAttribute('href') : '#';
-            var depsRaw   = row.getAttribute('data-depends-on') || '[]';
-            var dependsOn = [];
-            try { dependsOn = JSON.parse(depsRaw); } catch (_) {}
-            var points      = Math.max(1, parseInt(row.getAttribute('data-points')) || 1);
-            var displayName = row.getAttribute('data-display-name') || '';
-            items.push({ name: name, displayName: displayName, source: 'existing', isTest: isTest, tier: tier, dependsOn: dependsOn, points: points, url: url });
-        });
-        renderTree();
-        syncConfig();
-    }
-
-    // Add newly uploaded files to the items list (appended as root items)
-    function addUploadedFiles() {
-        var files = Array.from(filesInput.files || []);
-        // Remove previously added upload items (re-add fresh)
-        items = items.filter(function (it) { return it.source !== 'upload'; });
-        files.forEach(function (file, idx) {
-            var name = file.name;
-            items.push({
-                name:        name,
-                displayName: '',
-                source:      'upload',
-                index:       idx,
-                isTest:      isLikelyScript(name),
-                tier:        isLikelyScript(name) ? 'public' : 'support',
-                dependsOn:   [],
-                points:      1,
-                errors:      fileErrors(file)
-            });
-        });
-        renderTree();
-        syncConfig();
-    }
-
-    // --- Drag & Drop ---
-
-    body.addEventListener('dragstart', function (e) {
-        var handle = e.target.closest && e.target.closest('.suite-drag-handle');
-        if (!handle) { e.preventDefault(); return; }
-        var row = handle.closest('tr[data-name]');
-        if (!row) { e.preventDefault(); return; }
-        dragName = row.getAttribute('data-name');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragName);  // required by Safari
-        row.classList.add('suite-row-dragging');
-    });
-
-    body.addEventListener('dragend', function () {
-        dragName = null;
-        body.querySelectorAll('.suite-row-dragging').forEach(function (r) { r.classList.remove('suite-row-dragging'); });
-        clearDropIndicators();
-    });
-
-    function clearDropIndicators() {
-        body.querySelectorAll('.drop-before,.drop-after,.drop-adopt,.drop-hover').forEach(function (r) {
-            r.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
-        });
-    }
-
-    body.addEventListener('dragover', function (e) {
-        if (!dragName) return;
-        e.preventDefault();
-        clearDropIndicators();
-        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-        if (rootZone) { rootZone.classList.add('drop-hover'); return; }
-        var target = e.target.closest && e.target.closest('tr[data-name]');
-        if (!target) return;
-        var rect  = target.getBoundingClientRect();
-        var relY  = (e.clientY - rect.top) / rect.height;
-        var tName = target.getAttribute('data-name');
-        if (tName === dragName) return;
-        if (relY < 0.3) {
-            target.classList.add('drop-before');
-        } else if (relY > 0.7) {
-            target.classList.add('drop-after');
-        } else if (!isChild(tName) && !hasChildren(dragName)) {
-            target.classList.add('drop-adopt');
-        } else {
-            target.classList.add(relY < 0.5 ? 'drop-before' : 'drop-after');
-        }
-    });
-
-    body.addEventListener('dragleave', function (e) {
-        var row = e.target.closest && e.target.closest('tr');
-        if (row) row.classList.remove('drop-before','drop-after','drop-adopt','drop-hover');
-    });
-
-    body.addEventListener('drop', function (e) {
-        e.preventDefault();
-        if (!dragName) return;
-        var dragItem = items.find(function (it) { return it.name === dragName; });
-        if (!dragItem) return;
-
-        var rootZone = e.target.closest && e.target.closest('.suite-root-drop');
-        if (rootZone) {
-            dragItem.dependsOn = [];
-            renderTree(); syncConfig(); return;
-        }
-
-        var target = e.target.closest && e.target.closest('tr[data-name]');
-        if (!target) return;
-        var tName = target.getAttribute('data-name');
-        if (!tName || tName === dragName) return;
-
-        var rect = target.getBoundingClientRect();
-        var relY = (e.clientY - rect.top) / rect.height;
-
-        if (relY >= 0.3 && relY <= 0.7 && !isChild(tName) && !hasChildren(dragName)) {
-            dragItem.dependsOn = [tName];
-        } else {
-            dragItem.dependsOn = [];
-            items = items.filter(function (it) { return it.name !== dragName; });
-            var tIdx = items.findIndex(function (it) { return it.name === tName; });
-            items.splice(relY <= 0.5 ? tIdx : tIdx + 1, 0, dragItem);
-        }
-        renderTree(); syncConfig();
-    });
-
-    // Delete button
-    body.addEventListener('click', function (event) {
-        var btn = event.target.closest && event.target.closest('.suite-delete-btn');
-        if (!btn) return;
-        var row = btn.closest('tr[data-name]');
-        if (!row) return;
-        var name = row.getAttribute('data-name');
-        items = items.filter(function (it) { return it.name !== name; });
-        // Clear any dependsOn references to the deleted item
-        items.forEach(function (it) {
-            it.dependsOn = it.dependsOn.filter(function (d) { return d !== name; });
-        });
-        renderTree(); syncConfig();
-    });
-
-    body.addEventListener('change', function () { syncConfig(); });
-    body.addEventListener('input',  function () { syncConfig(); });
-
-    filesInput.addEventListener('change', addUploadedFiles);
-    if (form) {
-        form.addEventListener('submit', function () {
-            syncConfig();
-        });
-        form.addEventListener('chickadee:before-multipart-submit', function () {
-            syncConfig();
-        });
-    }
-
-    var addTestBtn = document.getElementById('add-test-btn');
-    if (addTestBtn) {
-        addTestBtn.addEventListener('click', function () {
-            filesInput.value = '';
-            filesInput.click();
-        });
-    }
-
-    function escHtml(v) {
-        return String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-    }
-    function escAttr(v) { return String(v).replaceAll('"','&quot;'); }
-
-    initFromDOM();
-
-    // Reload when restored from bfcache (browser back/forward) so the page
-    // always reflects the server's current state rather than a cached snapshot.
-    window.addEventListener('pageshow', function (e) {
-        if (e.persisted) window.location.reload();
-    });
-
 })();
 </script>
-<style>
-/* CodeMirror 6 host element */
-#cm-editor-mount .cm-editor { height: 100%; min-height: 240px; }
-#cm-editor-mount .cm-scroller { overflow: auto; }
-/* Dark-mode overrides for the CodeMirror editor */
-@media (prefers-color-scheme: dark) {
-    #cm-editor-mount .cm-editor {
-        background: var(--gray-100);
-    }
-    #cm-editor-mount .cm-gutters {
-        background: var(--gray-200);
-        border-color: var(--gray-200);
-        color: var(--gray-500);
-    }
-    #cm-editor-mount .cm-content {
-        color: var(--gray-900);
-        caret-color: var(--gray-900);
-    }
-    #cm-editor-mount .cm-activeLine {
-        background: var(--gray-200);
-    }
-    #cm-editor-mount .cm-selectionBackground,
-    #cm-editor-mount ::selection {
-        background: var(--hover-bg) !important;
-    }
-    #cm-editor-mount .cm-cursor {
-        border-left-color: var(--gray-900);
-    }
-    /* Modal inputs & selects */
-    #script-editor-overlay input,
-    #script-editor-overlay select {
-        background: var(--gray-100);
-        color: var(--gray-900);
-        border-color: var(--gray-200);
-    }
-}
-</style>
-<script type="module">
-// ── CodeMirror 6 script editor ─────────────────────────────────────────────
-import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         drawSelection, dropCursor } from 'https://esm.sh/@codemirror/view@6';
-import { EditorState, Compartment }  from 'https://esm.sh/@codemirror/state@6';
-import { defaultKeymap, history, historyKeymap, indentWithTab }
-                                      from 'https://esm.sh/@codemirror/commands@6';
-import { syntaxHighlighting, defaultHighlightStyle }
-                                      from 'https://esm.sh/@codemirror/language@6';
-import { python }                     from 'https://esm.sh/@codemirror/lang-python@6';
-import { StreamLanguage }             from 'https://esm.sh/@codemirror/language@6';
-import { shell }                      from 'https://esm.sh/@codemirror/legacy-modes@6/mode/shell';
-import { r }                          from 'https://esm.sh/@codemirror/legacy-modes@6/mode/r';
 
-const langComp = new Compartment();
-
-function langExtensionFor(filename) {
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    if (ext === 'py') return python();
-    if (ext === 'r')  return StreamLanguage.define(r);
-    return StreamLanguage.define(shell);
-}
-
-function makeEditorState(content, filename) {
-    return EditorState.create({
-        doc: content,
-        extensions: [
-            lineNumbers(),
-            highlightActiveLine(),
-            drawSelection(),
-            dropCursor(),
-            history(),
-            syntaxHighlighting(defaultHighlightStyle),
-            keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-            langComp.of(langExtensionFor(filename)),
-            EditorView.lineWrapping,
-            EditorView.theme({ '&': { height: '100%' } })
-        ]
-    });
-}
-
-const overlay    = document.getElementById('script-editor-overlay');
-const mount      = document.getElementById('cm-editor-mount');
-const titleEl    = document.getElementById('editor-title');
-const statusEl   = document.getElementById('editor-status');
-const saveBtn    = document.getElementById('editor-save-btn');
-const cancelBtn  = document.getElementById('editor-cancel-btn');
-const closeBtn   = document.getElementById('editor-close-btn');
-const newControls = document.getElementById('new-file-controls');
-const newNameInput = document.getElementById('new-filename-input');
-const tierSelect  = document.getElementById('new-file-tier');
-const pointsInput = document.getElementById('new-file-points');
-const templateSel = document.getElementById('template-select');
-const applyTplBtn = document.getElementById('apply-template-btn');
-const newScriptBtn = document.getElementById('new-script-btn');
-const assignmentID = '#(assignmentID)';
-const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-
-let view = null;
-let currentFilename = null;  // null when creating a new file
-let isCreating = false;
-
-function initView(content, filename) {
-    if (view) { view.destroy(); view = null; }
-    try {
-        view = new EditorView({ state: makeEditorState(content, filename), parent: mount });
-    } catch (e) {
-        statusEl.textContent = 'Editor failed to load: ' + e.message;
-        console.error('EditorView init error:', e);
-    }
-}
-
-function openEditor(filename, content) {
-    currentFilename = filename;
-    isCreating = false;
-    titleEl.textContent = 'Edit: ' + filename;
-    newControls.style.display = 'none';
-    statusEl.textContent = '';
-    overlay.style.display = 'flex';
-    initView(content, filename);
-    if (view) view.focus();
-}
-
-function openCreator() {
-    currentFilename = null;
-    isCreating = true;
-    titleEl.textContent = 'New Test Script';
-    newControls.style.display = '';
-    newNameInput.value = '';
-    statusEl.textContent = '';
-    overlay.style.display = 'flex';
-    initView('', '');
-    newNameInput.focus();
-}
-
-function closeEditor() {
-    overlay.style.display = 'none';
-    if (view) { view.destroy(); view = null; }
-}
-
-// ── Edit buttons on existing rows ─────────────────────────────────────────
-
-document.addEventListener('click', function(e) {
-    const btn = e.target.closest && e.target.closest('.suite-edit-btn');
-    if (!btn) return;
-    const filename = btn.getAttribute('data-filename');
-    if (!filename) return;
-    statusEl.textContent = 'Loading…';
-    overlay.style.display = 'flex';
-    fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(filename), {
-        headers: { 'x-csrf-token': csrfToken }
-    })
-        .then(r => r.ok ? r.text() : r.text().then(t => Promise.reject(r.status + ' ' + t)))
-        .then(content => openEditor(filename, content))
-        .catch(err => { statusEl.textContent = 'Error: ' + err; console.error('getScript error:', err); });
-});
-
-// ── New Script button ──────────────────────────────────────────────────────
-
-if (newScriptBtn) newScriptBtn.addEventListener('click', openCreator);
-
-// ── Template apply ─────────────────────────────────────────────────────────
-
-// Pre-loaded templates fetched from the server (populated on first template apply).
-let templateCache = null;
-
-function fetchTemplates() {
-    if (templateCache) return Promise.resolve(templateCache);
-    // Fetch generic templates (no function-specific personalisation) by scanning an empty notebook.
-    return fetch('/instructor/scan-notebook', {
-        method: 'POST',
-        body: JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }),
-        headers: {
-            'Content-Type': 'application/json',
-            'x-csrf-token': csrfToken
-        }
-    })
-    .then(r => r.ok ? r.json() : [])
-    .then(functions => {
-        // If the notebook has no functions the endpoint returns [].
-        // Fall back to server-generated generic templates via the template-info endpoint.
-        templateCache = null;
-        return null;
-    });
-}
-
-// Inline template content matching server templates (avoids a round-trip for the
-// generic "no function name" versions).  These are identical to what the server
-// returns for pythonTestScript / shellTestScript with default args.
-const INLINE_TEMPLATES = {
-    'py:exists':       '# Test: my_function is defined and callable\nrequire_function("my_function")\npassed("my_function is defined and callable")\n',
-    'py:correctness':  '# Test: my_function returns the correct output for known inputs\ntest_cases = [\n    ((), None),  # TODO: replace None with expected output\n]\nfailures = []\nfor args, expected in test_cases:\n    result = student_module.my_function(*args)\n    if result != expected:\n        failures.append(f"  my_function{args} = {result!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_cases)} case(s) passed")\n',
-    'py:corner_cases': '# Test: my_function handles edge / corner cases\ncorner_cases = [\n    ((None,),   None),\n    ((0,),      None),\n    ((-1,),     None),\n    (([],),     None),\n    (("",),     None),\n]\nfailures = []\nfor args, expected in corner_cases:\n    try:\n        result = student_module.my_function(*args)\n        if expected is not None and result != expected:\n            failures.append(f"  my_function{args} = {result!r}, expected {expected!r}")\n    except Exception as e:\n        failures.append(f"  my_function{args} raised {type(e).__name__}: {e}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(corner_cases)} corner case(s) handled")\n',
-    'py:exception':    '# Test: my_function raises the expected exception\nexpected_exc = ValueError  # TODO: change to expected exception type\ntry:\n    student_module.my_function()  # TODO: add arguments\n    failed(f"Expected {expected_exc.__name__} but no exception was raised")\nexcept expected_exc:\n    passed(f"Correctly raises {expected_exc.__name__}")\nexcept Exception as e:\n    failed(f"Wrong exception: expected {expected_exc.__name__}, got {type(e).__name__}: {e}")\n',
-    'py:type_check':   '# Test: my_function returns the expected type\nexpected_type = list  # TODO: change to the expected return type\nresult = student_module.my_function()  # TODO: add arguments\nif not isinstance(result, expected_type):\n    failed(f"my_function() returned {type(result).__name__}, expected {expected_type.__name__}")\nelse:\n    passed(f"my_function() returned {type(result).__name__} as expected")\n',
-    'py:performance':  '# Test: my_function completes within the time limit\nimport time\ntime_limit_ms = 100  # TODO: adjust\nstart = time.perf_counter()\nstudent_module.my_function()  # TODO: add arguments\nelapsed_ms = (time.perf_counter() - start) * 1000\nif elapsed_ms < time_limit_ms:\n    passed(f"Completed in {elapsed_ms:.1f} ms (limit: {time_limit_ms} ms)")\nelse:\n    failed(f"Too slow: {elapsed_ms:.1f} ms (limit: {time_limit_ms} ms)")\n',
-    'py:differential': '# Test: my_function matches a reference implementation\ndef _reference_my_function(*args, **kwargs):\n    pass  # TODO: implement reference solution\ntest_inputs = []\nfailures = []\nfor args in test_inputs:\n    args = args if isinstance(args, tuple) else (args,)\n    expected = _reference_my_function(*args)\n    actual   = student_module.my_function(*args)\n    if actual != expected:\n        failures.append(f"  my_function{args} = {actual!r}, expected {expected!r}")\nif failures:\n    failed("\\n".join(failures))\nelse:\n    passed(f"All {len(test_inputs)} case(s) match reference")\n',
-    'sh:always_pass':    '#!/bin/sh\n# TODO: replace this placeholder with a real test\necho "passed"\nexit 0\n',
-    'sh:file_exists':    '#!/bin/sh\nFILE="solution.py"  # TODO: change to the expected filename\nif [ -f "$FILE" ]; then\n    echo "File $FILE found"\n    exit 0\nelse\n    echo "File $FILE not found" >&2\n    exit 1\nfi\n',
-    'sh:command_output': '#!/bin/sh\nEXPECTED="expected output"  # TODO: replace\nACTUAL=$(python3 -c "import solution; print(solution.main())" 2>&1)\nif [ "$ACTUAL" = "$EXPECTED" ]; then\n    echo "Output matches"\n    exit 0\nelse\n    printf \'Expected: %s\\nActual:   %s\\n\' "$EXPECTED" "$ACTUAL" >&2\n    exit 1\nfi\n',
-    'blank': ''
-};
-
-// Auto-update filename extension when template language changes.
-templateSel.addEventListener('change', function() {
-    const [lang] = (templateSel.value || '').split(':');
-    const name = (newNameInput.value || '').trim();
-    if (!name) return;
-    const baseStem = name.replace(/\.[^.]*$/, '');
-    if (lang === 'py') newNameInput.value = baseStem + '.py';
-    if (lang === 'sh') newNameInput.value = baseStem + '.sh';
-});
-
-applyTplBtn.addEventListener('click', function() {
-    const tpl = INLINE_TEMPLATES[templateSel.value];
-    if (tpl === undefined) return;
-    // Auto-fill filename if empty.
-    if (!newNameInput.value.trim()) {
-        const [lang] = (templateSel.value || '').split(':');
-        const ext = lang === 'py' ? 'py' : lang === 'sh' ? 'sh' : 'py';
-        newNameInput.value = 'test_new.' + ext;
-    }
-    if (view) {
-        view.dispatch({
-            changes: { from: 0, to: view.state.doc.length, insert: tpl }
-        });
-        // Re-apply language for new filename.
-        view.dispatch({
-            effects: langComp.reconfigure(langExtensionFor(newNameInput.value))
-        });
-        view.focus();
-    }
-});
-
-// ── Save ───────────────────────────────────────────────────────────────────
-
-saveBtn.addEventListener('click', function() {
-    if (!view) { statusEl.textContent = 'Editor not ready — try closing and reopening.'; return; }
-    const content = view.state.doc.toString();
-
-    if (isCreating) {
-        const filename = (newNameInput.value || '').trim();
-        if (!filename) { statusEl.textContent = 'Enter a filename first.'; return; }
-        const tier   = tierSelect ? tierSelect.value : 'public';
-        const points = Math.max(1, parseInt(pointsInput ? pointsInput.value : '1') || 1);
-        const isTest = tier !== 'support';
-        statusEl.textContent = 'Saving…';
-        saveBtn.disabled = true;
-        fetch('/instructor/' + assignmentID + '/scripts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ filename, content, tier, points, isTest })
-        })
-        .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
-        .then(data => {
-            statusEl.textContent = 'Saved.';
-            saveBtn.disabled = false;
-            // Reload the page so the new file appears in the table.
-            window.location.reload();
-        })
-        .catch(err => {
-            statusEl.textContent = 'Error: ' + err;
-            saveBtn.disabled = false;
-        });
-    } else {
-        if (!currentFilename) return;
-        statusEl.textContent = 'Saving…';
-        saveBtn.disabled = true;
-        fetch('/instructor/' + assignmentID + '/scripts/' + encodeURIComponent(currentFilename), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ content })
-        })
-        .then(r => {
-            if (r.ok || r.status === 204) {
-                closeEditor();
-            } else {
-                return r.text().then(t => Promise.reject(t));
+<!-- ── Unified Suite Table ─────────────────────────────────────────────────
+     Factored out to Public/suite-table.js in v0.4.91 so the Create and Edit
+     pages share one implementation of drag/drop reorder, dep-adopt, inline
+     edits, and PUT /suite persistence.  Table markup stays in the Leaf
+     template; this block only wires the module to the page's URLs. -->
+<script src="/suite-table.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var assignmentID = '#(assignmentID)';
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var suiteTable = window.initSuiteTable({
+        assignmentID: assignmentID,
+        csrfToken: csrfToken,
+        formSelector: 'form.form',
+        urls: {
+            putSuite: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/suite';
+            },
+            deleteScript: function (name) {
+                return '/instructor/' + encodeURIComponent(assignmentID)
+                     + '/scripts/' + encodeURIComponent(name);
+            },
+            uploadScript: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts';
             }
-        })
-        .catch(err => { statusEl.textContent = 'Error: ' + err; })
-        .finally(() => { saveBtn.disabled = false; });
-    }
-});
+        }
+    });
+    // Window globals the Test Editor renderers (family / check / script) call
+    // to persist through the single PUT /suite write path.
+    window.chickadeeAddExistingSuiteScript = suiteTable.addExistingScript;
+    window.chickadeeSaveFamiliesViaSuite   = suiteTable.saveFamiliesViaSuite;
+    window.chickadeeSaveChecksViaSuite     = suiteTable.saveChecksViaSuite;
+    window.chickadeeSaveScriptViaSuite     = suiteTable.saveScriptViaSuite;
+    window.chickadeeGetSuiteItems          = suiteTable.getItems;
+})();
+</script>
 
-// ── Close ──────────────────────────────────────────────────────────────────
+<!-- Section inputs editor — extracted to Public/section-inputs-editor.js
+     in Slice 4 (v0.4.160) so the same module handles both literal
+     `+ Add Input` rows AND `=`-prefixed per-student expression rows.
+     The per-section create toolbar (+ Add Script, + Add Family, etc.)
+     stays inline below because it's not section-input logic. -->
+<script src="/section-inputs-editor.js?v=#appVersion()"></script>
+<script>
+(function () {
+    'use strict';
 
-[cancelBtn, closeBtn].forEach(btn => btn && btn.addEventListener('click', closeEditor));
-overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) closeEditor();
-});
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
-});
+    // ── Section inputs JS extracted to Public/section-inputs-editor.js
+    //    (loaded above).
+    //
+    // Per-section "+ Add Test" buttons (`.section-add-test-btn`) are upgraded
+    // in place by the unified Test Editor modal (test-editor-modal.js) into a
+    // <details> dropdown of the test-type catalog. Picking a type stashes
+    // `window.__chickadeeTargetSection` and opens the modal already in that
+    // type (no second picker inside the modal).
+})();
 </script>
 <script>
 function checkUWDates(dateTimeValue, warningEl) {
@@ -920,5 +598,217 @@ function checkUWDates(dateTimeValue, warningEl) {
     }).catch(function () { /* silently ignore */ });
 }
 </script>
+
+<!-- ── Pattern Family Editor JS ─────────────────────────────────────────────
+     Factored out to Public/pattern-family-editor.js in v0.4.90 — this block
+     just wires the module to the page's assignmentID and CSRF token.  The
+     same module powers the Create Assignment page; the only difference is
+     which URLs get passed in. -->
+<script src="/pattern-family-editor.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var assignmentID = '#(assignmentID)';
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var seed = document.getElementById('pattern-families-seed');
+    var initialFamilies = [];
+    if (seed) {
+        try { initialFamilies = JSON.parse(seed.textContent || '[]') || []; }
+        catch (e) { initialFamilies = []; }
+    }
+    window.chickadeePatternFamilyEditor = window.initPatternFamilyEditor({
+        assignmentID: assignmentID,
+        csrfToken: csrfToken,
+        initialFamilies: initialFamilies,
+        urls: {
+            solutionNotebook: function () {
+                return '/instructor/' + encodeURIComponent(assignmentID) + '/files/solution';
+            },
+            scanNotebook: function () { return '/instructor/scan-notebook'; }
+        }
+    });
+})();
+</script>
+
+<script src="/global-inputs-editor.js?v=#appVersion()"></script>
+<script src="/achievements-editor.js?v=#appVersion()"></script>
+
+<!-- ── Unified Test Editor modal (shell + renderers) ────────────────────────
+     The "+ Add Test" button opens one modal; picking a type morphs the body
+     in place.  The notebook-check form is a body renderer
+     (test-renderer-check.js, fed by the #check-schema seed); the family and
+     script types delegate to their existing overlays during the staged
+     rollout (the shell shows a "Continue →" button for those).  Replaces the
+     standalone notebook-check editor + the add-test dispatcher.  Renderer
+     scripts load before the shell so they self-register first. -->
+<script>
+// Per-page config for the script renderer (test-renderer-script.js), read
+// lazily by the renderer.  Edit page: published-assignment script endpoints.
+(function () {
+    var assignmentID = '#(assignmentID)';
+    window.ChickadeeScriptRendererConfig = {
+        csrfToken: (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+        scriptContentURL: function (name) {
+            return '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(name);
+        },
+        uploadFilesInputID: 'suite-files-input'
+    };
+})();
+</script>
+<script src="/test-renderer-check.js?v=#appVersion()"></script>
+<script type="module" src="/test-renderer-script.js?v=#appVersion()"></script>
+<script src="/test-editor-modal.js?v=#appVersion()"></script>
+<script>
+(function () {
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    window.initTestEditorModal({ csrfToken: csrfToken });
+
+    var modal = window.__chickadeeTestEditorModal;
+
+    function checkSpec(id) {
+        if (typeof window.chickadeeGetSuiteItems !== 'function') return null;
+        var m = window.chickadeeGetSuiteItems().find(function (i) {
+            return i.kind === 'check' && i.check && i.check.id === id;
+        });
+        return m ? m.check : null;
+    }
+    function scriptHint(name) {
+        if (typeof window.chickadeeGetSuiteItems !== 'function') return '';
+        var m = window.chickadeeGetSuiteItems().find(function (i) {
+            return i.kind === 'script' && i.script === name;
+        });
+        return (m && m.hint) || '';
+    }
+
+    document.body.addEventListener('click', function (ev) {
+        var t = ev.target;
+        // Edit an existing notebook check → shell, pre-populated.
+        var chk = t.closest && t.closest('[data-edit-check-id]');
+        if (chk) {
+            ev.preventDefault();
+            var item = checkSpec(chk.getAttribute('data-edit-check-id'));
+            if (item) modal.open({ editing: { mechanism: 'check', id: item.id, item: item } });
+            return;
+        }
+        // Edit an existing saved script → shell (renderer fetches the body).
+        var se = t.closest && t.closest('.suite-edit-btn');
+        if (se) {
+            var name = se.getAttribute('data-filename');
+            if (name) modal.open({ editing: { mechanism: 'script', id: name, item: { script: name, hint: scriptHint(name) } } });
+            return;
+        }
+        // Edit a queued-but-unsaved upload → shell (client-side body edit).
+        var ue = t.closest && t.closest('.suite-edit-upload-btn');
+        if (ue) {
+            var uname = ue.getAttribute('data-name');
+            var input = document.getElementById('suite-files-input');
+            var file = uname && input ? Array.from(input.files || []).find(function (f) { return f.name === uname; }) : null;
+            if (file) {
+                file.text().then(function (content) {
+                    modal.open({ editing: { mechanism: 'script', item: { uploadEdit: true, name: uname, content: content } } });
+                });
+            }
+        }
+    });
+})();
+</script>
+
+<!-- ── Support file upload + delete ────────────────────────────────────────
+     The top file table lists `supportFileRows`; this wires the
+     "+ Upload file" button (FileReader → POST /scripts with tier=support
+     and isTest=false) and per-row Remove buttons (DELETE /scripts/:name).
+     Reload on success to pick up the rendered changes.  -->
+<script>
+(function () {
+    var assignmentID = '#(assignmentID)';
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    var addBtn  = document.getElementById('add-support-file-btn');
+    var input   = document.getElementById('support-file-upload-input');
+    var status  = document.getElementById('support-file-upload-status');
+
+    function setStatus(msg, isError) {
+        if (!status) return;
+        status.textContent = msg;
+        status.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
+    }
+
+    function readAsText(file) {
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function () { resolve(reader.result); };
+            reader.onerror = function () { reject(new Error('Could not read ' + file.name)); };
+            reader.readAsText(file);
+        });
+    }
+
+    async function uploadSupportFile(file) {
+        var content = await readAsText(file);
+        var resp = await fetch('/instructor/' + encodeURIComponent(assignmentID) + '/scripts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-csrf-token': csrfToken
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                filename: file.name,
+                content: content,
+                tier: 'support',
+                isTest: false
+            })
+        });
+        if (!resp.ok) {
+            var errText = await resp.text();
+            throw new Error(resp.status + ': ' + errText);
+        }
+    }
+
+    if (addBtn && input) {
+        addBtn.addEventListener('click', function () { input.click(); });
+        input.addEventListener('change', async function () {
+            if (!input.files || input.files.length === 0) return;
+            setStatus('Uploading…', false);
+            try {
+                for (var i = 0; i < input.files.length; i++) {
+                    await uploadSupportFile(input.files[i]);
+                }
+                setStatus('Uploaded.', false);
+                window.location.reload();
+            } catch (e) {
+                setStatus('Upload failed — ' + e.message, true);
+            } finally {
+                input.value = '';
+            }
+        });
+    }
+
+    document.body.addEventListener('click', async function (ev) {
+        var btn = ev.target.closest('.support-file-delete-btn');
+        if (!btn) return;
+        var filename = btn.getAttribute('data-filename');
+        if (!filename) return;
+        if (!confirm('Remove support file "' + filename + '"? Students who already use it will fail until you re-add it.')) return;
+        try {
+            var resp = await fetch(
+                '/instructor/' + encodeURIComponent(assignmentID) + '/scripts/' + encodeURIComponent(filename),
+                {
+                    method: 'DELETE',
+                    headers: { 'x-csrf-token': csrfToken },
+                    credentials: 'same-origin'
+                }
+            );
+            if (!resp.ok) {
+                var errText = await resp.text();
+                alert('Remove failed: ' + resp.status + ' ' + errText);
+                return;
+            }
+            window.location.reload();
+        } catch (e) {
+            alert('Remove failed: ' + e.message);
+        }
+    });
+})();
+</script>
+
 #endexport
 #endextend

@@ -14,16 +14,24 @@ needed, but the architecture has been redesigned from scratch.
 
 ## Architecture Overview
 
-Three Swift targets share a clean dependency boundary:
+Swift targets share a clean dependency boundary:
 
-- **`chickadee-server`** — Vapor app. REST API + Leaf web UI. Handles auth,
-  assignment management, submission intake, result storage, and the JupyterLite
-  notebook workflow.
-- **`chickadee-runner`** — Daemon process. Polls for jobs, runs shell-script
-  test suites in subprocesses (sandboxed or unsandboxed), reports structured
-  results back to the server.
-- **`Core`** — Shared models and types. No Vapor dependency. Both targets
-  depend on this.
+- **`APIServer` / `chickadee-server`** — Vapor app. REST API + Leaf web UI.
+  Handles auth, assignment management, submission intake, result storage, the
+  JupyterLite notebook workflow, and the MCP server (see below).
+- **`Worker` / `chickadee-runner`** — Daemon process. Polls for jobs, runs
+  shell-script test suites in subprocesses (sandboxed or unsandboxed), reports
+  structured results back to the server.
+- **`RunnerCore`** — The shared, Vapor-free, **Embedded-Swift-compatible**
+  grading core. Compiled two ways: natively (linked into the worker) and to
+  **WebAssembly** (the in-browser runner). It owns suite execution
+  (`executeSuites`), output interpretation (`interpretScriptOutput`), script
+  classification, and the `TestOutcome` / `TestTier` / `TestStatus` types — so
+  the native and browser graders run one implementation and cannot drift. Pinned
+  by the shared `Tests/Fixtures/output-contract.json` contract, asserted against
+  both the native build and the *real vendored wasm* in CI.
+- **`Core`** — Shared models and types. No Vapor dependency; `@_exported import
+  RunnerCore` re-exports the grading types. Every other target depends on this.
 
 Test suites are **shell scripts** bundled by the instructor inside the test
 setup zip. The runner executes them generically. Adding a new language means
@@ -89,6 +97,16 @@ reads `ENFORCE_HTTPS`, `PUBLIC_BASE_URL`, `TRUST_X_FORWARDED_PROTO`, and
 `SESSION_COOKIE_SECURE`. `HTTPSRedirectMiddleware` handles the enforcement and
 respects `X-Forwarded-Proto` from reverse proxies.
 
+**Environment configuration is centralized (v0.4.168+).** Every env var read
+by the server flows through `AppConfig` (`Sources/APIServer/Configuration/`).
+At startup `configure(_:)` calls `AppConfig.fromEnvironment(workDir:)` once,
+stashes the result on `Application.appConfig`, and emits a redacted summary
+to the log. Subsystems read typed substructs (`appConfig.auth`, `.security`,
+`.workers`, `.oidc`, `.database`, `.lockout`, `.diagnostics`, `.alerts`,
+`.brightspace`, `.scanMode`) rather than calling `Environment.get` directly.
+Tests can preload an `AppConfig` via `Application.preloadedAppConfig` (the
+seam `configure(_:)` checks first) or pass one to `makeTestApp(appConfig:)`.
+
 **Worker secret is auto-generated.** If no secret is provided at startup, a
 random three-word diceware passphrase is generated from the EFF wordlist and
 persisted to `.worker-secret`. The runner reads it from `RUNNER_SHARED_SECRET`.
@@ -98,6 +116,54 @@ All runner↔server requests are HMAC-signed (`WorkerHMACAuthMiddleware`).
 automatically if `.local-runner-autostart` exists (or is toggled via the admin
 dashboard). This is a development convenience; production runs the runner
 separately.
+
+**MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server *and*
+its own OAuth 2.1 authorization server, so an agent (e.g. the Claude connector)
+can manage course content on an instructor's behalf. Gated by `MCP_MODE`
+(`off` / `read_only` / `read_write`). The browser OAuth flow is Authorization
+Code + PKCE (S256); codes, consent tokens, and refresh tokens are stored only as
+SHA-256 hashes and are strictly single-use — consumption is an **atomic
+conditional `UPDATE … WHERE consumed = false RETURNING`** so concurrent
+exchanges can't replay a code. Refresh tokens rotate with prior-hash theft
+detection; the human's role is re-checked at consent and on every refresh.
+Scopes are clamped to the mode ceiling (`MCPMode.advertisedScopes`, the single
+source for discovery + DCR). Access tokens are short-lived ES256 JWTs minted by
+`MCPTokenAuthority`; bearer auth + per-request scope clamping live in
+`MCPBearerAuthMiddleware`. An hourly reaper drops dead OAuth rows. The consent
+POST is deliberately cookie-independent (identity + CSRF ride the single-use
+consent token) so it survives Safari/ITP cross-site cookie blocking.
+
+**Pattern-generated test families (v0.4.75+).** Instructors can define a
+`PatternFamily` (Core/) — one function, shared defaults, a table of cases —
+and Chickadee expands each enabled case into an ordinary Python test script
+at save time. Families live in `TestProperties.patternFamilies`; generated
+entries in `testSuites` carry `generatedBy: <familyID>` so the raw-script edit
+endpoints refuse to mutate them (you edit the family instead). Two kinds
+ship: `.boundaryEquality` (single-arg equality) and `.approximateEquality`
+(float tolerance, v0.4.80). Generated filenames are deterministic
+(`{tier}test_{familyID}_{caseKey}.py`) and embed a `spec_hash` header so
+manifest bytes change when any case changes.
+
+**Server-authoritative suite editor (v0.4.79+).** The instructor assignment
+edit page is wired to `PUT /instructor/:assignmentID/suite` and
+`PUT /instructor/:assignmentID/families` — drag-reorder, tier/points edits,
+and family edits persist live with the server returning the reconciled state.
+The legacy client-side `#suite-config-field` JSON blob and the
+`/edit/save` suite-rebuild path are gone; the main Save button only handles
+name, due date, notebook uploads, and the validation enqueue. Dependencies
+accept `family:<id>` tokens which the server expands to concrete filenames
+before persistence; cycle detection runs on the authored graph.
+
+**Assignment vanity URLs (v0.4.71).** Each assignment gets a per-course
+unique slug. Student links prefer `/:courseCode/:assignmentSlug` routes while
+the canonical `/testsetups/:id/submit` handlers remain active for
+compatibility.
+
+**Runner-side LRU test setup cache (v0.4.41).** `TestSetupCache` (Swift actor,
+default 16 entries) keeps fully-prepared test setup directories keyed by
+`testSetupID`. Cache key hashes manifest + zip content, so any suite edit
+busts the entry. Concurrent jobs for the same setup share one in-flight
+population task.
 
 ---
 
@@ -193,8 +259,22 @@ Stored as `test.properties.json` inside the instructor-uploaded test setup zip.
   "requiredFiles": ["warmup.py"],
   "testSuites": [
     { "tier": "public",  "script": "test_bit_count.sh"  },
-    { "tier": "release", "script": "test_first_digit.sh" },
+    { "tier": "release", "script": "test_first_digit.sh",
+      "dependsOn": ["family:bmi"] },
+    { "tier": "public",  "script": "publictest_bmi_01.py",
+      "generatedBy": "bmi" },
     { "tier": "student", "script": "test_student.sh" }
+  ],
+  "patternFamilies": [
+    {
+      "id": "bmi",
+      "function": "classify_bmi",
+      "kind": "boundaryEquality",
+      "defaults": { "tier": "public", "points": 1 },
+      "cases": [
+        { "key": "01", "args": [18.49], "expected": "underweight" }
+      ]
+    }
   ],
   "timeLimitSeconds": 10,
   "makefile": null
@@ -204,6 +284,12 @@ Stored as `test.properties.json` inside the instructor-uploaded test setup zip.
 `makefile` is optional. When present, a `make` step runs before the test
 scripts. If `target` is `null`, bare `make` is invoked; otherwise
 `make <target>` is used.
+
+`patternFamilies` is the canonical spec for generated test families; each
+enabled case expands to a `testSuites` entry with `generatedBy: <familyID>`.
+`dependsOn` entries in authored form accept `family:<id>` tokens, which the
+server expands to the family's concrete generated filenames before
+persisting.
 
 ---
 
@@ -229,6 +315,11 @@ GET  /api/v1/submissions/:id/results    — Full TestOutcomeCollection (?tiers= 
 
 # Web / browser results
 GET  /results/:id                       — Browser-rendered result view
+
+# Instructor suite editor (server-authoritative, v0.4.79+)
+GET  /instructor/:assignmentID/suite    — Author-facing view of the ordered suite list
+PUT  /instructor/:assignmentID/suite    — Persist drag-reorder, tier/points/displayName edits
+PUT  /instructor/:assignmentID/families — Save a pattern family (add/edit/delete)
 ```
 
 Web routes (Leaf-rendered, session auth required) live under `/` and handle
@@ -249,10 +340,11 @@ Three roles in ascending order of privilege: `student` < `instructor` < `admin`.
 - **Instructor+:** assignment CRUD, submission intake, test setup management
 - **Admin:** admin panel, worker secret/autostart management, runner dashboard
 
-Session auth uses Vapor's `SessionAuthenticator`. Sessions are in-memory
-(swap to `.fluent` for multi-process deployments). Session cookie is
-`HttpOnly; SameSite=Lax`; `Secure` flag is set automatically when
-`PUBLIC_BASE_URL` is `https://` or `AUTH_MODE` is non-local.
+Session auth uses Vapor's `SessionAuthenticator`. Sessions are persisted
+via the Fluent driver (v0.4.46), so they survive restarts and work across
+multi-process deployments. Session cookie is `HttpOnly; SameSite=Lax`; `Secure`
+flag is set automatically when `PUBLIC_BASE_URL` is `https://` or `AUTH_MODE`
+is non-local.
 
 ---
 
@@ -274,6 +366,74 @@ updating kernel versions or config.
 
 ---
 
+## Vendored browser libraries
+
+Pyodide, jszip, and CodeMirror are vendored under `Public/` rather than
+pulled from third-party CDNs at runtime, so student / instructor IPs
+aren't leaked to `cdn.jsdelivr.net` and `esm.sh` on every page load
+(FIPPA / PIPEDA concern surfaced in the v0.4.171 audit).
+
+```
+Public/pyodide/              — the ONE canonical Pyodide distribution (~1.4 GB)
+Public/vendor/jszip.min.js   — jszip browser-runner uses for zip extraction
+Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
+```
+
+**One canonical Pyodide.** There is exactly one vended Pyodide, served at
+`/pyodide`, and *both* consumers load it: the JupyterLite editor kernel (via
+`pyodideUrl` in `Tools/jupyterlite/jupyter-lite.json`) and Chickadee's own
+browser paths (`browser-runner.js`, `assignment-validate.js`,
+`pyodide-worker.js`, `notebook.js`).  The editor and grader
+therefore run the identical Python environment.  (Historically the editor
+loaded a *second* Pyodide from `cdn.jsdelivr.net`; #574's CSP cleanup dropped
+that allowance and broke the editor — see `SecurityHeadersMiddleware`.)
+
+**The Pyodide version is not hardcoded — it is derived from the kernel.**
+The only version pin is `jupyterlite-pyodide-kernel` in
+`Tools/jupyterlite/requirements.txt`; its bundled core wheels are ABI-locked
+to a specific Pyodide release, so `scripts/setup-vendor.sh` reads that version
+out of the built bundle and vends exactly it.  One pin, one version, no drift.
+
+Rebuild order matters:
+
+```bash
+scripts/setup-jupyterlite.sh     # build the .venv-jlite toolchain
+scripts/build-jupyterlite.sh     # rebuild the bundle (kernel version baked in)
+scripts/setup-vendor.sh          # derives Pyodide version from the kernel, re-vendors
+```
+
+`scripts/check-pyodide-parity.sh` fails the build (and CI, via
+`jupyterlite.yml`) if the vended Pyodide ever drifts from the kernel's pinned
+version — the guard against repeating #574.  jszip is fetched by
+`setup-vendor.sh`; CodeMirror is bundled via `npm` + `esbuild` from
+`Tools/vendor/{package.json, codemirror-entry.js}`.  `Public/pyodide` and
+`Public/vendor` are checked in for the same reason `Public/jupyterlite` is —
+every contributor and CI runner sees the same bytes without a build-time
+network fetch.
+
+**Extra packages + nb_mypy.** Pure-Python packages not in the upstream Pyodide
+distribution are declared in `Tools/vendor/pyodide-extra-packages.json` (pinned
+URL + sha256) and injected into the one lock by `scripts/add-pyodide-extras.py`
+(run from `setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're
+present so a re-vendor can't silently drop them.  This is how `nb_mypy` (+
+`astor`) gets into the editor.  nb_mypy type-checking is **on by default** but
+**loaded lazily, off the kernel-boot critical path**: the kernel wheel's
+`__init__.py` is patched (deterministically, `ZIP_STORED`, by
+`scripts/patch-pyodide-kernel.py` from `setup-jupyterlite.sh`) to schedule a
+background task that — once the kernel is up — `loadPackage`s nb_mypy from the
+vended Pyodide lock and runs `%load_ext nb_mypy; %nb_mypy On`.  nb_mypy is
+deliberately **not** in `loadPyodideOptions.packages`: a package named there is
+loaded by `loadPyodide()` itself, so any failure (bad PEP 503 lock key, dropped
+wheel, ABI mismatch) would reject the boot and brick the whole editor.  The
+background load is wrapped in a fail-safe try/except so a missing/incompatible
+nb_mypy degrades to "no type warnings", never a dead kernel.  Patching a bundled
+wheel means a sha cascade (wheel → `all.json` digest → `pipliteUrls` sha);
+`verify-jupyterlite.sh` asserts that chain is consistent so a mismatch (which
+would make piplite reject the kernel) is a build failure, not a browser
+surprise.
+
+---
+
 ## Coding Conventions
 
 - Swift 6, strict concurrency. No `@unchecked Sendable` without a comment explaining why.
@@ -286,24 +446,126 @@ updating kernel versions or config.
 - Optionals are preferred over sentinel values (no `-1` for "missing").
 - File names match the primary type they contain.
 - One type per file unless the types are trivially small and closely related.
+- Formatting is enforced by `swift-format` in CI (`.swift-format` at repo root).
+  Run `scripts/format.sh` before committing, or `scripts/lint.sh` to check
+  without modifying.
+- Quality rules (force unwraps, `.filter{}.first` antipatterns, oversized
+  functions, etc.) are enforced by SwiftLint (`.swiftlint.yml` at repo root,
+  delivered via the `SwiftLintPlugins` SwiftPM dependency — no separate
+  install). Run `scripts/swiftlint.sh` to check. The two tools are
+  complementary: swift-format owns formatting, SwiftLint owns correctness;
+  overlapping rules are disabled in `.swiftlint.yml`. CI enforces SwiftLint
+  as a step in the `format-lint` job (alongside `scripts/lint.sh`).
+  `scripts/swiftlint.sh` passes `--strict` (every reported issue, warning
+  or error, fails the build), keeping the codebase at zero violations
+  going forward. If a structural-rule warning threshold (e.g.
+  `function_body_length` at 100 lines) starts causing legitimate
+  friction, raise the threshold in `.swiftlint.yml` rather than dropping
+  `--strict`.
+
+---
+
+## UI / Stylesheet Conventions
+
+The web UI is Leaf templates + one stylesheet (`Public/styles.css`). The
+render tests assert pages *render*, not how they look, so the following
+invariants are enforced statically by `scripts/check-styles.sh` (wired into
+the `format-lint` CI job) — keep them green:
+
+- **No inline `style=""` in templates** except a JS-toggled `display:none`
+  initial state, or a CSS custom-property assignment (e.g.
+  `style="--filter-width:220px"`). Everything else belongs in a class.
+- **Shared styling lives in `Public/styles.css`;** page-unique styling lives
+  in a page-local `<style>` block with **role-named** classes (e.g.
+  `.section-header`, not `.mt-1`). Don't paste the same rule into multiple
+  templates — hoist it to the global sheet. (`scripts/check-styles.sh` fails
+  if a page block re-defines a global selector or the same selector appears
+  in more than one page block; `.main` is an allowlisted page override.)
+- **Every `var(--x)` must resolve.** Declare new custom properties in
+  `styles.css` (with a `prefers-color-scheme: dark` value if it's a colour).
+  Never reference an undeclared var, and never use a hardcoded colour
+  fallback `var(--x, #hex)` — define the var so it routes through the palette
+  and adapts to dark mode. (`scripts/check-css-vars.sh` enforces both.)
+- **No native `alert()` in templates** — surface errors with the inline
+  `.form-error` banner pattern. The guard ratchets a baseline down only.
+
+Run `scripts/check-styles.sh` locally before pushing UI changes.
+
+---
+
+## Testing Conventions
+
+- **Framework: Swift Testing only.** All ~107 test files are on Swift
+  Testing as of the migration completion (PRs #597–#608). `scripts/no-new-xctest.sh`
+  blocks any new `import XCTest` under `Tests/`.
+- **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
+  `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`, and
+  `@Test(arguments:)`. Avoid `CustomExecutionTrait`, hand-rolled trait
+  types, and anything still labelled experimental in the Swift Testing
+  source — the API is still evolving.
+- **Struct vs class suites.**
+  - **`@Suite struct Foo`** — default. Per-test instance is cheap.
+  - **`@Suite final class Foo`** with `init()` / `deinit` — when the
+    suite needs expensive shared state per-test instance (temp
+    directories, Vapor app fixtures). For Vapor apps, store `let app`
+    and wrap each `@Test` body in `try await withApp(app) { _ in ... }`
+    so shutdown is deterministic; the next test's `init` builds a
+    fresh app.
+- **`with*App` helpers** for DB-backed suite clusters
+  (`withWebRoutesApp`, `withAssignmentRoutesApp`, `withPatternFamilyFixture`).
+  See `Tests/APITests/WebRoutesHelpers.swift` etc. for the pattern.
+- **`.serialized` on DB- or env-touching suites.** Swift Testing runs
+  tests in parallel within a suite by default; `.serialized` gates
+  within-suite parallelism. For cross-suite serialization (e.g. tests
+  that mutate process env vars), use the actor-backed
+  `withAsyncEnvLock { ... }` in `Tests/APITests/EnvTestLock.swift` or
+  `withMockURLProtocolLock { ... }` in
+  `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
+- **Force unwraps in new tests.** `Tests/.swiftlint.yml` still
+  permits `!` / `try!` / `as!` while the test corpus is being cleaned
+  up. New code should use `try #require(value)` instead — the
+  idiomatic Swift Testing replacement for `XCTUnwrap`.
+- **Skipping a test at runtime.** Don't use `Issue.record` to skip — it
+  records a failure. Either `guard condition else { return }` (silent)
+  or `throw IssueRecorded("...")` (fails with a clear message) — pick
+  based on whether the unmet condition is "expected on this platform"
+  (silent) or "test setup is broken" (failure).
+- **Pattern references.**
+  - Standalone struct suite:
+    [Tests/APITests/COEPMiddlewareTests.swift](Tests/APITests/COEPMiddlewareTests.swift)
+  - Class suite with sync `init`/`deinit`:
+    [Tests/APITests/ZipArchiverTests.swift](Tests/APITests/ZipArchiverTests.swift)
+  - Class suite with stored `app` + per-test `withApp`:
+    [Tests/APITests/AdminRoutesTests.swift](Tests/APITests/AdminRoutesTests.swift)
+  - `with*App` helper-driven suite:
+    [Tests/APITests/WebRoutesIndexTests.swift](Tests/APITests/WebRoutesIndexTests.swift)
+  - Parameterized + `try #require`:
+    [Tests/APITests/MarmosetImportParserTests.swift](Tests/APITests/MarmosetImportParserTests.swift)
+  - Worker-side class suite:
+    [Tests/WorkerTests/DirectorySizeBytesTests.swift](Tests/WorkerTests/DirectorySizeBytesTests.swift)
 
 ---
 
 ## Versioning
 
-Follows Semantic Versioning in the `0.y.z` phase. Current version: **0.4.36**
-(`VERSION` file + `ChickadeeVersion.current` in Core).
+Follows Semantic Versioning in the `0.y.z` phase. The version lives in the
+`VERSION` file + `ChickadeeVersion.current` in Core.
 
-Release checklist:
+**Versions are assigned at merge time — do NOT bump them in a PR.** A PR must
+not touch `VERSION`, `Sources/Core/ChickadeeVersion.swift`, or `CHANGELOG.md`
+(hand-editing those three to a hardcoded next number is what used to make every
+concurrent PR conflict). Instead:
 
-```bash
-# 1) Update VERSION, CHANGELOG.md
-scripts/check-version.sh
-swift test
-# 2) Tag
-git tag -a vX.Y.Z -m "Chickadee vX.Y.Z"
-git push origin vX.Y.Z
-```
+1. Add **one fragment** under `changelog.d/` describing the change
+   (see `changelog.d/README.md`). Preview with
+   `scripts/assemble-release.sh --dry-run`.
+2. On merge to `main`, `.github/workflows/auto-release.yml` computes the next
+   version, folds the fragments into `CHANGELOG.md`, bumps `VERSION` +
+   `ChickadeeVersion`, commits `chore(release): vX.Y.Z`, and pushes the tag —
+   which triggers `release.yml` + the tag build in `docker-build.yml`.
+
+Full details, plus how to enable the optional merge queue, are in
+[docs/release-process.md](docs/release-process.md).
 
 ---
 
@@ -366,10 +628,397 @@ Post-8 work also complete:
 - v0.4.33 poll-loop retry backoff now honors `RUNNER_RETRY_*` env settings
 - v0.4.34 instructor student submission drilldown; course-scoped student submissions page
 - v0.4.36 submission IDs on runner detail page are clickable; UI consistency pass
+- v0.4.37 architecture docs (`docs/architecture.md`); SSO token revocation on logout
+  (RFC 7009 + `end_session_endpoint` redirect); configurable OIDC claim names
+  (`OIDC_USERNAME_CLAIM`, `OIDC_EMAIL_CLAIM`, flexible `extraClaims`); large source
+  splits (`RunnerDaemon.swift`, `AdminRoutes.swift`, `AssignmentRoutes.swift`)
+- v0.4.38 Python test bootstrap now sets `sys.argv[0]` correctly; `chickadee.py`
+  exit 3 maps to `fail`; `NotebookExtractor` wraps bare module-level code in
+  `if __name__ == "__main__":` and strips IPython `%`/`!` lines to prevent
+  import-time failures
+- v0.4.39–v0.4.44 OIDC claim generalization follow-ups (compile fixes, test
+  coverage for custom-claim first-login, stale-username repair, `user_id` not
+  clobbered by username claim, Docker Compose env forwarding)
+- v0.4.41 runner-side LRU test setup cache (`TestSetupCache` actor, content-hashed
+  cache key, shared in-flight population)
+- v0.4.45 re-test wait time measured from retest click (`retested_at` column,
+  `queueWaitMs`/`turnaroundMs` baseline switched)
+- v0.4.46 Fluent-backed sessions (survive restarts, multi-process safe);
+  automatic cache-buster from `ChickadeeVersion.current`; runner stage timing
+  metrics (`job_execution_metrics`) persisted and surfaced on runner detail
+- v0.4.47 poll-time 401/403 treated as retryable so long-lived runners recover
+  from transient auth windows
+- v0.4.48 instructor dashboard activity cards (recent logins, submissions,
+  active assignments, queued attempts, no-submission students); assignment
+  summary cards; drag thumb beside assignment name
+- v0.4.49 browser-mode guard: `runner-submit` rejects browser-graded setups
+  server-side; instructor queue card counts only worker-eligible submissions
+- v0.4.50 draft-backed notebook authoring on new-assignment page (hidden
+  drafts, JupyterLite launch, reopen-for-edit, finalize); runner requirements
+  auto-detected and pre-filled during creation
+- v0.4.51 First-Try Perfect badge (100% first submission); submission output
+  table redesigned (pass-only collapsible, diagnostics in full-width rows)
+- v0.4.52 automated deadline auto-close (startup sweep + periodic runtime
+  sweep, late-submission guard across web/browser endpoints, instructor
+  manual-reopen override); GitHub release workflow
+- v0.4.56 worker backstop for browser-graded submissions (native `python3`
+  grades stuck browser-mode jobs, matching Pyodide semantics)
+- v0.4.57 JSON footer stripped from student-visible test output;
+  `:latest` Docker tag now pushed on version tag releases
+- v0.4.58 create-assignment page redesigned to match edit page
+  (compact `results-table` layout, editable display names, CodeMirror 6
+  modal, inline runner requirements)
+- v0.4.60 notebook sync preserves unsaved edits; submit button disabled until
+  notebook loaded; worker queue depth excludes browser-graded submissions
+- v0.4.61 syntax errors in student submissions now surfaced in `longResult`
+  with full traceback
+- v0.4.63 notebook upload draft endpoint wiring fixed for Safari; admin user
+  Delete button
+- v0.4.67 raw submission filenames sanitized before storage/runner staging;
+  empty draft-only notebook upload parts ignored on validation
+- v0.4.69–v0.4.70 student action icons (edit/upload); submit page uses
+  assignment title
+- v0.4.71 stable per-course assignment slugs; student dashboard links prefer
+  `/:courseCode/:assignmentSlug` routes
+- v0.4.72 new-script validation uses active manifest-backed suite; setup
+  download version includes manifest+zip metadata hash
+- v0.4.73 generated/uploaded tests persist from visible suite list;
+  extensionless Python scripts with shebang dispatched as Python
+- v0.4.75 pattern-generated test families (#375): `PatternFamily`,
+  `PatternCase`, `PatternKind` in Core; `.boundaryEquality` v1 template;
+  deterministic filenames + `spec_hash` header; raw-script endpoints return
+  409 on generated entries
+- v0.4.76 pattern family editor UX redesign (rows inside Test Suite table,
+  function dropdown from scanned notebook, auto-generated case keys,
+  typed per-parameter columns)
+- v0.4.77 pattern families survive assignment Save (manifest rebuild forwards
+  `patternFamilies` and re-runs `applyPatternFamilies`); each generated case
+  produces a distinct `TestOutcome`
+- v0.4.78 pattern family cells accept bare-typed values (numbers, booleans,
+  null, arrays/objects, bare strings); family rows stay visible during
+  client-side suite-list rebuild
+- v0.4.79 assignment suite editor unified around server-authoritative model:
+  `PUT /instructor/:assignmentID/suite`, `GET /instructor/:assignmentID/suite`,
+  `family:<id>` dependency tokens, authored-graph cycle detection.
+  `#suite-config-field` hidden input and `/edit/save` suite-rebuild path removed
+- v0.4.80 `.approximateEquality` pattern kind (float tolerance, default 1e-6,
+  failure messages include delta); editable Pts on family rows; authored
+  order preserved through `topologicallySorted`
+- v0.4.81 pattern family row visual polish (matches script rows); Visibility
+  column is an inline `<select>`; family row position survives modal save
+  (legacy `applyPatternFamilies` now reconstructs authored ordering); suite
+  edits re-trigger validation (debounced by pending-submission check)
+- v0.4.82 due-date timezone fix across five display sites (all now use
+  `waterlooDateTimeFormatter()` / `America/Toronto`, matching the edit form);
+  `.form--wide` modifier so the assignment edit, new-assignment, and submit
+  pages use the full 900px `.main` width instead of the 620px `.form` cap;
+  `TestProperties.runnerSanitized()` strips `patternFamilies` from the `Job`
+  payload so older runners don't crash decoding new `PatternKind` cases;
+  `StuckSubmissionReaperMonitor` reclaims `assigned` submissions whose
+  `assigned_at` is older than 10 minutes (startup sweep + 60 s periodic,
+  registered via `StuckSubmissionReaperLifecycleHandler`)
+- v0.4.83 pattern family editor auto-computes the Expected column by
+  evaluating the solution notebook's function against the instructor's
+  entered args in-browser via Pyodide (lazy-loaded on first row edit;
+  debounced 400 ms; respects `data-manual` overrides; surfaces solution
+  exceptions in the cell's tooltip); suite-editor inline rename preserves
+  focus + caret across the debounced `PUT /suite` re-render
+  (`captureFocus()` / `restoreFocus()` in `renderTree()`); "New Script"
+  modal drops the tier/points inputs, matching the New Family modal —
+  both default to public/1 and let the instructor tune from the inline
+  row afterwards
+- v0.4.84 `.variableEquality` pattern kind for module-level variables
+  (e.g. `beats = 5`) — case args hold the variable name, Expected holds
+  the value, renderer emits a `getattr(..., _MISSING)` sentinel check;
+  family editor hides the function dropdown and uses a single "variable"
+  column when this kind is selected.  Also: "Variable Equality" New Script
+  template; all Python templates now start with `#!/usr/bin/env python3`
+  so extensionless filenames don't fall through to `/bin/sh`; guard tests
+  (`testAllPythonTemplateTypes_startWithPythonShebang`,
+  `testAllPythonTemplateTypes_doNotImportChickadee`)
+- v0.4.92 assignment editor bug-fix pass for pattern families: (1) Create
+  publish preserves each family's draft position instead of dumping every
+  family at the bottom of the suite — `saveNewAssignment` now reconstructs
+  `[AuthoredSuiteItem]` from the draft's manifest and passes it to
+  `applyPatternFamilies` (new helper `authoredSuiteItemsFromDraftManifest`);
+  (2) the family modal no longer substitutes `null` for bare-string cell
+  values on reopen (`readCasesFromTableRaw` now uses the same type-aware
+  `coerceByType` as the strict save path); (3) `readFamilyFromEditor`
+  carries forward the family's `dependsOn` so family-level prerequisites
+  survive a modal save
+- v0.4.93 assignment-revision retest loop.  When the instructor Saves an
+  edited assignment whose manifest bytes changed, every student submission
+  on that setup is re-queued for the worker so it regrades against the
+  new test suite (`retestAllSubmissionsForSetup`).  Gated on a manifest-hash
+  compare (`test_setups.last_retested_manifest_hash`) so cosmetic saves
+  don't fan out.  Excludes `kind = validation`; browser-graded submissions
+  flip to pending and get picked up by the v0.4.56 worker backstop.  New
+  manual `POST /instructor/:assignmentID/retest` endpoint + refresh-arrow
+  toolbar button on every open/closed assignment row (`Resources/Views/assignments.leaf`).
+  New columns: `submissions.retested_by_user_id` (who triggered the retest)
+  and `test_setups.last_retested_manifest_hash` (dedup key)
+- v0.4.94 pattern family editor follow-through: (1) scan-notebook DTO now
+  forwards `paramTypes`/`returnType`/`isShadowed`/`paramHasDefault` so the
+  editor coerces cells by type (fixes the "bare `20260422` in a `str`
+  column becomes `int`" bug); (2) defaulted params treated as optional —
+  parallel `argsProvided: [Bool]` on `PatternCase` + kwarg-after-gap
+  rendering lets cases omit defaulted args and rely on Python's own
+  default at test time; (3) family-scoped Variables table for shared
+  values (dicts, lists, scalars) referenced from arg cells via `$name`
+  — new `PatternFamily.variables: [FamilyVariable]` + parallel
+  `PatternCase.argVarRefs: [String?]`, validated for identifier safety
+  and name uniqueness; (4) Hint field removed from the modal (underlying
+  `PatternCase.hint` / `PatternDefaults.hint` stay for manifest back-compat);
+  (5) instructor assignments list Status column tightened to 5.5rem
+- v0.4.96 Sections for test suites.  Instructors group tests into named
+  sections on the assignment edit page (each section is its own
+  `.section-block` + `.results-table`, drag/drop works within and across
+  sections, "+ Section" button creates new ones).  Student submission
+  view renders one table per section with an `<h3>` heading so students
+  can tell which tests belong to which question.  New Core types:
+  `TestSuiteSection`, optional `sectionID` on `TestSuiteEntry`,
+  `sections: [TestSuiteSection]` on `TestProperties`.  Sections are
+  display-only — the runner still walks `testSuites[]` in order and the
+  dependency graph is unchanged.  `applyPatternFamilies` takes a
+  `sections:` parameter, normalises stale `sectionID` refs to nil, and
+  enforces that items sharing a `sectionID` form a contiguous block.
+  Pattern families inherit their section from the authored-item
+  position.  Items not in any section appear in a trailing "Ungrouped"
+  block (hidden when empty).  Legacy manifests with no `sections` key
+  decode with `decodeIfPresent` defaults so older runners stay compatible.
 
-**Next work:** Gamification (attempt tracking, leaderboards), multi-provider SSO
-(generalize `OIDCIDTokenClaims` claim names beyond UWaterloo DUO), refresh token
-handling / IdP token revocation on logout.
+### v0.4.97 – v0.4.170 highlights (themed digest)
+
+The per-version log above stops at v0.4.96.  For the ~70 versions that
+followed, the full per-release detail lives in `CHANGELOG.md`; what
+follows is grouped by subsystem so a fresh session can build a mental
+model quickly.
+
+- **Notebook checks (v0.4.149–v0.4.155).**  In-browser editor preflight
+  + watchdog, `JupyterLite 0.7.6` upgrade, browser-error dashboard,
+  kernel-probe inversion to fire on failure evidence only, Safari
+  phase-1 timeout hotfix, JupyterLite SW manager disabled to fix
+  "Kernel Unknown".  IndexedDB cache-bust no longer wipes in-progress
+  work on first post-deploy visit (v0.4.154).  Instructor reset-notebook
+  action on the submissions page (v0.4.153).  `variableExists` check
+  type (defined, optional type) (v0.4.155).
+
+- **Personalization & generalized inputs (issue #461 slices, v0.4.156–v0.4.162).**
+  Per-student assignment seed plumbing (v0.4.156); generalized inputs
+  with a Global panel, raw-script inlining, and notebook substitution
+  (v0.4.157); per-student expressions on Global Inputs (v0.4.158);
+  suite-editor drag-and-drop fix for notebook-check rows (v0.4.159);
+  unified "enrolled students" count and tidied Global Inputs UI plus
+  section variables carrying `=` expressions (v0.4.160); retest queue
+  priority and 404 fix for non-student submission view (v0.4.162a);
+  personalization expressions can import support files, with auto-
+  extracted `solution.py` (v0.4.162b — issue #461 Slice 5).  See
+  [docs/inputs.md](docs/inputs.md) and
+  [docs/personalization-phase1.md](docs/personalization-phase1.md).
+
+- **BrightSpace grade sync (v0.4.145–v0.4.146).**  Debounced per-
+  submission grade push via the D2L REST API, then auth switched to
+  D2L Valence key signing (App+User key model, not OAuth2).  Currently
+  waiting on UWaterloo IST for credentials before enabling in prod.
+
+- **Worker / runner ops (v0.4.147, v0.4.164).**  Health-alert "error
+  rate spike" excludes student-code errors (v0.4.147).  Worker test
+  coverage expanded, disk-usage telemetry added, retest-metric fixes
+  (v0.4.164).  Tests run against real Postgres in parallel with
+  `TestSetupCache` hit-rate telemetry surfacing in CI (v0.4.165-ish,
+  commit `b615235`).
+
+- **Closed-assignment behaviour (v0.4.166).**  Closed assignments now
+  load read-only in the instructor editor instead of editable.
+
+- **AppScan / security hardening (v0.4.167–v0.4.168).**  `SCAN_MODE`
+  env flag, rate-limit middleware, session reaper, CSP, audit log;
+  v0.4.168 hotfix loosened CSP to allow `cdn.jsdelivr.net` (Pyodide)
+  and `esm.sh` (CodeMirror).
+
+- **Test/format/CI tooling.**  `makeTestApp()` helper plus drift fix
+  and Swift session hook (commit `8b88585`).  `swift-format` strict CI
+  gate + bulk format pass (commit `2bbebf9`).  WorkerTests restored to
+  the per-PR gate and the 3-job split collapsed to one (commit
+  `a5a6f61`).
+
+- **AppConfig centralization (v0.4.169).**  Every server env var now
+  flows through a single `AppConfig` struct read once at startup —
+  already documented in detail at lines 92–100 above.
+
+- **v0.4.170 maintenance pass (#495, #496, #497, #499).**  Shared
+  `escapeForPythonStringLiteral` / `tierFilenamePrefix` helpers
+  (`Sources/APIServer/Utilities/PythonScriptHelpers.swift`); submission
+  output-formatting helpers split into
+  `Sources/APIServer/Helpers/SubmissionOutputFormatting.swift`;
+  `APIServerApp.configure(_:)` decomposed into
+  `Sources/APIServer/Bootstrap/AppDirectories.swift`,
+  `AppMiddleware.swift`, and `AppServices.swift`; `makeTestApp()`
+  now seeds the worker secret + autostart paths inside the per-test
+  temp dir.  No behaviour changes; generated test-script bytes
+  unchanged so `spec_hash` / `TestSetupCache` keys stay stable.
+
+- **v0.5.0 / v0.6.0 runway (PR #505).**  Migration consolidation (#502):
+  the 13 historical `Add*` migrations except `AddSessionsCreatedAt`
+  were folded into the corresponding `Create*` files; their no-op
+  stubs and `registerMigrations(...)` entries have now been deleted
+  (v0.5.0 cleanup).  Production DBs that already have those names
+  marked applied in `_fluent_migrations` are unaffected — Fluent
+  ignores history rows whose struct names are no longer registered.
+  Fresh deploys produce the same final schema from the `Create*`
+  files alone.  Separately (#501), the inline enrollment-mode
+  fallback in `CourseBundleRoutes.swift` was extracted to a Core
+  helper `bundledCourseEnrollmentMode(_:)` so the v0.6.0 cleanup
+  had a single resolver to update.  The two DEPRECATED back-compat
+  sites — `NotebookFunctionScanner.isShadowed` decode fallback and
+  `CourseBundleManifest.openEnrollment` — have now been removed
+  (v0.6.0 cleanup).  Browser clients on v0.4.94+ already send
+  `isShadowed` unconditionally; `.chickadee` bundle exports have
+  only emitted `enrollmentMode` (never `openEnrollment`) since the
+  helper extraction in #501.
+
+### v0.4.171 – v0.4.350 highlights (themed digest)
+
+The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
+
+- **Swift→WASM grading core (RunnerCore, #764–#775).**  A staged migration
+  hoisted suite execution, output interpretation, script classification, and
+  the `TestOutcome` / `TestTier` / `TestStatus` types out of the worker into
+  the new Vapor-free, Embedded-Swift `RunnerCore` target, which compiles both
+  natively and to WebAssembly.  The browser runner now drives the *same*
+  `executeSuites` loop via the wasm bridge (Stage 4), so the in-browser and
+  native graders share one implementation.  Embedded-safe JSON (`JSONLite`, no
+  `strtod`).  The wasm is `wasm-opt -Oz`'d, content-hashed
+  (`RunnerWasm.<hash>.wasm`), immutably cached (`RunnerWasmCacheMiddleware`),
+  and size-guarded in CI.  Parity is pinned by `Tests/Fixtures/output-contract.json`,
+  asserted against the native build *and* the real vendored wasm.  This is the
+  "first use of Swift WASM in prod" path.
+
+- **MCP server + OAuth 2.1 authorization server (`Sources/APIServer/MCP/`).**
+  Chickadee exposes course-management tools to agents over MCP, gated by
+  `MCP_MODE`, with its own Authorization Code + PKCE OAuth server, rotating
+  refresh tokens, ES256 access JWTs, dynamic client registration, an hourly
+  reaper, and an admin "connected agents" view.  Recent fixes (#776, #778) made
+  the consent flow cookie-independent so it works in Safari/cross-site-cookie
+  contexts.  See the "MCP server" design decision above.
+
+- **Per-student personalization (issue #461, Slices 1–5+).**  Per-assignment
+  seeds (`AssignmentSeedStore`, deterministic per student), Global Inputs +
+  section variables, per-student expressions evaluated by a server-side
+  `python3` subprocess (`PersonalizationEvaluator`), `{{name}}` notebook
+  substitution at student first-open, and support-file/`solution.py` imports.
+  Docs: `docs/inputs.md`, `docs/personalization-phase1.md`.  Remaining UI work
+  tracked in #664.  This is the "first personalized assignments" path.
+
+- **Per-student pattern families (issue #461, v0.4.343–347).**  Pattern-family
+  cases can now personalize: a case's `$name` arg (`argVarRefs`) or its Expected
+  (`expectedVarRef`) may point at a per-student `=` expression instead of a
+  baked literal.  The expression is resolved **server-side** for the
+  submission's seed (`PersonalizationSubstitution.gradingInputs`, shared by the
+  worker job payload and the browser seed endpoint) and delivered to grading as
+  a `_ck_inputs.py` preamble the generated script loads — so a per-student
+  `expected = solution.foo(...)` stays server-side on the worker path.  The
+  generated script is byte-identical across students (cache + `spec_hash`
+  unchanged); only the resolved-values map differs.  Authorable via the browser
+  editor (type `$name` in an arg/Expected cell) and MCP (`update_pattern_family`
+  `expectedVarRef`); `preview_personalization` audits the refs.  Restricted to
+  `boundary_equality` families for now.  Doc:
+  `docs/personalization-pattern-families.md`.
+
+- **Notebook checks, BrightSpace grade sync, AppScan/security hardening,
+  assignment-revision retest loop, sections** — see the per-version `CHANGELOG.md`.
+
+- **v0.4.x "tock" audit hardening (this pass).**  Ahead of the first prod
+  deployments of the three subsystems above: MCP single-use token consumption
+  made atomic (conditional-`UPDATE` compare-and-set, closing a code-replay
+  TOCTOU); the personalization expression subprocess no longer inherits the
+  server environment (was leaking `RUNNER_SHARED_SECRET` / DB / OIDC secrets to
+  instructor expressions — now an explicit allowlist); browser-graded results
+  reconcile their attempt number / `isFirstPassSuccess` server-side (was always
+  stamped `1`, corrupting the First-Try-Perfect badge); pattern-family arg cells
+  may reference Global Inputs via `$name` (validator was rejecting the documented
+  worked example).  Plus OAuth `no-store` headers, reaper consumed-row cleanup,
+  an `oauth_grants.previous_refresh_token_hash` index, a `timedOut`
+  output-contract case, and `@unchecked Sendable` justification comments.
+
+- **MCP authoring-surface expansion (v0.4.328+).**  The agent tool catalog grew
+  from twelve to thirty-four content tools (`MCPToolCatalog.live`): `get_server_info`
+  (version/capability probe), `get_solution` / `update_solution` (read + replace
+  the reference solution, re-validating), `author_script` (create/replace a
+  hand-written test or support file through the same `applySuiteEdit` path the
+  web editor uses), and the personalization tools (`get_global_inputs`,
+  `update_global_inputs`, `update_section_variables`, `preview_personalization`).
+  `get_suite` now returns the full source of truth (script bodies + complete
+  pattern-family/notebook-check specs + on-disk filenames), and pattern-family
+  cases gained a per-student `expectedVarRef` (the worker/browser materialize
+  per-student `_ck_inputs.py` from `Job.personalizedInputs`).  Pattern-family
+  authoring also sets instructor **hints**: `create_pattern_family` /
+  `update_pattern_family` take a family-wide `defaultHint` and a per-case `hint`
+  (on update an empty string clears it, nil leaves it untouched), and `get_suite`
+  returns both in the `family` spec.  A hint surfaces to the student as a
+  "💡 Hint" only on a *failing* case — `buildHintByFilename` joins each case's
+  `resolvedHint(defaults:)` (per-case overriding the family default) by generated
+  filename at results-display time, so nothing is baked into the test script.
+  `PatternCase.hint` / `PatternDefaults.hint` have been manifest-authorable since
+  v0.4.94 but had no agent surface until now.  Agent-facing
+  copy lives in two places that must stay in sync with the catalog: each tool's
+  `description`/`inputSchema` and the server-level `MCPServerInstructions.text`
+  (the `initialize` handshake's `instructions`); the tool table in
+  `docs/mcp-authoring-roadmap.md` is the human index.  MCP content edits
+  (suite/family/script/notebook/solution) close a currently-open assignment and
+  re-validate — matching the web Save button (`saveEditedAssignment`), since the
+  student gate keys off `isOpen`, not `validationStatus` — so students can't
+  submit against a not-yet-revalidated suite; each write tool's response reports
+  it as `assignmentClosed`, and the human re-opens with
+  `update_assignment(isOpen:true)` once validation passes
+  (`closeOpenAssignmentForContentEdit`).
+
+- **MCP section / check / grading-mode round (v0.4.353+).**  The catalog reached
+  thirty-four tools: test-suite section management (`create_suite_section` /
+  `rename_suite_section` / `delete_suite_section`, plus `move_suite_item` to place a
+  script/family/check into a section); course-section management
+  (`list_course_sections`, `create_course_section`, `rename_course_section`,
+  `delete_course_section`, `reorder_course_sections`, and `set_assignment_course_section`,
+  which adopts the section's default grading mode); `create_pattern_family` /
+  `delete_suite_item`; `author_notebook_check` (create-or-replace a notebook check
+  — all ten `NotebookCheckKind`s, validated through `applySuiteEdit`); and
+  `set_grading_mode` (worker/browser, no regrade/close).  `get_assignment` now
+  reports `gradingMode` + the course section.  All the content-edit tools —
+  including the two that initially slipped (`create_pattern_family`,
+  `delete_suite_item`) — close a currently-open assignment on edit and report
+  `assignmentClosed`; metadata-only tools (`set_grading_mode`, section
+  organization) do not.  Content edits that change the graded suite also
+  **auto-re-grade** every existing student submission against the new suite
+  (`retestSubmissionsAfterContentEdit`, gated on a real manifest change), the
+  automatic equivalent of the instructor "Retest all" button; `move_suite_item`
+  (placement-only) and metadata edits do not.  (The suite-section tools were
+  renamed `create_section`→`create_suite_section` etc., and
+  `set_assignment_section`→`set_assignment_course_section`, so the two "section"
+  families read unambiguously — a breaking change to the not-yet-public MCP
+  surface.)
+
+**Near-term roadmap:**
+
+- **Leaf partial decomposition — UNBLOCKED (verified, not folklore).** Earlier
+  notes claimed a LeafKit 1.x "cyclically referenced" false positive blocked
+  decomposing the editor pages, pending LeafKit 2. That was re-tested on the
+  current pin (`leaf-kit 1.14.2`, the newest published — there is **no** 2.x /
+  Leaf 5 release to wait for) and could **not** be reproduced: a partial
+  `#extend`ed from two templates (new + edit), and a single template extending
+  `base` + two distinct partials, both render fine. The historical failures
+  were most likely on an older leaf-kit, or a cascade from a sibling parse
+  error surfaced through Leaf's shared AST cache. **Just decompose normally**
+  (extract a partial, `#extend` it — repeated from one template or shared across
+  pages). Caveat: render tests prove templates *resolve*; they don't exercise
+  page JS, so decomposing a JS-driven widget still wants a quick manual check.
+- **Feature backlog:** continued personalization / notebook-check
+  expansion (e.g. per-student refs in pattern kinds beyond
+  `boundary_equality`); pattern kinds beyond the seven shipped
+  (`boundaryEquality` / `approximateEquality` / `variableEquality` /
+  `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
+  `stdoutEquality`); multi-provider SSO testing beyond UWaterloo DUO;
+  refresh-token handling; gamification expansion (leaderboards, more
+  badges beyond First-Try Perfect).
 
 ---
 
@@ -389,6 +1038,12 @@ handling / IdP token revocation on logout.
 - `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
-- `docs/ci-followups.md` — CI reshaping notes from v0.4.6; WorkerTests gate status
+- `docs/runner-wasm-migration.md` — plan to share one Swift grading core (RunnerCore) between the worker + browser runner via SwiftWasm; staging, the ScriptExecutor protocol, type-hoist
+- `docs/personalization-phase1.md` — per-(student, assignment) seed contract (`CHICKADEE_ASSIGNMENT_SEED`), worked hand-written example
+- `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
+- `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
+- `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; why the server runs `python3` today, the trilemma, and the direction to move eval to the runner/browser per-language
+- `docs/mcp-validation-access.md` — planned MCP read tool for validation-run results only (per-test outcomes, never student data)
+- `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)
 - `reference/` — original Java source for behavioural reference only
 - `CHANGELOG.md` — release history

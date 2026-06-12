@@ -34,6 +34,14 @@ def _emit(payload: Dict[str, object]) -> None:
     print(json.dumps(payload, ensure_ascii=False))
 
 
+def _first_nonempty_line(text: str) -> str:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line:
+            return line
+    return ""
+
+
 def passed(message: Optional[str] = None):
     label = _first_comment_label()
     _emit({
@@ -46,18 +54,29 @@ def passed(message: Optional[str] = None):
 
 def failed(message: str = "failed"):
     label = _first_comment_label()
+    text = message if isinstance(message, str) else str(message)
+    summary = _first_nonempty_line(text) or "failed"
+    # Rich multi-line messages are printed to stdout so they land in the
+    # outcome's longResult.  The JSON footer below remains the last line and
+    # is stripped by the runner.  Skip the print when the caller gave no
+    # detail beyond the default placeholder.
+    if text.strip() and text.strip() != "failed":
+        print(text)
     _emit({
-        "shortResult": f"{label}: failed",
+        "shortResult": f"{label}: {summary}",
         "status": "fail",
         "test": label,
-        "error": message,
+        "error": text,
     })
     raise SystemExit(1)
 
 
 def errored(message: str = "error", err: Optional[Exception] = None):
     label = _first_comment_label()
-    summary = message.strip() if isinstance(message, str) and message.strip() else "error"
+    text = message if isinstance(message, str) else str(message)
+    summary = _first_nonempty_line(text) or "error"
+    if text.strip() and text.strip() != "error":
+        print(text)
     payload = {
         "shortResult": f"{label}: {summary}",
         "status": "error",
@@ -76,7 +95,7 @@ def _candidate_student_files() -> List[Path]:
     files: List[Path] = []
     for p in cwd.glob("*.py"):
         name = p.name
-        if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py"}:
+        if name in {"test_runtime.py", "sitecustomize.py", "nb_to_py.py", "_ck_inputs.py"}:
             continue
         lower = name.lower()
         if lower.startswith("publictest") or lower.startswith("secrettest") or lower.startswith("releasetest"):
@@ -182,7 +201,103 @@ def load_student_module():
     return modules.get(_loaded_student_order[0])
 
 
-def require_function(name: str):
+def student_source_raw() -> str:
+    # The full introspectable student source, exactly as the extractor wrote
+    # it (every cell, including any that do not parse). Written to a sidecar
+    # named by the `.chickadee_student_source` hint (both runners share one
+    # extractor); falls back to inspect.getsource on the loaded module. Use
+    # this for raw text inspection; use student_source() / student_ast() for
+    # parse-based checks.
+    hint = Path(".chickadee_student_source")
+    try:
+        if hint.exists():
+            name = Path(hint.read_text(encoding="utf-8").strip()).name
+            sidecar = Path(name)
+            if name and sidecar.exists():
+                return sidecar.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    try:
+        import inspect
+        module = load_student_module()
+        if module is not None:
+            return inspect.getsource(module)
+    except Exception:
+        pass
+    return ""
+
+
+def student_cell_sources() -> List[Any]:
+    # Split the raw student source into (label, source) chunks on the
+    # `# --- cell N ---` markers the notebook extractor writes between cells,
+    # so each notebook cell can be parsed on its own. A raw .py submission has
+    # no markers and yields a single ("module", source) chunk.
+    source = student_source_raw()
+    chunks: List[Any] = []
+    label = "module"
+    lines: List[str] = []
+    for raw in source.split("\n"):
+        stripped = raw.strip()
+        if stripped.startswith("# --- ") and stripped.endswith(" ---"):
+            if lines:
+                chunks.append((label, "\n".join(lines)))
+            label = stripped[6:-4].strip() or "module"
+            lines = []
+        else:
+            lines.append(raw)
+    if lines:
+        chunks.append((label, "\n".join(lines)))
+    if not chunks:
+        chunks.append(("module", source))
+    return chunks
+
+
+def student_ast(skipped: Optional[List[Any]] = None) -> Any:
+    # Best-effort AST of the student's source: parse each notebook cell on its
+    # own and merge the parseable cells' top-level statements into one module.
+    # A single non-Python cell (Markdown pasted into a code cell, a half-written
+    # cell) is then skipped instead of blinding a style/structure check on every
+    # other cell -- mirroring the per-cell resilience of the executable module.
+    # `skipped`, if a list, receives an (label, message) tuple per dropped cell.
+    import ast
+    module = ast.parse("")
+    for label, chunk in student_cell_sources():
+        if not chunk.strip():
+            continue
+        try:
+            node = ast.parse(chunk)
+        except SyntaxError as ex:
+            if skipped is not None:
+                skipped.append((label, f"{type(ex).__name__}: {ex}"))
+            continue
+        module.body.extend(node.body)
+    return module
+
+
+def student_source() -> str:
+    # Best-effort *parseable* introspectable source: like student_source_raw(),
+    # but any single cell that does not parse on its own is dropped, so callers
+    # that do `ast.parse(student_source())` are not blinded by one non-Python
+    # cell (e.g. a Markdown cell saved as a code cell). When nothing needs
+    # dropping the raw source is returned verbatim. Use student_source_raw()
+    # for the unfiltered text.
+    import ast
+    parts: List[str] = []
+    dropped = False
+    for label, chunk in student_cell_sources():
+        if chunk.strip():
+            try:
+                ast.parse(chunk)
+            except SyntaxError:
+                dropped = True
+                continue
+        parts.append(f"# --- {label} ---\n{chunk}")
+    if not dropped or not parts:
+        return student_source_raw()
+    return "\n\n".join(parts) + "\n"
+
+
+def require_function(name: str, num_args: Optional[int] = None):
     modules = load_student_modules()
     for key in _loaded_student_order:
         module = modules.get(key)
@@ -190,6 +305,8 @@ def require_function(name: str):
             continue
         fn = getattr(module, name, None)
         if fn is not None and callable(fn):
+            if num_args is not None:
+                _require_num_args(fn, name, num_args)
             return fn
 
     if not modules:
@@ -201,3 +318,38 @@ def require_function(name: str):
         errored("Could not load a student Python module from submission.")
 
     errored(f"Required function '{name}' was not found or is not callable in loaded student modules.")
+
+
+def _require_num_args(fn: Any, name: str, num_args: int) -> None:
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        # Built-ins / C functions may not expose a signature; skip the check.
+        return
+    positional_kinds = {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }
+    positional = [p for p in sig.parameters.values() if p.kind in positional_kinds]
+    required = sum(1 for p in positional if p.default is inspect.Parameter.empty)
+    accepts_varargs = any(
+        p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values()
+    )
+    total = len(positional)
+    if accepts_varargs:
+        if num_args < required:
+            errored(
+                f"'{name}' requires at least {required} positional argument(s), "
+                f"but the test expects it to take {num_args}."
+            )
+        return
+    if not (required <= num_args <= total):
+        if required == total:
+            errored(
+                f"'{name}' should take {num_args} argument(s), but it takes {total}."
+            )
+        else:
+            errored(
+                f"'{name}' should take {num_args} argument(s), "
+                f"but it takes {required}-{total}."
+            )

@@ -1,0 +1,141 @@
+# SwiftLint configuration for Chickadee.
+#
+# Style/formatting is owned by swift-format (.swift-format at repo root).
+# SwiftLint covers the quality / correctness layer that swift-format does not:
+# force unwraps, dead bindings, .isEmpty vs count == 0, first(where:), unused
+# imports, function complexity, etc.
+#
+# Run locally:  scripts/swiftlint.sh
+# Run formatter: scripts/format.sh   (swift-format, separate concern)
+
+disabled_rules:
+  # Rules below are owned by swift-format. Disabled here to keep one source of
+  # truth for formatting; SwiftLint would otherwise either duplicate or fight
+  # with swift-format.
+  - trailing_whitespace
+  - trailing_newline
+  - leading_whitespace
+  - vertical_whitespace
+  - opening_brace
+  - statement_position
+  - colon
+  - comma
+  - operator_whitespace
+  - return_arrow_whitespace
+  - line_length        # swift-format owns the 120-char limit
+  - todo               # repo has legitimate TODO/FIXME comments we keep
+  - file_length        # sub-rules below cap function/type size, which is what matters
+  - trailing_comma     # project convention uses multi-line trailing commas; formatting concern
+
+opt_in_rules:
+  - force_unwrapping
+  - explicit_init
+  # NOTE: first_where is intentionally NOT enabled.  It's a structural
+  # rule (no type info) that flags Fluent's
+  # `QueryBuilder.filter(_:).first()` chains as if they were
+  # `Sequence.filter { }.first`.  They are not: Fluent's .filter builds
+  # a SQL WHERE clause and .first() issues `LIMIT 1`.  QueryBuilder
+  # has no `.first(where:)` method, so the suggested rewrite would not
+  # compile.  Re-enable only if SwiftLint gains type-aware matching or
+  # we stop using Fluent.
+  - last_where
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  # contains_over_first_not_nil disabled for the same reason as
+  # first_where above: structural matching can't distinguish Fluent's
+  # `QueryBuilder.first()` (issues SQL LIMIT 1) from
+  # `Sequence.first(where:)`.  All three violations were Fluent calls
+  # like `try await X.query(on:).filter(...).first() != nil` — the
+  # rule's suggested `.contains(where:)` doesn't exist on QueryBuilder.
+  - contains_over_range_nil_comparison
+  - empty_count
+  - empty_string
+  - empty_collection_literal
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - toggle_bool
+  - unused_import
+  - joined_default_parameter
+  - sorted_first_last
+  - static_operator
+  - yoda_condition
+  - prefer_zero_over_explicit_init
+  - override_in_extension
+  - prohibited_super_call
+  # NOTE: discouraged_optional_boolean and discouraged_optional_collection
+  # are intentionally NOT enabled.  They conflict with two well-established
+  # patterns in this codebase:
+  #   1. Codable JSON models where `nil` (key absent) is semantically
+  #      distinct from `false` / `[]` (key present, explicitly false /
+  #      explicitly empty).  NotebookCheck, CourseBundleManifest, and
+  #      most Fluent models rely on this distinction at decode time.
+  #   2. Functions / env parsers that return `Bool?` or `[T]?` where
+  #      `nil` means "input absent or unparseable" — a meaning that
+  #      collapses to false / [] if the rule's advice were followed.
+  # Re-enable only after auditing every Codable schema for absence-vs-
+  # default-value semantics.
+
+excluded:
+  - .build
+  - wasm/.build     # wasm bridge sub-package build dir + vendored JavaScriptKit checkouts
+  - .claude         # agent worktrees + local state (nested .build vendored deps)
+  - .swiftpm
+  - Packages
+  - Public          # generated JupyterLite assets
+  - reference       # original Java code, kept for behavioural reference
+  - Tools           # JupyterLite build config
+
+identifier_name:
+  # Single-letter locals/closure params are common in this codebase
+  # (e.g. `s` for substring, `e` for element, `c` for character). Keeping
+  # min_length at 1 avoids ~390 violations on idiomatic short closures while
+  # still flagging unnamed-looking identifiers like empty strings.
+  min_length: 1
+  max_length:
+    warning: 50
+    error: 60
+
+type_name:
+  min_length: 3
+
+# Structural thresholds split warning from error meaningfully.  Warning
+# catches "this is getting long, consider splitting" (the boundary
+# cases — route handlers 5–10 lines past the line, etc.).  Error
+# catches "this is a genuine outlier that needs design work" (the
+# 300+-line functions and complexity-50+ behemoths in
+# PatternFamilyApplication / ManifestValidation).
+#
+# Because scripts/swiftlint.sh runs with --strict, both severities
+# currently fail CI; the split exists so that switching off --strict
+# (or using a baseline) is a coherent option later, and so future
+# tuning can lower these in tandem with real refactors without
+# re-deriving the right ratios.
+
+cyclomatic_complexity:
+  warning: 15
+  error: 40
+
+function_body_length:
+  warning: 100
+  error: 300
+
+type_body_length:
+  warning: 500
+  error: 800
+
+function_parameter_count:
+  warning: 6
+  error: 9
+
+# SwiftLint's default large_tuple threshold is 2/3 (warning/error), which
+# flags every labelled 3-tuple like `(data: Data, ext: String, name: String)`
+# — a perfectly readable shape that's effectively an anonymous struct.
+# We allow 3-tuples and flag 4+ as warnings, 5+ as errors.  Real refactor
+# work goes into the genuine outliers (4–7 member tuples that should be
+# proper structs).
+large_tuple:
+  warning: 3
+  error: 4
+
+nesting:
+  type_level: 2

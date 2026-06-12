@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import Core
 
 struct CoreModelTests {
@@ -34,10 +35,11 @@ struct CoreModelTests {
         #expect(tier == decoded)
     }
 
-    @Test(arguments: zip(
-        [TestTier.pub, .release, .secret],
-        ["public",     "release", "secret"]
-    ))
+    @Test(
+        arguments: zip(
+            [TestTier.pub, .release, .secret],
+            ["public", "release", "secret"]
+        ))
     func testTierRawValue(tier: TestTier, expectedRaw: String) {
         #expect(tier.rawValue == expectedRaw)
     }
@@ -45,20 +47,21 @@ struct CoreModelTests {
     // MARK: - GradingMode
 
     @Test func gradingModeDefaultsWorkerWhenAbsent() throws {
-        let json = #"{ "schemaVersion": 1 }"#.data(using: .utf8)!
+        let json = Data(#"{ "schemaVersion": 1 }"#.utf8)
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.gradingMode == .worker)
     }
 
-    @Test(arguments: zip(
-        [
-            #"{ "schemaVersion": 1, "gradingMode": "browser" }"#,
-            #"{ "schemaVersion": 1, "gradingMode": "worker"  }"#
-        ],
-        [GradingMode.browser, GradingMode.worker]
-    ))
+    @Test(
+        arguments: zip(
+            [
+                #"{ "schemaVersion": 1, "gradingMode": "browser" }"#,
+                #"{ "schemaVersion": 1, "gradingMode": "worker"  }"#,
+            ],
+            [GradingMode.browser, GradingMode.worker]
+        ))
     func gradingModeExplicit(json: String, expected: GradingMode) throws {
-        let manifest = try decoder.decode(TestProperties.self, from: json.data(using: .utf8)!)
+        let manifest = try decoder.decode(TestProperties.self, from: Data(json.utf8))
         #expect(manifest.gradingMode == expected)
     }
 
@@ -72,18 +75,19 @@ struct CoreModelTests {
     // MARK: - TestProperties (no Makefile)
 
     @Test func testPropertiesRoundTrip() throws {
-        let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": ["warmup.py"],
-          "testSuites": [
-            { "tier": "public",  "script": "test_bit_count.sh"  },
-            { "tier": "release", "script": "test_first_digit.sh" }
-          ],
-          "timeLimitSeconds": 10
-        }
-        """.data(using: .utf8)!
+        let json = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": ["warmup.py"],
+              "testSuites": [
+                { "tier": "public",  "script": "test_bit_count.sh"  },
+                { "tier": "release", "script": "test_first_digit.sh" }
+              ],
+              "timeLimitSeconds": 10
+            }
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.schemaVersion == 1)
@@ -103,18 +107,19 @@ struct CoreModelTests {
     // MARK: - TestProperties (with Makefile)
 
     @Test func testPropertiesWithMakefileRoundTrip() throws {
-        let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": ["warmup.py"],
-          "testSuites": [
-            { "tier": "public", "script": "test_bit_count.sh" }
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": { "target": "build" }
-        }
-        """.data(using: .utf8)!
+        let json = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": ["warmup.py"],
+              "testSuites": [
+                { "tier": "public", "script": "test_bit_count.sh" }
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": { "target": "build" }
+            }
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.makefile != nil)
@@ -126,18 +131,19 @@ struct CoreModelTests {
     }
 
     @Test func testPropertiesWithDefaultMakeTarget() throws {
-        let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "requiredFiles": ["warmup.py"],
-          "testSuites": [
-            { "tier": "public", "script": "test_bit_count.sh" }
-          ],
-          "timeLimitSeconds": 10,
-          "makefile": { "target": null }
-        }
-        """.data(using: .utf8)!
+        let json = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "requiredFiles": ["warmup.py"],
+              "testSuites": [
+                { "tier": "public", "script": "test_bit_count.sh" }
+              ],
+              "timeLimitSeconds": 10,
+              "makefile": { "target": null }
+            }
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.makefile != nil)
@@ -147,14 +153,14 @@ struct CoreModelTests {
     // MARK: - TestSuiteEntry dependsOn
 
     @Test func testSuiteEntryDefaultsEmptyDependsOn() throws {
-        let json = #"{ "tier": "public", "script": "test_foo.sh" }"#.data(using: .utf8)!
+        let json = Data(#"{ "tier": "public", "script": "test_foo.sh" }"#.utf8)
         let entry = try decoder.decode(TestSuiteEntry.self, from: json)
-        #expect(entry.dependsOn == [])
+        #expect(entry.dependsOn.isEmpty)
     }
 
     @Test func testSuiteEntryWithDependsOnRoundTrip() throws {
-        let json = #"{ "tier": "release", "script": "test_bar.sh", "dependsOn": ["test_foo.sh"] }"#
-            .data(using: .utf8)!
+        let json = Data(
+            #"{ "tier": "release", "script": "test_bar.sh", "dependsOn": ["test_foo.sh"] }"#.utf8)
         let entry = try decoder.decode(TestSuiteEntry.self, from: json)
         #expect(entry.script == "test_bar.sh")
         #expect(entry.dependsOn == ["test_foo.sh"])
@@ -165,22 +171,23 @@ struct CoreModelTests {
     }
 
     @Test func testPropertiesWithDependencyChainRoundTrip() throws {
-        let json = """
-        {
-          "schemaVersion": 1,
-          "gradingMode": "worker",
-          "testSuites": [
-            { "tier": "public",  "script": "test_build.sh" },
-            { "tier": "public",  "script": "test_unit_a.sh",  "dependsOn": ["test_build.sh"] },
-            { "tier": "release", "script": "test_unit_b.sh",  "dependsOn": ["test_build.sh"] }
-          ],
-          "timeLimitSeconds": 10
-        }
-        """.data(using: .utf8)!
+        let json = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "gradingMode": "worker",
+              "testSuites": [
+                { "tier": "public",  "script": "test_build.sh" },
+                { "tier": "public",  "script": "test_unit_a.sh",  "dependsOn": ["test_build.sh"] },
+                { "tier": "release", "script": "test_unit_b.sh",  "dependsOn": ["test_build.sh"] }
+              ],
+              "timeLimitSeconds": 10
+            }
+            """.utf8)
 
         let manifest = try decoder.decode(TestProperties.self, from: json)
         #expect(manifest.testSuites.count == 3)
-        #expect(manifest.testSuites[0].dependsOn == [])
+        #expect(manifest.testSuites[0].dependsOn.isEmpty)
         #expect(manifest.testSuites[1].dependsOn == ["test_build.sh"])
         #expect(manifest.testSuites[2].dependsOn == ["test_build.sh"])
 

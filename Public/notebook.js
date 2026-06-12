@@ -20,11 +20,28 @@
     const submitBtn  = document.getElementById('nb-submit');
     const resultsEl  = document.getElementById('nb-results');
     const uploadFile = document.getElementById('nb-upload-file');
-    const frameError = document.getElementById('nb-frame-error');
     const setupID     = frame ? frame.dataset.setupId : null;
     const gradingMode = frame ? frame.dataset.gradingMode : null;
+    // Closed-assignment read-only mode.  Plumbed from the server via
+    // NotebookContext.isClosed → notebook.leaf data-read-only.  Disables
+    // editing, run shortcuts, and the upload fallback handler.  The submit
+    // button is also suppressed server-side (showSubmit=false) when closed.
+    const readOnly    = frame ? frame.dataset.readOnly === 'true' : false;
 
     if (!frame || !setupID) return;
+
+    // ≤640px the page hides the editor behind a "larger screen" notice and
+    // an inline guard in notebook.leaf aborts the iframe's eager navigation.
+    // Don't run the preflight, watchdog, or editor mount for a surface the
+    // student can't see; if the viewport grows past the breakpoint
+    // (rotation, window resize) reload so the page boots normally.
+    const phoneQuery = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;
+    if (phoneQuery && phoneQuery.matches) {
+        const onChange = (e) => { if (!e.matches) window.location.reload(); };
+        if (phoneQuery.addEventListener) phoneQuery.addEventListener('change', onChange);
+        else if (phoneQuery.addListener) phoneQuery.addListener(onChange);
+        return;
+    }
 
     // Disable Submit until the student's notebook has been synced into the
     // JupyterLite editor. This prevents a race condition where students click
@@ -49,42 +66,332 @@
         frame.getAttribute('src') ||
         `/jupyterlite/notebooks/index.html?workspace=${encodeURIComponent(setupID)}-student&reset=&path=assignment.ipynb`;
     const lockedNotebookPath = normalizeJupyterPath(extractPathFromEditorURL(editorURL));
-    let lastForcedEditorResetMs = 0;
+    // Timestamp of a forced editor reset whose navigation has not committed
+    // yet (cleared by the iframe load event).  Guards the locked-path
+    // enforcement against aborting its own still-loading reset.
+    let forcedEditorResetAt = 0;
     let serverSyncInFlight = false;
     let serverSyncComplete = false;
-    frame.src = editorURL;
 
-    // Quick reachability check helps explain blank/failed editor loads.
-    fetch(notebookURL, { method: 'GET' }).then((res) => {
-        if (!res.ok) {
-            setStatus('error', `Notebook source unavailable (${res.status})`);
-            if (frameError) frameError.style.display = '';
+    // Capability preflight: gate iframe mounting on the browser actually
+    // supporting JupyterLite + Pyodide.  If the preflight module isn't
+    // loaded (older cached page, network glitch) fall through to the
+    // legacy behaviour of mounting unconditionally.
+    const failures = window.ChickadeeNotebookFailures;
+    const preflightPromise = failures
+        ? failures.runPreflight()
+        : Promise.resolve({ ok: true, failed: [] });
+
+    preflightPromise.then((result) => {
+        if (!result.ok) {
+            if (failures) {
+                failures.showFailure({
+                    kind:         'preflight_fail',
+                    failedChecks: result.failed
+                });
+            }
+            // Re-enable Submit so the upload-fallback handler runs.
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.title = '';
+            }
+            setStatus('error', 'In-browser editor unavailable — upload your notebook below.');
+            return;
         }
-    }).catch(() => {
-        setStatus('error', 'Notebook source unavailable');
-        if (frameError) frameError.style.display = '';
+        mountEditor();
     });
 
-    // Detect blank/failed iframe loads and provide an explicit fallback path.
-    let loaded = false;
-    frame.addEventListener('load', () => {
-        loaded = true;
-        if (frameError) frameError.style.display = 'none';
-        if (!serverSyncComplete && !serverSyncInFlight) {
-            void syncNotebookFromServerSnapshot();
+    function mountEditor() {
+        // The template renders the same URL into the iframe's src, so the
+        // editor is already loading by the time the preflight resolves.
+        // Re-assigning src aborts that in-flight navigation and starts it
+        // over — only navigate when the attribute is missing or different
+        // (an older cached copy of the page).
+        if (frame.getAttribute('src') !== editorURL) {
+            frame.src = editorURL;
         }
-        applyLockedNotebookUI();
-        enforceLockedNotebookPath();
-    });
-    setInterval(() => {
-        applyLockedNotebookUI();
-        enforceLockedNotebookPath();
-    }, 1500);
-    setTimeout(() => {
-        if (!loaded && frameError) {
-            frameError.style.display = '';
+
+        // Quick reachability check helps explain blank/failed editor loads.
+        fetch(notebookURL, { method: 'GET' }).then((res) => {
+            if (!res.ok) {
+                setStatus('error', `Notebook source unavailable (${res.status})`);
+            }
+        }).catch(() => {
+            setStatus('error', 'Notebook source unavailable');
+        });
+
+        // --- Idle-watchdog activity bridge -------------------------------
+        //
+        // Keystrokes/clicks INSIDE the JupyterLite iframe never reach the
+        // parent window, so idle-logout.js can't see a student who's actively
+        // editing.  On each iframe load we attach passive listeners to its
+        // document and (a) dispatch `chickadee:activity` on the parent window
+        // to reset the client idle deadline, and (b) send a throttled
+        // `/session/keepalive` so the server's last_seen_at tracks in-editor
+        // work and the next-request gate doesn't expire an active student.
+        // Same-origin contentDocument access is reliable in Chromium and
+        // best-effort in Safari (hence the try/catch).  Skipped entirely when
+        // the idle gate is disabled (timeout meta is 0/absent).
+        let lastNotebookKeepalive = 0;
+
+        function idleTimeoutConfigured() {
+            const meta = document.querySelector('meta[name="session-idle-timeout-seconds"]');
+            return meta ? (parseInt(meta.getAttribute('content'), 10) || 0) > 0 : false;
         }
-    }, 5000);
+
+        function notebookActivity() {
+            try {
+                window.dispatchEvent(new CustomEvent('chickadee:activity'));
+            } catch (_) { /* ignore */ }
+
+            const now = Date.now();
+            // Leading-edge, then at most once per 5 minutes.
+            if (now - lastNotebookKeepalive < 5 * 60 * 1000) return;
+            lastNotebookKeepalive = now;
+            const token = ChickadeeUI.getCsrfToken();
+            fetch('/session/keepalive', {
+                method: 'POST',
+                headers: { 'x-csrf-token': token, 'accept': 'application/json' },
+                redirect: 'manual'
+            }).catch(() => { /* best-effort */ });
+        }
+
+        function attachNotebookActivityBridge() {
+            if (!idleTimeoutConfigured()) return;
+            let doc;
+            try { doc = frame.contentDocument; } catch (_) { doc = null; }
+            if (!doc || doc._chickadeeActivityBound) return;
+            doc._chickadeeActivityBound = true;
+            ['keydown', 'pointerdown', 'wheel'].forEach((name) => {
+                try {
+                    doc.addEventListener(name, notebookActivity, { passive: true, capture: true });
+                } catch (_) { /* ignore */ }
+            });
+        }
+
+        frame.addEventListener('load', () => {
+            // A document committed; any forced reset we were waiting on has
+            // landed, so the locked-path enforcement may act again.
+            forcedEditorResetAt = 0;
+            if (!serverSyncComplete && !serverSyncInFlight) {
+                void syncNotebookFromServerSnapshot();
+            }
+            applyLockedNotebookUI();
+            enforceLockedNotebookPath();
+            attachNotebookActivityBridge();
+        });
+        setInterval(() => {
+            applyLockedNotebookUI();
+            enforceLockedNotebookPath();
+            attachNotebookActivityBridge();
+        }, 1500);
+
+        armEditorWatchdog();
+    }
+
+    // Watchdog: two-phase readiness check on the iframe's JupyterLite.
+    //
+    //   Phase 1 (shell) — wait up to 60s for the JupyterLite UI to appear
+    //       in the iframe's DOM.  Failure here means the iframe never
+    //       started — fallback fires with kind=watchdog_timeout (no
+    //       failedChecks).
+    //
+    //   Phase 2 (kernel) — once the shell is up, fire ONLY if we see
+    //       POSITIVE EVIDENCE the kernel is in a failure state — i.e.
+    //       "Kernel Unknown" text in the iframe DOM (Hans's symptom
+    //       from PR #467) or a `dead`/`unknown` kernel status reported
+    //       via the ServiceManager API.  Absence of positive evidence
+    //       of *health* (e.g. the kernel is in "Starting" /
+    //       "Connecting" state, or the status text isn't visible to
+    //       our probe) is NOT treated as failure.  Phase 2 deadline is
+    //       a maximum after which we silently give up watching (we
+    //       were wrong about a problem; the page is the user's now).
+    //
+    // Background: v0.4.149's original probe required positive evidence
+    // of kernel health (status text "| Idle" or "| Busy"); v0.4.150 +
+    // v0.4.151 didn't fix that.  In production Safari, Pyodide can
+    // legitimately take >60s to bootstrap, and the status indicator
+    // text doesn't always render the way our probe expects.  We were
+    // firing phase-2 timeouts on healthy kernels because we couldn't
+    // *prove* they were healthy — which is the wrong contract.
+    //
+    // Readiness signal: prefer DOM inspection over JS-property access
+    // on the iframe's contentWindow.  Same-origin contentWindow access
+    // works in Chromium but is unreliable in Safari (cross-process
+    // iframe isolation can make `frame.contentWindow.jupyterapp`
+    // invisible from the parent even when JupyterLite is fully alive).
+    // DOM access is more permissive and matches what the user actually
+    // sees on screen.
+    //
+    // Once the shell is confirmed loaded, `shellLoadedAt` is latched:
+    // even if a later poll fails to see the UI (intra-iframe
+    // navigation, transient cross-origin error), we don't regress to a
+    // phase-1 timeout.
+    function armEditorWatchdog() {
+        if (!failures) return;
+        const startedAt          = Date.now();
+        const shellDeadline      = 60000;
+        const kernelMaxObserveMs = 120000;
+        let shellLoadedAt = null;
+        let cancelled     = false;
+
+        function tick() {
+            if (cancelled) return;
+
+            const probe = probeIframeReadiness(frame);
+            if (probe.shellReady && shellLoadedAt === null) {
+                shellLoadedAt = Date.now();
+            }
+
+            // Phase 1: shell never seen
+            if (shellLoadedAt === null) {
+                if (Date.now() - startedAt >= shellDeadline) {
+                    cancelled = true;
+                    failures.showFailure({ kind: 'watchdog_timeout' });
+                    reenableSubmit();
+                    return;
+                }
+                setTimeout(tick, 500);
+                return;
+            }
+
+            // Shell loaded.  Phase 2 fires ONLY on positive evidence
+            // the kernel has hit a known failure state.
+            if (probe.kernelInFailureState) {
+                cancelled = true;
+                failures.showFailure({
+                    kind:         'watchdog_timeout',
+                    failedChecks: ['kernel-unhealthy']
+                });
+                reenableSubmit();
+                return;
+            }
+
+            // No failure evidence + shell loaded.  Stop watching after
+            // a generous observation window — the user has a working
+            // editor and we shouldn't keep polling forever.
+            if (Date.now() - shellLoadedAt >= kernelMaxObserveMs) {
+                cancelled = true; // silent give-up; assume healthy
+                return;
+            }
+            setTimeout(tick, 1000);
+        }
+        // First poll after 1s — the shell is never up before that.
+        setTimeout(tick, 1000);
+    }
+
+    // Probes the JupyterLite iframe for shell readiness + kernel failure
+    // evidence using a layered approach.  Each layer is wrapped in
+    // try/catch so a cross-origin or transient access error doesn't kill
+    // the watchdog.
+    //
+    // For shell readiness, we accept ANY of:
+    //   * `frame.contentWindow.jupyterapp` truthy  — works in Chromium
+    //   * a JupyterLab toolbar element in the iframe's DOM
+    //   * any `.jp-` prefixed class on the iframe's body
+    // The DOM checks work in Safari where the JS-property probe doesn't.
+    //
+    // For kernel state, we look for POSITIVE EVIDENCE OF FAILURE only:
+    //   * "Kernel Unknown" text in the iframe DOM (Hans's symptom)
+    //   * a session with status `dead` or `unknown` via ServiceManager
+    // Absence of failure evidence is NOT treated as failure — kernels
+    // that are still bootstrapping ("starting", "connecting") look the
+    // same to us as healthy ones, and that's fine; the watchdog only
+    // fires when we're sure something has broken.
+    function probeIframeReadiness(frame) {
+        let shellReady = false;
+        let kernelInFailureState = false;
+        let win = null;
+        let doc = null;
+
+        try { win = frame.contentWindow; } catch (_) { /* nope */ }
+        try { doc = frame.contentDocument; } catch (_) { /* nope */ }
+
+        // Probe 1: JS global on contentWindow (Chromium-friendly)
+        try {
+            if (win && win.jupyterapp) {
+                shellReady = true;
+                if (isKernelInFailureState(win)) {
+                    kernelInFailureState = true;
+                }
+            }
+        } catch (_) { /* fall through */ }
+
+        // Probe 2: DOM presence in the iframe (Safari-friendly)
+        if (!shellReady) {
+            try {
+                if (doc && doc.body) {
+                    if (doc.querySelector('.jp-Toolbar') ||
+                        doc.querySelector('.jp-Notebook') ||
+                        doc.querySelector('[class^="jp-"]') ||
+                        doc.querySelector('[class*=" jp-"]')) {
+                        shellReady = true;
+                    }
+                }
+            } catch (_) { /* fall through */ }
+        }
+
+        // Probe 3: kernel failure by DOM text (covers Safari where the
+        // JS-API path returns nothing).  We specifically look for the
+        // "Kernel Unknown" badge JupyterLite shows when the kernel
+        // session failed to register.
+        if (shellReady && !kernelInFailureState) {
+            try {
+                const txt = (doc && doc.body && doc.body.textContent) || '';
+                if (txt.indexOf('Kernel Unknown') !== -1) {
+                    kernelInFailureState = true;
+                }
+            } catch (_) { /* fall through */ }
+        }
+
+        return { shellReady, kernelInFailureState };
+    }
+
+    function reenableSubmit() {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.title = '';
+        }
+    }
+
+    // Returns true iff we have POSITIVE EVIDENCE the kernel has hit a
+    // known failure state.  Used by the watchdog to decide whether to
+    // fire phase-2 ("kernel-unhealthy").  We deliberately return false
+    // for the "I don't know" case — kernels that are still bootstrapping
+    // look the same as healthy ones to us, and that's fine.  We'd
+    // rather miss a genuine failure than false-positive on a working
+    // editor.
+    //
+    // Failure signals (any of):
+    //   * ServiceManager session with status `dead` or `unknown`
+    //   * "Kernel Unknown" text in the iframe DOM (the Hans symptom)
+    //
+    // Each probe is wrapped in try/catch so a TypeError or cross-origin
+    // access error doesn't propagate.
+    function isKernelInFailureState(win) {
+        try {
+            const app = win.jupyterapp;
+            const sm  = app && app.serviceManager;
+            if (sm && sm.sessions && typeof sm.sessions.running === 'function') {
+                const running = sm.sessions.running();
+                if (running) {
+                    const sessions = Array.from(running);
+                    for (let i = 0; i < sessions.length; i++) {
+                        const status = sessions[i] && sessions[i].kernel && sessions[i].kernel.status;
+                        if (status === 'unknown' || status === 'dead') return true;
+                    }
+                }
+            }
+        } catch (_) { /* fall through */ }
+
+        try {
+            const doc = win.document;
+            const txt = (doc && doc.body && doc.body.textContent) || '';
+            if (txt.indexOf('Kernel Unknown') !== -1) return true;
+        } catch (_) { /* fall through */ }
+
+        return false;
+    }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
     // iframe never loaded) re-enable Submit so the student isn't stuck. The
@@ -166,6 +473,24 @@
         const notebook = await nbRes.json();
         return looksLikeNotebook(notebook) ? notebook : null;
     }
+
+    // Exposed for idle-logout.js: flush the open notebook to JupyterLite's
+    // storage before the inactivity watchdog signs the user out, so unsaved
+    // cells survive. Best-effort and read-only-aware; never throws.
+    window.chickadeeSaveNotebook = async function () {
+        if (readOnly) return;
+        try {
+            const childWindow = frame.contentWindow;
+            const app = childWindow && childWindow.jupyterapp;
+            if (app && app.commands && typeof app.commands.execute === 'function') {
+                try { await app.commands.execute('docmanager:save'); } catch (_) {}
+                try { await app.commands.execute('docmanager:save-all'); } catch (_) {}
+                await delay(150);
+            }
+        } catch (_) {
+            // Saving is best-effort; swallow everything.
+        }
+    };
 
     async function readNotebookFromJupyterFrame() {
         try {
@@ -331,15 +656,31 @@
     function enforceLockedNotebookPath() {
         if (!lockedNotebookPath || !frame.contentWindow) return;
         try {
-            const currentURL = new URL(frame.contentWindow.location.href, window.location.origin);
+            const rawHref = frame.contentWindow.location.href;
+
+            // Until the iframe commits its first document, location.href is
+            // still the initial "about:blank" — the editor is loading, not
+            // navigated away.  Resetting src in that state aborts the
+            // in-flight load; on a slow connection (or a server busy with a
+            // class-wide rush) each 1.5s tick would abort and restart the
+            // navigation forever, so a healthy-but-slow boot never commits
+            // and the shell watchdog misfires.  Wait for a real document.
+            if (rawHref === 'about:blank') return;
+
+            const currentURL = new URL(rawHref, window.location.origin);
             const currentPath = normalizeJupyterPath(currentURL.searchParams.get('path'));
             const inNotebookApp = currentURL.pathname.includes('/jupyterlite/notebooks/');
 
             if (inNotebookApp && currentPath === lockedNotebookPath) return;
 
+            // The previous document's URL stays current while a forced
+            // reset's navigation is in flight, so the path still reads as
+            // wrong here.  Give the reset a generous window to commit (the
+            // load event clears the stamp) before forcing another one,
+            // otherwise slow recoveries are aborted in the same loop.
             const now = Date.now();
-            if (now - lastForcedEditorResetMs < 1000) return;
-            lastForcedEditorResetMs = now;
+            if (forcedEditorResetAt && now - forcedEditorResetAt < 20000) return;
+            forcedEditorResetAt = now;
             frame.src = editorURL;
         } catch (_) {
             // Ignore transient cross-frame navigation states.
@@ -360,13 +701,38 @@
 
             const contents = app.serviceManager && app.serviceManager.contents;
 
-            // Before writing the server snapshot into JupyterLite, check whether
-            // this browser already has a copy of the notebook in local storage
-            // (IndexedDB). If it does, preserve it — the local version is the
-            // student's most-recent in-progress work and must not be clobbered
-            // with the (potentially older) server copy. The server copy is only
-            // authoritative for seeding a fresh browser or a different device;
-            // in both of those cases local storage will be empty.
+            // Server-side overwrite detection.  The server stamps the iframe
+            // with `data-working-copy-mtime` = the Unix-epoch mtime of the
+            // working-copy file on disk.  We persist the last mtime this
+            // browser has *seen* (per setup) in localStorage.  When the
+            // server mtime is newer than the saved baseline, the server
+            // overwrote the file since our last visit — usually because an
+            // instructor clicked "Reset notebook" — and we must NOT
+            // preserve the local IndexedDB copy: we force-overwrite it
+            // with the server snapshot so the reset is visible without a
+            // manual cache-clear.
+            //
+            // CRITICAL SAFETY: a missing localStorage entry (`seenMtime`
+            // === 0) is treated as "no baseline" — NOT as "any server
+            // mtime is newer."  Otherwise the very first visit AFTER this
+            // code is deployed would wipe every student's in-progress
+            // IndexedDB work because `localStorage` doesn't have the new
+            // key yet but the working-copy file already has a non-zero
+            // mtime.  The baseline gets stamped at the end of this
+            // function so the *second* post-deploy visit has something to
+            // compare against, and only resets that bump the mtime after
+            // that baseline are treated as force-reseed events.
+            const serverMtime = parseInt(frame.dataset.workingCopyMtime || '0', 10) || 0;
+            const seenKey = 'chickadee_nb_mtime_' + setupID;
+            let seenMtime = 0;
+            try { seenMtime = parseInt(localStorage.getItem(seenKey) || '0', 10) || 0; } catch (_) {}
+            const serverIsNewer = shouldForceReseed({ serverMtime, seenMtime });
+
+            // Preservation logic: if the browser already has the notebook in
+            // IndexedDB AND the server hasn't overwritten it since we last
+            // saw it, keep the local version — that's the student's
+            // in-progress work.  Otherwise (no local copy, OR server is
+            // newer than our baseline) seed from the server.
             let hasLocalContent = false;
             if (contents && typeof contents.get === 'function') {
                 try {
@@ -377,12 +743,21 @@
                 }
             }
 
-            if (!hasLocalContent && contents && typeof contents.save === 'function') {
+            const shouldSeed = !hasLocalContent || serverIsNewer;
+            if (shouldSeed && contents && typeof contents.save === 'function') {
                 await contents.save(lockedNotebookPath, {
                     type: 'notebook',
                     format: 'json',
                     content: snapshotNotebook
                 });
+            }
+
+            // Stamp the mtime we just synced from so subsequent visits know
+            // what we've already seen.  Skip if localStorage is unavailable
+            // (private mode etc.) — the preservation logic still works on
+            // hasLocalContent alone in that case.
+            if (serverMtime > 0) {
+                try { localStorage.setItem(seenKey, String(serverMtime)); } catch (_) {}
             }
 
             if (app.commands && typeof app.commands.execute === 'function') {
@@ -408,6 +783,30 @@
         }
     }
 
+    // Pure decision function used by `syncNotebookFromServerSnapshot` to
+    // decide whether to force-overwrite the browser's IndexedDB copy
+    // with the server snapshot, OR preserve the local copy and let the
+    // student's in-progress edits stand.
+    //
+    //   serverMtime  — Unix-epoch seconds of the working-copy file on
+    //                  the server.  0 if the server couldn't stat it.
+    //   seenMtime    — Unix-epoch seconds of the last server mtime this
+    //                  browser observed, persisted in localStorage.  0
+    //                  if no baseline has been recorded yet (first visit
+    //                  ever, or first visit after this code deployed).
+    //
+    // Returns true iff we should treat the server file as "freshly
+    // overwritten since we last looked" and discard the local IndexedDB
+    // copy.  Returns false when we have no baseline (seenMtime === 0),
+    // because absence of a baseline must NOT mean "any server mtime is
+    // newer" — that would clobber every student's pre-existing local
+    // work on the first post-deploy visit.
+    function shouldForceReseed({ serverMtime, seenMtime }) {
+        if (!serverMtime || serverMtime <= 0) return false;
+        if (!seenMtime  || seenMtime  <= 0) return false;
+        return serverMtime > seenMtime;
+    }
+
     async function waitForJupyterApp(timeoutMs) {
         const started = Date.now();
         while (Date.now() - started < timeoutMs) {
@@ -422,15 +821,41 @@
     function applyLockedNotebookUI() {
         if (!frame.contentDocument) return;
         const doc = frame.contentDocument;
-        if (doc.getElementById('chickadee-notebook-lock-style')) return;
+        if (!doc.getElementById('chickadee-notebook-lock-style')) {
+            const rules = [
+                '.jp-SideBar, .jp-SidePanel, .jp-FileBrowser, .jp-FileBrowser-Panel, .jp-DirListing { display: none !important; }',
+                '.lm-MenuBar, .jp-MenuBar, .jp-TopBar { display: none !important; }'
+            ];
+            if (readOnly) {
+                rules.push(
+                    '.jp-Toolbar, .jp-Cell .jp-Toolbar, .jp-CellHeader, .jp-CellFooter { display: none !important; }',
+                    '.cm-content { caret-color: transparent !important; }'
+                );
+            }
+            const style = doc.createElement('style');
+            style.id = 'chickadee-notebook-lock-style';
+            style.textContent = rules.join('\n');
+            doc.head.appendChild(style);
+        }
 
-        const style = doc.createElement('style');
-        style.id = 'chickadee-notebook-lock-style';
-        style.textContent = [
-            '.jp-SideBar, .jp-SidePanel, .jp-FileBrowser, .jp-FileBrowser-Panel, .jp-DirListing { display: none !important; }',
-            '.lm-MenuBar, .jp-MenuBar, .jp-TopBar { display: none !important; }'
-        ].join('\n');
-        doc.head.appendChild(style);
+        if (readOnly) {
+            doc.querySelectorAll('.cm-content').forEach((el) => {
+                if (el.getAttribute('contenteditable') !== 'false') {
+                    el.setAttribute('contenteditable', 'false');
+                }
+            });
+            if (!doc.__chickadeeReadOnlyKeyHandler) {
+                const handler = (event) => {
+                    if (event.key !== 'Enter') return;
+                    if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                };
+                doc.addEventListener('keydown', handler, true);
+                doc.__chickadeeReadOnlyKeyHandler = handler;
+            }
+        }
     }
 
     function looksLikeNotebook(value) {
@@ -475,8 +900,16 @@
     // 3. Upload & submit — read file → queue runner grading
     // -------------------------------------------------------------------------
 
+    if (uploadFile && readOnly) {
+        uploadFile.disabled = true;
+    }
     if (uploadFile) {
         uploadFile.addEventListener('change', async () => {
+            if (readOnly) {
+                uploadFile.value = '';
+                setStatus('error', 'This assignment is closed — submissions are no longer accepted.');
+                return;
+            }
             const file = uploadFile.files && uploadFile.files[0];
             if (!file) return;
 
@@ -527,223 +960,6 @@
     }
 
     // -------------------------------------------------------------------------
-    // 4. Pyodide execution engine
-    // -------------------------------------------------------------------------
-
-    let pyodide = null;
-
-    async function loadPyodideOnce() {
-        if (pyodide) return pyodide;
-        // Pyodide is loaded from CDN the first time Submit is clicked.
-        if (!window.loadPyodide) {
-            await loadScript('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
-        }
-        pyodide = await window.loadPyodide();
-        return pyodide;
-    }
-
-    // Run all cells in order; collect outcomes for TEST cells.
-    async function runNotebook(notebook) {
-        const py = await loadPyodideOnce();
-
-        // Reset the interpreter for a clean run.
-        await py.runPythonAsync('import sys; sys.modules.clear()');
-
-        const outcomes = [];
-
-        for (const cell of notebook.cells) {
-            if (cell.cell_type !== 'code') continue;
-
-            const source = Array.isArray(cell.source)
-                ? cell.source.join('')
-                : cell.source;
-
-            if (!source.trim()) continue;
-
-            const testMeta = parseTestComment(source);
-            const startMs  = Date.now();
-
-            if (testMeta) {
-                // This is a test cell — run it and record pass/fail.
-                const outcome = await runTestCell(py, source, testMeta, startMs);
-                outcomes.push(outcome);
-            } else {
-                // Regular cell — run it silently; exceptions propagate and abort.
-                try {
-                    await py.runPythonAsync(source);
-                } catch (err) {
-                    const longResult = await captureTraceback(py, err);
-                    // A non-test cell threw — record a generic error and stop.
-                    outcomes.push({
-                        testName:          'setup_error',
-                        testClass:         null,
-                        tier:              'public',
-                        status:            'error',
-                        shortResult:       `Setup cell failed: ${firstLine(err.message)}`,
-                        longResult,
-                        executionTimeMs:   Date.now() - startMs,
-                        memoryUsageBytes:  null,
-                        attemptNumber:     1,
-                        isFirstPassSuccess: false,
-                    });
-                    break;
-                }
-            }
-        }
-
-        return outcomes;
-    }
-
-    // Run a single test cell; return a TestOutcome-shaped object.
-    async function runTestCell(py, source, meta, startMs) {
-        let status      = 'pass';
-        let shortResult = 'passed';
-        let longResult  = null;
-
-        try {
-            await py.runPythonAsync(source);
-        } catch (err) {
-            const msg = err.message || String(err);
-            longResult = await captureTraceback(py, err);
-
-            if (msg.includes('AssertionError') || msg.includes('assert')) {
-                status = 'fail';
-                // Surface the assertion message if one was provided.
-                const assertMsg = extractAssertionMessage(msg);
-                shortResult = assertMsg
-                    ? `failed: ${assertMsg.substring(0, 80)}`
-                    : 'failed';
-            } else {
-                status      = 'error';
-                shortResult = `error: ${firstLine(msg).substring(0, 80)}`;
-            }
-        }
-
-        return {
-            testName:          meta.name,
-            testClass:         null,
-            tier:              meta.tier,
-            status,
-            shortResult,
-            longResult,
-            executionTimeMs:   Date.now() - startMs,
-            memoryUsageBytes:  null,
-            attemptNumber:     1,
-            isFirstPassSuccess: status === 'pass',
-        };
-    }
-
-    // Ask Pyodide to format the last traceback from Python's sys module.
-    // Falls back to err.message if Python-level info is unavailable.
-    async function captureTraceback(py, err) {
-        try {
-            const tb = await py.runPythonAsync(`
-import traceback, sys
-_exc = sys.last_value
-if _exc is not None:
-    ''.join(traceback.format_exception(type(_exc), _exc, _exc.__traceback__))
-else:
-    ''
-`);
-            return tb.trim() || (err.message || String(err));
-        } catch (_) {
-            return err.message || String(err);
-        }
-    }
-
-    // Extract the message from an AssertionError line, e.g.:
-    //   "AssertionError: expected 5 but got 3"  →  "expected 5 but got 3"
-    function extractAssertionMessage(msg) {
-        const line = msg.split('\n').find(l => l.includes('AssertionError'));
-        if (!line) return null;
-        const colon = line.indexOf(':');
-        return colon >= 0 ? line.slice(colon + 1).trim() : null;
-    }
-
-    function firstLine(msg) {
-        return (msg || '').split('\n')[0].trim();
-    }
-
-    // -------------------------------------------------------------------------
-    // 5. # TEST: comment parser
-    //
-    // Format: # TEST: <name> [key=value ...]
-    // Supported keys: tier (default "public"), weight (reserved), requires (reserved)
-    // -------------------------------------------------------------------------
-
-    function parseTestComment(source) {
-        const firstLine = source.trimStart().split('\n')[0];
-        const match     = firstLine.match(/^#\s*TEST:\s*(\S+)(.*)/);
-        if (!match) return null;
-
-        const name   = match[1];
-        const kvStr  = match[2].trim();
-        const kvPairs = {};
-        for (const part of kvStr.split(/\s+/)) {
-            const [k, v] = part.split('=');
-            if (k && v !== undefined) kvPairs[k] = v;
-        }
-
-        return {
-            name,
-            tier:     kvPairs.tier     || 'public',
-            weight:   kvPairs.weight   ? parseFloat(kvPairs.weight) : null,
-            requires: kvPairs.requires ? kvPairs.requires.split(',') : [],
-        };
-    }
-
-    // -------------------------------------------------------------------------
-    // 6. Notebook merge helper (client-side, for Pyodide only)
-    //
-    // Produces a notebook with:
-    //   - non-test cells from the student's upload  (their solution code)
-    //   - test cells from the assignment notebook    (visible tiers only)
-    //
-    // The server re-injects hidden test cells when the notebook is saved.
-    // -------------------------------------------------------------------------
-
-    function mergeNotebooksForRun(studentNB, assignmentNB) {
-        const isTestCellJS = function (cell) {
-            const source = Array.isArray(cell.source)
-                ? cell.source.join('')
-                : (cell.source || '');
-            return /^#\s*TEST:/.test(source.trimStart().split('\n')[0]);
-        };
-        const solutionCells = (studentNB.cells   || []).filter(c => !isTestCellJS(c));
-        const testCells     = (assignmentNB.cells || []).filter(c =>  isTestCellJS(c));
-        return { ...studentNB, cells: [...solutionCells, ...testCells] };
-    }
-
-    // -------------------------------------------------------------------------
-    // 7. Build TestOutcomeCollection
-    // -------------------------------------------------------------------------
-
-    function buildCollection(outcomes, testSetupID) {
-        const pass    = outcomes.filter(o => o.status === 'pass').length;
-        const fail    = outcomes.filter(o => o.status === 'fail').length;
-        const error   = outcomes.filter(o => o.status === 'error').length;
-        const timeout = outcomes.filter(o => o.status === 'timeout').length;
-        const totalMs = outcomes.reduce((s, o) => s + o.executionTimeMs, 0);
-
-        return {
-            submissionID:    '',          // filled in by server
-            testSetupID,
-            attemptNumber:   1,           // server will recompute
-            buildStatus:     'passed',
-            compilerOutput:  null,
-            outcomes,
-            totalTests:      outcomes.length,
-            passCount:       pass,
-            failCount:       fail,
-            errorCount:      error,
-            timeoutCount:    timeout,
-            executionTimeMs: totalMs,
-            runnerVersion:   'browser-pyodide/1.0',
-            timestamp:       new Date().toISOString(),
-        };
-    }
-
-    // -------------------------------------------------------------------------
     // 8. POST to /api/v1/submissions/runner-submit
     // -------------------------------------------------------------------------
 
@@ -770,9 +986,9 @@ else:
         const notebookBytes = new Uint8Array(
             new TextEncoder().encode(JSON.stringify(notebook))
         );
-        const { outcomes, response } =
+        const { outcomes, response, sections, sectionIDs } =
             await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
-        renderResults(outcomes, response);
+        renderResults(outcomes, response, sections, sectionIDs);
         return { outcomes, response };
     }
 
@@ -790,7 +1006,7 @@ else:
     // Pattern that identifies a dependency-skip shortResult.
     const SKIP_RE = /^Skipped: prerequisite '(.+)' did not pass$/;
 
-    function renderResults(outcomes, response) {
+    function renderResults(outcomes, response, sections, sectionIDs) {
         if (!resultsEl) return;
         const displayNameMap = buildOutcomeDisplayNameMap(outcomes);
 
@@ -809,7 +1025,43 @@ else:
         if (timeout) parts.push(`${timeout} timed out`);
         summaryEl.textContent = parts.join(' · ');
 
-        // Results table — 4-column structure matching submission.leaf
+        resultsEl.innerHTML = '';
+        resultsEl.appendChild(summaryEl);
+
+        // One table per section, mirroring the server-rendered submission view
+        // (submission.leaf).  Unlabelled groups (no sections defined) render as
+        // a single bare table, identical to the pre-sections layout.
+        for (const group of groupOutcomesForDisplay(outcomes, sections, sectionIDs)) {
+            const block = document.createElement('section');
+            block.className = 'submission-section-block';
+            if (group.sectionName) {
+                const heading = document.createElement('h3');
+                heading.className = 'submission-section-heading';
+                heading.textContent = group.sectionName;
+                block.appendChild(heading);
+            }
+            block.appendChild(buildResultsTable(group.outcomes, displayNameMap));
+            resultsEl.appendChild(block);
+        }
+
+        resultsEl.hidden = false;
+
+        // Scroll results into view so student sees feedback immediately.
+        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Group outcomes for display via the browser runner's shared helper, with a
+    // flat single-bucket fallback if it is somehow unavailable.
+    function groupOutcomesForDisplay(outcomes, sections, sectionIDs) {
+        if (window.BrowserRunner && typeof window.BrowserRunner.groupBySection === 'function') {
+            return window.BrowserRunner.groupBySection(outcomes, sections, sectionIDs);
+        }
+        return [{ sectionName: null, outcomes }];
+    }
+
+    // Build one 4-column results table (Test / Tier / Output / Mark) for the
+    // given outcomes — the structure matches submission.leaf.
+    function buildResultsTable(outcomes, displayNameMap) {
         const table = document.createElement('table');
         table.className = 'results-table';
         table.innerHTML = `
@@ -877,23 +1129,14 @@ else:
             tbody.appendChild(tr);
         }
         table.appendChild(tbody);
-
-        resultsEl.innerHTML = '';
-        resultsEl.appendChild(summaryEl);
-        resultsEl.appendChild(table);
-        resultsEl.hidden = false;
-
-        // Scroll results into view so student sees feedback immediately.
-        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return table;
     }
 
-    function escHtml(str) {
-        return String(str ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
+    // Shared implementation (Public/chickadee-ui.js).  Deliberately a lazy
+    // wrapper (not `ChickadeeUI.escapeHtml` directly): the node tests run
+    // this file in a vm context without ChickadeeUI, so the global must not
+    // be touched at module load time.
+    const escHtml = (str) => ChickadeeUI.escapeHtml(str);
 
     function buildOutcomeDisplayNameMap(outcomes) {
         const map = new Map();
@@ -1034,16 +1277,6 @@ else:
         });
     }
 
-    function loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const s  = document.createElement('script');
-            s.src    = src;
-            s.onload  = resolve;
-            s.onerror = () => reject(new Error(`Failed to load ${src}`));
-            document.head.appendChild(s);
-        });
-    }
-
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -1058,6 +1291,9 @@ else:
             structuredSummaryText,
             extractTracebackText,
             parseStructuredPayload,
+            probeIframeReadiness,
+            isKernelInFailureState,
+            shouldForceReseed,
         };
     }
 })();

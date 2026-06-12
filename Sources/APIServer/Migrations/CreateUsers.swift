@@ -3,25 +3,29 @@
 import Fluent
 import SQLKit
 
-struct CreateUsers: AsyncMigration {
+struct CreateUsers: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("users")
             .id()
-            .field("username",         .string,   .required)
+            .field("username", .string, .required)
             .unique(on: "username")
-            .field("password_hash",    .string,   .required)
-            .field("role",             .string,   .required)
+            .field("password_hash", .string, .required)
+            .field("role", .string, .required)
             // Profile fields (formerly AddUserProfileFields)
-            .field("preferred_name",   .string)
-            .field("user_id",          .string)
-            .field("student_id",       .string)
+            .field("preferred_name", .string)
+            .field("user_id", .string)
+            .field("student_id", .string)
             // SSO fields (formerly AddUserSSOFields)
-            .field("auth_provider",    .string)
+            .field("auth_provider", .string)
             .field("external_subject", .string)
-            .field("email",            .string)
-            .field("display_name",     .string)
-            .field("last_login_at",    .datetime)
-            .field("created_at",       .datetime)
+            .field("email", .string)
+            .field("display_name", .string)
+            .field("last_login_at", .datetime)
+            // Folded from AddUserLastSeenAt.
+            .field("last_seen_at", .datetime)
+            // Folded from AddBrightSpaceSyncFields.
+            .field("brightspace_user_id", .string)
+            .field("created_at", .datetime)
             .create()
 
         // Partial unique index: one SSO identity per provider.

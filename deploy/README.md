@@ -291,6 +291,129 @@ docker run --rm \
   ubuntu tar czf /backup/chickadee-backup-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
+### Snapshots and rollback
+
+`scripts/snapshot.sh` and `scripts/restore.sh` provide point-in-time snapshot
+and restore for **PostgreSQL deployments** (Docker Compose). Each snapshot
+captures the database (`pg_dump -Fc`) plus the on-disk artifacts that the
+database rows reference (`testsetups/`, `submissions/`, `results/`,
+`.worker-secret`, `.local-runner-autostart`) into a timestamped directory
+under `backups/snapshot-<TS>[-<label>]/`. A `manifest.json` is written last
+so a partial snapshot can be detected and refused.
+
+> **SQLite deployments are not supported by these scripts** — the existing
+> `scripts/server-deploy.sh` already tars the entire data volume (including
+> `chickadee.sqlite`) before every deploy, which is sufficient.
+
+#### Taking a snapshot
+
+```bash
+scripts/snapshot.sh                       # label defaults to "manual"
+scripts/snapshot.sh --label pre-appscan   # any [A-Za-z0-9._-]+ identifier
+```
+
+The script:
+- verifies `DATABASE_BACKEND=postgres` and that the `db` service is
+  accepting connections,
+- dumps Postgres via `docker compose exec db pg_dump -Fc`,
+- archives the artifact paths from the `chickadee-data` volume,
+- writes `manifest.json` last (atomic-publish trick),
+- prunes `backups/snapshot-*` directories older than **7 days**.
+
+The server keeps running. Postgres dumps are consistent at a single
+transaction snapshot.
+
+#### Restoring a snapshot
+
+```bash
+scripts/restore.sh backups/snapshot-20260516-030000-scheduled
+```
+
+The script stops `server` and `runner` (leaving `db` running),
+`pg_restore --clean --if-exists` over the existing database, wipes and
+re-extracts the artifact paths from the snapshot's `data.tar.gz`, then
+restarts the services and waits for `/health`. Interactive: type `RESTORE`
+to confirm. Pass `--yes` to skip the prompt.
+
+If the snapshot's chickadee version differs from the current `VERSION`,
+the script warns and requires `--yes` to proceed — Fluent migrations will
+run on startup, which is fine going forward across additive migrations but
+**not** safe across a destructive migration.
+
+#### AppScan weekend workflow
+
+Before handing off admin credentials to Security:
+
+```bash
+echo "SCAN_MODE=true" >> .env
+docker compose up -d server runner          # picks up the env change
+scripts/snapshot.sh --label pre-appscan
+```
+
+After the scan completes:
+
+```bash
+scripts/snapshot.sh --label post-appscan    # forensics — keep the
+                                            # post-scan state for review
+scripts/restore.sh backups/snapshot-*-pre-appscan
+# edit .env: remove SCAN_MODE=true
+docker compose up -d server runner
+```
+
+`SCAN_MODE=true` (v0.4.167) already blocks the obvious destructive endpoints
+during the scan; the snapshot is a safety net if anything slips through.
+
+#### Scheduled snapshots (cron)
+
+Once installed and verified, add a daily snapshot to root's crontab on the
+production host:
+
+```cron
+# /etc/crontab or `sudo crontab -e`
+0 3 * * * cd /opt/chickadee && scripts/snapshot.sh --label scheduled >> /var/log/chickadee-snapshot.log 2>&1
+```
+
+3am local time, label `scheduled` so they're easy to distinguish from
+on-demand snapshots. The 7-day prune inside `snapshot.sh` keeps `backups/`
+bounded.
+
+#### Refreshing a staging server from prod
+
+The snapshot bundle is portable. To sync a staging server from a recent
+prod state:
+
+```bash
+# On prod
+scripts/snapshot.sh --label for-staging
+
+# Copy to staging
+rsync -av backups/snapshot-*-for-staging/ \
+  staging-host:/opt/chickadee/backups/snapshot-from-prod/
+
+# On staging
+scripts/restore.sh backups/snapshot-from-prod \
+  --regenerate-secrets --scrub-pii --yes
+```
+
+- `--regenerate-secrets` deletes `.worker-secret` so the staging server
+  writes a fresh runner HMAC secret on next boot. **Always pass this when
+  copying across environments** — without it, a staging runner could
+  authenticate against prod (or vice versa).
+- `--scrub-pii` anonymises identity columns on `users` rows where
+  `role='student'` (username, email, display_name, preferred_name,
+  user_id, student_id, external_subject, brightspace_user_id). Admin and
+  instructor rows are preserved so existing logins still work.
+- **`.env` is NOT in the snapshot.** Staging keeps its own
+  `PUBLIC_BASE_URL`, OIDC callback URL, BrightSpace credentials, etc.
+  Copy `.env` separately if you want to clone those too — usually you
+  don't.
+
+**Known PII-scrub gaps** (acknowledge before broadening staging access):
+- Submission zip contents (student code) are NOT scrubbed.
+- Submission filenames are NOT scrubbed.
+- Free-text fields on `submission_diagnostics` and similar tables are NOT
+  scrubbed.
+
 ---
 
 ## VM / systemd Deployment

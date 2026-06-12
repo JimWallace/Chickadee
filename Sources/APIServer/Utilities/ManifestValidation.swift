@@ -1,6 +1,12 @@
 // APIServer/Utilities/ManifestValidation.swift
 //
-// Validates the dependency graph in a TestProperties manifest.
+// Validates the dependency graph of a `TestProperties` manifest —
+// every `dependsOn` reference must name a known script, and the graph
+// must be acyclic.  Split out of the original 800-LOC megafile in
+// v0.4.182; pattern-family and notebook-check validation now live in
+// `PatternFamilyValidator.swift` and `NotebookCheckValidator.swift`.
+// The two tiny identifier helpers shared across all three validators
+// live in `IdentifierValidation.swift`.
 
 import Core
 import Vapor
@@ -19,7 +25,8 @@ func validateManifestDependencies(_ manifest: TestProperties) throws {
             guard allScripts.contains(dep) else {
                 throw Abort(
                     .unprocessableEntity,
-                    reason: "Manifest dependency error: '\(entry.script)' depends on '\(dep)', which is not listed in testSuites"
+                    reason:
+                        "Manifest dependency error: '\(entry.script)' depends on '\(dep)', which is not listed in testSuites"
                 )
             }
             guard dep != entry.script else {

@@ -1,0 +1,59 @@
+#extend("base"):
+#export("title"):
+Connected agents
+#endexport
+#export("content"):
+<section class="admin-section">
+    <h2 class="agents-heading">Connected agents</h2>
+    <p class="agents-intro">
+        AI agents authorized to author course content on
+        #if(isAdmin):a user's#else:your#endif behalf over the Model Context Protocol.
+        Revoking stops the agent immediately; any access token it holds lapses within minutes.
+    </p>
+    <div class="table-scroll"><table class="results-table">
+        <thead>
+            <tr>
+                <th>Agent</th>
+                #if(isAdmin):<th>Authorized by</th>#endif
+                <th>Scopes</th>
+                <th class="time">Authorized</th>
+                <th class="time">Last used</th>
+                <th class="time">Expires</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(row in rows):
+            <tr>
+                <td>#(row.agentName)</td>
+                #if(isAdmin):<td><code>#(row.owner)</code></td>#endif
+                <td><code>#(row.scope)</code></td>
+                <td class="time">#(row.createdAt)</td>
+                <td class="time">#if(row.lastUsedAt):#(row.lastUsedAt)#else:—#endif</td>
+                <td class="time">#(row.expiresAt)</td>
+                <td>
+                    #if(row.revoked):
+                    <span class="text-muted">Revoked</span>
+                    #else:
+                    <form method="post" action="/agents/#(row.id)/revoke" class="agents-revoke-form">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger" type="submit"
+                                onclick="return confirm('Revoke this agent? It will lose access immediately.')">Revoke</button>
+                    </form>
+                    #endif
+                </td>
+            </tr>
+        #endfor
+        #if(rows.isEmpty):
+            <tr><td colspan="7" class="text-muted">No connected agents.</td></tr>
+        #endif
+        </tbody>
+    </table></div>
+</section>
+<style>
+.agents-heading { margin-top: 0; }
+.agents-intro { color: var(--gray-600); font-size: .85rem; max-width: 60ch; }
+.agents-revoke-form { display: inline; }
+</style>
+#endexport
+#endextend

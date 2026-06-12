@@ -1,0 +1,21 @@
+<!--
+    Diagnostic-cards loop shared by the instructor dashboard
+    (`assignments.leaf`) and the per-assignment submissions drilldown
+    (`assignment-submissions.leaf`).  Expects a `metrics` array in
+    scope, each entry shaped `{ label, value }`.  The outer `<section>`
+    wrapper stays in the caller so the caller can scope styling via
+    its own section class (`instructor-diagnostics`,
+    `assignment-diagnostics`, …).
+
+    `admin.leaf` keeps its own hardcoded 5-card structure — those
+    cards have JS-targeted `id="diag-…"` attributes filled in by
+    polling, not a Swift-side `metrics` array.
+-->
+<div class="diagnostics-cards">
+    #for(metric in metrics):
+    <article class="diagnostic-card">
+        <div class="diagnostic-label">#(metric.label)</div>
+        <div class="diagnostic-value">#(metric.value)</div>
+    </article>
+    #endfor
+</div>

@@ -3,10 +3,10 @@
 // Admin course management: create, edit, archive, delete, copy, and enrollment.
 // All routes are registered in AdminRoutes.boot().
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 extension AdminRoutes {
     // MARK: - GET /admin/courses/new
@@ -14,23 +14,29 @@ extension AdminRoutes {
     @Sendable
     func newCourseForm(req: Request) async throws -> View {
         let emptyCourse = AdminCourseRow(
-            id:              "",
-            code:            "",
-            name:            "",
-            isArchived:      false,
-            enrollmentMode:  CourseEnrollmentMode.open.rawValue,
+            id: "",
+            code: "",
+            name: "",
+            isArchived: false,
+            enrollmentMode: CourseEnrollmentMode.open.rawValue,
             enrollmentCount: 0,
             assignmentCount: 0,
-            createdAt:       ""
+            submissionCount: 0,
+            createdAt: "",
+            brightspaceOrgUnitID: nil,
+            brightspaceOrgUnitName: nil,
+            brightspaceSyncEnabled: req.application.brightSpaceClient != nil
         )
-        return try await req.view.render("admin-course", AdminCourseDetailContext(
-            currentUser:   req.currentUserContext,
-            course:        emptyCourse,
-            enrolledUsers: [],
-            assignments:   [],
-            isNew:         true,
-            error:         req.query[String.self, at: "error"]
-        ))
+        return try await req.view.render(
+            "admin-course",
+            AdminCourseDetailContext(
+                currentUser: req.currentUserContext,
+                course: emptyCourse,
+                enrolledUsers: [],
+                assignments: [],
+                isNew: true,
+                error: req.query[String.self, at: "error"]
+            ))
     }
 
     // MARK: - POST /admin/courses
@@ -50,6 +56,13 @@ extension AdminRoutes {
         let course = APICourse(code: code, name: name)
         try await course.save(on: req.db)
         let id = try course.requireID().uuidString
+        await AuditLogger.record(
+            action: .courseCreated,
+            targetType: .course,
+            targetID: id,
+            metadata: ["course_code": code, "course_name": name],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(id)")
     }
 
@@ -60,12 +73,24 @@ extension AdminRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
+            let course = try await APICourse.find(courseID, on: req.db)
         else {
             throw Abort(.notFound)
         }
         course.isArchived.toggle()
+        // Archiving is Chickadee's "end of term" signal: stamp the moment so
+        // the submission-retention clock has an anchor (see
+        // SubmissionRetentionService). Un-archiving clears it so a course that
+        // re-opens isn't carrying a stale retention deadline.
+        course.archivedAt = course.isArchived ? Date() : nil
         try await course.save(on: req.db)
+        await AuditLogger.record(
+            action: course.isArchived ? .courseArchived : .courseUnarchived,
+            targetType: .course,
+            targetID: idString,
+            metadata: ["course_code": course.code],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(idString)")
     }
 
@@ -77,7 +102,7 @@ extension AdminRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
+            let course = try await APICourse.find(courseID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -94,13 +119,13 @@ extension AdminRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let source   = try await APICourse.find(courseID, on: req.db)
+            let source = try await APICourse.find(courseID, on: req.db)
         else {
             throw Abort(.notFound)
         }
 
-        let sourceID  = try source.requireID()
-        let newCode   = try await uniqueCopyCode(base: source.code, db: req.db)
+        let sourceID = try source.requireID()
+        let newCode = try await uniqueCopyCode(base: source.code, db: req.db)
         let setupsDir = req.application.testSetupsDirectory
 
         // Load source data before the transaction (read-only queries).
@@ -127,10 +152,10 @@ extension AdminRoutes {
             for section in sections {
                 guard let oldSectionID = section.id else { continue }
                 let newSection = APICourseSection(
-                    name:               section.name,
+                    name: section.name,
                     defaultGradingMode: section.defaultGradingMode,
-                    sortOrder:          section.sortOrder,
-                    courseID:           newCourseID
+                    sortOrder: section.sortOrder,
+                    courseID: newCourseID
                 )
                 try await newSection.save(on: db)
                 sectionIDMap[oldSectionID] = try newSection.requireID()
@@ -147,27 +172,29 @@ extension AdminRoutes {
                 let dstZip = URL(fileURLWithPath: setupsDir + "\(newID).zip")
                 try FileManager.default.copyItem(at: srcZip, to: dstZip)
 
-                // Copy the notebook using the actual stored path, not a reconstructed one.
-                var newNotebookPath: String? = nil
+                // Copy the notebook using the actual stored path — not a
+                // reconstructed `<setupID>.ipynb` flat path, which misses
+                // notebooks stored in the notebooks/<setupID>/ subdirectory.
+                var newNotebookPath: String?
                 if let srcPath = setup.notebookPath {
                     let srcNb = URL(fileURLWithPath: srcPath)
                     if FileManager.default.fileExists(atPath: srcNb.path) {
-                        let filename = srcNb.lastPathComponent
-                        let nbDir = setupsDir + "notebooks/\(newID)/"
-                        try? FileManager.default.createDirectory(atPath: nbDir,
-                                                                 withIntermediateDirectories: true)
-                        let dstNb = URL(fileURLWithPath: nbDir + filename)
+                        let nbDir = draftNotebookDirectory(
+                            testSetupsDirectory: setupsDir, setupID: newID)
+                        try FileManager.default.createDirectory(
+                            atPath: nbDir, withIntermediateDirectories: true)
+                        let dstNb = URL(fileURLWithPath: nbDir + srcNb.lastPathComponent)
                         try FileManager.default.copyItem(at: srcNb, to: dstNb)
                         newNotebookPath = dstNb.path
                     }
                 }
 
                 let newSetup = APITestSetup(
-                    id:           newID,
-                    manifest:     setup.manifest,
-                    zipPath:      dstZip.path,
+                    id: newID,
+                    manifest: setup.manifest,
+                    zipPath: dstZip.path,
                     notebookPath: newNotebookPath,
-                    courseID:     newCourseID
+                    courseID: newCourseID
                 )
                 try await newSetup.save(on: db)
             }
@@ -176,17 +203,17 @@ extension AdminRoutes {
             //    Validation state is reset so the instructor re-validates before opening.
             for (idx, a) in assignments.enumerated() {
                 guard let newSetupID = setupIDMap[a.testSetupID] else { continue }
-                let newSectionID = a.sectionID.flatMap { sectionIDMap[$0] }
                 let newAssignment = APIAssignment(
-                    testSetupID:          newSetupID,
-                    title:                a.title,
-                    dueAt:                a.dueAt,
-                    isOpen:               false,
-                    sortOrder:            a.sortOrder ?? idx,
-                    validationStatus:     nil,
+                    testSetupID: newSetupID,
+                    title: a.title,
+                    slug: try await uniqueAssignmentSlug(title: a.title, courseID: newCourseID, db: db),
+                    dueAt: a.dueAt,
+                    visibility: .closed,
+                    sortOrder: a.sortOrder ?? idx,
+                    validationStatus: nil,
                     validationSubmissionID: nil,
-                    sectionID:            newSectionID,
-                    courseID:             newCourseID
+                    sectionID: a.sectionID.flatMap { sectionIDMap[$0] },
+                    courseID: newCourseID
                 )
                 try await newAssignment.save(on: db)
             }
@@ -205,15 +232,28 @@ extension AdminRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
+            let course = try await APICourse.find(courseID, on: req.db)
         else { throw Abort(.notFound) }
-        guard course.isArchived else {
-            throw Abort(.badRequest, reason: "Only archived courses can be deleted.")
+
+        // Deletion is gated on the same retention window as Purge: a course
+        // can only be deleted from the Retention tab once it has been archived
+        // and its retention window has elapsed. Never trust the posting page.
+        let retentionDays = req.application.appConfig.diagnostics.submissionRetentionDays
+        guard course.isArchived, let archivedAt = course.archivedAt else {
+            return req.redirect(
+                to: retentionRedirect(error: "\(course.code) is not archived — cannot delete."))
+        }
+        let eligibleAt = SubmissionRetentionService.purgeEligibleDate(
+            archivedAt: archivedAt, retentionDays: retentionDays)
+        guard Date() >= eligibleAt else {
+            return req.redirect(
+                to: retentionRedirect(
+                    error: "\(course.code) is not yet past its retention window."))
         }
 
         let setupsDir = req.application.testSetupsDirectory
 
-        try await req.db.transaction { db in
+        let purgedSubmissions = try await req.db.transaction { db -> Int in
             // 1. Test setups for this course.
             let setups = try await APITestSetup.query(on: db)
                 .filter(\.$courseID == courseID).all()
@@ -254,22 +294,46 @@ extension AdminRoutes {
             try await APICourseEnrollment.query(on: db)
                 .filter(\.$course.$id == courseID).delete()
             try await course.delete(on: db)
+            return submissions.count
         }
 
         req.logger.info("Admin permanently deleted course \(course.code) (\(idString))")
-        return req.redirect(to: "/admin")
+        await AuditLogger.record(
+            action: .courseDeleted,
+            targetType: .course,
+            targetID: idString,
+            metadata: ["course_code": course.code, "submissions_purged": String(purgedSubmissions)],
+            on: req
+        )
+        // The one place student submissions are purged under the retention
+        // policy — record it distinctly when anything was actually removed.
+        if purgedSubmissions > 0 {
+            await AuditLogger.record(
+                action: .submissionsPurged,
+                targetType: .course,
+                targetID: idString,
+                metadata: ["course_code": course.code, "count": String(purgedSubmissions)],
+                on: req
+            )
+        }
+        return req.redirect(
+            to: retentionRedirect(ok: "Deleted \(course.code) and all its data."))
     }
 
     // MARK: - POST /admin/courses/:courseID/edit
 
     @Sendable
     func editCourse(req: Request) async throws -> Response {
-        struct EditCourseBody: Content { var code: String; var name: String }
+        struct EditCourseBody: Content {
+            var code: String
+            var name: String
+            var brightspaceOrgUnitID: String?
+        }
 
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
+            let course = try await APICourse.find(courseID, on: req.db)
         else {
             throw Abort(.notFound)
         }
@@ -291,8 +355,37 @@ extension AdminRoutes {
 
         course.code = code
         course.name = name
+        if let client = req.application.brightSpaceClient {
+            let rawOrgUnit = (body.brightspaceOrgUnitID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let newOrgUnit = rawOrgUnit.isEmpty ? nil : rawOrgUnit
+            course.brightspaceOrgUnitID = newOrgUnit
+            // Verify the binding against D2L and cache the org-unit name so the
+            // admin can confirm they pointed at the right course. Verification
+            // failures (D2L unreachable, bad ID) don't block the save — the
+            // name just stays nil and the UI shows "unverified".
+            if let orgUnit = newOrgUnit {
+                course.brightspaceOrgUnitName = await verifiedOrgUnitName(
+                    orgUnitID: orgUnit, client: client, req: req)
+            } else {
+                course.brightspaceOrgUnitName = nil
+            }
+        }
         try await course.save(on: req.db)
         return req.redirect(to: "/admin/courses/\(idString)")
+    }
+
+    /// Looks the org unit up in D2L and returns its name, or nil if it can't
+    /// be verified (not found, or D2L unreachable). Never throws — a failed
+    /// verification must not block saving the course.
+    private func verifiedOrgUnitName(
+        orgUnitID: String, client: BrightSpaceAPIClient, req: Request
+    ) async -> String? {
+        do {
+            return try await client.getOrgUnit(orgUnitID: orgUnitID, on: req.application)?.name
+        } catch {
+            req.logger.warning("BrightSpace org-unit verification failed for \(orgUnitID): \(error)")
+            return nil
+        }
     }
 
     // MARK: - POST /admin/courses/:courseID/unenroll/:userID
@@ -301,9 +394,9 @@ extension AdminRoutes {
     func unenrollUserFromCourse(req: Request) async throws -> Response {
         guard
             let courseIDString = req.parameters.get("courseID"),
-            let courseID       = UUID(uuidString: courseIDString),
-            let userIDString   = req.parameters.get("userID"),
-            let userID         = UUID(uuidString: userIDString)
+            let courseID = UUID(uuidString: courseIDString),
+            let userIDString = req.parameters.get("userID"),
+            let userID = UUID(uuidString: userIDString)
         else {
             throw Abort(.badRequest)
         }
@@ -313,6 +406,13 @@ extension AdminRoutes {
             .filter(\.$userID == userID)
             .delete()
 
+        await AuditLogger.record(
+            action: .enrollmentRemoved,
+            targetType: .enrollment,
+            targetID: userIDString,
+            metadata: ["course_id": courseIDString, "subject_user_id": userIDString],
+            on: req
+        )
         return req.redirect(to: "/admin/courses/\(courseIDString)")
     }
 
@@ -323,22 +423,30 @@ extension AdminRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db)
+            let course = try await APICourse.find(courseID, on: req.db)
         else {
             throw Abort(.notFound)
         }
 
-        let enrollmentCounts = try await enrollmentCountsByCourse(on: req.db)
-        let assignmentCounts = try await assignmentCountsByCourse(on: req.db)
+        async let enrollmentCountFetch = enrolledStudentCount(forCourse: courseID, on: req.db)
+        async let assignmentCountFetch = APIAssignment.query(on: req.db)
+            .filter(\.$courseID == courseID)
+            .count()
+        async let submissionCountFetch = SubmissionRetentionService.submissionCountsByCourse(
+            courseIDs: [courseID], on: req.db)
         let courseRow = AdminCourseRow(
-            id:              idString,
-            code:            course.code,
-            name:            course.name,
-            isArchived:      course.isArchived,
-            enrollmentMode:  course.enrollmentMode.rawValue,
-            enrollmentCount: enrollmentCounts[courseID] ?? 0,
-            assignmentCount: assignmentCounts[courseID] ?? 0,
-            createdAt:       course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—"
+            id: idString,
+            code: course.code,
+            name: course.name,
+            isArchived: course.isArchived,
+            enrollmentMode: course.enrollmentMode.rawValue,
+            enrollmentCount: try await enrollmentCountFetch,
+            assignmentCount: try await assignmentCountFetch,
+            submissionCount: (try await submissionCountFetch)[courseID] ?? 0,
+            createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
+            brightspaceOrgUnitID: course.brightspaceOrgUnitID,
+            brightspaceOrgUnitName: course.brightspaceOrgUnitName,
+            brightspaceSyncEnabled: req.application.brightSpaceClient != nil
         )
 
         // Load enrollments for this course, then fetch the corresponding users.
@@ -353,15 +461,18 @@ extension AdminRoutes {
         } else {
             let users = try await APIUser.query(on: req.db)
                 .filter(\.$id ~~ enrolledUserIDs)
+                // Exclude `mcp` service accounts: enrolled to scope an agent's
+                // access (admin MCP tab), not human roster members.
+                .filter(\.$role != UserRole.mcp.rawValue)
                 .sort(\.$username)
                 .all()
             enrolledUsers = users.compactMap { u in
                 guard let uid = u.id else { return nil }
                 return AdminCourseEnrolledUserRow(
-                    id:          uid.uuidString,
-                    username:    u.username,
+                    id: uid.uuidString,
+                    username: u.username,
                     displayName: u.displayName,
-                    role:        u.role
+                    role: u.role
                 )
             }
         }
@@ -371,26 +482,27 @@ extension AdminRoutes {
             .filter(\.$courseID == courseID)
             .sort(\.$dueAt)
             .all()
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .short
+        let df = waterlooDateTimeFormatter()
         let assignments = assignmentModels.map { a in
             AdminCourseAssignmentRow(
-                id:     a.publicID,
-                title:  a.title,
-                dueAt:  a.dueAt.map { df.string(from: $0) },
-                isOpen: a.isOpen
+                id: a.publicID,
+                title: a.title,
+                dueAt: a.dueAt.map { df.string(from: $0) },
+                isOpen: a.isOpen,
+                visibility: a.visibility.rawValue
             )
         }
 
-        return try await req.view.render("admin-course", AdminCourseDetailContext(
-            currentUser:   req.currentUserContext,
-            course:        courseRow,
-            enrolledUsers: enrolledUsers,
-            assignments:   assignments,
-            isNew:         false,
-            error:         nil
-        ))
+        return try await req.view.render(
+            "admin-course",
+            AdminCourseDetailContext(
+                currentUser: req.currentUserContext,
+                course: courseRow,
+                enrolledUsers: enrolledUsers,
+                assignments: assignments,
+                isNew: false,
+                error: nil
+            ))
     }
 
     // MARK: - POST /admin/users/:userID/enroll
@@ -399,8 +511,8 @@ extension AdminRoutes {
     func adminEnrollUser(req: Request) async throws -> Response {
         guard
             let idString = req.parameters.get("userID"),
-            let userID   = UUID(uuidString: idString),
-            let _        = try await APIUser.find(userID, on: req.db)
+            let userID = UUID(uuidString: idString),
+            try await APIUser.find(userID, on: req.db) != nil
         else {
             throw Abort(.notFound)
         }
@@ -410,7 +522,7 @@ extension AdminRoutes {
 
         guard
             let courseID = UUID(uuidString: body.courseID),
-            let course   = try await APICourse.find(courseID, on: req.db),
+            let course = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
             return req.redirect(to: "/admin/users/\(idString)?error=invalid_course")
@@ -434,10 +546,10 @@ extension AdminRoutes {
     @Sendable
     func adminUnenrollUser(req: Request) async throws -> Response {
         guard
-            let idString       = req.parameters.get("userID"),
-            let userID         = UUID(uuidString: idString),
+            let idString = req.parameters.get("userID"),
+            let userID = UUID(uuidString: idString),
             let courseIDString = req.parameters.get("courseID"),
-            let courseID       = UUID(uuidString: courseIDString)
+            let courseID = UUID(uuidString: courseIDString)
         else {
             throw Abort(.badRequest)
         }
@@ -447,6 +559,13 @@ extension AdminRoutes {
             .filter(\.$course.$id == courseID)
             .delete()
 
+        await AuditLogger.record(
+            action: .enrollmentRemoved,
+            targetType: .enrollment,
+            targetID: idString,
+            metadata: ["course_id": courseIDString, "subject_user_id": idString],
+            on: req
+        )
         return req.redirect(to: "/admin/users/\(idString)")
     }
 
@@ -461,58 +580,45 @@ extension AdminRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course   = try await APICourse.find(courseID, on: req.db),
+            let course = try await APICourse.find(courseID, on: req.db),
             !course.isArchived
         else {
-            throw Abort(.badRequest, reason: "Invalid or archived course.")
+            throw AppError.badRequest(reason: "Invalid or archived course.")
         }
 
         let form = try req.content.decode(BulkEnrollForm.self)
 
-        // Parse unique, non-empty usernames from the CSV (first column, header auto-skipped).
         let rawUsernames = parseUsernamesFromCSV(form.file)
-        var seen = Set<String>()
-        let uniqueUsernames = rawUsernames.filter { seen.insert($0).inserted }
+        let result = try await enrollUsernamesInCourse(
+            rawUsernames,
+            courseID: courseID,
+            on: req.db
+        )
 
-        // Match against APIUser.username in-memory (simpler than a Fluent IN query).
-        let usernameSet = Set(uniqueUsernames)
-        let allUsers = try await APIUser.query(on: req.db).all()
-        let matchedUsers = allUsers.filter { usernameSet.contains($0.username) }
-
-        let matchedUsernameSet = Set(matchedUsers.map { $0.username })
-        let notFoundUsernames = uniqueUsernames
-            .filter { !matchedUsernameSet.contains($0) }
-            .sorted()
-
-        // Load existing enrollments for this course to detect already-enrolled users.
-        let existingEnrollments = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseID)
-            .all()
-        let alreadyEnrolledUserIDs = Set(existingEnrollments.map { $0.userID })
-
-        var enrolledCount = 0
-        var alreadyEnrolledCount = 0
-
-        for user in matchedUsers {
-            guard let userID = user.id else { continue }
-            if alreadyEnrolledUserIDs.contains(userID) {
-                alreadyEnrolledCount += 1
-            } else {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-                try await enrollment.save(on: req.db)
-                enrolledCount += 1
-            }
-        }
-
-        return try await req.view.render("admin-enroll-csv-result", EnrollCSVResultContext(
-            currentUser:          req.currentUserContext,
-            courseCode:           course.code,
-            courseName:           course.name,
-            enrolledCount:        enrolledCount,
-            alreadyEnrolledCount: alreadyEnrolledCount,
-            notFoundUsernames:    notFoundUsernames,
-            returnURL:            "/admin/courses/\(idString)"
-        ))
+        await AuditLogger.record(
+            action: .enrollmentBulkAdded,
+            targetType: .course,
+            targetID: idString,
+            metadata: [
+                "course_code": course.code,
+                "enrolled": String(result.enrolledCount),
+                "pre_enrolled": String(result.preEnrolledCount),
+                "already_enrolled": String(result.alreadyEnrolledCount),
+            ],
+            on: req
+        )
+        return try await req.view.render(
+            "admin-enroll-csv-result",
+            EnrollCSVResultContext(
+                currentUser: req.currentUserContext,
+                courseCode: course.code,
+                courseName: course.name,
+                enrolledCount: result.enrolledCount,
+                preEnrolledCount: result.preEnrolledCount,
+                alreadyEnrolledCount: result.alreadyEnrolledCount,
+                rejectedUsernames: result.rejectedUsernames,
+                returnURL: "/admin/courses/\(idString)"
+            ))
     }
 
 }
@@ -520,15 +626,14 @@ extension AdminRoutes {
 // MARK: - Private helpers
 
 private func uniqueCopyCode(base: String, db: Database) async throws -> String {
-    let first = "\(base)-COPY"
-    if try await APICourse.query(on: db).filter(\.$code == first).count() == 0 {
-        return first
+    let candidates = ["\(base)-COPY"] + (2...10).map { "\(base)-COPY-\($0)" }
+    let taken = Set(
+        try await APICourse.query(on: db)
+            .filter(\.$code ~~ candidates)
+            .all()
+            .map(\.code))
+    if let available = candidates.first(where: { !taken.contains($0) }) {
+        return available
     }
-    for n in 2...10 {
-        let candidate = "\(base)-COPY-\(n)"
-        if try await APICourse.query(on: db).filter(\.$code == candidate).count() == 0 {
-            return candidate
-        }
-    }
-    throw Abort(.conflict, reason: "Could not generate a unique course code. Rename an existing copy first.")
+    throw AppError.conflict(reason: "Could not generate a unique course code. Rename an existing copy first.")
 }

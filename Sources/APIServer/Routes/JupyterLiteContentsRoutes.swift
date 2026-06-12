@@ -5,8 +5,8 @@
 // (`/jupyterlite/lab`, `/jupyterlite/notebooks`, or root), so we expose aliases
 // for all expected URL shapes.
 
-import Vapor
 import Foundation
+import Vapor
 
 struct JupyterLiteContentsRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
@@ -53,7 +53,8 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         }
         if let userRoot = try userRootPath(for: caller) {
             let userRootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true).standardizedFileURL
-            let withinUserRoot = targetURL.path == userRootURL.path
+            let withinUserRoot =
+                targetURL.path == userRootURL.path
                 || targetURL.path.hasPrefix(userRootURL.path + "/")
             guard withinUserRoot else {
                 throw Abort(.forbidden)
@@ -118,7 +119,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             "mimetype": mimetype,
             "size": fileData.count,
             "writable": !isSymlink(url: targetURL),
-            "type": isNotebook ? "notebook" : "file"
+            "type": isNotebook ? "notebook" : "file",
         ]
         return try jsonResponse(model)
     }
@@ -130,7 +131,8 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         includeContent: Bool
     ) throws -> Response {
         let cleanDir = directoryRelativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let directoryURL = cleanDir.isEmpty
+        let directoryURL =
+            cleanDir.isEmpty
             ? baseURL
             : baseURL.appendingPathComponent(cleanDir).standardizedFileURL
         guard directoryURL.path.hasPrefix(baseURL.path) else {
@@ -142,7 +144,9 @@ struct JupyterLiteContentsRoutes: RouteCollection {
 
         let attributes = attributesForItem(url: directoryURL, fileManager: fileManager)
         let children = try fileManager.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: nil)
-            .sorted(by: { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending })
+            .sorted(by: {
+                $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+            })
 
         let childModels: [[String: Any]] = children.map { child in
             let childAttributes = attributesForItem(url: child, fileManager: fileManager)
@@ -158,10 +162,11 @@ struct JupyterLiteContentsRoutes: RouteCollection {
                 "created": isoDate(asDate(childAttributes[.creationDate])),
                 "content": NSNull(),
                 "format": "json",
-                "mimetype": isDir ? "application/json" : (isNotebook ? "application/x-ipynb+json" : "application/octet-stream"),
+                "mimetype": isDir
+                    ? "application/json" : (isNotebook ? "application/x-ipynb+json" : "application/octet-stream"),
                 "size": isDir ? 0 : ((childAttributes[.size] as? NSNumber)?.intValue ?? 0),
                 "writable": isDir ? true : !isSymlink(url: child),
-                "type": isDir ? "directory" : (isNotebook ? "notebook" : "file")
+                "type": isDir ? "directory" : (isNotebook ? "notebook" : "file"),
             ]
         }
 
@@ -175,7 +180,7 @@ struct JupyterLiteContentsRoutes: RouteCollection {
             "mimetype": "application/json",
             "size": 0,
             "writable": true,
-            "type": "directory"
+            "type": "directory",
         ]
         return try jsonResponse(model)
     }

@@ -1,17 +1,17 @@
-import Crypto
+import Core
 import Foundation
+
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
 
 /// Signs worker → server requests with per-request HMAC signatures.
 ///
-/// Call `sign(_:)` on a fully-configured URLRequest (method and body already
-/// set) before sending it. The added headers are validated server-side by
-/// `WorkerHMACAuthMiddleware`.
-///
-/// Signed payload format (fields joined by newlines):
-///   METHOD\nPATH\nBODY_SHA256\nTIMESTAMP\nNONCE
+/// Call `sign(_:)` on a fully-configured `URLRequest` (method and body
+/// already set) before sending it.  The added headers are validated
+/// server-side by `WorkerHMACAuthMiddleware`.  Both sides delegate to
+/// `Core/WorkerHMACSigning.swift` so the algorithm and signed-payload
+/// format can't drift between server and worker.
 struct WorkerRequestSigner: Sendable {
     let sharedSecret: String
     let workerID: String?
@@ -37,37 +37,26 @@ struct WorkerRequestSigner: Sendable {
     }
 
     private func applySignature(to request: inout URLRequest, timestamp: Int64, nonce: String) {
-        let method   = (request.httpMethod ?? "GET").uppercased()
-        let path     = request.url?.path ?? "/"
-        let bodyBytes = request.httpBody.map { Array($0) } ?? []
+        let method = (request.httpMethod ?? "GET").uppercased()
+        let path = request.url?.path ?? "/"
+        let body = request.httpBody ?? Data()
 
-        let tsString  = String(timestamp)
-        let bodyHash  = sha256Hex(bodyBytes)
-        let payload   = [method, path, bodyHash, tsString, nonce].joined(separator: "\n")
-        let signature = hmacSHA256Hex(message: payload, secret: sharedSecret)
+        let headers = WorkerHMACSigning.signedHeaders(
+            method: method,
+            path: path,
+            body: body,
+            secret: sharedSecret,
+            workerID: workerID,
+            timestamp: timestamp,
+            nonce: nonce
+        )
 
-        request.setValue(tsString, forHTTPHeaderField: "X-Worker-Timestamp")
-        request.setValue(nonce,    forHTTPHeaderField: "X-Worker-Nonce")
-        request.setValue(bodyHash, forHTTPHeaderField: "X-Worker-Body-SHA256")
-        request.setValue(signature, forHTTPHeaderField: "X-Worker-Signature")
-        if let workerID, !workerID.isEmpty {
-            request.setValue(workerID, forHTTPHeaderField: "X-Worker-Id")
+        request.setValue(headers.timestamp, forHTTPHeaderField: WorkerHMACSigning.Header.timestamp)
+        request.setValue(headers.nonce, forHTTPHeaderField: WorkerHMACSigning.Header.nonce)
+        request.setValue(headers.bodyHash, forHTTPHeaderField: WorkerHMACSigning.Header.bodyHash)
+        request.setValue(headers.signature, forHTTPHeaderField: WorkerHMACSigning.Header.signature)
+        if let workerID = headers.workerID, !workerID.isEmpty {
+            request.setValue(workerID, forHTTPHeaderField: WorkerHMACSigning.Header.workerID)
         }
-    }
-
-    private func sha256Hex(_ bytes: [UInt8]) -> String {
-        Data(SHA256.hash(data: Data(bytes))).hexEncodedString()
-    }
-
-    private func hmacSHA256Hex(message: String, secret: String) -> String {
-        let key = SymmetricKey(data: Data(secret.utf8))
-        let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
-        return Data(mac).hexEncodedString()
-    }
-}
-
-private extension Data {
-    func hexEncodedString() -> String {
-        map { String(format: "%02x", $0) }.joined()
     }
 }

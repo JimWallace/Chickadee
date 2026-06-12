@@ -7,7 +7,7 @@ struct UserFileNamespaceMiddleware: AsyncMiddleware {
         "/files/users/",
         "/jupyterlite/files/users/",
         "/jupyterlite/lab/files/users/",
-        "/jupyterlite/notebooks/files/users/"
+        "/jupyterlite/notebooks/files/users/",
     ]
 
     func respond(to req: Request, chainingTo next: AsyncResponder) async throws -> Response {

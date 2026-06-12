@@ -2,12 +2,12 @@
 
 import Fluent
 
-struct CreateTestSetups: AsyncMigration {
+struct CreateTestSetups: ChickadeeMigration {
     func prepare(on database: Database) async throws {
         try await database.schema("test_setups")
-            .field("id",         .string, .identifier(auto: false))
-            .field("manifest",   .string, .required)
-            .field("zip_path",   .string, .required)
+            .field("id", .string, .identifier(auto: false))
+            .field("manifest", .string, .required)
+            .field("zip_path", .string, .required)
             .field("notebook_path", .string)
             .field(
                 "course_id",
@@ -15,6 +15,8 @@ struct CreateTestSetups: AsyncMigration {
                 .required,
                 .references("courses", "id", onDelete: .cascade)
             )
+            // Folded from AddTestSetupLastRetestedManifestHash.
+            .field("last_retested_manifest_hash", .string)
             .field("created_at", .datetime)
             .create()
     }

@@ -54,18 +54,18 @@ public struct CourseBundleManifest: Codable, Sendable {
         submissions: [BundledSubmission],
         results: [BundledResult]
     ) {
-        self.schemaVersion        = schemaVersion
-        self.exportedAt           = exportedAt
-        self.exportedBy           = exportedBy
-        self.chickadeeVersion     = chickadeeVersion
-        self.course               = course
-        self.users                = users
+        self.schemaVersion = schemaVersion
+        self.exportedAt = exportedAt
+        self.exportedBy = exportedBy
+        self.chickadeeVersion = chickadeeVersion
+        self.course = course
+        self.users = users
         self.enrolledUserBundleIDs = enrolledUserBundleIDs
-        self.sections             = sections
-        self.assignments          = assignments
-        self.testSetups           = testSetups
-        self.submissions          = submissions
-        self.results              = results
+        self.sections = sections
+        self.assignments = assignments
+        self.testSetups = testSetups
+        self.submissions = submissions
+        self.results = results
     }
 }
 
@@ -74,21 +74,23 @@ public struct CourseBundleManifest: Codable, Sendable {
 public struct BundledCourse: Codable, Sendable {
     public let code: String
     public let name: String
-    /// Enrollment mode; nil in bundles exported before this field was added.
-    /// When nil, fall back to `openEnrollment` for backward compatibility.
+    /// Enrollment mode; nil defaults to `.open` at resolution time.
     public let enrollmentMode: CourseEnrollmentMode?
-    /// Deprecated. Present only in bundles exported before `enrollmentMode` was added.
-    /// Ignored when `enrollmentMode` is non-nil.
-    public let openEnrollment: Bool?
 
-    public init(code: String, name: String,
-                enrollmentMode: CourseEnrollmentMode? = nil,
-                openEnrollment: Bool? = nil) {
-        self.code           = code
-        self.name           = name
+    public init(
+        code: String, name: String,
+        enrollmentMode: CourseEnrollmentMode? = nil
+    ) {
+        self.code = code
+        self.name = name
         self.enrollmentMode = enrollmentMode
-        self.openEnrollment = openEnrollment
     }
+}
+
+/// Resolves the effective `CourseEnrollmentMode` for an imported bundle.
+/// Defaults to `.open` when the bundle omitted the field.
+public func bundledCourseEnrollmentMode(_ course: BundledCourse) -> CourseEnrollmentMode {
+    course.enrollmentMode ?? .open
 }
 
 public struct BundledUser: Codable, Sendable {
@@ -100,17 +102,21 @@ public struct BundledUser: Codable, Sendable {
     /// "student" | "instructor" | "admin"
     public let role: String
 
-    public init(bundleID: String, username: String, displayName: String?,
-                email: String?, role: String) {
-        self.bundleID    = bundleID
-        self.username    = username
+    public init(
+        bundleID: String, username: String, displayName: String?,
+        email: String?, role: String
+    ) {
+        self.bundleID = bundleID
+        self.username = username
         self.displayName = displayName
-        self.email       = email
-        self.role        = role
+        self.email = email
+        self.role = role
     }
 }
 
+/// A course section (named group of assignments) carried in a bundle.
 public struct BundledSection: Codable, Sendable {
+    /// Stable cross-reference within this bundle (e.g. "section_1").
     public let bundleID: String
     public let name: String
     /// "browser" | "worker"
@@ -118,10 +124,10 @@ public struct BundledSection: Codable, Sendable {
     public let sortOrder: Int
 
     public init(bundleID: String, name: String, defaultGradingMode: String, sortOrder: Int) {
-        self.bundleID            = bundleID
-        self.name                = name
-        self.defaultGradingMode  = defaultGradingMode
-        self.sortOrder           = sortOrder
+        self.bundleID = bundleID
+        self.name = name
+        self.defaultGradingMode = defaultGradingMode
+        self.sortOrder = sortOrder
     }
 }
 
@@ -129,23 +135,46 @@ public struct BundledAssignment: Codable, Sendable {
     public let bundleID: String
     public let title: String
     public let dueAt: Date?
+    /// Optional automatic open date. Absent in bundles exported before this
+    /// field existed (decodes as nil).
+    public let startsAt: Date?
+    /// Legacy open/closed flag. Retained for round-trip compatibility with
+    /// bundles read by older instances; `visibility` is the source of truth on
+    /// import when present.
     public let isOpen: Bool
+    /// Three-state visibility. Absent in bundles exported before this field
+    /// existed (decodes as nil); resolve via `bundledAssignmentVisibility`.
+    public let visibility: AssignmentVisibility?
     public let sortOrder: Int?
     /// References BundledTestSetup.bundleID.
     public let testSetupBundleID: String
-    /// References BundledSection.bundleID; nil when assignment is ungrouped.
+    /// References BundledSection.bundleID (nil = ungrouped, or a bundle
+    /// exported before sections were carried).
     public let sectionBundleID: String?
 
-    public init(bundleID: String, title: String, dueAt: Date?, isOpen: Bool,
-                sortOrder: Int?, testSetupBundleID: String, sectionBundleID: String? = nil) {
-        self.bundleID           = bundleID
-        self.title              = title
-        self.dueAt              = dueAt
-        self.isOpen             = isOpen
-        self.sortOrder          = sortOrder
-        self.testSetupBundleID  = testSetupBundleID
-        self.sectionBundleID    = sectionBundleID
+    public init(
+        bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool,
+        visibility: AssignmentVisibility? = nil,
+        sortOrder: Int?, testSetupBundleID: String,
+        sectionBundleID: String? = nil
+    ) {
+        self.bundleID = bundleID
+        self.title = title
+        self.dueAt = dueAt
+        self.startsAt = startsAt
+        self.isOpen = isOpen
+        self.visibility = visibility
+        self.sortOrder = sortOrder
+        self.testSetupBundleID = testSetupBundleID
+        self.sectionBundleID = sectionBundleID
     }
+}
+
+/// Resolves the effective `AssignmentVisibility` for an imported assignment,
+/// falling back to the legacy `isOpen` boolean for bundles exported before the
+/// `visibility` field existed.
+public func bundledAssignmentVisibility(_ assignment: BundledAssignment) -> AssignmentVisibility {
+    assignment.visibility ?? AssignmentVisibility(legacyIsOpen: assignment.isOpen)
 }
 
 public struct BundledTestSetup: Codable, Sendable {
@@ -157,11 +186,13 @@ public struct BundledTestSetup: Codable, Sendable {
     /// Relative path within the bundle ZIP: "testsetups/<originalID>.zip"
     public let zipFilename: String
 
-    public init(bundleID: String, originalID: String, manifest: String,
-                zipFilename: String) {
-        self.bundleID    = bundleID
-        self.originalID  = originalID
-        self.manifest    = manifest
+    public init(
+        bundleID: String, originalID: String, manifest: String,
+        zipFilename: String
+    ) {
+        self.bundleID = bundleID
+        self.originalID = originalID
+        self.manifest = manifest
         self.zipFilename = zipFilename
     }
 }
@@ -179,15 +210,17 @@ public struct BundledSubmission: Codable, Sendable {
     /// Relative path within the bundle ZIP: "submissions/<originalSubID>.<ext>"
     public let submissionFilename: String
 
-    public init(bundleID: String, userBundleID: String, testSetupBundleID: String,
-                attemptNumber: Int, submittedAt: Date?, filename: String?,
-                submissionFilename: String) {
-        self.bundleID           = bundleID
-        self.userBundleID       = userBundleID
-        self.testSetupBundleID  = testSetupBundleID
-        self.attemptNumber      = attemptNumber
-        self.submittedAt        = submittedAt
-        self.filename           = filename
+    public init(
+        bundleID: String, userBundleID: String, testSetupBundleID: String,
+        attemptNumber: Int, submittedAt: Date?, filename: String?,
+        submissionFilename: String
+    ) {
+        self.bundleID = bundleID
+        self.userBundleID = userBundleID
+        self.testSetupBundleID = testSetupBundleID
+        self.attemptNumber = attemptNumber
+        self.submittedAt = submittedAt
+        self.filename = filename
         self.submissionFilename = submissionFilename
     }
 }
@@ -201,11 +234,13 @@ public struct BundledResult: Codable, Sendable {
     public let source: String
     public let receivedAt: Date?
 
-    public init(submissionBundleID: String, collectionJSON: String,
-                source: String, receivedAt: Date?) {
+    public init(
+        submissionBundleID: String, collectionJSON: String,
+        source: String, receivedAt: Date?
+    ) {
         self.submissionBundleID = submissionBundleID
-        self.collectionJSON     = collectionJSON
-        self.source             = source
-        self.receivedAt         = receivedAt
+        self.collectionJSON = collectionJSON
+        self.source = source
+        self.receivedAt = receivedAt
     }
 }

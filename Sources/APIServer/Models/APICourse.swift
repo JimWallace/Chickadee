@@ -6,9 +6,9 @@
 // Admins manage courses (create, archive). Enrollment policy is set per course
 // via CourseEnrollmentMode: open (self-enroll), auto (all users), or closed (admin-managed).
 
+import Core
 import Fluent
 import Vapor
-import Core
 
 final class APICourse: Model, Content, @unchecked Sendable {
     // @unchecked Sendable: all mutations happen within Vapor's request context.
@@ -39,6 +39,24 @@ final class APICourse: Model, Content, @unchecked Sendable {
         set { enrollmentModeRaw = newValue.rawValue }
     }
 
+    /// D2L BrightSpace org unit ID for this course (enables grade sync when set).
+    @OptionalField(key: "brightspace_org_unit_id")
+    var brightspaceOrgUnitID: String?
+
+    /// Human-readable D2L org-unit name, cached when an admin binds the
+    /// course to its org unit (we look the ID up and store the name so the
+    /// binding is verifiable at a glance). Nil = unbound or unverified.
+    @OptionalField(key: "brightspace_org_unit_name")
+    var brightspaceOrgUnitName: String?
+
+    /// When this course was archived. Set by `toggleCourseArchive` when a
+    /// course is archived (and cleared when un-archived). Archiving is
+    /// Chickadee's "end of term" signal, so this is the anchor for the
+    /// submission-retention clock — see `SubmissionRetentionService`. Nil
+    /// while the course is active.
+    @OptionalField(key: "archived_at")
+    var archivedAt: Date?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -47,12 +65,18 @@ final class APICourse: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: UUID? = nil, code: String, name: String,
-         isArchived: Bool = false, enrollmentMode: CourseEnrollmentMode = .open) {
-        self.id                 = id
-        self.code               = code
-        self.name               = name
-        self.isArchived         = isArchived
-        self.enrollmentModeRaw  = enrollmentMode.rawValue
+    init(
+        id: UUID? = nil, code: String, name: String,
+        isArchived: Bool = false, enrollmentMode: CourseEnrollmentMode = .open,
+        brightspaceOrgUnitID: String? = nil,
+        brightspaceOrgUnitName: String? = nil
+    ) {
+        self.id = id
+        self.code = code
+        self.name = name
+        self.isArchived = isArchived
+        self.enrollmentModeRaw = enrollmentMode.rawValue
+        self.brightspaceOrgUnitID = brightspaceOrgUnitID
+        self.brightspaceOrgUnitName = brightspaceOrgUnitName
     }
 }

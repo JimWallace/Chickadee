@@ -1,12 +1,15 @@
 // APIServer/Routes/Web/WebRoutes+Notebook.swift
 //
-// Notebook-related handlers and helpers for WebRoutes.
-// Extracted from WebRoutes.swift — no behaviour changes.
+// Notebook-related route handlers for WebRoutes (notebook page, raw source,
+// student self-service reset).  The filesystem service these handlers call —
+// working-copy path planning, participation gate, seeding + substitution,
+// history selection, latest-submission fallback, support-file symlinks —
+// lives in Services/NotebookWorkingCopyStore.swift.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 enum NotebookFileKind: String {
     case assignment
@@ -18,7 +21,7 @@ extension WebRoutes {
     // MARK: - GET /testsetups/:id/notebook
 
     @Sendable
-    func notebookPage(req: Request) async throws -> View {
+    func notebookPage(req: Request) async throws -> Response {
         struct NotebookQuery: Content {
             var title: String?
             var submissionID: String?
@@ -40,6 +43,33 @@ extension WebRoutes {
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
+        // Treat an assignment as closed for read-only display whenever it is
+        // not effectively open *for this user* — the per-user check honors a
+        // deadline extension granted to the current student, so an extended
+        // student still sees the Submit button after the assignment-wide
+        // deadline.  A bare test setup with no APIAssignment row (instructor
+        // preview / unpublished) is treated as not closed so authoring flows
+        // are unaffected.
+        let isClosed: Bool
+        if let assignment {
+            // Preview counts as open for staff and closed for students — handled
+            // inside isAssignmentEffectivelyOpen — so staff get an editable
+            // notebook on a Preview assignment and students see it read-only.
+            isClosed = !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db))
+        } else {
+            isClosed = false
+        }
+
+        // Closed-assignment access gate: a closed assignment is only reachable
+        // by a student who has previously engaged with it (and that access is
+        // recorded durably so it stays reachable once it closes).  Posting
+        // links in advance no longer spoils not-yet-opened labs.
+        if let redirect = try await closedAssignmentGate(
+            req: req, user: user, userID: userID, assignment: assignment, isClosed: isClosed)
+        {
+            return redirect
+        }
+
         let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignmentTitle = {
             if !queryTitle.isEmpty { return queryTitle }
@@ -47,7 +77,6 @@ extension WebRoutes {
             return "Assignment"
         }()
         let requestedSubmissionID = (query.submissionID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let userSlug = userID.uuidString.lowercased()
 
         // --- Submission view (read-only) ---
         // Use a submission-specific working copy path and workspace ID so:
@@ -55,50 +84,141 @@ extension WebRoutes {
         //   2. Each submission gets a fresh JupyterLite workspace; the browser
         //      IndexedDB cache from a previous visit to the edit/submit page
         //      cannot shadow the student's actual content.
+        let args = NotebookPageRenderArgs(
+            user: user,
+            setup: setup,
+            setupID: setupID,
+            userID: userID,
+            assignment: assignment,
+            assignmentTitle: assignmentTitle,
+            isClosed: isClosed
+        )
         if !requestedSubmissionID.isEmpty {
-            let notebookData = try await notebookDataForHistorySelection(
+            return try await renderSubmissionNotebookView(
                 req: req,
-                caller: user,
-                submissionID: requestedSubmissionID,
-                setupID: setupID,
-                userID: userID
-            )
-            let submissionRelativePath = "users/\(userSlug)/\(setupID)/view-\(requestedSubmissionID).ipynb"
-            _ = try await ensureUserNotebookWorkingCopy(
-                req: req,
-                setupID: setupID,
-                userID: userID,
-                fallbackSetup: setup,
-                relativePath: submissionRelativePath,
-                overwriteWith: notebookData   // always overwrite — we want the exact submission
-            )
-            let encodedPath = submissionRelativePath
-                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-                ?? submissionRelativePath
-            let workspaceID = "\(setupID)-\(userSlug)-view-\(requestedSubmissionID)"
-            let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=1&path=\(encodedPath)"
-            let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
-            let manifestGradingMode: String = {
-                let data = Data(setup.manifest.utf8)
-                guard let manifest = try? JSONDecoder().decode(TestProperties.self, from: data) else {
-                    return GradingMode.browser.rawValue
-                }
-                return manifest.gradingMode.rawValue
-            }()
-            return try await req.view.render("notebook",
-                NotebookContext(
-                    testSetupID: setupID,
-                    assignmentTitle: assignmentTitle,
-                    notebookURL: notebookURL,
-                    jupyterLiteEditorURL: editorURL,
-                    downloadURL: nil,           // download link lives on the submission page
-                    gradingMode: manifestGradingMode,
-                    showSubmit: false,          // read-only view
-                    currentUser: req.currentUserContext
-                ))
+                args: args,
+                submissionID: requestedSubmissionID
+            ).encodeResponse(for: req)
         }
 
-        // --- Normal assignment / solution view ---
+        return try await renderAssignmentNotebookView(
+            req: req,
+            args: args,
+            fileKind: fileKind
+        ).encodeResponse(for: req)
+    }
+
+    // MARK: - POST /testsetups/:id/reset-notebook
+    //
+    // Student self-service reset of their *own* working-copy notebook back to
+    // the assignment's canonical starter.  Mirrors the instructor-driven
+    // `resetStudentNotebook`, but scoped to the caller and gated on the
+    // assignment being open to them — `requireOpenStudentAssignment` enforces
+    // course enrollment and effective-open state, throwing `.closed` for a
+    // closed / not-yet-open assignment and `.notFound` for an unenrolled
+    // student.  Past submissions are never touched: only the live working copy
+    // at jupyterlite/files/users/{userID}/{setupID}/<filename> is overwritten.
+    @Sendable
+    func resetOwnNotebook(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let userID = user.id else { throw Abort(.unauthorized) }
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        // A bare test setup with no assignment row is not a student-facing
+        // assignment; `requireOpenStudentAssignment` returns nil there without
+        // an enrollment check, so reject it explicitly to avoid a bypass.
+        guard try await requireOpenStudentAssignment(for: setupID, user: user, on: req) != nil else {
+            throw Abort(.notFound)
+        }
+
+        let starter: Data
+        do {
+            starter = try notebookData(for: setup)
+        } catch {
+            throw Abort(.badRequest, reason: "This assignment has no starter notebook to reset to.")
+        }
+
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req,
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: setup,
+            overwriteWith: starter
+        )
+
+        req.logger.info("student_self_notebook_reset setup=\(setupID) student=\(userID.uuidString)")
+        return req.redirect(to: "/")
+    }
+
+    /// Renders the submission-view branch of `notebookPage` (read-only,
+    /// per-submission working copy, fresh JupyterLite workspace).
+    private func renderSubmissionNotebookView(
+        req: Request,
+        args: NotebookPageRenderArgs,
+        submissionID requestedSubmissionID: String
+    ) async throws -> View {
+        let setup = args.setup
+        let setupID = args.setupID
+        let userID = args.userID
+        let userSlug = userID.uuidString.lowercased()
+        let notebookData = try await notebookDataForHistorySelection(
+            req: req,
+            caller: args.user,
+            submissionID: requestedSubmissionID,
+            setupID: setupID,
+            userID: userID
+        )
+        let submissionRelativePath = "users/\(userSlug)/\(setupID)/view-\(requestedSubmissionID).ipynb"
+        _ = try await ensureUserNotebookWorkingCopy(
+            req: req,
+            setupID: setupID,
+            userID: userID,
+            fallbackSetup: setup,
+            relativePath: submissionRelativePath,
+            overwriteWith: notebookData  // always overwrite — we want the exact submission
+        )
+        let encodedPath =
+            submissionRelativePath
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            ?? submissionRelativePath
+        let workspaceID = "\(setupID)-\(userSlug)-view-\(requestedSubmissionID)"
+        let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=1&path=\(encodedPath)"
+        let notebookURL = "/testsetups/\(setupID)/notebook/source?submissionID=\(requestedSubmissionID)"
+        let submissionViewAbsPath =
+            req.application.directory.publicDirectory
+            + "jupyterlite/files/" + submissionRelativePath
+        return try await req.view.render(
+            "notebook",
+            NotebookContext(
+                testSetupID: setupID,
+                assignmentTitle: args.assignmentTitle,
+                notebookURL: notebookURL,
+                jupyterLiteEditorURL: editorURL,
+                downloadURL: nil,  // download link lives on the submission page
+                gradingMode: decodeManifestGradingMode(setup),
+                showSubmit: false,  // read-only view
+                isClosed: args.isClosed,
+                workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
+                currentUser: req.currentUserContext
+            ))
+    }
+
+    /// Renders the normal assignment / solution branch of `notebookPage`.
+    private func renderAssignmentNotebookView(
+        req: Request,
+        args: NotebookPageRenderArgs,
+        fileKind: NotebookFileKind
+    ) async throws -> View {
+        let setup = args.setup
+        let setupID = args.setupID
+        let userID = args.userID
+        let assignment = args.assignment
+        let userSlug = userID.uuidString.lowercased()
         if fileKind == .solution {
             let solutionData = try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
             _ = try await ensureUserNotebookWorkingCopy(
@@ -117,44 +237,66 @@ extension WebRoutes {
                 fallbackSetup: setup
             )
         }
-        let jupyterLiteNotebookPath = userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: fileKind)
-        let encodedPath = jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        let jupyterLiteNotebookPath = userNotebookWorkingCopyRelativePath(
+            setupID: setupID, userID: userID, fileKind: fileKind)
+        let encodedPath =
+            jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
             ?? jupyterLiteNotebookPath
         let workspaceID = "\(setupID)-\(userSlug)-\(fileKind.rawValue)"
         let editorURL = "/jupyterlite/notebooks/index.html?workspace=\(workspaceID)&reset=&path=\(encodedPath)"
-        let notebookURL = switch fileKind {
+        let notebookURL =
+            switch fileKind {
             case .assignment: "/testsetups/\(setupID)/notebook/source"
-            case .solution:   "/testsetups/\(setupID)/notebook/source?file=solution"
-        }
+            case .solution: "/testsetups/\(setupID)/notebook/source?file=solution"
+            }
         let downloadURL: String? = {
             guard let assignment else { return nil }
             return switch fileKind {
-                case .assignment: "/api/v1/testsetups/\(setupID)/assignment/download"
-                case .solution:   "/instructor/\(assignment.publicID)/files/solution"
+            case .assignment: "/api/v1/testsetups/\(setupID)/assignment/download"
+            case .solution: "/instructor/\(assignment.publicID)/files/solution"
             }
         }()
 
-        // Decode gradingMode from the manifest so the template can load
-        // browser-runner.js for browser-graded assignments.
-        let manifestGradingMode: String = {
-            let data = Data(setup.manifest.utf8)
-            guard let manifest = try? JSONDecoder().decode(TestProperties.self, from: data) else {
-                return GradingMode.browser.rawValue
-            }
-            return manifest.gradingMode.rawValue
-        }()
-
-        return try await req.view.render("notebook",
+        let workingCopyAbsPath =
+            req.application.directory.publicDirectory
+            + "jupyterlite/files/" + jupyterLiteNotebookPath
+        return try await req.view.render(
+            "notebook",
             NotebookContext(
                 testSetupID: setupID,
-                assignmentTitle: assignmentTitle,
+                assignmentTitle: args.assignmentTitle,
                 notebookURL: notebookURL,
                 jupyterLiteEditorURL: editorURL,
                 downloadURL: downloadURL,
-                gradingMode: manifestGradingMode,
-                showSubmit: fileKind == .assignment,
+                gradingMode: decodeManifestGradingMode(setup),
+                showSubmit: fileKind == .assignment && !args.isClosed,
+                isClosed: args.isClosed,
+                workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
                 currentUser: req.currentUserContext
             ))
+    }
+
+    /// Bundles the common state passed to both `notebookPage` render
+    /// branches.  Reduces the per-helper parameter count and keeps the
+    /// rendering signatures intentionally close to one another.
+    private struct NotebookPageRenderArgs {
+        let user: APIUser
+        let setup: APITestSetup
+        let setupID: String
+        let userID: UUID
+        let assignment: APIAssignment?
+        let assignmentTitle: String
+        let isClosed: Bool
+    }
+
+    /// Decodes the manifest's `gradingMode` for the notebook template;
+    /// falls back to `.browser` whenever the manifest can't be decoded.
+    private func decodeManifestGradingMode(_ setup: APITestSetup) -> String {
+        let data = Data(setup.manifest.utf8)
+        guard let manifest = decodeManifest(from: data) else {
+            return GradingMode.browser.rawValue
+        }
+        return manifest.gradingMode.rawValue
     }
 
     // MARK: - GET /testsetups/:id/notebook/source
@@ -175,6 +317,21 @@ extension WebRoutes {
         }
 
         try await requireCourseEnrollment(caller: user, courseID: setup.courseID, db: req.db)
+
+        // Same closed-assignment gate as the notebook page, applied to the raw
+        // content endpoint so a student can't fetch a not-yet-opened lab's
+        // starter notebook by hitting `/notebook/source` directly.  A
+        // legitimately reachable closed assignment already has a participation
+        // row (or a submission), so this never fires on normal page loads.
+        if !user.isInstructor,
+            let assignment = try await APIAssignment.query(on: req.db)
+                .filter(\.$testSetupID == setupID)
+                .first(),
+            !(try await isAssignmentEffectivelyOpen(assignment, for: user, on: req.db)),
+            !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
+        {
+            throw Abort(.forbidden)
+        }
 
         let query = try req.query.decode(NotebookSourceQuery.self)
 
@@ -199,11 +356,12 @@ extension WebRoutes {
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
             .first()
-        let defaultData: Data? = if fileKind == .solution {
-            try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
-        } else {
-            nil
-        }
+        let defaultData: Data? =
+            if fileKind == .solution {
+                try await solutionNotebookData(for: assignment, setup: setup, db: req.db)
+            } else {
+                nil
+            }
 
         let payload = try await ensureUserNotebookWorkingCopy(
             req: req,
@@ -217,259 +375,5 @@ extension WebRoutes {
         var headers = HTTPHeaders()
         headers.replaceOrAdd(name: .contentType, value: "application/json; charset=utf-8")
         return Response(status: .ok, headers: headers, body: .init(data: payload))
-    }
-}
-
-// MARK: - Notebook helpers
-
-func userNotebookWorkingCopyRelativePath(setupID: String, userID: UUID) -> String {
-    userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID, fileKind: .assignment)
-}
-
-private func notebookFileKind(from rawValue: String?) -> NotebookFileKind {
-    NotebookFileKind(rawValue: (rawValue ?? "").lowercased()) ?? .assignment
-}
-
-private func userNotebookFilename(fileKind: NotebookFileKind) -> String {
-    switch fileKind {
-    case .assignment: return "assignment.ipynb"
-    case .solution: return "solution.ipynb"
-    }
-}
-
-func userNotebookWorkingCopyRelativePath(
-    setupID: String,
-    userID: UUID,
-    fileKind: NotebookFileKind
-) -> String {
-    "users/\(userID.uuidString.lowercased())/\(setupID)/\(userNotebookFilename(fileKind: fileKind))"
-}
-
-func userNotebookWorkingCopyAbsolutePath(req: Request, setupID: String, userID: UUID) -> String {
-    req.application.directory.publicDirectory
-        + "jupyterlite/files/"
-        + userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
-}
-
-func ensureUserNotebookWorkingCopy(
-    req: Request,
-    setupID: String,
-    userID: UUID,
-    fallbackSetup: APITestSetup,
-    relativePath: String? = nil,
-    defaultData: Data? = nil,
-    overwriteWith: Data? = nil
-) async throws -> Data {
-    let fileManager = FileManager.default
-    let resolvedRelativePath = relativePath ?? userNotebookWorkingCopyRelativePath(setupID: setupID, userID: userID)
-    let workingCopyPath = req.application.directory.publicDirectory
-        + "jupyterlite/files/"
-        + resolvedRelativePath
-    let workingCopyDir = (workingCopyPath as NSString).deletingLastPathComponent
-
-    if let overwriteWith {
-        try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
-        try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
-        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
-        removeLegacyUserNotebookCopies(req: req, userID: userID)
-        return overwriteWith
-    }
-
-    if let existingData = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
-       !existingData.isEmpty,
-       (try? JSONSerialization.jsonObject(with: existingData)) != nil {
-        // Symlinks are idempotent — run on every visit so existing working copies
-        // also pick up support files when the feature is first deployed.
-        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
-        removeLegacyUserNotebookCopies(req: req, userID: userID)
-        return existingData
-    }
-
-    let seedData = if let defaultData {
-        defaultData
-    } else {
-        try await latestNotebookSubmissionData(
-            req: req,
-            setupID: setupID,
-            userID: userID,
-            fallbackSetup: fallbackSetup
-        ).data
-    }
-
-    try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
-    try seedData.write(to: URL(fileURLWithPath: workingCopyPath))
-    createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
-
-    removeLegacyUserNotebookCopies(req: req, userID: userID)
-    return seedData
-}
-
-private func solutionNotebookData(
-    for assignment: APIAssignment?,
-    setup: APITestSetup,
-    db: Database
-) async throws -> Data {
-    if let entryName = listZipEntries(zipPath: setup.zipPath).first(where: { $0.hasPrefix("solution.") }),
-       let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName),
-       !data.isEmpty {
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    if let validationID = assignment?.validationSubmissionID,
-       let validationSubmission = try await APISubmission.find(validationID, on: db),
-       let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
-       !data.isEmpty {
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    if let setupID = assignment?.testSetupID,
-       let fallbackSubmission = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.validation)
-        .sort(\.$submittedAt, .descending)
-        .first(),
-       let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
-       !data.isEmpty {
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    throw Abort(.notFound, reason: "No solution notebook is available for this assignment yet")
-}
-
-func notebookDataForHistorySelection(
-    req: Request,
-    caller: APIUser,
-    submissionID: String,
-    setupID: String,
-    userID: UUID
-) async throws -> Data {
-    guard let submission = try await APISubmission.find(submissionID, on: req.db) else {
-        throw Abort(.notFound, reason: "Submission not found")
-    }
-    guard submission.kind == APISubmission.Kind.student else {
-        throw Abort(.forbidden)
-    }
-    if !caller.isInstructor && submission.userID != userID {
-        throw Abort(.forbidden)
-    }
-    guard submission.testSetupID == setupID else {
-        throw Abort(.badRequest, reason: "Submission does not belong to this assignment")
-    }
-
-    let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
-    let nameExt = (submission.filename ?? "").lowercased()
-    guard pathExt == "ipynb" || nameExt.hasSuffix(".ipynb") else {
-        throw Abort(.badRequest, reason: "Only notebook submissions can be opened in notebook view")
-    }
-
-    let dataURL = URL(fileURLWithPath: submission.zipPath)
-    guard let data = try? Data(contentsOf: dataURL),
-          (try? JSONSerialization.jsonObject(with: data)) != nil else {
-        throw Abort(.notFound, reason: "Notebook artifact is unavailable for this submission")
-    }
-    return normalizeNotebookForJupyterLite(data)
-}
-
-func removeLegacyUserNotebookCopies(req: Request, userID: UUID) {
-    let userSlug = userID.uuidString.lowercased()
-    let roots = [
-        req.application.directory.publicDirectory + "files/",
-        req.application.directory.publicDirectory + "jupyterlite/files/",
-        req.application.directory.publicDirectory + "jupyterlite/lab/files/",
-        req.application.directory.publicDirectory + "jupyterlite/notebooks/files/"
-    ]
-
-    let fileManager = FileManager.default
-    for root in roots {
-        let userDir = root + "users/\(userSlug)/"
-        guard let entries = try? fileManager.contentsOfDirectory(atPath: userDir) else { continue }
-
-        for name in entries {
-            let path = userDir + name
-            var isDirectory = ObjCBool(false)
-            guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
-                continue
-            }
-            guard URL(fileURLWithPath: name).pathExtension.lowercased() == "ipynb" else {
-                continue
-            }
-            let lower = name.lowercased()
-            let shouldRemove = lower == "assignment.ipynb"
-                || lower == "submission.ipynb"
-                || (lower.hasPrefix("sub_") && lower.hasSuffix(".ipynb"))
-            guard shouldRemove else { continue }
-            try? fileManager.removeItem(atPath: path)
-        }
-    }
-}
-
-func latestNotebookSubmissionData(
-    req: Request,
-    setupID: String,
-    userID: UUID,
-    fallbackSetup: APITestSetup
-) async throws -> (data: Data, filename: String?) {
-    let submissions = try await APISubmission.query(on: req.db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$userID == userID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .sort(\.$submittedAt, .descending)
-        .all()
-
-    for submission in submissions {
-        let pathExt = URL(fileURLWithPath: submission.zipPath).pathExtension.lowercased()
-        let nameExt = (submission.filename ?? "").lowercased()
-        guard pathExt == "ipynb" || nameExt.hasSuffix(".ipynb") else {
-            continue
-        }
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: submission.zipPath)),
-              (try? JSONSerialization.jsonObject(with: data)) != nil else {
-            continue
-        }
-        return (data, submission.filename)
-    }
-
-    let fallbackFilename: String? = {
-        guard let path = fallbackSetup.notebookPath, !path.isEmpty else { return nil }
-        let name = URL(fileURLWithPath: path).lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? nil : name
-    }()
-    let fallbackData = try notebookData(for: fallbackSetup)
-    return (fallbackData, fallbackFilename)
-}
-
-/// Creates read-only symlinks for support files (zip entries that are not test suite
-/// scripts or canonical notebooks) inside the student's JupyterLite working directory.
-///
-/// Symlinks point to the shared extraction in `{testSetupsDir}/shared/{setupID}/`
-/// that is populated by `extractSupportFilesToSharedDirectory` when the test setup
-/// is created or edited. Only files that exist in the shared directory are linked;
-/// missing files are silently skipped so a missing shared dir never breaks notebook access.
-func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: String) {
-    guard let setupID = setup.id else { return }
-
-    // Derive the list of support files: everything in the zip except test suite scripts
-    // and the canonical notebooks.
-    guard let manifestData = setup.manifest.data(using: .utf8),
-          let props = try? JSONDecoder().decode(TestProperties.self, from: manifestData)
-    else { return }
-
-    let testScriptNames = Set(props.testSuites.map { $0.script })
-    let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
-    let allEntries = listZipEntries(zipPath: setup.zipPath)
-    let supportNames = allEntries.filter {
-        !testScriptNames.contains($0) && !reservedNames.contains($0)
-    }
-    guard !supportNames.isEmpty else { return }
-
-    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
-    let fm = FileManager.default
-
-    for name in supportNames {
-        let src  = sharedDir + name
-        let dest = studentDir + "/" + name
-        guard !fm.fileExists(atPath: dest) else { continue }   // idempotent
-        guard  fm.fileExists(atPath: src)  else { continue }   // skip if not yet extracted
-        try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
     }
 }

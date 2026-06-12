@@ -1,45 +1,22 @@
-import XCTest
-import XCTVapor
-@testable import chickadee_server
 import Fluent
-@testable import Core
 import Foundation
+import Testing
+import XCTVapor
 
-final class ResultRoutesTests: XCTestCase {
+@testable import APIServer
+@testable import Core
 
-    private var app: Application!
-    private var tmpResultsDir: String!
-    private let workerSecret = "test-worker-secret"
+@Suite(.serialized) final class ResultRoutesTests {
 
-    override func setUp() async throws {
-        app = try await Application.make(.testing)
+    let app: Application
 
-        // Use a temp directory so tests don't pollute the project directory
-        tmpResultsDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("chickadee-test-results-\(UUID().uuidString)", isDirectory: true)
-            .path + "/"
-        try FileManager.default.createDirectory(
-            atPath: tmpResultsDir,
-            withIntermediateDirectories: true
-        )
-
-        app.resultsDirectory = tmpResultsDir
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-test-results")
         app.routes.defaultMaxBodySize = "10mb"
-
-        // Sessions are required because routes.swift now registers UserSessionAuthenticator.
-        app.sessions.use(.memory)
-        app.middleware.use(app.sessions.middleware)
         app.workerSecretStore = WorkerSecretStore(initialOverride: workerSecret)
-
-        try await configureTestDatabase(app, options: .observability)
-
-        try routes(app)
     }
 
-    override func tearDown() async throws {
-        try await app.asyncShutdown()
-        try? FileManager.default.removeItem(atPath: tmpResultsDir)
-    }
+    private let workerSecret = "test-worker-secret"
 
     // MARK: - Helpers
 
@@ -83,30 +60,31 @@ final class ResultRoutesTests: XCTestCase {
     private func ensureSubmissionExists(
         submissionID: String,
         testSetupID: String = "setup_001"
-    ) throws {
-        if try APITestSetup.find(testSetupID, on: app.db).wait() == nil {
+    ) async throws {
+        if try await APITestSetup.find(testSetupID, on: app.db) == nil {
             let course = APICourse(code: "TEST101", name: "Test Course")
-            try course.save(on: app.db).wait()
+            try await course.save(on: app.db)
             let courseID = try course.requireID()
             let setup = APITestSetup(
                 id: testSetupID,
-                manifest: #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
-                zipPath: tmpResultsDir + "\(testSetupID).zip",
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"tests.py"}],"timeLimitSeconds":10,"makefile":null}"#,
+                zipPath: app.resultsDirectory + "\(testSetupID).zip",
                 courseID: courseID
             )
-            try setup.save(on: app.db).wait()
+            try await setup.save(on: app.db)
         }
 
-        if try APISubmission.find(submissionID, on: app.db).wait() == nil {
+        if try await APISubmission.find(submissionID, on: app.db) == nil {
             let submission = APISubmission(
                 id: submissionID,
                 testSetupID: testSetupID,
-                zipPath: tmpResultsDir + "\(submissionID).zip",
+                zipPath: app.resultsDirectory + "\(submissionID).zip",
                 attemptNumber: 1,
                 status: "pending",
                 kind: APISubmission.Kind.student
             )
-            try submission.save(on: app.db).wait()
+            try await submission.save(on: app.db)
         }
     }
 
@@ -114,205 +92,266 @@ final class ResultRoutesTests: XCTestCase {
 
     private let resultsPath = "/api/v1/worker/results"
 
-    func testReportResultsReturnsReceived() throws {
-        let collection = makeCollection()
-        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
-        let body = try bodyData(for: collection)
+    @Test func reportResultsReturnsReceived() async throws {
+        try await withApp(app) { _ in
+            let collection = makeCollection()
+            try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+            let body = try bodyData(for: collection)
 
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let response = try res.content.decode(ReportResponse.self)
-            XCTAssertTrue(response.received)
-        })
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: body, workerSecret: self.workerSecret)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let response = try res.content.decode(ReportResponse.self)
+                    #expect(response.received)
+                })
+
+        }
     }
 
-    func testReportResultsWritesFileToDisk() throws {
-        let collection = makeCollection(submissionID: "sub_disktest")
-        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
-        let body = try bodyData(for: collection)
+    @Test func reportResultsPersistsToDBNotDisk() async throws {
+        try await withApp(app) { _ in
+            let collection = makeCollection(submissionID: "sub_disktest")
+            try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+            let body = try bodyData(for: collection)
 
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: body, workerSecret: self.workerSecret)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let files = try FileManager.default.contentsOfDirectory(atPath: tmpResultsDir)
-        let resultFile = files.first { $0.hasPrefix("sub_disktest") }
-        XCTAssertNotNil(resultFile, "Expected a result file for sub_disktest to be written")
+            let stored = try await APIResult.query(on: app.db)
+                .filter(\.$submissionID == collection.submissionID)
+                .first()
+            #expect(stored != nil, "Expected the result to be persisted to the DB")
+
+            // The redundant on-disk JSON dump was removed; nothing should land in results/.
+            let files = try FileManager.default.contentsOfDirectory(atPath: app.resultsDirectory)
+            #expect(
+                !files.contains { $0.hasPrefix("sub_disktest") },
+                "Result JSON should no longer be written to disk")
+        }
     }
 
-    func testReportResultsAcceptsWrappedExecutionReportPayload() async throws {
-        let collection = makeCollection(submissionID: "sub_wrapped_report")
-        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
-        let report = WorkerExecutionReport(
-            collection: collection,
-            diagnostics: WorkerExecutionDiagnostics(
-                runnerID: "runner-stage",
-                startedAt: Date(timeIntervalSince1970: 100),
-                finishedAt: Date(timeIntervalSince1970: 101),
-                finalStatus: "passed",
-                timedOut: false,
-                exitCode: 0,
-                terminationReason: nil,
-                peakRSSBytes: nil,
-                wallClockMs: 100,
-                childProcessCount: nil,
-                stdoutBytes: nil,
-                stderrBytes: nil,
-                stageTimings: WorkerExecutionStageTimings(
-                    workdirSetupMs: 12,
-                    submissionDownloadMs: 45,
-                    testSetupAcquireMs: 67,
-                    submissionPrepareMs: 89,
-                    testExecutionMs: 100
+    @Test func reportResultsAcceptsWrappedExecutionReportPayload() async throws {
+        try await withApp(app) { _ in
+            let collection = makeCollection(submissionID: "sub_wrapped_report")
+            try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+            let report = WorkerExecutionReport(
+                collection: collection,
+                diagnostics: WorkerExecutionDiagnostics(
+                    runnerID: "runner-stage",
+                    startedAt: Date(timeIntervalSince1970: 100),
+                    finishedAt: Date(timeIntervalSince1970: 101),
+                    finalStatus: "passed",
+                    timedOut: false,
+                    exitCode: 0,
+                    terminationReason: nil,
+                    peakRSSBytes: nil,
+                    wallClockMs: 100,
+                    childProcessCount: nil,
+                    stdoutBytes: nil,
+                    stderrBytes: nil,
+                    stageTimings: WorkerExecutionStageTimings(
+                        workdirSetupMs: 12,
+                        submissionDownloadMs: 45,
+                        testSetupAcquireMs: 67,
+                        submissionPrepareMs: 89,
+                        testExecutionMs: 100
+                    )
                 )
             )
-        )
-        let body = try bodyData(for: report)
+            let body = try bodyData(for: report)
 
-        try await app.asyncTest(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-        })
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: body, workerSecret: self.workerSecret)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
 
-        let files = try FileManager.default.contentsOfDirectory(atPath: tmpResultsDir)
-        let resultFile = files.first { $0.hasPrefix(collection.submissionID) }
-        XCTAssertNotNil(resultFile, "Expected a result file for wrapped reports to be written")
+            let stored = try await APIResult.query(on: app.db)
+                .filter(\.$submissionID == collection.submissionID)
+                .first()
+            #expect(stored != nil, "Expected wrapped-report result to be persisted to the DB")
+        }
     }
 
-    func testReportResultsWithFailedBuild() throws {
-        let collection = makeCollection(buildStatus: .failed, outcomes: [])
-        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
-        let body = try bodyData(for: collection)
+    @Test func reportResultsWithFailedBuild() async throws {
+        try await withApp(app) { _ in
+            let collection = makeCollection(buildStatus: .failed, outcomes: [])
+            try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+            let body = try bodyData(for: collection)
 
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            let response = try res.content.decode(ReportResponse.self)
-            XCTAssertTrue(response.received)
-        })
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: body, workerSecret: self.workerSecret)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let response = try res.content.decode(ReportResponse.self)
+                    #expect(response.received)
+                })
+
+        }
     }
 
-    func testReportResultsRejectsMalformedJSON() throws {
-        let badBody = ByteBuffer(string: "not valid json")
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: badBody, workerSecret: self.workerSecret)
-            req.body = badBody
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .unprocessableEntity)
-        })
+    @Test func reportResultsRejectsMalformedJSON() async throws {
+        try await withApp(app) { _ in
+            let badBody = ByteBuffer(string: "not valid json")
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: badBody, workerSecret: self.workerSecret)
+                    req.body = badBody
+                },
+                afterResponse: { res in
+                    #expect(res.status == .unprocessableEntity)
+                })
+
+        }
     }
 
-    func testReportResultsRejectsEmptyBody() throws {
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            workerSecret: self.workerSecret)
-        }, afterResponse: { res in
-            // Either 400 or 422 is acceptable for empty body
-            XCTAssertTrue(
-                res.status == .badRequest || res.status == .unprocessableEntity,
-                "Expected 400 or 422, got \(res.status)"
+    @Test func reportResultsRejectsEmptyBody() async throws {
+        try await withApp(app) { _ in
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        workerSecret: self.workerSecret)
+                },
+                afterResponse: { res in
+                    // Either 400 or 422 is acceptable for empty body
+                    #expect(
+                        res.status == .badRequest || res.status == .unprocessableEntity,
+                        "Expected 400 or 422, got \(res.status)"
+                    )
+                })
+
+        }
+    }
+
+    @Test func duplicateResultSubmissionIsIdempotent() async throws {
+        try await withApp(app) { _ in
+            // Simulates a worker retry: the same TestOutcomeCollection is submitted
+            // twice (e.g. the first POST timed out from the worker's perspective but
+            // actually succeeded on the server). The second POST must succeed and must
+            // not corrupt the submission's state.
+            let collection = makeCollection(submissionID: "sub_dup_result")
+            try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+            let body = try bodyData(for: collection)
+
+            // First submission
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: body, workerSecret: self.workerSecret)
+                    req.body = body
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect((try? res.content.decode(ReportResponse.self))?.received == true)
+                })
+
+            // Second submission (worker retry)
+            let body2 = try bodyData(for: collection)
+            try await app.asyncTest(
+                .POST, resultsPath,
+                beforeRequest: { req in
+                    req.headers = workerHMACHeaders(
+                        method: .POST, path: self.resultsPath,
+                        body: body2, workerSecret: self.workerSecret)
+                    req.body = body2
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "Second (retry) POST must also succeed")
+                    #expect((try? res.content.decode(ReportResponse.self))?.received == true)
+                })
+
+            // Submission must still be "complete" (not rolled back or errored)
+            let submission = try await APISubmission.find(collection.submissionID, on: app.db)
+            #expect(submission?.status == "complete", "Submission must remain complete after duplicate result")
+
+            // Two result records should exist — duplicates are appended, not rejected.
+            // The view layer picks the latest, so both records are harmless.
+            let resultCount = try await APIResult.query(on: app.db)
+                .filter(\.$submissionID == collection.submissionID)
+                .count()
+            #expect(resultCount == 2, "Each POST should persist one result record")
+
+        }
+    }
+
+    @Test func reportResultsAcceptsLargeSignedBodyOverRealHTTP() async throws {
+        try await withApp(app) { _ in
+            let largeMessage = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
+            let outcome = TestOutcome(
+                testName: "large_payload_test",
+                testClass: nil,
+                tier: .pub,
+                status: .fail,
+                shortResult: largeMessage,
+                longResult: largeMessage,
+                executionTimeMs: 100,
+                memoryUsageBytes: nil,
+                attemptNumber: 1,
+                isFirstPassSuccess: false
             )
-        })
-    }
+            let collection = makeCollection(
+                submissionID: "sub_large_http",
+                buildStatus: .failed,
+                outcomes: [outcome]
+            )
+            try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
+            let body = try bodyData(for: collection)
 
-    func testDuplicateResultSubmissionIsIdempotent() throws {
-        // Simulates a worker retry: the same TestOutcomeCollection is submitted
-        // twice (e.g. the first POST timed out from the worker's perspective but
-        // actually succeeded on the server). The second POST must succeed and must
-        // not corrupt the submission's state.
-        let collection = makeCollection(submissionID: "sub_dup_result")
-        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
-        let body = try bodyData(for: collection)
-
-        // First submission
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body, workerSecret: self.workerSecret)
-            req.body = body
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok)
-            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
-        })
-
-        // Second submission (worker retry)
-        let body2 = try bodyData(for: collection)
-        try app.test(.POST, resultsPath, beforeRequest: { req in
-            req.headers = workerHMACHeaders(method: .POST, path: self.resultsPath,
-                                            body: body2, workerSecret: self.workerSecret)
-            req.body = body2
-        }, afterResponse: { res in
-            XCTAssertEqual(res.status, .ok, "Second (retry) POST must also succeed")
-            XCTAssertTrue((try? res.content.decode(ReportResponse.self))?.received == true)
-        })
-
-        // Submission must still be "complete" (not rolled back or errored)
-        let submission = try APISubmission.find(collection.submissionID, on: app.db).wait()
-        XCTAssertEqual(submission?.status, "complete", "Submission must remain complete after duplicate result")
-
-        // Two result records should exist — duplicates are appended, not rejected.
-        // The view layer picks the latest, so both records are harmless.
-        let resultCount = try APIResult.query(on: app.db)
-            .filter(\.$submissionID == collection.submissionID)
-            .count()
-            .wait()
-        XCTAssertEqual(resultCount, 2, "Each POST should persist one result record")
-    }
-
-    func testReportResultsAcceptsLargeSignedBodyOverRealHTTP() async throws {
-        let largeMessage = String(repeating: "abcdefghijklmnopqrstuvwxyz0123456789", count: 4096)
-        let outcome = TestOutcome(
-            testName: "large_payload_test",
-            testClass: nil,
-            tier: .pub,
-            status: .fail,
-            shortResult: largeMessage,
-            longResult: largeMessage,
-            executionTimeMs: 100,
-            memoryUsageBytes: nil,
-            attemptNumber: 1,
-            isFirstPassSuccess: false
-        )
-        let collection = makeCollection(
-            submissionID: "sub_large_http",
-            buildStatus: .failed,
-            outcomes: [outcome]
-        )
-        try ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
-        let body = try bodyData(for: collection)
-
-        try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
-            .POST,
-            self.resultsPath,
-            headers: workerHMACHeaders(
-                method: .POST,
-                path: self.resultsPath,
-                body: body,
-                workerSecret: self.workerSecret
-            ),
-            body: body
-        ) { res async in
-            XCTAssertEqual(res.status, .ok)
-            do {
-                let response = try res.content.decode(ReportResponse.self)
-                XCTAssertTrue(response.received)
-            } catch {
-                XCTFail("Failed to decode ReportResponse: \(error)")
+            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+                .POST,
+                self.resultsPath,
+                headers: workerHMACHeaders(
+                    method: .POST,
+                    path: self.resultsPath,
+                    body: body,
+                    workerSecret: self.workerSecret
+                ),
+                body: body
+            ) { res async in
+                #expect(res.status == .ok)
+                do {
+                    let response = try res.content.decode(ReportResponse.self)
+                    #expect(response.received)
+                } catch {
+                    XCTFail("Failed to decode ReportResponse: \(error)")
+                }
             }
+
         }
     }
 }

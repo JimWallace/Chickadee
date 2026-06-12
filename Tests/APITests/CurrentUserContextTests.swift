@@ -1,10 +1,11 @@
-import XCTest
-@testable import chickadee_server
 import Fluent
+import Testing
 
-final class CurrentUserContextTests: XCTestCase {
+@testable import APIServer
 
-    func testCurrentUserContextTrimsProfileFields() {
+@Suite struct CurrentUserContextTests {
+
+    @Test func trimsProfileFields() {
         let user = APIUser(
             username: "jsmith",
             passwordHash: "",
@@ -15,13 +16,13 @@ final class CurrentUserContextTests: XCTestCase {
         )
 
         let ctx = CurrentUserContext(user: user)
-        XCTAssertEqual(ctx.username, "jsmith")
-        XCTAssertEqual(ctx.preferredName, "Jane")
-        XCTAssertEqual(ctx.displayName, "Jane Smith")
-        XCTAssertEqual(ctx.email, "jsmith@example.edu")
+        #expect(ctx.username == "jsmith")
+        #expect(ctx.preferredName == "Jane")
+        #expect(ctx.displayName == "Jane Smith")
+        #expect(ctx.email == "jsmith@example.edu")
     }
 
-    func testCurrentUserContextDropsBlankProfileFields() {
+    @Test func dropsBlankProfileFields() {
         let user = APIUser(
             username: "jsmith",
             passwordHash: "",
@@ -32,8 +33,8 @@ final class CurrentUserContextTests: XCTestCase {
         )
 
         let ctx = CurrentUserContext(user: user)
-        XCTAssertNil(ctx.preferredName)
-        XCTAssertNil(ctx.displayName)
-        XCTAssertNil(ctx.email)
+        #expect(ctx.preferredName == nil)
+        #expect(ctx.displayName == nil)
+        #expect(ctx.email == nil)
     }
 }

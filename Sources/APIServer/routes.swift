@@ -1,18 +1,25 @@
 // APIServer/routes.swift
 
-import Vapor
 import CSRF
+import Vapor
 
 func routes(_ app: Application) throws {
     let sessionAuth = UserSessionAuthenticator()
-    let csrf = CSRF()
+    let csrf = CSRF(tokenRetrieval: chickadeeCSRFTokenRetrieval)
 
     // MARK: - Public routes (no auth required)
 
     try app.register(collection: HealthRoutes())
-    try app.grouped(csrf).register(collection: AuthRoutes())
+    let loginRateLimit = LoginRateLimitMiddleware(
+        configuration: app.loginRateLimitConfiguration
+    )
+    // CSRF is applied inside AuthRoutes (login/register only) so that POST
+    // /logout stays exempt — a timed-out tab POSTs a stale token, see AuthRoutes.
+    try app.grouped(loginRateLimit).register(collection: AuthRoutes(csrf: csrf))
     if app.authMode != .local {
-        try app.register(collection: SSOAuthRoutes())
+        try app.register(
+            collection: SSOAuthRoutes(configuredCallbackPath: app.appConfig.oidc.callbackPath)
+        )
     }
     // Worker routes — authenticated by per-request HMAC signatures.
     // WorkerHMACAuthMiddleware validates X-Worker-Timestamp / X-Worker-Nonce /
@@ -25,6 +32,7 @@ func routes(_ app: Application) throws {
     // MARK: - Any authenticated user
 
     let auth = app.grouped(sessionAuth, RoleMiddleware(required: .authenticated), csrf)
+    try auth.register(collection: SessionRoutes())
     try auth.register(collection: WebRoutes())
     try auth.register(collection: EnrollmentRoutes())
     try auth.register(collection: AccountRoutes())
@@ -32,19 +40,28 @@ func routes(_ app: Application) throws {
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())
     try auth.register(collection: BrowserRunnerRoutes())
+    try auth.register(collection: ClientDiagnosticsRoutes())
     try auth.register(collection: JupyterLiteContentsRoutes())
     // TestSetupRoutes is in the auth group so students can fetch/download notebooks.
     // Instructor-only handlers (upload, zip-download, save) guard themselves inline.
     try auth.register(collection: TestSetupRoutes())
+    // Registered last so fixed-path routes always take precedence.
+    try auth.register(collection: VanityURLRoutes())
 
     // MARK: - Instructor or admin only
 
     let instructor = app.grouped(sessionAuth, RoleMiddleware(required: .instructor), csrf)
-    try instructor.register(collection: AssignmentRoutes())
+    try instructor.register(collection: InstructorDashboardRoutes())
+    try instructor.register(collection: DraftAssignmentRoutes())
+    try instructor.register(collection: PublishedAssignmentRoutes())
+    try instructor.register(collection: CourseAdminRoutes())
+    try instructor.register(collection: StudentCourseRoutes())
     try instructor.register(collection: MarmosetImportRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())
     try instructor.register(collection: UWDatesRoute())
+    // MCP "Connected agents" management page (instructor sees own grants; admin all).
+    try instructor.register(collection: MCPAgentsRoutes())
 
     // MARK: - Admin only
 
@@ -52,4 +69,14 @@ func routes(_ app: Application) throws {
     try admin.register(collection: AdminRoutes())
     try admin.register(collection: InternalMetricsRoutes())
     try admin.register(collection: CourseBundleRoutes())
+
+    // MARK: - MCP (content authoring)
+
+    // Bearer-gated /mcp transport + unauthenticated OAuth discovery metadata.
+    // Mounted when MCP_MODE is read_only or read_write; a no-op when off.
+    try registerMCPRoutes(app)
+    // Browser OAuth flow (/oauth/authorize consent + /oauth/token). The consent
+    // GET reuses session auth; the submit is guarded by a single-use consent
+    // token instead of the session cookie so it survives the cross-site hop.
+    try registerMCPOAuthRoutes(app, sessionAuth: sessionAuth)
 }

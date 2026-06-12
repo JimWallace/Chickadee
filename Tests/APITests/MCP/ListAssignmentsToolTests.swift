@@ -1,0 +1,214 @@
+// Tests for ListAssignmentsTool and the dispatcher's tools/list + tools/call
+// paths, backed by a real test database.
+
+import Core
+import Fluent
+import Testing
+import Vapor
+
+@testable import APIServer
+
+@Suite struct ListAssignmentsToolTests {
+    private func context(_ app: Application) -> ToolContext {
+        ToolContext(
+            request: Request(application: app, on: app.eventLoopGroup.any()),
+            subject: "tester",
+            grantedScopes: [.read, .write]
+        )
+    }
+
+    @Test func listsAssignmentsForCourseSortedByTitle() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_bit", courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_app", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_bit", courseID: courseID, title: "Bit Counting")
+            try await makeTestAssignment(on: app, testSetupID: "setup_app", courseID: courseID, title: "Apportionment")
+
+            let output = try await ListAssignmentsTool().execute(
+                ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            #expect(output.courseCode == "CS136")
+            #expect(output.assignments.map(\.title) == ["Apportionment", "Bit Counting"])
+        }
+    }
+
+    @Test func deniesWhenSubjectNotEnrolledInCourse() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
+            let courseID = try course.requireID()
+            // "tester" exists but is NOT enrolled in CS136.
+            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestSetup(on: app, id: "setup_x", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_x", courseID: courseID, title: "X")
+
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListAssignmentsTool().execute(
+                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            }
+        }
+    }
+
+    @Test func adminSubjectIsEnrollmentScoped() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
+            let courseID = try course.requireID()
+            // Admins are enrollment-scoped like everyone else: denied before
+            // enrolling, allowed after.
+            let admin = try await makeTestUser(on: app, username: "tester", role: "admin")
+            try await makeTestSetup(on: app, id: "setup_x", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_x", courseID: courseID, title: "X")
+
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListAssignmentsTool().execute(
+                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            }
+
+            try await makeTestEnrollment(on: app, userID: admin.requireID(), courseID: courseID)
+            let output = try await ListAssignmentsTool().execute(
+                ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            #expect(output.assignments.map(\.title) == ["X"])
+        }
+    }
+
+    @Test func enrolledStudentSubjectIsDenied() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
+            let courseID = try course.requireID()
+            // A student enrolled in the course still may not use MCP.
+            let student = try await makeTestUser(on: app, username: "tester")
+            try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_s", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_s", courseID: courseID, title: "X")
+
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListAssignmentsTool().execute(
+                    ListAssignmentsTool.Input(courseCode: "CS136"), context(app))
+            }
+        }
+    }
+
+    @Test func unknownCourseThrowsToolError() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            await #expect(throws: MCPToolError.self) {
+                _ = try await ListAssignmentsTool().execute(
+                    ListAssignmentsTool.Input(courseCode: "NOPE"), context(app))
+            }
+        }
+    }
+
+    @Test func dispatcherToolsListAdvertisesRegisteredTools() async throws {
+        let registry = ToolRegistry([ListAssignmentsTool().erased(), UpdateAssignmentTool().erased()])
+        let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
+        let request = JSONRPCRequest(jsonrpc: "2.0", id: .number(1), method: "tools/list", params: nil)
+        let response = try #require(await dispatcher.dispatch(request))
+        #expect(toolNames(in: response.result) == ["list_assignments", "update_assignment"])
+
+        // Each entry advertises an output schema and behavioural annotations;
+        // the read tool is read-only, the write tool is not.
+        let entries = toolEntries(in: response.result)
+        let readTool = try #require(entries["list_assignments"])
+        #expect(readTool["outputSchema"] != nil)
+        #expect(readTool["annotations"]?.objectFields?["readOnlyHint"] == .bool(true))
+        let writeTool = try #require(entries["update_assignment"])
+        #expect(writeTool["outputSchema"] != nil)
+        #expect(writeTool["annotations"]?.objectFields?["readOnlyHint"] == .bool(false))
+        // The write tool's per-tool annotation override must actually win over
+        // the inferred default (it carries an idempotent hint the default lacks).
+        #expect(writeTool["annotations"]?.objectFields?["idempotentHint"] == .bool(true))
+    }
+
+    @Test func dispatcherToolsCallReturnsContentAndStructured() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_tasks", courseID: courseID)
+            try await makeTestAssignment(on: app, testSetupID: "setup_tasks", courseID: courseID, title: "Tasks")
+
+            let registry = ToolRegistry([ListAssignmentsTool().erased()])
+            let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
+            let request = JSONRPCRequest(
+                jsonrpc: "2.0", id: .number(2), method: "tools/call",
+                params: .object([
+                    "name": .string("list_assignments"),
+                    "arguments": .object(["courseCode": .string("CS246")]),
+                ]))
+            let response = try #require(await dispatcher.dispatch(request, context: context(app)))
+            let result = try #require(response.result?.objectFields)
+            #expect(result["isError"] == .bool(false))
+            #expect(result["content"] != nil)
+            #expect(result["structuredContent"]?.objectFields?["courseCode"] == .string("CS246"))
+        }
+    }
+
+    @Test func dispatcherToolsCallUnknownToolIsInvalidParams() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"))
+            let request = JSONRPCRequest(
+                jsonrpc: "2.0", id: .number(3), method: "tools/call",
+                params: .object(["name": .string("does_not_exist")]))
+            let response = try #require(await dispatcher.dispatch(request, context: context(app)))
+            #expect(response.error?.code == -32_602)
+        }
+    }
+
+    @Test func dispatcherRejectsWriteToolWithoutWriteScope() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let registry = ToolRegistry([UpdateAssignmentTool().erased()])
+            let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
+            // A read-only caller invoking the content:write tool is rejected
+            // before the tool runs (no database mutation occurs).
+            let readOnly = ToolContext(
+                request: Request(application: app, on: app.eventLoopGroup.any()),
+                subject: "tester", grantedScopes: [.read])
+            let request = JSONRPCRequest(
+                jsonrpc: "2.0", id: .number(4), method: "tools/call",
+                params: .object([
+                    "name": .string("update_assignment"),
+                    "arguments": .object([
+                        "assignmentPublicID": .string("ABC123"), "isOpen": .bool(true),
+                    ]),
+                ]))
+            let response = try #require(await dispatcher.dispatch(request, context: readOnly))
+            #expect(response.error?.code == JSONRPCError.insufficientScopeCode)
+        }
+    }
+}
+
+private func toolNames(in result: JSONValue?) -> [String] {
+    guard case .object(let object)? = result, case .array(let tools)? = object["tools"] else { return [] }
+    return tools.compactMap { entry in
+        guard case .object(let fields) = entry, case .string(let name)? = fields["name"] else { return nil }
+        return name
+    }
+}
+
+/// The `tools/list` entries keyed by tool name, each as its raw field map.
+private func toolEntries(in result: JSONValue?) -> [String: [String: JSONValue]] {
+    guard case .object(let object)? = result, case .array(let tools)? = object["tools"] else { return [:] }
+    var byName: [String: [String: JSONValue]] = [:]
+    for entry in tools {
+        guard case .object(let fields) = entry, case .string(let name)? = fields["name"] else { continue }
+        byName[name] = fields
+    }
+    return byName
+}
+
+private extension JSONValue {
+    var objectFields: [String: JSONValue]? {
+        if case .object(let fields) = self { return fields }
+        return nil
+    }
+}

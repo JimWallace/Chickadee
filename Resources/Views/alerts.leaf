@@ -1,0 +1,150 @@
+#extend("base"):
+#export("title"):
+Server Health Alerts
+#endexport
+#export("content"):
+<p class="admin-version-banner">Chickadee v#appVersion()</p>
+<nav class="admin-tabs" aria-label="Admin sections">
+    <a class="admin-tab" href="/admin"#if(activeAdminTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
+    <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
+    <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
+    #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
+    <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
+    <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
+</nav>
+<section class="admin-section">
+    #if(flashSuccess):
+    <div class="flash flash-success alerts-flash alerts-flash--success">#(flashSuccess)</div>
+    #endif
+    #if(flashError):
+    <div class="flash flash-error alerts-flash alerts-flash--error">#(flashError)</div>
+    #endif
+
+    #if(!enabled):
+    <div class="flash alerts-flash alerts-flash--neutral">
+        Alerting is currently <strong>disabled</strong>.  Set <code>ALERT_ENABLED=1</code> in the
+        environment and restart the server to begin evaluating rules.
+    </div>
+    #endif
+
+    <h3>Webhook</h3>
+    <form method="post" action="/admin/alerts/config" class="toolbar section-gap">
+        #csrfFormField()
+        <input class="form-input alerts-webhook-input"
+               type="url"
+               name="webhookURL"
+               value="#(webhookURL)"
+               placeholder="https://hooks.slack.com/services/…">
+        <button class="btn btn-primary" type="submit">Save webhook</button>
+    </form>
+    <form method="post" action="/admin/alerts/test" class="alerts-test-form">
+        #csrfFormField()
+        <button class="btn" type="submit">Send test alert</button>
+        #if(webhookURLFromEnvironment):
+        <span class="alerts-env-note">
+            (Fallback URL also configured via <code>ALERT_WEBHOOK_URL</code>.)
+        </span>
+        #endif
+    </form>
+
+    <h3>Rules</h3>
+    <div class="table-scroll"><table class="results-table">
+        <thead>
+            <tr>
+                <th>Rule</th>
+                <th>Threshold</th>
+                <th>Status</th>
+                <th class="time">Last fired</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(rule in rules):
+            <tr>
+                <td>
+                    <strong>#(rule.humanReadable)</strong><br>
+                    <code class="alerts-rule-code">#(rule.rule)</code>
+                </td>
+                <td>
+                    #if(rule.rule == "runnerOffline"):
+                        no runner heartbeat for #(runnerOfflineSeconds)s
+                    #elseif(rule.rule == "queueBackedUp"):
+                        ≥ #(queueDepthThreshold) pending OR oldest > #(oldestPendingSeconds)s
+                    #elseif(rule.rule == "errorRateSpike"):
+                        ≥ #(errorRatePercent)% errors+timeouts in last 50 jobs
+                    #elseif(rule.rule == "databaseUnreachable"):
+                        SELECT 1 fails
+                    #endif
+                </td>
+                <td>
+                    #if(rule.isFiring):
+                        <span class="tier tier-closed">FIRING</span>
+                    #else:
+                        <span class="tier tier-open">ok</span>
+                    #endif
+                </td>
+                <td class="time js-relative-time" data-iso="#(rule.lastFiredAt)">
+                    #if(rule.lastFiredAt):#(rule.lastFiredAt)#else:—#endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table></div>
+
+    <h3 class="alerts-recent-heading">Recent firings</h3>
+    #if(recentFirings.isEmpty):
+    <p class="empty">No alerts have fired since startup.</p>
+    #else:
+    <div class="table-scroll"><table class="results-table">
+        <thead>
+            <tr>
+                <th class="time">When</th>
+                <th>Rule</th>
+                <th>Kind</th>
+                <th>Summary</th>
+                <th>Delivery</th>
+            </tr>
+        </thead>
+        <tbody>
+        #for(firing in recentFirings):
+            <tr>
+                <td class="time js-relative-time" data-iso="#(firing.firedAt)">#(firing.firedAt)</td>
+                <td><code>#(firing.rule)</code></td>
+                <td>
+                    #if(firing.resolved):
+                        <span class="tier tier-open">resolved</span>
+                    #else:
+                        <span class="tier tier-closed">fired</span>
+                    #endif
+                </td>
+                <td>#(firing.summary)</td>
+                <td>
+                    #if(firing.delivered):
+                        delivered
+                    #else:
+                        <span class="alerts-delivery-failed">failed</span>
+                        #if(firing.deliveryError):<br><code class="alerts-delivery-error">#(firing.deliveryError)</code>#endif
+                    #endif
+                </td>
+            </tr>
+        #endfor
+        </tbody>
+    </table></div>
+    #endif
+</section>
+<script src="/relative-time.js?v=#appVersion()"></script>
+<style>
+.alerts-flash { margin-bottom: 1rem; padding: .6rem .8rem; border-radius: .4rem; }
+.alerts-flash--success { background: #d4edda; color: #155724; }
+.alerts-flash--error { background: #f8d7da; color: #721c24; }
+.alerts-flash--neutral { background: var(--gray-100); color: var(--gray-700); }
+.alerts-webhook-input { flex: 1; min-width: min(320px, 100%); }
+.alerts-test-form { margin-bottom: 1.5rem; }
+.alerts-env-note { margin-left: .6rem; color: var(--muted); font-size: .85rem; }
+.alerts-rule-code { font-size: .8em; color: var(--muted); }
+.alerts-recent-heading { margin-top: 1.5rem; }
+.alerts-delivery-failed { color: var(--red); }
+.alerts-delivery-error { font-size: .75em; color: var(--muted); }
+</style>
+#endexport
+#endextend

@@ -4,10 +4,10 @@ Runner #(runner.workerID)
 #endexport
 #export("content"):
 <section class="admin-section">
-    <div data-runner-id="#(runner.workerID)" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+    <div data-runner-id="#(runner.workerID)" class="runner-header">
         <div>
-            <h2 style="margin:0"><code>#(runner.workerID)</code> <span id="runner-offline-badge" style="display:none;font-size:.7rem;font-weight:600;padding:.1rem .4rem;border-radius:999px;background:var(--gray-200);color:var(--gray-600);vertical-align:middle;letter-spacing:.03em;text-transform:uppercase">Offline</span></h2>
-            <p style="margin:.4rem 0 0;color:var(--muted)">
+            <h2 class="runner-header-title"><code>#(runner.workerID)</code> <span id="runner-offline-badge" class="runner-badge-offline" style="display:none">Offline</span></h2>
+            <p class="runner-subhead">
                 <span id="runner-hostname">#if(runner.hostname != ""):#(runner.hostname)#else:Unknown host#endif</span>
                 ·
                 <span id="runner-version">#if(runner.runnerVersion != ""):#(runner.runnerVersion)#else:Unknown version#endif</span>
@@ -20,7 +20,7 @@ Runner #(runner.workerID)
             </div>
             #endif
         </div>
-        <div style="min-width:220px">
+        <div class="runner-meta">
             <div><strong>Last active:</strong> <span id="runner-last-active" class="js-relative-time" data-iso="#(runner.lastActive)">#(runner.lastActive)</span></div>
             #if(firstSeenAt):<div><strong>Online since:</strong> <span class="js-relative-time" data-iso="#(firstSeenAt)">#(firstSeenAt)</span></div>#endif
             <div><strong>Capacity:</strong> #(summary.activeJobs) / #(summary.maxJobs)</div>
@@ -29,12 +29,13 @@ Runner #(runner.workerID)
             <div><strong>Avg wait:</strong> #if(summary.avgQueueWaitFormatted):#(summary.avgQueueWaitFormatted)#else:—#endif</div>
             <div><strong>Avg setup/other:</strong> #if(summary.avgOverheadFormatted):#(summary.avgOverheadFormatted)#else:—#endif</div>
             <div><strong>Avg cache acquire:</strong> #if(summary.avgCacheAcquireFormatted):#(summary.avgCacheAcquireFormatted)#else:—#endif</div>
+            <div><strong>Cache hit rate:</strong> #if(summary.cacheHitRateFormatted):#(summary.cacheHitRateFormatted)#else:—#endif</div>
             <div><strong>Avg download:</strong> #if(summary.avgDownloadFormatted):#(summary.avgDownloadFormatted)#else:—#endif</div>
             <div><strong>Avg prep:</strong> #if(summary.avgPrepFormatted):#(summary.avgPrepFormatted)#else:—#endif</div>
         </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-bottom:1.25rem">
+    <div class="runner-stat-grid">
         <div class="admin-stat"><strong>Passed</strong><span>#(summary.passedCount)</span></div>
         <div class="admin-stat"><strong>Failed</strong><span>#(summary.failedCount)</span></div>
         <div class="admin-stat"><strong>Errored</strong><span>#(summary.errorCount)</span></div>
@@ -43,11 +44,11 @@ Runner #(runner.workerID)
 </section>
 
 <section class="admin-section">
-    <h3 style="margin-top:0">Recent Jobs</h3>
+    <h3 class="section-heading-flush">Recent Jobs</h3>
     #if(recentJobs.isEmpty):
     <p class="empty">No recorded jobs for this runner yet.</p>
     #else:
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th data-sort-type="text"><button class="sort-header" type="button">Submission</button></th>
@@ -55,8 +56,8 @@ Runner #(runner.workerID)
                 <th data-sort-type="text"><button class="sort-header" type="button">Status</button></th>
                 <th class="time" data-sort-type="number"><button class="sort-header" type="button">Queue Wait</button></th>
                 <th class="time" data-sort-type="number"><button class="sort-header" type="button">Execution</button></th>
-                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Setup/Other</button></th>
                 <th class="time" data-sort-type="number"><button class="sort-header" type="button">Total</button></th>
+                <th class="time" data-sort-type="number"><button class="sort-header" type="button">Peak Disk</button></th>
                 <th class="time" data-sort-type="date"><button class="sort-header" type="button">Completed</button></th>
             </tr>
         </thead>
@@ -68,24 +69,24 @@ Runner #(runner.workerID)
                 <td data-sort-value="#(job.finalStatus)">#(job.finalStatus)</td>
                 <td class="time" #if(job.queueWaitMs):data-sort-value="#(job.queueWaitMs)"#else:data-sort-value="-1"#endif>#if(job.queueWaitFormatted):#(job.queueWaitFormatted)#else:—#endif</td>
                 <td class="time" #if(job.executionMs):data-sort-value="#(job.executionMs)"#else:data-sort-value="-1"#endif>#if(job.executionFormatted):#(job.executionFormatted)#else:—#endif</td>
-                <td class="time" #if(job.overheadMs):data-sort-value="#(job.overheadMs)"#else:data-sort-value="-1"#endif>#if(job.overheadFormatted):#(job.overheadFormatted)#else:—#endif</td>
                 <td class="time" #if(job.totalProcessingMs):data-sort-value="#(job.totalProcessingMs)"#else:data-sort-value="-1"#endif>#if(job.totalProcessingFormatted):#(job.totalProcessingFormatted)#else:—#endif</td>
+                <td class="time" #if(job.workdirPeakBytes):data-sort-value="#(job.workdirPeakBytes)"#else:data-sort-value="-1"#endif>#if(job.workdirPeakFormatted):#(job.workdirPeakFormatted)#else:—#endif</td>
                 <td class="time js-relative-time" #if(job.completedAt):data-iso="#(job.completedAt)" data-sort-value="#(job.completedAt)"#else:data-sort-value=""#endif>
                     #if(job.completedAt):#(job.completedAt)#else:—#endif
                 </td>
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 
 <section class="admin-section">
-    <h3 style="margin-top:0">Recent Snapshots</h3>
+    <h3 class="section-heading-flush">Recent Snapshots</h3>
     #if(snapshots.isEmpty):
     <p class="empty">No heartbeat or poll snapshots recorded yet.</p>
     #else:
-    <table class="results-table sortable-table">
+    <div class="table-scroll"><table class="results-table sortable-table">
         <thead>
             <tr>
                 <th class="time" data-sort-type="date"><button class="sort-header" type="button">Recorded</button></th>
@@ -106,11 +107,38 @@ Runner #(runner.workerID)
             </tr>
         #endfor
         </tbody>
-    </table>
+    </table></div>
     #endif
 </section>
 
 <style>
+.runner-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.runner-header-title {
+    margin: 0;
+}
+.runner-subhead {
+    margin: .4rem 0 0;
+    color: var(--muted);
+}
+.runner-meta {
+    min-width: 220px;
+}
+.runner-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+}
+.section-heading-flush {
+    margin-top: 0;
+}
 .admin-stat {
     border: 1px solid var(--gray-200);
     border-radius: .65rem;
@@ -144,67 +172,16 @@ Runner #(runner.workerID)
     font-size: .8rem;
     line-height: 1.2;
 }
-.sort-header {
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-}
-.sort-header::after {
-    content: "↕";
-    font-size: .8em;
-    color: var(--gray-500);
-}
-th.sort-asc .sort-header::after {
-    content: "↑";
-}
-th.sort-desc .sort-header::after {
-    content: "↓";
-}
 </style>
+<script src="/relative-time.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
 
-    var relativeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-
-    function formatRelative(isoString) {
-        var date = new Date(isoString);
-        if (Number.isNaN(date.getTime())) return isoString;
-        var seconds = Math.round((date.getTime() - Date.now()) / 1000);
-        var abs = Math.abs(seconds);
-        if (abs < 60) return relativeFormatter.format(seconds, 'second');
-        var minutes = Math.round(seconds / 60);
-        if (Math.abs(minutes) < 60) return relativeFormatter.format(minutes, 'minute');
-        var hours = Math.round(minutes / 60);
-        if (Math.abs(hours) < 24) return relativeFormatter.format(hours, 'hour');
-        var days = Math.round(hours / 24);
-        if (Math.abs(days) < 7) return relativeFormatter.format(days, 'day');
-        var weeks = Math.round(days / 7);
-        if (Math.abs(weeks) < 5) return relativeFormatter.format(weeks, 'week');
-        var months = Math.round(days / 30);
-        if (Math.abs(months) < 12) return relativeFormatter.format(months, 'month');
-        var years = Math.round(days / 365);
-        return relativeFormatter.format(years, 'year');
-    }
-
     var offlineBadge = document.getElementById('runner-offline-badge');
 
-    function applyRelativeTimes() {
-        document.querySelectorAll('.js-relative-time[data-iso]').forEach(function (el) {
-            var iso = el.getAttribute('data-iso');
-            if (!iso) return;
-            var date = new Date(iso);
-            if (Number.isNaN(date.getTime())) return;
-            el.textContent = formatRelative(iso);
-            el.title = date.toLocaleString();
-        });
-        // Show/hide the offline badge based on how recently the runner checked in.
+    // Show/hide the offline badge based on how recently the runner checked in.
+    function updateOfflineBadge() {
         if (offlineBadge) {
             var laEl = document.getElementById('runner-last-active');
             var laIso = laEl ? laEl.getAttribute('data-iso') : null;
@@ -213,7 +190,8 @@ th.sort-desc .sort-header::after {
             offlineBadge.style.display = isOffline ? '' : 'none';
         }
     }
-    applyRelativeTimes();
+    ChickadeeRelativeTime.applyRelativeTimes();
+    updateOfflineBadge();
 
     // Poll the runners endpoint every 5 seconds and update the live-status
     // fields in the header (version, hostname, last active) without a full
@@ -222,7 +200,8 @@ th.sort-desc .sort-header::after {
         .getAttribute ? document.querySelector('[data-runner-id]').getAttribute('data-runner-id') : '';
 
     setInterval(function () {
-        applyRelativeTimes();
+        ChickadeeRelativeTime.applyRelativeTimes();
+        updateOfflineBadge();
         if (!RUNNER_ID) return;
         fetch('/admin/runners')
             .then(function (r) { return r.ok ? r.json() : null; })
@@ -237,63 +216,14 @@ th.sort-desc .sort-header::after {
                 if (hEl)  hEl.textContent = runner.hostname      || 'Unknown host';
                 if (laEl && runner.lastActive) {
                     laEl.setAttribute('data-iso', runner.lastActive);
-                    laEl.textContent = formatRelative(runner.lastActive);
+                    laEl.textContent = ChickadeeRelativeTime.formatRelative(runner.lastActive);
                     laEl.title = new Date(runner.lastActive).toLocaleString();
                 }
             })
             .catch(function () {});
     }, 5000);
-
-    function compareValues(a, b, sortType) {
-        if (sortType === 'number') {
-            var aNum = Number(a);
-            var bNum = Number(b);
-            if (Number.isNaN(aNum) && Number.isNaN(bNum)) return 0;
-            if (Number.isNaN(aNum)) return -1;
-            if (Number.isNaN(bNum)) return 1;
-            return aNum - bNum;
-        }
-        if (sortType === 'date') {
-            var aDate = a ? new Date(a).getTime() : 0;
-            var bDate = b ? new Date(b).getTime() : 0;
-            return aDate - bDate;
-        }
-        return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
-    }
-
-    document.querySelectorAll('.sortable-table').forEach(function (table) {
-        var headers = Array.from(table.querySelectorAll('thead th'));
-        var tbody = table.querySelector('tbody');
-        if (!tbody) return;
-
-        headers.forEach(function (th, index) {
-            var button = th.querySelector('.sort-header');
-            if (!button) return;
-
-            button.addEventListener('click', function () {
-                var nextDir = th.classList.contains('sort-asc') ? 'desc' : 'asc';
-                headers.forEach(function (header) {
-                    header.classList.remove('sort-asc', 'sort-desc');
-                });
-                th.classList.add(nextDir === 'asc' ? 'sort-asc' : 'sort-desc');
-
-                var rows = Array.from(tbody.querySelectorAll('tr'));
-                var sortType = th.getAttribute('data-sort-type') || 'text';
-                rows.sort(function (rowA, rowB) {
-                    var cellA = rowA.children[index];
-                    var cellB = rowB.children[index];
-                    var valueA = cellA ? (cellA.getAttribute('data-sort-value') || cellA.textContent || '') : '';
-                    var valueB = cellB ? (cellB.getAttribute('data-sort-value') || cellB.textContent || '') : '';
-                    var result = compareValues(valueA.trim(), valueB.trim(), sortType);
-                    return nextDir === 'asc' ? result : -result;
-                });
-                rows.forEach(function (row) {
-                    tbody.appendChild(row);
-                });
-            });
-        });
-    });
 })();
 </script>
+<script src="/sortable-table.js?v=#appVersion()"></script>
 #endexport
 #endextend

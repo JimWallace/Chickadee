@@ -7,8 +7,8 @@
 // The version is read from ChickadeeVersion.current, so it automatically
 // reflects the running build — no manual template updates needed on release.
 
-import Leaf
 import Core
+import Leaf
 
 struct AppVersionTag: UnsafeUnescapedLeafTag {
     func render(_ ctx: LeafContext) throws -> LeafData {

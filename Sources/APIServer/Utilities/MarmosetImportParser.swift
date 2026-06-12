@@ -12,6 +12,7 @@
 // Only `test.class.*` fields from test.properties are read; all `build.*`
 // fields are ignored — Chickadee always uses its own Makefile handling.
 
+import Core
 import Foundation
 
 // MARK: - Parsed Marmoset project
@@ -93,26 +94,27 @@ private func parseProject(number n: Int, in dir: URL, entries: [String]) throws 
     let propsData = try extractFileFromZip(zipPath: testSetupZip, filename: "test.properties")
     let props = propsData.flatMap { parseJavaProperties($0) } ?? [:]
 
-    let publicTests  = parseTestClassList(props["test.class.public"]  ?? "")
+    let publicTests = parseTestClassList(props["test.class.public"] ?? "")
     let releaseTests = parseTestClassList(props["test.class.release"] ?? "")
-    let secretTests  = parseTestClassList(props["test.class.secret"]  ?? "")
+    let secretTests = parseTestClassList(props["test.class.secret"] ?? "")
 
     // ── 4. Try to extract title from project.out ───────────────────────
 
     let suggestedTitle: String?
     if fm.fileExists(atPath: projectOutPath),
-       let outData = try? Data(contentsOf: URL(fileURLWithPath: projectOutPath)) {
+        let outData = try? Data(contentsOf: URL(fileURLWithPath: projectOutPath))
+    {
         suggestedTitle = extractTitleFromProjectOut(outData)
     } else {
         suggestedTitle = nil
     }
 
     return MarmosetProject(
-        number:       n,
-        publicTests:  publicTests,
+        number: n,
+        publicTests: publicTests,
         releaseTests: releaseTests,
-        secretTests:  secretTests,
-        hasMakefile:  hasMakefile,
+        secretTests: secretTests,
+        hasMakefile: hasMakefile,
         suggestedTitle: suggestedTitle
     )
 }
@@ -127,8 +129,7 @@ private func parseProject(number n: Int, in dir: URL, entries: [String]) throws 
 /// - Backslash line-continuation (trailing `\`)
 /// - Leading whitespace trimming on continuation lines
 func parseJavaProperties(_ data: Data) -> [String: String] {
-    guard let raw = String(data: data, encoding: .utf8) ??
-                    String(data: data, encoding: .isoLatin1) else { return [:] }
+    guard let raw = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else { return [:] }
 
     var result: [String: String] = [:]
     let lines = raw.components(separatedBy: .newlines)
@@ -175,8 +176,8 @@ func parseJavaProperties(_ data: Data) -> [String: String] {
 /// whitespace and backslash-continuation artefacts) into individual test names.
 func parseTestClassList(_ raw: String) -> [String] {
     raw.components(separatedBy: ",")
-       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-       .filter { !$0.isEmpty }
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
 }
 
 // MARK: - project.out title extraction
@@ -193,8 +194,8 @@ func extractTitleFromProjectOut(_ data: Data) -> String? {
 
     while idx + 2 < bytes.count {
         let high = bytes[idx]
-        let low  = bytes[idx + 1]
-        let len  = Int(high) << 8 | Int(low)
+        let low = bytes[idx + 1]
+        let len = Int(high) << 8 | Int(low)
 
         // Only bother with strings of length 3..80.
         guard len >= 3, len <= 80, idx + 2 + len <= bytes.count else {
@@ -208,8 +209,8 @@ func extractTitleFromProjectOut(_ data: Data) -> String? {
             (b >= 0x20 && b <= 0x7E) || b >= 0xC0
         }
         guard allPrintable,
-              let s = String(bytes: strBytes, encoding: .utf8),
-              !s.trimmingCharacters(in: .whitespaces).isEmpty
+            let s = String(bytes: strBytes, encoding: .utf8),
+            !s.trimmingCharacters(in: .whitespaces).isEmpty
         else {
             idx += 1
             continue
@@ -218,10 +219,11 @@ func extractTitleFromProjectOut(_ data: Data) -> String? {
         let trimmed = s.trimmingCharacters(in: .whitespaces)
         // Filter out pure numbers, single-character strings, and Java class names.
         if Double(trimmed) == nil,
-           trimmed.count >= 3,
-           !trimmed.contains("."),
-           !trimmed.contains("/"),
-           trimmed.contains(" ") || trimmed.first?.isUppercase == true {
+            trimmed.count >= 3,
+            !trimmed.contains("."),
+            !trimmed.contains("/"),
+            trimmed.contains(" ") || trimmed.first?.isUppercase == true
+        {
             candidates.append(trimmed)
         }
         idx += 1
@@ -254,12 +256,12 @@ func convertToChickadeeManifest(project: MarmosetProject) throws -> String {
 
     let manifest: [String: Any] = [
         "schemaVersion": 1,
-        "gradingMode":   "worker",
+        "gradingMode": "worker",
         "requiredFiles": [],
-        "testSuites":    suites,
+        "testSuites": suites,
         "timeLimitSeconds": 10,
         "makefile": NSNull(),  // Marmoset Makefiles are stripped; runner handles .ipynb→.py natively
-        "starterNotebook": "assignment.ipynb"
+        "starterNotebook": "assignment.ipynb",
     ]
 
     let data = try JSONSerialization.data(withJSONObject: manifest)
@@ -269,26 +271,32 @@ func convertToChickadeeManifest(project: MarmosetProject) throws -> String {
 // MARK: - Zip helpers (private)
 
 /// Extracts a single named file from a zip archive using `unzip -p`.
-/// Returns `nil` if the file is not found.
+/// Returns `nil` if the file is not found.  Runs under the shared zip
+/// process lock (see `ZipProcessSerialization.swift`) so it can't race
+/// the other zip helpers in the codebase.
 private func extractFileFromZip(zipPath: String, filename: String) throws -> Data? {
     guard FileManager.default.fileExists(atPath: "/usr/bin/unzip") else {
         throw ZipArchiverError.executableNotFound("/usr/bin/unzip")
     }
-    let entryName = try listZipContents(zipPath: zipPath).first(where: { entry in
-        entry == filename || (entry as NSString).lastPathComponent == filename
-    }) ?? filename
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments = ["-p", zipPath, entryName]
-    let outPipe = Pipe()
-    let errPipe = Pipe()
-    proc.standardOutput = outPipe
-    proc.standardError  = errPipe
-    try proc.run()
-    let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-    proc.waitUntilExit()
+    let entryName =
+        try listZipContents(zipPath: zipPath).first(where: { entry in
+            entry == filename || (entry as NSString).lastPathComponent == filename
+        }) ?? filename
+    let (status, data): (Int32, Data) = try withZipProcessLock {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        proc.arguments = ["-p", zipPath, entryName]
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+        try runProcessWithEFAULTRetry(proc)
+        let captured = outPipe.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        return (proc.terminationStatus, captured)
+    }
     // Exit 11 = file not found in archive; treat as nil.
-    guard proc.terminationStatus == 0 else { return nil }
+    guard status == 0 else { return nil }
     return data.isEmpty ? nil : data
 }
 
@@ -311,13 +319,16 @@ func extractNotebookFromZip(zipPath: String, filename: String) throws -> Data? {
 /// Returns the file data, its extension, and original filename, or `nil` if none found.
 func extractSolutionFromCanonicalZip(zipPath: String) throws -> (data: Data, ext: String, originalFilename: String)? {
     let entries = try listZipContents(zipPath: zipPath)
-    guard let entry = entries.first(where: { e in
-        let name = (e as NSString).lastPathComponent
-        return !name.hasPrefix(".") && !name.isEmpty
-    }) else { return nil }
+    guard
+        let entry = entries.first(where: { e in
+            let name = (e as NSString).lastPathComponent
+            return !name.hasPrefix(".") && !name.isEmpty
+        })
+    else { return nil }
     let filename = (entry as NSString).lastPathComponent
     let ext = (filename as NSString).pathExtension.lowercased()
     guard let data = try extractFileFromZip(zipPath: zipPath, filename: filename),
-          !data.isEmpty else { return nil }
+        !data.isEmpty
+    else { return nil }
     return (data: data, ext: ext, originalFilename: filename)
 }

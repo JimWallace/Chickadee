@@ -3,31 +3,55 @@
 // Logic for awarding class-wide achievement badges when a 100% result arrives.
 // Called from ResultRoutes after the result is persisted.
 
+import Core
 import Fluent
 import Foundation
 
 /// Awards class-wide badges for a 100%-grade submission.
 /// Safe to call multiple times for the same submission (idempotent via unique constraint).
+///
+/// Class-wide badges are class-LEVEL recognitions and only meaningful for
+/// enrolled students.  Admin/instructor test submissions used to lock in
+/// the immutable Trailblazer badge before any real student got to attempt
+/// the assignment (v0.4.127 fix).  This guard runs at the helper entry so
+/// every call site is protected — including future ones.
 func awardClassBadgesFor100Percent(
     testSetupID: String,
     userID: UUID,
     submissionID: String,
     executionTimeMs: Int,
     attemptNumber: Int,
+    disabled: Set<String> = [],
     on db: Database
 ) async throws {
-    async let _trail = awardImmutableBadge(
-        achievementID: "trailblazer",
-        testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
-    async let _speed = updateRecordBadge(
-        achievementID: "speed_champion",
-        testSetupID: testSetupID, userID: userID, submissionID: submissionID,
-        newValue: Double(executionTimeMs), on: db)
-    async let _mini  = updateRecordBadge(
-        achievementID: "minimalist",
-        testSetupID: testSetupID, userID: userID, submissionID: submissionID,
-        newValue: Double(attemptNumber), on: db)
-    _ = try await (_trail, _speed, _mini)
+    guard let user = try await APIUser.find(userID, on: db),
+        user.roleValue == .student
+    else { return }
+
+    // The class records to award — the manifest's authored ones (or the registry
+    // default), minus disabled.  Each is awarded by its dimension; firstToSubmit
+    // (Pathfinder) is awarded at submission time, not on reaching 100%.
+    let setup = try await APITestSetup.find(testSetupID, on: db)
+    for record in BuiltInAchievements.classRecordsForAward(in: setup, disabled: disabled) {
+        switch record.recordDimension {
+        case .firstToSolve:
+            try await awardImmutableBadge(
+                achievementID: record.id,
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID, on: db)
+        case .fastest:
+            try await updateRecordBadge(
+                achievementID: record.id,
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                newValue: Double(executionTimeMs), on: db)
+        case .shortest:
+            try await updateRecordBadge(
+                achievementID: record.id,
+                testSetupID: testSetupID, userID: userID, submissionID: submissionID,
+                newValue: Double(attemptNumber), on: db)
+        case .firstToSubmit, .none:
+            continue
+        }
+    }
 }
 
 /// Inserts the badge record only if no holder exists yet (first-to wins).
@@ -39,7 +63,7 @@ private func awardImmutableBadge(
     on db: Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
-        .filter(\.$testSetupID  == testSetupID)
+        .filter(\.$testSetupID == testSetupID)
         .filter(\.$achievementID == achievementID)
         .first()
     guard existing == nil else { return }
@@ -62,14 +86,14 @@ private func updateRecordBadge(
     on db: Database
 ) async throws {
     let existing = try await APIClassAchievement.query(on: db)
-        .filter(\.$testSetupID  == testSetupID)
+        .filter(\.$testSetupID == testSetupID)
         .filter(\.$achievementID == achievementID)
         .first()
     if let record = existing {
         guard let current = record.metricValue, newValue < current else { return }
-        record.userID       = userID
+        record.userID = userID
         record.submissionID = submissionID
-        record.metricValue  = newValue
+        record.metricValue = newValue
         try await record.update(on: db)
     } else {
         let badge = APIClassAchievement(

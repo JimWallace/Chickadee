@@ -30,8 +30,8 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     init() {}
 
     init(id: UUID? = nil, userID: UUID, courseID: UUID) {
-        self.id          = id
-        self.userID      = userID
-        self.$course.id  = courseID
+        self.id = id
+        self.userID = userID
+        self.$course.id = courseID
     }
 }

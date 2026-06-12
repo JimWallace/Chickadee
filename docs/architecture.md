@@ -345,7 +345,12 @@ additive (new columns or tables); no migration drops data. Migration names
 follow the pattern `Create<ModelName>` for canonical baseline tables and
 `Add<Feature>` for subsequent additions.
 
-Current migration count: 17 (as of v0.4.36).
+For the current set, see `Sources/APIServer/Migrations/`. Note that PR #502
+(v0.5.0 prep) folded all historical `Add*` migrations except
+`AddSessionsCreatedAt` into their corresponding `Create*` files; the `Add*`
+files remain as registered no-ops for compatibility with production DBs that
+already have them marked applied, and will be deleted in v0.5.0 once that
+behaviour has been observed tolerant in practice.
 
 ---
 
@@ -394,6 +399,48 @@ editor reads and writes the canonical `.ipynb` files directly.
 
 ---
 
+## BrightSpace grade sync
+
+Chickadee can push grades to D2L BrightSpace. It is off unless the server has
+BrightSpace credentials configured (`AppConfig.brightspace`, set from
+`BRIGHTSPACE_*` env vars); when present, `app.brightSpaceClient` is non-nil.
+
+**Auth model.** D2L Valence "App + User" key signing — one registered app +
+one D2L service account. Every push runs *as that one account* with its
+permissions; there is no per-instructor D2L identity. Credentials live only in
+env (ops-managed) and are never shown in the UI. `BrightSpaceAPIClient` signs
+each request URL per call (HMAC-SHA256) — no token endpoint.
+
+**Where grades land** is decided entirely by two IDs, not the credentials:
+
+- **Org unit ID** (`courses.brightspace_org_unit_id`) — the D2L course. Because
+  the service account can usually write to many courses, this binding is an
+  **admin-only** action on the course page, and it is **verified on save**: the
+  server looks the ID up via `getOrgUnit` and caches the D2L name
+  (`brightspace_org_unit_name`) so the admin can confirm they pointed at the
+  right course. Instructors are then locked to their bound course.
+- **Grade object ID** (`assignments.brightspace_grade_object_id`) — the grade
+  item (column). Instructors map these on the BrightSpace tab, picking from a
+  dropdown sourced from `listGradeObjects` (free-text fallback).
+
+**Student identity.** `users.student_id` is the D2L `OrgDefinedId`;
+`users.brightspace_user_id` caches the resolved internal D2L user ID
+(`lookupUserID`, looked up lazily on first sync). Students with no resolvable
+account surface in the BrightSpace tab's "unmapped students" list.
+
+**Sync engine.** On a worker result save, `ResultRoutes` flags the `APIResult`
+row pending. `BrightSpaceGradeSyncMonitor` sweeps every 60 s and pushes the
+**best (max) points** per (student, assignment) past a debounce window
+(`BRIGHTSPACE_SYNC_DEBOUNCE_SECS`, default 90 s). Each meaningful event
+(success, push failure, or skipped-no-account) appends a row to
+`brightspace_sync_log` — an append-only audit trail snapshotting identity
+fields so it survives course/assignment/user deletes. The BrightSpace tab
+renders this log plus summary counts, and offers manual **Sync now**, **Retry
+failed**, and per-assignment **Push all** (backfill) actions that re-flag rows
+and run an immediate (debounce-bypassing) sweep.
+
+---
+
 ## Deployment
 
 ### Docker Compose (recommended)
@@ -426,6 +473,20 @@ environment variable reference.
    production.
 
 ---
+
+## Configuration
+
+Every server-side environment variable read flows through `AppConfig`
+(`Sources/APIServer/Configuration/`). `configure(_:)` loads the entire tree
+once via `AppConfig.fromEnvironment(workDir:)`, stashes it on
+`Application.appConfig`, and logs a redacted summary. Subsystems read typed
+substructs (`auth`, `security`, `workers`, `oidc`, `database`, `lockout`,
+`diagnostics`, `alerts`, `brightspace`, `scanMode`) — never `Environment.get`
+directly. Tests preload an `AppConfig` via `Application.preloadedAppConfig`
+(checked first by `configure(_:)`) or pass one to `makeTestApp(appConfig:)`.
+
+A grep guardrail (`grep -rn "Environment.get" Sources/APIServer/`) must only
+return hits under `Sources/APIServer/Configuration/`.
 
 ## Key Design Constraints
 

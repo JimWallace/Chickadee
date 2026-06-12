@@ -3,6 +3,7 @@ import Fluent
 import Vapor
 
 final class RunnerProfile: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "runner_profiles"
 
     @ID(key: .id)
@@ -90,7 +91,8 @@ private extension RunnerProfile {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         guard let data = try? encoder.encode(value),
-              let string = String(data: data, encoding: .utf8) else {
+            let string = String(data: data, encoding: .utf8)
+        else {
             return "[]"
         }
         return string
@@ -98,7 +100,8 @@ private extension RunnerProfile {
 
     static func decodeJSON<T: Decodable>(_ raw: String, defaultValue: T) -> T {
         guard let data = raw.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(T.self, from: data) else {
+            let decoded = try? JSONDecoder().decode(T.self, from: data)
+        else {
             return defaultValue
         }
         return decoded

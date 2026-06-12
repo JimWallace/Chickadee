@@ -9,6 +9,137 @@ const runnerSource = await fs.readFile(
   'utf8',
 );
 
+// Shared producer/parser contract for the dependency-skip wording; the worker
+// side is pinned by Tests/CoreTests/DependencySkipMessageTests.swift.
+const skipFixture = JSON.parse(
+  await fs.readFile(path.resolve('Tests/Fixtures/dependency-skip-message.json'), 'utf8'),
+);
+
+// Mirrors RunnerCore.classifyScriptInterpreter (the real logic is wasm/Swift,
+// covered by ScriptClassificationTests) — returns the interpreter raw value so
+// the browser dispatch wiring can be tested without loading the wasm.
+function defaultClassifyStub(name, source) {
+  const base = String(name).slice(String(name).lastIndexOf('/') + 1);
+  const dot = base.lastIndexOf('.');
+  const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
+  const byExt = { py: 'python', sh: 'sh', bash: 'bash', zsh: 'zsh', rb: 'ruby', pl: 'perl', js: 'node', php: 'php', r: 'rscript' };
+  if (byExt[ext]) return byExt[ext];
+  const first = String(source || '').replace(/^[﻿\s]+/, '').split('\n', 1)[0] || '';
+  if (first.startsWith('#!')) {
+    const lo = first.toLowerCase();
+    if (lo.includes('python')) return 'python';
+    if (lo.includes('node') || lo.includes('javascript')) return 'node';
+    if (lo.includes('ruby')) return 'ruby';
+    if (lo.includes('perl')) return 'perl';
+    if (lo.includes('bash')) return 'bash';
+    if (lo.includes('zsh')) return 'zsh';
+    if (lo.includes('sh')) return 'sh';
+  }
+  const lines = String(source || '').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).slice(0, 5);
+  if (lines.some(l => l.startsWith('import ') || l.startsWith('from ') || l.startsWith('def ') || l.startsWith('class ') || l.startsWith('if __name__ =='))) {
+    return 'python';
+  }
+  return 'unknown';
+}
+
+// Same-realm test double for the shared RunnerCore `executeSuites` +
+// `interpretScriptOutput`. The REAL wasm interpretation/loop are pinned against
+// the shared fixture by output-contract.test.mjs (which drives the actual wasm)
+// and by the Swift SuiteExecutionTests / OutputContractTests. Here we only need
+// a faithful-enough stand-in so the browser-runner GLUE (suite building,
+// run/exists wiring, dependency gating, collection posting) can be exercised in
+// this vm realm — loading the real wasm here would hit a cross-realm Promise
+// hazard (the run callback's Promise lives in the vm realm, not the wasm's).
+function stemOf(name) {
+  const slash = name.lastIndexOf('/');
+  const dot = name.lastIndexOf('.');
+  return dot > slash + 1 ? name.slice(0, dot) : name;
+}
+function defaultShort(status) {
+  return status === 'pass' ? 'passed' : status === 'fail' ? 'failed' : status === 'timeout' ? 'timed out' : 'error';
+}
+function longResultOf(raw, footerObj) {
+  // A footer `traceback` is the most useful detail — surface it verbatim.
+  if (footerObj && typeof footerObj.traceback === 'string' && footerObj.traceback.trim()) {
+    return footerObj.traceback.trim();
+  }
+  let stdout = String(raw.stdout || '');
+  if (footerObj) {
+    const arr = stdout.split('\n');
+    for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].trim()) { arr.splice(i, 1); break; } }
+    stdout = arr.join('\n');
+  }
+  stdout = stdout.trim();
+  const stderr = String(raw.stderr || '').trim();
+  const sections = [];
+  if (stdout) sections.push('stdout:\n' + stdout);
+  if (stderr) sections.push('stderr:\n' + stderr);
+  return sections.length ? sections.join('\n\n') : null;
+}
+function interpretRaw(raw) {
+  if (raw.timedOut) return { status: 'timeout', shortResult: 'timed out', longResult: longResultOf(raw, null) };
+  const status = raw.exitCode === 0 ? 'pass' : (raw.exitCode === 1 || raw.exitCode === 3) ? 'fail' : 'error';
+  const lines = String(raw.stdout || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const last = lines[lines.length - 1] || '';
+  let footerObj = null;
+  if (last) {
+    try {
+      const obj = JSON.parse(last);
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) footerObj = obj;
+    } catch (_) { /* not a JSON footer */ }
+  }
+  let shortResult;
+  if (footerObj) {
+    shortResult = typeof footerObj.shortResult === 'string' ? footerObj.shortResult : defaultShort(status);
+    // Strip a redundant "<test>: " label prefix when the footer names the test.
+    if (typeof footerObj.test === 'string' && footerObj.test) {
+      const prefix = footerObj.test + ': ';
+      if (shortResult.startsWith(prefix)) shortResult = shortResult.slice(prefix.length);
+    }
+  } else {
+    shortResult = last || defaultShort(status);
+  }
+  return { status, shortResult, longResult: longResultOf(raw, footerObj) };
+}
+function makeStubOutcome(suite, interp, executionTimeMs, attempt) {
+  const displayName = (typeof suite.displayName === 'string' && suite.displayName.trim()) ? suite.displayName : null;
+  return {
+    testName: displayName || stemOf(suite.script),
+    testClass: null,
+    tier: suite.tier,
+    status: interp.status,
+    shortResult: interp.shortResult,
+    longResult: interp.longResult ?? null,
+    points: typeof suite.points === 'number' ? suite.points : 1,
+    executionTimeMs,
+    memoryUsageBytes: null,
+    attemptNumber: attempt,
+    isFirstPassSuccess: attempt === 1 && interp.status === 'pass',
+  };
+}
+function executeSuitesStub(suites, timeLimit, attempt, scriptExists, run) {
+  return (async () => {
+    const outcomes = [];
+    const passed = new Set();
+    for (const suite of suites) {
+      const deps = suite.dependsOn || [];
+      const blockedBy = deps.find(dep => !passed.has(dep));
+      if (deps.length && blockedBy !== undefined) {
+        outcomes.push(makeStubOutcome(suite,
+          { status: 'fail', shortResult: `Skipped: prerequisite '${blockedBy}' did not pass`, longResult: null },
+          0, attempt));
+        continue;
+      }
+      if (!scriptExists(suite.script)) continue;
+      const raw = await run(suite.script, timeLimit);
+      const interp = interpretRaw(raw);
+      outcomes.push(makeStubOutcome(suite, interp, raw.executionTimeMs, attempt));
+      if (interp.status === 'pass') passed.add(suite.script);
+    }
+    return outcomes;
+  })();
+}
+
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -16,6 +147,7 @@ function plain(value) {
 class FakeFS {
   constructor() {
     this.entries = new Map([['/', { type: 'dir' }]]);
+    this.writes = [];
   }
 
   mkdir(targetPath) {
@@ -36,6 +168,7 @@ class FakeFS {
     if (!this.entries.has(parent) || this.entries.get(parent).type !== 'dir') {
       throw new Error(`Missing parent directory: ${parent}`);
     }
+    this.writes.push({ targetPath, value });
     this.entries.set(targetPath, { type: 'file', value });
   }
 
@@ -137,6 +270,7 @@ function createPyodideHarness(options = {}) {
     exitCode: null,
     loadPackageCalls: [],
     configuredScripts: [],
+    assignmentSeedEnv: null,
   };
 
   const py = {
@@ -147,6 +281,12 @@ function createPyodideHarness(options = {}) {
       if (options.packageError) throw options.packageError;
     },
     async runPythonAsync(code) {
+      if (code.includes("os.environ['CHICKADEE_ASSIGNMENT_SEED']")) {
+        const m = code.match(/CHICKADEE_ASSIGNMENT_SEED'\]\s*=\s*"([^"]*)"/);
+        if (m) state.assignmentSeedEnv = m[1];
+        return null;
+      }
+
       if (code.includes("os.chdir('")) {
         const match = code.match(/os\.chdir\('([^']+)'\)/);
         if (match) state.cwd = match[1];
@@ -277,6 +417,19 @@ async function loadRunnerHarness(options = {}) {
       };
     }
 
+    if (url.endsWith('/seed')) {
+      if (options.seedFetchResponse) return options.seedFetchResponse;
+      return {
+        ok: true,
+        async text() {
+          return JSON.stringify({
+            seed: options.assignmentSeed ?? null,
+            personalizedInputs: options.personalizedInputs ?? null,
+          });
+        },
+      };
+    }
+
     if (url.includes('/download')) {
       if (options.downloadError) throw options.downloadError;
       return {
@@ -320,6 +473,22 @@ async function loadRunnerHarness(options = {}) {
     fetch: fetchImpl,
     getCsrfToken: () => options.csrfToken ?? 'csrf-test-token',
     document,
+    // Test seam: preset the RunnerCore extractor so the runner never loads the
+    // real wasm bundle. The actual extraction logic is covered by the Swift
+    // RunnerCore tests; here a stub returns deterministic output.
+    runnerExtractPython: options.runnerExtractor ?? ((cells, filename) => ({
+      executableModule: `# Generated from ${filename}\n# (stub executable module)\n`,
+      introspectableSource: `# Generated from ${filename}\n# (stub introspectable source)\n`,
+      codeCellCount: (cells || []).filter(c => c.cell_type === 'code').length,
+    })),
+    // Test seam for the shared classifier (real logic is RunnerCore/Swift,
+    // covered by ScriptClassificationTests). This stub mirrors it, returning the
+    // interpreter raw value so dispatch wiring can be exercised.
+    runnerClassifyScript: options.runnerClassify ?? defaultClassifyStub,
+    // Test seam for the shared loop + interpretation (real logic is
+    // RunnerCore/Swift via wasm; this faithful double avoids the cross-realm
+    // Promise hazard — see executeSuitesStub).
+    runnerExecuteSuites: options.runnerExecuteSuites ?? executeSuitesStub,
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
@@ -415,6 +584,34 @@ test('runAndSubmit executes Python scripts, posts a browser-wasm result collecti
   );
 });
 
+test('runScripts validates a plain Python solution without posting a submission', async () => {
+  const harness = await loadRunnerHarness({
+    zipFiles: {
+      'test_reference.py': '# pass\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'test_reference.py', tier: 'public' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runScripts(
+    new TextEncoder().encode('answer = 42\n'),
+    'setup123',
+    { filename: 'solution.py' },
+  );
+
+  assert.equal(result.outcomes.length, 1);
+  assert.equal(result.outcomes[0].status, 'pass');
+  assert.equal(result.collection.totalTests, 1);
+  assert.equal(harness.postBodies.length, 0);
+  const hintWrite = harness.py.FS.writes.find(write => write.targetPath.endsWith('/.chickadee_student_module'));
+  assert.equal(hintWrite && String(hintWrite.value), 'solution.py');
+});
+
 test('dependency failures are skipped without executing blocked scripts', async () => {
   const harness = await loadRunnerHarness({
     zipFiles: {
@@ -454,7 +651,9 @@ test('dependency failures are skipped without executing blocked scripts', async 
       {
         name: 'test_unit',
         status: 'fail',
-        shortResult: "Skipped: prerequisite 'test_build.py' did not pass",
+        // Pinned to the shared fixture so the browser producer can't drift from
+        // the worker producer (skippedPrerequisiteMessage) or the parsers.
+        shortResult: skipFixture.message,
       },
     ],
   );
@@ -500,7 +699,54 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
   assert.match(result.outcomes[2].shortResult, /WebR/);
 });
 
-test('browser runner keeps display names separate from output and extracts traceback-only details', async () => {
+test('extensionless Python test scripts dispatch via their shebang instead of failing as unsupported', async () => {
+  const harness = await loadRunnerHarness({
+    zipFiles: {
+      // A generated test script with no file extension whose first line is a
+      // Python shebang — the shape produced by the variableEquality template.
+      'beats': '#!/usr/bin/env python3\nvariable_name = "beats"\nJSON_RESULT_PASS\n',
+      // Extensionless file with a shell shebang stays a (browser-unsupported) shell.
+      'runtests': '#!/bin/sh\necho hi\n',
+      // No extension, no shebang, nothing Python-looking → genuinely unsupported.
+      'mystery': 'just some text\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'beats', tier: 'public' },
+        { script: 'runtests', tier: 'public' },
+        { script: 'mystery', tier: 'public' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_extensionless',
+  );
+
+  assert.deepEqual(
+    plain(result.outcomes.map(outcome => [outcome.testName, outcome.status])),
+    [
+      ['beats', 'pass'],
+      ['runtests', 'error'],
+      ['mystery', 'error'],
+    ],
+  );
+  // The extensionless Python script actually executed (it was compiled).
+  assert.ok(harness.py.state.configuredScripts.includes('beats'));
+  assert.match(result.outcomes[1].shortResult, /Shell scripts cannot run/);
+  assert.match(result.outcomes[2].shortResult, /Unsupported test script type: mystery/);
+});
+
+test('browser produces canonical worker-shaped outcomes (display name -> testName, no bespoke fields)', async () => {
+  // Post-migration the browser emits the SAME TestOutcome shape the worker does
+  // — testName is the display name (falling back to the script stem), and the
+  // result strings come from the shared interpretScriptOutput (footer
+  // shortResult; stdout/stderr → longResult). The browser-only fields
+  // (scriptName, displayName) and the bespoke JSON-envelope field extraction
+  // (error/traceback/exception) are gone — both runners are now identical.
   const harness = await loadRunnerHarness({
     zipFiles: {
       'test_q1_bmi.py': '# q1\n',
@@ -517,12 +763,8 @@ test('browser runner keeps display names separate from output and extracts trace
         stdout: `${JSON.stringify({
           shortResult: 'Q1: BMI Calculation: Could not test calculate_bmi',
           status: 'error',
-          test: 'Q1: BMI Calculation',
-          error: 'Could not test calculate_bmi',
-          exception: "NotImplementedError('Implement calculate_bmi')",
-          traceback: 'Traceback (most recent call last):\n  File "test_q1_bmi.py", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi\n',
         })}\n`,
-        stderr: '',
+        stderr: 'Traceback (most recent call last):\nNotImplementedError: Implement calculate_bmi\n',
         exitCode: 2,
       },
     },
@@ -536,18 +778,17 @@ test('browser runner keeps display names separate from output and extracts trace
   assert.deepEqual(
     plain(result.outcomes[0]),
     {
-      testName: 'test_q1_bmi',
+      testName: 'Q1: BMI Calculation',
       testClass: null,
       tier: 'public',
       status: 'error',
-      shortResult: 'Could not test calculate_bmi',
-      longResult: 'Traceback (most recent call last):\n  File "test_q1_bmi.py", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi',
+      shortResult: 'Q1: BMI Calculation: Could not test calculate_bmi',
+      longResult: 'stderr:\nTraceback (most recent call last):\nNotImplementedError: Implement calculate_bmi',
+      points: 1,
       executionTimeMs: result.outcomes[0].executionTimeMs,
       memoryUsageBytes: null,
       attemptNumber: 1,
       isFirstPassSuccess: false,
-      scriptName: 'test_q1_bmi.py',
-      displayName: 'Q1: BMI Calculation',
     },
   );
 });
@@ -585,54 +826,74 @@ test('manifest and setup download failures bubble up with browser-runner context
   );
 });
 
-test('extractNotebook writes python and R student module hints correctly', async () => {
-  const harness = await loadRunnerHarness();
+test('extractNotebook delegates Python to RunnerCore (module + introspectable sidecar + hints) and keeps R on the JS path', async () => {
+  // The per-cell extraction logic now lives in RunnerCore (Swift/wasm) and is
+  // covered by Tests/WorkerTests/NotebookExtractionTests.swift. Here we assert
+  // the browser glue: cells handed to the shared extractor, and its outputs
+  // (executable module + introspectable-source sidecar) written with hints.
+  let received = null;
+  const harness = await loadRunnerHarness({
+    runnerExtractor: (cells, filename) => {
+      received = { cells, filename };
+      return {
+        executableModule: '# exec module\nMODULE_BODY\n',
+        introspectableSource: '# real source\ndef tax():\n    pass\n',
+        codeCellCount: cells.filter(c => c.cell_type === 'code').length,
+      };
+    },
+  });
   const { extractNotebook } = harness.hooks;
 
   harness.py.FS.mkdir('/course');
-
   await extractNotebook(
     harness.py,
     '/course',
     'submission.ipynb',
     JSON.stringify({
       nbformat: 4,
-      metadata: {
-        kernelspec: { name: 'python3' },
-      },
+      metadata: { kernelspec: { name: 'python3' } },
       cells: [
         { cell_type: 'markdown', source: ['ignore'], metadata: {} },
         { cell_type: 'code', source: ['x = 1\n'], metadata: {} },
-        { cell_type: 'code', source: ['print(x)\n'], metadata: {} },
       ],
     }),
   );
 
+  // Cells passed through to the shared extractor (source joined, type preserved).
+  assert.equal(received.filename, 'submission.ipynb');
+  assert.deepEqual(plain(received.cells), [
+    { cell_type: 'markdown', source: 'ignore' },
+    { cell_type: 'code', source: 'x = 1\n' },
+  ]);
+  // Executable module + introspectable sidecar both written, with both hints.
   assert.equal(
     harness.py.FS.readFile('/course/submission.py', { encoding: 'utf8' }),
-    '# Generated from submission.ipynb\n\nx = 1\n\nprint(x)\n\n',
+    '# exec module\nMODULE_BODY\n',
+  );
+  assert.equal(
+    harness.py.FS.readFile('/course/submission.source.py', { encoding: 'utf8' }),
+    '# real source\ndef tax():\n    pass\n',
   );
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
     'submission.py',
   );
+  assert.equal(
+    harness.py.FS.readFile('/course/.chickadee_student_source', { encoding: 'utf8' }),
+    'submission.source.py',
+  );
 
+  // R notebooks stay on the JS path (RunnerCore is Python-only) — no sidecar.
   await extractNotebook(
     harness.py,
     '/course',
     'lab.ipynb',
     JSON.stringify({
       nbformat: 4,
-      metadata: {
-        kernelspec: { name: 'webr' },
-        language_info: { name: 'r' },
-      },
-      cells: [
-        { cell_type: 'code', source: ['x <- 2\n'], metadata: {} },
-      ],
+      metadata: { kernelspec: { name: 'webr' }, language_info: { name: 'r' } },
+      cells: [{ cell_type: 'code', source: ['x <- 2\n'], metadata: {} }],
     }),
   );
-
   assert.equal(
     harness.py.FS.readFile('/course/lab.R', { encoding: 'utf8' }),
     '# Generated from lab.ipynb\n\nx <- 2\n\n',
@@ -640,5 +901,269 @@ test('extractNotebook writes python and R student module hints correctly', async
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
     'lab.R',
+  );
+});
+
+test('failure detail strips the trailing JSON envelope so students never see the raw payload', async () => {
+  const errorText = 'Variable `age` is not defined in the student notebook.\n'
+    + '  expected: a module-level variable named `age`\n';
+  const jsonFooter = JSON.stringify({
+    shortResult: 'Test: `age` is defined: Variable `age` is not defined in the student notebook.',
+    status: 'fail',
+    test: 'Test: `age` is defined',
+    error: errorText,
+  });
+
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'publictest_age.py': '# Test: `age` is defined\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'publictest_age.py', tier: 'public', name: 'Test: `age` is defined' },
+      ],
+    },
+    scriptBehaviors: {
+      'publictest_age.py': {
+        stdout: `${errorText}${jsonFooter}\n`,
+        stderr: '',
+        exitCode: 1,
+      },
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_age',
+  );
+
+  const outcome = result.outcomes[0];
+  assert.equal(outcome.status, 'fail');
+  assert.ok(!outcome.longResult.includes('"shortResult"'), 'JSON envelope must be stripped from longResult');
+  assert.ok(!outcome.longResult.includes('{'), 'no JSON braces should remain in student-facing detail');
+  // Shared interpretScriptOutput strips the JSON footer line, then presents the
+  // remaining stdout under a "stdout:" section header — identical to the worker.
+  assert.equal(
+    outcome.longResult,
+    'stdout:\nVariable `age` is not defined in the student notebook.\n  expected: a module-level variable named `age`',
+  );
+});
+
+test('injects the per-student seed into os.environ for parity with the native worker', async () => {
+  // The worker sets CHICKADEE_ASSIGNMENT_SEED in the test subprocess
+  // (RunnerDaemon+JobProcessing). The browser must do the same so a test that
+  // reads the seed grades identically. The runner fetches the seed endpoint and
+  // sets os.environ before any script runs.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    zipFiles: { 'test_seed.py': '# seed\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_seed.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_seed',
+  );
+
+  assert.equal(harness.py.state.assignmentSeedEnv, 'deadbeefcafe0123');
+  assert.equal(
+    harness.fetchCalls.filter(call => call.url.endsWith('/seed')).length,
+    1,
+    'the seed endpoint should be fetched exactly once',
+  );
+});
+
+test('omits CHICKADEE_ASSIGNMENT_SEED when the assignment is not personalized (null seed)', async () => {
+  // A null seed (no owning assignment / non-personalized setup, or an older
+  // server) must leave the env var unset, preserving legacy behaviour.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: null,
+    zipFiles: { 'test_seed.py': '# seed\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_seed.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_noseed',
+  );
+
+  assert.equal(harness.py.state.assignmentSeedEnv, null);
+});
+
+test('writes _ck_inputs.py from the seed endpoint personalizedInputs (parity with the worker)', async () => {
+  // The worker writes _ck_inputs.py into the grading workspace from
+  // Job.personalizedInputs; the browser must do the same from the seed
+  // endpoint's personalizedInputs so a generated pattern-family script that
+  // loads per-student args/expected grades identically. Values are verbatim
+  // Python literals (repr) the server resolved for this student's seed.
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    personalizedInputs: { adults_expected: '2', patients: "[{'mrn': '1001'}]" },
+    zipFiles: { 'publictest_x.py': '# x\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'publictest_x.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_personalized',
+  );
+
+  // FS.writes is an append-only log, so the record survives workdir cleanup.
+  const write = harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py'));
+  assert.ok(write, '_ck_inputs.py must be written to the work dir');
+  const src = String(write.value);
+  assert.ok(src.includes('_ck = {'), 'emits a _ck dict');
+  assert.ok(src.includes('"adults_expected": 2,'), 'value inserted verbatim');
+  assert.ok(src.includes(`"patients": [{'mrn': '1001'}],`), 'Python-literal value preserved');
+  // Keys sorted for determinism (adults_expected before patients).
+  assert.ok(src.indexOf('adults_expected') < src.indexOf('patients'));
+});
+
+test('omits _ck_inputs.py when the seed endpoint returns no personalizedInputs', async () => {
+  const harness = await loadRunnerHarness({
+    assignmentSeed: 'deadbeefcafe0123',
+    zipFiles: { 'publictest_x.py': '# x\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'publictest_x.py', tier: 'public' }],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_noinputs',
+  );
+
+  assert.equal(
+    harness.py.FS.writes.find(w => w.targetPath.endsWith('/_ck_inputs.py')),
+    undefined,
+    'no _ck_inputs.py when there are no per-student inputs',
+  );
+});
+
+// ── Section grouping (results displayed per test-suite section) ──────────────
+// The browser-graded results views (notebook.js, assignment-validate.js) group
+// outcomes into one table per section, matching the server-rendered submission
+// view (submission.leaf).  The runner supplies the data — the ordered section
+// list plus a sectionID parallel to the outcomes — and the shared
+// BrowserRunner.groupBySection buckets them, mirroring the server's
+// groupOutcomesBySection (Tests/APITests/SectionsTests.swift).
+
+test('runScripts surfaces ordered sections + a sectionID parallel to outcomes; outcomes stay canonical', async () => {
+  const passing = exit => ({ stdout: '', stderr: '', exitCode: exit });
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'a.py': '# a\n', 'b.py': '# b\n', 'c.py': '# c\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      sections: [
+        { id: 's1', name: 'Question 1' },
+        { id: 's2', name: 'Question 2' },
+      ],
+      testSuites: [
+        { script: 'a.py', tier: 'public', sectionID: 's1' },
+        { script: 'b.py', tier: 'public', sectionID: 's2' },
+        { script: 'c.py', tier: 'public' },
+      ],
+    },
+    scriptBehaviors: { 'a.py': passing(0), 'b.py': passing(0), 'c.py': passing(0) },
+  });
+
+  const result = await harness.window.BrowserRunner.runScripts(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_sections',
+  );
+
+  // Ordered section list (id + name), straight from the manifest.
+  assert.deepEqual(plain(result.sections), [
+    { id: 's1', name: 'Question 1' },
+    { id: 's2', name: 'Question 2' },
+  ]);
+  // sectionIDs[i] is the section of outcomes[i] (c.py is ungrouped -> null).
+  assert.deepEqual(plain(result.sectionIDs), ['s1', 's2', null]);
+  // The outcome objects themselves must NOT carry a sectionID — they stay the
+  // canonical worker TestOutcome shape (guarded above for the single-outcome
+  // case; this is the multi-section regression guard).
+  for (const outcome of result.outcomes) {
+    assert.ok(!Object.hasOwn(outcome, 'sectionID'), 'outcome must not carry a sectionID field');
+  }
+});
+
+test('groupBySection buckets outcomes in section order with a trailing Ungrouped block', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const sections = [{ id: 's1', name: 'One' }, { id: 's2', name: 'Two' }];
+  const outcomes = ['a', 'b', 'c', 'd'].map(n => ({ testName: n }));
+  // d -> null => Ungrouped; matches SectionsTests.groupOutcomesEmits...Ungrouped.
+  const grouped = groupBySection(outcomes, sections, ['s1', 's2', 's1', null]);
+
+  // plain() normalises cross-realm objects returned from the vm context.
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, tests: g.outcomes.map(o => o.testName) }))),
+    [
+      { name: 'One', tests: ['a', 'c'] },
+      { name: 'Two', tests: ['b'] },
+      { name: 'Ungrouped', tests: ['d'] },
+    ],
+  );
+});
+
+test('groupBySection with no sections is a single unlabelled bucket (legacy flat table)', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const outcomes = [{ testName: 'a' }, { testName: 'b' }];
+  const grouped = groupBySection(outcomes, [], [null, null]);
+
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].sectionName, null, 'no sections => unlabelled bucket, identical to pre-sections layout');
+  assert.deepEqual(plain(grouped[0].outcomes.map(o => o.testName)), ['a', 'b']);
+});
+
+test('groupBySection keeps identical display names in their own sections (v0.4.105 index correlation)', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  // Two pattern-family cases sharing the label "Test 1" in different sections.
+  // A name-keyed map would collapse both onto one section; index correlation
+  // via the parallel sectionIDs array keeps them apart.
+  const sections = [{ id: 'warmup', name: 'Warm Up' }, { id: 'warmup2', name: 'Warm Up II' }];
+  const outcomes = [{ testName: 'Test 1' }, { testName: 'Test 1' }];
+  const grouped = groupBySection(outcomes, sections, ['warmup', 'warmup2']);
+
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, n: g.outcomes.length }))),
+    [{ name: 'Warm Up', n: 1 }, { name: 'Warm Up II', n: 1 }],
+  );
+});
+
+test('groupBySection sends a stale/unknown sectionID to the Ungrouped block', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { groupBySection } = harness.window.BrowserRunner;
+
+  const sections = [{ id: 's1', name: 'One' }];
+  // outcomes[1] points at a section no longer in the manifest.
+  const grouped = groupBySection([{ testName: 'a' }, { testName: 'b' }], sections, ['s1', 's-gone']);
+
+  assert.deepEqual(
+    plain(grouped.map(g => ({ name: g.sectionName, tests: g.outcomes.map(o => o.testName) }))),
+    [
+      { name: 'One', tests: ['a'] },
+      { name: 'Ungrouped', tests: ['b'] },
+    ],
   );
 });

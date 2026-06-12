@@ -11,6 +11,7 @@ import Fluent
 import Vapor
 
 final class APIClassAchievement: Model, Content, @unchecked Sendable {
+    // @unchecked Sendable: mutated only within Vapor's request context.
     static let schema = "class_achievements"
 
     @ID(key: .id)
@@ -50,10 +51,10 @@ final class APIClassAchievement: Model, Content, @unchecked Sendable {
         submissionID: String,
         metricValue: Double? = nil
     ) {
-        self.testSetupID   = testSetupID
+        self.testSetupID = testSetupID
         self.achievementID = achievementID
-        self.userID        = userID
-        self.submissionID  = submissionID
-        self.metricValue   = metricValue
+        self.userID = userID
+        self.submissionID = submissionID
+        self.metricValue = metricValue
     }
 }

@@ -20,16 +20,17 @@
 // endpoint serves it directly from the database so the browser runner can
 // read the up-to-date gradingMode and testSuites without re-zipping.
 
-import Vapor
-import Fluent
 import Core
+import Fluent
 import Foundation
+import Vapor
 
 struct BrowserRunnerRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let br = routes.grouped("api", "v1", "browser-runner")
-        br.get("testsetups", ":testSetupID", "download",  use: downloadTestSetup)
-        br.get("testsetups", ":testSetupID", "manifest",  use: getTestSetupManifest)
+        br.get("testsetups", ":testSetupID", "download", use: downloadTestSetup)
+        br.get("testsetups", ":testSetupID", "manifest", use: getTestSetupManifest)
+        br.get("testsetups", ":testSetupID", "seed", use: getAssignmentSeed)
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/download
@@ -43,12 +44,21 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        // Gate on effective-open (enrollment + open/visible), not enrollment
+        // alone: a student must not be able to pull the test scripts of a
+        // closed, not-yet-opened, or staff-only (preview) assignment by guessing
+        // its testSetupID. requireOpenStudentAssignment throws .closed (403) for a
+        // gated student and bypasses for staff. It returns nil only when no
+        // assignment owns the setup — then there is no hidden assignment to
+        // protect, so fall back to the plain enrollment check.
+        if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
+            try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        }
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 
@@ -67,17 +77,92 @@ struct BrowserRunnerRoutes: RouteCollection {
 
         guard
             let setupID = req.parameters.get("testSetupID"),
-            let setup   = try await APITestSetup.find(setupID, on: req.db)
+            let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
 
-        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        // Effective-open gate (see downloadTestSetup): the manifest carries the
+        // full testSuites list, so the same hidden-assignment leak applies.
+        if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
+            try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        }
 
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
-        return Response(status: .ok, headers: headers,
-                        body: .init(string: setup.manifest))
+        return Response(
+            status: .ok, headers: headers,
+            body: .init(string: setup.manifest))
     }
 
+    // MARK: - GET /api/v1/browser-runner/testsetups/:id/seed
+
+    /// Returns the per-(student, assignment) personalization seed the browser
+    /// runner injects into Pyodide as `CHICKADEE_ASSIGNMENT_SEED`.
+    ///
+    /// Personalization parity: the native worker resolves this exact seed in
+    /// `WorkerJobRoutes.buildJobPayload` via `AssignmentSeedStore.ensureSeed`
+    /// and injects it into the test subprocess (`RunnerDaemon+JobProcessing`).
+    /// Browser grading had no equivalent, so any test reading the seed saw
+    /// nothing in-browser. This endpoint calls the SAME `ensureSeed` — keyed by
+    /// the same `(userID, assignmentID)` that also backs notebook substitution —
+    /// so the browser, the worker backstop, and the student's notebook all share
+    /// one seed.
+    ///
+    /// Returns `{ "seed": null }` when the caller has no id or no assignment
+    /// owns the setup — mirroring the worker, which leaves the seed unset in
+    /// those cases (a non-personalized grade is unaffected by the missing var).
+    @Sendable
+    func getAssignmentSeed(req: Request) async throws -> BrowserRunnerSeedResponse {
+        let caller = try req.auth.require(APIUser.self)
+
+        guard
+            let setupID = req.parameters.get("testSetupID"),
+            let setup = try await APITestSetup.find(setupID, on: req.db)
+        else {
+            throw Abort(.notFound)
+        }
+
+        // Effective-open gate (enrollment + open/visible): prevents a student
+        // from fetching the per-student resolved personalization values — which
+        // can encode solution-derived expected answers — for a closed,
+        // not-yet-opened, or preview assignment. requireOpenStudentAssignment
+        // throws .closed (403) for a gated student and bypasses for staff; it
+        // returns nil only when no assignment owns the setup, in which case there
+        // is nothing personalized to resolve — fall back to the enrollment check
+        // and return the empty seed (mirroring the worker leaving it unset).
+        guard let assignment = try await requireOpenStudentAssignment(for: setupID, user: caller, on: req)
+        else {
+            try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil)
+        }
+        guard let userID = caller.id, let assignmentID = assignment.id else {
+            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil)
+        }
+
+        let seed = try await AssignmentSeedStore.ensureSeed(
+            userID: userID, assignmentID: assignmentID, on: req.db)
+
+        // Resolve per-student personalization inputs (issue #461) the same way
+        // the worker does — via the shared `gradingInputs` helper — so a
+        // browser-graded submission binds the same values a worker would.
+        var personalizedInputs: [String: String]?
+        if let manifest = setup.decodedManifest() {
+            personalizedInputs = await PersonalizationSubstitution.gradingInputs(
+                manifest: manifest, seedHex: seed,
+                supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/")
+        }
+        return BrowserRunnerSeedResponse(seed: seed, personalizedInputs: personalizedInputs)
+    }
+
+}
+
+/// JSON body for the browser-runner seed endpoint.
+struct BrowserRunnerSeedResponse: Content {
+    let seed: String?
+    /// Per-student personalization input values (Python literals), keyed by
+    /// name — the `=` expressions resolved for this student's seed. The browser
+    /// writes these to `_ck_inputs.py` so generated pattern-family scripts can
+    /// load per-student args / expected. Nil when there are none (issue #461).
+    let personalizedInputs: [String: String]?
 }
