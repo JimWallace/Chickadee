@@ -34,6 +34,7 @@ course-scoped:
 | `get_suite` | `content:read` | Full test-suite definition: items, tiers, points, deps, sections, plus each script's raw body, each family's full spec (cases' args/expected), and each notebook check's spec |
 | `get_notebook` | `content:read` | The starter notebook (.ipynb JSON) |
 | `get_solution` | `content:read` | The reference solution notebook (.ipynb JSON), resolved from the validation submission |
+| `get_support_files` | `content:read` | List the setup zip's non-graded helper/data files, or read one (UTF-8, byte-capped) |
 | `get_global_inputs` | `content:read` | Assignment personalization: global variables + per-student expressions |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |

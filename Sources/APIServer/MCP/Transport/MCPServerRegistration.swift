@@ -24,6 +24,7 @@ enum MCPToolCatalog {
             GetSuiteTool().erased(),
             GetNotebookTool().erased(),
             GetSolutionTool().erased(),
+            GetSupportFilesTool().erased(),
             GetGlobalInputsTool().erased(),
             PreviewPersonalizationTool().erased(),
             ValidateAssignmentTool().erased(),
