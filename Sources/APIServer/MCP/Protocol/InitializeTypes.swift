@@ -184,6 +184,11 @@ enum MCPServerInstructions {
         queued -> running -> done progress over an SSE connection), then re-open with \
         update_assignment(visibility:"open") — or visibility:"preview" to beta-test as staff first — \
         once it passes (opening and previewing are refused until it does). \
+        When validation fails, call get_validation_result for the per-test outcomes of your reference \
+        solution's latest run — each check's status plus shortResult/longResult, across all tiers — so \
+        you can see which check failed and why before fixing the suite or solution. It is \
+        validation-only: it resolves the instructor's own reference-solution run and never exposes a \
+        student submission, identity, or grade. \
         Metadata-only edits (update_assignment, set_grading_mode, the section-organization tools) \
         never trigger a regrade or a close.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
