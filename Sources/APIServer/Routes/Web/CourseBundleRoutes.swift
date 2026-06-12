@@ -85,6 +85,11 @@ struct CourseBundleRoutes: RouteCollection {
             .filter(\.$courseID == courseUUID)
             .all()
 
+        let sections = try await APICourseSection.query(on: db)
+            .filter(\.$courseID == courseUUID)
+            .sort(\.$sortOrder)
+            .all()
+
         let enrollments = try await APICourseEnrollment.query(on: db)
             .filter(\.$course.$id == courseUUID)
             .all()
@@ -134,6 +139,7 @@ struct CourseBundleRoutes: RouteCollection {
         return ExportData(
             testSetups: testSetups,
             assignments: assignments,
+            sections: sections,
             enrolledUserIDs: enrolledUserIDs,
             allUsers: Array(allUsers),
             submissions: submissions,
@@ -148,6 +154,7 @@ struct CourseBundleRoutes: RouteCollection {
         var setupBundleIDByID: [String: String] = [:]
         var assignBundleIDByID: [UUID: String] = [:]
         var subBundleIDByID: [String: String] = [:]
+        var sectionBundleIDByUUID: [UUID: String] = [:]
 
         for (i, u) in data.allUsers.enumerated() {
             guard let uid = u.id else { continue }
@@ -165,12 +172,17 @@ struct CourseBundleRoutes: RouteCollection {
             guard let sid = s.id else { continue }
             subBundleIDByID[sid] = "sub_\(i + 1)"
         }
+        for (i, sec) in data.sections.enumerated() {
+            guard let secID = sec.id else { continue }
+            sectionBundleIDByUUID[secID] = "section_\(i + 1)"
+        }
 
         return ExportBundleIDs(
             userBundleIDByUUID: userBundleIDByUUID,
             setupBundleIDByID: setupBundleIDByID,
             assignBundleIDByID: assignBundleIDByID,
-            subBundleIDByID: subBundleIDByID
+            subBundleIDByID: subBundleIDByID,
+            sectionBundleIDByUUID: sectionBundleIDByUUID
         )
     }
 
@@ -202,6 +214,18 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
+        let bundledSections = data.sections.compactMap { sec -> BundledSection? in
+            guard let secID = sec.id, let bid = bundleIDs.sectionBundleIDByUUID[secID] else {
+                return nil
+            }
+            return BundledSection(
+                bundleID: bid,
+                name: sec.name,
+                defaultGradingMode: sec.defaultGradingMode,
+                sortOrder: sec.sortOrder
+            )
+        }
+
         let bundledAssignments = data.assignments.compactMap { a -> BundledAssignment? in
             guard let aid = a.id, let bid = bundleIDs.assignBundleIDByID[aid],
                 let setupBid = bundleIDs.setupBundleIDByID[a.testSetupID]
@@ -214,7 +238,8 @@ struct CourseBundleRoutes: RouteCollection {
                 isOpen: a.isOpen,
                 visibility: a.visibility,
                 sortOrder: a.sortOrder,
-                testSetupBundleID: setupBid
+                testSetupBundleID: setupBid,
+                sectionBundleID: a.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] }
             )
         }
 
@@ -254,6 +279,7 @@ struct CourseBundleRoutes: RouteCollection {
                 enrollmentMode: course.enrollmentMode),
             users: bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
+            sections: bundledSections,
             assignments: bundledAssignments,
             testSetups: bundledSetups,
             submissions: bundledSubmissions,
@@ -331,6 +357,7 @@ struct CourseBundleRoutes: RouteCollection {
 private struct ExportData {
     let testSetups: [APITestSetup]
     let assignments: [APIAssignment]
+    let sections: [APICourseSection]
     let enrolledUserIDs: [UUID]
     let allUsers: [APIUser]
     let submissions: [APISubmission]
@@ -343,4 +370,5 @@ private struct ExportBundleIDs {
     let setupBundleIDByID: [String: String]
     let assignBundleIDByID: [UUID: String]
     let subBundleIDByID: [String: String]
+    let sectionBundleIDByUUID: [UUID: String]
 }

@@ -560,6 +560,109 @@ import XCTVapor
         }
     }
 
+    // MARK: - Round-trip: sections preserved through export → import
+
+    @Test func roundTripPreservesSections() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+
+            let course = try await makeTestCourse(code: "RT_SECTS")
+            let courseID = try course.requireID()
+
+            // Two sections with distinct grading modes.
+            let browserSec = APICourseSection(
+                name: "Browser Labs", defaultGradingMode: "browser",
+                sortOrder: 1, courseID: courseID)
+            try await browserSec.save(on: app.db)
+            let workerSec = APICourseSection(
+                name: "Worker Labs", defaultGradingMode: "worker",
+                sortOrder: 2, courseID: courseID)
+            try await workerSec.save(on: app.db)
+
+            let setup1 = try await insertSetupWithZip(id: "rt_sects_s1", courseID: courseID)
+            let setup2 = try await insertSetupWithZip(id: "rt_sects_s2", courseID: courseID)
+
+            let a1 = APIAssignment(
+                testSetupID: try #require(setup1.id), title: "Browser Lab",
+                isOpen: false, sectionID: try browserSec.requireID(),
+                courseID: courseID)
+            try await a1.save(on: app.db)
+            let a2 = APIAssignment(
+                testSetupID: try #require(setup2.id), title: "Worker Lab",
+                isOpen: false, sectionID: try workerSec.requireID(),
+                courseID: courseID)
+            try await a2.save(on: app.db)
+
+            // Export.
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    exportedZip = Data(res.body.readableBytesView)
+                })
+            #expect(!exportedZip.isEmpty)
+
+            // Inspect the raw manifest to confirm sections + sectionBundleIDs.
+            let extractDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-sects-ext-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: extractDir) }
+            let zipVerifyPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-sects-\(UUID().uuidString).zip").path
+            defer { try? FileManager.default.removeItem(atPath: zipVerifyPath) }
+            try exportedZip.write(to: URL(fileURLWithPath: zipVerifyPath))
+            try await extractZipArchive(zipPath: zipVerifyPath, into: extractDir)
+
+            let manifestData = try Data(contentsOf: extractDir.appendingPathComponent("bundle.json"))
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+
+            #expect(manifest.sections?.count == 2, "Manifest should include 2 sections")
+            #expect(
+                manifest.assignments.allSatisfy { $0.sectionBundleID != nil },
+                "Every assignment in the manifest should carry a sectionBundleID")
+
+            // Archive the original so import doesn't collide.
+            course.isArchived = true
+            try await course.save(on: app.db)
+
+            // Import.
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "Import should not fail: \(body.prefix(300))")
+            #expect(status != .conflict, "\(body.prefix(300))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "RT_SECTS")
+                    .filter(\.$isArchived == false)
+                    .first(),
+                "Imported course not found")
+            let importedID = try imported.requireID()
+
+            // Sections recreated with correct names and grading modes.
+            let importedSections = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == importedID)
+                .sort(\.$sortOrder)
+                .all()
+            #expect(importedSections.count == 2, "Imported course should have 2 sections")
+            #expect(importedSections.first?.name == "Browser Labs")
+            #expect(importedSections.first?.defaultGradingMode == "browser")
+            #expect(importedSections.last?.name == "Worker Labs")
+            #expect(importedSections.last?.defaultGradingMode == "worker")
+
+            // All assignments placed in a section, not ungrouped.
+            let importedAssignments = try await APIAssignment.query(on: app.db)
+                .filter(\.$courseID == importedID)
+                .all()
+            #expect(importedAssignments.count == 2)
+            #expect(
+                importedAssignments.allSatisfy { $0.sectionID != nil },
+                "All imported assignments should have a sectionID")
+        }
+    }
+
     // MARK: - Bundle builder with a user (used by user-matching tests)
 
     private func makeBundleZipWithUser(courseCode: String, username: String) async throws -> Data {

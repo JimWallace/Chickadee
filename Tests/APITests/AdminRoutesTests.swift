@@ -1020,4 +1020,144 @@ private struct PassthroughResponder: AsyncResponder {
                 })
         }
     }
+
+    // MARK: - POST /admin/courses/:courseID/copy
+
+    @Test func courseCopySectionsArePreserved() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "CPSECT")
+            let courseID = try course.requireID()
+
+            // Two sections with distinct grading modes.
+            let browserSec = APICourseSection(
+                name: "Browser Labs", defaultGradingMode: "browser",
+                sortOrder: 1, courseID: courseID)
+            try await browserSec.save(on: app.db)
+            let workerSec = APICourseSection(
+                name: "Worker Labs", defaultGradingMode: "worker",
+                sortOrder: 2, courseID: courseID)
+            try await workerSec.save(on: app.db)
+
+            let setup1 = try await makeSetup(id: "cpsect_s1", courseID: courseID, withNotebook: false)
+            let setup2 = try await makeSetup(id: "cpsect_s2", courseID: courseID, withNotebook: false)
+
+            let a1 = APIAssignment(
+                testSetupID: try #require(setup1.id), title: "Browser Lab",
+                isOpen: false, sectionID: try browserSec.requireID(),
+                courseID: courseID)
+            try await a1.save(on: app.db)
+            let a2 = APIAssignment(
+                testSetupID: try #require(setup2.id), title: "Worker Lab",
+                isOpen: false, sectionID: try workerSec.requireID(),
+                courseID: courseID)
+            try await a2.save(on: app.db)
+
+            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/copy",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            let copied = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "CPSECT-COPY").first(),
+                "Copied course not found")
+            let copiedID = try copied.requireID()
+
+            // Sections should be recreated with matching names and modes.
+            let copiedSections = try await APICourseSection.query(on: app.db)
+                .filter(\.$courseID == copiedID)
+                .sort(\.$sortOrder)
+                .all()
+            #expect(copiedSections.count == 2, "Copy should have 2 sections")
+            #expect(copiedSections.first?.name == "Browser Labs")
+            #expect(copiedSections.first?.defaultGradingMode == "browser")
+            #expect(copiedSections.last?.name == "Worker Labs")
+            #expect(copiedSections.last?.defaultGradingMode == "worker")
+
+            // Every copied assignment should land in the right new section.
+            let copiedAssignments = try await APIAssignment.query(on: app.db)
+                .filter(\.$courseID == copiedID)
+                .all()
+            #expect(copiedAssignments.count == 2)
+            #expect(
+                copiedAssignments.allSatisfy { $0.sectionID != nil },
+                "All copied assignments should have a sectionID")
+
+            let copiedBrowserSec = try #require(
+                copiedSections.first(where: { $0.defaultGradingMode == "browser" }))
+            let browserLab = try #require(
+                copiedAssignments.first(where: { $0.title == "Browser Lab" }))
+            #expect(browserLab.sectionID == (try copiedBrowserSec.requireID()))
+
+            let copiedWorkerSec = try #require(
+                copiedSections.first(where: { $0.defaultGradingMode == "worker" }))
+            let workerLab = try #require(
+                copiedAssignments.first(where: { $0.title == "Worker Lab" }))
+            #expect(workerLab.sectionID == (try copiedWorkerSec.requireID()))
+        }
+    }
+
+    @Test func courseCopyNotebookPathIsPreserved() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeCourse(code: "CPNB")
+            let courseID = try course.requireID()
+
+            // Store the notebook in the new-style subdirectory
+            // (notebooks/<id>/<filename>.ipynb), not the legacy flat path —
+            // this is the path the old copy code couldn't find.
+            let setupID = "cpnb_s1"
+            let zipPath = app.testSetupsDirectory + "\(setupID).zip"
+            let nbDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
+            let nbPath = nbDir + "assignment.ipynb"
+            try FileManager.default.createDirectory(atPath: nbDir, withIntermediateDirectories: true)
+            try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
+                .write(to: URL(fileURLWithPath: zipPath))
+            try #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
+                .write(to: URL(fileURLWithPath: nbPath), atomically: true, encoding: .utf8)
+
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
+                """
+            let setup = APITestSetup(
+                id: setupID, manifest: manifest, zipPath: zipPath,
+                notebookPath: nbPath, courseID: courseID)
+            try await setup.save(on: app.db)
+            try await makeAssignment(testSetupID: setupID, courseID: courseID)
+
+            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
+            try await app.asyncTest(
+                .POST, "/admin/courses/\(courseID.uuidString)/copy",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            let copied = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "CPNB-COPY").first(),
+                "Copied course not found")
+            let copiedCourseID = try copied.requireID()
+
+            let copiedSetup = try #require(
+                try await APITestSetup.query(on: app.db)
+                    .filter(\.$courseID == copiedCourseID)
+                    .first())
+            let path = try #require(
+                copiedSetup.notebookPath, "Copied setup should have a notebookPath set")
+            #expect(
+                FileManager.default.fileExists(atPath: path),
+                "Notebook file should exist on disk at the copied path")
+        }
+    }
 }

@@ -112,15 +112,17 @@ jobs:
       # old symbol → "undefined reference" link errors. Bumping the salt forces
       # one clean rebuild for everyone.  (v2: TestItem struct→enum, v0.4.228;
       # v3: TestProperties gained the `achievements` field — its init's mangled
-      # signature changed, so stale transitive objects fail to link.)
+      # signature changed, so stale transitive objects fail to link.
+      # v4: CourseBundleManifest gained the `sections` field, same init-mangling
+      # story.)
       - name: Cache build artifacts
         id: build-cache
         uses: actions/cache@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v3-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
           restore-keys: |
-            ${{ runner.os }}-build-v3-${{ steps.toolchain.outputs.key }}-
+            ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-
 
       # Exact cache hit: artifacts already match this tree, skip even the
       # near-no-op build.  Restore-keys partial hit (cache-hit is false): the
@@ -153,7 +155,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v3-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Run CoreTests
         run: |
@@ -186,7 +188,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v3-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
         run: |
@@ -261,7 +263,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v3-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
         run: |
@@ -332,7 +334,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .build
-          key: ${{ runner.os }}-build-v3-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install worker test dependencies
         # `file` backs SubmissionNormalizer's MIME detection; `python3` runs the

@@ -202,23 +202,27 @@ extension CourseBundleRoutes {
             try await importBundledEnrollments(
                 manifest: manifest, userIDMap: userIDMap, courseID: t.courseID, db: db)
 
-            // 6e. Create test setups → setupIDMap[bundleID] = new live ID
+            // 6e. Create course sections → sectionIDMap[bundleID] = new live UUID
+            let sectionIDMap = try await importBundledSections(
+                manifest: manifest, courseID: t.courseID, db: db)
+
+            // 6f. Create test setups → setupIDMap[bundleID] = new live ID
             let setupIDMap = try await importBundledTestSetups(
                 manifest: manifest, extractDir: extractDir, setupsDir: setupsDir,
                 courseID: t.courseID, db: db, tally: &t)
 
-            // 6f. Create assignments
+            // 6g. Create assignments
             try await importBundledAssignments(
-                manifest: manifest, setupIDMap: setupIDMap, courseID: t.courseID,
-                db: db, tally: &t)
+                manifest: manifest, setupIDMap: setupIDMap, sectionIDMap: sectionIDMap,
+                courseID: t.courseID, db: db, tally: &t)
 
-            // 6g. Create submissions → subIDMap[bundleID] = new live ID
+            // 6h. Create submissions → subIDMap[bundleID] = new live ID
             let subIDMap = try await importBundledSubmissions(
                 manifest: manifest, extractDir: extractDir, subsDir: subsDir,
                 idMaps: ImportIDMaps(userIDMap: userIDMap, setupIDMap: setupIDMap),
                 db: db, tally: &t)
 
-            // 6h. Create results
+            // 6i. Create results
             try await importBundledResults(
                 manifest: manifest, subIDMap: subIDMap, db: db, tally: &t)
 
@@ -386,9 +390,33 @@ private func importBundledTestSetups(
     return setupIDMap
 }
 
+/// Recreates the bundle's course sections in the new course. Returns a map
+/// from in-bundle section bundleID to the new live UUID, used to re-link
+/// assignments. Bundles exported before sections were carried have no
+/// `sections` array and yield an empty map (assignments land ungrouped).
+private func importBundledSections(
+    manifest: CourseBundleManifest,
+    courseID: UUID,
+    db: Database
+) async throws -> [String: UUID] {
+    var sectionIDMap: [String: UUID] = [:]
+    for bundledSection in manifest.sections ?? [] {
+        let newSection = APICourseSection(
+            name: bundledSection.name,
+            defaultGradingMode: bundledSection.defaultGradingMode,
+            sortOrder: bundledSection.sortOrder,
+            courseID: courseID
+        )
+        try await newSection.save(on: db)
+        sectionIDMap[bundledSection.bundleID] = try newSection.requireID()
+    }
+    return sectionIDMap
+}
+
 private func importBundledAssignments(
     manifest: CourseBundleManifest,
     setupIDMap: [String: String],
+    sectionIDMap: [String: UUID],
     courseID: UUID,
     db: Database,
     tally: inout ImportTally
@@ -404,6 +432,7 @@ private func importBundledAssignments(
             visibility: bundledAssignmentVisibility(bundledAssign),
             sortOrder: bundledAssign.sortOrder,
             validationStatus: nil,  // not imported — requires re-validation
+            sectionID: bundledAssign.sectionBundleID.flatMap { sectionIDMap[$0] },
             courseID: courseID
         )
         try await newAssign.save(on: db)
