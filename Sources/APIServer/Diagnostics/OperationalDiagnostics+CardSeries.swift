@@ -131,26 +131,35 @@ extension OperationalDiagnosticsService {
         grid: BucketWindow
     ) -> (series: [Int?], peakActive: Int?, peakMax: Int?) {
         var series = [Int?](repeating: nil, count: grid.bucketCount)
-        var peak: (active: Int, max: Int)?
 
         for point in points {
             guard point.totalMax > 0, let index = grid.bucketIndex(for: point.bucketStart) else { continue }
             let utilization = Int((Double(point.totalActive) / Double(point.totalMax) * 100).rounded())
             series[index] = series[index].map { Swift.max($0, utilization) } ?? utilization
+        }
+        let peak = peakLoadPoint(from: points)
+        return (series, peak?.active, peak?.max)
+    }
 
-            if let current = peak {
-                let currentRatio = Double(current.active) / Double(current.max)
-                let pointRatio = Double(point.totalActive) / Double(point.totalMax)
-                if pointRatio > currentRatio
-                    || (pointRatio == currentRatio && point.totalActive > current.active)
-                {
-                    peak = (point.totalActive, point.totalMax)
-                }
-            } else {
+    /// The window's peak load pair — the load point with the highest
+    /// utilization ratio (ties broken by more active jobs).  Shared by the card
+    /// "Max Load" headline and the `/admin/metrics` snapshot.
+    func peakLoadPoint(from points: [RunnerLoadPoint]) -> (active: Int, max: Int)? {
+        var peak: (active: Int, max: Int)?
+        for point in points where point.totalMax > 0 {
+            guard let current = peak else {
+                peak = (point.totalActive, point.totalMax)
+                continue
+            }
+            let currentRatio = Double(current.active) / Double(current.max)
+            let pointRatio = Double(point.totalActive) / Double(point.totalMax)
+            if pointRatio > currentRatio
+                || (pointRatio == currentRatio && point.totalActive > current.active)
+            {
                 peak = (point.totalActive, point.totalMax)
             }
         }
-        return (series, peak?.active, peak?.max)
+        return peak
     }
 
     /// Summed runner load per `loadBucketSeconds` bucket since `outerStart`.
@@ -252,5 +261,93 @@ extension OperationalDiagnosticsService {
                 totalMax: runners.values.reduce(0) { $0 + $1.max }
             )
         }
+    }
+
+    // MARK: - Time-series runner summaries
+
+    /// Per-display-bucket runner utilization summary for `/admin/metrics/
+    /// timeseries`, pre-aggregated so the endpoint never streams the full
+    /// RunnerSnapshot scan.  Postgres aggregates per display bucket in SQL;
+    /// SQLite (dev / tests) reuses the raw-row accumulator — both must yield
+    /// identical summaries (pinned by `runnerTimeseriesSummariesMatchSwift`).
+    func runnerTimeseriesSummaries(
+        window: BucketWindow,
+        on db: Database
+    ) async throws -> [RunnerBucketSummary] {
+        if let sql = db as? SQLDatabase, sql.dialect.name == "postgresql" {
+            return try await runnerTimeseriesSummariesViaPostgres(sql, window: window)
+        }
+        let snapshots = try await RunnerSnapshot.query(on: db)
+            .filter(\.$recordedAt >= window.windowStart)
+            .field(\.$recordedAt)
+            .field(\.$activeJobs)
+            .field(\.$maxJobs)
+            .all()
+        let accumulators = MetricBucketAccumulators.accumulateRunnerSnapshots(snapshots, window: window)
+        return MetricBucketAccumulators.summarizeRunnerBuckets(accumulators)
+    }
+
+    /// SQL equivalent of `accumulateRunnerSnapshots` + `summarizeRunnerBuckets`:
+    /// per display bucket, the per-snapshot utilization is averaged and peaked
+    /// in the database, collapsing the scan to one row per bucket.
+    private func runnerTimeseriesSummariesViaPostgres(
+        _ sql: SQLDatabase,
+        window: BucketWindow
+    ) async throws -> [RunnerBucketSummary] {
+        struct SummaryRow: Decodable {
+            let bucketIndex: Int
+            let sampleCount: Int
+            let utilCount: Int
+            let utilSum: Int
+            let utilMax: Int
+            enum CodingKeys: String, CodingKey {
+                case bucketIndex = "bucket_index"
+                case sampleCount = "sample_count"
+                case utilCount = "util_count"
+                case utilSum = "util_sum"
+                case utilMax = "util_max"
+            }
+        }
+
+        // Align buckets to the window start (matching BucketWindow.bucketIndex)
+        // rather than the epoch, so SQL bucket indices map straight onto the
+        // response array.
+        let windowStartEpoch = String(format: "%.3f", window.windowStart.timeIntervalSince1970)
+        // Per-row utilization, rounded half-away-from-zero and clamped to
+        // [0, 100] — exactly as the Swift accumulator does; NULL when the
+        // runner reported no capacity, so it drops out of the util aggregates.
+        let utilExpr = "LEAST(100, GREATEST(0, ROUND(active_jobs::numeric * 100 / NULLIF(max_jobs, 0))))"
+
+        let rows = try await sql.raw(
+            """
+            SELECT
+                bucket_index,
+                CAST(COUNT(*) AS BIGINT) AS sample_count,
+                CAST(COUNT(util) AS BIGINT) AS util_count,
+                CAST(COALESCE(SUM(util), 0) AS BIGINT) AS util_sum,
+                CAST(COALESCE(MAX(util), 0) AS BIGINT) AS util_max
+            FROM (
+                SELECT
+                    CAST(FLOOR((EXTRACT(EPOCH FROM recorded_at) - \(unsafeRaw: windowStartEpoch))
+                        / \(unsafeRaw: String(window.bucketSeconds))) AS BIGINT) AS bucket_index,
+                    \(unsafeRaw: utilExpr) AS util
+                FROM \(unsafeRaw: RunnerSnapshot.schema)
+                WHERE recorded_at >= \(bind: window.windowStart)
+            ) per_row
+            GROUP BY bucket_index
+            ORDER BY bucket_index
+            """
+        ).all(decoding: SummaryRow.self)
+
+        var summaries = [RunnerBucketSummary](repeating: .empty, count: window.bucketCount)
+        for row in rows {
+            guard row.bucketIndex >= 0, row.bucketIndex < window.bucketCount else { continue }
+            summaries[row.bucketIndex] = RunnerBucketSummary(
+                avgUtilizationPercent: row.utilCount > 0 ? row.utilSum / row.utilCount : nil,
+                maxUtilizationPercent: row.utilCount > 0 ? row.utilMax : nil,
+                avgActiveRunners: row.sampleCount > 0 ? 1 : 0
+            )
+        }
+        return summaries
     }
 }

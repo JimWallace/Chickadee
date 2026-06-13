@@ -56,17 +56,16 @@ extension OperationalDiagnosticsService {
         let windowHours = max(1, configuration.recentMetricsWindowHours)
         let windowStart = now.addingTimeInterval(Double(-windowHours) * 3600)
 
-        let runnerSnapshots = try await RunnerSnapshot.query(on: req.db)
-            .filter(\.$recordedAt >= windowStart)
-            .sort(\.$recordedAt, .ascending)
-            .all()
+        // Pre-aggregated in the DB (see runnerLoadPoints) so the snapshot
+        // endpoint never streams the full RunnerSnapshot scan.
+        let loadPoints = try await runnerLoadPoints(since: windowStart, on: req.db)
         let activeSnapshots = await req.application.workerActivityStore.snapshotsSortedByRecent()
             .filter { now.timeIntervalSince($0.lastActive) <= configuration.activeRunnerWindowSeconds }
         let recentMetrics = try await JobExecutionMetric.query(on: req.db)
             .filter(\.$completedAt >= windowStart)
             .all()
         let maxQueueDepth = try await maxQueueDepthSince(windowStart: windowStart, now: now, on: req.db)
-        let peakLoadSnapshot = peakLoad(from: runnerSnapshots)
+        let peakLoadSnapshot = peakLoadPoint(from: loadPoints)
 
         var statusCounts: [String: Int] = [:]
         var queueWaitValues: [Int] = []
@@ -103,9 +102,11 @@ extension OperationalDiagnosticsService {
             generatedAt: now,
             maxQueueDepth: maxQueueDepth,
             jobsProcessed24h: recentMetrics.count,
-            peakUtilizationPercent: peakUtilizationPercent(from: runnerSnapshots),
-            maxLoadActiveJobs: peakLoadSnapshot?.activeJobs,
-            maxLoadCapacity: peakLoadSnapshot?.maxJobs,
+            peakUtilizationPercent: peakLoadSnapshot.flatMap { peak in
+                peak.max > 0 ? Int((Double(peak.active) / Double(peak.max) * 100).rounded()) : nil
+            },
+            maxLoadActiveJobs: peakLoadSnapshot?.active,
+            maxLoadCapacity: peakLoadSnapshot?.max,
             activeRunners: activeSnapshots.count,
             runnerLoads: runnerLoads,
             recentWindowHours: windowHours,
@@ -132,10 +133,9 @@ extension OperationalDiagnosticsService {
         )
         let window = resolved.window
 
-        let runnerSnapshots = try await RunnerSnapshot.query(on: req.db)
-            .filter(\.$recordedAt >= window.windowStart)
-            .sort(\.$recordedAt, .ascending)
-            .all()
+        // Runner snapshots are pre-aggregated per bucket (in SQL on Postgres);
+        // request / job metrics are submission-bound, so they stay raw.
+        let runners = try await runnerTimeseriesSummaries(window: window, on: req.db)
 
         let requestMetrics = try await APIRequestMetric.query(on: req.db)
             .filter(\.$finishedAt >= window.windowStart)
@@ -147,7 +147,6 @@ extension OperationalDiagnosticsService {
             .sort(\.$completedAt, .ascending)
             .all()
 
-        let runners = MetricBucketAccumulators.accumulateRunnerSnapshots(runnerSnapshots, window: window)
         let requests = MetricBucketAccumulators.accumulateRequestMetrics(requestMetrics, window: window)
         let jobs = MetricBucketAccumulators.accumulateJobMetrics(jobMetrics, window: window)
 

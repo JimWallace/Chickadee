@@ -255,7 +255,7 @@ import Testing
 
         let buckets = MetricBucketAccumulators.buildBucketResponses(
             window: window,
-            runners: runners,
+            runners: MetricBucketAccumulators.summarizeRunnerBuckets(runners),
             requests: requests,
             jobs: jobs
         )
@@ -345,7 +345,7 @@ import Testing
         let jobBuckets = MetricBucketAccumulators.accumulateJobMetrics(jobs, window: window)
         let response = MetricBucketAccumulators.buildBucketResponses(
             window: window,
-            runners: runnerBuckets,
+            runners: MetricBucketAccumulators.summarizeRunnerBuckets(runnerBuckets),
             requests: requestBuckets,
             jobs: jobBuckets
         )

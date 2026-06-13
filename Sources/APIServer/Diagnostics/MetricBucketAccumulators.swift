@@ -55,6 +55,20 @@ struct RunnerBucketAccumulator: Sendable, Equatable {
     var utilizationValues: [Int] = []
 }
 
+/// Per-bucket runner summary used to build the time-series response.  Decouples
+/// the wire response from *how* the runner stats were aggregated: the SQLite /
+/// test path summarizes raw `RunnerBucketAccumulator`s in Swift, while Postgres
+/// computes these three values directly in the database (see
+/// `runnerTimeseriesSummaries`).  Both paths must produce identical summaries.
+struct RunnerBucketSummary: Sendable, Equatable {
+    var avgUtilizationPercent: Int?
+    var maxUtilizationPercent: Int?
+    var avgActiveRunners: Int
+
+    static let empty = RunnerBucketSummary(
+        avgUtilizationPercent: nil, maxUtilizationPercent: nil, avgActiveRunners: 0)
+}
+
 struct RequestBucketAccumulator: Sendable, Equatable {
     var requestCount = 0
     var durationValues: [Int] = []
@@ -142,9 +156,28 @@ enum MetricBucketAccumulators {
         return buckets
     }
 
+    /// Collapse raw per-bucket accumulators into the lighter per-bucket
+    /// summaries the response is built from.  Used by the SQLite / test path;
+    /// the Postgres path computes equivalent summaries directly in SQL.
+    static func summarizeRunnerBuckets(
+        _ accumulators: [RunnerBucketAccumulator]
+    ) -> [RunnerBucketSummary] {
+        accumulators.map { runner in
+            let avgActiveRunners =
+                runner.sampleCount > 0
+                ? Int((Double(runner.activeRunnerTotal) / Double(runner.sampleCount)).rounded())
+                : 0
+            return RunnerBucketSummary(
+                avgUtilizationPercent: average(runner.utilizationValues),
+                maxUtilizationPercent: runner.utilizationValues.max(),
+                avgActiveRunners: avgActiveRunners
+            )
+        }
+    }
+
     static func buildBucketResponses(
         window: BucketWindow,
-        runners: [RunnerBucketAccumulator],
+        runners: [RunnerBucketSummary],
         requests: [RequestBucketAccumulator],
         jobs: [JobBucketAccumulator]
     ) -> [InternalMetricsBucketResponse] {
@@ -152,15 +185,11 @@ enum MetricBucketAccumulators {
             let runner = runners[index]
             let request = requests[index]
             let job = jobs[index]
-            let avgActiveRunners =
-                runner.sampleCount > 0
-                ? Int((Double(runner.activeRunnerTotal) / Double(runner.sampleCount)).rounded())
-                : 0
             return InternalMetricsBucketResponse(
                 bucketStart: window.bucketStart(forIndex: index),
-                avgRunnerUtilizationPercent: average(runner.utilizationValues),
-                maxRunnerUtilizationPercent: runner.utilizationValues.max(),
-                avgActiveRunners: avgActiveRunners,
+                avgRunnerUtilizationPercent: runner.avgUtilizationPercent,
+                maxRunnerUtilizationPercent: runner.maxUtilizationPercent,
+                avgActiveRunners: runner.avgActiveRunners,
                 requestCount: request.requestCount,
                 requestP95Ms: percentile95(request.durationValues),
                 completedJobs: job.completedJobs,

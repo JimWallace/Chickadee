@@ -117,6 +117,35 @@ import XCTVapor
         }
     }
 
+    /// Per-display-bucket runner summaries: per-snapshot utilization is
+    /// averaged and peaked within each bucket.  Exercises the Swift aggregation
+    /// on SQLite locally; `api-tests-postgres` runs the same assertions through
+    /// the Postgres SQL path, pinning the two paths to identical output.
+    @Test func runnerTimeseriesSummariesAggregatePerBucket() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            let window = BucketWindow.resolve(
+                hours: 1, bucketMinutes: 30, defaultHours: 24, now: now
+            ).window
+
+            // Bucket 0 ([-60m, -30m)): r1 at 2/4 (50%) then 4/4 (100%).
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-3000), active: 2, max: 4)
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-2700), active: 4, max: 4)
+            // Bucket 1 ([-30m, now)): r2 at 1/2 (50%).
+            try await saveSnapshot(runner: "r2", at: now.addingTimeInterval(-1200), active: 1, max: 2)
+
+            let summaries = try await app.diagnostics.runnerTimeseriesSummaries(
+                window: window, on: app.db)
+
+            #expect(summaries.count == 2)
+            #expect(summaries[0].avgUtilizationPercent == 75)  // (50 + 100) / 2
+            #expect(summaries[0].maxUtilizationPercent == 100)
+            #expect(summaries[0].avgActiveRunners == 1)
+            #expect(summaries[1].avgUtilizationPercent == 50)
+            #expect(summaries[1].maxUtilizationPercent == 50)
+        }
+    }
+
     private func saveSnapshot(runner: String, at: Date, active: Int, max: Int) async throws {
         let snapshot = RunnerSnapshot(
             runnerID: runner, recordedAt: at, activeJobs: active, maxJobs: max,
