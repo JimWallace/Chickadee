@@ -183,7 +183,14 @@ extension OperationalDiagnosticsService {
 
         let rows = try await sql.raw(
             """
-            SELECT bucket_index, SUM(a) AS total_active, SUM(m) AS total_max
+            -- active_jobs / max_jobs are bigint columns, so MAX(...) is bigint
+            -- and SUM(bigint) widens to NUMERIC, which PostgresKit can't decode
+            -- into Swift.Int.  Cast the sums back to BIGINT (the per-bucket
+            -- totals are tiny) so they decode cleanly.
+            SELECT
+                bucket_index,
+                CAST(SUM(a) AS BIGINT) AS total_active,
+                CAST(SUM(m) AS BIGINT) AS total_max
             FROM (
                 SELECT
                     CAST(FLOOR(EXTRACT(EPOCH FROM recorded_at) / \(unsafeRaw: String(loadBucketSeconds))) AS BIGINT)
