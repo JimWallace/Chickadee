@@ -18,7 +18,16 @@ struct InternalMetricsRoutes: RouteCollection {
     /// a card's window without another round-trip.
     @Sendable
     func cards(req: Request) async throws -> MetricsCardSeriesResponse {
-        try await req.application.diagnostics.metricsCardSeries(on: req.db)
+        // Served from a single-flight, short-TTL cache: the 30-day scan is
+        // expensive, the dashboard polls it every 60s, and it must never stack
+        // on the connection pool (see MetricsCardCache).  The compute closure
+        // uses the application database, not `req.db`, since one caller's task
+        // may be awaited by concurrent callers that outlive the original
+        // request.
+        let app = req.application
+        return try await app.metricsCardCache.series {
+            try await app.diagnostics.metricsCardSeries(on: app.db)
+        }
     }
 
     @Sendable

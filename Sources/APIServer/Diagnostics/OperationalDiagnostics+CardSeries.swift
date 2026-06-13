@@ -18,11 +18,23 @@ extension OperationalDiagnosticsService {
         let longestWindow = MetricsCardWindow.allCases.max { $0.totalSeconds < $1.totalSeconds } ?? .month
         let outerStart = now.addingTimeInterval(-longestWindow.totalSeconds)
 
+        // Project only the columns the accumulators read.  Both tables are
+        // wide (JobExecutionMetric carries ~15 stage-timing columns;
+        // RunnerSnapshot several) and this scan spans 30 days, so trimming the
+        // selected columns materially cuts decode time and connection-hold.
         let jobMetrics = try await JobExecutionMetric.query(on: db)
             .filter(\.$completedAt >= outerStart)
+            .field(\.$completedAt)
+            .field(\.$queueWaitMs)
+            .field(\.$executionMs)
+            .field(\.$finalStatus)
             .all()
         let runnerSnapshots = try await RunnerSnapshot.query(on: db)
             .filter(\.$recordedAt >= outerStart)
+            .field(\.$recordedAt)
+            .field(\.$runnerID)
+            .field(\.$activeJobs)
+            .field(\.$maxJobs)
             .all()
         let queueTimeline = try await queueDepthTimeline(windowStart: outerStart, now: now, on: db)
 
