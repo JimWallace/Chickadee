@@ -69,7 +69,9 @@ struct DiagnosticsConfiguration: Sendable {
             enabled: environmentBool("ENABLE_DIAGNOSTICS_COLLECTION") ?? true,
             verboseRequestTiming: environmentBool("VERBOSE_REQUEST_TIMING") ?? false,
             jobMetricRetentionDays: environmentInt("JOB_METRIC_RETENTION_DAYS") ?? 30,
-            runnerSnapshotRetentionDays: environmentInt("RUNNER_SNAPSHOT_RETENTION_DAYS") ?? 14,
+            // 30 days so the admin cards' longest sparkline window (30d Max
+            // Load) has full data; matches JOB_METRIC_RETENTION_DAYS.
+            runnerSnapshotRetentionDays: environmentInt("RUNNER_SNAPSHOT_RETENTION_DAYS") ?? 30,
             activeRunnerWindowSeconds: TimeInterval(environmentInt("RUNNER_ACTIVE_WINDOW_SECONDS") ?? 120),
             recentMetricsWindowHours: environmentInt("METRICS_RECENT_WINDOW_HOURS") ?? 24,
             pruneIntervalHours: environmentInt("OBSERVABILITY_PRUNE_INTERVAL_HOURS") ?? 24,

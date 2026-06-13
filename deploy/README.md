@@ -237,7 +237,7 @@ curl -H "Cookie: <admin-session-cookie>" http://localhost:8080/admin/metrics | j
 Retention knobs:
 
 - `JOB_METRIC_RETENTION_DAYS` (default `30`)
-- `RUNNER_SNAPSHOT_RETENTION_DAYS` (default `14`)
+- `RUNNER_SNAPSHOT_RETENTION_DAYS` (default `30`)
 - `RUNNER_ACTIVE_WINDOW_SECONDS` (default `120`)
 - `METRICS_RECENT_WINDOW_HOURS` (default `24`)
 - `OBSERVABILITY_PRUNE_INTERVAL_HOURS` (default `24`)

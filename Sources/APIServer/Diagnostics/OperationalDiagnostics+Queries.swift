@@ -109,6 +109,19 @@ extension OperationalDiagnosticsService {
     }
 
     func maxQueueDepthSince(windowStart: Date, now: Date, on db: Database) async throws -> Int {
+        let timeline = try await queueDepthTimeline(windowStart: windowStart, now: now, on: db)
+        return MetricsCardAccumulators.maxQueueDepth(timeline: timeline)
+    }
+
+    /// Builds the worker-eligible queue depth as an event timeline: the depth
+    /// at `windowStart` plus the sorted ±1 steps inside the window.  Shared
+    /// by `maxQueueDepthSince` (single peak) and the card sparkline series
+    /// (per-bucket peaks).
+    func queueDepthTimeline(
+        windowStart: Date,
+        now: Date,
+        on db: Database
+    ) async throws -> QueueDepthTimeline {
         var relevantSubmissions: [String: APISubmission] = [:]
 
         for submission in try await APISubmission.query(on: db)
@@ -145,9 +158,8 @@ extension OperationalDiagnosticsService {
             on: db
         )
 
-        var queueDepth = 0
-        var maxQueueDepth = 0
-        var events: [(date: Date, delta: Int)] = []
+        var initialDepth = 0
+        var events: [QueueDepthEvent] = []
 
         for submission in relevantSubmissions.values {
             let isWorkerEligible =
@@ -160,17 +172,16 @@ extension OperationalDiagnosticsService {
             // Pending at windowStart: submitted before the window opened AND
             // either never assigned, or assigned after the window opened.
             if submittedAt < windowStart, (assignedAt ?? .distantFuture) > windowStart {
-                queueDepth += 1
+                initialDepth += 1
             }
             if submittedAt >= windowStart && submittedAt <= now {
-                events.append((submittedAt, 1))
+                events.append(QueueDepthEvent(date: submittedAt, delta: 1))
             }
             if let assignedAt, assignedAt > windowStart && assignedAt <= now {
-                events.append((assignedAt, -1))
+                events.append(QueueDepthEvent(date: assignedAt, delta: -1))
             }
         }
 
-        maxQueueDepth = queueDepth
         events.sort {
             if $0.date == $1.date {
                 return $0.delta > $1.delta
@@ -178,12 +189,7 @@ extension OperationalDiagnosticsService {
             return $0.date < $1.date
         }
 
-        for event in events {
-            queueDepth = max(0, queueDepth + event.delta)
-            maxQueueDepth = max(maxQueueDepth, queueDepth)
-        }
-
-        return maxQueueDepth
+        return QueueDepthTimeline(initialDepth: initialDepth, events: events)
     }
 
     func peakUtilizationPercent(from snapshots: [RunnerSnapshot]) -> Int? {

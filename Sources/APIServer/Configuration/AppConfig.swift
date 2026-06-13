@@ -194,7 +194,7 @@ extension AppConfig {
                 enabled: true,
                 verboseRequestTiming: false,
                 jobMetricRetentionDays: 30,
-                runnerSnapshotRetentionDays: 14,
+                runnerSnapshotRetentionDays: 30,
                 activeRunnerWindowSeconds: 120,
                 recentMetricsWindowHours: 24,
                 pruneIntervalHours: 24,
