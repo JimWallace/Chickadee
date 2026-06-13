@@ -130,7 +130,6 @@ extension InstructorDashboardRoutes {
         let metrics = try await buildCourseRosterMetrics(
             req: req,
             allSetupIDs: allSetupIDs,
-            enrolledUsers: enrolledUsers,
             activeStudentIDs: activeStudentIDs
         )
 
@@ -265,36 +264,15 @@ extension InstructorDashboardRoutes {
     private func buildCourseRosterMetrics(
         req: Request,
         allSetupIDs: [String],
-        enrolledUsers: [APIUser],
         activeStudentIDs: Set<UUID>
     ) async throws -> [InstructorDashboardMetric] {
         let now = Date()
         let windowStart = now.addingTimeInterval(-24 * 60 * 60)
-        let recentSubmissions =
-            allSetupIDs.isEmpty
-            ? []
-            : try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID ~~ allSetupIDs)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$submittedAt >= windowStart)
-                .all()
         let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
             for: allSetupIDs,
             on: req.db
         )
 
-        let active24h = enrolledUsers.reduce(into: 0) { count, user in
-            guard user.roleValue == .student else { return }
-            if let lastSeenAt = user.lastSeenAt, lastSeenAt >= windowStart {
-                count += 1
-            }
-        }
-
-        let recentStudentSubmissions = recentSubmissions.filter { submission in
-            guard let userID = submission.userID else { return false }
-            return activeStudentIDs.contains(userID)
-        }
-        let activeAssignments24h = Set(recentStudentSubmissions.map(\.testSetupID)).count
         // SQL COUNT instead of loading every course submission ever made just
         // to tally the in-flight ones (June 2026 audit, P1.6).
         let pendingNow: Int
@@ -315,10 +293,10 @@ extension InstructorDashboardRoutes {
             windowStart: windowStart
         )
 
+        // Submissions / active students / active assignments are now rendered
+        // as cyclable sparkline cards (fed by GET /instructor/metrics/cards);
+        // only the two instantaneous gauges remain as static cards here.
         return [
-            InstructorDashboardMetric(label: "24h Active", value: "\(active24h)"),
-            InstructorDashboardMetric(label: "24h Submissions", value: "\(recentStudentSubmissions.count)"),
-            InstructorDashboardMetric(label: "Assignments Active (24h)", value: "\(activeAssignments24h)"),
             InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
             InstructorDashboardMetric(label: "Students With Browser Errors", value: "\(studentsWithBrowserErrors)"),
         ]
@@ -381,12 +359,12 @@ extension InstructorDashboardRoutes {
         ).count
     }
 
-    /// Five "—" placeholder cards for use when no course is active.
+    /// "—" placeholder cards for use when no course is active.  The
+    /// submissions / active-students / active-assignments cards are the
+    /// cyclable sparkline cards (rendered separately), so only the two static
+    /// gauges appear here.
     static func placeholderDashboardMetrics() -> [InstructorDashboardMetric] {
         [
-            InstructorDashboardMetric(label: "24h Active", value: "—"),
-            InstructorDashboardMetric(label: "24h Submissions", value: "—"),
-            InstructorDashboardMetric(label: "Assignments Active (24h)", value: "—"),
             InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
             InstructorDashboardMetric(label: "Students With Browser Errors", value: "—"),
         ]

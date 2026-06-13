@@ -1347,6 +1347,50 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     color: var(--gray-900);
 }
 
+/* ── Clickable diagnostic cards with sparklines ─────────
+   Shared by the admin dashboard (admin.leaf) and the instructor dashboard
+   (assignments.leaf); both poll a /metrics/cards endpoint and cycle the
+   window on click. */
+.diagnostic-card-cyclable {
+    cursor: pointer;
+    user-select: none;
+}
+.diagnostic-card-cyclable:hover {
+    border-color: var(--health-teal);
+}
+.diagnostic-card-cyclable:focus-visible {
+    outline: 2px solid var(--health-teal-dark);
+    outline-offset: 2px;
+}
+.diagnostic-window-chip {
+    font-weight: 600;
+    color: var(--health-teal-dark);
+}
+.diagnostic-spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 28px;
+    margin-top: .4rem;
+}
+.spark-slot {
+    flex: 1 1 0;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+}
+.spark-fill {
+    width: 100%;
+    height: var(--bar-h, 0);
+    min-height: 2px;
+    background: var(--health-teal);
+    border-radius: 1px 1px 0 0;
+}
+.spark-fill-empty {
+    min-height: 0;
+    background: transparent;
+}
+
 /* ── Assignment editor: header + suite editor (new + edit pages) ─────────
    Shared component classes replacing inline styles duplicated across
    assignment-new.leaf and assignment-edit.leaf (UI audit).  display:* is

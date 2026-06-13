@@ -192,39 +192,6 @@ extension OperationalDiagnosticsService {
         return QueueDepthTimeline(initialDepth: initialDepth, events: events)
     }
 
-    func peakUtilizationPercent(from snapshots: [RunnerSnapshot]) -> Int? {
-        peakLoad(from: snapshots).flatMap { snapshot in
-            guard snapshot.maxJobs > 0 else { return nil }
-            return Int((Double(snapshot.activeJobs) / Double(snapshot.maxJobs) * 100).rounded())
-        }
-    }
-
-    func peakLoad(from snapshots: [RunnerSnapshot]) -> (activeJobs: Int, maxJobs: Int)? {
-        var latestByBucketAndRunner: [Int: [String: (activeJobs: Int, maxJobs: Int)]] = [:]
-
-        for snapshot in snapshots {
-            let bucket = Int(snapshot.recordedAt.timeIntervalSince1970 / 60)
-            latestByBucketAndRunner[bucket, default: [:]][snapshot.runnerID] = (
-                activeJobs: max(0, snapshot.activeJobs),
-                maxJobs: max(0, snapshot.maxJobs)
-            )
-        }
-
-        return latestByBucketAndRunner.values.compactMap { runnerStates in
-            let totalActiveJobs = runnerStates.values.reduce(0) { $0 + $1.activeJobs }
-            let totalMaxJobs = runnerStates.values.reduce(0) { $0 + $1.maxJobs }
-            guard totalMaxJobs > 0 else { return nil }
-            return (activeJobs: totalActiveJobs, maxJobs: totalMaxJobs)
-        }.max { lhs, rhs in
-            let lhsRatio = Double(lhs.activeJobs) / Double(lhs.maxJobs)
-            let rhsRatio = Double(rhs.activeJobs) / Double(rhs.maxJobs)
-            if lhsRatio == rhsRatio {
-                return lhs.activeJobs < rhs.activeJobs
-            }
-            return lhsRatio < rhsRatio
-        }
-    }
-
     func inFlightJobCount(on db: Database) async throws -> Int {
         try await APISubmission.query(on: db)
             .group(.or) { group in

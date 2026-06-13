@@ -92,6 +92,125 @@ import XCTVapor
         self.app = try await makeTestApp(prefix: "chickadee-cards")
     }
 
+    /// The load series sums concurrent runners' busy slots and capacity within
+    /// a bucket, and reports the window's peak pair.  Exercises the Swift
+    /// aggregation on SQLite locally; `api-tests-postgres` runs the same
+    /// assertions through the Postgres SQL path.
+    @Test func runnerLoadPointsSumConcurrentRunners() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            // Two runners reporting in the same 5-minute bucket (~10 min ago):
+            // r1 busy 2/4, r2 busy 1/4 → summed 3/8 in that bucket.
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-600), active: 2, max: 4)
+            try await saveSnapshot(runner: "r2", at: now.addingTimeInterval(-590), active: 1, max: 4)
+            // A later, quieter bucket (~3 min ago): only r1, busy 0/4.
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-180), active: 0, max: 4)
+
+            let points = try await app.diagnostics.runnerLoadPoints(
+                since: now.addingTimeInterval(-3600), on: app.db)
+
+            // Two distinct 5-minute buckets.
+            #expect(points.count == 2)
+            let busy = try #require(points.max(by: { $0.totalActive < $1.totalActive }))
+            #expect(busy.totalActive == 3)
+            #expect(busy.totalMax == 8)
+        }
+    }
+
+    /// Per-display-bucket runner summaries: per-snapshot utilization is
+    /// averaged and peaked within each bucket.  Exercises the Swift aggregation
+    /// on SQLite locally; `api-tests-postgres` runs the same assertions through
+    /// the Postgres SQL path, pinning the two paths to identical output.
+    @Test func runnerTimeseriesSummariesAggregatePerBucket() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            let window = BucketWindow.resolve(
+                hours: 1, bucketMinutes: 30, defaultHours: 24, now: now
+            ).window
+
+            // Bucket 0 ([-60m, -30m)): r1 at 2/4 (50%) then 4/4 (100%).
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-3000), active: 2, max: 4)
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-2700), active: 4, max: 4)
+            // Bucket 1 ([-30m, now)): r2 at 1/2 (50%).
+            try await saveSnapshot(runner: "r2", at: now.addingTimeInterval(-1200), active: 1, max: 2)
+
+            let summaries = try await app.diagnostics.runnerTimeseriesSummaries(
+                window: window, on: app.db)
+
+            #expect(summaries.count == 2)
+            #expect(summaries[0].avgUtilizationPercent == 75)  // (50 + 100) / 2
+            #expect(summaries[0].maxUtilizationPercent == 100)
+            #expect(summaries[0].avgActiveRunners == 1)
+            #expect(summaries[1].avgUtilizationPercent == 50)
+            #expect(summaries[1].maxUtilizationPercent == 50)
+        }
+    }
+
+    /// The instructor card series buckets student submissions per window and
+    /// reports distinct active students / assignments.  Runs on SQLite locally
+    /// and the Postgres path in CI.
+    @Test func instructorCardSeriesBucketsSubmissions() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            let s1 = try await makeSetup(id: "ics_s1").requireID()
+            let s2 = try await makeSetup(id: "ics_s2").requireID()
+            let studentA = try await makeStudent(username: "ics_a")
+            let studentB = try await makeStudent(username: "ics_b")
+            let studentC = try await makeStudent(username: "ics_c")
+
+            try await saveStudentSubmission(
+                id: "ics_1", setupID: s1, userID: studentA, at: now.addingTimeInterval(-2 * 3600))
+            try await saveStudentSubmission(
+                id: "ics_2", setupID: s2, userID: studentA, at: now.addingTimeInterval(-3 * 3600))
+            try await saveStudentSubmission(
+                id: "ics_3", setupID: s1, userID: studentB, at: now.addingTimeInterval(-1 * 3600))
+            // Outside the 30-day window — excluded everywhere.
+            try await saveStudentSubmission(
+                id: "ics_old", setupID: s1, userID: studentA, at: now.addingTimeInterval(-40 * 86400))
+            // Enrolled-student filter excludes this one (student C not passed in).
+            try await saveStudentSubmission(
+                id: "ics_other", setupID: s1, userID: studentC, at: now.addingTimeInterval(-30 * 60))
+
+            let response = try await app.diagnostics.instructorCardSeries(
+                setupIDs: [s1, s2], studentIDs: [studentA, studentB], on: app.db, now: now)
+
+            let day = try #require(response.windows.first { $0.window == "24h" })
+            #expect(day.submissions.headline == 3)
+            #expect(day.activeStudents.headline == 2)
+            #expect(day.activeAssignments.headline == 2)
+            #expect(day.submissions.series.compactMap { $0 }.reduce(0, +) == 3)
+
+            // The 30-day window also excludes the 40-day-old row and the
+            // non-enrolled student.
+            let month = try #require(response.windows.first { $0.window == "1m" })
+            #expect(month.submissions.headline == 3)
+        }
+    }
+
+    private func makeStudent(username: String) async throws -> UUID {
+        let user = APIUser(username: username, passwordHash: "x", role: "student")
+        try await user.save(on: app.db)
+        return try user.requireID()
+    }
+
+    private func saveStudentSubmission(id: String, setupID: String, userID: UUID, at: Date) async throws {
+        let submission = APISubmission(
+            id: id, testSetupID: setupID, zipPath: "/tmp/\(id).zip",
+            attemptNumber: 1, status: "completed", userID: userID,
+            kind: APISubmission.Kind.student)
+        try await submission.save(on: app.db)
+        submission.submittedAt = at
+        try await submission.update(on: app.db)
+    }
+
+    private func saveSnapshot(runner: String, at: Date, active: Int, max: Int) async throws {
+        let snapshot = RunnerSnapshot(
+            runnerID: runner, recordedAt: at, activeJobs: active, maxJobs: max,
+            availableCapacity: Swift.max(0, max - active), hostname: runner, runnerVersion: "x",
+            lastPollAt: at, lastHeartbeatAt: at, serverAssignedJobCountSinceStart: 0)
+        try await snapshot.save(on: app.db)
+    }
+
     @Test func cardsEndpointRequiresAuthentication() async throws {
         try await withApp(app) { _ in
             try await app.asyncTest(

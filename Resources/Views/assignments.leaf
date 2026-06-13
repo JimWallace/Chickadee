@@ -14,7 +14,35 @@
 <h1>Assignments</h1>
 #endif
 <section class="instructor-diagnostics">
-    #extend("_diagnostic-cards")
+    <div class="diagnostics-cards">
+        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="submissions"
+                 role="button" tabindex="0"
+                 aria-label="Submissions, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Submissions</div>
+            <div class="diagnostic-value" id="idash-submissions">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
+        </article>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="activeStudents"
+                 role="button" tabindex="0"
+                 aria-label="Active students, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Active Students</div>
+            <div class="diagnostic-value" id="idash-active-students">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
+        </article>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="activeAssignments"
+                 role="button" tabindex="0"
+                 aria-label="Active assignments, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Active Assignments</div>
+            <div class="diagnostic-value" id="idash-active-assignments">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
+        </article>
+        #for(metric in metrics):
+        <article class="diagnostic-card">
+            <div class="diagnostic-label">#(metric.label)</div>
+            <div class="diagnostic-value">#(metric.value)</div>
+        </article>
+        #endfor
+    </div>
 </section>
 <div class="section-toolbar">
     <!-- Add Section inline form -->
@@ -547,6 +575,75 @@ tr.assignment-draggable td {
     'use strict';
 
     ChickadeeRelativeTime.applyRelativeTimes();
+
+    // ── Dashboard diagnostic cards: headline + sparkline, click cycles ────────
+    //   24h / 7d / 30d.  Polls /instructor/metrics/cards (course-scoped) and
+    //   reuses the shared sparkline renderer + global card styles.
+    (function initInstructorCards() {
+        var cards = [
+            { key: 'submissions', name: 'Submissions', valueEl: document.getElementById('idash-submissions') },
+            { key: 'activeStudents', name: 'Active students', valueEl: document.getElementById('idash-active-students') },
+            { key: 'activeAssignments', name: 'Active assignments', valueEl: document.getElementById('idash-active-assignments') }
+        ].filter(function (c) { return c.valueEl; });
+        if (!cards.length) return;
+
+        var windowNouns = { '24h': 'last 24 hours', '1w': 'last 7 days', '1m': 'last 30 days' };
+        var payload = null;
+        var windowIndex = {};
+
+        function pointLabel(v) { return v + (v === 1 ? ' submission' : ''); }
+
+        function renderCard(card) {
+            if (!payload || !card.cardEl) return;
+            var idx = windowIndex[card.key] || 0;
+            var win = payload.windows[idx % payload.windows.length];
+            var data = win && win[card.key];
+            if (!data) return;
+            card.valueEl.textContent = data.headline == null ? '—' : String(data.headline);
+            var chip = card.cardEl.querySelector('.diagnostic-window-chip');
+            if (chip) chip.textContent = win.label;
+            ChickadeeUI.renderSparkline(
+                card.cardEl.querySelector('.diagnostic-spark'),
+                data.series, win.bucketLabels || [],
+                card.key === 'submissions' ? pointLabel : function (v) { return String(v); });
+            card.cardEl.setAttribute(
+                'aria-label',
+                card.name + ', ' + (windowNouns[win.window] || win.label) + '. Press to change time window.');
+        }
+
+        cards.forEach(function (card) {
+            card.cardEl = document.querySelector('.diagnostic-card[data-idash-card="' + card.key + '"]');
+            windowIndex[card.key] = 0;
+            if (!card.cardEl) return;
+            function cycle() {
+                if (!payload || !payload.windows.length) return;
+                windowIndex[card.key] = (windowIndex[card.key] + 1) % payload.windows.length;
+                renderCard(card);
+            }
+            card.cardEl.addEventListener('click', cycle);
+            card.cardEl.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                cycle();
+            });
+        });
+
+        async function refresh() {
+            try {
+                var res = await fetch('/instructor/metrics/cards', {
+                    headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
+                    cache: 'no-store'
+                });
+                if (!res.ok) return;
+                payload = await res.json();
+                cards.forEach(renderCard);
+            } catch (_) {
+                // Keep current values on transient polling errors.
+            }
+        }
+        refresh();
+        setInterval(refresh, 60000);
+    }());
 
     // ── Assignment drag-and-drop (within and across sections) ─────────────────
     //
