@@ -229,8 +229,10 @@ private struct PassthroughResponder: AsyncResponder {
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = String(buffer: res.body)
-                    #expect(body.contains("24h Jobs Processed"))
-                    #expect(body.contains("24h Peak Util") == false)
+                    // The window prefix lives in a chip span the sparkline
+                    // cycler rewrites (24h → 7d → 30d).
+                    #expect(body.contains("</span> Jobs Processed"))
+                    #expect(body.contains("Peak Util") == false)
                 })
 
         }

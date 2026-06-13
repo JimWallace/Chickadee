@@ -15,25 +15,35 @@ Admin
 </nav>
 <section class="admin-section admin-diagnostics">
     <div class="diagnostics-cards" id="diagnostics-cards">
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">24h Max Queue</div>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-card="maxQueueDepth"
+                 role="button" tabindex="0" aria-label="Max queue depth, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Max Queue</div>
             <div class="diagnostic-value" id="diag-queue-depth">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">24h Jobs Processed</div>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-card="jobsProcessed"
+                 role="button" tabindex="0" aria-label="Jobs processed, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Jobs Processed</div>
             <div class="diagnostic-value" id="diag-jobs-processed">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">24h Max Load</div>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-card="load"
+                 role="button" tabindex="0" aria-label="Max load, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Max Load</div>
             <div class="diagnostic-value" id="diag-max-load">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">P95 Wait Time</div>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-card="queueWaitP95Ms"
+                 role="button" tabindex="0" aria-label="P95 wait time, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> P95 Wait Time</div>
             <div class="diagnostic-value" id="diag-queue-p95">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">P95 Execution Time</div>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-card="executionP95Ms"
+                 role="button" tabindex="0" aria-label="P95 execution time, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> P95 Execution Time</div>
             <div class="diagnostic-value" id="diag-exec-p95">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
     </div>
 </section>
@@ -188,6 +198,46 @@ Admin
 <style>
 .admin-diagnostics {
     padding-bottom: 1rem;
+}
+/* ── Clickable diagnostic cards with sparklines ───────── */
+.diagnostic-card-cyclable {
+    cursor: pointer;
+    user-select: none;
+}
+.diagnostic-card-cyclable:hover {
+    border-color: var(--health-teal);
+}
+.diagnostic-card-cyclable:focus-visible {
+    outline: 2px solid var(--health-teal-dark);
+    outline-offset: 2px;
+}
+.diagnostic-window-chip {
+    font-weight: 600;
+    color: var(--health-teal-dark);
+}
+.diagnostic-spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 28px;
+    margin-top: .4rem;
+}
+.spark-slot {
+    flex: 1 1 0;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+}
+.spark-fill {
+    width: 100%;
+    height: var(--bar-h, 0);
+    min-height: 2px;
+    background: var(--health-teal);
+    border-radius: 1px 1px 0 0;
+}
+.spark-fill-empty {
+    min-height: 0;
+    background: transparent;
 }
 .admin-section-head {
     gap: .5rem;
@@ -351,7 +401,7 @@ tr.runner-row-offline {
     var totalRunnerCount = workersBody.querySelectorAll('tr').length;
     var totalRunnerCapacity = 0;
     var totalAssignedJobs = 0;
-    var latestDiagnostics = null;
+    var cardsPayload = null;
 
     function formatDuration(ms) {
         if (ms == null || ms < 0) return '—';
@@ -379,11 +429,9 @@ tr.runner-row-offline {
     }
 
     function renderMaxLoadSummary() {
-        if (!diagMaxLoad) return;
-        if (latestDiagnostics && latestDiagnostics.maxLoadActiveJobs != null && latestDiagnostics.maxLoadCapacity != null) {
-            setText(diagMaxLoad, String(latestDiagnostics.maxLoadActiveJobs) + '/' + String(latestDiagnostics.maxLoadCapacity));
-            return;
-        }
+        // Once the sparkline payload has arrived, the card renderer owns the
+        // Max Load value; this table-derived sum is only the pre-fetch state.
+        if (!diagMaxLoad || cardsPayload) return;
         if (totalRunnerCapacity > 0) {
             setText(diagMaxLoad, String(totalAssignedJobs) + '/' + String(totalRunnerCapacity));
             return;
@@ -391,15 +439,103 @@ tr.runner-row-offline {
         setText(diagMaxLoad, '—');
     }
 
-    function updateDiagnosticsCards(metrics) {
-        if (!metrics) return;
-        latestDiagnostics = metrics;
-        setText(diagQueueDepth, String(metrics.maxQueueDepth == null ? '—' : metrics.maxQueueDepth));
-        setText(diagJobsProcessed, String(metrics.jobsProcessed24h == null ? '—' : metrics.jobsProcessed24h));
-        renderMaxLoadSummary();
-        setText(diagQueueP95, formatDuration(metrics.queueWait && metrics.queueWait.p95Ms));
-        setText(diagExecP95, formatDuration(metrics.execution && metrics.execution.p95Ms));
+    // ── Diagnostic cards: headline + sparkline, click cycles 24h/7d/30d ──
+    var windowNouns = { '24h': 'last 24 hours', '1w': 'last 7 days', '1m': 'last 30 days' };
+    var cardWindowIndex = {};
+    var sparkCards = [
+        {
+            key: 'maxQueueDepth', name: 'Max queue depth', valueEl: diagQueueDepth,
+            headline: function (data) { return data.headline == null ? '—' : String(data.headline); },
+            point: function (v) { return v + (v === 1 ? ' job queued' : ' jobs queued'); }
+        },
+        {
+            key: 'jobsProcessed', name: 'Jobs processed', valueEl: diagJobsProcessed,
+            headline: function (data) { return data.headline == null ? '—' : String(data.headline); },
+            point: function (v) { return v + (v === 1 ? ' job' : ' jobs'); }
+        },
+        {
+            key: 'load', name: 'Max load', valueEl: diagMaxLoad,
+            headline: function (data) {
+                if (data.activeJobs == null || data.capacity == null) return '—';
+                return String(data.activeJobs) + '/' + String(data.capacity);
+            },
+            point: function (v) { return v + '% utilization'; }
+        },
+        {
+            key: 'queueWaitP95Ms', name: 'P95 wait time', valueEl: diagQueueP95,
+            headline: function (data) { return formatDuration(data.headline); },
+            point: formatDuration
+        },
+        {
+            key: 'executionP95Ms', name: 'P95 execution time', valueEl: diagExecP95,
+            headline: function (data) { return formatDuration(data.headline); },
+            point: formatDuration
+        }
+    ];
+
+    function renderSpark(container, series, labels, formatPoint) {
+        series = Array.isArray(series) ? series : [];
+        var max = series.reduce(function (m, v) { return v == null ? m : Math.max(m, v); }, 0);
+        container.innerHTML = series.map(function (value, i) {
+            var pct = (value != null && max > 0) ? (value / max) * 100 : 0;
+            var title = (labels[i] || '') + ': ' + (value == null ? 'no data' : formatPoint(value));
+            return '<div class="spark-slot" title="' + escapeHtml(title) + '">'
+                + '<span class="spark-fill' + (value == null ? ' spark-fill-empty' : '')
+                + '" style="--bar-h:' + pct.toFixed(1) + '%"></span>'
+                + '</div>';
+        }).join('');
     }
+
+    function renderSparkCard(config) {
+        if (!cardsPayload || !config.cardEl) return;
+        var index = cardWindowIndex[config.key] || 0;
+        var win = cardsPayload.windows[index % cardsPayload.windows.length];
+        var data = win && win[config.key];
+        if (!data) return;
+        setText(config.valueEl, config.headline(data));
+        var chip = config.cardEl.querySelector('.diagnostic-window-chip');
+        if (chip) chip.textContent = win.label;
+        var spark = config.cardEl.querySelector('.diagnostic-spark');
+        if (spark) renderSpark(spark, data.series, win.bucketLabels || [], config.point);
+        config.cardEl.setAttribute(
+            'aria-label',
+            config.name + ', ' + (windowNouns[win.window] || win.label) + '. Press to change time window.');
+    }
+
+    function renderAllSparkCards() {
+        sparkCards.forEach(renderSparkCard);
+    }
+
+    async function refreshCards() {
+        try {
+            var response = await fetch('/admin/metrics/cards', {
+                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
+                cache: 'no-store'
+            });
+            if (!response.ok) return;
+            cardsPayload = await response.json();
+            renderAllSparkCards();
+        } catch (_) {
+            // Keep current card values on transient polling errors.
+        }
+    }
+
+    sparkCards.forEach(function (config) {
+        config.cardEl = document.querySelector('.diagnostic-card[data-card="' + config.key + '"]');
+        if (!config.cardEl) return;
+        cardWindowIndex[config.key] = 0;
+        function cycleWindow() {
+            if (!cardsPayload || !cardsPayload.windows.length) return;
+            cardWindowIndex[config.key] = (cardWindowIndex[config.key] + 1) % cardsPayload.windows.length;
+            renderSparkCard(config);
+        }
+        config.cardEl.addEventListener('click', cycleWindow);
+        config.cardEl.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            cycleWindow();
+        });
+    });
 
     function renderWorkers(workers) {
         workers = sortWorkersArray(Array.isArray(workers) ? workers.slice() : []);
@@ -576,24 +712,10 @@ tr.runner-row-offline {
         }
     }
 
-    async function refreshDiagnostics() {
-        try {
-            var response = await fetch('/admin/metrics', {
-                headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
-                cache: 'no-store'
-            });
-            if (!response.ok) return;
-            var metrics = await response.json();
-            updateDiagnosticsCards(metrics);
-        } catch (_) {
-            // Keep current diagnostics values on transient polling errors.
-        }
-    }
-
     ChickadeeRelativeTime.applyRelativeTimes(document);
     recomputeLoadSummaryFromTable();
     refreshWorkers();
-    refreshDiagnostics();
+    refreshCards();
 
     if (workersTable && workersBody && workerHeaders.length) {
         workerHeaders.forEach(function (header) {
@@ -672,7 +794,7 @@ tr.runner-row-offline {
         ChickadeeRelativeTime.applyRelativeTimes(document);
         refreshWorkers();
     }, 5000);
-    setInterval(refreshDiagnostics, 15000);
+    setInterval(refreshCards, 60000);
 
     // ── Active-users activity chart ──────────────────────────────────
     var activityBars = document.getElementById('activity-bars');
