@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.432] - 2026-06-13
+
+### Fixed
+
+- **Admin diagnostic-card sparklines no longer overload the database.** The
+  `GET /admin/metrics/cards` endpoint scanned up to 30 days of `RunnerSnapshot`
+  rows (recorded every ~30s, so tens of thousands of rows); under the
+  dashboard's 60s poll, concurrent requests stacked that long query on separate
+  connections and could drain the Fluent pool, surfacing as
+  `ConnectionPoolTimeoutError` and 500s on unrelated pages. Two changes fix it:
+  (1) on Postgres the runner-load series is now pre-aggregated **in the
+  database** to per-5-minute summed load, collapsing the scan to a few hundred
+  rows (SQLite keeps an equivalent Swift aggregation); and (2) the whole series
+  is served through a single-flight, 60s-TTL cache (`MetricsCardCache`) so the
+  query runs at most once a minute no matter how many pollers or pages request
+  it. The "Max Load" card's peak pair is computed at 5-minute resolution.
+
+### Fixed
+
+- **`/admin/metrics` and `/admin/metrics/timeseries` no longer stream the full
+  `RunnerSnapshot` scan.** The snapshot and time-series endpoints loaded every
+  runner heartbeat in the window (a row every ~30s) and bucketed them in Swift —
+  the same unbounded-scan / pool-holding pattern that overloaded the diagnostic
+  cards. The runner-load aggregation is now done **in the database** on Postgres
+  (per-display-bucket utilization average / peak, and the summed-load peak pair),
+  with an equivalent Swift aggregation on SQLite (dev / tests) where the data is
+  tiny. Both paths produce identical results, pinned by a Postgres-exercised
+  parity test. Request- and job-metric series are submission-bound and stay raw.
+
+### Added
+
+- **Instructor dashboard diagnostic cards now have sparklines + cyclable time
+  windows.** The Submissions, Active Students, and Active Assignments cards on
+  the instructor overview gained the same click-to-cycle 24h / 7d / 30d
+  sparkline treatment as the admin dashboard, fed by a new course-scoped
+  `GET /instructor/metrics/cards` endpoint. The whole series is derived from a
+  single trailing fetch of the longest window's student submissions (projected
+  to the three columns the buckets need), so the dashboard's poll stays cheap.
+  The sparkline renderer and card styles are now shared between the admin and
+  instructor dashboards (`ChickadeeUI.renderSparkline`, global card CSS). The
+  Queued Right Now and Students With Browser Errors gauges remain static cards.
+
+
 ## [0.4.431] - 2026-06-13
 
 ### Added
