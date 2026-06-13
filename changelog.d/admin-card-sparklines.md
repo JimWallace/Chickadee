@@ -8,3 +8,9 @@
   payload (per-bucket peak queue depth, completed jobs, peak runner
   utilization, and queue-wait/execution P95s), so cycling is instant and the
   dashboard polls once a minute instead of every 15 seconds.
+
+### Changed
+
+- **`RUNNER_SNAPSHOT_RETENTION_DAYS` default raised from 14 to 30** so the
+  30-day Max Load sparkline has full data, matching
+  `JOB_METRIC_RETENTION_DAYS`.

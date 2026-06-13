@@ -220,7 +220,7 @@ Environment flags:
 - `JOB_METRIC_RETENTION_DAYS`
   - default: `30`
 - `RUNNER_SNAPSHOT_RETENTION_DAYS`
-  - default: `14`
+  - default: `30` (covers the admin dashboard's longest sparkline window)
 - `AUDIT_LOG_RETENTION_DAYS`
   - default: `90`; `0` disables the audit-log reaper
 - `SUBMISSION_RETENTION_DAYS`
