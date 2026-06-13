@@ -92,6 +92,39 @@ import XCTVapor
         self.app = try await makeTestApp(prefix: "chickadee-cards")
     }
 
+    /// The load series sums concurrent runners' busy slots and capacity within
+    /// a bucket, and reports the window's peak pair.  Exercises the Swift
+    /// aggregation on SQLite locally; `api-tests-postgres` runs the same
+    /// assertions through the Postgres SQL path.
+    @Test func runnerLoadPointsSumConcurrentRunners() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            // Two runners reporting in the same 5-minute bucket (~10 min ago):
+            // r1 busy 2/4, r2 busy 1/4 → summed 3/8 in that bucket.
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-600), active: 2, max: 4)
+            try await saveSnapshot(runner: "r2", at: now.addingTimeInterval(-590), active: 1, max: 4)
+            // A later, quieter bucket (~3 min ago): only r1, busy 0/4.
+            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-180), active: 0, max: 4)
+
+            let points = try await app.diagnostics.runnerLoadPoints(
+                since: now.addingTimeInterval(-3600), on: app.db)
+
+            // Two distinct 5-minute buckets.
+            #expect(points.count == 2)
+            let busy = try #require(points.max(by: { $0.totalActive < $1.totalActive }))
+            #expect(busy.totalActive == 3)
+            #expect(busy.totalMax == 8)
+        }
+    }
+
+    private func saveSnapshot(runner: String, at: Date, active: Int, max: Int) async throws {
+        let snapshot = RunnerSnapshot(
+            runnerID: runner, recordedAt: at, activeJobs: active, maxJobs: max,
+            availableCapacity: Swift.max(0, max - active), hostname: runner, runnerVersion: "x",
+            lastPollAt: at, lastHeartbeatAt: at, serverAssignedJobCountSinceStart: 0)
+        try await snapshot.save(on: app.db)
+    }
+
     @Test func cardsEndpointRequiresAuthentication() async throws {
         try await withApp(app) { _ in
             try await app.asyncTest(
