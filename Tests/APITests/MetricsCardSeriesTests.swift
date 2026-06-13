@@ -146,6 +146,63 @@ import XCTVapor
         }
     }
 
+    /// The instructor card series buckets student submissions per window and
+    /// reports distinct active students / assignments.  Runs on SQLite locally
+    /// and the Postgres path in CI.
+    @Test func instructorCardSeriesBucketsSubmissions() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            let s1 = try await makeSetup(id: "ics_s1").requireID()
+            let s2 = try await makeSetup(id: "ics_s2").requireID()
+            let studentA = try await makeStudent(username: "ics_a")
+            let studentB = try await makeStudent(username: "ics_b")
+            let studentC = try await makeStudent(username: "ics_c")
+
+            try await saveStudentSubmission(
+                id: "ics_1", setupID: s1, userID: studentA, at: now.addingTimeInterval(-2 * 3600))
+            try await saveStudentSubmission(
+                id: "ics_2", setupID: s2, userID: studentA, at: now.addingTimeInterval(-3 * 3600))
+            try await saveStudentSubmission(
+                id: "ics_3", setupID: s1, userID: studentB, at: now.addingTimeInterval(-1 * 3600))
+            // Outside the 30-day window — excluded everywhere.
+            try await saveStudentSubmission(
+                id: "ics_old", setupID: s1, userID: studentA, at: now.addingTimeInterval(-40 * 86400))
+            // Enrolled-student filter excludes this one (student C not passed in).
+            try await saveStudentSubmission(
+                id: "ics_other", setupID: s1, userID: studentC, at: now.addingTimeInterval(-30 * 60))
+
+            let response = try await app.diagnostics.instructorCardSeries(
+                setupIDs: [s1, s2], studentIDs: [studentA, studentB], on: app.db, now: now)
+
+            let day = try #require(response.windows.first { $0.window == "24h" })
+            #expect(day.submissions.headline == 3)
+            #expect(day.activeStudents.headline == 2)
+            #expect(day.activeAssignments.headline == 2)
+            #expect(day.submissions.series.compactMap { $0 }.reduce(0, +) == 3)
+
+            // The 30-day window also excludes the 40-day-old row and the
+            // non-enrolled student.
+            let month = try #require(response.windows.first { $0.window == "1m" })
+            #expect(month.submissions.headline == 3)
+        }
+    }
+
+    private func makeStudent(username: String) async throws -> UUID {
+        let user = APIUser(username: username, passwordHash: "x", role: "student")
+        try await user.save(on: app.db)
+        return try user.requireID()
+    }
+
+    private func saveStudentSubmission(id: String, setupID: String, userID: UUID, at: Date) async throws {
+        let submission = APISubmission(
+            id: id, testSetupID: setupID, zipPath: "/tmp/\(id).zip",
+            attemptNumber: 1, status: "completed", userID: userID,
+            kind: APISubmission.Kind.student)
+        try await submission.save(on: app.db)
+        submission.submittedAt = at
+        try await submission.update(on: app.db)
+    }
+
     private func saveSnapshot(runner: String, at: Date, active: Int, max: Int) async throws {
         let snapshot = RunnerSnapshot(
             runnerID: runner, recordedAt: at, activeJobs: active, maxJobs: max,

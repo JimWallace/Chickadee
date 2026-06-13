@@ -34,6 +34,8 @@ struct InstructorDashboardRoutes: RouteCollection {
 
         let r = routes.grouped("instructor")
         r.get(use: list)
+        // JSON sparkline series for the dashboard diagnostic cards.
+        r.get("metrics", "cards", use: metricsCards)
         // Students roster tab + its self-updating poll endpoint.
         r.get("students", use: studentsPage)
         r.get("students-data", use: studentsData)

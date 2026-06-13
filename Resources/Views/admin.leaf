@@ -199,46 +199,8 @@ Admin
 .admin-diagnostics {
     padding-bottom: 1rem;
 }
-/* ── Clickable diagnostic cards with sparklines ───────── */
-.diagnostic-card-cyclable {
-    cursor: pointer;
-    user-select: none;
-}
-.diagnostic-card-cyclable:hover {
-    border-color: var(--health-teal);
-}
-.diagnostic-card-cyclable:focus-visible {
-    outline: 2px solid var(--health-teal-dark);
-    outline-offset: 2px;
-}
-.diagnostic-window-chip {
-    font-weight: 600;
-    color: var(--health-teal-dark);
-}
-.diagnostic-spark {
-    display: flex;
-    align-items: flex-end;
-    gap: 1px;
-    height: 28px;
-    margin-top: .4rem;
-}
-.spark-slot {
-    flex: 1 1 0;
-    height: 100%;
-    display: flex;
-    align-items: flex-end;
-}
-.spark-fill {
-    width: 100%;
-    height: var(--bar-h, 0);
-    min-height: 2px;
-    background: var(--health-teal);
-    border-radius: 1px 1px 0 0;
-}
-.spark-fill-empty {
-    min-height: 0;
-    background: transparent;
-}
+/* Clickable diagnostic-card + sparkline styles are global (styles.css),
+   shared with the instructor dashboard. */
 .admin-section-head {
     gap: .5rem;
 }
@@ -473,18 +435,7 @@ tr.runner-row-offline {
         }
     ];
 
-    function renderSpark(container, series, labels, formatPoint) {
-        series = Array.isArray(series) ? series : [];
-        var max = series.reduce(function (m, v) { return v == null ? m : Math.max(m, v); }, 0);
-        container.innerHTML = series.map(function (value, i) {
-            var pct = (value != null && max > 0) ? (value / max) * 100 : 0;
-            var title = (labels[i] || '') + ': ' + (value == null ? 'no data' : formatPoint(value));
-            return '<div class="spark-slot" title="' + escapeHtml(title) + '">'
-                + '<span class="spark-fill' + (value == null ? ' spark-fill-empty' : '')
-                + '" style="--bar-h:' + pct.toFixed(1) + '%"></span>'
-                + '</div>';
-        }).join('');
-    }
+    var renderSpark = ChickadeeUI.renderSparkline;
 
     function renderSparkCard(config) {
         if (!cardsPayload || !config.cardEl) return;
