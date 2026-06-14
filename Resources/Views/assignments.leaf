@@ -486,6 +486,7 @@
                         </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
+                            #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
                                    >
@@ -508,6 +509,7 @@
                         </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
+                            #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
                                    >
@@ -524,6 +526,7 @@
                         </a>
                         <form method="post" action="/instructor/#(row.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
+                            #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
                                     aria-label="Delete assignment" title="Delete assignment"
                                    >

@@ -434,4 +434,66 @@ import XCTVapor
         }
     }
 
+    /// Regression guard for the "Session refreshed" delete bug.  The three
+    /// assignment delete forms in the Ungrouped table (the `closed` / `open` /
+    /// preview-`#else` branches in assignments.leaf) were missing
+    /// `#csrfFormField()`, so `POST /instructor/:id/delete` arrived with no
+    /// `_csrf` token and the CSRF middleware 403'd it — rendering the
+    /// "Session refreshed" error page instead of deleting.  With no course
+    /// sections defined, every assignment renders in that Ungrouped table, so
+    /// every delete failed.  This asserts each delete form embeds the hidden
+    /// CSRF input across all three visibility states.
+    @Test func deleteAssignmentFormsIncludeCSRFTokenInUngroupedTable() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+
+            // One assignment in each visibility state that drives a distinct
+            // template branch: open, closed, and preview (the `#else`).
+            try await arInsertSetup(id: "setup_del_open", on: app)
+            let openA = try await arInsertAssignment(
+                testSetupID: "setup_del_open", title: "Open One",
+                isOpen: true, validationStatus: "passed", on: app)
+
+            try await arInsertSetup(id: "setup_del_closed", on: app)
+            let closedA = try await arInsertAssignment(
+                testSetupID: "setup_del_closed", title: "Closed One",
+                isOpen: false, validationStatus: "passed", on: app)
+
+            try await arInsertSetup(id: "setup_del_preview", on: app)
+            let previewA = try await arInsertAssignment(
+                testSetupID: "setup_del_preview", title: "Preview One",
+                isOpen: false, validationStatus: "passed", on: app)
+            previewA.visibility = .preview
+            try await previewA.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/instructor",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    for assignment in [openA, closedA, previewA] {
+                        let action = "action=\"/instructor/\(assignment.publicID)/delete\""
+                        let actionRange = try #require(
+                            html.range(of: action),
+                            "Expected a delete form for assignment \(assignment.publicID)"
+                        )
+                        let formEnd = try #require(
+                            html.range(of: "</form>", range: actionRange.upperBound..<html.endIndex),
+                            "Delete form for \(assignment.publicID) is not closed"
+                        )
+                        let formSegment = html[actionRange.upperBound..<formEnd.lowerBound]
+                        #expect(
+                            formSegment.contains("name='_csrf'"),
+                            "Delete form for \(assignment.publicID) must include the CSRF hidden field"
+                        )
+                    }
+                })
+
+        }
+    }
+
 }
