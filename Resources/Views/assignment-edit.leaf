@@ -349,7 +349,9 @@
      The single Achievements table (class goals, individual badges, and
      the built-in awards) as first-class editable rows.  Persists via
      PUT /instructor/:id/achievements (the unified `achievements` list).
-     Lives outside the Save form; rows are edited in the <dialog> below. -->
+     Lives outside the Save form; rows are edited inline in an accordion
+     detail row (the suite editor's pattern), and every Save/Remove
+     persists immediately — no separate "Save Achievements" button. -->
 <section id="achievements-block"
          data-assignment-id="#(assignmentID)"
          class="editor-block">
@@ -357,7 +359,6 @@
         <h2>Achievements</h2>
         <div class="toolbar toolbar--end">
             <button type="button" class="btn action-btn" id="achievement-add">+ Add Achievement</button>
-            <button type="button" class="btn action-btn" id="achievements-save">Save Achievements</button>
             <span id="achievements-status" class="upload-status-inline"></span>
         </div>
     </div>
@@ -373,67 +374,64 @@
         <tbody class="achievements-body"></tbody>
     </table>
 
-    <dialog id="achievement-modal">
-        <form method="dialog" id="achievement-modal-form">
-            <h3 id="achievement-modal-title" class="subhead-label">Edit Achievement</h3>
-            <label class="form-label field-gap">
-                Name
-                <input type="text" class="form-input" id="am-name" placeholder="e.g. 80% Mastery">
-            </label>
-            <label class="form-label field-gap">
-                Kind
-                <!-- Options render from AchievementKindPresentation (the one
-                     source of truth for kinds); achievements-editor.js reads
-                     each option's data-label for its table Kind column. -->
-                <select class="form-input" id="am-kind">
-                    #for(opt in achievementKindOptions):
-                    <option value="#(opt.value)" data-label="#(opt.label)">#(opt.label) — #(opt.detail)</option>
-                    #endfor
-                </select>
-            </label>
-            <label class="form-label field-gap am-field" data-field="thresholdPercent" style="display:none">
-                Grade ≥ (%)
-                <input type="number" class="form-input" id="am-thresholdPercent" min="0" max="100">
-            </label>
-            <label class="form-label field-gap am-field" data-field="classPercent" style="display:none">
-                Class share ≥ (%)
-                <input type="number" class="form-input" id="am-classPercent" min="0" max="100">
-            </label>
-            <label class="form-label field-gap am-field" data-field="points" style="display:none">
-                Bonus points
-                <input type="number" class="form-input" id="am-points" min="0">
-            </label>
-            <label class="form-label field-gap am-field" data-field="testName" style="display:none">
-                Test filename that must pass
-                <input type="text" class="form-input" id="am-testName" placeholder="secrettest_x.py">
-            </label>
-            <label class="form-label field-gap am-field" data-field="recordDimension" style="display:none">
-                Ranked by
-                <select class="form-input" id="am-recordDimension">
-                    <option value="firstToSubmit">First to submit</option>
-                    <option value="firstToSolve">First to 100%</option>
-                    <option value="fastest">Fastest run</option>
-                    <option value="shortest">Fewest attempts</option>
-                </select>
-            </label>
-            <label class="form-label field-gap am-field" data-field="attemptThreshold" style="display:none">
-                Attempts
-                <input type="number" class="form-input" id="am-attemptThreshold" min="1">
-            </label>
-            <label class="form-label field-gap am-field" data-field="timeThresholdMs" style="display:none">
-                Under (ms)
-                <input type="number" class="form-input" id="am-timeThresholdMs" min="1">
-            </label>
-            <label class="form-label field-gap am-field" data-field="jumpThresholdPercent" style="display:none">
-                Grade jump ≥ (points)
-                <input type="number" class="form-input" id="am-jumpThresholdPercent" min="1">
-            </label>
-            <div class="toolbar toolbar--end field-gap">
-                <button type="submit" class="btn btn-primary" value="done">Done</button>
-                <button type="submit" class="btn" value="cancel">Cancel</button>
-            </div>
-        </form>
-    </dialog>
+    <!-- Inline editor body.  achievements-editor.js clones this into an
+         accordion detail row beneath the achievement being edited and adds
+         the Save/Cancel action bar; fields show/hide by kind.  Mirrors the
+         suite editor's inline-accordion pattern. -->
+    <template id="achievement-editor-template">
+        <label class="form-label field-gap">
+            Name
+            <input type="text" class="form-input" id="am-name" placeholder="e.g. 80% Mastery">
+        </label>
+        <label class="form-label field-gap">
+            Kind
+            <!-- Options render from AchievementKindPresentation (the one
+                 source of truth for kinds); achievements-editor.js reads
+                 each option's data-label for its table Kind column. -->
+            <select class="form-input" id="am-kind">
+                #for(opt in achievementKindOptions):
+                <option value="#(opt.value)" data-label="#(opt.label)">#(opt.label) — #(opt.detail)</option>
+                #endfor
+            </select>
+        </label>
+        <label class="form-label field-gap am-field" data-field="thresholdPercent" style="display:none">
+            Grade ≥ (%)
+            <input type="number" class="form-input" id="am-thresholdPercent" min="0" max="100">
+        </label>
+        <label class="form-label field-gap am-field" data-field="classPercent" style="display:none">
+            Class share ≥ (%)
+            <input type="number" class="form-input" id="am-classPercent" min="0" max="100">
+        </label>
+        <label class="form-label field-gap am-field" data-field="points" style="display:none">
+            Bonus points
+            <input type="number" class="form-input" id="am-points" min="0">
+        </label>
+        <label class="form-label field-gap am-field" data-field="testName" style="display:none">
+            Test filename that must pass
+            <input type="text" class="form-input" id="am-testName" placeholder="secrettest_x.py">
+        </label>
+        <label class="form-label field-gap am-field" data-field="recordDimension" style="display:none">
+            Ranked by
+            <select class="form-input" id="am-recordDimension">
+                <option value="firstToSubmit">First to submit</option>
+                <option value="firstToSolve">First to 100%</option>
+                <option value="fastest">Fastest run</option>
+                <option value="shortest">Fewest attempts</option>
+            </select>
+        </label>
+        <label class="form-label field-gap am-field" data-field="attemptThreshold" style="display:none">
+            Attempts
+            <input type="number" class="form-input" id="am-attemptThreshold" min="1">
+        </label>
+        <label class="form-label field-gap am-field" data-field="timeThresholdMs" style="display:none">
+            Under (ms)
+            <input type="number" class="form-input" id="am-timeThresholdMs" min="1">
+        </label>
+        <label class="form-label field-gap am-field" data-field="jumpThresholdPercent" style="display:none">
+            Grade jump ≥ (points)
+            <input type="number" class="form-input" id="am-jumpThresholdPercent" min="1">
+        </label>
+    </template>
 </section>
 
 <!-- Seed data: current suite state (scripts + families in authored form)

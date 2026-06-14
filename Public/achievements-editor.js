@@ -2,19 +2,21 @@
 //
 // The single "Achievements" editor table (unification C2).  Every achievement —
 // class goals, individual badges, and the built-in awards — is one row
-// (Name / Kind / Summary / Edit / Remove).  Rows are edited in a <dialog> whose
-// fields show/hide by kind.  Loads via GET and saves the whole typed list via
-// PUT /instructor/:id/achievements (the unified `achievements` array).  No icon
-// authoring (the generic badge rendering is used).
+// (Name / Kind / Summary / Edit / Remove).  Rows are edited inline in an
+// accordion detail row (the same pattern as the suite editor: see
+// expandInlineEditor in suite-table.js), whose fields show/hide by kind.
+// Every Save and Remove persists immediately via PUT /instructor/:id/achievements
+// (the unified `achievements` array) — there is no separate "Save Achievements"
+// button.  No icon authoring (the generic badge rendering is used).
 
 (function () {
     'use strict';
 
-    // Kind labels come from the server-rendered #am-kind options (their
+    // Kind labels come from the editor template's #am-kind options (their
     // data-label attributes), so the Swift AchievementKindPresentation
     // registry is the single source of truth; populated in init().
     var KIND_LABEL = {};
-    // Which modal fields apply to each kind.
+    // Which template fields apply to each kind.
     var KIND_FIELDS = {
         classGoal: ['thresholdPercent', 'classPercent', 'points'],
         thresholdBadge: ['thresholdPercent'],
@@ -65,19 +67,18 @@
         if (!block) return;
         var tbody = block.querySelector('tbody.achievements-body');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
-        if (!tbody || !assignmentID) return;
+        var template = document.getElementById('achievement-editor-template');
+        if (!tbody || !assignmentID || !template) return;
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/achievements';
         var status = document.getElementById('achievements-status');
-        var modal = document.getElementById('achievement-modal');
-        var kindSel = document.getElementById('am-kind');
-        if (kindSel) {
-            Array.prototype.slice.call(kindSel.options).forEach(function (o) {
-                KIND_LABEL[o.value] = o.getAttribute('data-label') || o.text;
-            });
-        }
+
+        // Kind labels: read the template's <select> options so the Swift
+        // AchievementKindPresentation registry stays the single source of truth.
+        Array.prototype.slice.call(template.content.querySelectorAll('#am-kind option'))
+            .forEach(function (o) { KIND_LABEL[o.value] = o.getAttribute('data-label') || o.text; });
 
         var state = [];
-        var editingIndex = -1;
+        var open = null;   // { index } of the currently-expanded editor, or null
 
         function setStatus(text, kind) {
             if (!status) return;
@@ -87,9 +88,11 @@
         }
 
         function render() {
+            open = null;   // tbody is about to be rebuilt; any open editor goes with it
             tbody.innerHTML = '';
             state.forEach(function (row, i) {
                 var tr = document.createElement('tr');
+                tr.setAttribute('data-i', i);
                 tr.innerHTML =
                     '<td><strong>' + esc(row.name) + '</strong></td>'
                     + '<td>' + esc(KIND_LABEL[row.kind] || row.kind) + '</td>'
@@ -102,90 +105,156 @@
             });
         }
 
-        function fieldEl(name) { return document.getElementById('am-' + name); }
-
-        function showFieldsFor(kind) {
-            var fields = KIND_FIELDS[kind] || [];
-            Array.prototype.slice.call(modal.querySelectorAll('.am-field')).forEach(function (el) {
-                el.style.display = fields.indexOf(el.getAttribute('data-field')) >= 0 ? '' : 'none';
-            });
-        }
-
-        function openModal(row, index) {
-            editingIndex = index;
-            document.getElementById('achievement-modal-title').textContent =
-                index < 0 ? 'Add Achievement' : 'Edit Achievement';
-            fieldEl('name').value = n(row.name);
-            kindSel.value = row.kind || 'classGoal';
-            ALL_FIELDS.forEach(function (f) { fieldEl(f).value = n(row[f]); });
-            showFieldsFor(kindSel.value);
-            if (modal.showModal) modal.showModal();
-        }
-
-        function applyModal() {
-            var kind = kindSel.value;
-            var row = { kind: kind, name: (fieldEl('name').value || '').trim() };
-            if (editingIndex >= 0 && state[editingIndex] && state[editingIndex].id) {
-                row.id = state[editingIndex].id;
-            }
-            (KIND_FIELDS[kind] || []).forEach(function (f) {
-                var v = fieldEl(f).value;
-                if (v === '') return;
-                row[f] = NUM_FIELDS.indexOf(f) >= 0 ? Number(v) : v;
-            });
-            if (!row.name) return;
-            if (editingIndex < 0) { state.push(row); } else { state[editingIndex] = row; }
-            render();
-        }
-
-        if (kindSel) kindSel.addEventListener('change', function () { showFieldsFor(kindSel.value); });
-        if (modal) {
-            modal.addEventListener('close', function () {
-                if (modal.returnValue === 'done') applyModal();
-            });
-        }
-
-        var addBtn = document.getElementById('achievement-add');
-        if (addBtn) {
-            addBtn.addEventListener('click', function () { openModal({ kind: 'classGoal' }, -1); });
-        }
-        block.addEventListener('click', function (e) {
-            var edit = e.target.closest && e.target.closest('.ach-edit');
-            if (edit) {
-                var ei = Number(edit.getAttribute('data-i'));
-                openModal(state[ei] || {}, ei);
-                return;
-            }
-            var rm = e.target.closest && e.target.closest('.ach-remove');
-            if (rm) { state.splice(Number(rm.getAttribute('data-i')), 1); render(); }
-        });
-
-        var saveBtn = document.getElementById('achievements-save');
-        if (saveBtn) {
-            saveBtn.addEventListener('click', function () {
-                setStatus('Saving…', null);
-                fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
-                    body: JSON.stringify({ achievements: state })
-                }).then(function (r) {
-                    if (r.ok) {
-                        return r.json().then(function (body) {
-                            state = (body && body.achievements) || [];
-                            render();
-                            setStatus('Saved.', 'ok');
-                        }).catch(function () { setStatus('Saved.', 'ok'); });
-                    }
+        // PUT the whole list; refresh local state from the server's reconciled
+        // response.  Returns the fetch promise (rejects with an Error on !ok).
+        function persist() {
+            return fetch(url, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
+                body: JSON.stringify({ achievements: state })
+            }).then(function (r) {
+                if (!r.ok) {
                     return r.text().then(function (t) {
                         var msg = t || ('HTTP ' + r.status);
                         try { var p = JSON.parse(t); if (p && p.reason) msg = p.reason; } catch (_) { /* text */ }
-                        setStatus('Save failed: ' + msg.slice(0, 240), 'error');
+                        throw new Error(msg.slice(0, 240));
                     });
-                }).catch(function (err) {
-                    setStatus('Save failed: ' + (err && err.message ? err.message : err), 'error');
-                });
+                }
+                return r.json()
+                    .then(function (body) { state = (body && body.achievements) || []; })
+                    .catch(function () { /* keep optimistic state if body unparseable */ });
             });
         }
+
+        // Tear down the open inline editor and un-expand its parent row.
+        function collapse() {
+            if (!open) return;
+            var detail = tbody.querySelector('tr.suite-detail-row');
+            if (detail && detail.parentNode) detail.parentNode.removeChild(detail);
+            var parent = tbody.querySelector('tr[data-i="' + open.index + '"]');
+            if (parent) parent.classList.remove('suite-row-expanded');
+            open = null;
+        }
+
+        // Open an accordion editor for state[index] (or index < 0 to add a new
+        // achievement, whose editor is appended to the table). Re-clicking the
+        // open row toggles it shut.
+        function expand(index) {
+            if (open && open.index === index) { collapse(); return; }
+            collapse();
+
+            var parent = index >= 0 ? tbody.querySelector('tr[data-i="' + index + '"]') : null;
+            var row = index >= 0 ? (state[index] || {}) : { kind: 'classGoal' };
+
+            var tr = document.createElement('tr');
+            tr.className = 'suite-detail-row';
+            var td = document.createElement('td');
+            td.setAttribute('colspan', '4');
+            var host = document.createElement('div');
+            host.className = 'suite-detail-host';
+            host.appendChild(template.content.cloneNode(true));
+
+            var actions = document.createElement('div');
+            actions.className = 'suite-detail-actions';
+            var saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = 'btn btn-primary btn-compact';
+            saveBtn.textContent = 'Save';
+            var cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'btn btn-compact';
+            cancelBtn.textContent = 'Cancel';
+            var st = document.createElement('span');
+            st.className = 'suite-detail-status card-meta';
+            actions.appendChild(saveBtn);
+            actions.appendChild(cancelBtn);
+            actions.appendChild(st);
+            td.appendChild(host);
+            td.appendChild(actions);
+            tr.appendChild(td);
+
+            if (parent) {
+                parent.parentNode.insertBefore(tr, parent.nextSibling);
+                parent.classList.add('suite-row-expanded');
+            } else {
+                tbody.appendChild(tr);
+            }
+            open = { index: index };
+
+            // Field helpers are scoped to this host — only one editor is open
+            // at a time, so the template's element ids resolve unambiguously.
+            function fieldEl(name) { return host.querySelector('#am-' + name); }
+            function showFieldsFor(kind) {
+                var fields = KIND_FIELDS[kind] || [];
+                Array.prototype.slice.call(host.querySelectorAll('.am-field')).forEach(function (el) {
+                    el.style.display = fields.indexOf(el.getAttribute('data-field')) >= 0 ? '' : 'none';
+                });
+            }
+
+            var kindSel = fieldEl('kind');
+            fieldEl('name').value = n(row.name);
+            kindSel.value = row.kind || 'classGoal';
+            ALL_FIELDS.forEach(function (f) { var el = fieldEl(f); if (el) el.value = n(row[f]); });
+            showFieldsFor(kindSel.value);
+            kindSel.addEventListener('change', function () { showFieldsFor(kindSel.value); });
+
+            saveBtn.addEventListener('click', function () {
+                var kind = kindSel.value;
+                var name = (fieldEl('name').value || '').trim();
+                if (!name) {
+                    st.textContent = 'Name is required.';
+                    st.classList.add('suite-detail-status-error');
+                    return;
+                }
+                var next = { kind: kind, name: name };
+                if (index >= 0 && state[index] && state[index].id) next.id = state[index].id;
+                (KIND_FIELDS[kind] || []).forEach(function (f) {
+                    var v = fieldEl(f).value;
+                    if (v === '') return;
+                    next[f] = NUM_FIELDS.indexOf(f) >= 0 ? Number(v) : v;
+                });
+
+                // Apply optimistically, persist, then rebuild from the server's
+                // reconciled list; roll back the local state on failure.
+                var snapshot = state.slice();
+                if (index < 0) { state.push(next); } else { state[index] = next; }
+                st.textContent = 'Saving…';
+                st.classList.remove('suite-detail-status-error');
+                saveBtn.disabled = true;
+                persist()
+                    .then(function () { collapse(); render(); setStatus('Saved.', 'ok'); })
+                    .catch(function (err) {
+                        state = snapshot;
+                        st.textContent = 'Save failed — ' + ((err && err.message) ? err.message : err);
+                        st.classList.add('suite-detail-status-error');
+                        saveBtn.disabled = false;
+                    });
+            });
+            cancelBtn.addEventListener('click', collapse);
+
+            if (tr.scrollIntoView) tr.scrollIntoView({ block: 'nearest' });
+        }
+
+        var addBtn = document.getElementById('achievement-add');
+        if (addBtn) addBtn.addEventListener('click', function () { expand(-1); });
+
+        block.addEventListener('click', function (e) {
+            var edit = e.target.closest && e.target.closest('.ach-edit');
+            if (edit) { expand(Number(edit.getAttribute('data-i'))); return; }
+            var rm = e.target.closest && e.target.closest('.ach-remove');
+            if (rm) {
+                var ri = Number(rm.getAttribute('data-i'));
+                var snapshot = state.slice();
+                state.splice(ri, 1);
+                setStatus('Saving…', null);
+                persist()
+                    .then(function () { render(); setStatus('Saved.', 'ok'); })
+                    .catch(function (err) {
+                        state = snapshot;
+                        setStatus('Remove failed: ' + ((err && err.message ? err.message : err)), 'error');
+                    });
+            }
+        });
 
         fetch(url, { headers: { 'x-csrf-token': csrf() } })
             .then(function (r) { return r.ok ? r.json() : { achievements: [] }; })
