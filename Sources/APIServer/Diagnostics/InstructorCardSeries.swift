@@ -18,7 +18,7 @@ import Fluent
 import Foundation
 import Vapor
 
-/// All three instructor card series for one window.
+/// All instructor card series for one window.
 struct InstructorCardWindowSeries: Content, Sendable {
     let window: String
     let label: String
@@ -26,6 +26,7 @@ struct InstructorCardWindowSeries: Content, Sendable {
     let submissions: MetricsCardSeries
     let activeStudents: MetricsCardSeries
     let activeAssignments: MetricsCardSeries
+    let browserErrors: MetricsCardSeries
 }
 
 /// Payload of `GET /instructor/metrics/cards`.
@@ -58,12 +59,21 @@ extension OperationalDiagnosticsService {
 
         let points = try await instructorSubmissionPoints(
             setupIDs: setupIDs, studentIDs: studentIDs, since: outerStart, on: db)
+        let browserErrorDates = try await instructorBrowserErrorDates(
+            setupIDs: setupIDs, studentIDs: studentIDs, since: outerStart, on: db)
 
         let windows = MetricsCardWindow.allCases.map { window in
-            buildInstructorWindow(window: window, now: now, points: points)
+            buildInstructorWindow(
+                window: window, now: now, points: points, browserErrorDates: browserErrorDates)
         }
         return InstructorCardSeriesResponse(generatedAt: now, windows: windows)
     }
+
+    /// The client-side diagnostic kinds that count as a browser error (the same
+    /// two `ClientDiagnosticsRoutes` accepts and the dashboard's stuck-student
+    /// count keys off): a failed preflight capability check or a kernel
+    /// watchdog timeout.
+    private static let browserErrorKinds = ["preflight_fail", "watchdog_timeout"]
 
     /// Trailing-window student submissions, projected to only the columns the
     /// buckets read.  Empty when the course has no setups or no students.
@@ -90,19 +100,44 @@ extension OperationalDiagnosticsService {
         }
     }
 
+    /// Trailing-window browser-error diagnostic timestamps for the course's
+    /// enrolled students, restricted to the two error kinds.  Only the
+    /// timestamp is needed — the card counts raw events per bucket so a
+    /// post-deploy decline is visible (vs. the dashboard's reconciled
+    /// "students stuck right now" gauge).
+    private func instructorBrowserErrorDates(
+        setupIDs: [String],
+        studentIDs: Set<UUID>,
+        since outerStart: Date,
+        on db: Database
+    ) async throws -> [Date] {
+        guard !setupIDs.isEmpty, !studentIDs.isEmpty else { return [] }
+        return try await APIClientDiagnostic.query(on: db)
+            .filter(\.$testSetupID ~~ setupIDs)
+            .filter(\.$userID ~~ Array(studentIDs))
+            .filter(\.$kind ~~ Self.browserErrorKinds)
+            .filter(\.$createdAt >= outerStart)
+            .field(\.$createdAt)
+            .all()
+            .compactMap(\.createdAt)
+    }
+
     private func buildInstructorWindow(
         window: MetricsCardWindow,
         now: Date,
-        points: [InstructorSubmissionPoint]
+        points: [InstructorSubmissionPoint],
+        browserErrorDates: [Date]
     ) -> InstructorCardWindowSeries {
         let grid = window.bucketWindow(endingAt: now)
 
         var submissionsPerBucket = [Int](repeating: 0, count: grid.bucketCount)
         var studentsPerBucket = [Set<UUID>](repeating: [], count: grid.bucketCount)
         var assignmentsPerBucket = [Set<String>](repeating: [], count: grid.bucketCount)
+        var browserErrorsPerBucket = [Int](repeating: 0, count: grid.bucketCount)
         var windowStudents: Set<UUID> = []
         var windowAssignments: Set<String> = []
         var windowSubmissions = 0
+        var windowBrowserErrors = 0
 
         for point in points {
             guard let index = grid.bucketIndex(for: point.submittedAt) else { continue }
@@ -112,6 +147,12 @@ extension OperationalDiagnosticsService {
             windowSubmissions += 1
             windowStudents.insert(point.userID)
             windowAssignments.insert(point.testSetupID)
+        }
+
+        for date in browserErrorDates {
+            guard let index = grid.bucketIndex(for: date) else { continue }
+            browserErrorsPerBucket[index] += 1
+            windowBrowserErrors += 1
         }
 
         let bucketLabels = (0..<grid.bucketCount).map { index in
@@ -135,6 +176,10 @@ extension OperationalDiagnosticsService {
             activeAssignments: MetricsCardSeries(
                 headline: windowAssignments.count,
                 series: assignmentsPerBucket.map { Optional($0.count) }
+            ),
+            browserErrors: MetricsCardSeries(
+                headline: windowBrowserErrors,
+                series: browserErrorsPerBucket.map { Optional($0) }
             )
         )
     }

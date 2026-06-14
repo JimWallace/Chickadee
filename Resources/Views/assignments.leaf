@@ -36,6 +36,13 @@
             <div class="diagnostic-value" id="idash-active-assignments">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-idash-card="browserErrors"
+                 role="button" tabindex="0"
+                 aria-label="Browser errors, last 24 hours. Press to change time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Browser Errors</div>
+            <div class="diagnostic-value" id="idash-browser-errors">—</div>
+            <div class="diagnostic-spark" aria-hidden="true"></div>
+        </article>
         #for(metric in metrics):
         <article class="diagnostic-card">
             <div class="diagnostic-label">#(metric.label)</div>
@@ -581,9 +588,10 @@ tr.assignment-draggable td {
     //   reuses the shared sparkline renderer + global card styles.
     (function initInstructorCards() {
         var cards = [
-            { key: 'submissions', name: 'Submissions', valueEl: document.getElementById('idash-submissions') },
+            { key: 'submissions', name: 'Submissions', valueEl: document.getElementById('idash-submissions'), unit: 'submission' },
             { key: 'activeStudents', name: 'Active students', valueEl: document.getElementById('idash-active-students') },
-            { key: 'activeAssignments', name: 'Active assignments', valueEl: document.getElementById('idash-active-assignments') }
+            { key: 'activeAssignments', name: 'Active assignments', valueEl: document.getElementById('idash-active-assignments') },
+            { key: 'browserErrors', name: 'Browser errors', valueEl: document.getElementById('idash-browser-errors'), unit: 'error' }
         ].filter(function (c) { return c.valueEl; });
         if (!cards.length) return;
 
@@ -591,7 +599,9 @@ tr.assignment-draggable td {
         var payload = null;
         var windowIndex = {};
 
-        function pointLabel(v) { return v + (v === 1 ? ' submission' : ''); }
+        function unitLabel(unit) {
+            return function (v) { return v + ' ' + unit + (v === 1 ? '' : 's'); };
+        }
 
         function renderCard(card) {
             if (!payload || !card.cardEl) return;
@@ -605,7 +615,7 @@ tr.assignment-draggable td {
             ChickadeeUI.renderSparkline(
                 card.cardEl.querySelector('.diagnostic-spark'),
                 data.series, win.bucketLabels || [],
-                card.key === 'submissions' ? pointLabel : function (v) { return String(v); });
+                card.unit ? unitLabel(card.unit) : function (v) { return String(v); });
             card.cardEl.setAttribute(
                 'aria-label',
                 card.name + ', ' + (windowNouns[win.window] || win.label) + '. Press to change time window.');
