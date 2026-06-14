@@ -365,6 +365,80 @@ import Vapor
         }
     }
 
+    /// Regression: clearing a family's `dependsOn` propagates to its generated
+    /// cases, so the prerequisite can then be removed.  Previously generated-row
+    /// deps carried the prior manifest entry's deps forward, so a once-set
+    /// family-level prerequisite (e.g. a hand-written `*_exists` script the
+    /// family pointed at) stuck to every generated row forever — clearing
+    /// `family.dependsOn` left it in place, and the script could never be
+    /// deleted (its generated rows still depended on it → dangling reference).
+    @Test func apply_clearingFamilyDepsDropsThemFromGeneratedCasesAndUnblocksDelete() async throws {
+        try await withPatternFamilyFixture { fixture in
+            try updateScriptInZip(
+                zipPath: fixture.setup.zipPath,
+                filename: "publictest_prereq.py",
+                content: "# prereq\npassed('ok')\n"
+            )
+            let prereq = AuthoredRawScript(
+                script: "publictest_prereq.py",
+                tier: .pub, points: 1, displayName: nil, dependsOn: []
+            )
+            let withDep = PatternFamily(
+                id: "bmi_category", name: "BMI", kind: .boundaryEquality,
+                functionName: "bmi_category", paramNames: ["bmi"],
+                cases: pfBMIFamily().cases,
+                dependsOn: ["publictest_prereq.py"]
+            )
+            // 1. Save with the family pointing at the prereq — every generated
+            //    row inherits it.
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [withDep],
+                authoredItems: [.script(prereq), .family(id: "bmi_category")],
+                on: fixture.app.db
+            )
+            let afterDep = try pfDecodeManifest(fixture.setup.manifest)
+            #expect(
+                afterDep.testSuites.contains {
+                    $0.generatedBy != nil && $0.dependsOn.contains("publictest_prereq.py")
+                },
+                "precondition: generated rows inherit the family-level prereq")
+
+            // 2. Clear the family's deps — every generated row must drop the
+            //    prereq (this is the assertion that failed before the fix).
+            let cleared = PatternFamily(
+                id: "bmi_category", name: "BMI", kind: .boundaryEquality,
+                functionName: "bmi_category", paramNames: ["bmi"],
+                cases: pfBMIFamily().cases,
+                dependsOn: []
+            )
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [cleared],
+                authoredItems: [.script(prereq), .family(id: "bmi_category")],
+                on: fixture.app.db
+            )
+            let afterClear = try pfDecodeManifest(fixture.setup.manifest)
+            #expect(
+                afterClear.testSuites.allSatisfy { !$0.dependsOn.contains("publictest_prereq.py") },
+                "clearing family.dependsOn drops the prereq from every generated row")
+
+            // 3. With nothing depending on it, the prereq can now be removed —
+            //    the save's post-expansion dependency validation no longer
+            //    rejects it as a dangling reference.
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [cleared],
+                authoredItems: [.family(id: "bmi_category")],
+                on: fixture.app.db
+            )
+            let afterRemove = try pfDecodeManifest(fixture.setup.manifest)
+            #expect(!afterRemove.testSuites.contains { $0.script == "publictest_prereq.py" })
+            #expect(
+                afterRemove.testSuites.allSatisfy { !$0.dependsOn.contains("publictest_prereq.py") })
+        }
+    }
+
     /// Removing a family drops `family:<id>` tokens from other entries'
     /// dependsOn — no dangling refs remain.
     @Test func apply_removingFamilyClearsFamilyRefsFromOtherEntries() async throws {

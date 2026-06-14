@@ -603,10 +603,6 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         return out
     }
 
-    let oldEntryByScript: [String: TestSuiteEntry] = Dictionary(
-        uniqueKeysWithValues: props.testSuites.map { ($0.script, $0) }
-    )
-
     let checkByID: [String: NotebookCheck] = Dictionary(
         uniqueKeysWithValues: resolvedChecks.map { ($0.id, $0) }
     )
@@ -650,14 +646,21 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
             perStudentNames: perStudentExpressionNames)
         {
             order += 1
-            let prior = oldEntryByScript[generated.filename]
-            let perCase = expandDeps(prior?.dependsOn ?? [])
             var combined: [String] = []
             var seen = Set<String>()
-            // Guard first so a missing function reports the guard as the
-            // unmet prerequisite; inherited family deps and any preserved
-            // per-case deps follow (deduped).
-            for d in (guardFilename.map { [$0] } ?? []) + inherited + perCase {
+            // Generated-case deps are fully derived from the *current* spec:
+            // the guard first (so a missing function reports the guard as the
+            // unmet prerequisite), then the family's inherited prerequisites
+            // (deduped).  We deliberately do NOT carry the prior manifest
+            // entry's deps forward.  Doing so made a once-set family-level
+            // dependency permanently "sticky": every regeneration re-read the
+            // old generated row's deps, so clearing `family.dependsOn` (or
+            // dropping a hand-written prereq the family used to point at) could
+            // never remove it from the generated rows — leaving a dangling
+            // reference that no edit could delete, because a hand-written
+            // script is not a generated file and so never entered the
+            // `expandDeps` `toDelete` filter.
+            for d in (guardFilename.map { [$0] } ?? []) + inherited {
                 guard seen.insert(d).inserted else { continue }
                 combined.append(d)
             }
