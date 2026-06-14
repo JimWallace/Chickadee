@@ -171,6 +171,25 @@ import XCTVapor
             try await saveStudentSubmission(
                 id: "ics_other", setupID: s1, userID: studentC, at: now.addingTimeInterval(-30 * 60))
 
+            // Browser errors: raw diagnostic events per bucket (not deduped).
+            try await saveDiagnostic(
+                userID: studentA, setupID: s1, kind: "preflight_fail", at: now.addingTimeInterval(-2 * 3600))
+            try await saveDiagnostic(
+                userID: studentA, setupID: s1, kind: "watchdog_timeout", at: now.addingTimeInterval(-90 * 60))
+            try await saveDiagnostic(
+                userID: studentB, setupID: s2, kind: "preflight_fail", at: now.addingTimeInterval(-10 * 3600))
+            // Excluded: out of the 30-day window.
+            try await saveDiagnostic(
+                userID: studentA, setupID: s1, kind: "watchdog_timeout", at: now.addingTimeInterval(-40 * 86400))
+            // Excluded: null test_setup_id (unattributable to the course).
+            try await saveDiagnostic(
+                userID: studentA, setupID: nil, kind: "watchdog_timeout", at: now.addingTimeInterval(-60 * 60))
+            // Excluded: non-enrolled student.
+            try await saveDiagnostic(
+                userID: studentC, setupID: s1, kind: "preflight_fail", at: now.addingTimeInterval(-60 * 60))
+            // Excluded: not an error kind.
+            try await saveDiagnostic(userID: studentA, setupID: s1, kind: "info", at: now.addingTimeInterval(-60 * 60))
+
             let response = try await app.diagnostics.instructorCardSeries(
                 setupIDs: [s1, s2], studentIDs: [studentA, studentB], on: app.db, now: now)
 
@@ -179,12 +198,24 @@ import XCTVapor
             #expect(day.activeStudents.headline == 2)
             #expect(day.activeAssignments.headline == 2)
             #expect(day.submissions.series.compactMap { $0 }.reduce(0, +) == 3)
+            // 3 in-window error events (2 from A + 1 from B); the others are filtered.
+            #expect(day.browserErrors.headline == 3)
+            #expect(day.browserErrors.series.compactMap { $0 }.reduce(0, +) == 3)
 
-            // The 30-day window also excludes the 40-day-old row and the
+            // The 30-day window also excludes the 40-day-old rows and the
             // non-enrolled student.
             let month = try #require(response.windows.first { $0.window == "1m" })
             #expect(month.submissions.headline == 3)
+            #expect(month.browserErrors.headline == 3)
         }
+    }
+
+    private func saveDiagnostic(userID: UUID, setupID: String?, kind: String, at: Date) async throws {
+        let diagnostic = APIClientDiagnostic(
+            userID: userID, testSetupID: setupID, kind: kind, failedChecks: nil, userAgent: "TestUA")
+        try await diagnostic.save(on: app.db)
+        diagnostic.createdAt = at
+        try await diagnostic.update(on: app.db)
     }
 
     private func makeStudent(username: String) async throws -> UUID {

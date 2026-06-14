@@ -266,8 +266,6 @@ extension InstructorDashboardRoutes {
         allSetupIDs: [String],
         activeStudentIDs: Set<UUID>
     ) async throws -> [InstructorDashboardMetric] {
-        let now = Date()
-        let windowStart = now.addingTimeInterval(-24 * 60 * 60)
         let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
             for: allSetupIDs,
             on: req.db
@@ -286,87 +284,22 @@ extension InstructorDashboardRoutes {
                 .filter(\.$userID ~~ Array(activeStudentIDs))
                 .count()
         }
-        let studentsWithBrowserErrors = try await countStudentsWithBrowserErrors(
-            req: req,
-            allSetupIDs: allSetupIDs,
-            activeStudentIDs: activeStudentIDs,
-            windowStart: windowStart
-        )
 
-        // Submissions / active students / active assignments are now rendered
-        // as cyclable sparkline cards (fed by GET /instructor/metrics/cards);
-        // only the two instantaneous gauges remain as static cards here.
+        // Submissions / active students / active assignments / browser errors
+        // are now cyclable sparkline cards (fed by GET /instructor/metrics/cards);
+        // only the live "Queued Right Now" gauge remains a static card here.
         return [
-            InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)"),
-            InstructorDashboardMetric(label: "Students With Browser Errors", value: "\(studentsWithBrowserErrors)"),
+            InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)")
         ]
     }
 
-    /// Students With Browser Errors: distinct students who posted a
-    /// client-side diagnostic (preflight_fail or watchdog_timeout) for one of
-    /// this course's test setups within the 24h window **and never got a
-    /// submission in for that setup**.  The in-browser editor records a
-    /// diagnostic even when the student reloads and submits fine, so counting
-    /// raw diagnostics over-reports transient hiccups (a slow Pyodide cold
-    /// start that clears on reload).  A student who errored on a setup but has
-    /// a submission for it has self-recovered and drops out — what remains is
-    /// the actually-stuck signal.  Diagnostics with a null test_setup_id (the
-    /// supplied setup ID didn't resolve) are excluded since they can't be
-    /// attributed to a course.
-    private func countStudentsWithBrowserErrors(
-        req: Request,
-        allSetupIDs: [String],
-        activeStudentIDs: Set<UUID>,
-        windowStart: Date
-    ) async throws -> Int {
-        let setupIDSet = Set(allSetupIDs)
-        let recentClientDiagnostics =
-            allSetupIDs.isEmpty
-            ? []
-            : try await APIClientDiagnostic.query(on: req.db)
-                .filter(\.$createdAt >= windowStart)
-                .all()
-
-        // (student, setup) pairs that hit a browser error attributable to this course.
-        let errorPairs = recentClientDiagnostics.compactMap { record -> (userID: UUID, setupID: String)? in
-            guard let setupID = record.testSetupID,
-                setupIDSet.contains(setupID),
-                activeStudentIDs.contains(record.userID)
-            else { return nil }
-            return (record.userID, setupID)
-        }
-        if errorPairs.isEmpty { return 0 }
-
-        // A student "recovered" — and drops out of the stuck count — if they
-        // have a submission for the setup they errored on, even though the
-        // diagnostic row remains.
-        let erroredSetupIDs = Array(Set(errorPairs.map(\.setupID)))
-        let recoverySubmissions = try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID ~~ erroredSetupIDs)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .all()
-        let recoveredKeys = Set(
-            recoverySubmissions.compactMap { submission -> String? in
-                guard let userID = submission.userID else { return nil }
-                return "\(userID.uuidString)|\(submission.testSetupID)"
-            }
-        )
-
-        return Set(
-            errorPairs.compactMap { pair -> UUID? in
-                recoveredKeys.contains("\(pair.userID.uuidString)|\(pair.setupID)") ? nil : pair.userID
-            }
-        ).count
-    }
-
-    /// "—" placeholder cards for use when no course is active.  The
-    /// submissions / active-students / active-assignments cards are the
-    /// cyclable sparkline cards (rendered separately), so only the two static
-    /// gauges appear here.
+    /// "—" placeholder card for use when no course is active.  The
+    /// submissions / active-students / active-assignments / browser-error cards
+    /// are the cyclable sparkline cards (rendered separately), so only the live
+    /// queue gauge appears here.
     static func placeholderDashboardMetrics() -> [InstructorDashboardMetric] {
         [
-            InstructorDashboardMetric(label: "Queued Right Now", value: "—"),
-            InstructorDashboardMetric(label: "Students With Browser Errors", value: "—"),
+            InstructorDashboardMetric(label: "Queued Right Now", value: "—")
         ]
     }
 
