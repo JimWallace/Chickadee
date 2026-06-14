@@ -22,10 +22,10 @@ import Testing
                 "first_try_perfect", "comeback_kid", "tenacious", "speed_demon",
                 "pathfinder", "trailblazer", "speed_champion", "minimalist",
             ])
-        #expect(BuiltInAchievements.perSubmission.allSatisfy { $0.scope == .individual })
+        #expect(BuiltInAchievements.perSubmission.allSatisfy { $0.isPerSubmissionBadge })
         #expect(
             BuiltInAchievements.classRecords.allSatisfy {
-                $0.scope == .classWide && $0.kind == .classRecord && $0.recordDimension != nil
+                $0.scope == .record && $0.isClassRecord && $0.recordDimension != nil
             })
     }
 
@@ -38,7 +38,8 @@ import Testing
         // An icon-bearing reward (the authored-badge style) prefixes the emoji.
         let iconned = AchievementBadge(
             from: Achievement(
-                id: "x", name: "Sharpshooter", kind: .thresholdBadge, scope: .individual,
+                id: "x", name: "Sharpshooter", scope: .individual,
+                conditions: [AchievementCondition(signal: .grade, comparator: .atLeast, value: 90)],
                 reward: AchievementReward(type: .badge, label: "Sharpshooter", icon: "🌟")))
         #expect(iconned.label == "🌟 Sharpshooter")
     }

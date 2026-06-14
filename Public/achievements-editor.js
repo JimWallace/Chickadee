@@ -1,65 +1,61 @@
 // Public/achievements-editor.js
 //
-// The single "Achievements" editor table (unification C2).  Every achievement —
-// class goals, individual badges, and the built-in awards — is one row
-// (Name / Kind / Summary / Edit / Remove).  Rows are edited inline in an
-// accordion detail row (the same pattern as the suite editor: see
-// expandInlineEditor in suite-table.js), whose fields show/hide by kind.
-// Every Save and Remove persists immediately via PUT /instructor/:id/achievements
-// (the unified `achievements` array) — there is no separate "Save Achievements"
-// button.  No icon authoring (the generic badge rendering is used).
+// The composable Achievements editor.  Every achievement — individual badges,
+// collaborative class goals, and competitive records — is one row
+// (Name / Scope / Earned-when / Edit / Remove).  Rows are edited inline in an
+// accordion detail row (the suite editor's pattern, see expandInlineEditor in
+// suite-table.js): the body is cloned from #achievement-editor-template and the
+// instructor composes a scope + a list of typed conditions (combined all/any) +
+// the scope's reward parameters.  Every Save and Remove persists immediately via
+// PUT /instructor/:id/achievements (the unified `achievements` array) — there is
+// no separate "Save Achievements" button.  No icon authoring (the generic badge
+// rendering is used).
 
 (function () {
     'use strict';
 
-    // Kind labels come from the editor template's #am-kind options (their
-    // data-label attributes), so the Swift AchievementKindPresentation
-    // registry is the single source of truth; populated in init().
-    var KIND_LABEL = {};
-    // Which template fields apply to each kind.
-    var KIND_FIELDS = {
-        classGoal: ['thresholdPercent', 'classPercent', 'points'],
-        thresholdBadge: ['thresholdPercent'],
-        testBadge: ['testName'],
-        firstTryPerfect: ['thresholdPercent', 'attemptThreshold'],
-        comeback: ['jumpThresholdPercent'],
-        persistence: ['thresholdPercent', 'attemptThreshold'],
-        speedRun: ['thresholdPercent', 'timeThresholdMs'],
-        classRecord: ['recordDimension']
+    var SCOPE_LABEL = {
+        individual: 'This student', classWide: 'The class', record: 'Class record'
     };
+    var CMP_LABEL = { atLeast: '≥', atMost: '≤', equals: '=' };
     var DIM_LABEL = {
         firstToSubmit: 'first to submit', firstToSolve: 'first to 100%',
         fastest: 'fastest run', shortest: 'fewest attempts'
     };
-    var NUM_FIELDS = [
-        'thresholdPercent', 'classPercent', 'points',
-        'attemptThreshold', 'timeThresholdMs', 'jumpThresholdPercent'
-    ];
-    var ALL_FIELDS = [
-        'thresholdPercent', 'classPercent', 'points', 'testName',
-        'recordDimension', 'attemptThreshold', 'timeThresholdMs', 'jumpThresholdPercent'
-    ];
+    // signal value -> { label, unit, isTest }; populated from the condition
+    // template's <option>s so AchievementSignalPresentation stays the single
+    // source of truth.
+    var SIGNAL_META = {};
 
-    // Shared implementations (Public/chickadee-ui.js); local aliases keep
-    // the call sites short.
     var csrf = ChickadeeUI.getCsrfToken;
     var esc = ChickadeeUI.escapeHtml;
     function n(v) { return v == null ? '' : v; }
 
+    // One condition rendered as a human phrase for the table's Earned-when cell.
+    function condPhrase(c) {
+        var meta = SIGNAL_META[c.signal] || { label: c.signal, unit: '', isTest: false };
+        if (meta.isTest) { return '“' + esc(c.testRef) + '” passes'; }
+        var unit = meta.unit ? (meta.unit === '%' ? '%' : ' ' + meta.unit) : '';
+        return esc(meta.label) + ' ' + (CMP_LABEL[c.comparator] || c.comparator)
+            + ' ' + n(c.value) + unit;
+    }
+
+    function conditionsText(row) {
+        var conds = row.conditions || [];
+        if (!conds.length) { return 'always'; }
+        var joiner = row.match === 'any' ? ' or ' : ' and ';
+        return conds.map(condPhrase).join(joiner);
+    }
+
     function summary(row) {
-        switch (row.kind) {
-            case 'classGoal':
-                return '≥ ' + n(row.thresholdPercent) + '% by ' + n(row.classPercent)
-                    + '% of class · +' + n(row.points) + ' pts';
-            case 'thresholdBadge': return 'score ≥ ' + n(row.thresholdPercent) + '%';
-            case 'testBadge': return esc(row.testName) + ' passes';
-            case 'firstTryPerfect': return '100% within ' + n(row.attemptThreshold || 1) + ' attempt(s)';
-            case 'comeback': return 'grade jumped ≥ ' + n(row.jumpThresholdPercent || 50) + ' pts';
-            case 'persistence': return '100% after ≥ ' + n(row.attemptThreshold || 5) + ' attempts';
-            case 'speedRun': return '100% under ' + n(row.timeThresholdMs || 2000) + ' ms';
-            case 'classRecord': return 'record · ' + (DIM_LABEL[row.recordDimension] || n(row.recordDimension));
-            default: return '';
+        if (row.scope === 'record') {
+            return 'record · ' + (DIM_LABEL[row.recordDimension] || n(row.recordDimension));
         }
+        if (row.scope === 'classWide') {
+            return conditionsText(row) + ' · by ' + n(row.classPercent)
+                + '% of class · +' + n(row.points) + ' pts';
+        }
+        return conditionsText(row);
     }
 
     function init() {
@@ -68,14 +64,18 @@
         var tbody = block.querySelector('tbody.achievements-body');
         var assignmentID = block.getAttribute('data-assignment-id') || '';
         var template = document.getElementById('achievement-editor-template');
-        if (!tbody || !assignmentID || !template) return;
+        var condTemplate = document.getElementById('achievement-condition-template');
+        if (!tbody || !assignmentID || !template || !condTemplate) return;
         var url = '/instructor/' + encodeURIComponent(assignmentID) + '/achievements';
         var status = document.getElementById('achievements-status');
 
-        // Kind labels: read the template's <select> options so the Swift
-        // AchievementKindPresentation registry stays the single source of truth.
-        Array.prototype.slice.call(template.content.querySelectorAll('#am-kind option'))
-            .forEach(function (o) { KIND_LABEL[o.value] = o.getAttribute('data-label') || o.text; });
+        Array.prototype.slice.call(condTemplate.content.querySelectorAll('.am-cond-signal option'))
+            .forEach(function (o) {
+                SIGNAL_META[o.value] = {
+                    label: o.text, unit: o.getAttribute('data-unit') || '',
+                    isTest: o.getAttribute('data-is-test') === 'true'
+                };
+            });
 
         var state = [];
         var open = null;   // { index } of the currently-expanded editor, or null
@@ -88,14 +88,14 @@
         }
 
         function render() {
-            open = null;   // tbody is about to be rebuilt; any open editor goes with it
+            open = null;
             tbody.innerHTML = '';
             state.forEach(function (row, i) {
                 var tr = document.createElement('tr');
                 tr.setAttribute('data-i', i);
                 tr.innerHTML =
                     '<td><strong>' + esc(row.name) + '</strong></td>'
-                    + '<td>' + esc(KIND_LABEL[row.kind] || row.kind) + '</td>'
+                    + '<td>' + esc(SCOPE_LABEL[row.scope] || row.scope) + '</td>'
                     + '<td>' + summary(row) + '</td>'
                     + '<td class="time">'
                     + '<button type="button" class="btn action-btn ach-edit" data-i="' + i + '">Edit</button> '
@@ -105,8 +105,7 @@
             });
         }
 
-        // PUT the whole list; refresh local state from the server's reconciled
-        // response.  Returns the fetch promise (rejects with an Error on !ok).
+        // PUT the whole list; refresh local state from the reconciled response.
         function persist() {
             return fetch(url, {
                 method: 'PUT',
@@ -126,7 +125,6 @@
             });
         }
 
-        // Tear down the open inline editor and un-expand its parent row.
         function collapse() {
             if (!open) return;
             var detail = tbody.querySelector('tr.suite-detail-row');
@@ -136,15 +134,43 @@
             open = null;
         }
 
-        // Open an accordion editor for state[index] (or index < 0 to add a new
-        // achievement, whose editor is appended to the table). Re-clicking the
-        // open row toggles it shut.
+        // Build one condition row inside `container` from an optional `cond`.
+        function addConditionRow(container, cond) {
+            container.appendChild(condTemplate.content.cloneNode(true));
+            var rowEl = container.lastElementChild;
+            var sig = rowEl.querySelector('.am-cond-signal');
+            var cmp = rowEl.querySelector('.am-cond-comparator');
+            var val = rowEl.querySelector('.am-cond-value');
+            var unit = rowEl.querySelector('.am-cond-unit');
+            var ref = rowEl.querySelector('.am-cond-testref');
+            if (cond) {
+                sig.value = cond.signal || 'grade';
+                cmp.value = cond.comparator || 'atLeast';
+                val.value = n(cond.value);
+                ref.value = n(cond.testRef);
+            }
+            function sync() {
+                var meta = SIGNAL_META[sig.value] || { unit: '', isTest: false };
+                var isTest = meta.isTest;
+                cmp.style.display = isTest ? 'none' : '';
+                val.style.display = isTest ? 'none' : '';
+                unit.style.display = isTest ? 'none' : '';
+                ref.style.display = isTest ? '' : 'none';
+                unit.textContent = meta.unit || '';
+            }
+            sig.addEventListener('change', sync);
+            rowEl.querySelector('.am-cond-remove').addEventListener('click', function () {
+                rowEl.parentNode.removeChild(rowEl);
+            });
+            sync();
+        }
+
         function expand(index) {
             if (open && open.index === index) { collapse(); return; }
             collapse();
 
             var parent = index >= 0 ? tbody.querySelector('tr[data-i="' + index + '"]') : null;
-            var row = index >= 0 ? (state[index] || {}) : { kind: 'classGoal' };
+            var row = index >= 0 ? (state[index] || {}) : { scope: 'individual' };
 
             var tr = document.createElement('tr');
             tr.className = 'suite-detail-row';
@@ -181,41 +207,71 @@
             }
             open = { index: index };
 
-            // Field helpers are scoped to this host — only one editor is open
-            // at a time, so the template's element ids resolve unambiguously.
-            function fieldEl(name) { return host.querySelector('#am-' + name); }
-            function showFieldsFor(kind) {
-                var fields = KIND_FIELDS[kind] || [];
-                Array.prototype.slice.call(host.querySelectorAll('.am-field')).forEach(function (el) {
-                    el.style.display = fields.indexOf(el.getAttribute('data-field')) >= 0 ? '' : 'none';
+            function el(id) { return host.querySelector('#' + id); }
+            var scopeSel = el('am-scope');
+            var conditionsBox = el('am-conditions');
+
+            function showScopeFields() {
+                var scope = scopeSel.value;
+                Array.prototype.slice.call(host.querySelectorAll('.am-scope-field')).forEach(function (f) {
+                    var scopes = (f.getAttribute('data-scope') || '').split(/\s+/);
+                    f.style.display = scopes.indexOf(scope) >= 0 ? '' : 'none';
                 });
             }
 
-            var kindSel = fieldEl('kind');
-            fieldEl('name').value = n(row.name);
-            kindSel.value = row.kind || 'classGoal';
-            ALL_FIELDS.forEach(function (f) { var el = fieldEl(f); if (el) el.value = n(row[f]); });
-            showFieldsFor(kindSel.value);
-            kindSel.addEventListener('change', function () { showFieldsFor(kindSel.value); });
+            el('am-name').value = n(row.name);
+            el('am-detail').value = n(row.detail);
+            scopeSel.value = row.scope || 'individual';
+            el('am-match').value = row.match || 'all';
+            el('am-classPercent').value = n(row.classPercent);
+            el('am-points').value = n(row.points);
+            el('am-recordDimension').value = row.recordDimension || 'firstToSolve';
+            (row.conditions || []).forEach(function (c) { addConditionRow(conditionsBox, c); });
+            showScopeFields();
+
+            scopeSel.addEventListener('change', showScopeFields);
+            el('am-add-condition').addEventListener('click', function () {
+                addConditionRow(conditionsBox, null);
+            });
 
             saveBtn.addEventListener('click', function () {
-                var kind = kindSel.value;
-                var name = (fieldEl('name').value || '').trim();
+                var name = (el('am-name').value || '').trim();
                 if (!name) {
                     st.textContent = 'Name is required.';
                     st.classList.add('suite-detail-status-error');
                     return;
                 }
-                var next = { kind: kind, name: name };
+                var scope = scopeSel.value;
+                var next = { name: name, scope: scope, match: el('am-match').value };
+                var detail = (el('am-detail').value || '').trim();
+                if (detail) next.detail = detail;
                 if (index >= 0 && state[index] && state[index].id) next.id = state[index].id;
-                (KIND_FIELDS[kind] || []).forEach(function (f) {
-                    var v = fieldEl(f).value;
-                    if (v === '') return;
-                    next[f] = NUM_FIELDS.indexOf(f) >= 0 ? Number(v) : v;
-                });
 
-                // Apply optimistically, persist, then rebuild from the server's
-                // reconciled list; roll back the local state on failure.
+                if (scope === 'record') {
+                    next.recordDimension = el('am-recordDimension').value;
+                } else {
+                    next.conditions = Array.prototype.slice.call(
+                        conditionsBox.querySelectorAll('.am-condition')).map(function (rowEl) {
+                            var signal = rowEl.querySelector('.am-cond-signal').value;
+                            var meta = SIGNAL_META[signal] || {};
+                            if (meta.isTest) {
+                                return {
+                                    signal: signal, comparator: 'atLeast', value: 1,
+                                    testRef: (rowEl.querySelector('.am-cond-testref').value || '').trim()
+                                };
+                            }
+                            return {
+                                signal: signal,
+                                comparator: rowEl.querySelector('.am-cond-comparator').value,
+                                value: Number(rowEl.querySelector('.am-cond-value').value || 0)
+                            };
+                        });
+                    if (scope === 'classWide') {
+                        next.classPercent = Number(el('am-classPercent').value || 0);
+                        next.points = Number(el('am-points').value || 0);
+                    }
+                }
+
                 var snapshot = state.slice();
                 if (index < 0) { state.push(next); } else { state[index] = next; }
                 st.textContent = 'Saving…';

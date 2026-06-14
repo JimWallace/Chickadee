@@ -21,7 +21,7 @@ import XCTVapor
             // defaults (trailblazer / speed_champion / minimalist) must NOT apply.
             let props = TestProperties(achievements: [
                 Achievement(
-                    id: "custom_speed", name: "Speedy", kind: .classRecord, scope: .classWide,
+                    id: "custom_speed", name: "Speedy", scope: .record,
                     reward: AchievementReward(type: .title, label: "Speedy"),
                     recordDimension: .fastest)
             ])

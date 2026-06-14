@@ -25,9 +25,12 @@ import XCTVapor
             let props = TestProperties(
                 achievements: [
                     Achievement(
-                        id: "goalX", name: "Mastery Goal", kind: .classGoal, scope: .classWide,
+                        id: "goalX", name: "Mastery Goal", scope: .classWide,
+                        conditions: [
+                            AchievementCondition(signal: .grade, comparator: .atLeast, value: 80)
+                        ],
                         reward: AchievementReward(type: .points, label: "Mastery", points: 5),
-                        threshold: 0.8, classFraction: 0.8)
+                        classFraction: 0.8)
                 ])
             let setup = try #require(try await APITestSetup.find("cg_setup", on: app.db))
             let data = try JSONEncoder().encode(props)

@@ -21,7 +21,7 @@ func classGoalBonusPoints(testSetupID: String, on db: Database) async throws -> 
     guard let setup = try await APITestSetup.find(testSetupID, on: db),
         let props = setup.decodedManifest()
     else { return 0 }
-    let goals = props.achievements.filter { $0.kind == .classGoal && $0.reward.type == .points }
+    let goals = props.achievements.filter { $0.isClassGoal }
     guard !goals.isEmpty else { return 0 }
 
     let rows = try await APIAchievementResult.query(on: db)

@@ -44,10 +44,14 @@ import XCTVapor
                         PublishedAssignmentRoutes.AchievementsBody(
                             achievements: [
                                 .init(
-                                    id: nil, name: "Solo", kind: "thresholdBadge", detail: nil,
-                                    thresholdPercent: 90, classPercent: nil, points: nil,
-                                    testName: nil, recordDimension: nil, attemptThreshold: nil,
-                                    timeThresholdMs: nil, jumpThresholdPercent: nil)
+                                    id: nil, name: "Solo", detail: nil, scope: "individual",
+                                    match: "all",
+                                    conditions: [
+                                        .init(
+                                            signal: "grade", comparator: "atLeast", value: 90,
+                                            testRef: nil)
+                                    ],
+                                    classPercent: nil, points: nil, recordDimension: nil)
                             ]), as: .json)
                 },
                 afterResponse: { res in #expect(res.status == .ok) })

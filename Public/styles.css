@@ -1526,6 +1526,17 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 .suite-detail-status { font-size: .8rem; }
 .suite-detail-status-error { color: var(--red); }
 
+/* Achievements editor — composable condition builder (achievements-editor.js). */
+.am-conditions { display: flex; flex-direction: column; gap: .4rem; margin: .4rem 0 .6rem; }
+.am-condition { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.am-condition .form-input { width: auto; }
+.am-cond-signal { min-width: 9rem; }
+.am-cond-value { width: 6rem; }
+.am-cond-testref { min-width: 12rem; }
+.am-cond-unit { color: var(--gray-500); font-size: .85rem; }
+.am-cond-remove { line-height: 1; }
+.form-input--inline { display: inline-block; width: auto; margin: 0 .25rem; }
+
 /* A suite section block: header bar, view/edit modes, per-section toolbars. */
 .section-block { margin-bottom: 1.25rem; }
 .section-header {

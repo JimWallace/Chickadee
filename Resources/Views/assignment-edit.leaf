@@ -366,7 +366,7 @@
         <thead>
             <tr>
                 <th>Name</th>
-                <th>Kind</th>
+                <th>Scope</th>
                 <th>Earned when</th>
                 <th></th>
             </tr>
@@ -376,41 +376,53 @@
 
     <!-- Inline editor body.  achievements-editor.js clones this into an
          accordion detail row beneath the achievement being edited and adds
-         the Save/Cancel action bar; fields show/hide by kind.  Mirrors the
-         suite editor's inline-accordion pattern. -->
+         the Save/Cancel action bar.  An achievement is a composable design
+         space: a scope, a list of typed conditions combined with all/any, and
+         the scope's reward parameters.  Fields show/hide by scope. -->
     <template id="achievement-editor-template">
         <label class="form-label field-gap">
             Name
             <input type="text" class="form-input" id="am-name" placeholder="e.g. 80% Mastery">
         </label>
         <label class="form-label field-gap">
-            Kind
-            <!-- Options render from AchievementKindPresentation (the one
-                 source of truth for kinds); achievements-editor.js reads
-                 each option's data-label for its table Kind column. -->
-            <select class="form-input" id="am-kind">
-                #for(opt in achievementKindOptions):
-                <option value="#(opt.value)" data-label="#(opt.label)">#(opt.label) — #(opt.detail)</option>
-                #endfor
+            Description (optional)
+            <input type="text" class="form-input" id="am-detail"
+                   placeholder="Shown to students - how to earn this.">
+        </label>
+        <label class="form-label field-gap">
+            Awarded to
+            <select class="form-input" id="am-scope">
+                <option value="individual">This student</option>
+                <option value="classWide">The class together</option>
+                <option value="record">Class record (one holder)</option>
             </select>
         </label>
-        <label class="form-label field-gap am-field" data-field="thresholdPercent" style="display:none">
-            Grade ≥ (%)
-            <input type="number" class="form-input" id="am-thresholdPercent" min="0" max="100">
-        </label>
-        <label class="form-label field-gap am-field" data-field="classPercent" style="display:none">
-            Class share ≥ (%)
+
+        <!-- Conditions (individual + classWide).  The signal dropdown options
+             render from AchievementSignalPresentation (the single source of
+             truth); the row layout is cloned per condition by the editor JS. -->
+        <div class="am-scope-field am-conditions-wrap" data-scope="individual classWide">
+            <div class="subhead-label">
+                Earned when
+                <select class="form-input form-input--inline" id="am-match">
+                    <option value="all">all</option>
+                    <option value="any">any</option>
+                </select>
+                of these conditions hold:
+            </div>
+            <div id="am-conditions" class="am-conditions"></div>
+            <button type="button" class="btn action-btn" id="am-add-condition">+ Add condition</button>
+        </div>
+
+        <label class="form-label field-gap am-scope-field" data-scope="classWide">
+            Class share &#8805; (%)
             <input type="number" class="form-input" id="am-classPercent" min="0" max="100">
         </label>
-        <label class="form-label field-gap am-field" data-field="points" style="display:none">
+        <label class="form-label field-gap am-scope-field" data-scope="classWide">
             Bonus points
             <input type="number" class="form-input" id="am-points" min="0">
         </label>
-        <label class="form-label field-gap am-field" data-field="testName" style="display:none">
-            Test filename that must pass
-            <input type="text" class="form-input" id="am-testName" placeholder="secrettest_x.py">
-        </label>
-        <label class="form-label field-gap am-field" data-field="recordDimension" style="display:none">
+        <label class="form-label field-gap am-scope-field" data-scope="record">
             Ranked by
             <select class="form-input" id="am-recordDimension">
                 <option value="firstToSubmit">First to submit</option>
@@ -419,18 +431,28 @@
                 <option value="shortest">Fewest attempts</option>
             </select>
         </label>
-        <label class="form-label field-gap am-field" data-field="attemptThreshold" style="display:none">
-            Attempts
-            <input type="number" class="form-input" id="am-attemptThreshold" min="1">
-        </label>
-        <label class="form-label field-gap am-field" data-field="timeThresholdMs" style="display:none">
-            Under (ms)
-            <input type="number" class="form-input" id="am-timeThresholdMs" min="1">
-        </label>
-        <label class="form-label field-gap am-field" data-field="jumpThresholdPercent" style="display:none">
-            Grade jump ≥ (points)
-            <input type="number" class="form-input" id="am-jumpThresholdPercent" min="1">
-        </label>
+    </template>
+
+    <!-- One condition row, cloned into #am-conditions per condition. -->
+    <template id="achievement-condition-template">
+        <div class="am-condition">
+            <select class="form-input am-cond-signal">
+                #for(opt in achievementSignalOptions):
+                <option value="#(opt.value)" data-unit="#(opt.unit)" data-is-test="#(opt.isTest)">#(opt.label)</option>
+                #endfor
+            </select>
+            <select class="form-input am-cond-comparator">
+                <option value="atLeast">at least</option>
+                <option value="atMost">at most</option>
+                <option value="equals">exactly</option>
+            </select>
+            <input type="number" class="form-input am-cond-value">
+            <span class="am-cond-unit"></span>
+            <input type="text" class="form-input am-cond-testref"
+                   placeholder="secrettest_x.py" style="display:none">
+            <button type="button" class="btn action-btn action-danger am-cond-remove"
+                    aria-label="Remove condition">&#215;</button>
+        </div>
     </template>
 </section>
 

@@ -19,10 +19,11 @@ import XCTVapor
         name: String, thresholdPercent: Double, classPercent: Double, points: Int
     ) -> PublishedAssignmentRoutes.AchievementInput {
         .init(
-            id: nil, name: name, kind: "classGoal", detail: nil,
-            thresholdPercent: thresholdPercent, classPercent: classPercent, points: points,
-            testName: nil, recordDimension: nil, attemptThreshold: nil,
-            timeThresholdMs: nil, jumpThresholdPercent: nil)
+            id: nil, name: name, detail: nil, scope: "classWide", match: "all",
+            conditions: [
+                .init(signal: "grade", comparator: "atLeast", value: thresholdPercent, testRef: nil)
+            ],
+            classPercent: classPercent, points: points, recordDimension: nil)
     }
 
     @Test func putAndGetClassGoalsRoundTrip() async throws {
@@ -52,10 +53,10 @@ import XCTVapor
             let setup = try #require(try await APITestSetup.find("cga_setup", on: app.db))
             let props = try JSONDecoder().decode(
                 TestProperties.self, from: Data(setup.manifest.utf8))
-            let goal = try #require(props.achievements.first { $0.kind == .classGoal })
+            let goal = try #require(props.achievements.first { $0.isClassGoal })
             #expect(goal.name == "80% Mastery")
             #expect(goal.scope == .classWide)
-            #expect(goal.threshold == 0.8)
+            #expect(goal.gradeThresholdFraction == 0.8)
             #expect(goal.classFraction == 0.8)
             #expect(goal.reward.type == .points)
             #expect(goal.reward.points == 5)
@@ -68,7 +69,7 @@ import XCTVapor
                     #expect(res.status == .ok)
                     let body = res.body.string
                     #expect(body.contains("80% Mastery"))
-                    #expect(body.contains("\"thresholdPercent\":80"))
+                    #expect(body.contains("\"signal\":\"grade\""))
                 })
         }
     }

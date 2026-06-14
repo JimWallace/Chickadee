@@ -416,7 +416,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             suiteStateJSON: suiteStateJSON(fromManifest: setup.manifest, zipPath: setup.zipPath),
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             globalVariableRows: globalVariableShellRows(fromManifest: setup.manifest),
-            achievementKindOptions: AchievementKindPresentation.all,
+            achievementSignalOptions: AchievementSignalPresentation.all,
             brightspaceSyncEnabled: req.application.brightSpaceClient != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             notice: q?.notice,

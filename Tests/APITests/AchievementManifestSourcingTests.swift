@@ -24,18 +24,24 @@ import Testing
         // and the registry defaults no longer apply (manifest is authoritative).
         let tight = [
             Achievement(
-                id: "lightning", name: "Lightning", kind: .speedRun, scope: .individual,
-                reward: AchievementReward(type: .badge, label: "Lightning"),
-                threshold: 1.0, timeThresholdMs: 500)
+                id: "lightning", name: "Lightning", scope: .individual,
+                conditions: [
+                    AchievementCondition(signal: .grade, comparator: .atLeast, value: 100),
+                    AchievementCondition(signal: .executionTimeMs, comparator: .atMost, value: 500),
+                ],
+                reward: AchievementReward(type: .badge, label: "Lightning"))
         ]
         #expect(AchievementBadge.forSubmission(ctx, achievements: tight).isEmpty)
 
         // A looser 3000 ms cutoff IS earned — and only the manifest badge shows.
         let loose = [
             Achievement(
-                id: "cruise", name: "Cruise", kind: .speedRun, scope: .individual,
-                reward: AchievementReward(type: .badge, label: "Cruise"),
-                threshold: 1.0, timeThresholdMs: 3_000)
+                id: "cruise", name: "Cruise", scope: .individual,
+                conditions: [
+                    AchievementCondition(signal: .grade, comparator: .atLeast, value: 100),
+                    AchievementCondition(signal: .executionTimeMs, comparator: .atMost, value: 3_000),
+                ],
+                reward: AchievementReward(type: .badge, label: "Cruise"))
         ]
         #expect(AchievementBadge.forSubmission(ctx, achievements: loose).map(\.id) == ["cruise"])
     }
@@ -44,9 +50,12 @@ import Testing
         // A "persistence" badge tuned to ≥ 3 attempts fires on attempt 3.
         let persistent = [
             Achievement(
-                id: "grit", name: "Grit", kind: .persistence, scope: .individual,
-                reward: AchievementReward(type: .badge, label: "Grit"),
-                threshold: 1.0, attemptThreshold: 3)
+                id: "grit", name: "Grit", scope: .individual,
+                conditions: [
+                    AchievementCondition(signal: .grade, comparator: .atLeast, value: 100),
+                    AchievementCondition(signal: .attempts, comparator: .atLeast, value: 3),
+                ],
+                reward: AchievementReward(type: .badge, label: "Grit"))
         ]
         let onThird = BadgeContext(
             attemptNumber: 3, gradePercent: 100, executionTimeMs: 9_000, priorGradePercent: 100)
