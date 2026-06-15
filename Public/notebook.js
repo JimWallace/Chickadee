@@ -1046,8 +1046,21 @@
 
         resultsEl.hidden = false;
 
-        // Scroll results into view so student sees feedback immediately.
-        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Scroll to the first test the student still needs to fix — usually the
+        // question they are actively working on — rather than the top of the
+        // results.  We target the first failing/error/timeout row, ignoring
+        // dependency-skipped rows (those are downstream of an actual failure,
+        // which is the better landing spot).  When everything passes there is
+        // nothing to fix, so fall back to the top of the results so the student
+        // sees the all-green summary.
+        const firstUnresolved = resultsEl.querySelector(
+            'tr.status-fail, tr.status-error, tr.status-timeout'
+        );
+        if (firstUnresolved) {
+            firstUnresolved.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 
     // Group outcomes for display via the browser runner's shared helper, with a
