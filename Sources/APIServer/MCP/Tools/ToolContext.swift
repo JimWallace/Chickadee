@@ -32,7 +32,14 @@ struct ToolContext {
         self.actingClientName = actingClientName
     }
 
-    var db: any Database { request.db }
+    /// The database the MCP tool surface runs on. When a dedicated
+    /// least-privilege pool is configured (`MCP_DATABASE_USER`/`PASSWORD`), every
+    /// MCP query goes through it (`DatabaseID.mcp`) so the student-data wall is
+    /// enforced by the DB role, not only the in-process boundary. Otherwise it
+    /// falls back to the shared default pool.
+    var db: any Database {
+        request.application.usesDedicatedMCPDatabase ? request.db(.mcp) : request.db
+    }
     var logger: Logger { request.logger }
 
     /// Resolves the token subject and confirms it may use the MCP interface at

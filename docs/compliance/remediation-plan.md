@@ -12,7 +12,7 @@ infrastructure or policy decision (noted per item).
 
 | Item | Status | Notes |
 |------|--------|-------|
-| P0-1 | **Done** (option 1) | `MCPStudentDataBoundary` chokepoint + wall guard test. Option 2 (DB role) deferred — needs DB provisioning. |
+| P0-1 | **Done** | Option 1: `MCPStudentDataBoundary` chokepoint + wall guard test (in-process). Option 2: dedicated least-privilege DB pool seam (`MCP_DATABASE_USER`/`PASSWORD`) + `deploy/sql/mcp-least-privilege-role.sql`; operator provisions the role. |
 | P0-2 | **Done** | `MCPAuthorizationCoverageTests` source-scan guard. |
 | P0-3 | **Done** | `.mcp-signing-key` git-ignored; rotation documented in `deploy/README.md`. |
 | P1-1 | **Done** | Audit records outcome + target resource; arguments still never logged. |
