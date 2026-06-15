@@ -269,8 +269,11 @@ struct MCPRoutes: RouteCollection {
         }
 
         // Audit the call here, since the generic dispatcher (which normally does)
-        // is bypassed for the streaming path.
-        await dispatcher.auditToolCall(name: ValidateAssignmentTool.name, context: context)
+        // is bypassed for the streaming path. The outcome is delivered over SSE
+        // after the watch, so only the target resource is recorded here.
+        await dispatcher.auditToolCall(
+            name: ValidateAssignmentTool.name, context: context,
+            target: MCPAuditTarget(type: .assignment, id: assignment.publicID))
 
         let application = req.application
         let id = rpc.id ?? .null

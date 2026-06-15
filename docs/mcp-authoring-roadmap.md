@@ -21,8 +21,15 @@ The original vertical slice (two tools, proving the auth/transport/dispatch
 pipeline) has grown into the full feature. The live tool catalog
 (`MCPToolCatalog.live` in
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) now ships
-thirty-four tools, all `content:read` / `content:write` scoped and
-course-scoped:
+thirty-six tools, all `content:read` / `content:write` scoped and
+course-scoped. `MCPToolCatalog.live` is the source of truth for the count —
+prefer it over any prose figure, which can drift.
+
+> Security & privacy posture for the UW Information Risk Assessment is audited
+> in [`docs/compliance/`](compliance/ira-audit-report.md) (tool inventory,
+> data-flow, student-data wall, Policy 46 classification, trust boundary).
+
+The catalog:
 
 | Tool | Scope | Capability |
 |------|-------|------------|

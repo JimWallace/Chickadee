@@ -274,6 +274,43 @@ Short outage behavior:
 
 See `docs/runner-capability-profiles.md` for rollout notes and troubleshooting.
 
+### MCP content-authoring server
+
+The MCP server (the `/mcp` endpoint an AI agent connects to) is **off by
+default**. Enable it only when you intend to let an authorized agent author
+course content on an instructor's behalf:
+
+```bash
+# .env
+MCP_MODE=read_only      # inspection only; content:write never honored
+# MCP_MODE=read_write   # full content authoring
+
+# DNS-rebinding guards — set BOTH in production to this deployment's public
+# host and origin. Left unset they default to "allow any" and the server logs
+# a startup warning.
+MCP_ALLOWED_HOSTS=chickadee.example.com
+MCP_ALLOWED_ORIGINS=https://chickadee.example.com
+```
+
+The MCP server **never** calls an external model API — it is the server an
+agent connects *to*. It also never exposes student submissions, grades, or
+roster data; see `docs/compliance/ira-audit-report.md` for the full posture.
+
+**Signing-key rotation.** MCP access tokens are ES256 JWTs signed with a key
+auto-generated on first start at `MCP_SIGNING_KEY_PATH` (default
+`.mcp-signing-key`, mode 0600, and git-ignored). To rotate:
+
+```bash
+# Stop the server, remove the key, restart — a fresh key is minted on boot.
+rm -f /data/.mcp-signing-key
+# Restart the server.
+```
+
+Rotation invalidates every in-flight access token (they fail closed on the next
+call); agents transparently re-acquire a token via the OAuth refresh flow, so
+the only user-visible effect is a one-time re-auth if a refresh token has also
+expired. Never commit `.mcp-signing-key`.
+
 ### Data persistence
 
 All persistent data lives in the `chickadee-data` named volume:

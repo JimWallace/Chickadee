@@ -16,6 +16,7 @@ Tools/jupyterlite/.jupyterlite.doit.db
 # Local runtime state / secrets
 .local-runner-autostart
 .worker-secret
+.mcp-signing-key
 .env
 chickadee*.sqlite
 chickadee*.sqlite3
