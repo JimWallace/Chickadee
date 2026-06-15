@@ -16,7 +16,7 @@ infrastructure or policy decision (noted per item).
 | P0-2 | **Done** | `MCPAuthorizationCoverageTests` source-scan guard. |
 | P0-3 | **Done** | `.mcp-signing-key` git-ignored; rotation documented in `deploy/README.md`. |
 | P1-1 | **Done** | Audit records outcome + target resource; arguments still never logged. |
-| P1-2 | **In progress** | Policy chosen: write tools fail closed if their audit row can't persist; reads degrade best-effort with an error marker. |
+| P1-2 | **Done** | Write tools fail closed if their audit row can't persist; reads degrade best-effort with a logged marker. |
 | P1-3 | **Done** | Solution-resolver guard test (answer key read only via `get_solution`). |
 | P2-1 | **Done** (artifact) | `deploy/egress-allowlist.md` documents the Squid / nftables / NetworkPolicy options; operator applies it. |
 | P2-2 | **Done** | Production refuses to mount `/mcp` with open Host/Origin guards unless `MCP_ALLOW_OPEN_GUARDS=true`. |
