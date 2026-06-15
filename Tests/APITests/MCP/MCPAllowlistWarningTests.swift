@@ -43,4 +43,39 @@ import Vapor
                     == nil)
         }
     }
+
+    // MARK: - Refuse-to-mount (P2-2)
+
+    @Test func refusesInProductionWhenAGuardIsOpen() throws {
+        let reason = try #require(
+            mcpTransportGuardRefusal(
+                environment: .production, allowedHosts: [], allowedOrigins: ["https://claude.ai"],
+                allowOpenGuards: false))
+        #expect(reason.contains("Refusing to mount /mcp"))
+        #expect(reason.contains("MCP_ALLOWED_HOSTS"))
+    }
+
+    @Test func allowsInProductionWhenOverrideSet() {
+        // Operator opts in (e.g. a trusted proxy pins Host/Origin): mount, do not refuse.
+        #expect(
+            mcpTransportGuardRefusal(
+                environment: .production, allowedHosts: [], allowedOrigins: [],
+                allowOpenGuards: true) == nil)
+    }
+
+    @Test func allowsInProductionWhenBothGuardsSet() {
+        #expect(
+            mcpTransportGuardRefusal(
+                environment: .production, allowedHosts: ["chickadee.example.com"],
+                allowedOrigins: ["https://claude.ai"], allowOpenGuards: false) == nil)
+    }
+
+    @Test func neverRefusesOutsideProduction() {
+        for environment in [Environment.development, .testing] {
+            #expect(
+                mcpTransportGuardRefusal(
+                    environment: environment, allowedHosts: [], allowedOrigins: [],
+                    allowOpenGuards: false) == nil)
+        }
+    }
 }
