@@ -20,6 +20,14 @@ struct DatabaseSettings: Sendable {
     let postgresUsername: String?
     let postgresPassword: String?
     let postgresSearchPath: [String]?
+    /// Optional least-privilege role for the MCP path (postgres only). When both
+    /// are set, a second connection pool is registered under `DatabaseID.mcp`
+    /// using these credentials against the same host/database, and the MCP tool
+    /// surface uses it — so a restricted DB role (no access to student tables)
+    /// enforces the student-data wall at the database layer, independent of the
+    /// in-process boundary. nil → the MCP path shares the main pool.
+    let postgresMCPUsername: String?
+    let postgresMCPPassword: String?
 
     static func fromEnvironment(defaultSQLitePath: String) throws -> Self {
         let backend: DatabaseBackend
@@ -62,7 +70,9 @@ struct DatabaseSettings: Sendable {
                 port: port,
                 database: database,
                 username: username,
-                password: password
+                password: password,
+                mcpUsername: trimmedEnv("MCP_DATABASE_USER"),
+                mcpPassword: trimmedEnv("MCP_DATABASE_PASSWORD")
             )
         }
     }
@@ -77,7 +87,9 @@ struct DatabaseSettings: Sendable {
             postgresDatabase: nil,
             postgresUsername: nil,
             postgresPassword: nil,
-            postgresSearchPath: nil
+            postgresSearchPath: nil,
+            postgresMCPUsername: nil,
+            postgresMCPPassword: nil
         )
     }
 
@@ -91,7 +103,9 @@ struct DatabaseSettings: Sendable {
             postgresDatabase: nil,
             postgresUsername: nil,
             postgresPassword: nil,
-            postgresSearchPath: nil
+            postgresSearchPath: nil,
+            postgresMCPUsername: nil,
+            postgresMCPPassword: nil
         )
     }
 
@@ -101,7 +115,9 @@ struct DatabaseSettings: Sendable {
         database: String,
         username: String,
         password: String,
-        searchPath: [String]? = nil
+        searchPath: [String]? = nil,
+        mcpUsername: String? = nil,
+        mcpPassword: String? = nil
     ) -> Self {
         .init(
             backend: .postgres,
@@ -112,7 +128,9 @@ struct DatabaseSettings: Sendable {
             postgresDatabase: database,
             postgresUsername: username,
             postgresPassword: password,
-            postgresSearchPath: searchPath
+            postgresSearchPath: searchPath,
+            postgresMCPUsername: mcpUsername,
+            postgresMCPPassword: mcpPassword
         )
     }
 }
@@ -130,6 +148,24 @@ enum DatabaseConfigurationError: Error, LocalizedError {
 
 extension DatabaseID {
     static let chickadee = DatabaseID(string: "chickadee")
+    /// Optional dedicated pool for the MCP path, backed by a least-privilege
+    /// Postgres role (see `deploy/sql/mcp-least-privilege-role.sql`). Registered
+    /// only when `MCP_DATABASE_USER`/`MCP_DATABASE_PASSWORD` are set.
+    static let mcp = DatabaseID(string: "mcp")
+}
+
+private struct UsesDedicatedMCPDatabaseKey: StorageKey {
+    typealias Value = Bool
+}
+
+extension Application {
+    /// True when a dedicated least-privilege MCP database pool (`DatabaseID.mcp`)
+    /// is registered. When false, the MCP path shares the main pool. The MCP tool
+    /// surface reads this to choose its connection (see `ToolContext.db`).
+    var usesDedicatedMCPDatabase: Bool {
+        get { storage[UsesDedicatedMCPDatabaseKey.self] ?? false }
+        set { storage[UsesDedicatedMCPDatabaseKey.self] = newValue }
+    }
 }
 
 func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
@@ -178,6 +214,28 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             as: .chickadee,
             isDefault: true
         )
+
+        // Optional: a second pool for the MCP path backed by a least-privilege
+        // role (no access to student tables). Same host/database/search_path,
+        // different credentials. When unset, MCP shares the main pool above.
+        if let mcpUsername = settings.postgresMCPUsername,
+            let mcpPassword = settings.postgresMCPPassword
+        {
+            var mcpConfiguration = SQLPostgresConfiguration(
+                hostname: host,
+                port: port,
+                username: mcpUsername,
+                password: mcpPassword,
+                database: database,
+                tls: .disable
+            )
+            if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
+                mcpConfiguration.searchPath = searchPath
+            }
+            app.databases.use(.postgres(configuration: mcpConfiguration), as: .mcp)
+            app.usesDedicatedMCPDatabase = true
+            app.logger.info("MCP database: dedicated least-privilege role \(mcpUsername) in use")
+        }
     }
 }
 

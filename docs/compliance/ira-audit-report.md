@@ -154,11 +154,18 @@ roster PII" is **not demonstrable from configuration** today. It is true of the
 current code by convention. The brief's bar — architectural enforcement, not a
 comment — is **not yet met.**
 
-**Remediation:** `remediation-plan.md` P0-1 — a repository boundary
-(`AuthoringStore`) that physically excludes student models from the MCP path
-(compile-time wall), and/or a least-privilege DB role with no `SELECT` on
-student tables (deployment-time wall). Recommended: do the repository boundary
-first (in-repo, reviewer-verifiable), add the DB role as defence in depth.
+**Remediation landed:** both forms now exist. (1) In-process boundary —
+`MCPStudentDataBoundary` is the single validation-filtered accessor to the
+`submissions`/`results` tables, and `MCPStudentDataWallTests` fails the build if
+any tool handler names a student-data model directly (a compile-/test-time
+wall, verifiable from the repo). (2) Deployment-time DB wall — an optional
+dedicated connection pool (`MCP_DATABASE_USER`/`MCP_DATABASE_PASSWORD`,
+`DatabaseID.mcp`) lets the MCP path run as a least-privilege role with **no**
+access to student tables and validation-only RLS on `submissions`/`results`
+(`deploy/sql/mcp-least-privilege-role.sql`); the content-edit re-grade was moved
+to the privileged pool so the role can fully wall off student submissions
+without breaking auto-regrade. The operator provisions the role; the in-process
+boundary is enforced unconditionally.
 
 ---
 
@@ -281,8 +288,10 @@ destinations are:
 makes no model call. No telemetry, analytics, or runtime CDN fetches were found
 (browser libraries are vendored, per `CLAUDE.md`). The gap is that egress
 restriction is left entirely to the network layer with no artifact in the repo
-to verify. Remediation: `remediation-plan.md` P2-1 (deployment-layer allowlist
-limited to the five destinations above; explicitly *no* model endpoint).
+to verify. **Remediation landed:** `deploy/egress-allowlist.md` now documents
+the deployment-layer allowlist (Squid / nftables / NetworkPolicy options)
+limited to the five destinations above — explicitly *no* model endpoint — for
+the operator to apply in the hosting environment.
 
 ---
 

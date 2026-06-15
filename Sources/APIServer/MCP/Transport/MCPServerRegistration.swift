@@ -97,6 +97,18 @@ func registerMCPRoutes(_ app: Application) throws {
         return
     }
 
+    // Fail safe: in production, refuse to mount the transport with the
+    // DNS-rebinding guards left open, unless an operator has explicitly opted in
+    // (e.g. a trusted proxy pins Host/Origin).
+    if let refusal = mcpTransportGuardRefusal(
+        environment: app.environment,
+        allowedHosts: mcp.allowedHosts,
+        allowedOrigins: mcp.allowedOrigins,
+        allowOpenGuards: mcp.allowOpenTransportGuards)
+    {
+        app.logger.error("\(refusal)")
+        return
+    }
     if let warning = mcpAllowlistWarning(
         environment: app.environment,
         allowedHosts: mcp.allowedHosts,
@@ -173,22 +185,46 @@ func registerMCPOAuthRoutes(
         "MCP browser OAuth flow mounted at /oauth/{authorize,token,revoke,register}")
 }
 
+/// The DNS-rebinding guard env-var names that are unset (empty allowlist means
+/// "allow any" — see MCPRoutes.Configuration).
+func mcpUnsetGuardNames(allowedHosts: Set<String>, allowedOrigins: Set<String>) -> [String] {
+    var unset: [String] = []
+    if allowedHosts.isEmpty { unset.append("MCP_ALLOWED_HOSTS") }
+    if allowedOrigins.isEmpty { unset.append("MCP_ALLOWED_ORIGINS") }
+    return unset
+}
+
 /// The operator-facing warning to log when the MCP transport is being mounted
-/// in production with one or both DNS-rebinding guards disabled (an empty
-/// allowlist means "allow any" — see MCPRoutes.Configuration).  Nil when both
+/// in production with one or both DNS-rebinding guards disabled.  Nil when both
 /// are configured, or in non-production environments where empty allowlists
-/// are the normal development default.
+/// are the normal development default.  (When the guards are open in production
+/// *without* the `allowOpenGuards` override, `mcpTransportGuardRefusal` blocks
+/// the mount before this warning would ever apply.)
 func mcpAllowlistWarning(
     environment: Environment, allowedHosts: Set<String>, allowedOrigins: Set<String>
 ) -> String? {
     guard environment == .production else { return nil }
-    var unset: [String] = []
-    if allowedHosts.isEmpty { unset.append("MCP_ALLOWED_HOSTS") }
-    if allowedOrigins.isEmpty { unset.append("MCP_ALLOWED_ORIGINS") }
+    let unset = mcpUnsetGuardNames(allowedHosts: allowedHosts, allowedOrigins: allowedOrigins)
     guard !unset.isEmpty else { return nil }
     return "MCP transport mounted with \(unset.joined(separator: " and ")) unset — "
         + "the Host/Origin DNS-rebinding guards are disabled. Set them to this "
         + "deployment's public host and origin."
+}
+
+/// The reason to REFUSE mounting `/mcp`: production, a guard left open, and no
+/// explicit `MCP_ALLOW_OPEN_GUARDS` override.  Nil means it is safe to mount
+/// (possibly still emitting `mcpAllowlistWarning` when overridden).  Outside
+/// production, or with the override set, an open guard is allowed.
+func mcpTransportGuardRefusal(
+    environment: Environment, allowedHosts: Set<String>, allowedOrigins: Set<String>,
+    allowOpenGuards: Bool
+) -> String? {
+    guard environment == .production, !allowOpenGuards else { return nil }
+    let unset = mcpUnsetGuardNames(allowedHosts: allowedHosts, allowedOrigins: allowedOrigins)
+    guard !unset.isEmpty else { return nil }
+    return "Refusing to mount /mcp: \(unset.joined(separator: " and ")) unset in production. "
+        + "The Host/Origin DNS-rebinding guards must be configured, or set "
+        + "MCP_ALLOW_OPEN_GUARDS=true if a trusted reverse proxy pins Host/Origin."
 }
 
 private extension String {

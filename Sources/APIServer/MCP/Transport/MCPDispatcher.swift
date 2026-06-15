@@ -207,6 +207,22 @@ struct MCPDispatcher: Sendable {
         // call is still attributed to what it acted on. Only the identifier is
         // captured here — never the argument values.
         let target = MCPAuditTarget(arguments: call.arguments)
+
+        // Fail closed for writes: a state-changing tool must not run unless its
+        // audit record is durably persisted first. Read tools stay best-effort
+        // (a read that can't be audited still degrades to a logged marker, but
+        // is not blocked).
+        var writeAuditRow: APIAuditLogEntry?
+        if tool.requiredScopes.contains(.write) {
+            writeAuditRow = await recordToolCall(name: call.name, context: context, target: target)
+            guard writeAuditRow != nil else {
+                return .failure(
+                    id: id,
+                    error: .internalError(
+                        "Refusing to run \(call.name): its audit record could not be persisted."))
+            }
+        }
+
         let response: JSONRPCResponse
         let outcome: MCPToolOutcome
         do {
@@ -222,22 +238,31 @@ struct MCPDispatcher: Sendable {
             outcome = .failed
             response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
         }
-        // Audit every authorized tool call as the human subject, attributed to
-        // the acting agent, recording the target resource and the outcome.
-        await auditToolCall(name: call.name, context: context, target: target, outcome: outcome)
+
+        if let writeAuditRow {
+            // Stamp the outcome onto the row already persisted before the write.
+            await AuditLogger.updateMetadata(
+                writeAuditRow, merging: ["outcome": outcome.rawValue], on: context.request)
+        } else {
+            // Read tool: one best-effort row carrying the outcome.
+            _ = await recordToolCall(
+                name: call.name, context: context, target: target, outcome: outcome)
+        }
         return response
     }
 
-    /// Records an `mcp.tool_called` audit entry. The actor is the token subject
-    /// suffixed with `-MCP` (e.g. `jsmith-MCP`) so agent-made changes are
-    /// tracked separately from the human's own web actions in the admin audit
-    /// log; the acting agent is in `via_agent` when present. The target resource
-    /// (assignment public ID or course code) and the call outcome are recorded
-    /// when known. Never logs tool arguments.
-    func auditToolCall(
+    /// Records an `mcp.tool_called` audit entry and returns the persisted row
+    /// (nil if the write failed). The actor is the token subject suffixed with
+    /// `-MCP` (e.g. `jsmith-MCP`) so agent-made changes are tracked separately
+    /// from the human's own web actions in the admin audit log; the acting agent
+    /// is in `via_agent` when present. The target resource (assignment public ID
+    /// or course code) and, when known, the outcome are recorded. Never logs
+    /// tool arguments.
+    @discardableResult
+    func recordToolCall(
         name: String, context: ToolContext,
         target: MCPAuditTarget? = nil, outcome: MCPToolOutcome? = nil
-    ) async {
+    ) async -> APIAuditLogEntry? {
         var metadata = ["tool": name]
         if let agent = context.actingClientName {
             metadata["via_agent"] = agent
@@ -245,13 +270,22 @@ struct MCPDispatcher: Sendable {
         if let outcome {
             metadata["outcome"] = outcome.rawValue
         }
-        await AuditLogger.record(
+        return await AuditLogger.recordReturning(
             action: .mcpToolCalled,
             targetType: target?.type,
             targetID: target?.id,
             metadata: metadata,
             actorUsernameOverride: "\(context.subject)-MCP",
             on: context.request)
+    }
+
+    /// Best-effort audit used by the streaming `validate_assignment` path (a read
+    /// tool, so no fail-closed): records the call without propagating failure.
+    func auditToolCall(
+        name: String, context: ToolContext,
+        target: MCPAuditTarget? = nil, outcome: MCPToolOutcome? = nil
+    ) async {
+        _ = await recordToolCall(name: name, context: context, target: target, outcome: outcome)
     }
 
     private func successToolResult(_ structured: JSONValue) -> JSONValue {

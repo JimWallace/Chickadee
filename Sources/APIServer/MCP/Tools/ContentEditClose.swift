@@ -49,8 +49,13 @@ func closeOpenAssignmentForContentEdit(
 func retestSubmissionsAfterContentEdit(setup: APITestSetup, context: ToolContext) async -> Int {
     do {
         let actingUser = try await context.requireEligibleSubject(tool: "retest")
+        // Re-queue runs on the privileged default pool, not the MCP pool: it
+        // reads and flips STUDENT submission rows (a system regrade, not
+        // agent-facing data access), so it must not depend on the MCP path's
+        // (optionally least-privilege) connection. With no dedicated MCP pool
+        // configured this is the same connection, so behaviour is unchanged.
         return try await retestSubmissionsIfManifestChanged(
-            setup: setup, triggeredBy: actingUser.id, on: context.db)
+            setup: setup, triggeredBy: actingUser.id, on: context.request.db)
     } catch {
         context.logger.warning("retestSubmissionsAfterContentEdit failed: \(error)")
         return 0

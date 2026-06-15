@@ -43,6 +43,13 @@ struct MCPConfig: Sendable {
     var maxRegisteredClients: Int
     /// Cap on `redirect_uris` accepted in a single registration.  Default 5.
     var maxRedirectURIsPerClient: Int
+    /// Allow `/mcp` to mount in production even when the Host/Origin
+    /// DNS-rebinding guards (`allowedHosts` / `allowedOrigins`) are empty.
+    /// Default false: production refuses to mount the transport with the guards
+    /// open, since "allow any" defeats the rebinding protection.  Set
+    /// `MCP_ALLOW_OPEN_GUARDS=true` only when another layer (e.g. a trusted
+    /// reverse proxy that pins Host/Origin) provides the same protection.
+    var allowOpenTransportGuards: Bool
 
     init(
         mode: MCPMode,
@@ -56,7 +63,8 @@ struct MCPConfig: Sendable {
         grantTTLDays: Int = 120,
         oauthRateLimitPerMin: Int = 30,
         maxRegisteredClients: Int = 1000,
-        maxRedirectURIsPerClient: Int = 5
+        maxRedirectURIsPerClient: Int = 5,
+        allowOpenTransportGuards: Bool = false
     ) {
         self.mode = mode
         self.allowedHosts = allowedHosts
@@ -70,6 +78,7 @@ struct MCPConfig: Sendable {
         self.oauthRateLimitPerMin = oauthRateLimitPerMin
         self.maxRegisteredClients = maxRegisteredClients
         self.maxRedirectURIsPerClient = maxRedirectURIsPerClient
+        self.allowOpenTransportGuards = allowOpenTransportGuards
     }
 
     static func fromEnvironment(workDir: String) -> MCPConfig {
@@ -85,7 +94,8 @@ struct MCPConfig: Sendable {
             grantTTLDays: environmentInt("MCP_GRANT_TTL_DAYS") ?? 120,
             oauthRateLimitPerMin: max(1, environmentInt("MCP_OAUTH_RATE_LIMIT_PER_MIN") ?? 30),
             maxRegisteredClients: max(1, environmentInt("MCP_MAX_REGISTERED_CLIENTS") ?? 1000),
-            maxRedirectURIsPerClient: max(1, environmentInt("MCP_MAX_REDIRECT_URIS") ?? 5)
+            maxRedirectURIsPerClient: max(1, environmentInt("MCP_MAX_REDIRECT_URIS") ?? 5),
+            allowOpenTransportGuards: environmentBool("MCP_ALLOW_OPEN_GUARDS") ?? false
         )
     }
 
