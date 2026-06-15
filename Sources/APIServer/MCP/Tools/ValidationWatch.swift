@@ -98,7 +98,7 @@ private func currentValidationPhase(
     }
     // Not terminal: distinguish "queued" from "running" via the submission row.
     if let subID = assignment.validationSubmissionID,
-        let submission = try await APISubmission.find(subID, on: db)
+        let submission = try await MCPStudentDataBoundary.validationSubmission(byID: subID, on: db)
     {
         switch submission.status {
         case SubmissionStatus.assigned.rawValue, SubmissionStatus.running.rawValue: return (status, .running)

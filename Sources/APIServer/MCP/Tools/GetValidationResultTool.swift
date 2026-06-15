@@ -114,7 +114,9 @@ struct GetValidationResultTool: ContentTool {
             publicID: input.assignmentPublicID, tool: Self.name)
         let status = assignment.validationStatus ?? "none"
 
-        guard let submission = try await resolveValidationSubmission(assignment: assignment, on: context.db)
+        guard
+            let submission = try await MCPStudentDataBoundary.validationSubmission(
+                for: assignment, on: context.db)
         else {
             return Self.empty(assignmentPublicID: assignment.publicID, validationStatus: status)
         }
@@ -122,10 +124,8 @@ struct GetValidationResultTool: ContentTool {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard
-            let result = try await APIResult.query(on: context.db)
-                .filter(\.$submissionID == submission.requireID())
-                .sort(\.$receivedAt, .descending)
-                .first(),
+            let result = try await MCPStudentDataBoundary.latestResult(
+                forSubmissionID: submission.requireID(), on: context.db),
             let data = result.collectionJSON.data(using: .utf8),
             let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
         else {
@@ -156,27 +156,6 @@ struct GetValidationResultTool: ContentTool {
                 fail: collection.failCount,
                 error: collection.errorCount,
                 timeout: collection.timeoutCount))
-    }
-
-    /// Resolves the assignment's validation (reference-solution) submission,
-    /// never a student one: the linked validation submission if present and
-    /// still `kind == .validation`, else the most recent `.validation`
-    /// submission for the setup. Mirrors `loadExistingSolution`'s resolver,
-    /// filtered to validation submissions.
-    private func resolveValidationSubmission(
-        assignment: APIAssignment, on db: any Database
-    ) async throws -> APISubmission? {
-        if let validationID = assignment.validationSubmissionID,
-            let linked = try await APISubmission.find(validationID, on: db),
-            linked.kind == APISubmission.Kind.validation
-        {
-            return linked
-        }
-        return try await APISubmission.query(on: db)
-            .filter(\.$testSetupID == assignment.testSetupID)
-            .filter(\.$kind == APISubmission.Kind.validation)
-            .sort(\.$submittedAt, .descending)
-            .first()
     }
 
     /// The pending / no-result-yet response: the current status with no outcomes
