@@ -3,7 +3,24 @@
 Prioritised remediation for the findings in `ira-audit-report.md`. **P0** =
 student-data wall / authz / secrets; **P1** = audit logging / payload
 minimisation; **P2** = docs & polish. Each item states the concrete change and
-its acceptance criteria. No code has been changed yet (Phase 1 is read-only).
+its acceptance criteria.
+
+## Implementation status (this branch)
+
+The in-repo items have been implemented; the split items await an
+infrastructure or policy decision (noted per item).
+
+| Item | Status | Notes |
+|------|--------|-------|
+| P0-1 | **Done** (option 1) | `MCPStudentDataBoundary` chokepoint + wall guard test. Option 2 (DB role) deferred — needs DB provisioning. |
+| P0-2 | **Done** | `MCPAuthorizationCoverageTests` source-scan guard. |
+| P0-3 | **Done** | `.mcp-signing-key` git-ignored; rotation documented in `deploy/README.md`. |
+| P1-1 | **Done** | Audit records outcome + target resource; arguments still never logged. |
+| P1-2 | **Deferred** | Needs the fail-closed vs best-effort policy decision (Steward). |
+| P1-3 | **Done** | Solution-resolver guard test (answer key read only via `get_solution`). |
+| P2-1 | **Deferred** | Deployment-layer egress allowlist — infra artifact + deploy. |
+| P2-2 | **Partial** | Env templates document the Host/Origin guards; flipping prod to refuse-to-mount left as a deployment policy call. |
+| P2-3 | **Done** | Compliance docs cross-linked; tool count corrected to 36. |
 
 Status legend: the **current state** of each control is in `ira-audit-report.md`.
 Items marked *(verify-only)* found no defect — the work is to add a test/doc
