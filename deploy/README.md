@@ -295,6 +295,8 @@ MCP_ALLOWED_ORIGINS=https://chickadee.example.com
 The MCP server **never** calls an external model API — it is the server an
 agent connects *to*. It also never exposes student submissions, grades, or
 roster data; see `docs/compliance/ira-audit-report.md` for the full posture.
+Restrict the server's *outbound* traffic at the deployment layer following
+[egress-allowlist.md](egress-allowlist.md).
 
 **Signing-key rotation.** MCP access tokens are ES256 JWTs signed with a key
 auto-generated on first start at `MCP_SIGNING_KEY_PATH` (default

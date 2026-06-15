@@ -281,8 +281,10 @@ destinations are:
 makes no model call. No telemetry, analytics, or runtime CDN fetches were found
 (browser libraries are vendored, per `CLAUDE.md`). The gap is that egress
 restriction is left entirely to the network layer with no artifact in the repo
-to verify. Remediation: `remediation-plan.md` P2-1 (deployment-layer allowlist
-limited to the five destinations above; explicitly *no* model endpoint).
+to verify. **Remediation landed:** `deploy/egress-allowlist.md` now documents
+the deployment-layer allowlist (Squid / nftables / NetworkPolicy options)
+limited to the five destinations above — explicitly *no* model endpoint — for
+the operator to apply in the hosting environment.
 
 ---
 

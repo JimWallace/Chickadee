@@ -16,10 +16,10 @@ infrastructure or policy decision (noted per item).
 | P0-2 | **Done** | `MCPAuthorizationCoverageTests` source-scan guard. |
 | P0-3 | **Done** | `.mcp-signing-key` git-ignored; rotation documented in `deploy/README.md`. |
 | P1-1 | **Done** | Audit records outcome + target resource; arguments still never logged. |
-| P1-2 | **Deferred** | Needs the fail-closed vs best-effort policy decision (Steward). |
+| P1-2 | **In progress** | Policy chosen: write tools fail closed if their audit row can't persist; reads degrade best-effort with an error marker. |
 | P1-3 | **Done** | Solution-resolver guard test (answer key read only via `get_solution`). |
-| P2-1 | **Deferred** | Deployment-layer egress allowlist — infra artifact + deploy. |
-| P2-2 | **Partial** | Env templates document the Host/Origin guards; flipping prod to refuse-to-mount left as a deployment policy call. |
+| P2-1 | **Done** (artifact) | `deploy/egress-allowlist.md` documents the Squid / nftables / NetworkPolicy options; operator applies it. |
+| P2-2 | **Done** | Production refuses to mount `/mcp` with open Host/Origin guards unless `MCP_ALLOW_OPEN_GUARDS=true`. |
 | P2-3 | **Done** | Compliance docs cross-linked; tool count corrected to 36. |
 
 Status legend: the **current state** of each control is in `ira-audit-report.md`.
