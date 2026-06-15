@@ -203,33 +203,52 @@ struct MCPDispatcher: Sendable {
             let required = tool.requiredScopes.map(\.rawValue).sorted().joined(separator: " ")
             return .failure(id: id, error: .insufficientScope(required))
         }
-        // Audit every authorized tool call as the human subject, attributed to
-        // the acting agent (when the token carries one).
-        await auditToolCall(name: call.name, context: context)
+        // Resolve the target resource from the arguments up front so a failing
+        // call is still attributed to what it acted on. Only the identifier is
+        // captured here — never the argument values.
+        let target = MCPAuditTarget(arguments: call.arguments)
+        let response: JSONRPCResponse
+        let outcome: MCPToolOutcome
         do {
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
-            return .success(id: id, result: successToolResult(output))
+            outcome = .success
+            response = .success(id: id, result: successToolResult(output))
         } catch let error as MCPToolError {
             // Tool-originated failures are reported inside the result with
             // isError:true so the model can see and correct them.
-            return .success(id: id, result: errorToolResult(error))
+            outcome = MCPToolOutcome(error)
+            response = .success(id: id, result: errorToolResult(error))
         } catch {
-            return .failure(id: id, error: .internalError("Tool \(call.name) failed."))
+            outcome = .failed
+            response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
         }
+        // Audit every authorized tool call as the human subject, attributed to
+        // the acting agent, recording the target resource and the outcome.
+        await auditToolCall(name: call.name, context: context, target: target, outcome: outcome)
+        return response
     }
 
     /// Records an `mcp.tool_called` audit entry. The actor is the token subject
     /// suffixed with `-MCP` (e.g. `jsmith-MCP`) so agent-made changes are
     /// tracked separately from the human's own web actions in the admin audit
-    /// log; the acting agent is in `via_agent` when present. Never logs tool
-    /// arguments.
-    func auditToolCall(name: String, context: ToolContext) async {
+    /// log; the acting agent is in `via_agent` when present. The target resource
+    /// (assignment public ID or course code) and the call outcome are recorded
+    /// when known. Never logs tool arguments.
+    func auditToolCall(
+        name: String, context: ToolContext,
+        target: MCPAuditTarget? = nil, outcome: MCPToolOutcome? = nil
+    ) async {
         var metadata = ["tool": name]
         if let agent = context.actingClientName {
             metadata["via_agent"] = agent
         }
+        if let outcome {
+            metadata["outcome"] = outcome.rawValue
+        }
         await AuditLogger.record(
             action: .mcpToolCalled,
+            targetType: target?.type,
+            targetID: target?.id,
             metadata: metadata,
             actorUsernameOverride: "\(context.subject)-MCP",
             on: context.request)
@@ -303,4 +322,51 @@ func mcpToolSuccessResult(_ structured: JSONValue) -> JSONValue {
         "structuredContent": structured,
         "isError": .bool(false),
     ])
+}
+
+/// Classification of a tool call's outcome, recorded in the audit metadata so a
+/// reviewer can see whether a call succeeded or failed without the tool ever
+/// logging its arguments.
+enum MCPToolOutcome: String, Sendable {
+    case success
+    case invalidArguments = "invalid_arguments"
+    case notAuthorized = "not_authorized"
+    case executionFailed = "execution_failed"
+    case failed
+
+    init(_ error: MCPToolError) {
+        switch error {
+        case .unknownTool: self = .failed
+        case .invalidArguments: self = .invalidArguments
+        case .notAuthorized: self = .notAuthorized
+        case .executionFailed: self = .executionFailed
+        }
+    }
+}
+
+/// The resource a tool acted on, extracted from the call arguments for the audit
+/// record. Records only the resource identifier and its kind (assignment public
+/// ID or course code) — never the argument values (script bodies, notebook
+/// content, solution text), which must never land in the audit log.
+struct MCPAuditTarget {
+    let type: AuditTargetType
+    let id: String
+
+    init(type: AuditTargetType, id: String) {
+        self.type = type
+        self.id = id
+    }
+
+    init?(arguments: JSONValue?) {
+        guard case .object(let fields)? = arguments else { return nil }
+        if case .string(let publicID)? = fields["assignmentPublicID"], !publicID.isEmpty {
+            type = .assignment
+            id = publicID
+        } else if case .string(let courseCode)? = fields["courseCode"], !courseCode.isEmpty {
+            type = .course
+            id = courseCode
+        } else {
+            return nil
+        }
+    }
 }
