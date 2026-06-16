@@ -220,7 +220,19 @@ extension WebRoutes {
             let isPass = (outcome.status == .pass)
             return (!wasPass && isPass, wasPass && !isPass)
         }()
-        let pointsLabel: String? = weighted && outcome.points > 1 ? "\(outcome.points) pts" : nil
+        // Partial credit (#548): when a test earned a fraction of its points
+        // (0 < score < 1, typically a script that emitted an explicit footer
+        // `score`), surface it as "1.5 / 2 pts" so the student sees the credit
+        // even though the status badge reads Fail. Full credit / no credit keep
+        // the plain weight label, shown only on weighted assignments.
+        let pointsLabel: String? = {
+            if outcome.score > 0, outcome.score < 1 {
+                let earned = formatPoints(outcome.score * Double(outcome.points))
+                let unit = outcome.points == 1 ? "pt" : "pts"
+                return "\(earned) / \(outcome.points) \(unit)"
+            }
+            return weighted && outcome.points > 1 ? "\(outcome.points) pts" : nil
+        }()
         // Surface the instructor hint only on a genuine failure (not pass, not
         // a skipped/blocked test — there the blocker message is the guidance).
         // Hints are shown for failing release rows too, even before the deadline.
