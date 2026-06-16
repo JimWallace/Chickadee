@@ -11,7 +11,7 @@
 # Both paths must use the same Swift / Ubuntu version so the
 # statically-linked-stdlib binaries match the runtime glibc.
 # To update Swift: change the tag here and in the runtime stage.
-# Current: Swift 6.3 on Ubuntu 22.04 (jammy).
+# Current: Swift 6.3 on Ubuntu 24.04 (noble).
 # ============================================================
 
 # Global ARG — must be declared before the first FROM so it can be used in
@@ -19,7 +19,7 @@
 ARG BINARIES=compile
 
 # ── Compile from source ─────────────────────────────────────
-FROM swift:6.3-jammy AS compile
+FROM swift:6.3-noble AS compile
 
 WORKDIR /build
 
@@ -45,7 +45,7 @@ RUN mkdir -p /out \
 # ── Prebuilt binaries from the build context ────────────────
 # Only built when BINARIES=prebuilt; its COPY paths are not evaluated
 # otherwise.  CI downloads the `build-release` artifact into ./artifacts/.
-FROM ubuntu:22.04 AS prebuilt
+FROM ubuntu:24.04 AS prebuilt
 
 WORKDIR /out
 COPY artifacts/chickadee-server artifacts/chickadee-runner /out/
@@ -61,9 +61,9 @@ RUN ls -lh /out/chickadee-server /out/chickadee-runner
 
 # ============================================================
 # Stage 2 — Runtime
-# Must use the same Ubuntu version as the build stage (jammy).
+# Must use the same Ubuntu version as the build stage (noble).
 # ============================================================
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 

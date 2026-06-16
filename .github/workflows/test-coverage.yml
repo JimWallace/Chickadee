@@ -22,7 +22,7 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-jammy
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
