@@ -16,6 +16,9 @@
                     #for(badge in setup.badges):
                     <span class="achievement-badge achievement-badge-compact" title="#(badge.tooltip)">#(badge.label)</span>
                     #endfor
+                    #if(setup.extraBadgeCount > 0):
+                    <span class="achievement-badge achievement-badge-compact achievement-badge-overflow" title="Also earned: #(setup.extraBadgesTooltip)">+#(setup.extraBadgeCount)</span>
+                    #endif
                 </span>
                 #endif
             </div>
@@ -66,7 +69,7 @@
                 #endif
             </div>
         #else:
-            <span class="empty">No submissions yet</span>
+            <span class="empty">—</span>
         #endif
     </td>
     <td>

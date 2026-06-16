@@ -497,6 +497,15 @@ textarea.form-input {
     font-size: .68rem;
 }
 
+/* "+N" overflow pill on the student-dashboard row: muted so it reads as a
+   "more awards" affordance rather than an award itself.  Its title attribute
+   lists the hidden badges. */
+.achievement-badge-overflow {
+    background: var(--gray-100);
+    border-color: var(--gray-200);
+    color: var(--text-secondary);
+}
+
 .exec-time {
     font-size: .875rem;
     font-weight: 400;
