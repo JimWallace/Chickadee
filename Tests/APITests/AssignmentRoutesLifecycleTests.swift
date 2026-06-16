@@ -67,6 +67,43 @@ import XCTVapor
         }
     }
 
+    // MARK: - POST /instructor/:id/clone
+
+    @Test func cloneAssignmentCreatesClosedCopyAndRedirectsToEdit() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await arInsertSetup(id: "setup_clone", on: app)
+            // cloneAssignment copies the setup zip off disk — materialize one.
+            let zipPath = app.testSetupsDirectory + "setup_clone.zip"
+            #expect(FileManager.default.createFile(atPath: zipPath, contents: Data("PK".utf8)))
+            let a = try await arInsertAssignment(
+                testSetupID: "setup_clone", title: "Lab 1", isOpen: true, on: app)
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/clone",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location)?.contains("/edit") == true)
+                })
+
+            // Source is untouched and still open.
+            let source = try await APIAssignment.find(a.id, on: app.db)
+            #expect(source?.isOpen == true)
+
+            // A new, closed copy "<title> (Copy)" with its own setup now exists.
+            let copy = try #require(
+                try await APIAssignment.query(on: app.db).all().first { $0.title == "Lab 1 (Copy)" })
+            #expect(copy.isOpen == false)
+            #expect(copy.publicID != a.publicID)
+            #expect(copy.testSetupID != a.testSetupID)
+        }
+    }
+
     // MARK: - POST /instructor/:id/delete
 
     @Test func deleteAssignmentRemovesRecord() async throws {

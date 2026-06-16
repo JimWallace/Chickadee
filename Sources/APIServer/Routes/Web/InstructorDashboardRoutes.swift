@@ -70,6 +70,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(":assignmentID", "open", use: openAssignment)
         r.post(":assignmentID", "close", use: closeAssignment)
         r.post(":assignmentID", "delete", use: deleteAssignment)
+        r.post(":assignmentID", "clone", use: cloneAssignment)
         r.post("setup", ":setupID", "delete", use: deleteUnpublishedSetup)
 
         // Published-assignment editor surface (edit/save, file downloads,
@@ -260,6 +261,28 @@ struct InstructorDashboardRoutes: RouteCollection {
         let assignment = try await loadAssignment(req)
         try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         return req.redirect(to: "/instructor")
+    }
+
+    // MARK: - POST /instructor/:assignmentID/clone
+
+    /// Duplicates an assignment (notebooks, suite zip, manifest) into a new
+    /// closed/unvalidated copy in the same course — the web counterpart of the
+    /// `clone_assignment` MCP tool, both going through
+    /// `AssignmentAuthoringService.cloneAssignment` so they can't drift. Lands
+    /// the instructor on the new copy's edit page to set a due date and
+    /// re-validate before opening.
+    @Sendable
+    func cloneAssignment(req: Request) async throws -> Response {
+        let (source, sourceSetup) = try await loadAssignmentAndSetup(req)
+        let cloned = try await AssignmentAuthoringService.cloneAssignment(
+            source: source,
+            sourceSetup: sourceSetup,
+            newTitle: "\(source.title) (Copy)",
+            targetCourseID: source.courseID,
+            setupsDirectory: req.application.testSetupsDirectory,
+            on: req.db)
+        let notice = "Cloned from \(source.title). Set a due date and re-validate, then open."
+        return req.redirect(to: "/instructor/\(cloned.assignment.publicID)/edit?notice=\(urlEncode(notice))")
     }
 
     // MARK: - POST /instructor/:assignmentID/brightspace
