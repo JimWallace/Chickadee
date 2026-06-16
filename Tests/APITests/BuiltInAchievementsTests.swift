@@ -29,6 +29,28 @@ import Testing
             })
     }
 
+    @Test func dashboardSplitCapsBadgesAndSummarisesOverflow() {
+        let badges = (1...5).map { AchievementBadge(id: "b\($0)", label: "Badge \($0)", tooltip: "t\($0)") }
+
+        // Fits within the limit → everything visible, no overflow.
+        let small = AchievementBadge.dashboardSplit(Array(badges.prefix(2)), limit: 3)
+        #expect(small.visible.map(\.id) == ["b1", "b2"])
+        #expect(small.extraCount == 0)
+        #expect(small.extraTooltip == nil)
+
+        // Exactly at the limit → still no overflow pill.
+        let exact = AchievementBadge.dashboardSplit(Array(badges.prefix(3)), limit: 3)
+        #expect(exact.visible.count == 3)
+        #expect(exact.extraCount == 0)
+        #expect(exact.extraTooltip == nil)
+
+        // Over the limit → first `limit` visible, rest summarised in the tooltip.
+        let big = AchievementBadge.dashboardSplit(badges, limit: 3)
+        #expect(big.visible.map(\.id) == ["b1", "b2", "b3"])
+        #expect(big.extraCount == 2)
+        #expect(big.extraTooltip == "Badge 4, Badge 5")
+    }
+
     @Test func badgeDerivesIdentityFromTheAchievement() {
         let ace = AchievementBadge(from: BuiltInAchievements.ace)
         #expect(ace.id == "first_try_perfect")

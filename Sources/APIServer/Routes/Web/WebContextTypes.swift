@@ -49,7 +49,17 @@ struct TestSetupRow: Encodable {
     /// True when `bestGradeText` is an instructor override rather than the
     /// runner-computed grade.  Drives the "overridden" tag in the template.
     let gradeIsOverridden: Bool
+    /// Inline-visible achievement badges only — capped to
+    /// `AchievementBadge.dashboardBadgeDisplayLimit` so a student with many
+    /// awards doesn't balloon the row height.  The full set still shows on the
+    /// submission view.
     let badges: [AchievementBadge]
+    /// Count of earned badges beyond the inline-visible `badges` slice.  0 when
+    /// every earned badge fits; otherwise drives the "+N" overflow pill.
+    let extraBadgeCount: Int
+    /// Comma-joined labels of the overflow badges, surfaced as the "+N" pill's
+    /// tooltip.  nil when `extraBadgeCount` is 0.
+    let extraBadgesTooltip: String?
     /// True when this student has an active deadline extension on this
     /// assignment.  Used by the template to show the Submit button and
     /// surface the effective deadline even when the assignment-wide
@@ -239,6 +249,30 @@ struct AchievementBadge: Encodable {
         return BuiltInAchievements.classRecords
             .first { $0.id == achievementID }
             .map(AchievementBadge.init(from:))
+    }
+
+    // MARK: Dashboard overflow
+
+    /// The most badges shown inline on a student-dashboard row before the
+    /// remainder collapse into a single "+N" overflow pill.  Bounds the row
+    /// height so a student with many awards doesn't make the assignments table
+    /// grow — the full set is still shown on the submission view, and the
+    /// overflow pill names the hidden ones in its tooltip.
+    static let dashboardBadgeDisplayLimit = 3
+
+    /// Splits a dashboard badge list into the inline-visible slice and an
+    /// overflow summary.  When the list already fits within `limit`,
+    /// `extraCount` is 0 and `extraTooltip` is nil.
+    static func dashboardSplit(
+        _ badges: [AchievementBadge], limit: Int = dashboardBadgeDisplayLimit
+    ) -> (visible: [AchievementBadge], extraCount: Int, extraTooltip: String?) {
+        guard badges.count > limit else { return (badges, 0, nil) }
+        let hidden = badges.suffix(from: limit)
+        return (
+            Array(badges.prefix(limit)),
+            hidden.count,
+            hidden.map(\.label).joined(separator: ", ")
+        )
     }
 }
 

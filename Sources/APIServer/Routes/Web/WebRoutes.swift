@@ -380,6 +380,7 @@ struct WebRoutes: RouteCollection {
                 )
             }()
             let canEdit = isOpenForThisUser || previouslyOpenedSetupIDs.contains(setupID)
+            let badgeSplit = AchievementBadge.dashboardSplit(latestBadgesBySetupID[setupID] ?? [])
             return TestSetupRow(
                 id: setupID,
                 title: assignment?.title,
@@ -404,7 +405,9 @@ struct WebRoutes: RouteCollection {
                 bestGradeText: overridePercentBySetupID[setupID].map { "\($0)%" }
                     ?? bestGradePercentBySetupID[setupID].map { "\($0)%" },
                 gradeIsOverridden: overridePercentBySetupID[setupID] != nil,
-                badges: latestBadgesBySetupID[setupID] ?? [],
+                badges: badgeSplit.visible,
+                extraBadgeCount: badgeSplit.extraCount,
+                extraBadgesTooltip: badgeSplit.extraTooltip,
                 hasActiveExtension: hasActiveExtension,
                 effectiveDueAtText: effectiveDueAt.map { fmt.string(from: $0) }
             )
