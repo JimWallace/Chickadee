@@ -999,18 +999,27 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 
 **Near-term roadmap:**
 
-- **Leaf partial decomposition — UNBLOCKED (verified, not folklore).** Earlier
-  notes claimed a LeafKit 1.x "cyclically referenced" false positive blocked
-  decomposing the editor pages, pending LeafKit 2. That was re-tested on the
-  current pin (`leaf-kit 1.14.2`, the newest published — there is **no** 2.x /
-  Leaf 5 release to wait for) and could **not** be reproduced: a partial
-  `#extend`ed from two templates (new + edit), and a single template extending
-  `base` + two distinct partials, both render fine. The historical failures
-  were most likely on an older leaf-kit, or a cascade from a sibling parse
-  error surfaced through Leaf's shared AST cache. **Just decompose normally**
-  (extract a partial, `#extend` it — repeated from one template or shared across
-  pages). Caveat: render tests prove templates *resolve*; they don't exercise
-  page JS, so decomposing a JS-driven widget still wants a quick manual check.
+- **Leaf partial decomposition — PARTIALLY BLOCKED on the big editor pages
+  (re-verified 2026-06, supersedes the earlier "UNBLOCKED" note).** A LeafKit
+  `1.14.2` parser bug makes **two or more inline `#extend("_partial")` includes
+  in the same template** fail at render with
+  `LeafError.500: extend only supports one or two parameters []` (the second
+  include's params come through `nil` — `Extend.init` in
+  `LeafSyntax.swift:213`). It is **template-wide**, not partial-specific:
+  on `assignment-new.leaf` / `assignment-edit.leaf` (~900–1000 lines, already
+  carrying one `#extend("_family-editor-body")`) *any* second inline `#extend`
+  500s the page. Confirmed by bisection against the real render tests
+  (`AssignmentRoutesPublishTests.newAssignmentPage*`) — section-shells+family,
+  support-rows+family, and section-shells+support-rows (no family) all fail;
+  the bodied form `#extend(x):#endextend` and wrapping in a parent `#if` do
+  **not** help. `index.leaf` has two inline `#extend`s and renders fine *only
+  because it is small* (~36 lines), so "it works in index.leaf" is misleading.
+  There is **no** leaf-kit 2.x / Leaf 5 to upgrade to. **Practical rule:** at
+  most **one** inline partial `#extend` per template until the parser bug is
+  fixed (fork/patch leaf-kit) — the multi-`#extend` editor decomposition is on
+  hold. Single-`#extend` decompositions and small templates are still fine.
+  (Render tests catch this — they prove templates *resolve*; they don't
+  exercise page JS, so a JS-driven widget still wants a manual check.)
 - **Feature backlog:** continued personalization / notebook-check
   expansion (e.g. per-student refs in pattern kinds beyond
   `boundary_equality`); pattern kinds beyond the seven shipped
