@@ -1,15 +1,15 @@
 name: Mirror CI images
 
-# Mirrors the Docker Hub images our CI jobs run in (swift:6.3-jammy /
-# swift:6.3-noble job containers, postgres:16 service) into GHCR, so the
-# test workflows never pull from registry-1.docker.io at job time.
+# Mirrors the Docker Hub images our CI jobs run in (swift:6.3-noble job
+# container, postgres:16 service) into GHCR, so the test workflows never
+# pull from registry-1.docker.io at job time.
 # Unauthenticated Docker Hub pulls from shared Actions runner IPs are
 # rate-limited and were the single largest source of red CI on main
 # (6 "Initialize containers" / docker-pull timeout failures in the
 # three-week window audited for #890).  GHCR pulls from Actions runners
 # are same-infrastructure and not rate-limited.
 #
-# Runs weekly (Docker Hub tags like swift:6.3-jammy are re-pushed with
+# Runs weekly (Docker Hub tags like swift:6.3-noble are re-pushed with
 # fixes) and on demand.  `docker buildx imagetools create` copies the
 # full multi-arch manifest registry-to-registry without a local pull.
 #
@@ -68,6 +68,5 @@ jobs:
             echo "Failed to mirror ${src} after 5 attempts" >&2
             return 1
           }
-          mirror docker.io/library/swift:6.3-jammy swift:6.3-jammy
           mirror docker.io/library/swift:6.3-noble swift:6.3-noble
           mirror docker.io/library/postgres:16 postgres:16
