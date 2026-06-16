@@ -20,13 +20,19 @@ import XCTVapor
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let props = TestProperties(achievements: [
                 Achievement(
-                    id: "b_thr", name: "Sharpshooter", kind: .thresholdBadge, scope: .individual,
-                    reward: AchievementReward(type: .badge, label: "Sharpshooter", icon: "🌟"),
-                    target: AchievementTarget(kind: .assignmentGrade), threshold: 0.8),
+                    id: "b_thr", name: "Sharpshooter", scope: .individual,
+                    conditions: [
+                        AchievementCondition(signal: .grade, comparator: .atLeast, value: 80)
+                    ],
+                    reward: AchievementReward(type: .badge, label: "Sharpshooter", icon: "🌟")),
                 Achievement(
-                    id: "b_test", name: "Recursion Master", kind: .testBadge, scope: .individual,
-                    reward: AchievementReward(type: .badge, label: "Recursion Master", icon: "🌀"),
-                    target: AchievementTarget(kind: .testPass, ref: "secrettest_rec.py")),
+                    id: "b_test", name: "Recursion Master", scope: .individual,
+                    conditions: [
+                        AchievementCondition(
+                            signal: .testPass, comparator: .atLeast, value: 1,
+                            target: AchievementTarget(kind: .testPass, ref: "secrettest_rec.py"))
+                    ],
+                    reward: AchievementReward(type: .badge, label: "Recursion Master", icon: "🌀")),
             ])
             let manifest = try #require(String(bytes: try JSONEncoder().encode(props), encoding: .utf8))
             let setup = APITestSetup(

@@ -265,7 +265,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// Instructor-authored achievements / goals / awards for this assignment —
     /// the generalized form of the hardcoded badge + class-achievement system.
     /// Server-evaluated and display-only; `runnerSanitized()` strips them so a
-    /// runner never decodes an `AchievementKind` it doesn't know (same rationale
+    /// runner never decodes an achievement shape it doesn't know (same rationale
     /// as `patternFamilies` / `notebookChecks`).
     public let achievements: [Achievement]
 

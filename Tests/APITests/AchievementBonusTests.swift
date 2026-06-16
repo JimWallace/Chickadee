@@ -35,9 +35,12 @@ import XCTVapor
                 testSuites: testSuites,
                 achievements: [
                     Achievement(
-                        id: "g_csv", name: "Mastery", kind: .classGoal, scope: .classWide,
+                        id: "g_csv", name: "Mastery", scope: .classWide,
+                        conditions: [
+                            AchievementCondition(signal: .grade, comparator: .atLeast, value: 80)
+                        ],
                         reward: AchievementReward(type: .points, label: "Mastery", points: 5),
-                        threshold: 0.8, classFraction: 0.8)
+                        classFraction: 0.8)
                 ])
             let manifest = try #require(String(bytes: try JSONEncoder().encode(props), encoding: .utf8))
             let setup = APITestSetup(

@@ -65,7 +65,7 @@ func evaluateClassGoalAchievements(
             let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
         else { continue }
 
-        let goals = props.achievements.filter { $0.kind == .classGoal }
+        let goals = props.achievements.filter { $0.isClassGoal }
         guard !goals.isEmpty else { continue }
 
         let existing = try await APIAchievementResult.query(on: db)
@@ -84,7 +84,7 @@ func evaluateClassGoalAchievements(
         for goal in goals {
             if rowByAchievement[goal.id]?.locked == true { continue }  // frozen at the deadline
 
-            let threshold = goal.threshold ?? 1
+            let threshold = goal.gradeThresholdFraction ?? 1
             let studentsMeeting = bestByStudent.values.filter { $0 >= threshold }.count
             let progress = classGoalProgress(
                 studentsMeeting: studentsMeeting,

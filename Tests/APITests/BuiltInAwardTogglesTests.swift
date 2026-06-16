@@ -33,9 +33,10 @@ import XCTVapor
         // Regression: makeWorkerManifestJSON builds a fresh dict, so before the
         // fix a suite edit wiped authored achievements (and would wipe toggles).
         let goal = Achievement(
-            id: "g1", name: "Goal", kind: .classGoal, scope: .classWide,
+            id: "g1", name: "Goal", scope: .classWide,
+            conditions: [AchievementCondition(signal: .grade, comparator: .atLeast, value: 80)],
             reward: AchievementReward(type: .points, label: "Goal", points: 5),
-            threshold: 0.8, classFraction: 0.8)
+            classFraction: 0.8)
         let json = try makeWorkerManifestJSON(
             testSuites: [], includeMakefile: false,
             achievements: [goal], disabledBuiltInAwardIDs: ["trailblazer", "speed_champion"])

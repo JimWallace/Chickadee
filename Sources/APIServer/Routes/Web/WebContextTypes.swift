@@ -220,33 +220,15 @@ struct AchievementBadge: Encodable {
         _ ctx: BadgeContext, achievements: [Achievement]? = nil, disabled: Set<String> = []
     ) -> [AchievementBadge] {
         let source = achievements ?? BuiltInAchievements.perSubmission.filter { !disabled.contains($0.id) }
+        let signals = AchievementSignals(
+            gradePercent: ctx.gradePercent,
+            attemptNumber: ctx.attemptNumber,
+            executionTimeMs: ctx.executionTimeMs,
+            priorGradePercent: ctx.priorGradePercent)
         return
             source
-            .filter { BuiltInAchievements.perSubmissionKinds.contains($0.kind) && perSubmissionEarned($0, ctx: ctx) }
+            .filter { $0.isPerSubmissionBadge && $0.isSatisfied(by: signals) }
             .map(AchievementBadge.init(from:))
-    }
-
-    /// Whether a per-submission award's (now parameterized) condition is met for
-    /// `ctx`.  Reads the thresholds off the achievement, defaulting to the
-    /// legacy constants (attempt 1 / +50 pts / 5 attempts / 2 s @ 100%) so the
-    /// built-in defaults behave exactly as before.
-    private static func perSubmissionEarned(_ a: Achievement, ctx: BadgeContext) -> Bool {
-        // `threshold` is a 0…1 grade fraction; default 100%.  gradePercent never
-        // exceeds 100, so `>=` collapses to `==` at the default.
-        let gradeCutoff = Int(((a.threshold ?? 1.0) * 100).rounded())
-        switch a.kind {
-        case .firstTryPerfect:
-            return ctx.attemptNumber <= (a.attemptThreshold ?? 1) && ctx.gradePercent >= gradeCutoff
-        case .comeback:
-            guard let prior = ctx.priorGradePercent else { return false }
-            return ctx.gradePercent - prior >= (a.jumpThresholdPercent ?? 50)
-        case .persistence:
-            return ctx.attemptNumber >= (a.attemptThreshold ?? 5) && ctx.gradePercent >= gradeCutoff
-        case .speedRun:
-            return ctx.gradePercent >= gradeCutoff && ctx.executionTimeMs < (a.timeThresholdMs ?? 2_000)
-        default:
-            return false
-        }
     }
 
     /// Maps a class-achievement ID string to its badge, returning nil for unknown IDs.

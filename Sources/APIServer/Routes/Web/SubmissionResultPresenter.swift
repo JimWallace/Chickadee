@@ -373,7 +373,7 @@ func loadClassGoalViews(testSetupID: String, on db: Database) async throws -> [C
     guard let setup = try await APITestSetup.find(testSetupID, on: db),
         let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
     else { return [] }
-    let goals = props.achievements.filter { $0.kind == .classGoal }
+    let goals = props.achievements.filter { $0.isClassGoal }
     guard !goals.isEmpty else { return [] }
 
     let rows = try await APIAchievementResult.query(on: db)

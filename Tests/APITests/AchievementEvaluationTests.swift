@@ -33,9 +33,13 @@ import XCTVapor
         let props = TestProperties(
             achievements: [
                 Achievement(
-                    id: id, name: "Class Goal", kind: .classGoal, scope: .classWide,
+                    id: id, name: "Class Goal", scope: .classWide,
+                    conditions: [
+                        AchievementCondition(
+                            signal: .grade, comparator: .atLeast, value: threshold * 100)
+                    ],
                     reward: AchievementReward(type: .points, label: "Class Goal Met", points: 5),
-                    threshold: threshold, classFraction: classFraction)
+                    classFraction: classFraction)
             ])
         let data = try JSONEncoder().encode(props)
         return try #require(String(bytes: data, encoding: .utf8))
