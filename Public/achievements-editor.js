@@ -78,7 +78,8 @@
             });
 
         var state = [];
-        var open = null;   // { index } of the currently-expanded editor, or null
+        var open = null;          // { index, detailRow } of the open editor, or null
+        var lingeringClose = null; // finishNow() of an in-flight animated collapse
 
         function setStatus(text, kind) {
             if (!status) return;
@@ -98,6 +99,7 @@
                     + '<td>' + esc(SCOPE_LABEL[row.scope] || row.scope) + '</td>'
                     + '<td>' + summary(row) + '</td>'
                     + '<td class="time">'
+                    + ChickadeeUI.accordion.CARET_HTML + ' '
                     + '<button type="button" class="btn action-btn ach-edit" data-i="' + i + '">Edit</button> '
                     + '<button type="button" class="btn action-btn action-danger ach-remove" data-i="' + i + '">Remove</button>'
                     + '</td>';
@@ -125,13 +127,24 @@
             });
         }
 
-        function collapse() {
-            if (!open) return;
-            var detail = tbody.querySelector('tr.suite-detail-row');
-            if (detail && detail.parentNode) detail.parentNode.removeChild(detail);
-            var parent = tbody.querySelector('tr[data-i="' + open.index + '"]');
-            if (parent) parent.classList.remove('suite-row-expanded');
+        // Animated collapse via the shared accordion helper.  `immediate`
+        // tears down synchronously — used before opening another editor and
+        // before render() (which rebuilds the tbody and would wipe the
+        // animation anyway).
+        function collapse(immediate) {
+            if (!open) {
+                if (lingeringClose) { var f = lingeringClose; lingeringClose = null; f(); }
+                return;
+            }
+            var o = open;
             open = null;
+            var parent = o.index >= 0 ? tbody.querySelector('tr[data-i="' + o.index + '"]') : null;
+            var finishNow = ChickadeeUI.accordion.close(o.detailRow, {
+                immediate: !!immediate,
+                parentRow: parent,
+                onDone: function () { lingeringClose = null; }
+            });
+            lingeringClose = immediate ? null : finishNow;
         }
 
         // Build one condition row inside `container` from an optional `cond`.
@@ -166,46 +179,26 @@
         }
 
         function expand(index) {
-            if (open && open.index === index) { collapse(); return; }
-            collapse();
+            if (open && open.index === index) { collapse(false); return; }
+            collapse(true);
 
             var parent = index >= 0 ? tbody.querySelector('tr[data-i="' + index + '"]') : null;
             var row = index >= 0 ? (state[index] || {}) : { scope: 'individual' };
 
-            var tr = document.createElement('tr');
-            tr.className = 'suite-detail-row';
-            var td = document.createElement('td');
-            td.setAttribute('colspan', '4');
-            var host = document.createElement('div');
-            host.className = 'suite-detail-host';
+            var parts = ChickadeeUI.accordion.build({ colspan: 4 });
+            var tr = parts.tr;
+            var host = parts.host;
+            var saveBtn = parts.saveBtn;
+            var cancelBtn = parts.cancelBtn;
+            var st = parts.status;
             host.appendChild(template.content.cloneNode(true));
-
-            var actions = document.createElement('div');
-            actions.className = 'suite-detail-actions';
-            var saveBtn = document.createElement('button');
-            saveBtn.type = 'button';
-            saveBtn.className = 'btn btn-primary btn-compact';
-            saveBtn.textContent = 'Save';
-            var cancelBtn = document.createElement('button');
-            cancelBtn.type = 'button';
-            cancelBtn.className = 'btn btn-compact';
-            cancelBtn.textContent = 'Cancel';
-            var st = document.createElement('span');
-            st.className = 'suite-detail-status card-meta';
-            actions.appendChild(saveBtn);
-            actions.appendChild(cancelBtn);
-            actions.appendChild(st);
-            td.appendChild(host);
-            td.appendChild(actions);
-            tr.appendChild(td);
 
             if (parent) {
                 parent.parentNode.insertBefore(tr, parent.nextSibling);
-                parent.classList.add('suite-row-expanded');
             } else {
                 tbody.appendChild(tr);
             }
-            open = { index: index };
+            open = { index: index, detailRow: tr };
 
             function el(id) { return host.querySelector('#' + id); }
             var scopeSel = el('am-scope');
@@ -278,7 +271,7 @@
                 st.classList.remove('suite-detail-status-error');
                 saveBtn.disabled = true;
                 persist()
-                    .then(function () { collapse(); render(); setStatus('Saved.', 'ok'); })
+                    .then(function () { collapse(true); render(); setStatus('Saved.', 'ok'); })
                     .catch(function (err) {
                         state = snapshot;
                         st.textContent = 'Save failed — ' + ((err && err.message) ? err.message : err);
@@ -286,9 +279,9 @@
                         saveBtn.disabled = false;
                     });
             });
-            cancelBtn.addEventListener('click', collapse);
+            cancelBtn.addEventListener('click', function () { collapse(false); });
 
-            if (tr.scrollIntoView) tr.scrollIntoView({ block: 'nearest' });
+            ChickadeeUI.accordion.open(parts, parent);
         }
 
         var addBtn = document.getElementById('achievement-add');

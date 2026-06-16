@@ -303,7 +303,8 @@
                     }).join('')
                 + '</select></td>'
                 + '<td><input type="number" class="form-input suite-family-points" min="0" max="100" value="' + defaultPoints + '" title="Points per case — applied to every generated test" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
+                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap;align-items:center">'
+                +   ChickadeeUI.accordion.CARET_HTML
                 +   '<button class="btn action-btn family-edit-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Edit family" aria-label="Edit family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
                 +   '<button class="btn action-btn action-danger family-delete-btn" type="button" data-family-id="' + escAttr(family.id || '') + '" title="Delete family" aria-label="Delete family" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
                 + '</div></td>'
@@ -333,7 +334,8 @@
                     }).join('')
                 + '</select></td>'
                 + '<td><input type="number" class="form-input suite-check-points" min="0" max="100" value="' + points + '" style="width:4rem;padding:.25rem .5rem;font-size:.8rem"></td>'
-                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap">'
+                + '<td class="time"><div style="display:flex;gap:.4rem;justify-content:flex-end;flex-wrap:wrap;align-items:center">'
+                +   ChickadeeUI.accordion.CARET_HTML
                 +   '<button class="btn action-btn check-edit-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Edit notebook check" aria-label="Edit notebook check" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>'
                 +   '<button class="btn action-btn action-danger check-delete-btn" type="button" data-check-id="' + escAttr(check.id || '') + '" title="Delete notebook check" aria-label="Delete notebook check" style="padding:.3rem .45rem"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>'
                 + '</div></td>'
@@ -382,6 +384,7 @@
         // are singletons). `renderSuspended` gates renderTree while it's open so
         // a debounced PUT response can't wipe the open detail row.
         var expandedDetail = null;   // { rowID, mechanism, renderer, detailRow }
+        var lingeringClose = null;   // finishNow() of an in-flight animated collapse
         var renderSuspended = false;
         var renderPendingFlag = false;
 
@@ -454,33 +457,47 @@
 
         /// Tear down the open inline editor: cleanup the renderer, remove the
         /// detail row, un-suspend renderTree, and flush any deferred render.
-        function collapseInlineEditor() {
+        /// Animates the collapse via the shared accordion helper unless
+        /// `immediate` is set — programmatic callers (opening another editor,
+        /// the modal) pass immediate so the singleton renderers and
+        /// #family-editor-body are never shared by two live editors at once.
+        function collapseInlineEditor(immediate) {
             var d = expandedDetail;
-            if (!d) return;
+            // No open editor: still flush any collapse that's mid-animation so a
+            // caller about to open a new editor starts from a clean slate.
+            if (!d) {
+                if (lingeringClose) { var f = lingeringClose; lingeringClose = null; f(); }
+                return;
+            }
             expandedDetail = null;
-            if (d.renderer && typeof d.renderer.cleanup === 'function') {
-                try { d.renderer.cleanup(); } catch (e) { /* ignore */ }
-            }
-            // The family editor hosts the singleton #family-editor-body element;
-            // move it out (hidden) before removing the detail row, or removing
-            // the row would delete the one shared editor body for good.
-            if (d.mechanism === 'family') {
-                var fb = document.getElementById('family-editor-body');
-                if (fb) {
-                    fb.hidden = true;
-                    fb.style.display = 'none';
-                    document.body.appendChild(fb);
+            var parentRow = d.rowID
+                ? container.querySelector('tr[data-id="' + cssAttrEscape(d.rowID) + '"]')
+                : null;
+            // The actual teardown runs once, just before the row is removed —
+            // while content is still mounted — so the family editor can rescue
+            // its singleton #family-editor-body before the row goes away.
+            function onTornDown() {
+                lingeringClose = null;
+                if (d.renderer && typeof d.renderer.cleanup === 'function') {
+                    try { d.renderer.cleanup(); } catch (e) { /* ignore */ }
                 }
+                if (d.mechanism === 'family') {
+                    var fb = document.getElementById('family-editor-body');
+                    if (fb) {
+                        fb.hidden = true;
+                        fb.style.display = 'none';
+                        document.body.appendChild(fb);
+                    }
+                }
+                renderSuspended = false;
+                if (renderPendingFlag) { renderPendingFlag = false; renderTree(); }
             }
-            if (d.detailRow && d.detailRow.parentNode) {
-                d.detailRow.parentNode.removeChild(d.detailRow);
-            }
-            if (d.rowID) {
-                var pr = container.querySelector('tr[data-id="' + cssAttrEscape(d.rowID) + '"]');
-                if (pr) pr.classList.remove('suite-row-expanded');
-            }
-            renderSuspended = false;
-            if (renderPendingFlag) { renderPendingFlag = false; renderTree(); }
+            var finishNow = ChickadeeUI.accordion.close(d.detailRow, {
+                immediate: !!immediate,
+                parentRow: parentRow,
+                onDone: onTornDown
+            });
+            lingeringClose = immediate ? null : finishNow;
         }
 
         /// Open an inline editor for a family/check — either editing an existing
@@ -501,44 +518,27 @@
                 if (srcItem) sectionID = srcItem.sectionID || null;
             }
 
-            // Toggle off when re-clicking the row that's already open.
+            // Toggle off when re-clicking the row that's already open (animated).
             if (opts.afterRowID && expandedDetail && expandedDetail.rowID === opts.afterRowID) {
                 collapseInlineEditor();
                 return;
             }
-            collapseInlineEditor();
+            // Close any other open editor synchronously: the family/check
+            // renderers are singletons, so two live editors can't coexist.
+            collapseInlineEditor(true);
 
-            var tr = document.createElement('tr');
-            tr.className = 'suite-detail-row';
-            var td = document.createElement('td');
-            td.setAttribute('colspan', '4');
-            var host = document.createElement('div');
-            host.className = 'suite-detail-host';
-            var actions = document.createElement('div');
-            actions.className = 'suite-detail-actions';
-            var saveBtn = document.createElement('button');
-            saveBtn.type = 'button';
-            saveBtn.className = 'btn btn-primary btn-compact';
-            saveBtn.textContent = 'Save';
-            var cancelBtn = document.createElement('button');
-            cancelBtn.type = 'button';
-            cancelBtn.className = 'btn btn-compact';
-            cancelBtn.textContent = 'Cancel';
-            var status = document.createElement('span');
-            status.className = 'suite-detail-status card-meta';
-            actions.appendChild(saveBtn);
-            actions.appendChild(cancelBtn);
-            actions.appendChild(status);
-            td.appendChild(host);
-            td.appendChild(actions);
-            tr.appendChild(td);
+            var parts = ChickadeeUI.accordion.build({ colspan: 4 });
+            var tr = parts.tr;
+            var host = parts.host;
+            var saveBtn = parts.saveBtn;
+            var cancelBtn = parts.cancelBtn;
+            var status = parts.status;
 
             var parentRow = opts.afterRowID
                 ? container.querySelector('tr[data-id="' + cssAttrEscape(opts.afterRowID) + '"]')
                 : null;
             if (parentRow) {
                 parentRow.parentNode.insertBefore(tr, parentRow.nextSibling);
-                parentRow.classList.add('suite-row-expanded');
             } else {
                 var sidSel = cssAttrEscape(sectionID || '');
                 var tb = container.querySelector('tbody[data-section-id="' + sidSel + '"]')
@@ -586,9 +586,9 @@
                         saveBtn.disabled = false;
                     });
             });
-            cancelBtn.addEventListener('click', collapseInlineEditor);
+            cancelBtn.addEventListener('click', function () { collapseInlineEditor(false); });
 
-            if (tr.scrollIntoView) tr.scrollIntoView({ block: 'nearest' });
+            ChickadeeUI.accordion.open(parts, parentRow);
         }
 
         /// Entry point for the "+ Add Test" dropdown to author a NEW inline test
@@ -604,7 +604,8 @@
         // Let the modal close any open inline editor before it opens, so the two
         // hosts never run simultaneously (the renderSuspended guard would
         // otherwise defer the modal's save render until the inline one closes).
-        window.chickadeeCollapseInlineEditor = collapseInlineEditor;
+        // Immediate (no animation) so the modal opens against a settled DOM.
+        window.chickadeeCollapseInlineEditor = function () { collapseInlineEditor(true); };
 
         // ── Persistence (items only; sections go through dedicated endpoints) ──
 

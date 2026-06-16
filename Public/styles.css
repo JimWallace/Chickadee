@@ -1507,12 +1507,35 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     outline: none;
 }
 
-/* Inline test editor (accordion) hosted in a detail row under a suite row. */
+/* Inline editor (accordion) hosted in a detail row beneath a suite/achievement
+   row.  Shared by the suite editor (suite-table.js) and the achievements editor
+   (achievements-editor.js) through ChickadeeUI.accordion. */
 .suite-row-expanded > td { background: var(--gray-100); }
+/* A continuous left accent bar ties the open editor to its row (mirrors the
+   status colour-strips at .status-pass &c.). */
+.suite-row-expanded > td:first-child { border-left: 3px solid var(--blue); }
 .suite-detail-row > td {
-    padding: .75rem 1rem 1rem;
+    padding: 0;   /* padding lives on .suite-detail-inner so the collapsed
+                     (grid 0fr) state is genuinely zero-height — no flash */
     background: var(--gray-100);
     border-top: none;
+    border-bottom: 1px solid var(--gray-200);  /* delineate from the next test */
+    border-left: 3px solid var(--blue);
+}
+/* Height animation: a single-row grid transitions grid-template-rows 0fr -> 1fr,
+   animating the editor's intrinsic height with no magic max-height (the family
+   editor's height varies a lot).  The inner clips while the row is partly open
+   (overflow:hidden) and can shrink below its content (min-height:0). */
+.suite-detail-anim {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows .18s ease;
+}
+.suite-detail-anim.is-open { grid-template-rows: 1fr; }
+.suite-detail-inner {
+    overflow: hidden;
+    min-height: 0;
+    padding: .75rem 1rem 1rem;
 }
 .suite-detail-host { display: flex; flex-direction: column; gap: .5rem; }
 .suite-detail-actions {
@@ -1525,6 +1548,40 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 }
 .suite-detail-status { font-size: .8rem; }
 .suite-detail-status-error { color: var(--red); }
+
+/* Rotating disclosure caret on rows that open an inline editor (pattern-family
+   and notebook-check rows in the suite editor; every achievement row).  Script
+   rows open the modal instead, so they deliberately carry no caret. */
+.accordion-caret {
+    display: inline-flex;
+    align-items: center;
+    color: var(--gray-500);
+    transition: transform .18s ease;
+}
+.suite-row-expanded .accordion-caret { transform: rotate(90deg); }
+
+/* Editor-only row affordances — the shared, student-facing .results-table is
+   untouched.  Firmer separators between tests, and a hover fill (skipping the
+   open row, which has its own background). */
+#suite-sections tbody tr[data-id] > td,
+.achievements-body tr[data-i] > td {
+    border-bottom: 1px solid var(--gray-200);
+}
+/* No separator between the open row and its editor — they read as one unit.
+   Scoped to match the firmer-separator rule above so it actually wins. */
+#suite-sections tbody tr[data-id].suite-row-expanded > td,
+.achievements-body tr[data-i].suite-row-expanded > td {
+    border-bottom: none;
+}
+#suite-sections tbody tr[data-id]:not(.suite-row-expanded):hover > td,
+.achievements-body tr[data-i]:not(.suite-row-expanded):hover > td {
+    background: var(--gray-50);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .suite-detail-anim { transition: none; }
+    .accordion-caret { transition: none; }
+}
 
 /* Achievements editor — composable condition builder (achievements-editor.js). */
 .am-conditions { display: flex; flex-direction: column; gap: .4rem; margin: .4rem 0 .6rem; }
