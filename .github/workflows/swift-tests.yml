@@ -190,8 +190,11 @@ jobs:
 
       - name: Install system test dependencies
         run: |
+          # python3: the noble base image (unlike jammy) does not bundle it, and
+          # APITests run generated pattern-family cases that shell out to
+          # `#!/usr/bin/env python3`.  worker-tests installs it explicitly too.
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done
@@ -265,8 +268,11 @@ jobs:
 
       - name: Install system test dependencies
         run: |
+          # python3: the noble base image (unlike jammy) does not bundle it, and
+          # APITests run generated pattern-family cases that shell out to
+          # `#!/usr/bin/env python3`.  worker-tests installs it explicitly too.
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done
