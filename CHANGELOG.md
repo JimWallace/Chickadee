@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.442] - 2026-06-16
+
+### Changed
+
+- **Compacter student-dashboard rows.** Assignments with no submissions now
+  show a dash in the Submissions column instead of the taller "No submissions
+  yet" text, and a row's achievement badges are capped to the first three
+  inline awards with the rest collapsed into a "+N" overflow pill (the pill's
+  tooltip names the hidden awards). Prevents rows from ballooning when a student
+  has earned many badges; the full set still shows on the submission view.
+
+
 ## [0.4.441] - 2026-06-16
 
 ### Changed
