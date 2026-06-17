@@ -6,7 +6,7 @@ Audit scope: the Model Context Protocol (MCP) server under
 This is a complete, one-row-per-tool inventory of the MCP capability surface,
 walked from the live registry (`MCPToolCatalog.live`,
 `Sources/APIServer/MCP/Transport/MCPServerRegistration.swift:16-57`) down to
-each tool's handler. The catalog registers **36 tools** (the prose digest in
+each tool's handler. The catalog registers **37 tools** (the prose digest in
 `CLAUDE.md` says "thirty-four"; the registry is the source of truth — count it
 from `MCPServerRegistration.swift:18-55`).
 
@@ -44,7 +44,7 @@ from `MCPServerRegistration.swift:18-55`).
 | `validate_assignment` | `ValidateAssignmentTool.swift:36` | `assignmentPublicID` | course-enrol (`:82`) | enqueues validation run; reads `validationStatus` | passed/failed/no-runner |
 | `get_validation_result` | `GetValidationResultTool.swift:69` | `assignmentPublicID` | course-enrol (`:113`) | validation submission + its `APIResult` only | per-test outcomes (no student identity) |
 
-## Write tools (`content:write`) — 23
+## Write tools (`content:write`) — 24
 
 | Tool | Handler (`file`) | Resource arg | Authz | Writes / touches |
 |------|------------------|--------------|-------|------------------|
@@ -71,6 +71,7 @@ from `MCPServerRegistration.swift:18-55`).
 | `delete_course_section` | `CourseSectionTools.swift:409` | section id | course-enrol (`:586`) | `APICourseSection` (assignments ungrouped) |
 | `reorder_course_sections` | `CourseSectionTools.swift:483` | `courseCode` | course-enrol (`:632`) | `APICourseSection` order |
 | `set_assignment_course_section` | `CourseSectionTools.swift:208` | `assignmentPublicID` + section | course-enrol (`:247`, `:453`) | `APIAssignment` section ref |
+| `reorder_assignments` | `AssignmentOrderingTools.swift:23` | `courseCode` | course-enrol (`resolveCourseID`) | `APIAssignment` order (`sort_order`) |
 
 ## Escape-hatch / general-capability audit
 

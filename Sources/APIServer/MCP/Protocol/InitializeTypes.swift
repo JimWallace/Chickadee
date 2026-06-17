@@ -100,7 +100,9 @@ enum MCPServerInstructions {
         rename or change the default grading mode with rename_course_section, reorder with \
         reorder_course_sections, delete with delete_course_section (assignments in it are ungrouped, \
         not deleted), and assign an assignment with set_assignment_course_section (which adopts the section's \
-        default grading mode). get_assignment reports an assignment's current course section.
+        default grading mode). get_assignment reports an assignment's current course section. Order \
+        the assignments themselves within the list with reorder_assignments (a course-global order, \
+        lower first; the dashboard still groups the ordered assignments by their section for display).
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \
         (public/release/secret/student), points, an optional section, prerequisites (dependsOn), and \

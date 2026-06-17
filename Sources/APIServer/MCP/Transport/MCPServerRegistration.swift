@@ -50,6 +50,7 @@ enum MCPToolCatalog {
             DeleteCourseSectionTool().erased(),
             ReorderCourseSectionsTool().erased(),
             SetAssignmentCourseSectionTool().erased(),
+            ReorderAssignmentsTool().erased(),
             CloneAssignmentTool().erased(),
             CreateAssignmentTool().erased(),
         ])
