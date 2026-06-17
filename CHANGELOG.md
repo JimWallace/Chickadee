@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.448] - 2026-06-17
+
+### Removed
+
+- **Import-from-Marmoset workflow.** Removed the legacy "Import from Marmoset"
+  instructor feature — the upload page, the `/instructor/import-marmoset`
+  routes, the Marmoset export parser, and the dashboard button. The MCP
+  authoring tools have superseded it (creating and validating assignment
+  content directly). The runner's handling of Marmoset-style file layouts and
+  the project's origin as a clean-break Marmoset rewrite are unchanged.
+
+
 ## [0.4.447] - 2026-06-17
 
 ### Added
