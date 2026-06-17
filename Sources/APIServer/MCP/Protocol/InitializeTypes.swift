@@ -115,7 +115,10 @@ enum MCPServerInstructions {
         with update_solution (which stores it as the validation submission and re-runs validation).
         - Support files — non-graded helper/data files bundled in the setup zip (e.g. a CSV a check \
         loads, a helper module tests import). List or read them with get_support_files (byte-capped \
-        reads, so big datasets return a useful head); write one with author_script(tier:"support"). \
+        reads, so big datasets return a useful head); write one with author_script(tier:"support") — \
+        passing the body inline as content, or, for a data file too large to inline faithfully (e.g. a \
+        big CSV), passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
+        no private/loopback/metadata hosts, no redirects, 8 MB cap, UTF-8 body). \
         Confirm a data file is bundled before authoring checks that load it.
         - Global inputs (personalization) — assignment-scoped names that vary the assignment per \
         student: literal `variables` (a name + JSON value) and `expressions` (a name + Python source \

@@ -28,7 +28,14 @@ struct AuthorScriptTool: ContentTool {
     struct Input: Decodable, Sendable {
         let assignmentPublicID: String
         let filename: String
-        let content: String
+        /// The full file body, inline.  Mutually exclusive with `sourceUrl`;
+        /// exactly one of the two must be provided.
+        let content: String?
+        /// An https URL the server fetches and stores as the file body — for a
+        /// data/support file too large to inline faithfully (e.g. a CSV
+        /// fixture).  SSRF-guarded (https only, no private/metadata addresses,
+        /// no redirects, size-capped); see `SupportFileURLFetcher`.
+        let sourceUrl: String?
         /// public/release/secret/student, or "support" for a non-graded helper
         /// file.  When omitted, an existing file keeps its current kind/tier and
         /// a brand-new file defaults to a public test.
@@ -67,8 +74,11 @@ struct AuthorScriptTool: ContentTool {
         + "catches errors in it) and is opaque to readers. Use a graded tier here only when no pattern "
         + "kind or notebook check fits. "
         + "Create or replace a single hand-written test or support file in an assignment's test "
-        + "setup, by its public ID. Provide filename (a bare name, no path separators) and content "
-        + "(the full script body). tier is public/release/secret/student for a graded test, or "
+        + "setup, by its public ID. Provide filename (a bare name, no path separators) and EITHER "
+        + "content (the full body inline) OR sourceUrl (an https URL the server fetches — for a "
+        + "data/support file too large to inline faithfully, e.g. a CSV fixture; the fetch is "
+        + "SSRF-guarded: https only, no private/loopback/metadata addresses, no redirects, size-capped, "
+        + "and the body must be UTF-8 text). tier is public/release/secret/student for a graded test, or "
         + "\"support\" for a helper file that tests or personalization expressions can import but that "
         + "is not itself graded; omit tier to keep an existing file's kind (new files default to a "
         + "public test). For test tiers you may also set points, displayName, dependsOn (prerequisite "
@@ -93,7 +103,18 @@ struct AuthorScriptTool: ContentTool {
             ]),
             "content": .object([
                 "type": .string("string"),
-                "description": .string("The full script body, written verbatim into the setup zip."),
+                "description": .string(
+                    "The full file body, written verbatim into the setup zip. Provide this OR "
+                        + "sourceUrl, not both."),
+            ]),
+            "sourceUrl": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "An https URL the server downloads and stores as the file body — use for a "
+                        + "data/support file too large to inline (e.g. a CSV). The fetch is SSRF-guarded "
+                        + "(https only; the host must not resolve to a loopback/private/link-local/"
+                        + "cloud-metadata address; redirects are not followed; capped at 8 MB; body must "
+                        + "be UTF-8 text). Provide this OR content, not both."),
             ]),
             "tier": .object([
                 "type": .string("string"),
@@ -125,7 +146,9 @@ struct AuthorScriptTool: ContentTool {
                         + "an unknown id is treated as ungrouped."),
             ]),
         ]),
-        "required": .array([.string("assignmentPublicID"), .string("filename"), .string("content")]),
+        // content/sourceUrl are a one-of (validated in execute), so neither is
+        // individually required here.
+        "required": .array([.string("assignmentPublicID"), .string("filename")]),
         "additionalProperties": .bool(false),
     ])
 
@@ -181,15 +204,18 @@ struct AuthorScriptTool: ContentTool {
     // MARK: - Execute
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        guard !input.content.isEmpty else {
-            throw MCPToolError.invalidArguments(tool: Self.name, detail: "`content` must not be empty.")
-        }
         let cleaned = sanitizeSuiteFilename(input.filename)
         guard !cleaned.isEmpty, cleaned == input.filename else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name,
                 detail: "filename must be a bare filename with no path separators (got \"\(input.filename)\").")
         }
+
+        // Validate the content/sourceUrl one-of up front (cheap, no I/O); the
+        // actual fetch is deferred to `materialize` below, after the call is
+        // authorized and the cheap rejections have passed, so we never make an
+        // outbound request for a call we are about to refuse.
+        let source = try Self.resolveContentSource(input)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
             publicID: input.assignmentPublicID, tool: Self.name)
@@ -220,6 +246,10 @@ struct AuthorScriptTool: ContentTool {
             resolved = .test(.pub)
         }
 
+        // Now that the call has cleared the cheap rejections, materialize the
+        // body (fetching sourceUrl if that's the source).
+        let content = try await Self.materialize(source, context: context)
+
         switch resolved {
         case .support:
             // Demoting a currently-graded test to a support file would orphan
@@ -233,10 +263,10 @@ struct AuthorScriptTool: ContentTool {
                         + "or delete it before re-authoring it as a support file.")
             }
             try authorSupportFile(
-                filename: cleaned, content: input.content, setup: setup, assignment: assignment, context: context)
+                filename: cleaned, content: content, setup: setup, assignment: assignment, context: context)
         case .test(let tier):
             try await authorTestScript(
-                filename: cleaned, content: input.content, tier: tier, input: input,
+                filename: cleaned, content: content, tier: tier, input: input,
                 setup: setup, context: context)
         }
 
@@ -252,6 +282,54 @@ struct AuthorScriptTool: ContentTool {
             created: !existedInZip,
             validationStatus: assignment.validationStatus,
             assignmentClosed: closed)
+    }
+
+    // MARK: - Body resolution (inline content or fetched sourceUrl)
+
+    /// Where a file's body comes from: inline `content` or a server-fetched
+    /// `sourceUrl`.
+    private enum ContentSource {
+        case inline(String)
+        case remote(url: String)
+    }
+
+    /// Validates the `content`/`sourceUrl` one-of and returns the source. Cheap
+    /// and side-effect-free (no network) so it can run before authorization.
+    private static func resolveContentSource(_ input: Input) throws -> ContentSource {
+        let inline = input.content
+        let url = input.sourceUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch (inline?.isEmpty == false, url?.isEmpty == false) {
+        case (true, true):
+            throw MCPToolError.invalidArguments(
+                tool: name, detail: "Provide either `content` or `sourceUrl`, not both.")
+        case (false, false):
+            throw MCPToolError.invalidArguments(
+                tool: name,
+                detail: "Provide `content` (the body inline) or `sourceUrl` (an https URL to fetch).")
+        case (true, false):
+            return .inline(inline ?? "")
+        case (false, true):
+            return .remote(url: url ?? "")
+        }
+    }
+
+    /// Produces the file body, fetching `sourceUrl` under the SSRF guard when
+    /// the source is remote. Maps a fetch refusal to an MCP tool error.
+    private static func materialize(_ source: ContentSource, context: ToolContext) async throws -> String {
+        switch source {
+        case .inline(let body):
+            return body
+        case .remote(let url):
+            do {
+                return try await SupportFileURLFetcher.fetch(urlString: url, on: context.request)
+            } catch let error as SupportFileFetchError {
+                throw MCPToolError.invalidArguments(tool: name, detail: error.toolDetail)
+            } catch {
+                throw MCPToolError.executionFailed(
+                    tool: name, detail: "Failed to fetch sourceUrl: \(error).")
+            }
+        }
     }
 
     // MARK: - Test-script authoring (suite-payload path)
