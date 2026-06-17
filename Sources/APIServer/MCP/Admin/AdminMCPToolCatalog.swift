@@ -9,7 +9,9 @@
 enum AdminMCPToolCatalog {
     static var live: DiagnosticToolRegistry {
         DiagnosticToolRegistry([
-            GetDeploymentInfoTool().erased()
+            GetDeploymentInfoTool().erased(),
+            GetMetricsSnapshotTool().erased(),
+            GetHealthAlertsTool().erased(),
         ])
     }
 }

@@ -383,9 +383,13 @@ OAuth and DB-wall work lands.
      `/oauth/authorize` branches the role gate on the requested resource
      (`isAdmin` for the admin resource), plus the PII-free DB views +
      least-privilege role for the data tools.
-3. **Clean-source tools.** `get_runner_health`, `get_queue_state`,
-   `get_health_alerts`, `get_job_metrics_summary` — all aggregate/PII-free,
-   lowest risk.
+3. **Clean-source tools.** ✅ **Done (first pass).** Shipped `get_metrics_snapshot`
+   (the dashboard `InternalMetricsResponse` aggregate — runner loads, queue
+   depth, job status counts, duration percentiles, compatibility counters) and
+   `get_health_alerts` (live `evaluateHealthRules`), both admin-gated via
+   `requireAdminSubject` and PII-free. These cover the originally-listed
+   `get_runner_health` / `get_queue_state` / `get_job_metrics_summary` in one
+   snapshot; finer-grained splits can follow if an agent wants them.
 4. **`get_browser_diagnostics` + `query_logs`.** The two that read the enriched
    (formerly PII-adjacent) sources; land them after the DB-view wall and the
    per-tool PII tests are in place.
