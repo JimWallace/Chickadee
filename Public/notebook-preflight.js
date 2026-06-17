@@ -131,6 +131,11 @@
         const body = { kind: info.kind };
         if (info.failedChecks && info.failedChecks.length) body.failedChecks = info.failedChecks;
         if (setupID) body.testSetupID = setupID;
+        // Error detail (editor_error + kernel-unhealthy watchdog).  Client-side
+        // caps are generous; the server trims to its own bounds.
+        if (info.message) body.message = String(info.message).slice(0, 2000);
+        if (info.stack)   body.stack   = String(info.stack).slice(0, 8000);
+        if (info.source)  body.source  = String(info.source).slice(0, 64);
 
         await fetch(PREFLIGHT_DIAGNOSTICS_URL, {
             method:  'POST',
@@ -144,11 +149,45 @@
     }
 
     // ----------------------------------------------------------------
+    // Editor-error telemetry
+    // ----------------------------------------------------------------
+    //
+    // Unlike showFailure(), this makes NO visible change to the page — an
+    // uncaught error on the editor page isn't necessarily fatal — it just
+    // posts an "editor_error" diagnostic so we can see what broke.  Capped and
+    // de-duplicated per page load so a tight error loop can't flood the
+    // endpoint (the server also rate-limits per (user, setup, kind, source)).
+
+    const _reportedErrors = new Set();
+    let _errorReportCount = 0;
+    const MAX_ERROR_REPORTS = 8;
+
+    function reportEditorError(info) {
+        try {
+            if (!info || _errorReportCount >= MAX_ERROR_REPORTS) return;
+            const dedupeKey = (info.source || '') + '|' + (info.message || '');
+            if (_reportedErrors.has(dedupeKey)) return;
+            _reportedErrors.add(dedupeKey);
+            _errorReportCount += 1;
+
+            postDiagnostic({
+                kind:    'editor_error',
+                source:  info.source,
+                message: info.message,
+                stack:   info.stack
+            }).catch(function () { /* telemetry is best-effort */ });
+        } catch (_) {
+            // Never let telemetry throw inside an error handler.
+        }
+    }
+
+    // ----------------------------------------------------------------
     // Public surface
     // ----------------------------------------------------------------
 
     window.ChickadeeNotebookFailures = {
-        runPreflight: runPreflight,
-        showFailure:  showFailure
+        runPreflight:     runPreflight,
+        showFailure:      showFailure,
+        reportEditorError: reportEditorError
     };
 })();

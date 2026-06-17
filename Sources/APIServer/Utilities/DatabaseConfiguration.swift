@@ -317,4 +317,8 @@ func registerMigrations(on app: Application) {
     // Denormalized grade columns on results + one-time backfill from the
     // collection_json blob (June 2026 audit, P1.1).
     app.migrations.add(AddResultGradeColumns())
+
+    // Error-detail columns on client_diagnostics (message/stack/source) so
+    // browser-side failures carry diagnosable signal.
+    app.migrations.add(AddClientDiagnosticErrorDetail())
 }
