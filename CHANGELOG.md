@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.445] - 2026-06-17
+
+### Added
+
+- **MCP `reorder_assignments` tool.** Agents can now set the instructor-defined
+  display order of a course's assignments — the assignment-level counterpart to
+  `reorder_course_sections`, mirroring the web dashboard's drag-reorder. Takes a
+  full permutation of the course's assignment public IDs and rewrites the
+  course-global `sort_order`; it's organizational metadata, so it never re-runs
+  validation or changes an assignment's open/closed state.
+
+
 ## [0.4.444] - 2026-06-16
 
 ### Added
