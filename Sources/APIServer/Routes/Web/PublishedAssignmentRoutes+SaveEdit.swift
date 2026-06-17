@@ -176,7 +176,7 @@ extension PublishedAssignmentRoutes {
         )
     }
 
-    /// Marmoset-style worker-mode imports often have no starter .ipynb.
+    /// Worker-mode assignments often have no starter .ipynb.
     /// Falls back to an empty notebook so the edit can proceed without
     /// requiring the instructor to upload one on every save.
     fileprivate func resolvedAssignmentNotebookRaw(

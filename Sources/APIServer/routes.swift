@@ -56,7 +56,6 @@ func routes(_ app: Application) throws {
     try instructor.register(collection: PublishedAssignmentRoutes())
     try instructor.register(collection: CourseAdminRoutes())
     try instructor.register(collection: StudentCourseRoutes())
-    try instructor.register(collection: MarmosetImportRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())
     try instructor.register(collection: UWDatesRoute())
