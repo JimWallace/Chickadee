@@ -27,6 +27,9 @@ import Testing
         "authorizeCourseAccess",
         "authorizedAssignment",  // also matches authorizedAssignmentAndSetup
         "requireEligibleSubject",
+        // Course-scoped wrapper: resolves the course code, then calls
+        // authorizeCourseAccess before returning the id (CourseSectionTools.swift).
+        "resolveCourseID",
     ]
 
     /// Tools that legitimately need no per-resource authorization: they touch no

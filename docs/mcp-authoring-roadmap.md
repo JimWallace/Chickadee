@@ -65,6 +65,7 @@ The catalog:
 | `delete_course_section` | `content:write` | Delete a course section (assignments in it are ungrouped, not deleted) |
 | `reorder_course_sections` | `content:write` | Set the display order of a course's sections |
 | `set_assignment_course_section` | `content:write` | Place an assignment into a course section (adopts its grading mode), or ungroup it |
+| `reorder_assignments` | `content:write` | Set the display order of a course's assignments (course-global; permutation, not a subset); no regrade/close |
 | `clone_assignment` | `content:write` | Duplicate an assignment (closed, unvalidated) |
 | `create_assignment` | `content:write` | New notebook-based assignment from scratch |
 
