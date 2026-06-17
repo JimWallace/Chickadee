@@ -372,11 +372,13 @@ OAuth and DB-wall work lands.
      `get_deployment_info` — proven end to end at the dispatch layer with unit
      tests. **Nothing is mounted**, so there is zero production impact while the
      architecture is reviewed.
-   - **2b — HTTP mount + bearer.** Mount `POST /admin-mcp` behind
-     `ADMIN_MCP_MODE` with a bearer middleware enforcing the admin audience +
-     `diagnostics:read`, the admin `.well-known/oauth-protected-resource`
+   - **2b — HTTP mount + bearer.** ✅ **Done.** Mounts `POST /admin-mcp` behind
+     `ADMIN_MCP_MODE` with `AdminMCPBearerAuthMiddleware` enforcing the admin
+     audience + `diagnostics:read` (separate signing key from the content
+     surface), the admin `.well-known/oauth-protected-resource/admin-mcp`
      discovery, the production DNS-rebinding fail-safe, and admin tool-call
-     audit. Tokens minted via `MCPTokenAuthority` (admin audience) for tests.
+     audit (`admin_mcp.tool_called`). Tokens minted via `MCPTokenAuthority`
+     (admin audience) for tests; production issuance is 2c.
    - **2c — two-resource OAuth consent.** Extend `MCPOAuthRoutes` so
      `/oauth/authorize` branches the role gate on the requested resource
      (`isAdmin` for the admin resource), plus the PII-free DB views +
