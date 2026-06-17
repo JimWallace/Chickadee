@@ -540,7 +540,7 @@ Run `scripts/check-styles.sh` locally before pushing UI changes.
   - `with*App` helper-driven suite:
     [Tests/APITests/WebRoutesIndexTests.swift](Tests/APITests/WebRoutesIndexTests.swift)
   - Parameterized + `try #require`:
-    [Tests/APITests/MarmosetImportParserTests.swift](Tests/APITests/MarmosetImportParserTests.swift)
+    [Tests/APITests/MCP/MCPModeScopeContractTests.swift](Tests/APITests/MCP/MCPModeScopeContractTests.swift)
   - Worker-side class suite:
     [Tests/WorkerTests/DirectorySizeBytesTests.swift](Tests/WorkerTests/DirectorySizeBytesTests.swift)
 
