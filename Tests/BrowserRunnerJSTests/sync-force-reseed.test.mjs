@@ -139,3 +139,60 @@ test('shouldForceReseed: negative or NaN inputs → FALSE', async () => {
   assert.equal(shouldForceReseed({ serverMtime: NaN, seenMtime: 100 }), false);
   assert.equal(shouldForceReseed({ serverMtime: 100, seenMtime: NaN }), false);
 });
+
+// ----------------------------------------------------------------
+// reseedPlan: seed + open-document reload decision
+//
+// `shouldForceReseed` decides whether the server overwrote the file;
+// `reseedPlan` turns that (plus "do we already hold a local copy?")
+// into the two actions the sync takes.  The `reloadOpenDoc` flag is the
+// fix for the instructor "Reset notebook" button appearing to do
+// nothing: JupyterLite's workspace restore re-opens the previous
+// (stale) document before the reseed lands, and a plain
+// `docmanager:open` only focuses it.  We must revert the open widget so
+// the reset is visible without a second page load — but ONLY on a
+// server-newer reset, never on a normal revisit (which would discard
+// the student's unsaved edits).
+// ----------------------------------------------------------------
+
+// `reseedPlan` returns a plain object built inside the vm realm, whose
+// prototype differs from the test realm's — so `deepStrictEqual` (the
+// `assert/strict` default) would fail on prototype identity even for
+// identical content.  Assert the two boolean fields individually, as the
+// `shouldForceReseed` cases above do.
+
+test('reseedPlan: instructor reset (local copy present, server newer) → seed + reload', async () => {
+  const { reseedPlan } = await loadHarness();
+  const plan = reseedPlan({ hasLocalContent: true, serverIsNewer: true });
+  assert.equal(plan.shouldSeed, true);
+  assert.equal(plan.reloadOpenDoc, true,
+    'A reset over an already-restored local copy must reload the open widget');
+});
+
+test('reseedPlan: normal revisit (local copy present, server unchanged) → preserve', async () => {
+  // The student's in-progress work: don't seed, and crucially don't
+  // reload the open editor (that would wipe unsaved edits).
+  const { reseedPlan } = await loadHarness();
+  const plan = reseedPlan({ hasLocalContent: true, serverIsNewer: false });
+  assert.equal(plan.shouldSeed, false);
+  assert.equal(plan.reloadOpenDoc, false,
+    'Must never revert an unchanged revisit — that would discard unsaved edits');
+});
+
+test('reseedPlan: first visit (no local copy, server not newer) → seed, no reload', async () => {
+  // A fresh seed opens the document from the just-written contents
+  // anyway, so there's no stale widget to revert.
+  const { reseedPlan } = await loadHarness();
+  const plan = reseedPlan({ hasLocalContent: false, serverIsNewer: false });
+  assert.equal(plan.shouldSeed, true);
+  assert.equal(plan.reloadOpenDoc, false);
+});
+
+test('reseedPlan: no local copy AND server newer → seed, no reload', async () => {
+  // Both reasons to seed; still no open stale widget on a first-ever
+  // open, so reload stays off (the open below loads fresh contents).
+  const { reseedPlan } = await loadHarness();
+  const plan = reseedPlan({ hasLocalContent: false, serverIsNewer: true });
+  assert.equal(plan.shouldSeed, true);
+  assert.equal(plan.reloadOpenDoc, false);
+});
