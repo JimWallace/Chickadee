@@ -4,6 +4,7 @@
 
 import Core
 import Fluent
+import Logging
 import Testing
 import Vapor
 import XCTVapor
@@ -112,6 +113,73 @@ import XCTVapor
             }
         }
     }
+
+    @Test func queryLogsFiltersForAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "ql-admin", role: "admin")
+            let sink = AdminEventSink(capacity: 100)
+            sink.record(
+                CapturedEvent(
+                    timestamp: Date(), level: "warning", label: "a", message: "disk low",
+                    metadata: ["job_id": "j1"]))
+            sink.record(
+                CapturedEvent(
+                    timestamp: Date(), level: "error", label: "b", message: "runner crashed",
+                    metadata: [:]))
+            app.adminEventSink = sink
+
+            let all = try await QueryLogsTool().execute(.init(), context(subject: "ql-admin"))
+            #expect(all.matched == 2)
+            #expect(all.entries.first?.level == "error")  // most-recent first
+
+            let errorsOnly = try await QueryLogsTool().execute(
+                .init(minLevel: "error"), context(subject: "ql-admin"))
+            #expect(errorsOnly.matched == 1)
+
+            let bySubstring = try await QueryLogsTool().execute(
+                .init(contains: "disk"), context(subject: "ql-admin"))
+            #expect(bySubstring.matched == 1)
+            #expect(bySubstring.entries.first?.message == "disk low")
+        }
+    }
+
+    @Test func queryLogsRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "ql-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await QueryLogsTool().execute(.init(), context(subject: "ql-prof"))
+            }
+        }
+    }
+}
+
+// Pure-logic tests for the log ring-buffer handler — no app.
+@Suite struct RingBufferLogHandlerTests {
+    @Test func capturesWarningPlusAndRedactsPII() throws {
+        let sink = AdminEventSink(capacity: 10)
+        let handler = RingBufferLogHandler(label: "test", sink: sink)
+        handler.log(
+            event: LogEvent(
+                level: .warning, message: "boom",
+                metadata: ["user_id": "u1", "job_id": "j1"],
+                source: "s", file: "f", function: "fn", line: 1))
+        let event = try #require(sink.snapshot().first)
+        #expect(event.level == "warning")
+        #expect(event.message == "boom")
+        #expect(event.metadata["job_id"] == "j1")
+        // PII key dropped at capture.
+        #expect(event.metadata["user_id"] == nil)
+    }
+
+    @Test func dropsBelowWarning() {
+        let sink = AdminEventSink(capacity: 10)
+        let handler = RingBufferLogHandler(label: "test", sink: sink)
+        handler.log(
+            event: LogEvent(
+                level: .info, message: "hi", metadata: nil,
+                source: "s", file: "f", function: "fn", line: 1))
+        #expect(sink.snapshot().isEmpty)
+    }
 }
 
 // Pure-logic catalog check — no app, so kept out of the class suite (which would
@@ -122,7 +190,7 @@ import XCTVapor
         #expect(
             names.isSuperset(of: [
                 "get_deployment_info", "get_metrics_snapshot", "get_health_alerts",
-                "get_browser_diagnostics",
+                "get_browser_diagnostics", "query_logs",
             ]))
     }
 }

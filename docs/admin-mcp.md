@@ -422,8 +422,14 @@ OAuth and DB-wall work lands.
      check over a window + recent samples with the actual message/stack.
      Admin-gated; the returned DTO omits `user_id` (code-allowlist guarantee),
      asserted by a per-tool PII test. No DB role (§4 decision).
-   - `query_logs` — remaining: an in-memory redacted log ring buffer + the tool
-     to query it (no DB).
+   - `query_logs` ✅ **Done.** Built as a **shared `AdminEventSink`** (bounded
+     in-process ring buffer, per-process / until-restart) fed by a
+     `RingBufferLogHandler` multiplexed alongside Vapor's real `ConsoleLogger`
+     in the logging bootstrap — console output is unchanged. Captures warning+
+     only, drops PII metadata keys at capture. `query_logs` is its first
+     consumer (filter by level / substring / window); future event-driven admin
+     queries reuse the same sink. Graduates to a retention-bounded table if
+     durability / multi-instance history is ever needed.
 
 ---
 
