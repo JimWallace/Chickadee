@@ -1,10 +1,12 @@
 // APIServer/APIServerApp.swift
 
 import CSRF
+import ConsoleKit
 import Core
 import Fluent
 import Foundation
 import Leaf
+import Logging
 import Vapor
 
 /// Library entry point invoked by the `chickadee-server` executable target.
@@ -13,9 +15,22 @@ import Vapor
 public func runAPIServer() async throws {
     var env = try Environment.detect()
     let cliWorkerSecret = extractWorkerSecretArgument(from: &env)
-    try LoggingSystem.bootstrap(from: &env)
+    // Tee logs into the admin diagnostic ring buffer while preserving Vapor's
+    // exact console output: multiplex Vapor's own ConsoleLogger (the same handler
+    // its default bootstrap installs) with the warning+ ring-buffer handler.
+    let adminEventSink = AdminEventSink()
+    try LoggingSystem.bootstrap(from: &env) { level in
+        let console = Terminal()
+        return { label in
+            MultiplexLogHandler([
+                ConsoleLogger(label: label, console: console, level: level),
+                RingBufferLogHandler(label: label, sink: adminEventSink),
+            ])
+        }
+    }
 
     let app = try await Application.make(env)
+    app.adminEventSink = adminEventSink
     app.logger.info("Starting chickadee-server v\(ChickadeeVersion.current)")
 
     do {
