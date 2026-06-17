@@ -379,10 +379,19 @@ OAuth and DB-wall work lands.
      discovery, the production DNS-rebinding fail-safe, and admin tool-call
      audit (`admin_mcp.tool_called`). Tokens minted via `MCPTokenAuthority`
      (admin audience) for tests; production issuance is 2c.
-   - **2c — two-resource OAuth consent.** Extend `MCPOAuthRoutes` so
-     `/oauth/authorize` branches the role gate on the requested resource
-     (`isAdmin` for the admin resource), plus the PII-free DB views +
-     least-privilege role for the data tools.
+   - **2c — two-resource OAuth consent.** ✅ **Done (OAuth part).**
+     `MCPOAuthRoutes` is now resource-aware: the RFC 8707 `resource` parameter
+     (or the requested scope's namespace) selects the surface, and the flow
+     branches the scope ceiling, role gate (`isInstructor` for content,
+     `isAdmin` for the admin resource — re-checked at consent submit and on
+     every refresh), signing authority, audience, and TTL accordingly. No
+     migration: the disjoint scope namespaces (`content:*` vs `diagnostics:*`)
+     let every post-authorize step derive the surface from the stored scope.
+     **Known limitation:** the shared `/oauth/*` authorization server is mounted
+     by the content registration, so admin OAuth issuance currently requires
+     `MCP_MODE` to also be on; an admin-only deployment can still use a
+     directly-minted admin token. The PII-free DB views + least-privilege role
+     are deferred to land with the PII-adjacent data tools (Phase 4).
 3. **Clean-source tools.** ✅ **Done (first pass).** Shipped `get_metrics_snapshot`
    (the dashboard `InternalMetricsResponse` aggregate — runner loads, queue
    depth, job status counts, duration percentiles, compatibility counters) and

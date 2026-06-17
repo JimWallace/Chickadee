@@ -72,7 +72,11 @@ struct MCPOAuthRoutes: Sendable {
         guard !query.codeChallenge.isEmpty, query.codeChallengeMethod == "S256" else {
             return redirect(query.redirectURI, error: "invalid_request", state: query.state)
         }
-        let scopes = resolveScopes(query.scope, ceiling: req.application.appConfig.mcp.mode.scopeCeiling)
+        // Which resource is being authorized (content authoring vs admin
+        // diagnostics) — picks the scope ceiling, role gate, audience, and
+        // signing authority for the rest of the flow.
+        let surface = resolveSurface(req: req, resource: query.resource, scope: query.scope)
+        let scopes = resolveScopes(query.scope, ceiling: surface.scopeCeiling)
         guard !scopes.isEmpty else {
             return redirect(query.redirectURI, error: "invalid_scope", state: query.state)
         }
@@ -87,20 +91,21 @@ struct MCPOAuthRoutes: Sendable {
         let firstTimeApproval = try await Self.isFirstApproval(
             req, userID: user.id, clientID: client.clientID)
 
-        // Mint a single-use consent token only for a permitted instructor. The
-        // token (not a cookie) carries identity + CSRF protection to the POST,
-        // so the submit works even when Safari/ITP drops the session cookie on
-        // the cross-site hop. Non-instructors get the not-permitted view and no
+        // Mint a single-use consent token only for a human permitted on THIS
+        // surface (instructor+ for content, admin for diagnostics). The token
+        // (not a cookie) carries identity + CSRF protection to the POST, so the
+        // submit works even when Safari/ITP drops the session cookie on the
+        // cross-site hop. Non-permitted users get the not-permitted view and no
         // actionable token.
         var requestToken: String?
-        if let userID = user.id, user.isInstructor {
+        if let userID = user.id, surface.permits(user) {
             let token = Self.randomToken()
             try await MCPConsentRequest(
                 tokenHash: sha256HexDigest(token),
                 userID: userID,
                 clientID: client.clientID,
                 redirectURI: query.redirectURI,
-                scope: scopes.map(\.rawValue).sorted().joined(separator: " "),
+                scope: scopes.sorted().joined(separator: " "),
                 state: query.state,
                 codeChallenge: query.codeChallenge,
                 codeChallengeMethod: query.codeChallengeMethod,
@@ -109,14 +114,16 @@ struct MCPOAuthRoutes: Sendable {
             requestToken = token
         }
 
-        let ordered = ContentScope.allCases.filter { scopes.contains($0) }
+        let ordered = Self.scopeDisplayOrder.filter { scopes.contains($0) }
         let context = ConsentContext(
             currentUser: req.currentUserContext,
             clientName: client.name,
             scopeLabels: ordered.map(Self.scopeLabel),
             redirectHost: URLComponents(string: query.redirectURI)?.host ?? query.redirectURI,
             firstTimeApproval: firstTimeApproval,
-            notPermitted: !user.isInstructor,
+            notPermitted: !surface.permits(user),
+            permittedRoleLabel: surface.permittedRoleLabel,
+            purposeLabel: surface.purposeLabel,
             requestToken: requestToken)
         return try await renderConsent(req, context: context)
     }
@@ -184,14 +191,18 @@ struct MCPOAuthRoutes: Sendable {
         guard form.decision == "authorize" else {
             return redirect(record.redirectURI, error: "access_denied", state: state)
         }
+        // The surface is fixed by the frozen consent record's scope (its
+        // namespace identifies content vs admin), so the role re-check uses the
+        // right gate.
+        let surface = surfaceForScope(record.scope, req: req)
         // Re-check the role from the bound user at submit time: a downgrade
         // between rendering the consent screen and submitting it must stop here.
         guard
-            let user = try await APIUser.find(record.userID, on: req.db), user.isInstructor
+            let user = try await APIUser.find(record.userID, on: req.db), surface.permits(user)
         else {
-            throw Abort(.forbidden, reason: "Only instructors and admins may authorize agents.")
+            throw Abort(.forbidden, reason: "Only \(surface.permittedRoleLabel) may authorize agents.")
         }
-        let scopes = resolveScopes(record.scope, ceiling: req.application.appConfig.mcp.mode.scopeCeiling)
+        let scopes = resolveScopes(record.scope, ceiling: surface.scopeCeiling)
         guard !scopes.isEmpty, !record.codeChallenge.isEmpty, record.codeChallengeMethod == "S256" else {
             return redirect(record.redirectURI, error: "invalid_request", state: state)
         }
@@ -204,7 +215,7 @@ struct MCPOAuthRoutes: Sendable {
             redirectURI: record.redirectURI,
             codeChallenge: record.codeChallenge,
             codeChallengeMethod: record.codeChallengeMethod,
-            scope: scopes.map(\.rawValue).sorted().joined(separator: " "),
+            scope: scopes.sorted().joined(separator: " "),
             expiresAt: Date().addingTimeInterval(60))
         try await authCode.save(on: req.db)
         // The human consenting to an agent is the single most security-sensitive
@@ -231,22 +242,23 @@ struct MCPOAuthRoutes: Sendable {
 
     @Sendable
     func token(req: Request) async throws -> Response {
-        guard let authority = req.application.mcpTokenAuthority else {
-            return Self.tokenError(.internalServerError, "server_error")
-        }
+        // The signing authority is resolved per-surface inside each grant path
+        // (the surface comes from the code's / grant's stored scope), so a
+        // content code mints a content token and an admin code mints an admin
+        // token from the right key + audience.
         let form = try req.content.decode(TokenForm.self)
         switch form.grantType {
         case "authorization_code":
-            return try await exchangeCode(req, form: form, authority: authority)
+            return try await exchangeCode(req, form: form)
         case "refresh_token":
-            return try await rotateRefresh(req, form: form, authority: authority)
+            return try await rotateRefresh(req, form: form)
         default:
             return Self.tokenError(.badRequest, "unsupported_grant_type")
         }
     }
 
     private func exchangeCode(
-        _ req: Request, form: TokenForm, authority: MCPTokenAuthority
+        _ req: Request, form: TokenForm
     ) async throws -> Response {
         guard let code = form.code, let verifier = form.codeVerifier, let redirectURI = form.redirectURI
         else {
@@ -280,6 +292,10 @@ struct MCPOAuthRoutes: Sendable {
             return Self.tokenError(.badRequest, "invalid_grant")
         }
 
+        let surface = surfaceForScope(authCode.scope, req: req)
+        guard let authority = surface.authority else {
+            return Self.tokenError(.internalServerError, "server_error")
+        }
         let client = try await MCPOAuthClient.query(on: req.db)
             .filter(\.$clientID == authCode.clientID).first()
         let refresh = Self.randomToken()
@@ -290,7 +306,7 @@ struct MCPOAuthRoutes: Sendable {
         try await grant.save(on: req.db)
 
         let access = try await mintAccess(
-            authority, subject: user.username, scope: authCode.scope,
+            surface, authority: authority, subject: user.username, scope: authCode.scope,
             clientID: authCode.clientID, agentName: client?.name)
         // Records the first access+refresh pair an agent receives after consent.
         // (Routine hourly refresh rotation is deliberately NOT logged — high
@@ -312,7 +328,7 @@ struct MCPOAuthRoutes: Sendable {
     }
 
     private func rotateRefresh(
-        _ req: Request, form: TokenForm, authority: MCPTokenAuthority
+        _ req: Request, form: TokenForm
     ) async throws -> Response {
         guard let refreshToken = form.refreshToken else {
             return Self.tokenError(.badRequest, "invalid_request")
@@ -352,12 +368,18 @@ struct MCPOAuthRoutes: Sendable {
         else {
             return Self.tokenError(.badRequest, "invalid_grant")
         }
-        // Re-authorize at refresh time: if the human is no longer an
-        // instructor/admin (role downgraded or account repurposed), stop the
-        // agent — revoke the grant so it can't be refreshed again.  The web
-        // session loses access immediately via RoleMiddleware; this closes the
-        // gap for long-lived MCP grants.
-        guard user.isInstructor else {
+        // The surface is fixed by the grant's stored scope namespace.
+        let surface = surfaceForScope(grant.scope, req: req)
+        guard let authority = surface.authority else {
+            return Self.tokenError(.internalServerError, "server_error")
+        }
+        // Re-authorize at refresh time: if the human no longer holds the role
+        // this surface requires (instructor+ for content, admin for diagnostics
+        // — role downgraded or account repurposed), stop the agent and revoke
+        // the grant so it can't be refreshed again.  The web session loses
+        // access immediately via RoleMiddleware; this closes the gap for
+        // long-lived MCP grants.
+        guard surface.permits(user) else {
             grant.revoked = true
             try await grant.save(on: req.db)
             await AuditLogger.record(
@@ -393,7 +415,7 @@ struct MCPOAuthRoutes: Sendable {
         let client = try await MCPOAuthClient.query(on: req.db)
             .filter(\.$clientID == grant.clientID).first()
         let access = try await mintAccess(
-            authority, subject: user.username, scope: grant.scope,
+            surface, authority: authority, subject: user.username, scope: grant.scope,
             clientID: grant.clientID, agentName: client?.name)
         return try tokenSuccess(req, access: access, refresh: newRefresh, scope: grant.scope)
     }
@@ -459,11 +481,11 @@ struct MCPOAuthRoutes: Sendable {
             grantTypes: ["authorization_code", "refresh_token"],
             responseTypes: ["code"],
             tokenEndpointAuthMethod: "none",
-            // Grant exactly what the discovery metadata advertises — same
-            // source (MCPMode.advertisedScopes) so DCR and the .well-known docs
-            // can never disagree.
-            scope: req.application.appConfig.mcp.mode.advertisedScopes
-                .map(\.rawValue).joined(separator: " "))
+            // Advertise what both mounted surfaces grant — content scopes plus,
+            // when the admin diagnostic surface is mounted, diagnostics:read.  A
+            // DCR client picks the resource at /authorize; the per-resource
+            // protected-resource metadata narrows it.
+            scope: Self.dcrAdvertisedScopes(req).joined(separator: " "))
         let result = Response(status: .created)
         try result.content.encode(response, as: .json)
         result.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
@@ -513,15 +535,15 @@ struct MCPOAuthRoutes: Sendable {
     // MARK: - Helpers
 
     private func mintAccess(
-        _ authority: MCPTokenAuthority, subject: String, scope: String,
+        _ surface: ResolvedSurface, authority: MCPTokenAuthority, subject: String, scope: String,
         clientID: String, agentName: String?
     ) async throws -> String {
         try await authority.mint(
             subject: subject,
-            scopes: parseScopes(scope),
-            issuer: endpoints.issuer,
-            audience: endpoints.resource,
-            ttlSeconds: accessTokenTTLSeconds,
+            scopeStrings: scope.split(separator: " ").map(String.init),
+            issuer: surface.issuer,
+            audience: surface.audience,
+            ttlSeconds: surface.accessTokenTTLSeconds,
             clientID: clientID,
             agentName: agentName)
     }
@@ -535,27 +557,42 @@ struct MCPOAuthRoutes: Sendable {
         return response
     }
 
-    /// Keeps only valid content scopes, then clamps to the server-wide ceiling
-    /// for the current MCP_MODE so a consent request can't grant more than the
-    /// mode honors (read_only → {read}).  An empty/absent request defaults to
-    /// the full ceiling.
-    private func resolveScopes(_ scope: String?, ceiling: Set<ContentScope>) -> Set<ContentScope> {
+    /// Keeps only requested scope strings that the target surface advertises for
+    /// the current mode (the ceiling), dropping anything else.  An empty/absent
+    /// request defaults to the full ceiling.  Scope strings are kept untyped so
+    /// the same flow serves both the content (`content:*`) and admin
+    /// (`diagnostics:*`) vocabularies.
+    private func resolveScopes(_ scope: String?, ceiling: Set<String>) -> Set<String> {
         guard let scope, !scope.trimmingCharacters(in: .whitespaces).isEmpty else {
             return ceiling
         }
-        let requested = Set(scope.split(separator: " ").compactMap { ContentScope(rawValue: String($0)) })
+        let requested = Set(scope.split(separator: " ").map(String.init))
         return requested.intersection(ceiling)
     }
 
-    private func parseScopes(_ scope: String) -> Set<ContentScope> {
-        Set(scope.split(separator: " ").compactMap { ContentScope(rawValue: String($0)) })
+    /// Display order for the consent screen's scope list.
+    static let scopeDisplayOrder: [String] = [
+        ContentScope.read.rawValue, ContentScope.write.rawValue, DiagnosticScope.read.rawValue,
+    ]
+
+    private static func scopeLabel(_ scope: String) -> String {
+        switch scope {
+        case ContentScope.read.rawValue: return "Read course content (assignments, etc.)"
+        case ContentScope.write.rawValue: return "Create and edit course content"
+        case DiagnosticScope.read.rawValue: return "Read server diagnostics and operational status"
+        default: return scope
+        }
     }
 
-    private static func scopeLabel(_ scope: ContentScope) -> String {
-        switch scope {
-        case .read: return "Read course content (assignments, etc.)"
-        case .write: return "Create and edit course content"
+    /// Scopes a dynamically-registered client may request: the content surface's
+    /// advertised scopes, plus the admin surface's when it is mounted.
+    private static func dcrAdvertisedScopes(_ req: Request) -> [String] {
+        let cfg = req.application.appConfig
+        var scopes = cfg.mcp.mode.advertisedScopes.map(\.rawValue)
+        if cfg.adminMCP.mode.isMounted {
+            scopes += cfg.adminMCP.mode.advertisedScopes.map(\.rawValue)
         }
+        return scopes
     }
 
     private func tokenSuccess(_ req: Request, access: String, refresh: String, scope: String) throws -> Response {
@@ -644,6 +681,107 @@ struct MCPOAuthRoutes: Sendable {
 
 }
 
+// MARK: - Resource surfaces (content authoring vs admin diagnostics)
+
+extension MCPOAuthRoutes {
+    /// Which MCP resource an authorization targets.  The two surfaces have
+    /// disjoint scope namespaces (`content:*` vs `diagnostics:*`), so every
+    /// post-authorize step derives the surface from the stored scope — no
+    /// resource column is needed on the consent/code/grant tables.
+    enum Surface: Sendable {
+        case content
+        case admin
+    }
+
+    /// The per-surface parameters the OAuth flow varies: issuer/audience, the
+    /// mode-clamped scope ceiling, the signing authority, token TTL, and the
+    /// role a human must hold to authorize this resource.
+    struct ResolvedSurface {
+        let surface: Surface
+        let issuer: String
+        let audience: String
+        let advertisedScopes: [String]
+        let accessTokenTTLSeconds: Int
+        let authority: MCPTokenAuthority?
+
+        var scopeCeiling: Set<String> { Set(advertisedScopes) }
+
+        /// The role gate: content authoring needs instructor+, admin diagnostics
+        /// needs admin. (Admin implies instructor, so `isAdmin` is the stricter
+        /// gate, not a widening.)
+        func permits(_ user: APIUser) -> Bool {
+            switch surface {
+            case .content: return user.isInstructor
+            case .admin: return user.isAdmin
+            }
+        }
+
+        var permittedRoleLabel: String {
+            switch surface {
+            case .content: return "instructors and admins"
+            case .admin: return "admins"
+            }
+        }
+
+        var purposeLabel: String {
+            switch surface {
+            case .content: return "author course content"
+            case .admin: return "read server diagnostics"
+            }
+        }
+    }
+
+    /// Resolves the surface for a NEW authorize request: the RFC 8707 `resource`
+    /// parameter wins when present; otherwise the requested scope's namespace
+    /// decides.  Falls back to content when the admin surface isn't mounted.
+    func resolveSurface(req: Request, resource: String?, scope: String?) -> ResolvedSurface {
+        let cfg = req.application.appConfig
+        let wantsAdmin: Bool
+        if let resource, !resource.isEmpty {
+            wantsAdmin = isAdminResource(resource, req: req)
+        } else {
+            wantsAdmin = Self.scopeStringTargetsAdmin(scope ?? "")
+        }
+        if wantsAdmin,
+            let adminEndpoints = AdminMCPEndpoints.resolve(adminMCP: cfg.adminMCP, security: cfg.security)
+        {
+            return ResolvedSurface(
+                surface: .admin,
+                issuer: adminEndpoints.issuer,
+                audience: adminEndpoints.resource,
+                advertisedScopes: cfg.adminMCP.mode.advertisedScopes.map(\.rawValue),
+                accessTokenTTLSeconds: cfg.adminMCP.accessTokenTTLSeconds,
+                authority: req.application.adminMcpTokenAuthority)
+        }
+        return ResolvedSurface(
+            surface: .content,
+            issuer: endpoints.issuer,
+            audience: endpoints.resource,
+            advertisedScopes: cfg.mcp.mode.advertisedScopes.map(\.rawValue),
+            accessTokenTTLSeconds: accessTokenTTLSeconds,
+            authority: req.application.mcpTokenAuthority)
+    }
+
+    /// Resolves the surface for a STORED scope (the post-authorize steps, which
+    /// have no `resource` parameter).  Reliable because the scope namespaces are
+    /// disjoint and `resolveScopes` clamps a request to a single surface.
+    func surfaceForScope(_ scope: String, req: Request) -> ResolvedSurface {
+        resolveSurface(req: req, resource: nil, scope: scope)
+    }
+
+    private func isAdminResource(_ resource: String, req: Request) -> Bool {
+        let cfg = req.application.appConfig
+        guard let adminEndpoints = AdminMCPEndpoints.resolve(adminMCP: cfg.adminMCP, security: cfg.security)
+        else { return false }
+        return resource == adminEndpoints.resource
+    }
+
+    static func scopeStringTargetsAdmin(_ scope: String) -> Bool {
+        let parts = Set(scope.split(separator: " ").map(String.init))
+        return DiagnosticScope.allCases.contains { parts.contains($0.rawValue) }
+    }
+}
+
 // MARK: - Request / response shapes
 
 /// Parsed `/oauth/authorize` query parameters.
@@ -655,6 +793,10 @@ private struct AuthorizeQuery {
     let state: String
     let codeChallenge: String
     let codeChallengeMethod: String
+    /// RFC 8707 resource indicator: which resource the client wants a token for
+    /// (content `…/mcp` vs admin `…/admin-mcp`).  Optional — when absent the
+    /// requested scope's namespace decides.
+    let resource: String?
 
     init(_ req: Request) throws {
         guard
@@ -670,6 +812,7 @@ private struct AuthorizeQuery {
         self.state = req.query[String.self, at: "state"] ?? ""
         self.codeChallenge = req.query[String.self, at: "code_challenge"] ?? ""
         self.codeChallengeMethod = req.query[String.self, at: "code_challenge_method"] ?? ""
+        self.resource = req.query[String.self, at: "resource"]
     }
 }
 
@@ -780,6 +923,12 @@ private struct ConsentContext: Encodable {
     /// True when the user has never approved this client — drives a warning.
     let firstTimeApproval: Bool
     let notPermitted: Bool
+    /// Role label for the not-permitted message ("instructors and admins" for the
+    /// content surface, "admins" for admin diagnostics).
+    let permittedRoleLabel: String
+    /// What the agent would be authorized to do, for the not-permitted message
+    /// ("author course content" vs "read server diagnostics").
+    let purposeLabel: String
     /// Single-use consent token embedded in the form; nil for the not-permitted
     /// view (no submittable form is shown).
     let requestToken: String?
