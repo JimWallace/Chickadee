@@ -35,13 +35,14 @@ struct MCPInitializeParams: Decodable, Sendable {
     }
 }
 
-/// Capabilities this server advertises at initialization.  `tools` and
-/// `resources` are advertised; `prompts` is not.  `listChanged` is false on
-/// both (no server-initiated list-change notifications), and resources are not
-/// subscribable.
+/// Capabilities this server advertises at initialization.  `tools` is always
+/// advertised; `resources` is optional and omitted from the wire when nil (a
+/// surface that has no resources doesn't advertise the capability).  `prompts`
+/// is not advertised.  `listChanged` is false (no server-initiated list-change
+/// notifications), and resources are not subscribable.
 struct MCPServerCapabilities: Encodable, Sendable {
     let tools: ListChanged
-    let resources: Resources
+    let resources: Resources?
 
     struct ListChanged: Encodable, Sendable {
         let listChanged: Bool
@@ -52,11 +53,29 @@ struct MCPServerCapabilities: Encodable, Sendable {
         let listChanged: Bool
     }
 
-    /// The capability set advertised by v1: tools + resources, neither pushing
-    /// list-change notifications, resources not subscribable.
+    enum CodingKeys: String, CodingKey {
+        case tools, resources
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(tools, forKey: .tools)
+        // Omit `resources` entirely when nil so a tools-only surface doesn't
+        // advertise a capability it doesn't implement.
+        try container.encodeIfPresent(resources, forKey: .resources)
+    }
+
+    /// The capability set advertised by v1 (the content surface): tools +
+    /// resources, neither pushing list-change notifications, resources not
+    /// subscribable.
     static let v1 = MCPServerCapabilities(
         tools: ListChanged(listChanged: false),
         resources: Resources(subscribe: false, listChanged: false))
+
+    /// Tools-only capability set (the admin diagnostic surface): no resources.
+    static let toolsOnly = MCPServerCapabilities(
+        tools: ListChanged(listChanged: false),
+        resources: nil)
 }
 
 /// Identifies this server to the client in the `initialize` result.  `name` is

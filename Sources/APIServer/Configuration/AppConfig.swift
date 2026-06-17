@@ -23,6 +23,41 @@ struct AppConfig: Sendable {
     let alerts: ServerHealthAlertConfiguration
     let outboundProxy: OutboundProxyConfig?
     let mcp: MCPConfig
+    let adminMCP: AdminMCPConfig
+
+    /// Explicit initializer (replacing the synthesized memberwise one) so
+    /// `adminMCP` can default to `.default`: existing construction sites that
+    /// don't care about the admin diagnostic surface stay unchanged, and only
+    /// the env loader wires the real value.
+    init(
+        auth: AuthConfig,
+        oidc: OIDCEnvConfig,
+        security: AppSecurityConfiguration,
+        scanMode: ScanModeConfiguration,
+        database: DatabaseSettings,
+        lockout: LoginRateLimitConfiguration,
+        workers: WorkerConfig,
+        brightspace: BrightSpaceSyncConfig?,
+        diagnostics: DiagnosticsConfiguration,
+        alerts: ServerHealthAlertConfiguration,
+        outboundProxy: OutboundProxyConfig?,
+        mcp: MCPConfig,
+        adminMCP: AdminMCPConfig = .default
+    ) {
+        self.auth = auth
+        self.oidc = oidc
+        self.security = security
+        self.scanMode = scanMode
+        self.database = database
+        self.lockout = lockout
+        self.workers = workers
+        self.brightspace = brightspace
+        self.diagnostics = diagnostics
+        self.alerts = alerts
+        self.outboundProxy = outboundProxy
+        self.mcp = mcp
+        self.adminMCP = adminMCP
+    }
 
     /// Loads the entire config tree from `Environment.get(...)`.
     ///
@@ -54,7 +89,8 @@ struct AppConfig: Sendable {
             diagnostics: DiagnosticsConfiguration.fromEnvironment(),
             alerts: ServerHealthAlertConfiguration.fromEnvironment(),
             outboundProxy: OutboundProxyConfig.fromEnvironment(),
-            mcp: MCPConfig.fromEnvironment(workDir: workDir)
+            mcp: MCPConfig.fromEnvironment(workDir: workDir),
+            adminMCP: AdminMCPConfig.fromEnvironment(workDir: workDir)
         )
     }
 
@@ -114,6 +150,11 @@ struct AppConfig: Sendable {
         if mcp.mode.isMounted {
             logger.info(
                 "mcp: mode=\(mcp.mode.rawValue), tokenTTL=\(mcp.tokenTTLSeconds)s, accessTokenTTL=\(mcp.accessTokenTTLSeconds)s, grantTTL=\(mcp.grantTTLDays)d, allowedHosts=\(mcp.allowedHosts.count), allowedOrigins=\(mcp.allowedOrigins.count), signingKeyPath=\(mcp.signingKeyPath)"
+            )
+        }
+        if adminMCP.mode.isMounted {
+            logger.info(
+                "adminMCP: mode=\(adminMCP.mode.rawValue), accessTokenTTL=\(adminMCP.accessTokenTTLSeconds)s, allowedHosts=\(adminMCP.allowedHosts.count), allowedOrigins=\(adminMCP.allowedOrigins.count), signingKeyPath=\(adminMCP.signingKeyPath)"
             )
         }
     }

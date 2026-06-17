@@ -105,22 +105,28 @@ The transport/JSON-RPC machinery, by contrast, is generic and worth reusing
 
 ### 3.1 Endpoint, mode, config
 
-| Aspect | Content MCP (today) | Admin MCP (proposed) |
-|--------|---------------------|----------------------|
-| Endpoint | `POST /mcp` | `POST /admin/mcp` |
+| Aspect | Content MCP (today) | Admin MCP |
+|--------|---------------------|-----------|
+| Endpoint | `POST /mcp` | `POST /admin-mcp` |
 | Enable flag | `MCP_MODE` (`off`/`read_only`/`read_write`) | `ADMIN_MCP_MODE` (`off`/`read_only`) |
-| Resource / audience | `…/mcp` | `…/admin/mcp` (distinct) |
+| Resource / audience | `…/mcp` | `…/admin-mcp` (distinct) |
 | Issuer | `PUBLIC_BASE_URL` | same issuer, different resource |
 | Config struct | `MCPConfig` | `AdminMCPConfig` (parallel) |
-| Catalog | `MCPToolCatalog.live` | `MCPToolCatalog.adminLive` |
+| Catalog | `MCPToolCatalog.live` | `AdminMCPToolCatalog.live` |
 | Default | `off` | `off` |
 
+**Path note:** the endpoint is `/admin-mcp`, **not** `/admin/mcp` — the latter is
+already the admin *web page* that manages content-MCP service accounts and
+connected agents (`AdminMCPRoutesTests`). A hyphenated top-level path avoids the
+collision and keeps the bearer-gated transport out of the session-gated `/admin`
+web group. The audience matches the path.
+
 `AdminMCPConfig` parallels `MCPConfig` (mount guards `ADMIN_MCP_ALLOWED_HOSTS` /
-`ADMIN_MCP_ALLOWED_ORIGINS`, signing key, token TTL, rate limits) and is read
-once at startup into the `AppConfig` tree, with a redacted line in the startup
-summary like every other subsystem. Mounting reuses the production fail-safe in
-`registerMCPRoutes` (refuse to mount in production with the DNS-rebinding guards
-open unless `ADMIN_MCP_ALLOW_OPEN_GUARDS=true`).
+`ADMIN_MCP_ALLOWED_ORIGINS`, signing key, access-token TTL) and is read once at
+startup into the `AppConfig` tree, with a redacted line in the startup summary
+like every other subsystem. Mounting reuses the production fail-safe pattern
+(refuse to mount in production with the DNS-rebinding guards open unless
+`ADMIN_MCP_ALLOW_OPEN_GUARDS=true`).
 
 Note there is **no `read_write`** for the admin surface — read-only is a
 hard property of the surface, not a mode toggle, so the enum can't even express
@@ -349,19 +355,32 @@ queryable). Add a bounded **in-process ring buffer**:
 
 ## 7. Implementation sequencing
 
-Each phase is independently shippable and reviewable.
+Each step is independently shippable and reviewable. Phase 2 (the surface
+itself) is split into thin slices so the architecture can be reviewed before the
+OAuth and DB-wall work lands.
 
-1. **Capture (Track 1).** Browser-error enrichment (§6.1) + the log ring buffer
-   (§6.2). No MCP yet — these improve existing dashboards/ops on their own and
-   create the signal the tools will read. Doing this first means the motivating
-   browser error starts producing diagnosable records immediately.
-2. **Scaffold the admin surface.** `AdminMCPConfig`/`AdminMCPMode`/
-   `DiagnosticScope`, the parameterized/parallel bearer middleware +
-   `AdminToolContext` (`requireAdminSubject`), mount `POST /admin/mcp` behind
-   `ADMIN_MCP_MODE`, the two-resource OAuth consent gate (`isAdmin` on the admin
-   resource) + the admin `.well-known` discovery, audit-log wiring, and the
-   PII-free DB views + least-privilege role. One trivial tool
-   (`get_deployment_info`) to prove the pipeline end-to-end.
+1. **Capture (Track 1).** ✅ **Done** (PR #942). Browser-error enrichment (§6.1):
+   `editor_error` kind + message/stack/source on `client_diagnostics`,
+   `window.onerror`/`unhandledrejection` capture, kernel-failure evidence. The
+   log ring buffer (§6.2) is deferred to land alongside `query_logs` (step 4).
+2. **Scaffold the admin surface.** Split into:
+   - **2a — dispatch-layer foundation.** ◀ **This slice.** `AdminMCPMode` /
+     `DiagnosticScope` / `AdminMCPConfig` (+ `AppConfig` wiring + startup
+     summary), `AdminToolContext` (`requireAdminSubject`), the `DiagnosticTool`
+     protocol / registry, `AdminMCPDispatcher` (tools-only, read-only),
+     `AdminMCPServerInstructions`, `AdminMCPToolCatalog`, and the first tool
+     `get_deployment_info` — proven end to end at the dispatch layer with unit
+     tests. **Nothing is mounted**, so there is zero production impact while the
+     architecture is reviewed.
+   - **2b — HTTP mount + bearer.** Mount `POST /admin-mcp` behind
+     `ADMIN_MCP_MODE` with a bearer middleware enforcing the admin audience +
+     `diagnostics:read`, the admin `.well-known/oauth-protected-resource`
+     discovery, the production DNS-rebinding fail-safe, and admin tool-call
+     audit. Tokens minted via `MCPTokenAuthority` (admin audience) for tests.
+   - **2c — two-resource OAuth consent.** Extend `MCPOAuthRoutes` so
+     `/oauth/authorize` branches the role gate on the requested resource
+     (`isAdmin` for the admin resource), plus the PII-free DB views +
+     least-privilege role for the data tools.
 3. **Clean-source tools.** `get_runner_health`, `get_queue_state`,
    `get_health_alerts`, `get_job_metrics_summary` — all aggregate/PII-free,
    lowest risk.
