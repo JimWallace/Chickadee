@@ -14,8 +14,13 @@ Decisions locked with the maintainer:
 3. **Design doc first** — this file. No code until it's reviewed.
 4. **Auth: reuse the OAuth flow** (same as the content endpoint), gated on
    `isAdmin` — see §3.3.
-5. **PII wall: hybrid** — DTO allowlist everywhere + PII-free DB views and a
-   least-privilege role in production — see §4.
+5. **PII wall: code allowlist (revised — no new DB role).** The guarantee is
+   hand-built DTOs that never include student identifiers, asserted by per-tool
+   PII tests; `query_logs` reads an in-memory redacted ring buffer (no DB). A
+   dedicated admin DB role was dropped as disproportionate (only one tool reads
+   a PII-adjacent table). If DB-enforced hardening is ever wanted, extend the
+   *existing* MCP least-privilege pool with PII-free views — no second role. See
+   §4.
 
 It builds on the shipped content-authoring MCP server (OAuth 2.1 bearer flow,
 `ContentScope`, per-tool scope enforcement, course-scoping). Where this design
@@ -231,7 +236,19 @@ differ):
 
 This is the part that must be right.
 
-### 4.1 Principle: redact at the database, not only in the DTO
+> **Decision (revised during build): code allowlist, no new DB role.** The
+> sections below describe the *maximal* hybrid (DB views + a dedicated role).
+> In practice that was disproportionate: only `get_browser_diagnostics` reads a
+> PII-adjacent table (`client_diagnostics`); `query_logs` uses an in-memory
+> redacted ring buffer, and the metrics/health tools return aggregates. So the
+> shipped guarantee is the **code allowlist** (§4.3) — hand-built DTOs that omit
+> student identifiers, asserted by per-tool PII tests (e.g. the seeded
+> `user_id` must not appear anywhere in `get_browser_diagnostics` output). The
+> DB-view layer below is retained as the design of record for *if* DB-enforced
+> hardening is ever required — and even then it would **extend the existing MCP
+> least-privilege pool**, not add a second role.
+
+### 4.1 Principle (aspirational): redact at the database, not only in the DTO
 
 The content MCP already demonstrates the strongest pattern: an optional dedicated
 least-privilege DB pool (`MCP_DATABASE_USER` / `MCP_DATABASE_PASSWORD` →
@@ -399,9 +416,14 @@ OAuth and DB-wall work lands.
    `requireAdminSubject` and PII-free. These cover the originally-listed
    `get_runner_health` / `get_queue_state` / `get_job_metrics_summary` in one
    snapshot; finer-grained splits can follow if an agent wants them.
-4. **`get_browser_diagnostics` + `query_logs`.** The two that read the enriched
-   (formerly PII-adjacent) sources; land them after the DB-view wall and the
-   per-tool PII tests are in place.
+4. **`get_browser_diagnostics` + `query_logs`.**
+   - `get_browser_diagnostics` ✅ **Done.** Reads `client_diagnostics` (the
+     enriched browser-error reports from step 1): counts by kind/source/failed-
+     check over a window + recent samples with the actual message/stack.
+     Admin-gated; the returned DTO omits `user_id` (code-allowlist guarantee),
+     asserted by a per-tool PII test. No DB role (§4 decision).
+   - `query_logs` — remaining: an in-memory redacted log ring buffer + the tool
+     to query it (no DB).
 
 ---
 

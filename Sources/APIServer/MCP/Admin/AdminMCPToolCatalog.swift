@@ -12,6 +12,7 @@ enum AdminMCPToolCatalog {
             GetDeploymentInfoTool().erased(),
             GetMetricsSnapshotTool().erased(),
             GetHealthAlertsTool().erased(),
+            GetBrowserDiagnosticsTool().erased(),
         ])
     }
 }
