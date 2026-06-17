@@ -743,8 +743,8 @@
                 }
             }
 
-            const shouldSeed = !hasLocalContent || serverIsNewer;
-            if (shouldSeed && contents && typeof contents.save === 'function') {
+            const plan = reseedPlan({ hasLocalContent, serverIsNewer });
+            if (plan.shouldSeed && contents && typeof contents.save === 'function') {
                 await contents.save(lockedNotebookPath, {
                     type: 'notebook',
                     format: 'json',
@@ -762,7 +762,25 @@
 
             if (app.commands && typeof app.commands.execute === 'function') {
                 try {
-                    await app.commands.execute('docmanager:open', { path: lockedNotebookPath });
+                    const widget = await app.commands.execute(
+                        'docmanager:open', { path: lockedNotebookPath });
+                    // CRITICAL for instructor/self "Reset notebook": when the
+                    // server overwrote the working copy since we last saw it,
+                    // JupyterLite's workspace restore has typically already
+                    // re-opened the *previous* (stale) document from IndexedDB
+                    // before our reseed above committed.  `docmanager:open` on
+                    // an already-open path only focuses that widget — it does
+                    // NOT re-read the freshly-seeded contents — so without this
+                    // the reset only becomes visible on a *second* page load
+                    // (the student/TA sees "nothing happened").  Reverting the
+                    // document context forces it to reload from the contents we
+                    // just wrote, so the reset is visible immediately.  Gated on
+                    // `reloadOpenDoc` (server-newer only) so a normal revisit
+                    // never discards the student's unsaved in-editor edits.
+                    if (plan.reloadOpenDoc && widget && widget.context
+                        && typeof widget.context.revert === 'function') {
+                        await widget.context.revert();
+                    }
                 } catch (_) {
                     // Best-effort open only.
                 }
@@ -805,6 +823,32 @@
         if (!serverMtime || serverMtime <= 0) return false;
         if (!seenMtime  || seenMtime  <= 0) return false;
         return serverMtime > seenMtime;
+    }
+
+    // Pure decision used by `syncNotebookFromServerSnapshot` to turn the
+    // two observations (do we already hold a local copy? did the server
+    // overwrite the file since we last looked?) into an action plan.
+    //
+    //   shouldSeed    — write the server snapshot into the IndexedDB
+    //                   contents store.  True when there's no local copy
+    //                   (first visit / different device) OR the server is
+    //                   newer (instructor/self reset).
+    //   reloadOpenDoc — after seeding, force an already-open document
+    //                   widget to re-read the freshly-seeded contents.
+    //                   Only on a server-newer reset: a first-time seed
+    //                   opens the doc fresh anyway, and a preserve case
+    //                   must NOT reload or it would wipe the student's
+    //                   unsaved in-editor edits.
+    function reseedPlan({ hasLocalContent, serverIsNewer }) {
+        const shouldSeed = !hasLocalContent || serverIsNewer;
+        return {
+            shouldSeed,
+            // Only a copy we already held (and the workspace already
+            // re-opened) can be stale on screen.  With no local copy the
+            // `docmanager:open` below loads the freshly-seeded contents
+            // directly, so there's nothing to revert.
+            reloadOpenDoc: !!hasLocalContent && !!serverIsNewer,
+        };
     }
 
     async function waitForJupyterApp(timeoutMs) {
@@ -1307,6 +1351,7 @@
             probeIframeReadiness,
             isKernelInFailureState,
             shouldForceReseed,
+            reseedPlan,
         };
     }
 })();
