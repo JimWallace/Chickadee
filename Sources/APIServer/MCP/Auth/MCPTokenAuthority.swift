@@ -69,13 +69,40 @@ actor MCPTokenAuthority {
         agentName: String? = nil,
         now: Date = Date()
     ) async throws -> String {
+        try await mint(
+            subject: subject,
+            scopeStrings: scopes.map(\.rawValue),
+            issuer: issuer,
+            audience: audience,
+            ttlSeconds: ttlSeconds,
+            clientID: clientID,
+            agentName: agentName,
+            now: now)
+    }
+
+    /// Mints a token carrying raw scope strings.  Used by surfaces with their own
+    /// scope vocabulary (e.g. the admin diagnostic surface's `diagnostics:read`);
+    /// the `ContentScope` overload delegates here.  The same ES256 key signs both
+    /// — separation between surfaces comes from a distinct `audience` (and a
+    /// distinct authority instance / signing key when configured), not the claim
+    /// shape.
+    func mint(
+        subject: String,
+        scopeStrings: [String],
+        issuer: String,
+        audience: String,
+        ttlSeconds: Int,
+        clientID: String? = nil,
+        agentName: String? = nil,
+        now: Date = Date()
+    ) async throws -> String {
         let claims = MCPAccessTokenClaims(
             sub: SubjectClaim(value: subject),
             iss: IssuerClaim(value: issuer),
             aud: AudienceClaim(value: audience),
             exp: ExpirationClaim(value: now.addingTimeInterval(TimeInterval(ttlSeconds))),
             iat: IssuedAtClaim(value: now),
-            scope: scopes.map(\.rawValue).sorted().joined(separator: " "),
+            scope: scopeStrings.sorted().joined(separator: " "),
             clientID: clientID,
             agentName: agentName
         )

@@ -211,7 +211,8 @@ extension AppConfig {
     static func testDefaults(
         authMode: AuthMode = .local,
         database: DatabaseSettings = .sqliteInMemory(),
-        mcp: MCPConfig = .default
+        mcp: MCPConfig = .default,
+        adminMCP: AdminMCPConfig = .default
     ) -> AppConfig {
         let auth = AuthConfig(
             mode: authMode,
@@ -244,7 +245,8 @@ extension AppConfig {
             ),
             alerts: .default,
             outboundProxy: nil,
-            mcp: mcp
+            mcp: mcp,
+            adminMCP: adminMCP
         )
     }
 }

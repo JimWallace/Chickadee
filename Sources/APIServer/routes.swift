@@ -78,4 +78,11 @@ func routes(_ app: Application) throws {
     // GET reuses session auth; the submit is guarded by a single-use consent
     // token instead of the session cookie so it survives the cross-site hop.
     try registerMCPOAuthRoutes(app, sessionAuth: sessionAuth)
+
+    // MARK: - Admin diagnostic MCP (read-only)
+
+    // Bearer-gated /admin-mcp transport + protected-resource discovery, mounted
+    // when ADMIN_MCP_MODE is read_only; a no-op when off. Separate audience +
+    // signing key from the content surface. OAuth issuance lands in a follow-up.
+    try registerAdminMCPRoutes(app)
 }

@@ -132,14 +132,36 @@ struct AdminMCPDispatcher: Sendable {
             return .failure(id: id, error: .insufficientScope(required))
         }
 
+        let response: JSONRPCResponse
+        let outcome: String
         do {
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
-            return .success(id: id, result: mcpToolSuccessResult(output))
+            outcome = MCPToolOutcome.success.rawValue
+            response = .success(id: id, result: mcpToolSuccessResult(output))
         } catch let error as MCPToolError {
-            return .success(id: id, result: errorToolResult(error))
+            outcome = MCPToolOutcome(error).rawValue
+            response = .success(id: id, result: errorToolResult(error))
         } catch {
-            return .failure(id: id, error: .internalError("Tool \(call.name) failed."))
+            outcome = MCPToolOutcome.failed.rawValue
+            response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
         }
+        // Best-effort audit (read-only surface, so no fail-closed): one row per
+        // executed call, attributed to the subject (suffixed -MCP) so agent reads
+        // are distinguishable from a human's web actions. Never logs arguments.
+        await auditToolCall(name: call.name, context: context, outcome: outcome)
+        return response
+    }
+
+    private func auditToolCall(name: String, context: AdminToolContext, outcome: String) async {
+        var metadata = ["tool": name, "outcome": outcome]
+        if let agent = context.actingClientName {
+            metadata["via_agent"] = agent
+        }
+        await AuditLogger.record(
+            action: .adminMcpToolCalled,
+            metadata: metadata,
+            actorUsernameOverride: "\(context.subject)-MCP",
+            on: context.request)
     }
 
     private func errorToolResult(_ error: MCPToolError) -> JSONValue {

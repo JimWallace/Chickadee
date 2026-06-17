@@ -38,6 +38,15 @@ public func runAPIServer() async throws {
             app.logger.info("MCP token authority ready (signing key: \(app.appConfig.mcp.signingKeyPath)).")
         }
 
+        // Admin diagnostic MCP surface: its own ES256 key (separate from the
+        // content authority) so rotating it revokes admin tokens independently.
+        if app.appConfig.adminMCP.mode.isMounted {
+            app.adminMcpTokenAuthority = try await MCPTokenAuthority.loadOrGenerate(
+                path: app.appConfig.adminMCP.signingKeyPath, keyID: "admin-mcp-1")
+            app.logger.info(
+                "Admin MCP token authority ready (signing key: \(app.appConfig.adminMCP.signingKeyPath)).")
+        }
+
         try await app.execute()
     } catch {
         await app.localRunnerManager.stopIfRunning(logger: app.logger)
