@@ -73,12 +73,14 @@ import Vapor
     }
 
     private func input(
-        _ assignment: APIAssignment, filename: String, content: String,
+        _ assignment: APIAssignment, filename: String, content: String? = nil,
+        sourceUrl: String? = nil,
         tier: String? = nil, points: Int? = nil, displayName: String? = nil,
         dependsOn: [String]? = nil, sectionID: String? = nil
     ) -> AuthorScriptTool.Input {
         AuthorScriptTool.Input(
             assignmentPublicID: assignment.publicID, filename: filename, content: content,
+            sourceUrl: sourceUrl,
             tier: tier, points: points, displayName: displayName, dependsOn: dependsOn, sectionID: sectionID)
     }
 

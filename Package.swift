@@ -23,6 +23,10 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.0"),
         .package(url: "https://github.com/vapor-community/CSRF.git", from: "3.1.1"),
+        // Already in the resolved graph transitively via Vapor; declared
+        // explicitly so the MCP support-file fetcher can build a dedicated,
+        // no-redirect HTTPClient (the shared Vapor client follows redirects).
+        .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.34.0"),
         // SwiftLint via SimplyDanny's plugin distribution: ships a pre-built
         // binary so CI / fresh checkouts don't pay a SwiftLint-from-source build.
         // Invoked on demand via `scripts/swiftlint.sh`; no `plugins:` entry on
@@ -73,6 +77,7 @@ let package = Package(
                 .product(name: "Leaf", package: "leaf"),
                 .product(name: "JWT", package: "jwt"),
                 .product(name: "CSRF", package: "CSRF"),
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
             ],
             path: "Sources/APIServer",
             exclude: ["README.md"],
