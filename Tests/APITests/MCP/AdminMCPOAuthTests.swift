@@ -15,7 +15,11 @@ import XCTVapor
 
 @testable import APIServer
 
-@Suite struct AdminMCPOAuthTests {
+// .serialized: each test spins up a full app with two token authorities;
+// running them concurrently (on top of the other parallel app-backed suites)
+// exhausts the shared connection pool and flakes unrelated suites with
+// ConnectionPoolTimeoutError.
+@Suite(.serialized) struct AdminMCPOAuthTests {
     private let issuer = "https://chickadee.example"
     private let contentResource = "https://chickadee.example/mcp"
     private let adminResource = "https://chickadee.example/admin-mcp"
