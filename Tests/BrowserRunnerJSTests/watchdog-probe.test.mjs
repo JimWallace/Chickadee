@@ -331,22 +331,56 @@ test('probeIframeReadiness: ServiceManager reports kernel status "starting" → 
     'starting kernels must not be flagged as failed (v0.4.152 regression guard)');
 });
 
-test('isKernelInFailureState: empty running sessions → not in failure', async () => {
-  const { isKernelInFailureState } = await loadHarness();
+test('kernelFailureEvidence: empty running sessions → null (no evidence)', async () => {
+  const { kernelFailureEvidence } = await loadHarness();
   const fakeWin = {
     jupyterapp: {
       serviceManager: { sessions: { running() { return []; } } },
     },
     document: { body: { textContent: '' } },
   };
-  assert.equal(isKernelInFailureState(fakeWin), false);
+  assert.equal(kernelFailureEvidence(fakeWin), null);
 });
 
-test('isKernelInFailureState: API access throws → not in failure (no evidence)', async () => {
-  const { isKernelInFailureState } = await loadHarness();
+test('kernelFailureEvidence: API access throws → null (no evidence)', async () => {
+  const { kernelFailureEvidence } = await loadHarness();
   const fakeWin = {
     get jupyterapp() { throw new Error('cross-origin'); },
     document: { body: { textContent: '' } },
   };
-  assert.equal(isKernelInFailureState(fakeWin), false);
+  assert.equal(kernelFailureEvidence(fakeWin), null);
+});
+
+test('kernelFailureEvidence: dead session → returns the status as evidence', async () => {
+  const { kernelFailureEvidence } = await loadHarness();
+  const fakeWin = {
+    jupyterapp: {
+      serviceManager: { sessions: { running() { return [{ kernel: { status: 'dead' } }]; } } },
+    },
+    document: { body: { textContent: '' } },
+  };
+  assert.equal(kernelFailureEvidence(fakeWin), 'kernel status: dead');
+});
+
+test('kernelFailureEvidence: "Kernel Unknown" DOM text → returns badge evidence', async () => {
+  const { kernelFailureEvidence } = await loadHarness();
+  const fakeWin = {
+    jupyterapp: { serviceManager: null },
+    document: { body: { textContent: 'Python (Pyodide) Kernel Unknown' } },
+  };
+  assert.equal(kernelFailureEvidence(fakeWin), 'Kernel Unknown badge');
+});
+
+test('probeIframeReadiness: kernel failure surfaces evidence string', async () => {
+  const { probeIframeReadiness } = await loadHarness();
+  const frame = makeFrame({
+    winFactory: () => null,
+    docFactory: () => makeDoc({
+      classList: ['jp-Toolbar'],
+      bodyText: 'Python (Pyodide) Kernel Unknown',
+    }),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.kernelInFailureState, true);
+  assert.equal(r.kernelEvidence, 'Kernel Unknown badge (iframe dom)');
 });

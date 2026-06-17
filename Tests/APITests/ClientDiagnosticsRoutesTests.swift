@@ -166,6 +166,72 @@ import XCTVapor
         }
     }
 
+    @Test func persistsEditorErrorRecord() async throws {
+        try await withApp(app) { _ in
+            // An uncaught JS error / unhandled rejection on the editor page is
+            // posted as kind=editor_error carrying message + stack + source so
+            // the actual failure is diagnosable, not just a symbolic bucket.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_editor_err")
+            let body = #"""
+                {"kind":"editor_error","testSetupID":"setup_editor_err","source":"onerror","message":"TypeError: x is undefined","stack":"at foo (a.js:1:1)\nat bar (b.js:2:2)"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "TestUA/3.0")
+            #expect(res.status == .accepted)
+
+            let records = try await APIClientDiagnostic.query(on: app.db).all()
+            #expect(records.count == 1)
+            let rec = try #require(records.first)
+            #expect(rec.kind == "editor_error")
+            #expect(rec.source == "onerror")
+            #expect(rec.message == "TypeError: x is undefined")
+            #expect(rec.stack?.contains("at foo") == true)
+            #expect(rec.failedChecks == nil)
+        }
+    }
+
+    @Test func editorErrorMessageAndStackAreTruncated() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsStudent()
+            let longMessage = String(repeating: "m", count: 5000)
+            let longStack = String(repeating: "s", count: 10000)
+            let body = """
+                {"kind":"editor_error","source":"unhandledrejection",\
+                "message":"\(longMessage)","stack":"\(longStack)"}
+                """
+            let res = try await postJSON(body, auth: auth)
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.message?.count == 1024)
+            #expect(rec.stack?.count == 4096)
+        }
+    }
+
+    @Test func editorErrorsWithDifferentSourceAreNotDeduplicated() async throws {
+        try await withApp(app) { _ in
+            // The error source is part of the dedup key, so onerror vs.
+            // unhandledrejection on the same (user, setup, kind) each keep a
+            // slot; a repeat of the same source within the window is dropped.
+            let auth = try await loginAsStudent()
+            let res1 = try await postJSON(
+                #"{"kind":"editor_error","testSetupID":"setup_ed","source":"onerror","message":"a"}"#,
+                auth: auth)
+            #expect(res1.status == .accepted)
+            let res2 = try await postJSON(
+                #"{"kind":"editor_error","testSetupID":"setup_ed","source":"unhandledrejection","message":"b"}"#,
+                auth: auth)
+            #expect(res2.status == .accepted)
+            let res3 = try await postJSON(
+                #"{"kind":"editor_error","testSetupID":"setup_ed","source":"onerror","message":"c"}"#,
+                auth: auth)
+            #expect(res3.status == .accepted)
+
+            let count = try await APIClientDiagnostic.query(on: app.db).count()
+            #expect(count == 2)
+        }
+    }
+
     @Test func acceptsMissingTestSetupID() async throws {
         try await withApp(app) { _ in
             let auth = try await loginAsStudent()

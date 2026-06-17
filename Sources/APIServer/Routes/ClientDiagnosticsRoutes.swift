@@ -10,10 +10,19 @@
 //   "watchdog_timeout"  — the iframe loaded but the JupyterLite kernel did
 //                          not become ready within the 45-second watchdog
 //                          window
+//   "editor_error"      — an uncaught error / unhandled promise rejection on
+//                          the editor page (window.onerror / unhandledrejection),
+//                          carrying message + stack for diagnosis
+//
+// "editor_error" and the kernel-unhealthy "watchdog_timeout" subtype may carry
+// `message` / `stack` / `source`.  These are JupyterLite/Pyodide infrastructure
+// errors captured on the editor-load path only — never student-code execution —
+// so no student-authored content is stored here.
 //
 // Records flow into client_diagnostics for the instructor dashboard's
-// "Students With Browser Errors" card.  Rate-limited per (user, setup, kind)
-// so a stuck student reloading 50 times doesn't fill the table.
+// "Browser Errors" card and the admin diagnostic tooling.  Rate-limited per
+// (user, setup, kind, source) so a stuck student reloading 50 times doesn't
+// fill the table, while distinct error sources are still preserved.
 
 import Fluent
 import Foundation
@@ -34,27 +43,35 @@ struct ClientDiagnosticsRoutes: RouteCollection {
 
         let body = try req.content.decode(ClientDiagnosticBody.self)
 
-        let allowedKinds: Set<String> = ["preflight_fail", "watchdog_timeout"]
+        let allowedKinds: Set<String> = ["preflight_fail", "watchdog_timeout", "editor_error"]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")
         }
 
-        // De-duplicate within an hour so reloads don't multiply rows.
-        let limiter = req.application.clientDiagnosticsRateLimiter
-        let key = ClientDiagnosticsRateLimiter.Key(
-            userID: userID,
-            testSetupID: body.testSetupID,
-            kind: body.kind
-        )
-        let admitted = await limiter.admit(key: key, now: Date())
-        guard admitted else { return .accepted }
-
         // Trim defensive bounds — these are short strings in practice but we
-        // do not want a hostile client filling rows with megabyte payloads.
+        // do not want a hostile client filling rows with large payloads.
         let trimmedAgent = req.headers.first(name: .userAgent).map { String($0.prefix(512)) }
         let trimmedChecks = body.failedChecks.map { checks -> String in
             String(checks.joined(separator: ",").prefix(256))
         }
+        let trimmedSource = body.source.map { String($0.prefix(64)) }
+        let trimmedMessage = body.message.map { String($0.prefix(1024)) }
+        let trimmedStack = body.stack.map { String($0.prefix(4096)) }
+
+        // De-duplicate within an hour so reloads don't multiply rows.  The
+        // source is part of the key so distinct error origins (onerror vs.
+        // unhandledrejection vs. kernel) each keep a slot rather than the first
+        // one suppressing the rest; preflight/watchdog records pass nil and so
+        // dedupe by (user, setup, kind) exactly as before.
+        let limiter = req.application.clientDiagnosticsRateLimiter
+        let key = ClientDiagnosticsRateLimiter.Key(
+            userID: userID,
+            testSetupID: body.testSetupID,
+            kind: body.kind,
+            subkey: trimmedSource
+        )
+        let admitted = await limiter.admit(key: key, now: Date())
+        guard admitted else { return .accepted }
 
         // Verify the supplied setup exists before storing the FK.  A stale
         // page (e.g. the assignment was deleted between page load and the
@@ -72,7 +89,10 @@ struct ClientDiagnosticsRoutes: RouteCollection {
             testSetupID: verifiedSetupID,
             kind: body.kind,
             failedChecks: trimmedChecks,
-            userAgent: trimmedAgent
+            userAgent: trimmedAgent,
+            message: trimmedMessage,
+            stack: trimmedStack,
+            source: trimmedSource
         )
         try await record.save(on: req.db)
         return .accepted
@@ -82,12 +102,18 @@ struct ClientDiagnosticsRoutes: RouteCollection {
 // MARK: - Request body
 
 struct ClientDiagnosticBody: Content {
-    /// "preflight_fail" | "watchdog_timeout"
+    /// "preflight_fail" | "watchdog_timeout" | "editor_error"
     var kind: String
     /// Symbolic names of the capability checks that failed (preflight only).
     var failedChecks: [String]?
     /// The assignment the student was trying to load (best-effort).
     var testSetupID: String?
+    /// Error message (editor_error + kernel-unhealthy watchdog).
+    var message: String?
+    /// JS stack trace (editor_error).
+    var stack: String?
+    /// Origin of the error: "onerror" | "unhandledrejection" | "kernel".
+    var source: String?
 }
 
 // MARK: - Rate limiter
@@ -101,6 +127,10 @@ actor ClientDiagnosticsRateLimiter {
         let userID: UUID
         let testSetupID: String?
         let kind: String
+        /// Optional sub-discriminator (the error source) so distinct origins
+        /// aren't collapsed by the (user, setup, kind) dedup. nil for
+        /// preflight/watchdog records.
+        var subkey: String?
     }
 
     private var lastAdmitted: [Key: Date] = [:]

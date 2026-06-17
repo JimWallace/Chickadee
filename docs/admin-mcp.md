@@ -6,12 +6,16 @@ diagnosis* — letting an authorized agent inspect server health, telemetry, and
 error reports to help diagnose bugs. It is deliberately **read-only** and
 **never exposes student data**.
 
-Decisions locked with the maintainer before drafting:
+Decisions locked with the maintainer:
 
 1. **Separate MCP service**, not more tools on the existing `/mcp` endpoint.
 2. **Read-only.** Diagnosis only; "fixing bugs" happens through code changes and
    PRs, never through a live mutation surface.
 3. **Design doc first** — this file. No code until it's reviewed.
+4. **Auth: reuse the OAuth flow** (same as the content endpoint), gated on
+   `isAdmin` — see §3.3.
+5. **PII wall: hybrid** — DTO allowlist everywhere + PII-free DB views and a
+   least-privilege role in production — see §4.
 
 It builds on the shipped content-authoring MCP server (OAuth 2.1 bearer flow,
 `ContentScope`, per-tool scope enforcement, course-scoping). Where this design
@@ -140,35 +144,36 @@ Read-only is enforced three ways, defense in depth:
    performs a mutating Fluent query, asserted by a guard test analogous to the
    content-side template guards.
 
-### 3.3 Authentication: admin-minted service tokens (recommended)
+### 3.3 Authentication: reuse the OAuth flow (decided)
 
-The content surface uses the full browser OAuth 2.1 + PKCE + DCR flow because
-**arbitrary instructors** authorize a **public** agent (the Claude connector)
-over the internet, and the consent screen + cross-site-cookie handling exist to
-make that safe.
+**Decision: the admin surface authenticates the same way the content endpoint
+does** — the browser OAuth 2.1 + PKCE + DCR flow — with the consent gate raised
+from `isInstructor` to `isAdmin`. One auth mechanism across both MCP surfaces
+means one mental model, one set of discovery endpoints, per-grant revocation,
+refresh-token rotation with theft detection, and per-client audit attribution —
+all already built and hardened for the content surface.
 
-The admin surface has exactly one class of principal — deployment admins — and a
-much smaller, more trusted population. The full DCR/consent/refresh machinery
-buys little here and adds the awkward problem of multiplexing two resources
-through one `/oauth/authorize` (the role check would have to switch on the
-requested resource). **Recommendation: admin-minted service tokens.**
+What this decision implies (the work to do):
 
-- An admin, on the admin panel, mints a bearer token for the admin MCP
-  resource. The mint is gated on `isAdmin` server-side; the token is minted by
-  the existing `MCPTokenAuthority` with `aud = …/admin/mcp`, scope
-  `diagnostics:read`, and a configurable TTL (`ADMIN_MCP_TOKEN_TTL_SECONDS`,
-  default e.g. 24h). This mirrors the content surface's "Phase 1 admin-minted
-  token" path (`MCPConfig.tokenTTLSeconds`).
-- The admin pastes that token into their MCP client config (or it's wired into
-  the agent's environment). No DCR, no consent redirect, no ITP cookie concerns.
-- Revocation: short TTL + a deny-list / "rotate admin MCP key" button that
-  invalidates outstanding tokens by rotating the signing key, reusing the worker
-  -secret rotation UX pattern.
+- **Two-resource consent.** `/oauth/authorize` branches the role gate on the
+  requested resource (RFC 8707 `resource` / requested scopes): an authorization
+  targeting `…/admin/mcp` requires `isAdmin`; one targeting `…/mcp` keeps the
+  existing `isInstructor` check. The role is re-checked at consent submit and on
+  every refresh, exactly as today (`MCPOAuthRoutes`).
+- **Distinct audience.** Tokens for the admin resource carry `aud = …/admin/mcp`
+  and the `diagnostics:read` scope; the admin bearer middleware enforces that
+  audience, so a content token can't call admin tools and vice versa (§2).
+- **Discovery.** A second `.well-known/oauth-protected-resource` describes the
+  admin resource (the `MCPMetadataRoutes` pattern), advertising
+  `diagnostics:read` under `ADMIN_MCP_MODE`.
+- **DCR.** Dynamic client registration is shared; requested scopes are still
+  clamped to each resource's advertised ceiling.
 
-Alternative (recorded, not recommended for v1): reuse the browser OAuth flow with
-the admin resource and an `isAdmin` consent gate. Choose this only if we later
-want to authorize a *public* agent against the admin surface, which is not a
-current goal.
+Recorded alternative (not chosen): admin-minted service tokens — a button on the
+admin panel minting a `diagnostics:read` bearer via `MCPTokenAuthority`. Simpler
+plumbing and no two-resource consent, but it diverges from "works like our other
+endpoint" and offers only coarse, rotate-the-key revocation. Revisit only if a
+headless/CI consumer makes the interactive consent flow impractical.
 
 Every admin tool call is written to the `audit_log` (new `AuditAction` cases,
 e.g. `admin.diagnostic_queried`, or reuse `mcpToolCalled` with
@@ -183,8 +188,9 @@ e.g. `admin.diagnostic_queried`, or reuse `mcpToolCalled` with
   below).
 - `MCPRoutes` transport with the Host/Origin DNS-rebinding guards.
 - `MCPMetadataRoutes` pattern for a second `.well-known/oauth-protected-resource`
-  describing the admin resource (only if we adopt OAuth; the service-token path
-  needs none).
+  describing the admin resource (required — §3.3 reuses the OAuth flow).
+- `MCPOAuthRoutes` for the consent/token/refresh/DCR flow, extended with the
+  two-resource role gate (`isAdmin` on the admin resource).
 - `MCPTokenAuthority` for minting/verifying ES256 tokens (parameterized by
   audience).
 
@@ -352,8 +358,9 @@ Each phase is independently shippable and reviewable.
 2. **Scaffold the admin surface.** `AdminMCPConfig`/`AdminMCPMode`/
    `DiagnosticScope`, the parameterized/parallel bearer middleware +
    `AdminToolContext` (`requireAdminSubject`), mount `POST /admin/mcp` behind
-   `ADMIN_MCP_MODE`, admin-minted token mint on the admin panel, audit-log
-   wiring, and the PII-free DB views + least-privilege role. One trivial tool
+   `ADMIN_MCP_MODE`, the two-resource OAuth consent gate (`isAdmin` on the admin
+   resource) + the admin `.well-known` discovery, audit-log wiring, and the
+   PII-free DB views + least-privilege role. One trivial tool
    (`get_deployment_info`) to prove the pipeline end-to-end.
 3. **Clean-source tools.** `get_runner_health`, `get_queue_state`,
    `get_health_alerts`, `get_job_metrics_summary` — all aggregate/PII-free,
@@ -375,9 +382,11 @@ Each phase is independently shippable and reviewable.
   clean. Mitigation: capture from infrastructure paths (not student-code
   execution), truncate, and treat the DB-view wall as the real boundary for
   structured columns.
-- **OAuth vs. service token.** §3.3 recommends service tokens; if a future goal
-  is authorizing a public agent against the admin surface, the OAuth path
-  resurfaces with the two-resource consent-gate complexity.
+- **Two-resource OAuth consent.** §3.3 reuses the OAuth flow (decided), which
+  means `/oauth/authorize` must branch its role gate on the requested resource.
+  The main risk is getting that branch right so an admin-resource consent can
+  never be satisfied by an instructor-only session; covered by tests that assert
+  an `isInstructor`-but-not-`isAdmin` user is refused the admin resource.
 - **Does the agent need anything beyond read?** Read-only is the decision. If a
   diagnosis routinely needs an action (e.g. "reap these stuck jobs"), that's a
   separate, explicitly-authorized proposal — not a quiet expansion of this

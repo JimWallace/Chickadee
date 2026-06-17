@@ -78,6 +78,33 @@
     // loaded (older cached page, network glitch) fall through to the
     // legacy behaviour of mounting unconditionally.
     const failures = window.ChickadeeNotebookFailures;
+
+    // Editor-page error telemetry: capture uncaught errors / unhandled
+    // rejections on THIS (parent) page and report them quietly, without
+    // changing the UI.  Errors inside the cross-origin JupyterLite iframe are
+    // not visible from here — those surface via the watchdog's kernel-unhealthy
+    // path instead.  Resource-load errors (<img>/<script> 404s) don't bubble to
+    // a non-capturing window listener, so we only see real script errors.
+    if (failures && failures.reportEditorError) {
+        window.addEventListener('error', function (e) {
+            if (!e || (!e.message && !e.error)) return;
+            const err = e.error;
+            failures.reportEditorError({
+                source:  'onerror',
+                message: e.message || (err && err.message) || 'error',
+                stack:   err && err.stack
+            });
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+            const reason = e && e.reason;
+            failures.reportEditorError({
+                source:  'unhandledrejection',
+                message: (reason && reason.message) || String(reason || 'unhandledrejection'),
+                stack:   reason && reason.stack
+            });
+        });
+    }
+
     const preflightPromise = failures
         ? failures.runPreflight()
         : Promise.resolve({ ok: true, failed: [] });
@@ -261,7 +288,9 @@
                 cancelled = true;
                 failures.showFailure({
                     kind:         'watchdog_timeout',
-                    failedChecks: ['kernel-unhealthy']
+                    failedChecks: ['kernel-unhealthy'],
+                    source:       'kernel',
+                    message:      probe.kernelEvidence || 'kernel in failure state'
                 });
                 reenableSubmit();
                 return;
@@ -301,6 +330,7 @@
     function probeIframeReadiness(frame) {
         let shellReady = false;
         let kernelInFailureState = false;
+        let kernelEvidence = null;
         let win = null;
         let doc = null;
 
@@ -311,8 +341,10 @@
         try {
             if (win && win.jupyterapp) {
                 shellReady = true;
-                if (isKernelInFailureState(win)) {
+                const evidence = kernelFailureEvidence(win);
+                if (evidence) {
                     kernelInFailureState = true;
+                    kernelEvidence = evidence;
                 }
             }
         } catch (_) { /* fall through */ }
@@ -340,11 +372,12 @@
                 const txt = (doc && doc.body && doc.body.textContent) || '';
                 if (txt.indexOf('Kernel Unknown') !== -1) {
                     kernelInFailureState = true;
+                    kernelEvidence = 'Kernel Unknown badge (iframe dom)';
                 }
             } catch (_) { /* fall through */ }
         }
 
-        return { shellReady, kernelInFailureState };
+        return { shellReady, kernelInFailureState, kernelEvidence };
     }
 
     function reenableSubmit() {
@@ -354,13 +387,13 @@
         }
     }
 
-    // Returns true iff we have POSITIVE EVIDENCE the kernel has hit a
-    // known failure state.  Used by the watchdog to decide whether to
-    // fire phase-2 ("kernel-unhealthy").  We deliberately return false
-    // for the "I don't know" case — kernels that are still bootstrapping
-    // look the same as healthy ones to us, and that's fine.  We'd
-    // rather miss a genuine failure than false-positive on a working
-    // editor.
+    // Returns a short evidence string iff we have POSITIVE EVIDENCE the
+    // kernel has hit a known failure state, or null otherwise.  Used by the
+    // watchdog to decide whether to fire phase-2 ("kernel-unhealthy") and to
+    // attach a diagnosable reason to the diagnostic.  We deliberately return
+    // null for the "I don't know" case — kernels that are still bootstrapping
+    // look the same as healthy ones to us, and that's fine.  We'd rather miss a
+    // genuine failure than false-positive on a working editor.
     //
     // Failure signals (any of):
     //   * ServiceManager session with status `dead` or `unknown`
@@ -368,7 +401,7 @@
     //
     // Each probe is wrapped in try/catch so a TypeError or cross-origin
     // access error doesn't propagate.
-    function isKernelInFailureState(win) {
+    function kernelFailureEvidence(win) {
         try {
             const app = win.jupyterapp;
             const sm  = app && app.serviceManager;
@@ -378,7 +411,9 @@
                     const sessions = Array.from(running);
                     for (let i = 0; i < sessions.length; i++) {
                         const status = sessions[i] && sessions[i].kernel && sessions[i].kernel.status;
-                        if (status === 'unknown' || status === 'dead') return true;
+                        if (status === 'unknown' || status === 'dead') {
+                            return 'kernel status: ' + status;
+                        }
                     }
                 }
             }
@@ -387,10 +422,10 @@
         try {
             const doc = win.document;
             const txt = (doc && doc.body && doc.body.textContent) || '';
-            if (txt.indexOf('Kernel Unknown') !== -1) return true;
+            if (txt.indexOf('Kernel Unknown') !== -1) return 'Kernel Unknown badge';
         } catch (_) { /* fall through */ }
 
-        return false;
+        return null;
     }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
@@ -1349,7 +1384,7 @@
             extractTracebackText,
             parseStructuredPayload,
             probeIframeReadiness,
-            isKernelInFailureState,
+            kernelFailureEvidence,
             shouldForceReseed,
             reseedPlan,
         };
