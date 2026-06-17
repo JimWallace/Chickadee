@@ -7,8 +7,8 @@ Authorize agent
     <h1>Authorize access</h1>
     #if(notPermitted):
     <div class="error-box">
-        <p>You are signed in, but only <strong>instructors and admins</strong> may authorize an
-        agent to author course content. Ask an instructor or admin to complete this connection.</p>
+        <p>You are signed in, but only <strong>#(permittedRoleLabel)</strong> may authorize an
+        agent to #(purposeLabel). Ask #(permittedRoleLabel) to complete this connection.</p>
     </div>
     #else:
     <p class="section-gap"><strong>#(clientName)</strong> wants to act on your behalf over the
