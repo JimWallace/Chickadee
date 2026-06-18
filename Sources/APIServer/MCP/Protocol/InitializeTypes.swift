@@ -147,6 +147,14 @@ enum MCPServerInstructions {
         into the starter notebook's `{{name}}` placeholders. Read with get_global_inputs, replace \
         with update_global_inputs. Sections can also carry their own scoped variables/expressions \
         (same shape); get_suite returns them per section and update_section_variables replaces them.
+        - Achievements — instructor-authored awards shown to students, separate from grading. Each is a \
+        scope (an `individual` per-student badge, a `classWide` collaborative goal, or a single-holder \
+        competitive `record`), a list of conditions over a submission's signals (grade, attempts, \
+        executionTimeMs, gradeJumpPercent, testPass) combined with `match` (all/any), and the scope's \
+        reward (classPercent + points for a goal, recordDimension for a record). Read them with \
+        get_achievements, replace the whole list with update_achievements. They are server-evaluated \
+        and DISPLAY-ONLY — they never change what the suite grades, so editing them does not re-validate, \
+        re-grade, or close the assignment (unlike every other content edit).
         - Visibility — an assignment is closed, preview, or open (set via update_assignment `visibility`, \
         or the legacy `isOpen` boolean for open/closed). `preview` is a staff-only state: course staff \
         see and use it exactly like an open assignment (its bundled solution and tests, normal grading), \
@@ -159,7 +167,7 @@ enum MCPServerInstructions {
         deployed version and whether writes are honored — call it to confirm a feature/deploy is live \
         (a tool call reflects the running process even if your tool list is cached).
         2. Inspect before editing: get_assignment, get_suite, get_notebook, get_solution, \
-        get_support_files, get_global_inputs. Use \
+        get_support_files, get_global_inputs, get_achievements. Use \
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
@@ -167,7 +175,8 @@ enum MCPServerInstructions {
         check types — update_pattern_family (edit a family's defaults/cases) / create_pattern_family \
         (add a new family) and author_notebook_check (create/replace a notebook check) — over a \
         hand-written script (see "Prefer native check types" below). Personalization and grouping: \
-        update_global_inputs (personalization variables/expressions), update_section_variables (a \
+        update_global_inputs (personalization variables/expressions), update_achievements (the \
+        display-only awards shown to students), update_section_variables (a \
         section's scoped variables/expressions), create_suite_section / rename_suite_section / \
         delete_suite_section (manage the named display groups), move_suite_item (place a script, \
         family, or check into a section, or ungroup it), delete_suite_item (remove a script, family, \
@@ -217,8 +226,8 @@ enum MCPServerInstructions {
         you can see which check failed and why before fixing the suite or solution. It is \
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
-        Metadata-only edits (update_assignment, set_grading_mode, the section-organization tools) \
-        never trigger a regrade or a close.
+        Metadata-only edits (update_assignment, set_grading_mode, update_achievements, the \
+        section-organization tools) never trigger a regrade or a close.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
         and pick up the new notebook when their copy is next reset. Call get_notebook first and edit \
         the returned JSON.
