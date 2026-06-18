@@ -31,6 +31,19 @@ enum AdminMCPServerInstructions {
         metrics, browser-error reports, and logs to diagnose problems — then \
         propose fixes as code, outside this surface.
 
+        Getting started:
+        - Call get_deployment_info first to confirm the surface is live and see \
+        the version it's running.
+        - A typical flow is "is anything wrong?" (get_health_alerts) → "show me \
+        the underlying numbers" (get_queue_state / list_runners / get_metrics_*) \
+        → "what was logged?" (query_logs / get_browser_diagnostics). Each tool's \
+        own description says exactly what it returns and when to prefer it over a \
+        neighbour.
+        - For trends over time, prefer get_metrics_card_series (the fixed \
+        dashboard windows) or get_metrics_timeseries (an arbitrary window, plus \
+        HTTP request latency); get_metrics_snapshot is the single point-in-time \
+        number. tools/list only shows the tools your grant's scope covers.
+
         What's available, by area:
         - Deployment: get_deployment_info (version + capability surface).
         - Runners: list_runners (the fleet) and get_runner_detail (one runner's \
