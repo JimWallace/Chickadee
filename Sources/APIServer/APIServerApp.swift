@@ -47,19 +47,13 @@ public func runAPIServer() async throws {
         // read_write — read_only still needs to verify tokens).  The routes are
         // already mounted by configure(); the bearer middleware reads this
         // authority per-request, so it only needs to exist before app.execute().
+        // Loaded when MCP is mounted (read_only or read_write).  The admin
+        // diagnostic surface (/admin-mcp) shares this same authority — it's tied
+        // to MCP_MODE and separated only by token audience, so no second key.
         if app.appConfig.mcp.mode.isMounted {
             app.mcpTokenAuthority = try await MCPTokenAuthority.loadOrGenerate(
                 path: app.appConfig.mcp.signingKeyPath, keyID: "mcp-1")
             app.logger.info("MCP token authority ready (signing key: \(app.appConfig.mcp.signingKeyPath)).")
-        }
-
-        // Admin diagnostic MCP surface: its own ES256 key (separate from the
-        // content authority) so rotating it revokes admin tokens independently.
-        if app.appConfig.adminMCP.mode.isMounted {
-            app.adminMcpTokenAuthority = try await MCPTokenAuthority.loadOrGenerate(
-                path: app.appConfig.adminMCP.signingKeyPath, keyID: "admin-mcp-1")
-            app.logger.info(
-                "Admin MCP token authority ready (signing key: \(app.appConfig.adminMCP.signingKeyPath)).")
         }
 
         try await app.execute()

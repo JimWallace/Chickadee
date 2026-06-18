@@ -38,14 +38,11 @@ import XCTVapor
         let mcp = MCPConfig(
             mode: .readWrite, allowedHosts: [], allowedOrigins: [],
             tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: contentResource)
-        let admin = AdminMCPConfig(
-            mode: .readOnly, allowedHosts: [], allowedOrigins: [],
-            signingKeyPath: "unused", issuer: issuer, resource: adminResource)
-        let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp, adminMCP: admin))
+        // MCP_MODE mounts both the content and the (read-only) admin surface; they
+        // share one signing authority, separated only by token audience.
+        let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp))
         app.mcpTokenAuthority = try await MCPTokenAuthority.make(
             privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "mcp-1")
-        app.adminMcpTokenAuthority = try await MCPTokenAuthority.make(
-            privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "admin-mcp-1")
         return app
     }
 
@@ -135,8 +132,9 @@ import XCTVapor
                 username: "the-admin", password: "testpassword", role: "admin", on: app)
             let access = try await adminAccessToken(app, cookie: cookie)
 
-            // Token is minted for the admin audience + diagnostics scope.
-            let adminAuthority = try #require(app.adminMcpTokenAuthority)
+            // Token is minted for the admin audience + diagnostics scope, signed
+            // by the shared authority (separation is by audience, not key).
+            let adminAuthority = try #require(app.mcpTokenAuthority)
             let claims = try await adminAuthority.verify(access)
             #expect(claims.aud.value.contains(adminResource))
             #expect(claims.scopes.contains("diagnostics:read"))

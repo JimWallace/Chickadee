@@ -81,8 +81,9 @@ func routes(_ app: Application) throws {
 
     // MARK: - Admin diagnostic MCP (read-only)
 
-    // Bearer-gated /admin-mcp transport + protected-resource discovery, mounted
-    // when ADMIN_MCP_MODE is read_only; a no-op when off. Separate audience +
-    // signing key from the content surface. OAuth issuance lands in a follow-up.
+    // Bearer-gated /admin-mcp transport + protected-resource discovery. Tied to
+    // MCP_MODE (all-or-nothing): mounts read-only whenever MCP is mounted, a
+    // no-op when off. Distinct token audience from the content surface; shares
+    // the content signing key + OAuth authorization server.
     try registerAdminMCPRoutes(app)
 }

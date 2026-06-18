@@ -12,8 +12,8 @@ import Vapor
 
 struct AdminMCPMetadataRoutes: RouteCollection {
     let endpoints: AdminMCPEndpoints
-    /// Scopes advertised in the discovery document, derived from ADMIN_MCP_MODE
-    /// so the metadata never claims a scope the server won't grant.
+    /// Scopes advertised in the discovery document — always `diagnostics:read`
+    /// (the admin surface is read-only); see `adminMCPAdvertisedScopes`.
     let advertisedScopes: [DiagnosticScope]
 
     func boot(routes: RoutesBuilder) throws {
