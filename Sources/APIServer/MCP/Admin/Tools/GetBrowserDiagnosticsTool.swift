@@ -50,16 +50,33 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let byKind: [CountEntry]
         let bySource: [CountEntry]
         let byFailedCheck: [CountEntry]
+        /// Submit-flow funnel: `submit_phase` breadcrumb counts in phase order
+        /// (grading_start → … → result_posted). The drop-off between consecutive
+        /// phases shows where in-browser submissions are lost to a freeze — the
+        /// last phase a frozen student reaches has no successor record.
+        let submitFunnel: [CountEntry]
         let recentSamples: [Sample]
     }
 
+    /// Canonical order of the browser submit/grading breadcrumbs (emitted by
+    /// `recordSubmitPhase` in Public/browser-runner.js).
+    static let submitPhaseOrder = [
+        "grading_start", "runtime_loaded", "setup_unpacked",
+        "suite_started", "suite_done", "result_posting", "result_posted",
+    ]
+
     static let name = "get_browser_diagnostics"
     static let description =
-        "In-browser editor error reports (JupyterLite/Pyodide) for diagnosis: totals and breakdowns "
-        + "by kind (preflight_fail / watchdog_timeout / editor_error), source, and failed capability "
-        + "check over a window, plus recent samples carrying the actual error message and stack. "
-        + "Optionally filter by testSetupID. Read-only; reports infrastructure errors only and never "
-        + "includes a student identifier."
+        "In-browser editor + submission diagnostics (JupyterLite/Pyodide) for diagnosis: totals and "
+        + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error for editor load, and "
+        + "submit_phase / submit_error for the grading/submission flow), source, and failed capability "
+        + "check over a window, plus recent samples carrying the actual error message and stack. Also "
+        + "returns submitFunnel: the submit_phase breadcrumb counts in phase order "
+        + "(grading_start → runtime_loaded → setup_unpacked → suite_started → suite_done → "
+        + "result_posting → result_posted) — the drop-off between consecutive phases shows where "
+        + "in-browser submissions are lost to a freeze (a frozen student's last reached phase has no "
+        + "successor). Optionally filter by testSetupID. Read-only; reports infrastructure breadcrumbs "
+        + "only and never includes a student identifier."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -106,6 +123,17 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             }
         }
 
+        // Submit-flow funnel from the `submit_phase` breadcrumbs, in phase order
+        // (then any unknown phases by count). The drop-off pinpoints the freeze.
+        let submitPhaseCounts = rows.reduce(into: [String: Int]()) { acc, row in
+            if row.kind == "submit_phase", let source = row.source { acc[source, default: 0] += 1 }
+        }
+        var submitFunnel = Self.submitPhaseOrder.compactMap { phase -> CountEntry? in
+            submitPhaseCounts[phase].map { CountEntry(key: phase, count: $0) }
+        }
+        let knownPhases = Set(Self.submitPhaseOrder)
+        submitFunnel += Self.sortedCounts(submitPhaseCounts.filter { !knownPhases.contains($0.key) })
+
         let samples = rows.prefix(sampleLimit).map { row in
             Sample(
                 kind: row.kind,
@@ -124,6 +152,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             byKind: Self.sortedCounts(byKind),
             bySource: Self.sortedCounts(bySource),
             byFailedCheck: Self.sortedCounts(byCheck),
+            submitFunnel: submitFunnel,
             recentSamples: Array(samples))
     }
 

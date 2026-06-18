@@ -190,6 +190,47 @@ import XCTVapor
         }
     }
 
+    @Test func persistsSubmitPhaseBreadcrumb() async throws {
+        try await withApp(app) { _ in
+            // The browser submit flow posts breadcrumbs (kind=submit_phase,
+            // source=the phase, message=elapsed timing) so a freeze during
+            // grading leaves a server-visible trail of how far the submit got.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_submit_phase")
+            let body = #"""
+                {"kind":"submit_phase","testSetupID":"setup_submit_phase","source":"suite_started","message":"elapsed_ms=4200;tests=8"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "TestUA/4.0")
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.kind == "submit_phase")
+            #expect(rec.source == "suite_started")
+            #expect(rec.message == "elapsed_ms=4200;tests=8")
+            #expect(rec.userAgent == "TestUA/4.0")
+        }
+    }
+
+    @Test func submitPhasesRecordEachPhaseOnceForTheFunnel() async throws {
+        try await withApp(app) { _ in
+            // The funnel relies on each distinct phase (source) being recorded —
+            // so two different phases persist two rows, while a repeat of the same
+            // phase within the window dedups to one.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_funnel")
+            for source in ["grading_start", "runtime_loaded", "grading_start"] {
+                let body = """
+                    {"kind":"submit_phase","testSetupID":"setup_funnel","source":"\(source)","message":"elapsed_ms=10"}
+                    """
+                let res = try await postJSON(body, auth: auth)
+                #expect(res.status == .accepted)
+            }
+            let sources = try await APIClientDiagnostic.query(on: app.db).all()
+                .compactMap(\.source).sorted()
+            #expect(sources == ["grading_start", "runtime_loaded"])
+        }
+    }
+
     @Test func editorErrorMessageAndStackAreTruncated() async throws {
         try await withApp(app) { _ in
             let auth = try await loginAsStudent()

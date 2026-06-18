@@ -43,7 +43,16 @@ struct ClientDiagnosticsRoutes: RouteCollection {
 
         let body = try req.content.decode(ClientDiagnosticBody.self)
 
-        let allowedKinds: Set<String> = ["preflight_fail", "watchdog_timeout", "editor_error"]
+        // "submit_phase" / "submit_error" are breadcrumbs from the browser
+        // grading/submission flow (source = phase name, message = "elapsed_ms=…").
+        // They let us see how far a submit got when the page freezes during
+        // grading — which produces no exception and no result POST, so it is
+        // otherwise invisible to the server. Like the editor errors, these are
+        // infrastructure breadcrumbs (phase + timing + a pipeline error string),
+        // never student-code output, so no student-authored content is stored.
+        let allowedKinds: Set<String> = [
+            "preflight_fail", "watchdog_timeout", "editor_error", "submit_phase", "submit_error",
+        ]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")
         }
