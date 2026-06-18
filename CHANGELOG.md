@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.462] - 2026-06-18
+
+### Changed
+
+- **The student notebook page no longer spawns an `unzip` subprocess on every visit.** `createSupportFileSymlinks` runs on each notebook load to (idempotently) link the assignment's support files into the student's working directory, and it listed the test-setup zip fresh every time — a `/usr/bin/unzip` subprocess under the global zip process lock, redundant after the first visit and a source of tail latency when many students load notebooks at once. The zip-listing cache that already backed the dashboard's "has a notebook?" check (`NotebookPresenceCache`, keyed by the zip's mtime + size) is generalized into a shared `ZipEntryListCache` that caches the full entry list; the notebook page's symlink pass now reads through it, and the presence check becomes a derived query — one zip-listing cache instead of two near-identical ones. The cache busts automatically whenever the instructor edits the zip (every mutation repacks the archive, changing its mtime/size), so newly added or removed support files are still linked. No behaviour change beyond removing the redundant subprocess.
+
+
 ## [0.4.461] - 2026-06-18
 
 ### Fixed
