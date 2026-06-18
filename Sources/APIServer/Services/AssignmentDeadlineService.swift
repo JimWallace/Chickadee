@@ -120,8 +120,29 @@ func studentHasActiveExtension(
     return now < extensionDueAt
 }
 
-/// The effective deadline given a baseline and an optional extension: the later
-/// of the two, or whichever is non-nil. Returns nil only when both are nil.
+/// Whether a published assignment should appear to an enrolled student on the
+/// strength of its own state alone — independent of any per-student extension
+/// or prior participation, which the dashboard unions in separately.
+///
+/// Students see an assignment that is currently open, or one that was published
+/// to the class and has since closed at its deadline (so recently-closed labs
+/// stay on the dashboard and remain openable read-only, instead of silently
+/// vanishing). Deliberately hidden so authoring-in-progress content never leaks:
+///   - `.preview` assignments (staff-only beta state),
+///   - not-yet-started assignments (a future `startsAt`),
+///   - not-yet-published drafts — a `.closed` assignment that has no past due
+///     date (a freshly created / cloned assignment, or one closed before its
+///     deadline; those are surfaced only via an extension or prior engagement).
+func assignmentVisibleToStudentByState(_ assignment: APIAssignment, now: Date = Date()) -> Bool {
+    if assignment.isOpen { return true }
+    // Only `.closed` is a candidate for the published-then-closed case; `.preview`
+    // remains staff-only.
+    guard assignment.visibility == .closed else { return false }
+    if let startsAt = assignment.startsAt, now < startsAt { return false }
+    guard let dueAt = assignment.dueAt, dueAt <= now else { return false }
+    return true
+}
+
 func laterDeadline(baseline: Date?, extensionDueAt: Date?) -> Date? {
     guard let extensionDueAt else { return baseline }
     guard let baseline else { return extensionDueAt }

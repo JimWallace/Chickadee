@@ -202,8 +202,62 @@ import XCTVapor
         }
     }
 
-    @Test func indexHidesClosedAssignmentNeverOpenedFromStudent() async throws {
+    @Test func indexShowsClosedPublishedAssignmentToEnrolledStudentEvenWithoutEngagement() async throws {
         try await withWebRoutesApp { app in
+            // A published assignment that has since closed at its deadline stays
+            // on every enrolled student's dashboard (read-only), even one who
+            // never opened it and holds no extension — recent labs must not
+            // silently disappear just because a student missed the window.
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+
+            // A browser-graded notebook assignment (like the real Lab 4), closed
+            // at a past deadline, with no submission or participation for this
+            // student.
+            let setupID = "setup_closed_published"
+            let courseID = try await wrMakeCourse(on: app).requireID()
+            let notebookPath = app.testSetupsDirectory + "\(setupID).ipynb"
+            try Data(
+                #"{"cells":[],"metadata":{"kernelspec":{"display_name":"Python 3","language":"python","name":"python3"}},"nbformat":4,"nbformat_minor":5}"#
+                    .utf8
+            ).write(to: URL(fileURLWithPath: notebookPath))
+            let setup = APITestSetup(
+                id: setupID,
+                manifest:
+                    #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[{"tier":"public","script":"t.py"}],"timeLimitSeconds":10}"#,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip",
+                notebookPath: notebookPath,
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            try await wrInsertAssignment(
+                testSetupID: setupID, title: "Closed Published Lab",
+                isOpen: false, dueAt: Date().addingTimeInterval(-3_600), on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("Closed Published Lab"),
+                        "A published-then-closed assignment must stay visible to every enrolled student")
+                    #expect(
+                        html.contains(#"title="Edit""#),
+                        "The closed published assignment must be openable (read-only), not a dead-end row")
+                })
+        }
+    }
+
+    @Test func indexHidesUnpublishedClosedDraftFromStudent() async throws {
+        try await withWebRoutesApp { app in
+            // A closed assignment with NO due date is an unpublished draft (the
+            // freshly-created / authoring-in-progress state), not a lab that ran
+            // and closed — it must stay hidden from students who never engaged.
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -221,7 +275,7 @@ import XCTVapor
                     #expect(res.status == .ok)
                     #expect(
                         res.body.string.contains("Secret Lab") == false,
-                        "A closed assignment the student never opened must not appear on the dashboard")
+                        "An unpublished closed draft (no due date) must not appear on the dashboard")
                 })
         }
     }

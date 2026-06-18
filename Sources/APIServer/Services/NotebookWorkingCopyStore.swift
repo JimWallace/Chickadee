@@ -79,10 +79,21 @@ func closedAssignmentGate(
     isClosed: Bool
 ) async throws -> Response? {
     guard !user.isInstructor else { return nil }
-    if isClosed, let assignment,
-        !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
-    {
-        return req.redirect(to: "/")
+    if isClosed, let assignment {
+        // A published-then-closed assignment is openable read-only — a student
+        // may return to a recently-closed lab to review it. Only bounce a
+        // student from a closed assignment that isn't student-visible by state
+        // (a preview, a not-yet-opened scheduled assignment, or an unpublished
+        // draft) and that they have never engaged with. Submission stays gated
+        // separately by requireOpenStudentAssignment, so this view is read-only.
+        var mayView = assignmentVisibleToStudentByState(assignment)
+        if !mayView {
+            mayView = try await studentHasOpenedAssignment(
+                assignment: assignment, userID: userID, on: req.db)
+        }
+        if !mayView {
+            return req.redirect(to: "/")
+        }
     }
     if let assignmentID = assignment?.id {
         try await AssignmentParticipationStore.recordFirstAccess(

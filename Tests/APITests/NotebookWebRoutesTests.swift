@@ -337,23 +337,58 @@ import XCTVapor
         }
     }
 
-    @Test func notebookPageClosedAssignmentNeverOpenedRedirectsToDashboard() async throws {
+    @Test func notebookPageClosedPublishedAssignmentNeverOpenedRendersReadOnly() async throws {
         try await withApp(app) { _ in
-            // A student who has never opened a closed assignment (no working
-            // copy, no submission) is redirected to their dashboard instead of
-            // seeing the notebook — this keeps pre-posted links from spoiling
-            // not-yet-opened labs.
+            // A published-then-closed assignment (its deadline has passed) is now
+            // openable read-only by any enrolled student, even one who never
+            // engaged with it — recent labs stay reviewable instead of bouncing
+            // the student to the dashboard. Submission remains separately gated,
+            // so the view is read-only (no Submit button, closed notice shown).
             let cookie = try await loginAsStudent()
             let user = try await studentUser()
             try await enroll(user)
 
-            let setupID = "setup_nb_closed_unopened"
-            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Hidden"))
+            let setupID = "setup_nb_closed_published"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Review me"))
             _ = try await insertAssignment(
                 testSetupID: setupID,
-                title: "Unopened Closed Lab",
-                dueAt: Date(timeIntervalSinceNow: -3600),
+                title: "Closed Published Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),  // published, deadline passed
                 isOpen: true
+            )
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains(#"data-read-only="true""#))
+                    #expect(html.contains(#"id="nb-submit""#) == false)
+                    #expect(html.contains("This assignment is closed"))
+                })
+        }
+    }
+
+    @Test func notebookPageUnpublishedDraftRedirectsToDashboard() async throws {
+        try await withApp(app) { _ in
+            // A closed assignment with no due date is an unpublished draft, not a
+            // lab that ran and closed: a student who never engaged with it is
+            // still bounced to the dashboard so authoring-in-progress content and
+            // pre-posted links can't spoil it.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_draft"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Draft"))
+            _ = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Draft Lab",
+                dueAt: nil,  // no deadline → unpublished draft
+                isOpen: false
             )
 
             try await app.asyncTest(
@@ -364,6 +399,115 @@ import XCTVapor
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
                     #expect(res.headers.first(name: .location) == "/")
+                })
+        }
+    }
+
+    @Test func notebookPageExtendedStudentGetsEditableClosedAssignmentEvenIfNeverStarted() async throws {
+        try await withApp(app) { _ in
+            // CRITICAL: a per-student extension must let the student COMPLETE a
+            // closed assignment for full credit, even one they never started.
+            // The notebook page must render EDITABLE (not read-only) with the
+            // Submit button, because the extension makes it effectively open for
+            // this student — independent of any prior participation.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_extension_editable"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Extend me"))
+            let assignment = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Extended Closed Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),  // deadline passed
+                isOpen: false  // assignment-wide visibility is closed
+            )
+            // Grant a future extension. The student has NEVER opened this
+            // assignment — no participation row, no submission.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try user.requireID(),
+                extendedDueAt: Date(timeIntervalSinceNow: 48 * 3600)
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"data-read-only="false""#),
+                        "An extended student must get an EDITABLE notebook on a closed assignment")
+                    #expect(
+                        html.contains(#"id="nb-submit""#),
+                        "An extended student must see the Submit button so they can complete it")
+                    #expect(html.contains("This assignment is closed") == false)
+                })
+        }
+    }
+
+    @Test func notebookPageRejectsSolutionFileForStudent() async throws {
+        try await withApp(app) { _ in
+            // The reference solution is staff-only. A student crafting
+            // ?file=solution on the notebook route must be refused — the answer
+            // key is never served to a student, on any assignment.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_solution_student"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(markdown: "Assignment"),
+                zipEntries: [
+                    ("assignment.ipynb", notebookJSON(markdown: "Assignment")),
+                    ("solution.ipynb", notebookJSON(markdown: "Reference solution")),
+                ]
+            )
+            _ = try await insertAssignment(testSetupID: setupID, title: "Solution Guard Lab", isOpen: true)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?file=solution",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+        }
+    }
+
+    @Test func notebookPageAllowsSolutionFileForInstructor() async throws {
+        try await withApp(app) { _ in
+            // Course staff may view the solution on the same route — the guard is
+            // role-based, not a blanket block, so instructor preview still works.
+            let cookie = try await loginUser(
+                username: "notebook_instructor", password: "testpassword", role: "instructor", on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "notebook_instructor").first())
+            try await enroll(instructor)
+
+            let setupID = "setup_nb_solution_instructor"
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(markdown: "Assignment"),
+                zipEntries: [
+                    ("assignment.ipynb", notebookJSON(markdown: "Assignment")),
+                    ("solution.ipynb", notebookJSON(markdown: "Reference solution")),
+                ]
+            )
+            _ = try await insertAssignment(testSetupID: setupID, title: "Solution View Lab", isOpen: true)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook?file=solution",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
                 })
         }
     }

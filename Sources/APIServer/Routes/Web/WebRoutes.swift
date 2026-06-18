@@ -113,17 +113,25 @@ struct WebRoutes: RouteCollection {
                     .all()
             }
         } else {
-            // Students see test setups whose assignment is open, plus any setup
-            // where they hold an active extension — so an assignment that the
-            // automatic sweep closed at its deadline stays visible to a student
-            // who was granted more time.
-            var visibleSetupIDs = Set(allAssignments.filter(\.isOpen).map(\.testSetupID))
+            // Enrolled students see every published assignment in their course:
+            // open ones, and ones that were published and have since closed at
+            // their deadline — kept on the list (read-only) so recent labs never
+            // silently disappear. Preview / scheduled / unpublished-draft
+            // assignments stay hidden (see assignmentVisibleToStudentByState).
             let now = Date()
+            var visibleSetupIDs = Set(
+                allAssignments
+                    .filter { assignmentVisibleToStudentByState($0, now: now) }
+                    .map(\.testSetupID))
+            // An active per-student extension also reveals an assignment that was
+            // closed before its deadline (which the by-state rule leaves hidden
+            // for everyone else) to the one student who was granted more time.
             for (setupID, extendedDueAt) in extensionDueAtBySetupID
             where studentHasActiveExtension(extensionDueAt: extendedDueAt, now: now) {
                 visibleSetupIDs.insert(setupID)
             }
-            // Closed assignments the student already opened remain on the list.
+            // Any closed assignment the student already engaged with stays listed
+            // too — covers no-deadline assignments the by-state rule can't classify.
             visibleSetupIDs.formUnion(previouslyOpenedSetupIDs)
             guard !visibleSetupIDs.isEmpty else {
                 return try await req.view.render(
@@ -372,7 +380,13 @@ struct WebRoutes: RouteCollection {
                     startsAt: gate.honorsStartDate ? assignment.startsAt : nil
                 )
             }()
-            let canEdit = isOpenForThisUser || previouslyOpenedSetupIDs.contains(setupID)
+            // A published-but-closed assignment is openable read-only, so it
+            // still gets the open-notebook action even for a student who never
+            // engaged with it (the page renders read-only and hides Submit).
+            let canEdit =
+                isOpenForThisUser
+                || previouslyOpenedSetupIDs.contains(setupID)
+                || (assignment.map { assignmentVisibleToStudentByState($0) } ?? false)
             let badgeSplit = AchievementBadge.dashboardSplit(latestBadgesBySetupID[setupID] ?? [])
             return TestSetupRow(
                 id: setupID,
