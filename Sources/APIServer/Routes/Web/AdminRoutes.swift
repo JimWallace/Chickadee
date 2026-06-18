@@ -195,7 +195,7 @@ struct AdminRoutes: RouteCollection {
 
     @Sendable
     func storagePage(req: Request) async throws -> View {
-        let storage = try await makeStorageContext(req: req)
+        let storage = try await Self.makeStorageContext(req: req)
         let ctx = AdminStoragePageContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "storage",
@@ -210,7 +210,11 @@ struct AdminRoutes: RouteCollection {
     /// the results+logs dir, the static asset tree) and the database so an
     /// admin can see where disk is going.  Directory walks are blocking, so
     /// they run on the thread pool off the event loop.
-    private func makeStorageContext(req: Request) async throws -> AdminStorageContext {
+    ///
+    /// `static` so the admin diagnostic MCP tool (`get_storage_usage`) can reuse
+    /// the exact same builder as the `/admin/storage` page — the context is
+    /// PII-free (assignment/course identifiers + byte counts only).
+    static func makeStorageContext(req: Request) async throws -> AdminStorageContext {
         let submissionsDir = req.application.submissionsDirectory
         let testSetupsDir = req.application.testSetupsDirectory
         let resultsDir = req.application.resultsDirectory
