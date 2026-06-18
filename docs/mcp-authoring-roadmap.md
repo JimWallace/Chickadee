@@ -43,6 +43,7 @@ The catalog:
 | `get_solution` | `content:read` | The reference solution notebook (.ipynb JSON), resolved from the validation submission |
 | `get_support_files` | `content:read` | List the setup zip's non-graded helper/data files, or read one (UTF-8, byte-capped) |
 | `get_global_inputs` | `content:read` | Assignment personalization: global variables + per-student expressions |
+| `get_achievements` | `content:read` | The assignment's composable awards (badges / class goals / records), built-in defaults merged in until first curated |
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
 | `get_validation_result` | `content:read` | Per-test outcomes of the reference solution's latest validation run (status + shortResult/longResult, all tiers); validation-only, never student data |
@@ -50,6 +51,7 @@ The catalog:
 | `set_grading_mode` | `content:write` | Set an assignment's grading path (worker vs browser); no regrade/close |
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
+| `update_achievements` | `content:write` | Replace the assignment's composable awards (display-only; no regrade/close) |
 | `update_section_variables` | `content:write` | Replace a section's scoped variables/expressions |
 | `create_suite_section` / `rename_suite_section` / `delete_suite_section` | `content:write` | Manage an assignment's test-suite sections (display groups) |
 | `move_suite_item` | `content:write` | Move a script/family/check into a suite section, or ungroup it |
