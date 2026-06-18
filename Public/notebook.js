@@ -72,6 +72,12 @@
     let forcedEditorResetAt = 0;
     let serverSyncInFlight = false;
     let serverSyncComplete = false;
+    // True once the JupyterLite editor shell is up (the watchdog's reliable
+    // shell-ready signal). The browser-grading submit path waits on this so a
+    // submit clicked during a cold boot can't kick off a SECOND Pyodide
+    // (browser grading runs its own, separate from the editor kernel) that
+    // starves the still-booting kernel — the kernel-unhealthy race.
+    let editorReady = false;
 
     // Capability preflight: gate iframe mounting on the browser actually
     // supporting JupyterLite + Pyodide.  If the preflight module isn't
@@ -259,7 +265,12 @@
     // navigation, transient cross-origin error), we don't regress to a
     // phase-1 timeout.
     function armEditorWatchdog() {
-        if (!failures) return;
+        if (!failures) {
+            // No preflight/watchdog supervision (legacy cached page): don't
+            // gate the submit path on a readiness signal that will never fire.
+            markEditorReady();
+            return;
+        }
         let startedAt            = Date.now();
         const shellDeadline      = 60000;
         const kernelMaxObserveMs = 120000;
@@ -280,6 +291,10 @@
             const probe = probeIframeReadiness(frame);
             if (probe.shellReady && shellLoadedAt === null) {
                 shellLoadedAt = Date.now();
+                // Editor shell is up. Unblock the browser-grading submit path
+                // (it waits on this so it won't race a second Pyodide against
+                // the kernel's cold boot).
+                markEditorReady();
                 if (recovering) {
                     // The post-recovery editor is back; clear the transient
                     // "reloading" status and let the student carry on.
@@ -427,6 +442,32 @@
         }
     }
 
+    // Editor-readiness gate for the browser-grading submit path (see the
+    // `editorReady` declaration). Idempotent; the watchdog flips it on the
+    // editor shell's first appearance. Deliberately does NOT enable Submit —
+    // that stays gated on the notebook sync so a blank notebook can't be
+    // submitted before the student's work loads.
+    function markEditorReady() {
+        editorReady = true;
+    }
+
+    // Resolves once the editor shell is ready, or after `timeoutMs` so a dead
+    // editor never blocks submission forever (browser grading still runs in its
+    // own Pyodide regardless). Polls because readiness is observed by the
+    // watchdog tick. Resolves immediately in the common case (editor long
+    // since ready by the time the student clicks Submit).
+    function awaitEditorReady(timeoutMs) {
+        if (editorReady) return Promise.resolve(true);
+        return new Promise((resolve) => {
+            const started = Date.now();
+            (function poll() {
+                if (editorReady) { resolve(true); return; }
+                if (Date.now() - started >= timeoutMs) { resolve(false); return; }
+                setTimeout(poll, 200);
+            })();
+        });
+    }
+
     // Returns a short evidence string iff we have POSITIVE EVIDENCE the
     // kernel has hit a known failure state, or null otherwise.  Used by the
     // watchdog to decide whether to fire phase-2 ("kernel-unhealthy") and to
@@ -527,6 +568,16 @@
                 if (gradingMode === 'browser') {
                     if (!window.BrowserRunner || typeof window.BrowserRunner.runAndSubmit !== 'function') {
                         throw new Error('Browser grading is unavailable right now. Please reload and try again.');
+                    }
+                    // Browser grading runs its own Pyodide, separate from the
+                    // editor kernel. Don't start it while the kernel is still
+                    // cold-booting — that contention is what leaves the kernel
+                    // dead/unknown. Wait for the editor shell first; resolves
+                    // immediately once ready (the common case) and is bounded so
+                    // a genuinely dead editor still degrades to grading here.
+                    if (!editorReady) {
+                        setStatus('loading', 'Waiting for the editor to finish loading…');
+                        await awaitEditorReady(45000);
                     }
                     // Browser-graded lab: run tests locally in Pyodide then submit atomically.
                     const { outcomes } = await submitBrowserNotebook(notebook, setupID);
