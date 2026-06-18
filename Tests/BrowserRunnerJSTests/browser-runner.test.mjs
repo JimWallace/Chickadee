@@ -362,6 +362,7 @@ async function loadRunnerHarness(options = {}) {
   const scriptLoads = [];
   const postBodies = [];
   const fetchCalls = [];
+  const breadcrumbs = [];
   const testHooks = {};
   const py = options.pyodide ?? createPyodideHarness(options);
 
@@ -397,6 +398,11 @@ async function loadRunnerHarness(options = {}) {
 
   const fetchImpl = async (url, init = {}) => {
     fetchCalls.push({ url, init });
+    // Submit-phase breadcrumbs (fire-and-forget telemetry) — capture and ack.
+    if (url.includes('/client-diagnostics')) {
+      try { breadcrumbs.push(JSON.parse(init.body)); } catch (_) { breadcrumbs.push({ raw: init.body }); }
+      return { ok: true, async json() { return {}; } };
+    }
     if (init.method === 'POST') {
       const body = init.body;
       const collection = body.get('collection');
@@ -514,6 +520,7 @@ async function loadRunnerHarness(options = {}) {
     scriptLoads,
     postBodies,
     fetchCalls,
+    breadcrumbs,
     py,
   };
 }
@@ -582,6 +589,72 @@ test('runAndSubmit executes Python scripts, posts a browser-wasm result collecti
     harness.fetchCalls.filter(call => call.url.includes('/manifest')).length,
     1,
   );
+});
+
+test('runAndSubmit emits ordered submit-phase breadcrumbs; validation stays silent', async () => {
+  const notebookJSON = JSON.stringify({
+    nbformat: 4,
+    metadata: {},
+    cells: [{ cell_type: 'code', source: ['answer = 42\n'], metadata: {} }],
+  });
+
+  const harness = await loadRunnerHarness({
+    zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'tests/test_pass.py', tier: 'public' }],
+    },
+    scriptBehaviors: {
+      'tests/test_pass.py': {
+        stdout: `${JSON.stringify({ shortResult: 'ok', status: 'pass' })}\n`,
+        stderr: '',
+        exitCode: 0,
+      },
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode(notebookJSON),
+    'setup_bc',
+  );
+
+  // The breadcrumb funnel must cover the whole grading flow, in order, so a
+  // freeze in any phase leaves a server-visible "last reached" record.
+  assert.deepEqual(
+    harness.breadcrumbs.map(b => b.source),
+    [
+      'grading_start',
+      'runtime_loaded',
+      'setup_unpacked',
+      'suite_started',
+      'suite_done',
+      'result_posting',
+      'result_posted',
+    ],
+  );
+  for (const b of harness.breadcrumbs) {
+    assert.equal(b.kind, 'submit_phase');
+    assert.equal(b.testSetupID, 'setup_bc');
+    assert.match(b.message, /elapsed_ms=\d+/);
+  }
+
+  // The instructor validation path (runScripts without reportPhase) is silent —
+  // breadcrumbs are scoped to actual student submissions.
+  const validationHarness = await loadRunnerHarness({
+    zipFiles: { 'test_ref.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'test_ref.py', tier: 'public' }],
+    },
+  });
+  await validationHarness.window.BrowserRunner.runScripts(
+    new TextEncoder().encode('answer = 42\n'),
+    'setup_val',
+    { filename: 'solution.py' },
+  );
+  assert.equal(validationHarness.breadcrumbs.length, 0);
 });
 
 test('runScripts validates a plain Python solution without posting a submission', async () => {

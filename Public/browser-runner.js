@@ -43,18 +43,64 @@
      * @param {string}     setupID        The test setup ID for this assignment.
      * @returns {{ outcomes: object[], response: object, sections: object[], sectionIDs: (?string)[] }}
      */
+    // Fire-and-forget submit-phase breadcrumb for diagnosing "the page froze
+    // during submission". Sent with keepalive so the browser hands it to the
+    // network layer immediately — a breadcrumb emitted *before* a phase reaches
+    // the server even if that phase then blocks the main thread or the page
+    // unloads, so we can see how far a submit got when grading hangs (a hang
+    // produces no exception and no result POST, so it is otherwise invisible to
+    // the server). Best-effort: never blocks, never throws. Only emitted on the
+    // student submit path — runAndSubmit passes `reportPhase` into runScripts;
+    // instructor validation calls runScripts without it, so it stays silent.
+    function recordSubmitPhase(phase, setupID, detail, isError) {
+        try {
+            const startMs = window.__ckSubmitStartMs || Date.now();
+            const parts = ['elapsed_ms=' + (Date.now() - startMs)];
+            if (detail) parts.push(String(detail).slice(0, 200));
+            const body = {
+                kind: isError ? 'submit_error' : 'submit_phase',
+                source: String(phase).slice(0, 64),
+                message: parts.join(';'),
+            };
+            if (setupID) body.testSetupID = setupID;
+            let csrf = '';
+            try { csrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+            fetch('/api/v1/client-diagnostics', {
+                method: 'POST',
+                credentials: 'same-origin',
+                keepalive: true,
+                headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
+                body: JSON.stringify(body),
+            }).catch(function () { /* telemetry is best-effort */ });
+        } catch (_) { /* never let telemetry break grading */ }
+    }
+
     async function runAndSubmit(notebookBytes, setupID) {
-        const result = await runScripts(notebookBytes, setupID, { filename: 'submission.ipynb' });
+        window.__ckSubmitStartMs = Date.now();
+        recordSubmitPhase('grading_start', setupID);
+        try {
+            const result = await runScripts(notebookBytes, setupID, {
+                filename: 'submission.ipynb',
+                reportPhase: function (phase, detail) { recordSubmitPhase(phase, setupID, detail); },
+            });
 
-        // Hide the loading-progress status bar — results are now in #nb-results.
-        if (statusEl) statusEl.hidden = true;
+            // Hide the loading-progress status bar — results are now in #nb-results.
+            if (statusEl) statusEl.hidden = true;
 
-        return {
-            outcomes: result.outcomes,
-            response: await postBrowserResult(notebookBytes, result.collection, setupID),
-            sections: result.sections,
-            sectionIDs: result.sectionIDs,
-        };
+            recordSubmitPhase('result_posting', setupID);
+            const response = await postBrowserResult(notebookBytes, result.collection, setupID);
+            recordSubmitPhase('result_posted', setupID);
+
+            return {
+                outcomes: result.outcomes,
+                response: response,
+                sections: result.sections,
+                sectionIDs: result.sectionIDs,
+            };
+        } catch (e) {
+            recordSubmitPhase('submit_failed', setupID, toMessage(e), true);
+            throw e;
+        }
     }
 
     /**
@@ -125,6 +171,7 @@
         } catch (e) {
             throw new Error('Failed to load ZIP library: ' + toMessage(e));
         }
+        if (options.reportPhase) options.reportPhase('runtime_loaded');
 
         // Unique work directory per run to avoid state leakage.
         const workDir = `/chickadee_work_${Date.now()}`;
@@ -164,6 +211,7 @@
                 }
                 py.FS.writeFile(fullPath, data);
             }
+            if (options.reportPhase) options.reportPhase('setup_unpacked');
 
             // 2. Write runtime helper libraries.
             py.FS.writeFile(`${workDir}/test_runtime.py`,  TEST_RUNTIME_PY);
@@ -350,8 +398,10 @@ for _module_name in student_module_names_in_load_order():
             };
             const runScript = (name, limit) => runRawScript(py, runnerCore, workDir, name, limit);
 
+            if (options.reportPhase) options.reportPhase('suite_started', 'tests=' + suites.length);
             const outcomes = await globalThis.runnerExecuteSuites(
                 suites, timeLimitSeconds, 1, scriptExists, runScript);
+            if (options.reportPhase) options.reportPhase('suite_done', 'n=' + outcomes.length);
 
             // 5. Build collection. The caller decides whether to submit it.
             // `outcomes` stays the canonical worker TestOutcome shape — section

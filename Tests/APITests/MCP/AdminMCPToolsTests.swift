@@ -59,6 +59,45 @@ import XCTVapor
         }
     }
 
+    @Test func getBrowserDiagnosticsBuildsSubmitFunnelInPhaseOrder() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "bf-admin", role: "admin")
+            let student = try await makeTestUser(on: app, username: "bf-student", role: "student")
+            let studentID = try student.requireID()
+            // submit_phase breadcrumbs reaching different depths, inserted out of
+            // order with uneven counts — the funnel must come back in canonical
+            // phase order so the drop-off (the freeze point) reads top-to-bottom.
+            let phaseSeeds: [(String, Int)] = [
+                ("result_posted", 2),
+                ("grading_start", 5),
+                ("suite_started", 4),
+                ("runtime_loaded", 5),
+                ("setup_unpacked", 4),
+                ("suite_done", 3),
+                ("result_posting", 2),
+            ]
+            for (phase, count) in phaseSeeds {
+                for _ in 0..<count {
+                    try await APIClientDiagnostic(
+                        userID: studentID, testSetupID: nil, kind: "submit_phase",
+                        failedChecks: nil, userAgent: "UA", message: "elapsed_ms=10",
+                        stack: nil, source: phase
+                    ).save(on: app.db)
+                }
+            }
+
+            let output = try await GetBrowserDiagnosticsTool().execute(
+                .init(), context(subject: "bf-admin"))
+
+            #expect(
+                output.submitFunnel.map(\.key) == [
+                    "grading_start", "runtime_loaded", "setup_unpacked",
+                    "suite_started", "suite_done", "result_posting", "result_posted",
+                ])
+            #expect(output.submitFunnel.map(\.count) == [5, 5, 4, 4, 3, 2, 2])
+        }
+    }
+
     @Test func getHealthAlertsRejectsNonAdmin() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "ha-student", role: "student")
