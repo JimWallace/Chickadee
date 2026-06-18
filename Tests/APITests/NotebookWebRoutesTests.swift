@@ -403,6 +403,52 @@ import XCTVapor
         }
     }
 
+    @Test func notebookPageExtendedStudentGetsEditableClosedAssignmentEvenIfNeverStarted() async throws {
+        try await withApp(app) { _ in
+            // CRITICAL: a per-student extension must let the student COMPLETE a
+            // closed assignment for full credit, even one they never started.
+            // The notebook page must render EDITABLE (not read-only) with the
+            // Submit button, because the extension makes it effectively open for
+            // this student — independent of any prior participation.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+
+            let setupID = "setup_nb_extension_editable"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Extend me"))
+            let assignment = try await insertAssignment(
+                testSetupID: setupID,
+                title: "Extended Closed Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600),  // deadline passed
+                isOpen: false  // assignment-wide visibility is closed
+            )
+            // Grant a future extension. The student has NEVER opened this
+            // assignment — no participation row, no submission.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try user.requireID(),
+                extendedDueAt: Date(timeIntervalSinceNow: 48 * 3600)
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"data-read-only="false""#),
+                        "An extended student must get an EDITABLE notebook on a closed assignment")
+                    #expect(
+                        html.contains(#"id="nb-submit""#),
+                        "An extended student must see the Submit button so they can complete it")
+                    #expect(html.contains("This assignment is closed") == false)
+                })
+        }
+    }
+
     @Test func notebookPageRejectsSolutionFileForStudent() async throws {
         try await withApp(app) { _ in
             // The reference solution is staff-only. A student crafting
