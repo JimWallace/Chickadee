@@ -31,12 +31,34 @@ enum AdminMCPServerInstructions {
         metrics, browser-error reports, and logs to diagnose problems — then \
         propose fixes as code, outside this surface.
 
-        Time-series ("sparkline") data behind the dashboards is also available: \
-        get_metrics_card_series (the operational cards — queue depth, jobs \
-        processed, load, p95 wait/execution), get_active_users_series (distinct \
-        active users per bucket), and get_instructor_card_series (one course's \
-        submission/active-student/active-assignment/browser-error counts, scoped \
-        by an explicit courseCode filter — still aggregate counts only, never a \
-        student identifier).
+        What's available, by area:
+        - Deployment: get_deployment_info (version + capability surface).
+        - Runners: list_runners (the fleet) and get_runner_detail (one runner's \
+        capability profile + aggregate per-stage timing + cache-hit rate + \
+        recent snapshots — never the per-job rows).
+        - Queue: get_queue_state (pending depth, in-flight, oldest-pending age, \
+        stuck-submission count).
+        - Metrics: get_metrics_snapshot (point-in-time), get_metrics_card_series \
+        (the dashboard's fixed 24h/7d/30d sparklines), get_metrics_timeseries \
+        (a flexible window/bucket, including HTTP request latency), and \
+        get_request_metrics (slowest routes / status-class counts).
+        - Activity: get_active_users_series (distinct active users per bucket); \
+        get_instructor_card_series (one course's submission / active-student / \
+        active-assignment / browser-error counts, scoped by an explicit \
+        courseCode filter).
+        - Errors & logs: get_browser_diagnostics, query_logs, get_health_alerts.
+        - Storage: get_storage_usage (footprint by component + per-assignment).
+        - Integrations & security: list_connected_agents (MCP OAuth grants), \
+        get_brightspace_sync_status (grade-push health), query_audit_log \
+        (activity COUNTS by action/category only).
+
+        Every one of these returns aggregates or redacted records by \
+        construction — never a student identity, grade, submission content, or \
+        enrollment. Where a source table carries such data (browser \
+        diagnostics, brightspace sync, the audit log, per-job metrics), the tool \
+        omits it: query_audit_log returns counts only (no actor/IP/metadata), \
+        get_brightspace_sync_status drops the student username and grade, and \
+        get_runner_detail exposes only aggregate timing, not the per-job rows \
+        the web page shows.
         """
 }

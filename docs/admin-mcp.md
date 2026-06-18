@@ -320,8 +320,17 @@ All `diagnostics:read`. Names are provisional.
 | `query_logs` | Recent structured log records from the in-process ring buffer (§6), filterable by event name / level / time window | PII metadata redacted |
 | `get_health_alerts` | Current `ServerHealthAlertService` rule states (which are firing) + configured thresholds | clean |
 | `get_metrics_card_series` | The time-series (sparkline) data behind the admin dashboard's five operational cards — per-bucket max queue depth, jobs processed, max load, p95 queue-wait, p95 execution — for every window (24h / 7d / 30d). The windowed series behind `get_metrics_snapshot` | aggregate, no row identifiers |
+| `get_metrics_timeseries` | Flexible-window operational time-series (`metricsTimeSeriesSnapshot`): per-bucket runner utilization, **HTTP request count + P95 latency**, completed jobs, test status counts, queue-wait/execution P95. Arbitrary window/bucket | aggregate, no row identifiers |
 | `get_active_users_series` | The admin dashboard's "Active Users" chart: distinct active users per bucket over a trailing window (`ActivityChartService`) | aggregate, distinct counts only |
 | `get_instructor_card_series` | The instructor dashboard's four cards for one course (by `courseCode`): per-bucket submissions, active students, active assignments, browser errors (`instructorCardSeries`) | aggregate counts only; enrolled-student lookup is internal scoping, no identity reaches the output |
+| `get_queue_state` | Current worker-queue state: pending depth (worker-eligible + total), in-flight, oldest-pending age, stuck-submission count (the reaper's view), recent-window peak depth | aggregate, clean |
+| `list_runners` | The runner fleet (`makeWorkerRows`): id, hostname, version, load, jobs processed, rolling avg execution/queue-wait | clean |
+| `get_runner_detail` | One runner's identity + capability profile + aggregate timing breakdown (avg execution/queue-wait/overhead/per-stage, cache-hit rate, status counts) + recent snapshots | aggregate only; the per-job rows the web page shows (username + submission id) are deliberately omitted |
+| `get_storage_usage` | On-disk footprint (`AdminRoutes.makeStorageContext`): bytes by component + DB + per-assignment breakdown | assignment/course identifiers + byte/count aggregates; no student data |
+| `get_request_metrics` | HTTP request-timing aggregates (`request_metrics`): total, status-class counts, overall duration summary, slowest routes by P95 | id-like path segments normalized to `:id`; no row-level identifier |
+| `list_connected_agents` | MCP OAuth grants (`MCPAgentsRoutes.grantRows`, all-grants view): agent name, scopes, owner, authorized/last-used/expires/revoked | owner is the authorizing instructor/admin — never a student; no refresh-token secret |
+| `get_brightspace_sync_status` | BrightSpace grade-sync health (`brightspace_sync_log`): counts by status + recent error samples (D2L error detail) | **student username + grade (points) hard-dropped**; status/detail/assignment/org-unit/timestamp only |
+| `query_audit_log` | Audit-log activity as **counts only** by action + category over a window (`audit_log`) | counts only — no row, actor, IP, or metadata is ever returned (actors can be students), so the guarantee holds by construction |
 
 A `get_deployment_info` / capability-probe tool mirrors the content surface's
 `get_server_info` and lets the agent confirm the surface is live and what it can
@@ -452,6 +461,19 @@ OAuth and DB-wall work lands.
    explicit `courseCode` filter (not a session) but returns only per-bucket
    counts — the enrolled-student/setup lookup is internal scoping, no student
    identifier reaches the output, asserted by a per-tool PII test.
+6. **Diagnostic-surface coverage round.** ✅ **Done.** Eight more tools so an
+   agent has parity with the admin web dashboards' operational views, each
+   reusing the same builder its page uses: `get_metrics_timeseries`
+   (flexible-window series + HTTP request latency), `get_queue_state`,
+   `list_runners` + `get_runner_detail` (capability profile + aggregate
+   per-stage timing — never the per-job rows), `get_storage_usage`,
+   `get_request_metrics` (id-like path segments normalized), `list_connected_agents`
+   (MCP OAuth grants), `get_brightspace_sync_status` (grade-push health, student
+   username + grade dropped), and `query_audit_log` (counts only — no actor / IP
+   / metadata). The three identity/grade-adjacent sources (audit log, brightspace
+   sync, per-job runner metrics) are realized as counts/aggregates/redacted DTOs
+   so the no-student-data guarantee holds by construction; each is asserted by a
+   per-tool PII test.
 
 ---
 
