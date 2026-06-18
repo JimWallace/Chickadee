@@ -230,9 +230,13 @@
     //       via the ServiceManager API.  Absence of positive evidence
     //       of *health* (e.g. the kernel is in "Starting" /
     //       "Connecting" state, or the status text isn't visible to
-    //       our probe) is NOT treated as failure.  Phase 2 deadline is
-    //       a maximum after which we silently give up watching (we
-    //       were wrong about a problem; the page is the user's now).
+    //       our probe) is NOT treated as failure.  On the FIRST kernel
+    //       failure we reload the editor iframe once (recovery) — a
+    //       dead/unknown kernel is usually a transient cold-boot race a
+    //       fresh load clears; only a SECOND failure surfaces the upload
+    //       fallback + diagnostic.  Phase 2 deadline is a maximum after
+    //       which we silently give up watching (we were wrong about a
+    //       problem; the page is the user's now).
     //
     // Background: v0.4.149's original probe required positive evidence
     // of kernel health (status text "| Idle" or "| Busy"); v0.4.150 +
@@ -256,11 +260,19 @@
     // phase-1 timeout.
     function armEditorWatchdog() {
         if (!failures) return;
-        const startedAt          = Date.now();
+        let startedAt            = Date.now();
         const shellDeadline      = 60000;
         const kernelMaxObserveMs = 120000;
         let shellLoadedAt = null;
         let cancelled     = false;
+        // One-shot automatic recovery: a kernel that registers `dead` /
+        // `unknown` is almost always a transient cold-boot hiccup
+        // (WASM/IndexedDB/service-worker race) that a fresh editor load
+        // clears.  We reload the iframe ONCE before falling back to the
+        // upload panel.  `recovering` suppresses status noise while the
+        // reloaded shell comes back up.
+        let kernelRecoveryAttempted = false;
+        let recovering              = false;
 
         function tick() {
             if (cancelled) return;
@@ -268,6 +280,13 @@
             const probe = probeIframeReadiness(frame);
             if (probe.shellReady && shellLoadedAt === null) {
                 shellLoadedAt = Date.now();
+                if (recovering) {
+                    // The post-recovery editor is back; clear the transient
+                    // "reloading" status and let the student carry on.
+                    recovering = false;
+                    setStatus('', '');
+                    reenableSubmit();
+                }
             }
 
             // Phase 1: shell never seen
@@ -282,16 +301,37 @@
                 return;
             }
 
-            // Shell loaded.  Phase 2 fires ONLY on positive evidence
-            // the kernel has hit a known failure state.
+            // Shell loaded.  Phase 2 fires ONLY on positive evidence the
+            // kernel has hit a known failure state.  The first time we see
+            // it we reload the editor once (recovery); only a SECOND failure
+            // surfaces the fallback UI + diagnostic.
             if (probe.kernelInFailureState) {
-                cancelled = true;
-                failures.showFailure({
-                    kind:         'watchdog_timeout',
-                    failedChecks: ['kernel-unhealthy'],
-                    source:       'kernel',
-                    message:      probe.kernelEvidence || 'kernel in failure state'
+                const plan = planKernelFailureResponse({
+                    recoveryAlreadyAttempted: kernelRecoveryAttempted,
+                    evidence: probe.kernelEvidence
                 });
+                if (plan.action === 'recover') {
+                    kernelRecoveryAttempted = true;
+                    recovering = true;
+                    setStatus('loading',
+                        'The notebook kernel didn’t start — reloading the editor…');
+                    // Reload from the parent side (cross-origin-safe; the same
+                    // mechanism the locked-path reset uses).  JupyterLite's
+                    // workspace restore re-opens the student's saved copy from
+                    // IndexedDB on boot and the reseed preservation logic keeps
+                    // their work, so this reboots the kernel without discarding
+                    // edits.  `forcedEditorResetAt` keeps the locked-path
+                    // enforcer from fighting our navigation.
+                    forcedEditorResetAt = Date.now();
+                    try { frame.src = editorURL; } catch (_) { /* retry on next tick */ }
+                    // Re-arm both phases for the fresh boot.
+                    startedAt     = Date.now();
+                    shellLoadedAt = null;
+                    setTimeout(tick, 2000);
+                    return;
+                }
+                cancelled = true;
+                failures.showFailure(plan.diagnostic);
                 reenableSubmit();
                 return;
             }
@@ -426,6 +466,36 @@
         } catch (_) { /* fall through */ }
 
         return null;
+    }
+
+    // Decides how the watchdog reacts to POSITIVE EVIDENCE that the kernel is
+    // in a failure state (`dead` / `unknown` session, or the "Kernel Unknown"
+    // badge).  Pure so it's unit-testable; the caller performs the reload /
+    // showFailure side effects.
+    //
+    //   * First failure  → 'recover': reload the editor once.  A dead/unknown
+    //                      kernel is usually a transient cold-boot race that a
+    //                      fresh load clears, so we retry before giving up.
+    //   * Second failure → 'fail': the reload didn't help.  Surface the upload
+    //                      fallback and report the diagnostic, with the message
+    //                      annotated so telemetry can distinguish a persistent
+    //                      kernel failure from a first-try one.  The kind /
+    //                      failedChecks / source are unchanged so the admin
+    //                      browser-diagnostics breakdown keeps classifying it.
+    function planKernelFailureResponse({ recoveryAlreadyAttempted, evidence }) {
+        if (!recoveryAlreadyAttempted) {
+            return { action: 'recover' };
+        }
+        const reason = evidence || 'kernel in failure state';
+        return {
+            action: 'fail',
+            diagnostic: {
+                kind:         'watchdog_timeout',
+                failedChecks: ['kernel-unhealthy'],
+                source:       'kernel',
+                message:      reason + ' (persisted after auto-reload)'
+            }
+        };
     }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
@@ -1385,6 +1455,7 @@
             parseStructuredPayload,
             probeIframeReadiness,
             kernelFailureEvidence,
+            planKernelFailureResponse,
             shouldForceReseed,
             reseedPlan,
         };
