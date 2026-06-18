@@ -151,6 +151,115 @@ import XCTVapor
             }
         }
     }
+
+    // MARK: - get_metrics_card_series
+
+    @Test func getMetricsCardSeriesReturnsAllWindowsForAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "mcs-admin", role: "admin")
+            let output = try await GetMetricsCardSeriesTool().execute(
+                .init(), context(subject: "mcs-admin"))
+            // One entry per selectable window (24h / 7d / 30d), each with a full
+            // bucket grid — empty test deployment, but the grid still resolves.
+            #expect(output.windows.count == MetricsCardWindow.allCases.count)
+            let day = try #require(output.windows.first { $0.window == "24h" })
+            #expect(day.bucketLabels.count == 24)
+            #expect(day.maxQueueDepth.series.count == 24)
+        }
+    }
+
+    @Test func getMetricsCardSeriesRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "mcs-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetMetricsCardSeriesTool().execute(.init(), context(subject: "mcs-prof"))
+            }
+        }
+    }
+
+    // MARK: - get_active_users_series
+
+    @Test func getActiveUsersSeriesDefaultsToDayWindowForAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "aus-admin", role: "admin")
+            let output = try await GetActiveUsersSeriesTool().execute(
+                .init(), context(subject: "aus-admin"))
+            #expect(output.window == "24h")
+            #expect(output.buckets.count == 24)
+
+            let week = try await GetActiveUsersSeriesTool().execute(
+                .init(window: "1w"), context(subject: "aus-admin"))
+            #expect(week.window == "1w")
+            #expect(week.buckets.count == 7)
+        }
+    }
+
+    @Test func getActiveUsersSeriesRejectsUnknownWindow() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "aus-admin2", role: "admin")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetActiveUsersSeriesTool().execute(
+                    .init(window: "90d"), context(subject: "aus-admin2"))
+            }
+        }
+    }
+
+    @Test func getActiveUsersSeriesRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "aus-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetActiveUsersSeriesTool().execute(.init(), context(subject: "aus-prof"))
+            }
+        }
+    }
+
+    // MARK: - get_instructor_card_series
+
+    @Test func getInstructorCardSeriesScopesToCourseAndRedactsStudentID() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "ics-admin", role: "admin")
+            let course = try await makeTestCourse(on: app, code: "MCP101")
+            let courseID = try course.requireID()
+            let setup = try await makeTestSetup(on: app, id: "ics_setup", courseID: courseID)
+            let student = try await makeTestUser(on: app, username: "ics-student", role: "student")
+            let studentID = try student.requireID()
+            try await makeTestEnrollment(on: app, userID: studentID, courseID: courseID)
+            _ = try await makeTestSubmission(
+                on: app, id: "ics_sub", setupID: try setup.requireID(), userID: studentID)
+
+            let output = try await GetInstructorCardSeriesTool().execute(
+                .init(courseCode: "mcp101"), context(subject: "ics-admin"))  // case-insensitive
+            let day = try #require(output.windows.first { $0.window == "24h" })
+            #expect(day.submissions.headline == 1)
+            #expect(day.activeStudents.headline == 1)
+            #expect(day.activeAssignments.headline == 1)
+
+            // PII guarantee: no student identifier in the serialized output.
+            let json = try #require(String(bytes: JSONEncoder().encode(output), encoding: .utf8))
+            #expect(!json.contains(studentID.uuidString))
+            #expect(!json.lowercased().contains("userid"))
+        }
+    }
+
+    @Test func getInstructorCardSeriesRejectsUnknownCourse() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "ics-admin2", role: "admin")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetInstructorCardSeriesTool().execute(
+                    .init(courseCode: "NO-SUCH-COURSE"), context(subject: "ics-admin2"))
+            }
+        }
+    }
+
+    @Test func getInstructorCardSeriesRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "ics-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetInstructorCardSeriesTool().execute(
+                    .init(courseCode: "MCP101"), context(subject: "ics-prof"))
+            }
+        }
+    }
 }
 
 // Pure-logic tests for the log ring-buffer handler — no app.
@@ -189,7 +298,8 @@ import XCTVapor
         let names = Set(AdminMCPToolCatalog.live.all.map(\.name))
         #expect(
             names.isSuperset(of: [
-                "get_deployment_info", "get_metrics_snapshot", "get_health_alerts",
+                "get_deployment_info", "get_metrics_snapshot", "get_metrics_card_series",
+                "get_active_users_series", "get_instructor_card_series", "get_health_alerts",
                 "get_browser_diagnostics", "query_logs",
             ]))
     }

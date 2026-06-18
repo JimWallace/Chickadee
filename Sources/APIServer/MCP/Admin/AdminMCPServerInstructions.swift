@@ -30,5 +30,13 @@ enum AdminMCPServerInstructions {
         Use the tools to inspect deployment health, runner/queue state, server \
         metrics, browser-error reports, and logs to diagnose problems — then \
         propose fixes as code, outside this surface.
+
+        Time-series ("sparkline") data behind the dashboards is also available: \
+        get_metrics_card_series (the operational cards — queue depth, jobs \
+        processed, load, p95 wait/execution), get_active_users_series (distinct \
+        active users per bucket), and get_instructor_card_series (one course's \
+        submission/active-student/active-assignment/browser-error counts, scoped \
+        by an explicit courseCode filter — still aggregate counts only, never a \
+        student identifier).
         """
 }

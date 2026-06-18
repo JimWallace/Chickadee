@@ -11,6 +11,9 @@ enum AdminMCPToolCatalog {
         DiagnosticToolRegistry([
             GetDeploymentInfoTool().erased(),
             GetMetricsSnapshotTool().erased(),
+            GetMetricsCardSeriesTool().erased(),
+            GetActiveUsersSeriesTool().erased(),
+            GetInstructorCardSeriesTool().erased(),
             GetHealthAlertsTool().erased(),
             GetBrowserDiagnosticsTool().erased(),
             QueryLogsTool().erased(),

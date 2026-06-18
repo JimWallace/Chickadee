@@ -319,6 +319,9 @@ All `diagnostics:read`. Names are provisional.
 | `get_browser_diagnostics` | `client_diagnostics` (post-§6): counts by `kind`/`failedChecks`/`user_agent` over a window **plus recent redacted samples** incl. error message/stack | `user_id` dropped |
 | `query_logs` | Recent structured log records from the in-process ring buffer (§6), filterable by event name / level / time window | PII metadata redacted |
 | `get_health_alerts` | Current `ServerHealthAlertService` rule states (which are firing) + configured thresholds | clean |
+| `get_metrics_card_series` | The time-series (sparkline) data behind the admin dashboard's five operational cards — per-bucket max queue depth, jobs processed, max load, p95 queue-wait, p95 execution — for every window (24h / 7d / 30d). The windowed series behind `get_metrics_snapshot` | aggregate, no row identifiers |
+| `get_active_users_series` | The admin dashboard's "Active Users" chart: distinct active users per bucket over a trailing window (`ActivityChartService`) | aggregate, distinct counts only |
+| `get_instructor_card_series` | The instructor dashboard's four cards for one course (by `courseCode`): per-bucket submissions, active students, active assignments, browser errors (`instructorCardSeries`) | aggregate counts only; enrolled-student lookup is internal scoping, no identity reaches the output |
 
 A `get_deployment_info` / capability-probe tool mirrors the content surface's
 `get_server_info` and lets the agent confirm the surface is live and what it can
@@ -437,6 +440,18 @@ OAuth and DB-wall work lands.
      consumer (filter by level / substring / window); future event-driven admin
      queries reuse the same sink. Graduates to a retention-bounded table if
      durability / multi-instance history is ever needed.
+5. **Dashboard sparkline series.** ✅ **Done.** The time-series data behind the
+   instructor/admin dashboard sparklines, exposed verbatim from the same builders
+   the dashboards poll: `get_metrics_card_series` (the five admin operational
+   cards, `metricsCardSeries`), `get_active_users_series` (the "Active Users"
+   chart, `ActivityChartService.chartData`), and `get_instructor_card_series`
+   (one course's four cards, `instructorCardSeries`). `get_metrics_snapshot`
+   gives the point-in-time numbers; these give the windowed series behind them.
+   All admin-gated and PII-free: the operational/active-users series carry only
+   per-bucket aggregates, and the instructor series is course-scoped by an
+   explicit `courseCode` filter (not a session) but returns only per-bucket
+   counts — the enrolled-student/setup lookup is internal scoping, no student
+   identifier reaches the output, asserted by a per-tool PII test.
 
 ---
 
