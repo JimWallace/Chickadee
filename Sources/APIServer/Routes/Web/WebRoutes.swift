@@ -119,9 +119,8 @@ struct WebRoutes: RouteCollection {
             // who was granted more time.
             var visibleSetupIDs = Set(allAssignments.filter(\.isOpen).map(\.testSetupID))
             let now = Date()
-            for (setupID, extendedDueAt) in extensionDueAtBySetupID where extendedDueAt > now {
-                let baseline = assignmentBySetup[setupID]?.dueAt
-                if let baseline, extendedDueAt <= baseline { continue }
+            for (setupID, extendedDueAt) in extensionDueAtBySetupID
+            where studentHasActiveExtension(extensionDueAt: extendedDueAt, now: now) {
                 visibleSetupIDs.insert(setupID)
             }
             // Closed assignments the student already opened remain on the list.
@@ -356,16 +355,9 @@ struct WebRoutes: RouteCollection {
             // deadline has passed but this user retains submit privileges.
             let extensionDueAt = extensionDueAtBySetupID[setupID]
             let baselineDueAt = assignment?.dueAt
-            let hasActiveExtension: Bool = {
-                guard let extDate = extensionDueAt else { return false }
-                if let baseline = baselineDueAt, extDate <= baseline { return false }
-                return Date() < extDate
-            }()
-            let effectiveDueAt: Date? = {
-                guard let extDate = extensionDueAt else { return baselineDueAt }
-                guard let baseline = baselineDueAt else { return extDate }
-                return max(extDate, baseline)
-            }()
+            let hasActiveExtension = studentHasActiveExtension(extensionDueAt: extensionDueAt)
+            let effectiveDueAt = laterDeadline(
+                baseline: baselineDueAt, extensionDueAt: extensionDueAt)
             let isOpenForThisUser: Bool = {
                 guard let assignment else { return false }
                 // Preview is open for staff, closed for students; staff testing a
@@ -376,6 +368,7 @@ struct WebRoutes: RouteCollection {
                     overrideActive: assignment.deadlineOverrideActive ?? false,
                     baselineDueAt: baselineDueAt,
                     effectiveDueAt: effectiveDueAt,
+                    hasActiveExtension: hasActiveExtension,
                     startsAt: gate.honorsStartDate ? assignment.startsAt : nil
                 )
             }()
