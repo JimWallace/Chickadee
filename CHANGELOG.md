@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.460] - 2026-06-18
+
+### Changed
+
+- **Closed assignments stay visible to enrolled students.** A published assignment that has closed at its deadline now remains on every enrolled student's dashboard (shown as `closed`, read-only) and is openable for review, instead of silently disappearing for any student who never opened it while it was open. Recent labs no longer vanish for students who missed the window — including those a platform issue locked out. Unpublished drafts (a `closed` assignment with no past due date), `preview` (staff-only) assignments, and not-yet-started (future open date) assignments stay hidden, so authoring-in-progress content never leaks. New shared helper `assignmentVisibleToStudentByState` drives the dashboard filter and the notebook read-only view gate so they can't drift; submission remains separately gated, so the widened access is strictly read-only.
+
+### Security
+
+- **The reference solution is now staff-gated on the student notebook route.** `GET /testsetups/:id/notebook?file=solution` previously rendered the instructor's answer-key notebook for any enrolled student who crafted the query (the guard relied on the absence of a UI link). It now returns `403` for non-instructors, closing the exposure on open assignments and preventing the closed-assignment read-only view from widening it.
+
+### Added
+
+- **Submit-phase breadcrumbs for diagnosing in-browser submission freezes.** Browser grading runs Pyodide on the main thread, so a hang during a submission (slow runtime boot, package/zip stall, or a CPU-bound test) freezes the page and produces no exception and no result POST — invisible to the server. `Public/browser-runner.js` now emits a `submit_phase` breadcrumb at each step of the grading flow (`grading_start` → `runtime_loaded` → `setup_unpacked` → `suite_started` → `suite_done` → `result_posting` → `result_posted`, plus `submit_error`), sent fire-and-forget with `fetch(keepalive:true)` so a breadcrumb dispatched *before* a phase reaches the server even if that phase then freezes. The last phase a frozen student reaches has no successor record, pinpointing where submissions stall. Breadcrumbs are scoped to real student submissions (instructor validation stays silent). The admin diagnostic tool `get_browser_diagnostics` now returns a `submitFunnel` (phase counts in order) so the drop-off is readable, and accepts the new `submit_phase` / `submit_error` kinds; the instructor "Browser Errors" card is unaffected (it still counts only `preflight_fail` / `watchdog_timeout`). No schema change — breadcrumbs reuse the existing `client_diagnostics` `source` / `message` columns and the per-(user, setup, kind, source) hourly rate limit.
+
+
 ## [0.4.459] - 2026-06-18
 
 ### Fixed
