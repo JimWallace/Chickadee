@@ -16,16 +16,18 @@ import XCTVapor
     private let resource = "https://chickadee.example/admin-mcp"
     private let contentResource = "https://chickadee.example/mcp"
 
-    /// Builds a test app with the admin MCP surface mounted (read_only) and an
-    /// admin token authority installed, mirroring how runAPIServer wires it.
+    /// Builds a test app with MCP mounted (which all-or-nothing mounts the admin
+    /// /admin-mcp surface too) and the shared token authority installed, mirroring
+    /// how runAPIServer wires it.  The admin resource is derived as
+    /// `<origin>/admin-mcp`, matching `resource`.
     private func makeMountedApp() async throws -> (Application, MCPTokenAuthority) {
-        let adminCfg = AdminMCPConfig(
-            mode: .readOnly, allowedHosts: [], allowedOrigins: [],
-            signingKeyPath: "unused", issuer: issuer, resource: resource)
-        let app = try await makeTestApp(appConfig: .testDefaults(adminMCP: adminCfg))
+        let mcp = MCPConfig(
+            mode: .readWrite, allowedHosts: [], allowedOrigins: [],
+            tokenTTLSeconds: 3600, signingKeyPath: "unused", issuer: issuer, resource: contentResource)
+        let app = try await makeTestApp(appConfig: .testDefaults(mcp: mcp))
         let authority = try await MCPTokenAuthority.make(
-            privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "admin-mcp-1")
-        app.adminMcpTokenAuthority = authority
+            privateKeyPEM: ES256PrivateKey().pemRepresentation, keyID: "mcp-1")
+        app.mcpTokenAuthority = authority
         return (app, authority)
     }
 

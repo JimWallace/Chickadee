@@ -3,9 +3,9 @@
 // The authenticated caller behind an admin diagnostic MCP request, set by
 // `AdminMCPBearerAuthMiddleware` and read by `AdminMCPRoutes` when it builds the
 // `AdminToolContext`.  Parallel to `MCPPrincipal` but over `DiagnosticScope`.
-// Also home to the admin token authority's Application storage — a separate
-// authority instance (and signing key) from the content surface's, so rotating
-// the admin key revokes admin tokens without touching content grants.
+// The admin surface shares the content surface's signing key/authority
+// (`Application.mcpTokenAuthority`); separation comes from the distinct token
+// audience (…/admin-mcp), not a separate key.
 
 import Vapor
 
@@ -40,19 +40,5 @@ extension Request {
     var adminMcpPrincipal: AdminMCPPrincipal? {
         get { storage[AdminMCPPrincipalKey.self] }
         set { storage[AdminMCPPrincipalKey.self] = newValue }
-    }
-}
-
-private struct AdminMCPTokenAuthorityKey: StorageKey {
-    typealias Value = MCPTokenAuthority
-}
-
-extension Application {
-    /// The admin MCP token authority, loaded at startup when
-    /// `appConfig.adminMCP.mode` is mounted.  Separate from `mcpTokenAuthority`
-    /// (the content surface) — its own ES256 signing key.
-    var adminMcpTokenAuthority: MCPTokenAuthority? {
-        get { storage[AdminMCPTokenAuthorityKey.self] }
-        set { storage[AdminMCPTokenAuthorityKey.self] = newValue }
     }
 }

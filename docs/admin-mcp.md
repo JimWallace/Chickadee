@@ -110,28 +110,35 @@ The transport/JSON-RPC machinery, by contrast, is generic and worth reusing
 
 ### 3.1 Endpoint, mode, config
 
-| Aspect | Content MCP (today) | Admin MCP |
-|--------|---------------------|-----------|
+| Aspect | Content MCP | Admin MCP |
+|--------|-------------|-----------|
 | Endpoint | `POST /mcp` | `POST /admin-mcp` |
-| Enable flag | `MCP_MODE` (`off`/`read_only`/`read_write`) | `ADMIN_MCP_MODE` (`off`/`read_only`) |
+| Enable flag | `MCP_MODE` (`off`/`read_only`/`read_write`) | **same `MCP_MODE`** (all-or-nothing) |
 | Resource / audience | `…/mcp` | `…/admin-mcp` (distinct) |
 | Issuer | `PUBLIC_BASE_URL` | same issuer, different resource |
-| Config struct | `MCPConfig` | `AdminMCPConfig` (parallel) |
+| Signing key / authority | `mcpTokenAuthority` | **shared** (separated by audience) |
+| Config struct | `MCPConfig` | none — derived from `MCPConfig` |
 | Catalog | `MCPToolCatalog.live` | `AdminMCPToolCatalog.live` |
-| Default | `off` | `off` |
+
+**Tied to `MCP_MODE` (decided during build).** There are **no `ADMIN_MCP_*`
+settings**. The admin surface mounts (read-only) exactly when MCP is mounted —
+`read_only` *or* `read_write` — and is off when MCP is off. It reuses the content
+surface's DNS-rebinding guards (`MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` /
+`MCP_ALLOW_OPEN_GUARDS`), issuer, access-token TTL, and **signing key/authority**
+(`mcpTokenAuthority`); separation between the two surfaces is by **token
+audience** (`…/mcp` vs `…/admin-mcp`), not a separate key. The admin resource is
+derived as `<origin>/admin-mcp`.
+
+**Always read-only — even under `MCP_MODE=read_write`.** The admin surface only
+ever advertises and honors `diagnostics:read` (`DiagnosticScope` has no write
+case; `adminMCPAdvertisedScopes` is the single source). So `read_write` gives the
+*content* surface read+write while the admin surface stays read-only.
 
 **Path note:** the endpoint is `/admin-mcp`, **not** `/admin/mcp` — the latter is
 already the admin *web page* that manages content-MCP service accounts and
 connected agents (`AdminMCPRoutesTests`). A hyphenated top-level path avoids the
 collision and keeps the bearer-gated transport out of the session-gated `/admin`
 web group. The audience matches the path.
-
-`AdminMCPConfig` parallels `MCPConfig` (mount guards `ADMIN_MCP_ALLOWED_HOSTS` /
-`ADMIN_MCP_ALLOWED_ORIGINS`, signing key, access-token TTL) and is read once at
-startup into the `AppConfig` tree, with a redacted line in the startup summary
-like every other subsystem. Mounting reuses the production fail-safe pattern
-(refuse to mount in production with the DNS-rebinding guards open unless
-`ADMIN_MCP_ALLOW_OPEN_GUARDS=true`).
 
 Note there is **no `read_write`** for the admin surface — read-only is a
 hard property of the surface, not a mode toggle, so the enum can't even express

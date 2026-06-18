@@ -60,11 +60,15 @@ struct GetDeploymentInfoTool: DiagnosticTool {
 
     func execute(_ input: Input, _ context: AdminToolContext) async throws -> Output {
         let config = context.request.application.appConfig
+        // The admin surface is tied to MCP_MODE (all-or-nothing) and is always
+        // read-only — even under MCP_MODE=read_write it reports read_only and
+        // advertises only diagnostics:read.
+        let adminMounted = config.mcp.mode.isMounted
         return Output(
             version: ChickadeeVersion.current,
             environment: context.request.application.environment.name,
-            adminMcpMode: config.adminMCP.mode.rawValue,
-            advertisedScopes: config.adminMCP.mode.advertisedScopes.map(\.rawValue),
+            adminMcpMode: adminMounted ? "read_only" : "off",
+            advertisedScopes: adminMounted ? adminMCPAdvertisedScopes.map(\.rawValue) : [],
             contentMcpMode: config.mcp.mode.rawValue)
     }
 }

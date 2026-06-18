@@ -1,12 +1,14 @@
 // APIServer/MCP/Admin/AdminMCPBearerAuthMiddleware.swift
 //
 // OAuth 2.1 bearer-token gate for the admin diagnostic MCP endpoint.  Parallel
-// to `MCPBearerAuthMiddleware` but bound to the admin token authority, the admin
-// audience, and the `DiagnosticScope` vocabulary — so a content token (different
-// audience) can never authenticate here, and vice versa.  Validates signature +
-// exp via the admin authority, enforces issuer + audience (RFC 8707), requires
-// at least one diagnostic scope after clamping to the ADMIN_MCP_MODE ceiling,
-// and surfaces the caller on `request.adminMcpPrincipal`.
+// to `MCPBearerAuthMiddleware`, bound to the admin audience and the
+// `DiagnosticScope` vocabulary — so a content token (different audience) can
+// never authenticate here, and vice versa.  Verifies via the shared
+// `mcpTokenAuthority` (the admin surface reuses the content signing key;
+// separation is by audience), enforces issuer + audience (RFC 8707), requires
+// a diagnostic scope, and surfaces the caller on `request.adminMcpPrincipal`.
+// The surface is read-only by construction: `DiagnosticScope` has no write case,
+// so even under MCP_MODE=read_write only `diagnostics:read` is ever granted.
 
 import Vapor
 
@@ -16,8 +18,8 @@ struct AdminMCPBearerAuthMiddleware: AsyncMiddleware {
     let resourceMetadataURL: String
 
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
-        guard let authority = request.application.adminMcpTokenAuthority else {
-            throw Abort(.internalServerError, reason: "Admin MCP token authority is not configured.")
+        guard let authority = request.application.mcpTokenAuthority else {
+            throw Abort(.internalServerError, reason: "MCP token authority is not configured.")
         }
         guard let token = request.headers.bearerAuthorization?.token else {
             return challenge(status: .unauthorized, error: nil, scope: nil)
@@ -36,17 +38,15 @@ struct AdminMCPBearerAuthMiddleware: AsyncMiddleware {
             return challenge(status: .unauthorized, error: "invalid_token", scope: nil)
         }
 
-        // Clamp the token's scopes to the server-wide ceiling for the current
-        // ADMIN_MCP_MODE (read_only → {diagnostics:read}).  A token left with no
-        // usable scope after clamping is insufficient.
-        let tokenScopes = Set(DiagnosticScope.allCases.filter { claims.scopes.contains($0.rawValue) })
-        let granted = tokenScopes.intersection(request.application.appConfig.adminMCP.mode.scopeCeiling)
+        // The admin surface only honors `diagnostics:read` (there is no write
+        // scope), so a token must carry it.  This is independent of MCP_MODE —
+        // read_write does not widen the admin surface.
+        let granted = Set(DiagnosticScope.allCases.filter { claims.scopes.contains($0.rawValue) })
         guard !granted.isEmpty else {
             return challenge(
                 status: .forbidden,
                 error: "insufficient_scope",
-                scope: request.application.appConfig.adminMCP.mode.scopeCeiling
-                    .map(\.rawValue).sorted().joined(separator: " ")
+                scope: DiagnosticScope.allCases.map(\.rawValue).sorted().joined(separator: " ")
             )
         }
 

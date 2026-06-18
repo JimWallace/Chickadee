@@ -481,11 +481,12 @@ struct MCPOAuthRoutes: Sendable {
             grantTypes: ["authorization_code", "refresh_token"],
             responseTypes: ["code"],
             tokenEndpointAuthMethod: "none",
-            // Advertise what both mounted surfaces grant — content scopes plus,
-            // when the admin diagnostic surface is mounted, diagnostics:read.  A
-            // DCR client picks the resource at /authorize; the per-resource
-            // protected-resource metadata narrows it.
-            scope: Self.dcrAdvertisedScopes(req).joined(separator: " "))
+            // Advertise the content surface's scopes (same source as the
+            // .well-known docs).  The admin resource's `diagnostics:read` is
+            // discovered via its own protected-resource metadata and clamped at
+            // /authorize, so it isn't listed here — keeping DCR content-focused.
+            scope: req.application.appConfig.mcp.mode.advertisedScopes
+                .map(\.rawValue).joined(separator: " "))
         let result = Response(status: .created)
         try result.content.encode(response, as: .json)
         result.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
@@ -582,17 +583,6 @@ struct MCPOAuthRoutes: Sendable {
         case DiagnosticScope.read.rawValue: return "Read server diagnostics and operational status"
         default: return scope
         }
-    }
-
-    /// Scopes a dynamically-registered client may request: the content surface's
-    /// advertised scopes, plus the admin surface's when it is mounted.
-    private static func dcrAdvertisedScopes(_ req: Request) -> [String] {
-        let cfg = req.application.appConfig
-        var scopes = cfg.mcp.mode.advertisedScopes.map(\.rawValue)
-        if cfg.adminMCP.mode.isMounted {
-            scopes += cfg.adminMCP.mode.advertisedScopes.map(\.rawValue)
-        }
-        return scopes
     }
 
     private func tokenSuccess(_ req: Request, access: String, refresh: String, scope: String) throws -> Response {
@@ -743,15 +733,18 @@ extension MCPOAuthRoutes {
             wantsAdmin = Self.scopeStringTargetsAdmin(scope ?? "")
         }
         if wantsAdmin,
-            let adminEndpoints = AdminMCPEndpoints.resolve(adminMCP: cfg.adminMCP, security: cfg.security)
+            let adminEndpoints = AdminMCPEndpoints.resolve(mcp: cfg.mcp, security: cfg.security)
         {
+            // The admin surface rides on MCP_MODE, shares the content signing
+            // authority (separation is by audience), and is always read-only —
+            // it advertises only diagnostics:read even under MCP_MODE=read_write.
             return ResolvedSurface(
                 surface: .admin,
                 issuer: adminEndpoints.issuer,
                 audience: adminEndpoints.resource,
-                advertisedScopes: cfg.adminMCP.mode.advertisedScopes.map(\.rawValue),
-                accessTokenTTLSeconds: cfg.adminMCP.accessTokenTTLSeconds,
-                authority: req.application.adminMcpTokenAuthority)
+                advertisedScopes: adminMCPAdvertisedScopes.map(\.rawValue),
+                accessTokenTTLSeconds: cfg.mcp.accessTokenTTLSeconds,
+                authority: req.application.mcpTokenAuthority)
         }
         return ResolvedSurface(
             surface: .content,
@@ -771,7 +764,7 @@ extension MCPOAuthRoutes {
 
     private func isAdminResource(_ resource: String, req: Request) -> Bool {
         let cfg = req.application.appConfig
-        guard let adminEndpoints = AdminMCPEndpoints.resolve(adminMCP: cfg.adminMCP, security: cfg.security)
+        guard let adminEndpoints = AdminMCPEndpoints.resolve(mcp: cfg.mcp, security: cfg.security)
         else { return false }
         return resource == adminEndpoints.resource
     }

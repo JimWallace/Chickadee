@@ -1,7 +1,8 @@
 // Tests for the admin diagnostic MCP surface (docs/admin-mcp.md): the
-// AdminMCPMode/DiagnosticScope contract, the AdminMCPDispatcher (lifecycle,
-// tools-only capabilities, scope-gated tools/list, tools/call), the
-// get_deployment_info tool, and the AdminToolContext.requireAdminSubject gate.
+// AdminMCPDispatcher (lifecycle, tools-only capabilities, scope-gated
+// tools/list, tools/call), the get_deployment_info tool, and the
+// AdminToolContext.requireAdminSubject gate.  The surface is tied to MCP_MODE
+// (no ADMIN_MCP_* settings) and is always read-only.
 //
 // Distinct from AdminMCPRoutesTests, which covers the unrelated /admin/mcp web
 // page that manages content-MCP service accounts.
@@ -13,32 +14,6 @@ import Vapor
 import XCTVapor
 
 @testable import APIServer
-
-// MARK: - Mode / scope contract (pure logic)
-
-@Suite struct AdminMCPModeTests {
-    @Test func parseResolvesCanonicalAndSynonyms() {
-        #expect(AdminMCPMode.parse("off") == .off)
-        #expect(AdminMCPMode.parse(nil) == .off)
-        #expect(AdminMCPMode.parse("") == .off)
-        #expect(AdminMCPMode.parse("read_only") == .readOnly)
-        #expect(AdminMCPMode.parse("readonly") == .readOnly)
-        // No read_write exists; write-shaped values resolve to read_only (the
-        // most this surface can ever be), not to a write mode.
-        #expect(AdminMCPMode.parse("on") == .readOnly)
-        #expect(AdminMCPMode.parse("true") == .readOnly)
-        // Unrecognized → fail safe to off.
-        #expect(AdminMCPMode.parse("garbage") == .off)
-    }
-
-    @Test func advertisedScopesAndCeiling() {
-        #expect(AdminMCPMode.off.advertisedScopes.isEmpty)
-        #expect(AdminMCPMode.off.isMounted == false)
-        #expect(AdminMCPMode.readOnly.advertisedScopes == [.read])
-        #expect(AdminMCPMode.readOnly.scopeCeiling == [.read])
-        #expect(AdminMCPMode.readOnly.isMounted)
-    }
-}
 
 // MARK: - Dispatcher (pure logic, no app)
 
