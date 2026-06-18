@@ -34,35 +34,90 @@ func assignmentDeadlineOverrideIsActive(_ assignment: APIAssignment) -> Bool {
 /// `effectiveDueAt` is the later of the assignment-wide deadline and any
 /// per-student extension (nil only when the assignment has no deadline at all).
 ///
-/// The assignment-wide `isOpen` flag is flipped to false two different ways: an
-/// instructor closing it manually, or the automatic deadline sweep
-/// (`closeExpiredAssignments`).  We can only tell them apart by timing — a close
-/// while the deadline is still in the future is a deliberate manual close, and
-/// an extension does not reopen it; a close at/after the deadline is the
-/// automatic sweep, so an active per-student extension (a later `effectiveDueAt`)
-/// keeps submission open for that one student.
+/// `hasActiveExtension` is the decisive signal for an accommodated student: when
+/// the instructor has granted this student an extension whose deadline is still
+/// in the future, they may keep submitting no matter how the assignment-wide
+/// state reads — open, auto-closed at the deadline, or manually closed before
+/// it. An extension is an explicit, per-student accommodation; the only thing it
+/// does not override is a future open date (`startsAt`), since the assignment
+/// must have started before anyone — accommodated or not — can submit.
+///
+/// With no active extension the assignment-wide `isOpen` flag still governs: a
+/// close *before* the deadline is a deliberate manual close and stays closed,
+/// while a close *at/after* the deadline is the automatic sweep and likewise
+/// leaves an un-extended student closed.
 func isAssignmentOpenForUser(
     isOpen: Bool,
     overrideActive: Bool,
     baselineDueAt: Date?,
     effectiveDueAt: Date?,
+    hasActiveExtension: Bool = false,
     startsAt: Date? = nil,
     now: Date = Date()
 ) -> Bool {
-    // Front gate: a future open date holds the assignment closed for
-    // everyone, regardless of `isOpen` or any deadline/extension state.
+    // Front gate: a future open date holds the assignment closed for everyone,
+    // regardless of `isOpen` or any deadline/extension state. An extension
+    // lengthens the *deadline*, not the *open date*, so it does not unlock an
+    // assignment that has not started yet.
     if let startsAt, now < startsAt { return false }
+
+    // An active per-student extension reopens submission for that one student no
+    // matter how the assignment closed — including a deliberate manual close
+    // before the deadline. Granting an extension is an explicit instructor
+    // decision to let this student keep working; without this, an extension on
+    // an already-closed assignment would have no effect.
+    if hasActiveExtension { return true }
+
     let deadlinePassed = baselineDueAt.map { $0 <= now } ?? false
     if isOpen {
         if !deadlinePassed { return true }
         if overrideActive { return true }
     } else if !deadlinePassed {
-        // Closed before the deadline — a deliberate manual close that an
-        // extension must not reopen.
+        // Closed before the deadline with no active extension — a deliberate
+        // manual close stays closed.
         return false
     }
     guard let effectiveDueAt else { return false }
     return now < effectiveDueAt
+}
+
+/// The raw per-student extension date for (assignment, user), if a row exists.
+/// Unlike `effectiveDueAt`, this is the extension's *own* date — never folded
+/// together with the assignment-wide deadline — so callers can tell a genuine
+/// accommodation apart from the baseline due date.
+func studentExtensionDueAt(
+    for assignment: APIAssignment,
+    user: APIUser,
+    on db: Database
+) async throws -> Date? {
+    guard let assignmentID = assignment.id, let userID = user.id else { return nil }
+    return try await APIAssignmentExtension.query(on: db)
+        .filter(\.$assignmentID == assignmentID)
+        .filter(\.$userID == userID)
+        .first()?
+        .extendedDueAt
+}
+
+/// Whether a per-student extension is currently granting extra time: a row
+/// exists, its date is later than the assignment-wide deadline (so it actually
+/// extends something), and that date has not yet passed. Shared by the
+/// submission gate and the student dashboard so the two never drift.
+func studentHasActiveExtension(
+    extensionDueAt: Date?,
+    baselineDueAt: Date?,
+    now: Date = Date()
+) -> Bool {
+    guard let extensionDueAt else { return false }
+    if let baselineDueAt, extensionDueAt <= baselineDueAt { return false }
+    return now < extensionDueAt
+}
+
+/// The effective deadline given a baseline and an optional extension: the later
+/// of the two, or whichever is non-nil. Returns nil only when both are nil.
+func laterDeadline(baseline: Date?, extensionDueAt: Date?) -> Date? {
+    guard let extensionDueAt else { return baseline }
+    guard let baseline else { return extensionDueAt }
+    return max(baseline, extensionDueAt)
 }
 
 /// Returns the deadline that actually applies to `user` for `assignment`,
@@ -74,22 +129,8 @@ func effectiveDueAt(
     user: APIUser,
     on db: Database
 ) async throws -> Date? {
-    let baseline = assignment.dueAt
-    guard let assignmentID = assignment.id, let userID = user.id else {
-        return baseline
-    }
-    guard
-        let extensionRow = try await APIAssignmentExtension.query(on: db)
-            .filter(\.$assignmentID == assignmentID)
-            .filter(\.$userID == userID)
-            .first()
-    else {
-        return baseline
-    }
-    if let baseline {
-        return max(baseline, extensionRow.extendedDueAt)
-    }
-    return extensionRow.extendedDueAt
+    let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
+    return laterDeadline(baseline: assignment.dueAt, extensionDueAt: extensionDueAt)
 }
 
 /// Whether `user` may currently submit to `assignment`, consulting per-student
@@ -108,12 +149,15 @@ func isAssignmentEffectivelyOpen(
     // .open / .closed the stored visibility applies to everyone. Staff testing a
     // preview also bypass the future-open-date gate — see `submissionGate`.
     let gate = assignment.visibility.submissionGate(isStaff: user.isInstructor)
-    let effective = try await effectiveDueAt(for: assignment, user: user, on: db)
+    let baseline = assignment.dueAt
+    let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
     return isAssignmentOpenForUser(
         isOpen: gate.treatAsOpen,
         overrideActive: assignmentDeadlineOverrideIsActive(assignment),
-        baselineDueAt: assignment.dueAt,
-        effectiveDueAt: effective,
+        baselineDueAt: baseline,
+        effectiveDueAt: laterDeadline(baseline: baseline, extensionDueAt: extensionDueAt),
+        hasActiveExtension: studentHasActiveExtension(
+            extensionDueAt: extensionDueAt, baselineDueAt: baseline, now: now),
         startsAt: gate.honorsStartDate ? assignment.startsAt : nil,
         now: now
     )

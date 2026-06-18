@@ -225,6 +225,121 @@ import XCTVapor
         }
     }
 
+    /// The reported emergency: the instructor closed an assignment *before* its
+    /// deadline (a deliberate manual close), then granted one student an
+    /// extension.  That student must be able to submit even though the
+    /// assignment-wide window is closed and the deadline has not passed.
+    @Test func effectiveOpenHonorsExtensionAfterManualClose() async throws {
+        try await withAssignmentRoutesApp { app in
+            try await arInsertSetup(id: "manualclosed_setup", on: app)
+            // Manually closed BEFORE its deadline: visibility=.closed (isOpen
+            // false) while the due date is still in the future.
+            let assignment = try await arInsertAssignment(
+                testSetupID: "manualclosed_setup",
+                title: "Manually closed early",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(3_600), on: app  // 1h from now
+            )
+            let student = try await arInsertStudent(username: "manualclosed_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+
+            // No extension — a deliberate manual close is closed for everyone.
+            let beforeExt = try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)
+            #expect(beforeExt == false, "Manually closed assignment with no extension stays closed")
+
+            // Grant an extension past the deadline.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)
+            ).save(on: app.db)
+
+            let afterExt = try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)
+            #expect(
+                afterExt,
+                "An active extension lets the student submit even though the assignment was manually closed before its deadline"
+            )
+
+            // The accommodation is scoped to the one student.
+            let peer = try await arInsertStudent(username: "manualclosed_peer", on: app)
+            try await arEnrollStudentInTestCourse(peer, on: app)
+            let peerOpen = try await isAssignmentEffectivelyOpen(assignment, for: peer, on: app.db)
+            #expect(peerOpen == false, "A peer without an extension stays closed")
+        }
+    }
+
+    // MARK: - Invariant lock (so this never regresses again)
+
+    /// The contract, pinned exhaustively: an active per-student extension opens
+    /// submission for that student across *every* combination of the
+    /// assignment-wide inputs — open or closed, deadline past / future / none,
+    /// override on or off — with the single exception of an assignment that has
+    /// not yet reached its open date.  Every past regression here came from the
+    /// gate trying to infer instructor intent from how/when the assignment
+    /// closed; this test makes the explicit "extension ⇒ open (once started)"
+    /// rule a hard invariant, so any future change that reintroduces the heuristic
+    /// fails loudly instead of silently locking out an accommodated student.
+    @Test func activeExtensionOpensSubmissionRegardlessOfAssignmentState() {
+        let now = Date()
+        let past = now.addingTimeInterval(-3_600)
+        let future = now.addingTimeInterval(3_600)
+        let farFuture = now.addingTimeInterval(7 * 86_400)
+
+        for isOpen in [true, false] {
+            for overrideActive in [true, false] {
+                for baseline in [past, future, Date?.none] {
+                    // Already started (no open date, or one in the past): an
+                    // active extension must open submission no matter what.
+                    for startsAt in [Date?.none, past] {
+                        #expect(
+                            isAssignmentOpenForUser(
+                                isOpen: isOpen, overrideActive: overrideActive,
+                                baselineDueAt: baseline, effectiveDueAt: farFuture,
+                                hasActiveExtension: true, startsAt: startsAt, now: now),
+                            """
+                            Active extension must open submission \
+                            (isOpen=\(isOpen) override=\(overrideActive) \
+                            baseline=\(String(describing: baseline)) \
+                            startsAt=\(String(describing: startsAt)))
+                            """)
+                    }
+                    // Not yet open: a future open date still holds it closed,
+                    // even for a student with an active extension.
+                    #expect(
+                        isAssignmentOpenForUser(
+                            isOpen: isOpen, overrideActive: overrideActive,
+                            baselineDueAt: baseline, effectiveDueAt: farFuture,
+                            hasActiveExtension: true, startsAt: future, now: now) == false,
+                        "A future open date holds the assignment closed even with an active extension")
+                }
+            }
+        }
+    }
+
+    /// The mirror invariant: `studentHasActiveExtension` is the single source of
+    /// truth for "this student was granted more time", shared by the submission
+    /// gate and the dashboard so they can never disagree.  An extension counts
+    /// only when it both post-dates the baseline deadline (actually extends
+    /// something) and has not itself lapsed.
+    @Test func studentHasActiveExtensionBoundaries() {
+        let now = Date()
+        let past = now.addingTimeInterval(-3_600)
+        let future = now.addingTimeInterval(3_600)
+
+        // No extension row → never active.
+        #expect(studentHasActiveExtension(extensionDueAt: nil, baselineDueAt: past, now: now) == false)
+        // Extension later than baseline and still ahead → active.
+        #expect(studentHasActiveExtension(extensionDueAt: future, baselineDueAt: past, now: now))
+        // Extension into the future but the assignment has no deadline → active.
+        #expect(studentHasActiveExtension(extensionDueAt: future, baselineDueAt: nil, now: now))
+        // Extension not past the baseline → does not extend anything → inactive.
+        #expect(
+            studentHasActiveExtension(extensionDueAt: past, baselineDueAt: future, now: now) == false)
+        // Extension already lapsed → inactive.
+        #expect(
+            studentHasActiveExtension(extensionDueAt: past, baselineDueAt: nil, now: now) == false)
+    }
+
     // MARK: - Per-user open decision (pure logic)
 
     @Test func openForUserCoversDeadlineAndExtensionCases() {
@@ -257,13 +372,20 @@ import XCTVapor
             isAssignmentOpenForUser(
                 isOpen: false, overrideActive: false,
                 baselineDueAt: past, effectiveDueAt: past, now: now) == false)
-        // Manual close *before* the deadline is deliberate — an extension does
-        // not reopen it.
+        // Manual close *before* the deadline with no active extension stays
+        // closed — a deliberate manual close is respected.
         #expect(
             isAssignmentOpenForUser(
                 isOpen: false, overrideActive: false,
                 baselineDueAt: future, effectiveDueAt: future.addingTimeInterval(86_400),
                 now: now) == false)
+        // …but an explicit per-student extension reopens it for that student,
+        // even though the manual close happened before the deadline.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: false, overrideActive: false,
+                baselineDueAt: future, effectiveDueAt: future.addingTimeInterval(86_400),
+                hasActiveExtension: true, now: now))
         // No deadline at all, open → open.
         #expect(
             isAssignmentOpenForUser(
@@ -288,6 +410,13 @@ import XCTVapor
                 isOpen: false, overrideActive: false,
                 baselineDueAt: past, effectiveDueAt: future.addingTimeInterval(86_400),
                 startsAt: future, now: now) == false)
+        // An active extension still does not bypass a future open date — the
+        // assignment must have started before anyone can submit.
+        #expect(
+            isAssignmentOpenForUser(
+                isOpen: false, overrideActive: false,
+                baselineDueAt: past, effectiveDueAt: future.addingTimeInterval(86_400),
+                hasActiveExtension: true, startsAt: future, now: now) == false)
         // Open date already passed → behaves exactly as if unset (open).
         #expect(
             isAssignmentOpenForUser(
