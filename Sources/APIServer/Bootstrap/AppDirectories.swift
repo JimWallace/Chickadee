@@ -48,7 +48,7 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     // Seeded eagerly (like the stores above) so request handlers never hit
     // the lazy-create branch in the accessor — Application.storage writes
     // are not synchronized.
-    app.storage[NotebookPresenceCacheKey.self] = NotebookPresenceCache()
+    app.storage[ZipEntryListCacheKey.self] = ZipEntryListCache()
     app.storage[LocalRunnerAutoStartStoreKey.self] = LocalRunnerAutoStartStore(
         initialEnabled: localRunnerAutoStartEnabled
     )
