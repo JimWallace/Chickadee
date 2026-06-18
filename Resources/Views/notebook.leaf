@@ -61,6 +61,13 @@ Notebook
         assignment on a larger screen to edit and submit your notebook.
     </p>
 </div>
+<!-- The editor is booted by notebook.js *after* the capability preflight
+     resolves (mountEditor sets the iframe src from data-editor-url), not
+     eagerly here. Booting eagerly during HTML parse raced the preflight's
+     service-worker registration and IndexedDB probes — the same subsystems the
+     kernel's cold boot uses — and intermittently left the kernel dead
+     ("Kernel Unknown"). Starting at about:blank serializes the load. On phones
+     notebook.js skips the mount entirely, so the iframe stays about:blank. -->
 <iframe
     id="jl-frame"
     class="jl-frame"
@@ -71,22 +78,9 @@ Notebook
     data-editor-url="#(jupyterLiteEditorURL)"
     data-working-copy-mtime="#(workingCopyMtime)"
     data-read-only="#(isClosed)"
-    src="#(jupyterLiteEditorURL)"
+    src="about:blank"
     loading="eager">
 </iframe>
-<script>
-// On phones the editor is hidden behind the "larger screen" notice above,
-// but display:none does not stop the iframe from booting JupyterLite +
-// Pyodide in the background. Abort that navigation immediately after the
-// parser starts it; notebook.js skips mounting at this width and reloads
-// the page if the viewport grows past the breakpoint.
-(function () {
-    if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
-        var frame = document.getElementById('jl-frame');
-        if (frame) frame.src = 'about:blank';
-    }
-})();
-</script>
 <section id="nb-fallback" class="nb-fallback" role="alert" hidden>
     <h2 class="nb-fallback-title">Editor didn&rsquo;t load</h2>
     <p class="nb-fallback-text">

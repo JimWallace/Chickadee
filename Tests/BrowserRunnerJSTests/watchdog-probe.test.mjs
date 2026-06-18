@@ -384,3 +384,49 @@ test('probeIframeReadiness: kernel failure surfaces evidence string', async () =
   assert.equal(r.kernelInFailureState, true);
   assert.equal(r.kernelEvidence, 'Kernel Unknown badge (iframe dom)');
 });
+
+// ----------------------------------------------------------------
+// One-shot kernel recovery — first failure reloads, second gives up
+// ----------------------------------------------------------------
+
+test('planKernelFailureResponse: first failure → recover (reload once)', async () => {
+  const { planKernelFailureResponse } = await loadHarness();
+  const plan = planKernelFailureResponse({
+    recoveryAlreadyAttempted: false,
+    evidence: 'kernel status: dead',
+  });
+  assert.equal(plan.action, 'recover');
+  assert.equal(plan.diagnostic, undefined,
+    'a recovery does not post a diagnostic — the editor gets one more chance');
+});
+
+test('planKernelFailureResponse: second failure → fail with annotated diagnostic', async () => {
+  const { planKernelFailureResponse } = await loadHarness();
+  const plan = planKernelFailureResponse({
+    recoveryAlreadyAttempted: true,
+    evidence: 'kernel status: dead',
+  });
+  assert.equal(plan.action, 'fail');
+  // The classification fields must be unchanged so the admin browser-diagnostics
+  // breakdown still buckets this as watchdog_timeout / kernel-unhealthy.
+  assert.equal(plan.diagnostic.kind, 'watchdog_timeout');
+  // Element-wise (the helper runs in a vm realm, so its Array isn't
+  // reference-comparable with deepStrictEqual against the test realm's).
+  assert.equal(plan.diagnostic.failedChecks.length, 1);
+  assert.equal(plan.diagnostic.failedChecks[0], 'kernel-unhealthy');
+  assert.equal(plan.diagnostic.source, 'kernel');
+  assert.ok(plan.diagnostic.message.includes('kernel status: dead'),
+    'keeps the original evidence');
+  assert.ok(plan.diagnostic.message.includes('after auto-reload'),
+    'annotates that recovery was attempted so persistent failures are distinguishable');
+});
+
+test('planKernelFailureResponse: second failure with no evidence → safe default message', async () => {
+  const { planKernelFailureResponse } = await loadHarness();
+  const plan = planKernelFailureResponse({
+    recoveryAlreadyAttempted: true,
+    evidence: null,
+  });
+  assert.equal(plan.action, 'fail');
+  assert.equal(plan.diagnostic.message, 'kernel in failure state (persisted after auto-reload)');
+});
