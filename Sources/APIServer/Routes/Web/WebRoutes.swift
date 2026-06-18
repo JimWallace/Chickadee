@@ -297,7 +297,7 @@ struct WebRoutes: RouteCollection {
 
         // Notebook presence drives the Edit button.  The zip-derived answer
         // costs an `unzip` subprocess per setup, so it is resolved through
-        // NotebookPresenceCache (keyed by zip mtime + size) instead of being
+        // ZipEntryListCache (keyed by zip mtime + size) instead of being
         // recomputed on every dashboard view.
         var hasNotebookBySetupID: [String: Bool] = [:]
         for setup in sortedSetups {
@@ -307,7 +307,7 @@ struct WebRoutes: RouteCollection {
             {
                 hasNotebookBySetupID[setupID] = true
             } else {
-                hasNotebookBySetupID[setupID] = await req.application.notebookPresenceCache
+                hasNotebookBySetupID[setupID] = await req.application.zipEntryListCache
                     .zipContainsNotebook(zipPath: setup.zipPath)
             }
         }

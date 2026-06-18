@@ -1,0 +1,86 @@
+// APIServer/Services/ZipEntryListCache.swift
+//
+// Caches the entry-name list of a test setup zip.  Listing a zip shells out to
+// `/usr/bin/unzip` (`listZipEntries`) under the global zip process lock — one
+// subprocess spawn per call, with concurrent callers serializing behind one
+// another on the lock.  Several hot paths need that list per page view: the
+// student dashboard's "does this setup contain a notebook?" check, and the
+// per-visit support-file symlink pass on the notebook page (which runs even
+// when the working copy is already seeded).  Caching the list keyed by the
+// zip's modification date + size removes a redundant subprocess from every
+// such visit.
+//
+// The list only changes when the zip bytes change, and every zip mutation path
+// repacks the archive in place, which refreshes the mtime and invalidates the
+// entry.  (Generalised from the former `NotebookPresenceCache`, which cached
+// only the notebook-present boolean; that is now a derived query so there is
+// one zip-listing cache rather than two near-identical ones.)
+
+import Foundation
+import Vapor
+
+actor ZipEntryListCache {
+    private struct CachedEntries {
+        let zipModified: Date
+        let zipSize: UInt64
+        let entries: [String]
+    }
+
+    /// Safety valve, not a tuning knob: entries are small and keyed by setup
+    /// zip path, so the dictionary grows with the number of test setups ever
+    /// listed.  Reset wholesale in the unlikely event it grows past this.
+    private static let maxEntries = 4096
+
+    private var cache: [String: CachedEntries] = [:]
+
+    /// The zip's entry-name list (exactly what `listZipEntries` would return),
+    /// cached by the zip's mtime + size.  Returns an empty list when the zip is
+    /// missing or unreadable, matching `listZipEntries`' behaviour.
+    func entries(zipPath: String) -> [String] {
+        guard
+            let attributes = try? FileManager.default.attributesOfItem(atPath: zipPath),
+            let zipModified = attributes[.modificationDate] as? Date
+        else { return [] }
+        let zipSize = (attributes[.size] as? UInt64) ?? 0
+
+        if let cached = cache[zipPath],
+            cached.zipModified == zipModified,
+            cached.zipSize == zipSize
+        {
+            return cached.entries
+        }
+
+        let entries = listZipEntries(zipPath: zipPath)
+        if cache.count >= Self.maxEntries { cache.removeAll() }
+        cache[zipPath] = CachedEntries(
+            zipModified: zipModified,
+            zipSize: zipSize,
+            entries: entries
+        )
+        return entries
+    }
+
+    /// True when the (cached) entry list contains at least one `.ipynb` entry.
+    /// Returns false when the zip is missing or unreadable.
+    func zipContainsNotebook(zipPath: String) -> Bool {
+        entries(zipPath: zipPath).contains { $0.hasSuffix(".ipynb") }
+    }
+}
+
+struct ZipEntryListCacheKey: StorageKey {
+    typealias Value = ZipEntryListCache
+}
+
+extension Application {
+    var zipEntryListCache: ZipEntryListCache {
+        get {
+            if let existing = storage[ZipEntryListCacheKey.self] {
+                return existing
+            }
+            let created = ZipEntryListCache()
+            storage[ZipEntryListCacheKey.self] = created
+            return created
+        }
+        set { storage[ZipEntryListCacheKey.self] = newValue }
+    }
+}

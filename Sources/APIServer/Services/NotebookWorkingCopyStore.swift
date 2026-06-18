@@ -137,7 +137,7 @@ func ensureUserNotebookWorkingCopy(
     if let overwriteWith {
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
-        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
+        await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
         return overwriteWith
     }
 
@@ -147,7 +147,7 @@ func ensureUserNotebookWorkingCopy(
     {
         // Symlinks are idempotent — run on every visit so existing working copies
         // also pick up support files when the feature is first deployed.
-        createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
+        await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
         return existingData
     }
 
@@ -180,7 +180,7 @@ func ensureUserNotebookWorkingCopy(
 
     try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
     try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
-    createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
+    await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
 
     return processedData
 }
@@ -443,7 +443,7 @@ func latestNotebookSubmissionData(
 /// that is populated by `extractSupportFilesToSharedDirectory` when the test setup
 /// is created or edited. Only files that exist in the shared directory are linked;
 /// missing files are silently skipped so a missing shared dir never breaks notebook access.
-func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: String) {
+func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: String) async {
     guard let setupID = setup.id else { return }
 
     // Derive the list of support files: everything in the zip except test suite scripts
@@ -454,7 +454,11 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
 
     let testScriptNames = Set(props.testSuites.map { $0.script })
     let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
-    let allEntries = listZipEntries(zipPath: setup.zipPath)
+    // Cached: this pass runs on every notebook visit (the symlinks are
+    // idempotent), so listing the zip fresh each time would spawn a serialized
+    // `unzip` subprocess per load. The cache busts when the zip's mtime/size
+    // changes — i.e. whenever the instructor edits support files.
+    let allEntries = await req.application.zipEntryListCache.entries(zipPath: setup.zipPath)
     let supportNames = allEntries.filter {
         !testScriptNames.contains($0) && !reservedNames.contains($0)
     }
