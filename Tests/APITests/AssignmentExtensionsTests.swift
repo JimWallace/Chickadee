@@ -367,6 +367,39 @@ import XCTVapor
         #expect(studentHasActiveExtension(extensionDueAt: past, now: now) == false)
     }
 
+    // MARK: - Published-vs-draft student visibility (pure logic)
+
+    /// `assignmentVisibleToStudentByState` decides whether an assignment shows
+    /// to an enrolled student on its own state: open ones and published-then-
+    /// closed ones are visible; preview, scheduled, and unpublished drafts are
+    /// hidden so authoring-in-progress content never leaks.
+    @Test func assignmentVisibleToStudentByStateClassifiesPublishedVsDraft() {
+        let now = Date()
+        let past = now.addingTimeInterval(-3_600)
+        let future = now.addingTimeInterval(3_600)
+        let courseID = UUID()
+        func make(_ visibility: AssignmentVisibility, dueAt: Date?, startsAt: Date? = nil) -> APIAssignment {
+            APIAssignment(
+                testSetupID: "s", title: "t", dueAt: dueAt, startsAt: startsAt,
+                visibility: visibility, courseID: courseID)
+        }
+
+        // Open → always visible (deadline state is irrelevant to visibility).
+        #expect(assignmentVisibleToStudentByState(make(.open, dueAt: nil), now: now))
+        #expect(assignmentVisibleToStudentByState(make(.open, dueAt: past), now: now))
+        // Published-then-closed (deadline elapsed) → visible read-only.
+        #expect(assignmentVisibleToStudentByState(make(.closed, dueAt: past), now: now))
+        // Unpublished draft: closed with no deadline → hidden.
+        #expect(!assignmentVisibleToStudentByState(make(.closed, dueAt: nil), now: now))
+        // Closed before its (future) deadline — surfaced only via extension /
+        // engagement, not by state → hidden.
+        #expect(!assignmentVisibleToStudentByState(make(.closed, dueAt: future), now: now))
+        // Preview is staff-only → hidden even once its deadline passes.
+        #expect(!assignmentVisibleToStudentByState(make(.preview, dueAt: past), now: now))
+        // Not yet started (future open date) → hidden.
+        #expect(!assignmentVisibleToStudentByState(make(.closed, dueAt: past, startsAt: future), now: now))
+    }
+
     // MARK: - Per-user open decision (pure logic)
 
     @Test func openForUserCoversDeadlineAndExtensionCases() {

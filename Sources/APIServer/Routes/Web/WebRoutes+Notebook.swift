@@ -39,6 +39,13 @@ extension WebRoutes {
 
         let query = try req.query.decode(NotebookQuery.self)
         let fileKind = notebookFileKind(from: query.file)
+        // The reference solution is staff-only. The student notebook route is
+        // reachable by any enrolled student (and now, read-only, for closed
+        // assignments), so guard the solution view here rather than relying on
+        // the absence of a UI link — never serve the answer key to a student.
+        if fileKind == .solution, !user.isInstructor {
+            throw Abort(.forbidden, reason: "The solution is only available to course staff.")
+        }
         let queryTitle = (query.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == setupID)
