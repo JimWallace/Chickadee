@@ -120,11 +120,7 @@ struct WebRoutes: RouteCollection {
             var visibleSetupIDs = Set(allAssignments.filter(\.isOpen).map(\.testSetupID))
             let now = Date()
             for (setupID, extendedDueAt) in extensionDueAtBySetupID
-            where studentHasActiveExtension(
-                extensionDueAt: extendedDueAt,
-                baselineDueAt: assignmentBySetup[setupID]?.dueAt,
-                now: now)
-            {
+            where studentHasActiveExtension(extensionDueAt: extendedDueAt, now: now) {
                 visibleSetupIDs.insert(setupID)
             }
             // Closed assignments the student already opened remain on the list.
@@ -359,8 +355,7 @@ struct WebRoutes: RouteCollection {
             // deadline has passed but this user retains submit privileges.
             let extensionDueAt = extensionDueAtBySetupID[setupID]
             let baselineDueAt = assignment?.dueAt
-            let hasActiveExtension = studentHasActiveExtension(
-                extensionDueAt: extensionDueAt, baselineDueAt: baselineDueAt)
+            let hasActiveExtension = studentHasActiveExtension(extensionDueAt: extensionDueAt)
             let effectiveDueAt = laterDeadline(
                 baseline: baselineDueAt, extensionDueAt: extensionDueAt)
             let isOpenForThisUser: Bool = {

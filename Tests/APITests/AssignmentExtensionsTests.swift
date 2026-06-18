@@ -268,6 +268,37 @@ import XCTVapor
         }
     }
 
+    /// An extension whose date is in the future but *earlier* than the
+    /// assignment's original deadline must still unlock submission — this is the
+    /// "closed the assignment early, then gave one student a short window" case.
+    /// Tying activeness to "beats the deadline" used to lock the student out.
+    @Test func extensionEarlierThanDeadlineStillUnlocksClosedAssignment() async throws {
+        try await withAssignmentRoutesApp { app in
+            try await arInsertSetup(id: "earlyext_setup", on: app)
+            // Closed well before its far-future deadline.
+            let assignment = try await arInsertAssignment(
+                testSetupID: "earlyext_setup",
+                title: "Closed early, far deadline",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(7 * 86_400), on: app  // 1 week out
+            )
+            let student = try await arInsertStudent(username: "earlyext_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+
+            // Extension is in the future but EARLIER than the original deadline.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(2 * 86_400)  // 2 days out
+            ).save(on: app.db)
+
+            let open = try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)
+            #expect(
+                open,
+                "A future extension unlocks the assignment even when its date precedes the original deadline")
+        }
+    }
+
     // MARK: - Invariant lock (so this never regresses again)
 
     /// The contract, pinned exhaustively: an active per-student extension opens
@@ -317,27 +348,23 @@ import XCTVapor
     }
 
     /// The mirror invariant: `studentHasActiveExtension` is the single source of
-    /// truth for "this student was granted more time", shared by the submission
-    /// gate and the dashboard so they can never disagree.  An extension counts
-    /// only when it both post-dates the baseline deadline (actually extends
-    /// something) and has not itself lapsed.
+    /// truth for "this student's accommodation is still live", shared by the
+    /// submission gate, the dashboard gate, and the visibility filter so they
+    /// can never disagree.  An extension is active purely while its date is in
+    /// the future — deliberately *not* gated on beating the assignment deadline,
+    /// so an extension granted with a date before the original due date (the
+    /// case when an assignment was closed early) still unlocks submission.
     @Test func studentHasActiveExtensionBoundaries() {
         let now = Date()
         let past = now.addingTimeInterval(-3_600)
         let future = now.addingTimeInterval(3_600)
 
         // No extension row → never active.
-        #expect(studentHasActiveExtension(extensionDueAt: nil, baselineDueAt: past, now: now) == false)
-        // Extension later than baseline and still ahead → active.
-        #expect(studentHasActiveExtension(extensionDueAt: future, baselineDueAt: past, now: now))
-        // Extension into the future but the assignment has no deadline → active.
-        #expect(studentHasActiveExtension(extensionDueAt: future, baselineDueAt: nil, now: now))
-        // Extension not past the baseline → does not extend anything → inactive.
-        #expect(
-            studentHasActiveExtension(extensionDueAt: past, baselineDueAt: future, now: now) == false)
+        #expect(studentHasActiveExtension(extensionDueAt: nil, now: now) == false)
+        // Extension still ahead → active, regardless of the original deadline.
+        #expect(studentHasActiveExtension(extensionDueAt: future, now: now))
         // Extension already lapsed → inactive.
-        #expect(
-            studentHasActiveExtension(extensionDueAt: past, baselineDueAt: nil, now: now) == false)
+        #expect(studentHasActiveExtension(extensionDueAt: past, now: now) == false)
     }
 
     // MARK: - Per-user open decision (pure logic)

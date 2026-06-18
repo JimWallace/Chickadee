@@ -98,17 +98,25 @@ func studentExtensionDueAt(
         .extendedDueAt
 }
 
-/// Whether a per-student extension is currently granting extra time: a row
-/// exists, its date is later than the assignment-wide deadline (so it actually
-/// extends something), and that date has not yet passed. Shared by the
-/// submission gate and the student dashboard so the two never drift.
+/// Whether a per-student extension is currently in effect: a row exists and its
+/// date has not yet passed.
+///
+/// This is deliberately independent of the assignment-wide deadline. An
+/// extension is an explicit accommodation, so as long as it has not lapsed the
+/// student may keep working — even when the extension date falls *before* the
+/// original due date, which is exactly what happens when an instructor closes an
+/// assignment early and then grants a shorter window to one student. Tying
+/// "active" to "later than the deadline" would silently lock that student out.
+///
+/// Computing the *effective* deadline to display (the later of the baseline and
+/// the extension) is a separate concern handled by `laterDeadline`. Shared by
+/// the submission gate, the dashboard gate, and the dashboard visibility filter
+/// so the three never drift.
 func studentHasActiveExtension(
     extensionDueAt: Date?,
-    baselineDueAt: Date?,
     now: Date = Date()
 ) -> Bool {
     guard let extensionDueAt else { return false }
-    if let baselineDueAt, extensionDueAt <= baselineDueAt { return false }
     return now < extensionDueAt
 }
 
@@ -156,8 +164,7 @@ func isAssignmentEffectivelyOpen(
         overrideActive: assignmentDeadlineOverrideIsActive(assignment),
         baselineDueAt: baseline,
         effectiveDueAt: laterDeadline(baseline: baseline, extensionDueAt: extensionDueAt),
-        hasActiveExtension: studentHasActiveExtension(
-            extensionDueAt: extensionDueAt, baselineDueAt: baseline, now: now),
+        hasActiveExtension: studentHasActiveExtension(extensionDueAt: extensionDueAt, now: now),
         startsAt: gate.honorsStartDate ? assignment.startsAt : nil,
         now: now
     )
