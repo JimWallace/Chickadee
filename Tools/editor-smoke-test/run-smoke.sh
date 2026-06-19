@@ -44,14 +44,21 @@ cleanup() {
 trap cleanup EXIT
 
 echo "run-smoke: booting $BIN on 127.0.0.1:$PORT (isolation=${NOTEBOOK_CROSS_ORIGIN_ISOLATION:-unset})"
-ENABLE_NON_SSO_AUTH_MODES=true \
-AUTH_MODE=local \
-DATABASE_BACKEND=sqlite \
-SQLITE_PATH="$WORKDIR/smoke.sqlite" \
-MCP_MODE=off \
-LOG_LEVEL=info \
-NOTEBOOK_CROSS_ORIGIN_ISOLATION="${NOTEBOOK_CROSS_ORIGIN_ISOLATION:-false}" \
-  "$BIN" serve --hostname 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
+# Launch from the repo root: Vapor's DirectoryConfiguration.detect() resolves
+# Public/ (the vended JupyterLite + Pyodide the editor loads) from the working
+# directory, so the server must run with the repo root as its CWD — not this
+# script's directory.
+(
+  cd "$REPO_ROOT"
+  ENABLE_NON_SSO_AUTH_MODES=true \
+  AUTH_MODE=local \
+  DATABASE_BACKEND=sqlite \
+  SQLITE_PATH="$WORKDIR/smoke.sqlite" \
+  MCP_MODE=off \
+  LOG_LEVEL=info \
+  NOTEBOOK_CROSS_ORIGIN_ISOLATION="${NOTEBOOK_CROSS_ORIGIN_ISOLATION:-false}" \
+    exec "$BIN" serve --hostname 127.0.0.1 --port "$PORT"
+) >"$LOG" 2>&1 &
 SRV_PID=$!
 
 # Wait for readiness (up to ~40s).
