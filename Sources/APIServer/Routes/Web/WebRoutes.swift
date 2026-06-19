@@ -68,17 +68,26 @@ struct WebRoutes: RouteCollection {
             }
         }
 
+        // The home dashboard is course-scoped for every role. With no active
+        // enrollment we've either already redirected to /enroll (when an open
+        // course exists to self-enrol into) or there's nothing this user is
+        // affiliated with — render the empty "not enrolled in any courses"
+        // dashboard rather than falling through to a deployment-wide assignment
+        // list. An admin with no enrollment administers courses from /admin; the
+        // home dashboard is never an all-courses view, for any role.
+        guard let activeCourseUUID = courseState.activeCourseUUID else {
+            return try await req.view.render(
+                "index",
+                IndexContext(displayGroups: [], hasAny: false, currentUser: userContext)
+            ).encodeResponse(for: req)
+        }
+
         let fmt = waterlooDateTimeFormatter()
 
-        // Load assignments, filtering by active course when one is resolved.
-        let allAssignments: [APIAssignment]
-        if let activeCourseUUID = courseState.activeCourseUUID {
-            allAssignments = try await APIAssignment.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .all()
-        } else {
-            allAssignments = try await APIAssignment.query(on: req.db).all()
-        }
+        // Load every assignment in the active course.
+        let allAssignments = try await APIAssignment.query(on: req.db)
+            .filter(\.$courseID == activeCourseUUID)
+            .all()
         let assignmentBySetup = Dictionary(
             allAssignments.map { ($0.testSetupID, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -101,17 +110,11 @@ struct WebRoutes: RouteCollection {
 
         let setups: [APITestSetup]
         if user.isInstructor {
-            // Instructors and admins see test setups for the active course.
-            if let activeCourseUUID = courseState.activeCourseUUID {
-                setups = try await APITestSetup.query(on: req.db)
-                    .filter(\.$courseID == activeCourseUUID)
-                    .sort(\.$createdAt, .descending)
-                    .all()
-            } else {
-                setups = try await APITestSetup.query(on: req.db)
-                    .sort(\.$createdAt, .descending)
-                    .all()
-            }
+            // Instructors and admins see every test setup in the active course.
+            setups = try await APITestSetup.query(on: req.db)
+                .filter(\.$courseID == activeCourseUUID)
+                .sort(\.$createdAt, .descending)
+                .all()
         } else {
             // Enrolled students see every published assignment in their course:
             // open ones, and ones that were published and have since closed at
