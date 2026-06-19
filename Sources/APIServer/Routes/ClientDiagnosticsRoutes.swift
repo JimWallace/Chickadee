@@ -59,9 +59,16 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         // service-worker sync path) and a dedicated worker — which keeps running
         // while the page is frozen — reported it. Such freezes are otherwise
         // invisible: the blocked main thread can't post anything itself.
+        // "editor_ready" and "sw_state" are non-failure telemetry: editor_ready
+        // is the success denominator (the editor shell came up, message
+        // "elapsed_ms=…") so we can compute a success RATE; sw_state reports
+        // whether JupyterLite's service worker registered (message
+        // "supported=…;registrations=…"), which diagnoses the "Kernel Unknown"
+        // failure mode per browser/device.
         let allowedKinds: Set<String> = [
             "preflight_fail", "watchdog_timeout", "editor_error",
             "submit_phase", "submit_error", "page_unresponsive",
+            "editor_ready", "sw_state",
         ]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")

@@ -182,12 +182,32 @@
     }
 
     // ----------------------------------------------------------------
+    // Non-error event telemetry
+    // ----------------------------------------------------------------
+    //
+    // Fire-and-forget beacon for NON-failure editor events — the success
+    // denominator (`editor_ready`) and service-worker state (`sw_state`).
+    // Like reportEditorError it makes NO visible change to the page; it just
+    // lets us compute an editor *success rate* and diagnose the SW path,
+    // instead of only counting failures.
+
+    function reportEvent(info) {
+        try {
+            if (!info || !info.kind) return;
+            postDiagnostic(info).catch(function () { /* telemetry is best-effort */ });
+        } catch (_) {
+            // Never let telemetry throw.
+        }
+    }
+
+    // ----------------------------------------------------------------
     // Public surface
     // ----------------------------------------------------------------
 
     window.ChickadeeNotebookFailures = {
         runPreflight:     runPreflight,
         showFailure:      showFailure,
-        reportEditorError: reportEditorError
+        reportEditorError: reportEditorError,
+        reportEvent:       reportEvent
     };
 })();

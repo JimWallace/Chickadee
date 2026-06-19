@@ -178,6 +178,8 @@
             frame.src = editorURL;
         }
 
+        scheduleServiceWorkerStateBeacon();
+
         // Quick reachability check helps explain blank/failed editor loads.
         fetch(notebookURL, { method: 'GET' }).then((res) => {
             if (!res.ok) {
@@ -482,7 +484,40 @@
     // that stays gated on the notebook sync so a blank notebook can't be
     // submitted before the student's work loads.
     function markEditorReady() {
+        if (editorReady) return;
         editorReady = true;
+        // Success denominator: the editor shell came up. Paired with the failure
+        // beacons (preflight_fail / watchdog_timeout / page_unresponsive) this
+        // lets us compute an editor success RATE, not just count failures.
+        if (failures && failures.reportEvent) {
+            failures.reportEvent({
+                kind: 'editor_ready',
+                message: 'elapsed_ms=' + Math.round(performance.now())
+            });
+        }
+    }
+
+    // Reports whether JupyterLite's service worker registered. The SW is the
+    // kernel's stdin/Drive sync path, so a missing/blocked SW is the signature
+    // of the "Kernel Unknown" failure — reporting it lets us correlate that
+    // with browser/device class. Fired a few seconds after mount to give the
+    // SW manager time to register.
+    function scheduleServiceWorkerStateBeacon() {
+        setTimeout(function () {
+            if (!failures || !failures.reportEvent) return;
+            if (!('serviceWorker' in navigator)) {
+                failures.reportEvent({ kind: 'sw_state', message: 'supported=false' });
+                return;
+            }
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+                failures.reportEvent({
+                    kind: 'sw_state',
+                    message: 'supported=true;registrations=' + (regs ? regs.length : 0)
+                });
+            }).catch(function () {
+                failures.reportEvent({ kind: 'sw_state', message: 'supported=true;error=1' });
+            });
+        }, 6000);
     }
 
     // Resolves once the editor shell is ready, or after `timeoutMs` so a dead
