@@ -90,6 +90,76 @@ func brightSpaceHMACSHA256Base64URL(key: String, message: String) -> String {
     return Data(mac).base64URLEncodedString()
 }
 
+/// The path component fed to `valenceRequestBaseString`: the portion of
+/// `urlString` between the host and the query (`?`) / fragment (`#`),
+/// percent-decoded. Mirrors the reference client's `unquote_plus(path.lower())`
+/// (`valenceRequestBaseString` applies the lowercasing). Unlike
+/// `URL(string:)?.path` this never returns nil, so a URL Foundation declines to
+/// parse is still signed rather than silently sent unauthenticated. Our request
+/// URLs only ever carry numeric IDs and lowercase route names in the path — the
+/// one caller-supplied value, `orgDefinedId`, rides in the query — so no
+/// percent-encoded alphabetic character can reach the path, making this
+/// decode-then-lowercase order equivalent to the reference's lowercase-then-decode.
+func valencePath(of urlString: String) -> String {
+    var path = Substring(urlString)
+    if let cut = path.firstIndex(where: { $0 == "?" || $0 == "#" }) {
+        path = path[..<cut]
+    }
+    if let scheme = path.range(of: "://") {
+        let afterHost = path[scheme.upperBound...]
+        if let slash = afterHost.firstIndex(of: "/") {
+            path = afterHost[slash...]
+        } else {
+            return "/"
+        }
+    }
+    let raw = String(path)
+    return raw.removingPercentEncoding ?? raw
+}
+
+/// The URL of the next page in a Valence list response, or nil when pagination
+/// is complete. Mirrors the reference client's `get_paged`, which follows either
+/// D2L paging convention:
+///   • `PagingInfo` / `Bookmark` — re-issue the first-page URL with
+///     `?bookmark=<bm>` while `HasMoreItems` is true;
+///   • `Next` — a continuation URL (absolute, or a path relative to the host).
+func valenceNextPageURL(
+    firstPageURL: String,
+    baseURL: String,
+    pagingBookmark: String?,
+    pagingHasMore: Bool?,
+    next: String?
+) -> String? {
+    // Bookmark convention: a `PagingInfo` block was present.
+    if pagingHasMore != nil || pagingBookmark != nil {
+        guard pagingHasMore == true, let bookmark = pagingBookmark, !bookmark.isEmpty else {
+            return nil
+        }
+        let encoded = bookmark.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? bookmark
+        let basePath = firstPageURL.split(separator: "?", maxSplits: 1).first.map(String.init) ?? firstPageURL
+        return "\(basePath)?bookmark=\(encoded)"
+    }
+    // Continuation-URL convention.
+    if let next, !next.isEmpty {
+        if next.hasPrefix("http://") || next.hasPrefix("https://") { return next }
+        return baseURL + (next.hasPrefix("/") ? next : "/" + next)
+    }
+    return nil
+}
+
+/// Parses D2L's clock-skew error body. A request whose `x_t` timestamp is
+/// outside the server's tolerance gets HTTP 403 with the body
+/// `"Timestamp out of range, <serverUnixTimeSeconds>"`. Returns the server's
+/// Unix time (seconds) so the client can set its skew and retry, or nil when the
+/// body isn't a timestamp error (e.g. a genuine permission 403).
+func valenceServerTimeFromTimestampError(body: String) -> Int? {
+    guard body.range(of: "Timestamp out of range", options: .caseInsensitive) != nil else {
+        return nil
+    }
+    let digits = body.drop(while: { !$0.isNumber }).prefix(while: { $0.isNumber })
+    return Int(digits)
+}
+
 /// Percent-encodes a query-parameter value so reserved characters (`:` `/` `?`
 /// `=` `&`) in the callback don't leak into the surrounding query. Equivalent
 /// to Python's `urllib.parse.quote(value, safe='')`.
