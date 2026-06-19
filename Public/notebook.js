@@ -43,6 +43,40 @@
         return;
     }
 
+    // --- Main-thread freeze watchdog ---------------------------------
+    // A dedicated worker beacons a `page_unresponsive` diagnostic if the main
+    // thread stops sending heartbeats — i.e. the page hard-freezes (a
+    // synchronous Pyodide hang with no SharedArrayBuffer / service-worker sync
+    // path, which is Chrome's "Page Unresponsive"). The frozen main thread
+    // can't report itself; the worker, on its own thread, can. Fully guarded:
+    // this telemetry must never affect the editor.
+    if (typeof Worker !== 'undefined') {
+        try {
+            const freezeWorker = new Worker('/freeze-watchdog-worker.js');
+            let freezeCsrf = '';
+            try { freezeCsrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+            freezeWorker.postMessage({
+                type: 'init',
+                beaconUrl: '/api/v1/client-diagnostics',
+                setupID: setupID,
+                csrfToken: freezeCsrf,
+                thresholdMs: 8000,
+            });
+            const sendFreezeBeat = () => {
+                try { freezeWorker.postMessage({ type: 'beat' }); } catch (_) { /* worker gone */ }
+            };
+            setInterval(sendFreezeBeat, 2000);
+            sendFreezeBeat();
+            document.addEventListener('visibilitychange', () => {
+                try {
+                    freezeWorker.postMessage({ type: 'visibility', visible: !document.hidden });
+                } catch (_) { /* worker gone */ }
+            });
+        } catch (_) {
+            // No freeze watchdog — never block the editor over telemetry.
+        }
+    }
+
     // Disable Submit until the student's notebook has been synced into the
     // JupyterLite editor. This prevents a race condition where students click
     // Submit before their work is loaded, causing a blank notebook to be

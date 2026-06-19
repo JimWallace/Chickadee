@@ -108,6 +108,24 @@ import XCTVapor
         }
     }
 
+    @Test func persistsPageUnresponsiveRecord() async throws {
+        try await withApp(app) { _ in
+            // The freeze watchdog worker beacons this kind when the editor page's
+            // main thread hard-froze. message carries "stalled_ms=…".
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_frozen")
+            let body = #"{"kind":"page_unresponsive","testSetupID":"setup_frozen","message":"stalled_ms=9120"}"#
+            let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
+            #expect(res.status == .accepted)
+
+            let records = try await APIClientDiagnostic.query(on: app.db).all()
+            #expect(records.count == 1)
+            #expect(records.first?.kind == "page_unresponsive")
+            #expect(records.first?.testSetupID == "setup_frozen")
+            #expect(records.first?.message == "stalled_ms=9120")
+        }
+    }
+
     @Test func persistsPreflightFailRecord() async throws {
         try await withApp(app) { _ in
             let auth = try await loginAsStudent()

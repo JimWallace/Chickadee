@@ -73,7 +73,7 @@ extension OperationalDiagnosticsService {
     /// two `ClientDiagnosticsRoutes` accepts and the dashboard's stuck-student
     /// count keys off): a failed preflight capability check or a kernel
     /// watchdog timeout.
-    private static let browserErrorKinds = ["preflight_fail", "watchdog_timeout"]
+    private static let browserErrorKinds = ["preflight_fail", "watchdog_timeout", "page_unresponsive"]
 
     /// Trailing-window student submissions, projected to only the columns the
     /// buckets read.  Empty when the course has no setups or no students.

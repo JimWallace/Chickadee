@@ -13,6 +13,10 @@
 //   "editor_error"      — an uncaught error / unhandled promise rejection on
 //                          the editor page (window.onerror / unhandledrejection),
 //                          carrying message + stack for diagnosis
+//   "page_unresponsive" — the editor page's main thread hard-froze; a dedicated
+//                          worker (which keeps running while the page is frozen)
+//                          beaconed it, since the blocked main thread cannot
+//                          (message carries "stalled_ms=…")
 //
 // "editor_error" and the kernel-unhealthy "watchdog_timeout" subtype may carry
 // `message` / `stack` / `source`.  These are JupyterLite/Pyodide infrastructure
@@ -50,8 +54,14 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         // otherwise invisible to the server. Like the editor errors, these are
         // infrastructure breadcrumbs (phase + timing + a pipeline error string),
         // never student-code output, so no student-authored content is stored.
+        // "page_unresponsive" is the main-thread freeze beacon: the editor page
+        // hard-froze (a synchronous Pyodide hang with no SharedArrayBuffer /
+        // service-worker sync path) and a dedicated worker — which keeps running
+        // while the page is frozen — reported it. Such freezes are otherwise
+        // invisible: the blocked main thread can't post anything itself.
         let allowedKinds: Set<String> = [
-            "preflight_fail", "watchdog_timeout", "editor_error", "submit_phase", "submit_error",
+            "preflight_fail", "watchdog_timeout", "editor_error",
+            "submit_phase", "submit_error", "page_unresponsive",
         ]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")
