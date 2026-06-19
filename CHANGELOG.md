@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.468] - 2026-06-19
+
+### Added
+
+- **Editor success/SW telemetry + per-browser breakdown for diagnosing the notebook editor.** The client-diagnostics pipeline gained two non-failure beacons and the admin tool a new aggregation, so we can measure the editor *rate* and localize problems instead of only counting failures: `editor_ready` (the editor shell came up, with `elapsed_ms`) is the **success denominator** — paired with `preflight_fail` / `watchdog_timeout` / `page_unresponsive` it yields a real success rate and boot-time distribution; `sw_state` reports whether JupyterLite's service worker registered (`supported=…;registrations=…`), the signal that diagnoses "Kernel Unknown" per device; and `get_browser_diagnostics` now returns a **`byBrowser`** breakdown (coarse browser/OS from the User-Agent, e.g. `Safari/iOS`) so editor failures can be pinned to a browser/device class. All PII-safe (no student identifier), same boundary as the existing telemetry. Also adds `docs/notebook-editor-smoke-test.md` — a proposal for a pre-merge headless-browser smoke test that would have caught the recent COEP/kernel breakages at the gate.
+
+
 ## [0.4.467] - 2026-06-19
 
 ### Fixed
