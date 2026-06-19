@@ -22,17 +22,6 @@ struct AppSecurityConfiguration: Sendable {
     /// timeout; zero (or a disabled gate) suppresses the warning so the
     /// client logs out straight at the ceiling.
     let sessionIdleWarningSeconds: TimeInterval
-    /// When true, the student notebook editor page AND the `/jupyterlite/*`
-    /// iframe assets are served with COOP + COEP (`require-corp`) so the page is
-    /// cross-origin isolated and the Pyodide kernel can use `SharedArrayBuffer`
-    /// for synchronous execution — the fix for the main-thread freeze that
-    /// occurs when neither `SharedArrayBuffer` nor the (disabled) service-worker
-    /// sync fallback is available. Set via `NOTEBOOK_CROSS_ORIGIN_ISOLATION`,
-    /// default false: COEP on the editor page has broken the iframe before
-    /// (#574), so this is gated behind a flag — enable on staging, verify the
-    /// editor boots in each target browser, then enable in production, with
-    /// instant rollback by flipping the flag (no redeploy).
-    let notebookCrossOriginIsolation: Bool
 
     static let `default` = AppSecurityConfiguration(
         publicBaseURL: nil,
@@ -40,8 +29,7 @@ struct AppSecurityConfiguration: Sendable {
         trustForwardedProto: true,
         sessionCookieSecure: false,
         sessionIdleTimeoutSeconds: 30 * 60,
-        sessionIdleWarningSeconds: 120,
-        notebookCrossOriginIsolation: false
+        sessionIdleWarningSeconds: 120
     )
 
     static func fromEnvironment(authMode: AuthMode) -> Self {
@@ -72,8 +60,7 @@ struct AppSecurityConfiguration: Sendable {
             trustForwardedProto: environmentBool("TRUST_X_FORWARDED_PROTO") ?? true,
             sessionCookieSecure: environmentBool("SESSION_COOKIE_SECURE") ?? (publicBaseIsHTTPS || authMode != .local),
             sessionIdleTimeoutSeconds: idleSeconds,
-            sessionIdleWarningSeconds: warningSeconds,
-            notebookCrossOriginIsolation: environmentBool("NOTEBOOK_CROSS_ORIGIN_ISOLATION") ?? false
+            sessionIdleWarningSeconds: warningSeconds
         )
     }
 }

@@ -6,12 +6,11 @@ import XCTVapor
 
 @Suite struct COEPMiddlewareTests {
 
-    /// Wires both isolation middlewares the way `AppMiddleware` does, with the
-    /// `NOTEBOOK_CROSS_ORIGIN_ISOLATION` flag passed through.
-    private func makeApp(isolateNotebook: Bool = false) async throws -> Application {
+    /// Wires both isolation middlewares the way `AppMiddleware` does.
+    private func makeApp() async throws -> Application {
         let app = try await Application.make(.testing)
-        app.middleware.use(NotebookAssetIsolationMiddleware(enabled: isolateNotebook))
-        app.middleware.use(COEPMiddleware(isolateNotebook: isolateNotebook))
+        app.middleware.use(NotebookAssetIsolationMiddleware())
+        app.middleware.use(COEPMiddleware())
 
         app.get("testsetups", ":testSetupID", "notebook") { _ in "notebook" }
         app.get("instructor", ":assignmentID", "validate") { _ in "validate" }
@@ -21,32 +20,8 @@ import XCTVapor
         return app
     }
 
-    // MARK: - Flag OFF (default) preserves the long-standing behaviour
-
-    @Test func notebookPageIsNotIsolatedByDefault() async throws {
+    @Test func notebookPageIsCrossOriginIsolated() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/testsetups/setup_123/notebook") { res async in
-                #expect(res.status == .ok)
-                #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
-                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
-            }
-        }
-    }
-
-    @Test func jupyterliteAssetsAreNotIsolatedByDefault() async throws {
-        try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
-                #expect(res.status == .ok)
-                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
-                #expect(res.headers.first(name: "Cross-Origin-Resource-Policy") == nil)
-            }
-        }
-    }
-
-    // MARK: - Flag ON isolates the editor page AND its iframe assets
-
-    @Test func notebookPageIsIsolatedWhenEnabled() async throws {
-        try await withApp(try await makeApp(isolateNotebook: true)) { app in
             try await app.testable().test(.GET, "/testsetups/setup_123/notebook") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
@@ -55,8 +30,8 @@ import XCTVapor
         }
     }
 
-    @Test func jupyterliteAssetsAreIsolatedWhenEnabled() async throws {
-        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+    @Test func jupyterliteAssetsAreCrossOriginIsolated() async throws {
+        try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
@@ -66,9 +41,7 @@ import XCTVapor
         }
     }
 
-    // MARK: - Always: validate isolated, unrelated pages untouched
-
-    @Test func validatePageAlwaysReceivesCOEPHeaders() async throws {
+    @Test func validatePageIsCrossOriginIsolated() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/instructor/assignment_123/validate") { res async in
                 #expect(res.status == .ok)
@@ -78,8 +51,8 @@ import XCTVapor
         }
     }
 
-    @Test func unrelatedPageNeverReceivesCOEPHeaders() async throws {
-        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+    @Test func unrelatedPageReceivesNoIsolationHeaders() async throws {
+        try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/plain") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
