@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.463] - 2026-06-19
+
+### Changed
+
+- **The student dashboard now reflects a personal deadline extension in the status badge.** Previously a student with an active extension on a class-closed assignment saw the class-wide **"closed"** badge — and on phones, where the due-date column (with its "(extension)" note) is hidden, that badge was the *only* status cue, so the assignment looked uneditable even though the student could still submit. The badge now reads **"extended"** (styled like "open", with a tooltip explaining the accommodation) whenever the viewer has an active extension on an otherwise-closed assignment. The gate behaviour is unchanged — this is display only; the badge value is derived per-viewer from `hasActiveExtension`, scoped to the genuine published-then-closed case (preview/unpublished and class-wide-open rows are untouched, and staff carry no extensions). The due-date column already surfaced the extended date; this closes the gap for the badge (and for mobile).
+
+
 ## [0.4.462] - 2026-06-18
 
 ### Changed
