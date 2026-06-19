@@ -156,6 +156,54 @@ def run_handshake(host: str, app_id: str, app_key: str, port: int,
     return _CallbackHandler.captured
 
 
+def _extract_user_pair(text: str) -> dict[str, str]:
+    """Pull x_a (user id) + x_b (user key) out of a pasted redirect URL."""
+    text = text.strip()
+    query = text.split("?", 1)[1] if "?" in text else text
+    parsed = urllib.parse.parse_qs(query)
+    return {
+        "user_id": (parsed.get("x_a") or [""])[0],
+        "user_key": (parsed.get("x_b") or [""])[0],
+    }
+
+
+def manual_capture(host: str, app_id: str, app_key: str, callback: str,
+                   open_browser: bool) -> dict[str, str]:
+    """Handshake against an externally-approved Trusted URL.
+
+    D2L redirects to `callback` (not localhost), so there is nothing here to
+    catch the redirect — the operator reads x_a/x_b from the browser address
+    bar and pastes the redirected URL back. Use this when the app's registered
+    Trusted URL is a real host (e.g. chickadee.uwaterloo.ca) rather than
+    localhost.
+
+    NOTE: the redirect carries the User Key in its query string, so it lands in
+    that host's access logs. Treat the resulting key as disposable (revoke /
+    rotate once a durable flow exists).
+    """
+    auth_url = build_auth_url(host, app_id, app_key, callback)
+
+    print("\nStep 1 — authorize the app as the SERVICE ACCOUNT")
+    print("  Log in as the D2L account whose grade-write permissions you want")
+    print(f"  Trusted-URL callback: {callback}\n")
+    if open_browser and webbrowser.open(auth_url):
+        print("  Opened your browser. If nothing appeared, visit this URL:\n")
+    else:
+        print("  Open this URL in a browser logged in as the service account:\n")
+    print(f"    {auth_url}\n")
+    print("After authorizing, D2L redirects to a URL like:")
+    print(f"    {callback}?x_a=<userId>&x_b=<userKey>")
+    print("That page may 404 — that's fine; the values are in the address bar.\n")
+
+    while True:
+        pasted = input("Paste the full redirected URL here: ").strip()
+        pair = _extract_user_pair(pasted)
+        if pair["user_id"] and pair["user_key"]:
+            return pair
+        print("  Couldn't find both x_a and x_b — paste the complete URL "
+              "(including the ?x_a=…&x_b=… part).\n")
+
+
 def verify_whoami(host: str, app_id: str, app_key: str,
                   user_id: str, user_key: str) -> None:
     path = f"/d2l/api/lp/{LP_API_VERSION}/users/whoami"
@@ -182,6 +230,12 @@ def main() -> None:
     parser.add_argument("--app-id", default=os.environ.get("BRIGHTSPACE_APP_ID"))
     parser.add_argument("--app-key", default=os.environ.get("BRIGHTSPACE_APP_KEY"))
     parser.add_argument("--port", type=int, default=8088)
+    parser.add_argument(
+        "--callback",
+        help=("use this externally-approved Trusted URL instead of localhost "
+              "(e.g. https://chickadee.uwaterloo.ca/brightspace-valence-callback); "
+              "capture is manual — you paste the redirected URL back"),
+    )
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--no-verify", action="store_true")
     args = parser.parse_args()
@@ -197,8 +251,15 @@ def main() -> None:
     if not host.startswith(("http://", "https://")):
         fail(f"BRIGHTSPACE_URL must include a scheme, e.g. https://… (got '{host}')")
 
-    captured = run_handshake(host, args.app_id, args.app_key, args.port,
-                             open_browser=not args.no_browser)
+    if args.callback:
+        callback = args.callback.strip()
+        if not callback.startswith(("http://", "https://")):
+            fail(f"--callback must include a scheme (got '{callback}')")
+        captured = manual_capture(host, args.app_id, args.app_key, callback,
+                                  open_browser=not args.no_browser)
+    else:
+        captured = run_handshake(host, args.app_id, args.app_key, args.port,
+                                 open_browser=not args.no_browser)
 
     if not args.no_verify:
         verify_whoami(host, args.app_id, args.app_key,

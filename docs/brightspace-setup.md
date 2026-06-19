@@ -70,12 +70,34 @@ forward the port. Use `--port N` if `8088` is taken.
 > **"x_target does not match the allowed values for this application."** D2L
 > validates the callback (`x_target`) against the **Trusted URL** registered
 > for the app, by prefix. If the auth page shows this error, the app's
-> Trusted URL doesn't cover `http://localhost:8088/callback`. Ask your D2L
-> admin to add `http://localhost` (or the exact callback) to the application's
-> Trusted URL / allowed-redirect list — or, if a Trusted URL is already
-> registered for a real host, run the handshake from that host with a matching
-> `--port`/callback. This is configured entirely on the D2L side; no change to
-> the helper bypasses it.
+> Trusted URL doesn't cover `http://localhost:8088/callback`. Either ask your
+> D2L admin to add `http://localhost` to the allowed-redirect list, or — if a
+> Trusted URL is **already** registered for a real host — use `--callback`
+> (below). This is configured entirely on the D2L side; no change to the
+> helper bypasses it.
+
+### Using an already-approved Trusted URL (`--callback`)
+
+If the app's Trusted URL is already a real host (e.g. UW approved
+`chickadee.uwaterloo.ca`), point the helper at it instead of localhost:
+
+```bash
+scripts/brightspace-valence-auth.py \
+  --callback https://chickadee.uwaterloo.ca/brightspace-valence-callback
+```
+
+D2L then redirects to *that host*, not localhost, so the helper can't catch
+the redirect automatically — it prints the auth URL, you authorize, and you
+**paste the redirected URL back** (read it from the browser address bar; the
+page may 404, which is fine — the `x_a`/`x_b` values are in the URL). The
+helper extracts the pair and verifies it via `whoami`.
+
+> **Trade-off:** the redirect carries the User Key in its query string, so it
+> transits that host's request path and lands in its access logs (nginx /
+> Vapor). Loopback (the default) avoids this. When you use `--callback`
+> against a shared host, treat the resulting key as **disposable** — revoke /
+> rotate it (D2L manage-extensibility) once testing is done or a durable
+> server-side authorize flow exists.
 
 ## Step 2 — Put the five vars in the server's environment
 
