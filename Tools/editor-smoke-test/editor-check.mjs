@@ -53,7 +53,15 @@ function looksBlocked(text) {
 }
 
 async function main() {
-  const browser = await chromium.launch({ headless: true });
+  // `--no-sandbox` / chromiumSandbox:false: CI runs this in a root container,
+  // where Chromium's setuid sandbox refuses to start. Chromium's *process*
+  // sandbox is unrelated to the web-platform cross-origin-isolation / COEP
+  // behaviour under test, so disabling it does not affect what we assert.
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--no-sandbox"],
+    chromiumSandbox: false,
+  });
   const context = await browser.newContext();
   const page = await context.newPage();
 
