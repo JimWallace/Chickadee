@@ -50,9 +50,13 @@
     // path, which is Chrome's "Page Unresponsive"). The frozen main thread
     // can't report itself; the worker, on its own thread, can. Fully guarded:
     // this telemetry must never affect the editor.
+    // Hoisted so the browser-grading submit path can arm/disarm the grading
+    // failover (see armGradingFailover / submitBrowserNotebook). null when
+    // Workers are unavailable or construction failed — every use is guarded.
+    let freezeWorker = null;
     if (typeof Worker !== 'undefined') {
         try {
-            const freezeWorker = new Worker('/freeze-watchdog-worker.js');
+            freezeWorker = new Worker('/freeze-watchdog-worker.js');
             let freezeCsrf = '';
             try { freezeCsrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
             freezeWorker.postMessage({
@@ -74,6 +78,52 @@
             });
         } catch (_) {
             // No freeze watchdog — never block the editor over telemetry.
+            freezeWorker = null;
+        }
+    }
+
+    // Arm the freeze-watchdog worker to fail this grade over to the server if the
+    // main thread freezes mid-run (a synchronous runaway loop in student code).
+    // The worker holds the notebook bytes on its own thread, so it can POST the
+    // failover even when the main thread is dead — which the main thread cannot.
+    function armGradingFailover(testSetupID, notebookString) {
+        if (!freezeWorker) return;
+        let csrf = '';
+        try { csrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+        try {
+            freezeWorker.postMessage({
+                type: 'grading-armed',
+                setupID: testSetupID,
+                notebook: notebookString,
+                failoverUrl: '/api/v1/submissions/browser-failover',
+                csrfToken: csrf,
+            });
+        } catch (_) { /* worker gone */ }
+    }
+
+    function disarmGradingFailover() {
+        if (!freezeWorker) return;
+        try { freezeWorker.postMessage({ type: 'grading-disarmed' }); } catch (_) { /* worker gone */ }
+    }
+
+    // Main-thread failover for a non-freeze browser-grading failure (e.g. Pyodide
+    // won't load): enqueue the server-side backstop grade and return its
+    // submission id, or null if even the failover POST fails. The freeze case is
+    // handled by the worker above; this is the path when an exception is actually
+    // thrown and the main thread is still alive to react.
+    async function postBrowserFailover(testSetupID, notebookString) {
+        try {
+            const res = await fetch('/api/v1/submissions/browser-failover', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'content-type': 'application/json', 'x-csrf-token': getCsrfToken() },
+                body: JSON.stringify({ testSetupID: testSetupID, notebook: notebookString }),
+            });
+            if (!res.ok) return null;
+            const json = await res.json();
+            return (json && json.submissionID) ? json.submissionID : null;
+        } catch (_) {
+            return null;
         }
     }
 
@@ -1252,11 +1302,36 @@
 
     async function submitBrowserNotebook(notebook, testSetupID) {
         setStatus('loading', 'Testing…');
-        const notebookBytes = new Uint8Array(
-            new TextEncoder().encode(JSON.stringify(notebook))
-        );
-        const { outcomes, response, sections, sectionIDs } =
-            await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
+        const notebookString = JSON.stringify(notebook);
+        const notebookBytes = new Uint8Array(new TextEncoder().encode(notebookString));
+
+        // Arm the freeze failover before grading: if the main thread hangs on a
+        // runaway loop, the watchdog worker enqueues a server-side grade with
+        // these bytes. Disarmed below the moment grading resolves either way.
+        armGradingFailover(testSetupID, notebookString);
+
+        let result;
+        try {
+            result = await window.BrowserRunner.runAndSubmit(notebookBytes, testSetupID);
+        } catch (err) {
+            disarmGradingFailover();
+            // Browser grading failed outright (not a freeze — the watchdog covers
+            // those). Fall back to server-side grading so the student's work is
+            // still graded instead of leaving them with only an error.
+            const failoverID = await postBrowserFailover(testSetupID, notebookString);
+            if (failoverID) {
+                setStatus('loading',
+                    'Grading didn’t finish in your browser — we’ve queued it for server grading. Opening grade details…');
+                window.location.assign(`/submissions/${failoverID}`);
+                // The page is navigating away; stop here so the caller's
+                // success-summary code never runs against an empty result.
+                return new Promise(() => {});
+            }
+            throw err;
+        }
+        disarmGradingFailover();
+
+        const { outcomes, response, sections, sectionIDs } = result;
         renderResults(outcomes, response, sections, sectionIDs);
         return { outcomes, response };
     }

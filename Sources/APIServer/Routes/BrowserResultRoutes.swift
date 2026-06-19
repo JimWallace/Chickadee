@@ -10,6 +10,15 @@
 //   collection  — JSON text of a TestOutcomeCollection
 //   notebook    — raw bytes of the student's .ipynb file
 //   testSetupID — ID of the test setup this submission targets
+//
+// When in-browser grading FREEZES (a synchronous runaway loop on the Pyodide
+// main thread) or fails outright, the browser never reaches the call above, so
+// no row is created and the worker backstop has nothing to grade. The
+// freeze-watchdog worker / browser-runner catch path instead calls:
+//
+//   POST /api/v1/submissions/browser-failover   (JSON: testSetupID, notebook)
+//
+// which enqueues a `pending` browser-mode submission for the native backstop.
 
 import Core
 import Fluent
@@ -21,6 +30,7 @@ struct BrowserResultRoutes: RouteCollection {
         let submissions = routes.grouped("api", "v1", "submissions")
         submissions.post("browser-result", use: submitBrowserResult)
         submissions.post("runner-submit", use: submitRunnerSubmission)
+        submissions.post("browser-failover", use: submitBrowserFailover)
     }
 
     // MARK: - POST /api/v1/submissions/browser-result
@@ -196,6 +206,131 @@ struct BrowserResultRoutes: RouteCollection {
         return RunnerSubmissionResponse(submissionID: subID)
     }
 
+    // MARK: - POST /api/v1/submissions/browser-failover
+
+    /// Enqueues a server-side ("worker backstop") grade for a browser-graded
+    /// submission whose in-browser Pyodide run failed or *froze*.
+    ///
+    /// Browser grading runs Pyodide on the page's main thread, so a synchronous
+    /// runaway loop in student code hard-freezes the tab: the in-browser per-test
+    /// timeout (a `Promise.race` against a timer) can't fire on the blocked
+    /// thread, grading never completes, and `browser-result` is never POSTed — so
+    /// no submission row is ever created and the v0.4.56 worker backstop (which
+    /// only grades *pending* browser-mode rows) has nothing to claim. The student
+    /// is stuck on "Testing…" forever.
+    ///
+    /// This endpoint closes that gap. The page's freeze-watchdog worker — which
+    /// keeps running on its own thread while the main thread is frozen — calls it
+    /// with the notebook bytes it stashed before grading began; the browser-runner
+    /// catch path also calls it on a non-freeze hard failure. It creates a
+    /// `pending`, browser-mode student submission so the existing native backstop
+    /// grades the `.py` scripts via `python3` — where a runaway loop is SIGKILLed
+    /// and reported as a clean `timeout` instead of a dead kernel.
+    ///
+    /// Gated identically to `browser-result` (enrollment + effective-open), so a
+    /// closed or overdue assignment can't be graded via the failover either.
+    /// Idempotent per (student, setup): a repeated fire (watchdog + catch path,
+    /// retries, reloads) reuses the existing queued/in-flight row instead of
+    /// piling up duplicates.
+    @Sendable
+    func submitBrowserFailover(req: Request) async throws -> RunnerSubmissionResponse {
+        let caller = try req.auth.require(APIUser.self)
+        let body = try req.content.decode(BrowserFailoverBody.self)
+
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
+            throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
+        }
+
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
+        _ = try await requireOpenStudentAssignment(for: body.testSetupID, user: caller, on: req)
+
+        // The failover only applies to browser-graded setups — worker-graded
+        // assignments already enqueue through `runner-submit` and can't freeze a
+        // browser kernel. Reject the inverse so a stray call can't smuggle a
+        // worker-mode submission in through this path.
+        let manifestData = Data(setup.manifest.utf8)
+        guard let manifest = decodeManifest(from: manifestData), manifest.gradingMode == .browser
+        else {
+            throw AppError.badRequest(
+                reason: "Browser failover is only for browser-graded assignments.")
+        }
+
+        guard let userID = caller.id else {
+            throw AppError.internalFailure(reason: "Authenticated user has no ID")
+        }
+
+        // Idempotency: a browser-mode setup never has `pending`/`assigned` student
+        // rows except failovers (normal browser submissions are stored `complete`),
+        // so an existing one is an earlier failover for this same attempt — reuse
+        // it rather than enqueue a duplicate grade.
+        if let existing = try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID == body.testSetupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$userID == userID)
+            .filter(\.$status ~~ [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue])
+            .first()
+        {
+            return RunnerSubmissionResponse(submissionID: existing.id ?? "")
+        }
+
+        // Persist the notebook artifact, merged with the instructor notebook so
+        // the backstop runs the hidden (release/secret) test cells too — exactly
+        // as `browser-result` does.
+        let subsDir = req.application.submissionsDirectory
+        let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
+        let nbPath = subsDir + "\(subID).ipynb"
+        let studentData = Data(body.notebook.utf8)
+        let instructorData: Data
+        do {
+            instructorData = try notebookData(for: setup)
+        } catch {
+            req.logger.warning(
+                "Browser failover: could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
+            )
+            instructorData = studentData
+        }
+        let notebookToSave = mergeNotebook(student: studentData, instructor: instructorData)
+        try notebookToSave.write(to: URL(fileURLWithPath: nbPath))
+
+        let submission = APISubmission(
+            id: subID,
+            testSetupID: body.testSetupID,
+            zipPath: nbPath,
+            attemptNumber: 0,  // assigned by saveSubmissionWithNextAttemptNumber
+            status: SubmissionStatus.pending.rawValue,
+            filename: "\(subID).ipynb",
+            userID: userID,
+            kind: APISubmission.Kind.student
+        )
+        try await saveSubmissionWithNextAttemptNumber(submission, userID: userID, on: req.db)
+
+        req.logger.warning(
+            "Browser grading failed/froze for setup \(body.testSetupID); enqueued worker backstop grade \(subID)"
+        )
+
+        // Record a diagnostic breadcrumb so the freeze→failover is visible in the
+        // admin browser-diagnostics surface next to the watchdog_timeout /
+        // kernel-unhealthy events that precede it. Infrastructure-only (a
+        // submission id), never student content.
+        let diagnostic = APIClientDiagnostic(
+            userID: userID,
+            testSetupID: body.testSetupID,
+            kind: "submit_failover",
+            failedChecks: nil,
+            userAgent: req.headers.first(name: .userAgent).map { String($0.prefix(512)) },
+            message: "submission=\(subID)",
+            source: "backstop"
+        )
+        try? await diagnostic.save(on: req.db)
+
+        // Wake a local runner in development (production runners poll
+        // continuously). The backstop claims browser-mode pending rows, so unlike
+        // `runner-submit` we DO want to nudge the runner for a browser setup here.
+        await ensureLocalRunnerForSubmissionIfNeeded(req: req)
+
+        return RunnerSubmissionResponse(submissionID: subID)
+    }
+
     /// Rewrites a browser-supplied collection with the server-authoritative
     /// submission ID and attempt number, recomputing `isFirstPassSuccess` from
     /// the true attempt (a pass only counts as a first-pass success on attempt
@@ -262,6 +397,15 @@ struct RunnerSubmitBody: Content {
     var notebook: Data
     var testSetupID: String
     var filename: String?
+}
+
+struct BrowserFailoverBody: Content {
+    /// The test setup this submission belongs to.
+    var testSetupID: String
+    /// Raw `.ipynb` JSON text the browser stashed before grading began. Sent as
+    /// a string (not multipart) so the freeze-watchdog worker can post it with a
+    /// plain JSON `fetch` from its own thread while the main thread is frozen.
+    var notebook: String
 }
 
 struct BrowserResultResponse: Content {
