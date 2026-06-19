@@ -54,13 +54,13 @@ struct BrightSpaceSyncConfig: Sendable {
 
 // MARK: - Error
 
-enum BrightSpaceSyncError: Error, CustomStringConvertible {
+enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
     case notConfigured
     case userLookupFailed(orgDefinedId: String, status: Int)
     case userNotFound(orgDefinedId: String)
     case gradePushFailed(status: Int, body: String)
     case missingPoints
-    case whoamiFailed(status: Int)
+    case whoamiFailed(status: Int, body: String)
     case orgUnitLookupFailed(orgUnitID: String, status: Int)
     case gradeObjectsFetchFailed(orgUnitID: String, status: Int)
     case classlistFetchFailed(orgUnitID: String, status: Int)
@@ -77,8 +77,8 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible {
             return "BrightSpace grade push failed (HTTP \(s)): \(b)"
         case .missingPoints:
             return "No grade points available to push"
-        case .whoamiFailed(let s):
-            return "BrightSpace whoami failed (HTTP \(s))"
+        case .whoamiFailed(let s, let b):
+            return "BrightSpace whoami failed (HTTP \(s))\(b.isEmpty ? "" : ": \(b)")"
         case .orgUnitLookupFailed(let id, let s):
             return "BrightSpace org unit lookup for '\(id)' failed (HTTP \(s))"
         case .gradeObjectsFetchFailed(let id, let s):
@@ -87,6 +87,11 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible {
             return "BrightSpace classlist fetch for org unit '\(id)' failed (HTTP \(s))"
         }
     }
+
+    // Surface `description` through `localizedDescription` so the UI's
+    // "Connection failed: \(error.localizedDescription)" shows the HTTP status
+    // and D2L's error body, not Swift's generic "(… error N.)".
+    var errorDescription: String? { description }
 }
 
 // MARK: - Read-only lookup result types
@@ -256,7 +261,11 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let url = signed(url: rawURL, method: "GET")
         let response = try await application.client.get(URI(string: url))
         guard response.status == .ok else {
-            throw BrightSpaceSyncError.whoamiFailed(status: Int(response.status.code))
+            var bodyBuf = response.body
+            let bodyLen = bodyBuf?.readableBytes ?? 0
+            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
+            throw BrightSpaceSyncError.whoamiFailed(
+                status: Int(response.status.code), body: String(bodyText.prefix(500)))
         }
         struct WhoAmIResponse: Decodable {
             let identifier: String

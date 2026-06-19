@@ -51,6 +51,7 @@ import http.server
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -216,6 +217,19 @@ def verify_whoami(host: str, app_id: str, app_key: str,
         with urllib.request.urlopen(url, timeout=30) as resp:
             import json
             data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # D2L's body carries the real reason (e.g. "Timestamp out of range",
+        # "Invalid token") — far more useful than just the status.
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", "replace")[:500]
+        except Exception:  # noqa: BLE001
+            pass
+        print(f"\n⚠  whoami verification FAILED: HTTP {exc.code} — {body}", file=sys.stderr)
+        print("   The keys were captured but D2L rejected the call. A 403 with "
+              "'Timestamp out of range' means clock skew; 'Invalid token' means a "
+              "key/signature mismatch.", file=sys.stderr)
+        return
     except Exception as exc:  # noqa: BLE001 — surface any failure to the operator
         print(f"\n⚠  whoami verification FAILED: {exc}", file=sys.stderr)
         print("   The keys were captured but could not be confirmed. Double-check "
