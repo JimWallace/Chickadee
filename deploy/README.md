@@ -168,6 +168,14 @@ The entrypoint script automatically syncs fresh templates and JupyterLite assets
 from the new image into the data volume on each restart. Fluent schema migrations
 also run automatically on startup.
 
+During the few seconds the server is restarting, nginx serves a
+Chickadee-themed maintenance page (`deploy/error-pages/maintenance.html`)
+instead of the default nginx 502, as long as the `nginx` service is enabled and
+mounts the page (see the volumes list in `docker-compose.yml`). The page is
+fully self-contained and auto-refreshes, so it disappears on its own once the
+server is healthy again. To customize the wording, edit
+`deploy/error-pages/maintenance.html` and `docker compose restart nginx`.
+
 > **Note (v0.4.46+):** Sessions are now persisted in the database (`_fluent_sessions`
 > table). The migration runs automatically on startup. All existing users will be
 > logged out once when this version is first deployed.
@@ -582,6 +590,12 @@ sudo nano /etc/nginx/sites-available/chickadee
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+While the server restarts (e.g. during an update), nginx serves the
+Chickadee-themed maintenance page at `deploy/error-pages/maintenance.html`
+instead of the default nginx 502. The shipped `nginx.conf` expects the repo at
+`/opt/chickadee`; adjust the `alias` path in the `error_page` block if you
+cloned it elsewhere.
+
 ### HTTPS (recommended)
 
 ```bash
@@ -639,7 +653,7 @@ If you also changed templates or static assets, rsync `Public/` and `Resources/`
 
 | Symptom | Check |
 |---------|-------|
-| 502 Bad Gateway | `systemctl status chickadee-server` — is it running? |
+| 502 Bad Gateway | `systemctl status chickadee-server` — is it running? (While it restarts, nginx serves the themed `deploy/error-pages/maintenance.html` page instead.) |
 | SSO redirect loop | Verify `OIDC_CALLBACK` matches the redirect URI registered with your IdP |
 | Students not auto-enrolled | Make sure exactly one non-archived course exists in `/admin/courses` |
 | Runner not picking up jobs | Check `journalctl -u chickadee-runner`; verify `RUNNER_SHARED_SECRET` matches `.worker-secret` |
