@@ -90,6 +90,13 @@ extension AdminRoutes {
         req.session.data["bs_valence_state"] = state
 
         let callbackWithState = callback + "?state=" + state
+
+        // The CSP is globally `form-action 'self'`; this POST 303s to the LMS
+        // origin, and Chrome/Firefox enforce form-action across that redirect —
+        // so without relaxing it the navigation is silently blocked (the button
+        // appears to "do nothing"). Mirrors the SSO/MCP consent flows.
+        SecurityHeadersMiddleware.allowFormAction(lmsOrigin(appCreds.baseURL), on: req)
+
         return req.redirect(to: appCreds.valenceAuthURL(callback: callbackWithState))
     }
 
@@ -192,6 +199,15 @@ extension AdminRoutes {
     }
 
     // MARK: - Helpers
+
+    /// `scheme://host[:port]` of the LMS base URL, for the `form-action`
+    /// CSP allow-list. Nil when the base URL can't be parsed.
+    func lmsOrigin(_ baseURL: String) -> String? {
+        guard let url = URL(string: baseURL), let scheme = url.scheme, let host = url.host else {
+            return nil
+        }
+        return "\(scheme)://\(host)\(url.port.map { ":\($0)" } ?? "")"
+    }
 
     /// The absolute Trusted-URL callback D2L redirects back to, derived from
     /// `PUBLIC_BASE_URL`. Nil when the base URL isn't configured.
