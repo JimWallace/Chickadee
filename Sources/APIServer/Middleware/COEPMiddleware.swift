@@ -9,12 +9,12 @@
 //
 //   • /instructor/…/validate — browser-side validation (assignment-validate.js).
 //   • /testsetups/:id/notebook — the student notebook editor (JupyterLite in an
-//     iframe). `NotebookAssetIsolationMiddleware` applies the matching headers
-//     to the `/jupyterlite/*` iframe assets so the iframe document — where the
-//     kernel worker actually runs — is isolated too. Without this the kernel
-//     has no SharedArrayBuffer and (the JupyterLite service worker being
-//     disabled) no service-worker sync fallback either, so a synchronous kernel
-//     operation hard-freezes the page ("Page Unresponsive").
+//     iframe), but ONLY when `isolateNotebook` is true. This is gated behind the
+//     `NOTEBOOK_CROSS_ORIGIN_ISOLATION` flag because COEP on the editor page has
+//     broken the iframe before (#574): the editor must be browser-verified to
+//     still boot under COEP. When enabled, `NotebookAssetIsolationMiddleware`
+//     applies the matching headers to the `/jupyterlite/*` iframe assets so the
+//     iframe document — where the kernel worker actually runs — is isolated too.
 //
 // COEP require-corp only restricts CROSS-origin subresources; same-origin ones
 // (Chickadee vendors Pyodide / CodeMirror / jszip same-origin) load unchanged.
@@ -24,6 +24,13 @@
 import Vapor
 
 struct COEPMiddleware: AsyncMiddleware {
+    /// Whether the student notebook editor page opts into cross-origin isolation.
+    let isolateNotebook: Bool
+
+    init(isolateNotebook: Bool = false) {
+        self.isolateNotebook = isolateNotebook
+    }
+
     func respond(
         to request: Request,
         chainingTo next: any AsyncResponder
@@ -51,8 +58,8 @@ struct COEPMiddleware: AsyncMiddleware {
         // and other instructor pages that load CDN resources.
         if last == "validate" { return true }
 
-        // Student notebook editor page (/testsetups/:id/notebook).
-        if parts.count == 3, parts[0] == "testsetups", last == "notebook" {
+        // Student notebook editor page (/testsetups/:id/notebook), gated.
+        if isolateNotebook, parts.count == 3, parts[0] == "testsetups", last == "notebook" {
             return true
         }
 
