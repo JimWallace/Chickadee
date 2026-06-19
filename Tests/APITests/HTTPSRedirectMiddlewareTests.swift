@@ -26,8 +26,7 @@ import XCTVapor
             trustForwardedProto: trustForwardedProto,
             sessionCookieSecure: false,
             sessionIdleTimeoutSeconds: 0,
-            sessionIdleWarningSeconds: 0,
-            notebookCrossOriginIsolation: false
+            sessionIdleWarningSeconds: 0
         )
         app.middleware.use(HTTPSRedirectMiddleware(configuration: config))
         app.get("test") { _ in "ok" }
