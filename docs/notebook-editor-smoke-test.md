@@ -1,7 +1,31 @@
-# Plan: pre-merge browser smoke test for the notebook editor
+# Pre-merge browser smoke test for the notebook editor
 
-Status: **proposal — needs greenlight.** Companion to the editor telemetry
-(`editor_ready` / `sw_state` / `byBrowser`) added alongside this doc.
+Status: **implemented (Phase 1), advisory.** The harness lives in
+`Tools/editor-smoke-test/` and runs in CI via the `Editor smoke test` workflow
+(nightly + path-filtered per-PR). Companion to the editor telemetry
+(`editor_ready` / `sw_state` / `byBrowser`).
+
+## Status update — what shipped
+
+Phase 1 is in: headless Chromium, full-app harness, assertions (1)–(4) below,
+advisory. It is **verified to catch the regression it exists for** — run
+`Tools/editor-smoke-test/selftest.sh`, which boots the same server build twice
+and asserts the editor **passes on the default config and fails under**
+`NOTEBOOK_CROSS_ORIGIN_ISOLATION=true` (the COEP attempt, which makes the
+cross-origin-isolated editor page refuse its own fast-path-served Pyodide kernel
+worker → `net::ERR_BLOCKED_BY_RESPONSE`). Demonstrated result:
+
+```
+default config:                       crossOriginIsolated=false  SMOKE PASS (kernel ran 7*191=1337)
+NOTEBOOK_CROSS_ORIGIN_ISOLATION=true: crossOriginIsolated=true   SMOKE FAIL (kernel worker ERR_BLOCKED_BY_RESPONSE)
+```
+
+The decisions below were resolved as: **Chromium-only** to start (WebKit is
+Phase 2); **advisory** (not a required check — it is path-filtered, so a
+required check would block the merge of every PR that skips it; promote to
+required after it proves stable); **full app** harness (it drives the real
+`/jupyterlite/repl` through the real middleware chain, no course seeding). The
+original proposal follows for context.
 
 ## Why
 

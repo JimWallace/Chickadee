@@ -1,0 +1,105 @@
+name: Editor smoke test
+
+# Boots the real chickadee-server and drives the JupyterLite notebook editor in
+# a headless browser, asserting the Pyodide kernel comes up and runs a cell.
+# This is the gate the recent editor breakages slipped through: swift test, the
+# render tests, and BrowserRunnerJSTests all prove code/templates *resolve* —
+# none put a browser in front of the editor, so a change that loads the page but
+# blocks the kernel worker (the COEP cross-origin-isolation attempt) or leaves a
+# dead kernel ("Kernel Unknown") passes CI and only fails in front of a student.
+#
+# Runs two ways:
+#   • nightly (schedule) — always-on insurance across the whole editor stack;
+#   • per-PR but PATH-FILTERED — only when a notebook/editor/middleware/asset
+#     file changes, so the PRs that can actually break the editor get the gate
+#     without burdening every unrelated PR.
+#
+# Advisory for now (do NOT mark it a required check while it's path-filtered: a
+# required check that is skipped on most PRs blocks their merge). Promote to
+# required once it has proven stable — see docs/notebook-editor-smoke-test.md.
+
+on:
+  schedule:
+    # ~03:30 America/Toronto (07:30 UTC) — off the nightly coverage slot.
+    - cron: "30 7 * * *"
+  pull_request:
+    paths:
+      - "Public/notebook*.js"
+      - "Public/browser-runner.js"
+      - "Public/pyodide-worker.js"
+      - "Public/assignment-validate.js"
+      - "Public/freeze-watchdog-worker.js"
+      - "Public/jupyterlite/**"
+      - "Public/pyodide/**"
+      - "Public/vendor/**"
+      - "Sources/APIServer/Middleware/COEPMiddleware.swift"
+      - "Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware.swift"
+      - "Sources/APIServer/Middleware/SecurityHeadersMiddleware.swift"
+      - "Sources/APIServer/Middleware/EditorAssetFastPathMiddleware.swift"
+      - "Sources/APIServer/Bootstrap/AppMiddleware.swift"
+      - "Sources/APIServer/Configuration/SecurityConfig.swift"
+      - "Tools/jupyterlite/**"
+      - "Tools/editor-smoke-test/**"
+      - ".github/workflows/editor-smoke.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: editor-smoke-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Run in the same swift image the other jobs use so the cached server binary
+    # (dynamically linked against this image's Swift runtime) actually runs, and
+    # so the vended Public/pyodide it serves is the exact build CI ships.
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Normalise source mtimes to commit times so a restored .build/ stays
+      # valid for unchanged files and only new commits recompile.
+      - uses: ./.github/actions/restore-git-mtimes
+
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # Read-only restore of the shared build cache produced by the Swift Tests
+      # `build` job (same key). On a hit, building just the server product is a
+      # near-no-op; on the nightly/cold path, restore-keys gets the most recent
+      # main build and only changed files recompile.
+      - name: Restore build artifacts
+        uses: actions/cache/restore@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-
+
+      - name: Build chickadee-server
+        run: swift build --product chickadee-server
+
+      - name: Install Node, Playwright and Chromium
+        working-directory: Tools/editor-smoke-test
+        run: |
+          set -eux
+          # Node + curl from the noble base (curl backs the readiness poll).
+          apt-get update -qq
+          apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
+          npm ci
+          # --with-deps installs the browser's system libraries via apt.
+          npx playwright install --with-deps chromium
+
+      - name: Run editor smoke test
+        run: Tools/editor-smoke-test/run-smoke.sh
