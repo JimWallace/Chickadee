@@ -91,6 +91,29 @@ BrightSpace
         #endif
     </div>
 
+    <div class="bs-manual">
+        <h3 class="bs-manual-heading">Set credentials manually</h3>
+        <p class="bs-muted">
+            If your institution registers a central credential service as the
+            app's Trusted URL (e.g. UW's
+            <code>d2l-api-cred.fast.uwaterloo.ca</code>) instead of this server's
+            callback, the "Authorize" button above can't work. Harvest the
+            <strong>User ID</strong> and <strong>User Key</strong> for your
+            service account there, then paste them here — they're verified
+            against D2L and stored live, no env change or restart.
+        </p>
+        <form method="post" action="/admin/brightspace/set-credentials" class="bs-manual-form">
+            #csrfFormField()
+            <label class="bs-field">User ID
+                <input type="text" name="userID" autocomplete="off" spellcheck="false" required>
+            </label>
+            <label class="bs-field">User Key
+                <input type="text" name="userKey" autocomplete="off" spellcheck="false" required>
+            </label>
+            <button class="btn" type="submit">Save &amp; verify</button>
+        </form>
+    </div>
+
     <p class="bs-muted bs-footnote">
         Instructors map assignments to grade items and watch grades flow on
         their course's BrightSpace tab; this page only sets the shared connection.
@@ -126,6 +149,32 @@ BrightSpace
 .bs-footnote {
     font-size: .85rem;
     margin-bottom: 0;
+}
+.bs-manual {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+.bs-manual-heading {
+    margin: 0 0 .4rem;
+    font-size: 1rem;
+}
+.bs-manual-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: .8rem;
+    margin-top: .6rem;
+}
+.bs-field {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    font-size: .85rem;
+}
+.bs-field input {
+    width: 22rem;
+    max-width: 100%;
 }
 </style>
 #endexport

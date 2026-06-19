@@ -188,6 +188,65 @@ extension AdminRoutes {
         return req.redirect(to: "/admin/brightspace")
     }
 
+    // MARK: - POST /admin/brightspace/set-credentials
+
+    /// Stores a User ID/Key pasted in by an admin (e.g. harvested from UW's
+    /// `d2l-api-cred.fast.uwaterloo.ca` credential service, where the app's
+    /// Trusted URL is the central harvester rather than this server's callback,
+    /// so the in-browser authorize flow can't run). Verifies the pair against
+    /// D2L before persisting, then rebuilds the live client — same effect as a
+    /// successful authorize, no env change or restart.
+    @Sendable
+    func brightspaceSetCredentials(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+
+        struct CredentialForm: Content {
+            let userID: String
+            let userKey: String
+        }
+        let form = try req.content.decode(CredentialForm.self)
+        let userID = form.userID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let userKey = form.userKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userID.isEmpty, !userKey.isEmpty else {
+            req.session.data["bs_flash_error"] = "Both User ID and User Key are required."
+            return req.redirect(to: "/admin/brightspace")
+        }
+        guard let appCreds = req.application.brightSpaceAppCredentials else {
+            req.session.data["bs_flash_error"] = "BrightSpace is not configured on this server."
+            return req.redirect(to: "/admin/brightspace")
+        }
+
+        // Verify before persisting so a bad paste fails loudly rather than
+        // silently breaking grade sync.
+        let config = BrightSpaceSyncConfig(app: appCreds, userID: userID, userKey: userKey)
+        let candidate = BrightSpaceAPIClient(config: config)
+        let who: BrightSpaceWhoAmI
+        do {
+            who = try await candidate.whoami(on: req.application)
+        } catch {
+            req.logger.warning(
+                "BrightSpace set-credentials: whoami verification failed: \(error.localizedDescription)")
+            req.session.data["bs_flash_error"] =
+                "Could not verify those credentials against D2L: \(error.localizedDescription)"
+            return req.redirect(to: "/admin/brightspace")
+        }
+
+        let identity = who.uniqueName.isEmpty ? who.displayName : "\(who.displayName) (\(who.uniqueName))"
+        try await BrightSpaceCredentialStore.save(
+            valenceUserID: userID,
+            valenceUserKey: userKey,
+            identityName: identity,
+            capturedByUserID: user.id,
+            on: req.db
+        )
+        req.application.brightSpaceSyncConfig = config
+        req.application.brightSpaceClient = candidate
+        req.logger.info("BrightSpace credentials set manually by \(user.username) as \(identity)")
+
+        req.session.data["bs_flash_success"] = "BrightSpace credentials saved — connected as \(identity)."
+        return req.redirect(to: "/admin/brightspace")
+    }
+
     // MARK: - POST /admin/brightspace/test
 
     @Sendable
