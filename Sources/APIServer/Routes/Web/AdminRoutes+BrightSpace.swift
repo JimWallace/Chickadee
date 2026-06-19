@@ -83,13 +83,12 @@ extension AdminRoutes {
             return req.redirect(to: "/admin/brightspace")
         }
 
-        // CSRF state for the Valence round-trip (validated on the callback).
-        var rng = SystemRandomNumberGenerator()
-        let stateBytes = (0..<32).map { _ in UInt8.random(in: 0...255, using: &rng) }
-        let state = Data(stateBytes).base64URLEncodedString()
-        req.session.data["bs_valence_state"] = state
-
-        let callbackWithState = callback + "?state=" + state
+        // CSRF marker. D2L matches `x_target` against the registered Trusted
+        // URL strictly (a parent path does NOT cover a sub-path, and a query
+        // string breaks the match), so we can't echo a state token back through
+        // the callback URL. Instead the callback is bound to an authorize that
+        // *this* admin session initiated.
+        req.session.data["bs_valence_pending"] = "1"
 
         // The CSP is globally `form-action 'self'`; this POST 303s to the LMS
         // origin, and Chrome/Firefox enforce form-action across that redirect —
@@ -97,7 +96,8 @@ extension AdminRoutes {
         // appears to "do nothing"). Mirrors the SSO/MCP consent flows.
         SecurityHeadersMiddleware.allowFormAction(lmsOrigin(appCreds.baseURL), on: req)
 
-        return req.redirect(to: appCreds.valenceAuthURL(callback: callbackWithState))
+        // `x_target` must equal the registered Trusted URL exactly — no query.
+        return req.redirect(to: appCreds.valenceAuthURL(callback: callback))
     }
 
     // MARK: - GET /admin/brightspace/valence-callback
@@ -113,13 +113,14 @@ extension AdminRoutes {
             return response
         }
 
-        // CSRF: the returned state must match what we stored before redirecting.
-        let returnedState = req.query[String.self, at: "state"] ?? ""
-        let storedState = req.session.data["bs_valence_state"] ?? ""
-        req.session.data["bs_valence_state"] = nil
-        guard !returnedState.isEmpty, returnedState == storedState else {
-            req.logger.warning("BrightSpace authorize: state mismatch (possible CSRF or stale session)")
-            return failRedirect("Authorization failed: state mismatch — please retry.")
+        // CSRF: the callback must follow an authorize that this same admin
+        // session started (see brightspaceAuthorize — D2L's strict Trusted-URL
+        // match prevents echoing a state token in the callback URL).
+        let pending = req.session.data["bs_valence_pending"]
+        req.session.data["bs_valence_pending"] = nil
+        guard pending == "1" else {
+            req.logger.warning("BrightSpace authorize: no pending authorize in session (CSRF or stale)")
+            return failRedirect("Authorization didn't originate here — please click Authorize again.")
         }
 
         let userID = req.query[String.self, at: "x_a"] ?? ""
