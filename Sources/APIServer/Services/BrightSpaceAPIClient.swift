@@ -27,8 +27,13 @@ struct BrightSpaceSyncConfig: Sendable {
     let userKey: String
     let debounceSecs: TimeInterval
 
-    static let leAPIVersion = "1.85"
-    static let lpAPIVersion = "1.28"
+    // Fallback API versions, used only when live version negotiation
+    // (`/d2l/api/{product}/versions/`) is unavailable. Set to UW-known-good
+    // values (the reference client pins le=1.75 / lp=1.47); the client prefers
+    // the server's advertised `LatestVersion`. Hardcoding a version the LMS
+    // doesn't support 404s every call, so these are a floor, not the target.
+    static let leAPIVersion = "1.75"
+    static let lpAPIVersion = "1.47"
 
     static func fromEnvironment() -> Self? {
         guard
@@ -125,6 +130,34 @@ struct BrightSpaceClasslistEntry: Content, Sendable {
     let username: String?
 }
 
+// MARK: - Paged list envelope
+
+/// Decodes the two interchangeable Valence list envelopes: bookmark-paged
+/// (`Items` + `PagingInfo`) and continuation-URL (`Objects` + `Next`). The
+/// reference client's `get_paged` branches on which keys are present; the
+/// pagination step itself is `valenceNextPageURL`.
+struct ValencePagedEnvelope<Element: Decodable>: Decodable {
+    let items: [Element]?
+    let objects: [Element]?
+    let pagingInfo: PagingInfo?
+    let next: String?
+    struct PagingInfo: Decodable {
+        let bookmark: String?
+        let hasMoreItems: Bool?
+        enum CodingKeys: String, CodingKey {
+            case bookmark = "Bookmark"
+            case hasMoreItems = "HasMoreItems"
+        }
+    }
+    enum CodingKeys: String, CodingKey {
+        case items = "Items"
+        case objects = "Objects"
+        case pagingInfo = "PagingInfo"
+        case next = "Next"
+    }
+    var elements: [Element] { items ?? objects ?? [] }
+}
+
 // MARK: - Grading seam
 
 /// The network-touching BrightSpace operations the grade-sync sweep depends on.
@@ -148,6 +181,14 @@ protocol BrightSpaceGrading: Sendable {
 actor BrightSpaceAPIClient: BrightSpaceGrading {
     private let config: BrightSpaceSyncConfig
 
+    /// Negotiated API version per D2L product code ("lp"/"le"), cached for the
+    /// client's lifetime (the client is rebuilt on (re)authorize / restart).
+    private var negotiatedVersions: [String: String] = [:]
+
+    /// Clock-skew correction (seconds) learned from a D2L "Timestamp out of
+    /// range" 403; added to the request timestamp on every subsequent signing.
+    private var serverSkewSeconds = 0
+
     init(config: BrightSpaceSyncConfig) {
         self.config = config
     }
@@ -158,13 +199,14 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     //
     // Signing base string: "<METHOD>&<lowercase_path>&<unix_timestamp>" where
     // path is the URL path only (no query string, no host) and the timestamp is
-    // seconds. Verified against Brightspace's official valence-sdk-python
+    // seconds (plus any learned clock skew). Verified against Brightspace's
+    // official valence-sdk-python
     // (`'{0}&{1}&{2}'.format(method.upper(), path.lower(), time)`).
     // x_c = HMAC-SHA256(appKey, baseString) as base64url (no padding)
     // x_d = HMAC-SHA256(userKey, baseString) as base64url (no padding)
     private func signed(url urlString: String, method: String) -> String {
-        let timestamp = Int(Date().timeIntervalSince1970)
-        guard let path = URL(string: urlString)?.path else { return urlString }
+        let timestamp = Int(Date().timeIntervalSince1970) + serverSkewSeconds
+        let path = valencePath(of: urlString)
         let baseString = valenceRequestBaseString(method: method, path: path, timestamp: timestamp)
         let appSig = hmacSHA256Base64URL(key: config.appKey, message: baseString)
         let userSig = hmacSHA256Base64URL(key: config.userKey, message: baseString)
@@ -179,6 +221,99 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         return Data(mac).base64URLEncodedString()
     }
 
+    // MARK: - Request transport (signing + clock-skew retry)
+
+    /// Signs `rawURL` for `method` ("GET"/"PUT") and sends it. If D2L rejects the
+    /// request with a "Timestamp out of range" 403, learns the clock skew from
+    /// the response body and retries exactly once with a corrected timestamp.
+    private func sendSigned(
+        method: String,
+        rawURL: String,
+        on app: Application,
+        beforeSend: (@Sendable (inout ClientRequest) throws -> Void)? = nil
+    ) async throws -> ClientResponse {
+        func attempt() async throws -> ClientResponse {
+            let uri = URI(string: signed(url: rawURL, method: method))
+            if method.uppercased() == "PUT" {
+                return try await app.client.put(uri) { req in try beforeSend?(&req) }
+            }
+            return try await app.client.get(uri) { req in try beforeSend?(&req) }
+        }
+        let response = try await attempt()
+        guard response.status == .forbidden else { return response }
+        // Peek the body non-destructively (a copied ByteBuffer has its own reader
+        // index) so a genuine permission 403 is still returned intact to the caller.
+        var bodyBuf = response.body
+        let len = bodyBuf?.readableBytes ?? 0
+        let bodyText = (len > 0 ? bodyBuf?.readString(length: len) : nil) ?? ""
+        guard let serverTime = valenceServerTimeFromTimestampError(body: bodyText) else {
+            return response
+        }
+        serverSkewSeconds = serverTime - Int(Date().timeIntervalSince1970)
+        return try await attempt()
+    }
+
+    // MARK: - API version negotiation
+
+    /// Resolves the API version for a D2L product code ("lp"/"le"): an ops env
+    /// pin wins (`BRIGHTSPACE_LE_API_VERSION` / `BRIGHTSPACE_LP_API_VERSION`),
+    /// otherwise the server's advertised `LatestVersion` from
+    /// `/d2l/api/{product}/versions/` (cached), falling back to `fallback` when
+    /// discovery is unavailable. Avoids 404s from requesting an unsupported
+    /// version (the reference client pins these by hand).
+    private func apiVersion(_ product: String, fallback: String, on app: Application) async -> String {
+        if let pinned = trimmedEnv("BRIGHTSPACE_\(product.uppercased())_API_VERSION") {
+            return pinned
+        }
+        if let cached = negotiatedVersions[product] { return cached }
+        let rawURL = "\(config.baseURL)/d2l/api/\(product)/versions/"
+        do {
+            let response = try await sendSigned(method: "GET", rawURL: rawURL, on: app)
+            guard response.status == .ok else { return fallback }
+            struct ProductVersions: Decodable {
+                let latestVersion: String
+                enum CodingKeys: String, CodingKey { case latestVersion = "LatestVersion" }
+            }
+            let latest = try response.content.decode(ProductVersions.self)
+                .latestVersion.trimmingCharacters(in: .whitespaces)
+            let resolved = latest.isEmpty ? fallback : latest
+            negotiatedVersions[product] = resolved
+            return resolved
+        } catch {
+            return fallback
+        }
+    }
+
+    // MARK: - Paged list reads
+
+    /// Follows a Valence list endpoint across every page (either paging
+    /// convention) and returns the concatenated elements. The 10_000-page guard
+    /// is a safety stop against a server that never clears its "more" flag.
+    private func fetchAllPages<Element: Decodable>(
+        firstRawURL: String,
+        on app: Application,
+        failure: (Int) -> BrightSpaceSyncError
+    ) async throws -> [Element] {
+        var url = firstRawURL
+        var collected: [Element] = []
+        for _ in 0..<10_000 {
+            let response = try await sendSigned(method: "GET", rawURL: url, on: app)
+            guard response.status == .ok else { throw failure(Int(response.status.code)) }
+            let page = try response.content.decode(ValencePagedEnvelope<Element>.self)
+            collected.append(contentsOf: page.elements)
+            guard
+                let next = valenceNextPageURL(
+                    firstPageURL: firstRawURL,
+                    baseURL: config.baseURL,
+                    pagingBookmark: page.pagingInfo?.bookmark,
+                    pagingHasMore: page.pagingInfo?.hasMoreItems,
+                    next: page.next)
+            else { break }
+            url = next
+        }
+        return collected
+    }
+
     // MARK: - Push grade
 
     /// Push `earnedPoints` for `bsUserID` to the BrightSpace grade item.
@@ -190,9 +325,10 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         earnedPoints: Double,
         on application: Application
     ) async throws {
+        let leVersion = await apiVersion(
+            "le", fallback: BrightSpaceSyncConfig.leAPIVersion, on: application)
         let rawURL =
-            "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
-        let url = signed(url: rawURL, method: "PUT")
+            "\(config.baseURL)/d2l/api/le/\(leVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
 
         struct NumericGradeValue: Content {
             let gradeObjectType: Int
@@ -204,7 +340,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         }
         let body = NumericGradeValue(gradeObjectType: 1, pointsNumerator: earnedPoints)
 
-        let response = try await application.client.put(URI(string: url)) { req in
+        let response = try await sendSigned(method: "PUT", rawURL: rawURL, on: application) { req in
             req.headers.contentType = .json
             try req.content.encode(body, as: .json)
         }
@@ -224,11 +360,12 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     func lookupUserID(orgDefinedId: String, on application: Application) async throws -> String? {
         guard !orgDefinedId.isEmpty else { return nil }
 
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
         let encoded = orgDefinedId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? orgDefinedId
-        let rawURL = "\(config.baseURL)/d2l/api/lp/\(BrightSpaceSyncConfig.lpAPIVersion)/users/?orgDefinedId=\(encoded)"
-        let url = signed(url: rawURL, method: "GET")
+        let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/users/?orgDefinedId=\(encoded)"
 
-        let response = try await application.client.get(URI(string: url))
+        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
 
         guard response.status == .ok else {
             throw BrightSpaceSyncError.userLookupFailed(
@@ -257,9 +394,10 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     /// endpoint, returning the identity the keys act as.  Used by the
     /// "Test connection" button — surfaces auth problems before grades fail.
     func whoami(on application: Application) async throws -> BrightSpaceWhoAmI {
-        let rawURL = "\(config.baseURL)/d2l/api/lp/\(BrightSpaceSyncConfig.lpAPIVersion)/users/whoami"
-        let url = signed(url: rawURL, method: "GET")
-        let response = try await application.client.get(URI(string: url))
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
+        let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/users/whoami"
+        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
         guard response.status == .ok else {
             var bodyBuf = response.body
             let bodyLen = bodyBuf?.readableBytes ?? 0
@@ -298,10 +436,11 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     /// so the caller can flag an unverified binding without throwing.
     func getOrgUnit(orgUnitID: String, on application: Application) async throws -> BrightSpaceOrgUnitInfo? {
         guard !orgUnitID.isEmpty else { return nil }
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
         let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
-        let rawURL = "\(config.baseURL)/d2l/api/lp/\(BrightSpaceSyncConfig.lpAPIVersion)/orgstructure/\(encoded)"
-        let url = signed(url: rawURL, method: "GET")
-        let response = try await application.client.get(URI(string: url))
+        let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/orgstructure/\(encoded)"
+        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
         if response.status == .notFound { return nil }
         guard response.status == .ok else {
             throw BrightSpaceSyncError.orgUnitLookupFailed(
@@ -328,10 +467,11 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     /// instructor can pick one instead of hand-typing the numeric ID.
     func listGradeObjects(orgUnitID: String, on application: Application) async throws -> [BrightSpaceGradeObject] {
         guard !orgUnitID.isEmpty else { return [] }
+        let leVersion = await apiVersion(
+            "le", fallback: BrightSpaceSyncConfig.leAPIVersion, on: application)
         let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
-        let rawURL = "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(encoded)/grades/"
-        let url = signed(url: rawURL, method: "GET")
-        let response = try await application.client.get(URI(string: url))
+        let rawURL = "\(config.baseURL)/d2l/api/le/\(leVersion)/\(encoded)/grades/"
+        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
         guard response.status == .ok else {
             throw BrightSpaceSyncError.gradeObjectsFetchFailed(
                 orgUnitID: orgUnitID, status: Int(response.status.code))
@@ -364,16 +504,14 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         -> [BrightSpaceClasslistEntry]
     {
         guard !orgUnitID.isEmpty else { return [] }
+        let leVersion = await apiVersion(
+            "le", fallback: BrightSpaceSyncConfig.leAPIVersion, on: application)
         let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
-        let rawURL = "\(config.baseURL)/d2l/api/le/\(BrightSpaceSyncConfig.leAPIVersion)/\(encoded)/classlist/"
-        let url = signed(url: rawURL, method: "GET")
-        let response = try await application.client.get(URI(string: url))
-        guard response.status == .ok else {
-            throw BrightSpaceSyncError.classlistFetchFailed(
-                orgUnitID: orgUnitID, status: Int(response.status.code))
-        }
-        // D2L returns a JSON array of ClasslistUser objects; we keep only the
-        // two identity fields we match on.
+        // The non-paged /classlist/ can truncate on large courses; /classlist/paged/
+        // returns a bookmark-paged envelope we walk to completion (see fetchAllPages).
+        let rawURL = "\(config.baseURL)/d2l/api/le/\(leVersion)/\(encoded)/classlist/paged/"
+        // D2L returns ClasslistUser objects; we keep only the two identity fields
+        // we match on.
         struct ClasslistUserResponse: Decodable {
             let orgDefinedId: String?
             let username: String?
@@ -382,8 +520,12 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 case username = "Username"
             }
         }
-        let decoded = try response.content.decode([ClasslistUserResponse].self)
-        return decoded.map {
+        let rows: [ClasslistUserResponse] = try await fetchAllPages(
+            firstRawURL: rawURL, on: application
+        ) { status in
+            .classlistFetchFailed(orgUnitID: orgUnitID, status: status)
+        }
+        return rows.map {
             BrightSpaceClasslistEntry(orgDefinedID: $0.orgDefinedId, username: $0.username)
         }
     }
