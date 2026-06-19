@@ -37,9 +37,11 @@ the user handshake are two separate steps.
 
 ## Step 1 — Obtain the User ID + User Key
 
-There are two ways to capture the Valence user key. On a **deployed server**,
-prefer the in-app admin flow (1A); for **local/scripted** setup use the CLI
-helper (1B). Both perform the same D2L handshake.
+There are a few ways to capture the Valence user key. On a **deployed server**
+whose own callback is the app's Trusted URL, use the in-app authorize flow (1A);
+where a **central credential service** is the Trusted URL instead (e.g. UW),
+harvest the key there and paste it in (1C); for **local/scripted** setup use the
+CLI helper (1B).
 
 > **Auth scheme note.** This is D2L's legacy **ID-Key Auth** (the
 > `x_a`…`x_t` HMAC signing), which is what an "Application ID + Application Key"
@@ -66,6 +68,30 @@ picks it up within one sweep (≤60 s), no restart.
   key and reverts to env (or disables sync).
 - The captured key rides in D2L's redirect query string, so it lands in the
   host's access log once — treat it as rotatable.
+
+### Step 1C — Central credential service + manual entry (e.g. UW)
+
+Some institutions register a **central credential-harvesting service** as the
+app's Trusted URL rather than each app's own callback. UW's is
+`https://d2l-api-cred.fast.uwaterloo.ca` (registered with **no trailing slash**).
+In this model the in-app "Authorize" button (1A) can't work — D2L only ever
+redirects to that central service, never to this server. Instead:
+
+1. Open the harvester (UW: `https://d2l-api-cred.fast.uwaterloo.ca`) in a
+   **private/incognito** window, enter the LMS host + App ID + App Key, and
+   authenticate **as the service account** (e.g. `sphs-dev`), *not* your personal
+   login. It returns a **User ID** and **User Key**.
+2. In Chickadee, go to **Admin → BrightSpace → "Set credentials manually"**,
+   paste the User ID + User Key, and save. Chickadee `whoami`-verifies the pair,
+   stores it (same `brightspace_credentials` row, taking precedence over env),
+   and rebuilds the live client — no env change or restart.
+
+This is the supported path at UW: the env-key model with the key sourced from the
+harvester. The stored key acts as whatever account you logged into the harvester
+as, so use the **service account** for a shared, person-independent grade sync.
+(You can also drop the harvested values into `BRIGHTSPACE_USER_ID` /
+`BRIGHTSPACE_USER_KEY` in env instead — the manual-entry form just avoids the
+restart.)
 
 ### Step 1B — CLI helper (local / scripted)
 

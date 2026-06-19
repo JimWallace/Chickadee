@@ -53,6 +53,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("brightspace", "authorize", use: brightspaceAuthorize)
         admin.get("brightspace", "valence-callback", use: brightspaceValenceCallback)
         admin.post("brightspace", "clear", use: brightspaceClearAuthorization)
+        admin.post("brightspace", "set-credentials", use: brightspaceSetCredentials)
         admin.post("brightspace", "test", use: brightspaceTestConnection)
         admin.get("mcp", use: mcpPage)
         admin.post("mcp", "accounts", use: createMCPAccount)
