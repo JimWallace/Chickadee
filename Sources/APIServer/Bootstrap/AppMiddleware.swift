@@ -146,16 +146,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.leaf.tags["sessionIdleTimeoutSeconds"] = SessionIdleTimeoutTag()
     app.leaf.tags["sessionIdleWarningSeconds"] = SessionIdleWarningTag()
     app.leaf.tags["rawJSON"] = RawJSONTag()
-    // FileMiddleware is registered first so static files are served directly.
-    // It short-circuits the responder chain (returns without calling next), so
-    // middleware registered after it only runs for dynamic Leaf-rendered pages.
-    // This is intentional: JupyterLite's static files must NOT receive COEP
-    // require-corp because JupyterLite's service worker produces synthetic
-    // responses (virtual filesystem, contents API) that lack Cross-Origin-
-    // Resource-Policy headers.  COEP on the page would block those responses
-    // and prevent the app from initialising.  Modern Pyodide (0.27+) does not
-    // require SharedArrayBuffer — it uses a service-worker-based synchronisation
-    // fallback — so cross-origin isolation on the iframe document is unnecessary.
+    // FileMiddleware short-circuits the responder chain (it returns without
+    // calling next), so middleware registered AFTER it only runs for dynamic
+    // Leaf-rendered pages — which is why COEPMiddleware (after it) covers the
+    // dynamic notebook page, while NotebookAssetIsolationMiddleware (before it)
+    // is needed to decorate the static /jupyterlite/* responses. By default the
+    // JupyterLite assets get no COEP (long-standing behaviour). Cross-origin
+    // isolation for the editor — the fix for the Pyodide main-thread freeze when
+    // there's no SharedArrayBuffer and the service-worker sync fallback is
+    // disabled — is opt-in via NOTEBOOK_CROSS_ORIGIN_ISOLATION (see
+    // COEPMiddleware / NotebookAssetIsolationMiddleware).
     // Registered just OUTSIDE FileMiddleware so it can set immutable cache +
     // application/wasm headers on the content-hashed wasm runner served from
     // Public/runner-wasm/ (FileMiddleware short-circuits, so a middleware after
@@ -166,6 +166,13 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // existing Cache-Control.
     app.middleware.use(StaticAssetCacheMiddleware())
     app.middleware.use(RunnerWasmCacheMiddleware())
+    // Cross-origin isolation for the notebook editor (gated by
+    // NOTEBOOK_CROSS_ORIGIN_ISOLATION, default off). The asset middleware runs
+    // BEFORE FileMiddleware so it can decorate the short-circuited /jupyterlite/*
+    // static responses; COEPMiddleware (after FileMiddleware) covers the dynamic
+    // notebook page itself. Both no-op when the flag is off.
+    let isolateNotebook = securityConfiguration.notebookCrossOriginIsolation
+    app.middleware.use(NotebookAssetIsolationMiddleware(enabled: isolateNotebook))
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.middleware.use(COEPMiddleware())
+    app.middleware.use(COEPMiddleware(isolateNotebook: isolateNotebook))
 }

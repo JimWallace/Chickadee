@@ -1,31 +1,36 @@
 // APIServer/Middleware/COEPMiddleware.swift
 //
 // Adds Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers
-// to responses that still require cross-origin isolation.
+// to dynamic (Leaf-rendered) pages that require cross-origin isolation.
 //
-// Without these headers on the relevant pages:
-//   • WebR cannot start (SharedArrayBuffer unavailable)
-//   • jupyterlite-webr will not function (Issue #77)
+// Cross-origin isolation (COOP same-origin + COEP require-corp) is what makes
+// `SharedArrayBuffer` available, which Pyodide needs to run synchronous Python
+// (stdin / filesystem) without blocking the page. Two pages opt in:
 //
-// The headers are intentionally scoped to paths that need them rather than
-// applied globally.  COEP require-corp forces every cross-origin resource on
-// the same page to include a Cross-Origin-Resource-Policy header, which breaks
-// CDN imports (e.g. CodeMirror via esm.sh) on pages that don't need
-// SharedArrayBuffer (e.g. the assignment editor at /instructor/:id/edit).
+//   • /instructor/…/validate — browser-side validation (assignment-validate.js).
+//   • /testsetups/:id/notebook — the student notebook editor (JupyterLite in an
+//     iframe), but ONLY when `isolateNotebook` is true. This is gated behind the
+//     `NOTEBOOK_CROSS_ORIGIN_ISOLATION` flag because COEP on the editor page has
+//     broken the iframe before (#574): the editor must be browser-verified to
+//     still boot under COEP. When enabled, `NotebookAssetIsolationMiddleware`
+//     applies the matching headers to the `/jupyterlite/*` iframe assets so the
+//     iframe document — where the kernel worker actually runs — is isolated too.
 //
-// Paths that need COEP:
-//   /instructor/…/validate — reserved for browser-side validation if a future
-//                            runtime requires SharedArrayBuffer again
-//
-// The student notebook page at /testsetups/… must NOT receive COEP. It embeds
-// the bundled JupyterLite app in an iframe, and JupyterLite intentionally runs
-// without COEP so its service worker can serve synthetic in-browser filesystem
-// responses. Applying COEP to the parent page causes Chromium to block the
-// iframe navigation with ERR_BLOCKED_BY_RESPONSE.
+// COEP require-corp only restricts CROSS-origin subresources; same-origin ones
+// (Chickadee vendors Pyodide / CodeMirror / jszip same-origin) load unchanged.
+// The historical objection — that JupyterLite's service-worker synthesised
+// responses lacked CORP — no longer applies: that service worker is disabled.
 
 import Vapor
 
 struct COEPMiddleware: AsyncMiddleware {
+    /// Whether the student notebook editor page opts into cross-origin isolation.
+    let isolateNotebook: Bool
+
+    init(isolateNotebook: Bool = false) {
+        self.isolateNotebook = isolateNotebook
+    }
+
     func respond(
         to request: Request,
         chainingTo next: any AsyncResponder
@@ -43,13 +48,21 @@ struct COEPMiddleware: AsyncMiddleware {
         return response
     }
 
-    /// Returns true for paths whose pages still require cross-origin isolation.
+    /// Returns true for paths whose pages opt into cross-origin isolation.
     private func needsCOEP(path: String) -> Bool {
+        let parts = path.split(separator: "/").map(String.init)
+        let last = parts.last ?? ""
+
         // Instructor validate page — loads assignment-validate.js (Pyodide).
         // Matched by last path component to avoid affecting /instructor/:id/edit
         // and other instructor pages that load CDN resources.
-        let last = path.split(separator: "/").last.map(String.init) ?? ""
         if last == "validate" { return true }
+
+        // Student notebook editor page (/testsetups/:id/notebook), gated.
+        if isolateNotebook, parts.count == 3, parts[0] == "testsetups", last == "notebook" {
+            return true
+        }
+
         return false
     }
 }
