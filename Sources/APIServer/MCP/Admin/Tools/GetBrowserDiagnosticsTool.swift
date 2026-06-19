@@ -68,7 +68,8 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     static let name = "get_browser_diagnostics"
     static let description =
         "In-browser editor + submission diagnostics (JupyterLite/Pyodide) for diagnosis: totals and "
-        + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error for editor load, and "
+        + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error / page_unresponsive for "
+        + "editor load — page_unresponsive is a main-thread freeze beaconed by a watchdog worker — and "
         + "submit_phase / submit_error for the grading/submission flow), source, and failed capability "
         + "check over a window, plus recent samples carrying the actual error message and stack. Also "
         + "returns submitFunnel: the submit_phase breadcrumb counts in phase order "
