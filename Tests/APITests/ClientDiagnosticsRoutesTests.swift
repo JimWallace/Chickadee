@@ -126,6 +126,27 @@ import XCTVapor
         }
     }
 
+    @Test func acceptsEditorReadyAndSwStateTelemetry() async throws {
+        try await withApp(app) { _ in
+            // Non-failure telemetry: editor_ready is the success denominator,
+            // sw_state reports service-worker registration. Both are accepted
+            // and persisted, and surface in get_browser_diagnostics by kind.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_tele")
+            let bodies = [
+                #"{"kind":"editor_ready","testSetupID":"setup_tele","message":"elapsed_ms=3400"}"#,
+                #"{"kind":"sw_state","testSetupID":"setup_tele","message":"supported=true;registrations=1"}"#,
+            ]
+            for body in bodies {
+                let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
+                #expect(res.status == .accepted)
+            }
+
+            let kinds = try await APIClientDiagnostic.query(on: app.db).all().map(\.kind).sorted()
+            #expect(kinds == ["editor_ready", "sw_state"])
+        }
+    }
+
     @Test func persistsPreflightFailRecord() async throws {
         try await withApp(app) { _ in
             let auth = try await loginAsStudent()

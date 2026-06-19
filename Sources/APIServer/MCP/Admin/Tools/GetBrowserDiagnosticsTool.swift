@@ -50,6 +50,11 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let byKind: [CountEntry]
         let bySource: [CountEntry]
         let byFailedCheck: [CountEntry]
+        /// Events grouped by coarse browser/OS (e.g. "Safari/iOS", "Chrome/Windows")
+        /// so failures vs successes can be seen per browser/device class — the
+        /// breakdown needed to localize editor problems (e.g. "Kernel Unknown" on
+        /// a specific platform). Derived from the User-Agent; no student identity.
+        let byBrowser: [CountEntry]
         /// Submit-flow funnel: `submit_phase` breadcrumb counts in phase order
         /// (grading_start → … → result_posted). The drop-off between consecutive
         /// phases shows where in-browser submissions are lost to a freeze — the
@@ -69,9 +74,10 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     static let description =
         "In-browser editor + submission diagnostics (JupyterLite/Pyodide) for diagnosis: totals and "
         + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error / page_unresponsive for "
-        + "editor load — page_unresponsive is a main-thread freeze beaconed by a watchdog worker — and "
-        + "submit_phase / submit_error for the grading/submission flow), source, and failed capability "
-        + "check over a window, plus recent samples carrying the actual error message and stack. Also "
+        + "editor-load failures, editor_ready as the success denominator and sw_state for service-worker "
+        + "registration, and submit_phase / submit_error for the grading/submission flow), by source, by "
+        + "failed capability check, and by browser/OS (byBrowser, e.g. Safari/iOS) so failures can be "
+        + "localized per device class, over a window, plus recent samples with the error message and stack. Also "
         + "returns submitFunnel: the submit_phase breadcrumb counts in phase order "
         + "(grading_start → runtime_loaded → setup_unpacked → suite_started → suite_done → "
         + "result_posting → result_posted) — the drop-off between consecutive phases shows where "
@@ -114,8 +120,10 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         var byKind: [String: Int] = [:]
         var bySource: [String: Int] = [:]
         var byCheck: [String: Int] = [:]
+        var byBrowser: [String: Int] = [:]
         for row in rows {
             byKind[row.kind, default: 0] += 1
+            byBrowser[Self.browserLabel(forUserAgent: row.userAgent), default: 0] += 1
             if let source = row.source { bySource[source, default: 0] += 1 }
             if let checks = row.failedChecks {
                 for check in checks.split(separator: ",") {
@@ -153,6 +161,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             byKind: Self.sortedCounts(byKind),
             bySource: Self.sortedCounts(bySource),
             byFailedCheck: Self.sortedCounts(byCheck),
+            byBrowser: Self.sortedCounts(byBrowser),
             submitFunnel: submitFunnel,
             recentSamples: Array(samples))
     }
@@ -161,5 +170,43 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     private static func sortedCounts(_ counts: [String: Int]) -> [CountEntry] {
         counts.map { CountEntry(key: $0.key, count: $0.value) }
             .sorted { ($0.count, $1.key) > ($1.count, $0.key) }
+    }
+
+    /// Coarse, PII-safe "browser/OS" label from a User-Agent (e.g.
+    /// "Chrome/Windows", "Safari/iOS"). Browser order matters — Chrome and
+    /// Edge UAs also contain "Safari", and Edge contains "Chrome" — so the more
+    /// specific tokens are checked first. "Unknown" when the UA is absent.
+    static func browserLabel(forUserAgent userAgent: String?) -> String {
+        guard let ua = userAgent, !ua.isEmpty else { return "Unknown" }
+
+        let browser: String
+        if ua.contains("Edg/") || ua.contains("Edge/") || ua.contains("EdgiOS/") {
+            browser = "Edge"
+        } else if ua.contains("Firefox/") || ua.contains("FxiOS/") {
+            browser = "Firefox"
+        } else if ua.contains("CriOS/") || ua.contains("Chrome/") || ua.contains("Chromium/") {
+            browser = "Chrome"
+        } else if ua.contains("Safari/") {
+            browser = "Safari"
+        } else {
+            browser = "Other"
+        }
+
+        let os: String
+        if ua.contains("Windows") {
+            os = "Windows"
+        } else if ua.contains("iPhone") || ua.contains("iPad") || ua.contains("iPod") {
+            os = "iOS"
+        } else if ua.contains("Android") {
+            os = "Android"
+        } else if ua.contains("Mac OS X") || ua.contains("Macintosh") {
+            os = "macOS"
+        } else if ua.contains("Linux") {
+            os = "Linux"
+        } else {
+            os = "Other"
+        }
+
+        return "\(browser)/\(os)"
     }
 }
