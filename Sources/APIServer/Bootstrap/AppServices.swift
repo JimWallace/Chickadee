@@ -41,12 +41,35 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.mcpOAuthReaperMonitor })
     }
 
-    // BrightSpace grade sync (only registered when env vars are present).
-    if let bsConfig = appConfig.brightspace {
-        app.brightSpaceSyncConfig = bsConfig
-        app.brightSpaceClient = BrightSpaceAPIClient(config: bsConfig)
+    // BrightSpace grade sync. Registered whenever the deployment app creds
+    // (URL/App ID/App Key) are present; the user key may come from env or be
+    // supplied later via the admin authorize flow (the sweep re-reads the
+    // client each cycle, so authorization takes effect without a restart).
+    if let bsApp = appConfig.brightspaceApp {
+        app.brightSpaceAppCredentials = bsApp
+        // Resolve the active identity now (migrations have run): a stored
+        // (authorized) key wins, else an env-provided full config.
+        let resolved: BrightSpaceSyncConfig?
+        do {
+            resolved = try app.eventLoopGroup.any().makeFutureWithTask {
+                try await BrightSpaceCredentialStore.resolveSyncConfig(
+                    app: bsApp, envConfig: appConfig.brightspace, on: app.db)
+            }.wait()
+        } catch {
+            app.logger.warning(
+                "BrightSpace: failed to load stored credential at startup: \(error.localizedDescription); falling back to env"
+            )
+            resolved = appConfig.brightspace
+        }
+        if let resolved {
+            app.brightSpaceSyncConfig = resolved
+            app.brightSpaceClient = BrightSpaceAPIClient(config: resolved)
+            app.logger.info("BrightSpace grade sync enabled (org unit IDs configured per-course)")
+        } else {
+            app.logger.info(
+                "BrightSpace configured but not authorized — authorize at /admin/brightspace")
+        }
         app.lifecycle.use(BrightSpaceGradeSyncLifecycleHandler())
-        app.logger.info("BrightSpace grade sync enabled (org unit IDs configured per-course)")
     }
 
     if appConfig.auth.mode != .local {

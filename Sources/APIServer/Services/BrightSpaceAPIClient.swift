@@ -151,14 +151,16 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
 
     // Appends Valence auth query parameters to a URL.
     //
-    // Signing base string: "<unix_timestamp>\n<METHOD>\n<lowercase_path>"
-    // where path is the URL path only (no query string, no host).
+    // Signing base string: "<METHOD>&<lowercase_path>&<unix_timestamp>" where
+    // path is the URL path only (no query string, no host) and the timestamp is
+    // seconds. Verified against Brightspace's official valence-sdk-python
+    // (`'{0}&{1}&{2}'.format(method.upper(), path.lower(), time)`).
     // x_c = HMAC-SHA256(appKey, baseString) as base64url (no padding)
     // x_d = HMAC-SHA256(userKey, baseString) as base64url (no padding)
     private func signed(url urlString: String, method: String) -> String {
         let timestamp = Int(Date().timeIntervalSince1970)
         guard let path = URL(string: urlString)?.path else { return urlString }
-        let baseString = "\(timestamp)\n\(method.uppercased())\n\(path.lowercased())"
+        let baseString = valenceRequestBaseString(method: method, path: path, timestamp: timestamp)
         let appSig = hmacSHA256Base64URL(key: config.appKey, message: baseString)
         let userSig = hmacSHA256Base64URL(key: config.userKey, message: baseString)
         let sep = urlString.contains("?") ? "&" : "?"

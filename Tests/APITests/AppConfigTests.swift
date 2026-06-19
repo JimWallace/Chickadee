@@ -131,6 +131,7 @@ import Vapor
             lockout: seed.lockout,
             workers: seed.workers,
             brightspace: seed.brightspace,
+            brightspaceApp: seed.brightspaceApp,
             diagnostics: seed.diagnostics,
             alerts: seed.alerts,
             outboundProxy: seed.outboundProxy,
@@ -166,6 +167,7 @@ import Vapor
                 publicBaseURL: nil
             ),
             brightspace: nil,
+            brightspaceApp: nil,
             diagnostics: AppConfig.testDefaults().diagnostics,
             alerts: .default,
             outboundProxy: nil,

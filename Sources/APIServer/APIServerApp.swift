@@ -127,6 +127,7 @@ private func resolveAppConfig(
                 lockout: preloaded.lockout,
                 workers: preloaded.workers,
                 brightspace: preloaded.brightspace,
+                brightspaceApp: preloaded.brightspaceApp,
                 diagnostics: preloaded.diagnostics,
                 alerts: preloaded.alerts,
                 outboundProxy: preloaded.outboundProxy,

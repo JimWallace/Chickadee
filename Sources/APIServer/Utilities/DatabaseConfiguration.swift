@@ -289,6 +289,9 @@ func registerMigrations(on app: Application) {
     app.migrations.add(AddPreviousRefreshTokenHashToGrants())
     app.migrations.add(AddAssignmentStartsAt())
     app.migrations.add(CreateBrightSpaceSyncLog())
+    // Single-row store for the admin-authorized BrightSpace Valence user key
+    // (durable alternative to BRIGHTSPACE_USER_ID/KEY in env).
+    app.migrations.add(CreateBrightSpaceCredentials())
     // Single-use consent requests for the browser OAuth flow (cookie-less
     // POST /oauth/authorize). FK references `users`.
     app.migrations.add(CreateMCPConsentRequests())

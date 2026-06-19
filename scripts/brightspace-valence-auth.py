@@ -88,9 +88,13 @@ def build_auth_url(host: str, app_id: str, app_key: str, callback: str) -> str:
 
 def sign_request(host: str, path: str, method: str, app_id: str, app_key: str,
                  user_id: str, user_key: str) -> str:
-    """Per-request Valence signing, mirroring BrightSpaceAPIClient.signed(url:method:)."""
+    """Per-request Valence signing, mirroring BrightSpaceAPIClient.signed(url:method:).
+
+    Base string is "<METHOD>&<lowercase_path>&<timestamp_seconds>" per
+    Brightspace's valence-sdk-python.
+    """
     timestamp = int(time.time())
-    base_string = f"{timestamp}\n{method.upper()}\n{path.lower()}"
+    base_string = f"{method.upper()}&{path.lower()}&{timestamp}"
     x_c = hmac_sha256_base64url(app_key, base_string)
     x_d = hmac_sha256_base64url(user_key, base_string)
     return (

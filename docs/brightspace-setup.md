@@ -37,6 +37,38 @@ the user handshake are two separate steps.
 
 ## Step 1 — Obtain the User ID + User Key
 
+There are two ways to capture the Valence user key. On a **deployed server**,
+prefer the in-app admin flow (1A); for **local/scripted** setup use the CLI
+helper (1B). Both perform the same D2L handshake.
+
+> **Auth scheme note.** This is D2L's legacy **ID-Key Auth** (the
+> `x_a`…`x_t` HMAC signing), which is what an "Application ID + Application Key"
+> registration uses. D2L recommends OAuth2 for new work, but OAuth2 needs a
+> different registration (a Client ID/Secret + redirect URI + scopes). Request
+> signing is the `<METHOD>&<lowercase_path>&<timestamp>` base string, verified
+> against Brightspace's `valence-sdk-python`.
+
+### Step 1A — Authorize in the admin UI (recommended on a deployed server)
+
+With `BRIGHTSPACE_URL` / `BRIGHTSPACE_APP_ID` / `BRIGHTSPACE_APP_KEY` set in the
+server environment and `PUBLIC_BASE_URL` pointing at the deployment, an admin
+opens **Admin → BrightSpace → "Authorize BrightSpace"**. This redirects to D2L;
+log in as the **service account** (e.g. `sphs-dev`) and authorize. D2L redirects
+back to `{PUBLIC_BASE_URL}/admin/brightspace/valence-callback`, the server
+captures + `whoami`-verifies the user key, stores it (single active row,
+table `brightspace_credentials`), and **rebuilds the live client** — grade sync
+picks it up within one sweep (≤60 s), no restart.
+
+- The callback URL must be covered by the app's registered **Trusted URL**
+  (e.g. `chickadee.uwaterloo.ca`).
+- A stored (authorized) key **takes precedence** over `BRIGHTSPACE_USER_KEY` in
+  env; env stays the bootstrap fallback. "Clear authorization" drops the stored
+  key and reverts to env (or disables sync).
+- The captured key rides in D2L's redirect query string, so it lands in the
+  host's access log once — treat it as rotatable.
+
+### Step 1B — CLI helper (local / scripted)
+
 Run the one-time interactive handshake helper. It builds the signed Valence
 auth URL, opens it, captures D2L's redirect, and verifies the captured pair
 with a live `whoami` call. Stdlib only — no `pip install`.
@@ -99,25 +131,28 @@ helper extracts the pair and verifies it via `whoami`.
 > rotate it (D2L manage-extensibility) once testing is done or a durable
 > server-side authorize flow exists.
 
-## Step 2 — Put the five vars in the server's environment
+## Step 2 — Put the vars in the server's environment
 
-Set all five (the four secrets + the URL) wherever the server runs. With
-Docker Compose they're already plumbed through `docker-compose.yml`; put them
-in your `.env`:
+Set the deployment app creds + URL wherever the server runs. With Docker
+Compose they're already plumbed through `docker-compose.yml`; put them in your
+`.env`:
 
 ```
 BRIGHTSPACE_URL=https://learntest.uwaterloo.ca
 BRIGHTSPACE_APP_ID=...
 BRIGHTSPACE_APP_KEY=...
+# User key: omit these if you authorize via the admin UI (Step 1A); set them
+# only for the env-supplied / CLI-helper path (Step 1B).
 BRIGHTSPACE_USER_ID=...
 BRIGHTSPACE_USER_KEY=...
 BRIGHTSPACE_SYNC_DEBOUNCE_SECS=10
 ```
 
-On startup the log emits a redacted `brightspace: baseURL=… appID=present
-appKey=[redacted] …` line — that confirms `AppConfig.brightspace` loaded and
-`app.brightSpaceClient` is non-nil. Sync stays fully off until all four
-secrets are present.
+On startup the log emits a redacted `brightspace: baseURL=… appID=[set]
+appKey=[redacted] …` line. With only the three app vars set it reads
+`userKey=(awaiting authorize)` and grade sync stays idle until an admin
+authorizes (Step 1A); with all four (env user key) or a stored authorized key,
+`app.brightSpaceClient` is live.
 
 > **Test against a non-prod Chickadee instance first.** `learntest` is D2L's
 > test environment and the credentials are dev credentials — point a

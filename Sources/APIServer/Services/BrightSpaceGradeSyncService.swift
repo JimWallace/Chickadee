@@ -444,26 +444,32 @@ final class BrightSpaceGradeSyncMonitor: @unchecked Sendable {
     private let sweepIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
 
     func start(application: Application) {
-        guard task == nil,
-            let client = application.brightSpaceClient,
-            let config = application.brightSpaceSyncConfig
-        else { return }
+        guard task == nil else { return }
 
+        // The client/config are re-read each cycle rather than captured once, so
+        // an admin authorization (which rebuilds `app.brightSpaceClient` live)
+        // takes effect within one sweep interval without a server restart. When
+        // BrightSpace is configured at the app level but not yet authorized, the
+        // loop idles until a client appears.
         task = Task {
             while !Task.isCancelled {
-                do {
-                    let n = try await sweepBrightSpaceGradeSync(
-                        on: application.db,
-                        client: client,
-                        config: config,
-                        logger: application.logger,
-                        application: application
-                    )
-                    if n > 0 {
-                        application.logger.info("BrightSpace grade sync: pushed \(n) grade(s)")
+                if let client = application.brightSpaceClient,
+                    let config = application.brightSpaceSyncConfig
+                {
+                    do {
+                        let n = try await sweepBrightSpaceGradeSync(
+                            on: application.db,
+                            client: client,
+                            config: config,
+                            logger: application.logger,
+                            application: application
+                        )
+                        if n > 0 {
+                            application.logger.info("BrightSpace grade sync: pushed \(n) grade(s)")
+                        }
+                    } catch {
+                        application.logger.error("BrightSpace grade sync sweep failed: \(error.localizedDescription)")
                     }
-                } catch {
-                    application.logger.error("BrightSpace grade sync sweep failed: \(error.localizedDescription)")
                 }
                 do {
                     try await Task.sleep(nanoseconds: sweepIntervalNanoseconds)
