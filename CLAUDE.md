@@ -1045,6 +1045,7 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 ## Reference Material
 
 - `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
+- `docs/brightspace-setup.md` — BrightSpace grade-sync operator runbook: Valence credential handshake (`scripts/brightspace-valence-auth.py`), env wiring, org-unit/grade-item binding, end-to-end testing against `learntest`
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
 - `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
 - `docs/runner-wasm-migration.md` — plan to share one Swift grading core (RunnerCore) between the worker + browser runner via SwiftWasm; staging, the ScriptExecutor protocol, type-hoist
