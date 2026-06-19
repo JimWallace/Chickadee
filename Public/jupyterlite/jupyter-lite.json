@@ -5,9 +5,7 @@
     "appVersion": "0.7.6-chickadee.1",
     "baseUrl": "./",
     "defaultKernelName": "python",
-    "disabledExtensions": [
-      "@jupyterlite/application-extension:service-worker-manager"
-    ],
+    "disabledExtensions": [],
     "faviconUrl": "./lab/favicon.ico",
     "federated_extensions": [
       {
