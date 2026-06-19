@@ -19,6 +19,10 @@ struct AppConfig: Sendable {
     let lockout: LoginRateLimitConfiguration
     let workers: WorkerConfig
     let brightspace: BrightSpaceSyncConfig?
+    /// Deployment-level BrightSpace app creds (URL/App ID/App Key), present
+    /// whenever those three env vars are set even if no user key is configured.
+    /// The user key may instead arrive via the admin authorize flow.
+    let brightspaceApp: BrightSpaceAppCredentials?
     let diagnostics: DiagnosticsConfiguration
     let alerts: ServerHealthAlertConfiguration
     let outboundProxy: OutboundProxyConfig?
@@ -51,6 +55,7 @@ struct AppConfig: Sendable {
             ),
             workers: WorkerConfig.fromEnvironment(),
             brightspace: BrightSpaceSyncConfig.fromEnvironment(),
+            brightspaceApp: BrightSpaceAppCredentials.fromEnvironment(),
             diagnostics: DiagnosticsConfiguration.fromEnvironment(),
             alerts: ServerHealthAlertConfiguration.fromEnvironment(),
             outboundProxy: OutboundProxyConfig.fromEnvironment(),
@@ -98,6 +103,10 @@ struct AppConfig: Sendable {
         if let bs = brightspace {
             logger.info(
                 "brightspace: baseURL=\(bs.baseURL), appID=\(redactPresence(bs.appID)), appKey=[redacted], userID=\(redactPresence(bs.userID)), userKey=[redacted], debounceSecs=\(bs.debounceSecs)"
+            )
+        } else if let bsApp = brightspaceApp {
+            logger.info(
+                "brightspace: baseURL=\(bsApp.baseURL), appID=\(redactPresence(bsApp.appID)), appKey=[redacted], userKey=(awaiting authorize), debounceSecs=\(bsApp.debounceSecs)"
             )
         }
         logger.info(
@@ -191,6 +200,7 @@ extension AppConfig {
             lockout: .default,
             workers: .default,
             brightspace: nil,
+            brightspaceApp: nil,
             // Mirror production defaults (enabled by default) so test apps
             // exercise the same observability code paths the runtime uses.
             diagnostics: DiagnosticsConfiguration(
