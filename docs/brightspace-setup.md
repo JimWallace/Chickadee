@@ -67,6 +67,16 @@ disk. If the browser can't reach `localhost` (e.g. you're on a remote box),
 run it locally with `--no-browser` and open the printed URL yourself, or
 forward the port. Use `--port N` if `8088` is taken.
 
+> **"x_target does not match the allowed values for this application."** D2L
+> validates the callback (`x_target`) against the **Trusted URL** registered
+> for the app, by prefix. If the auth page shows this error, the app's
+> Trusted URL doesn't cover `http://localhost:8088/callback`. Ask your D2L
+> admin to add `http://localhost` (or the exact callback) to the application's
+> Trusted URL / allowed-redirect list — or, if a Trusted URL is already
+> registered for a real host, run the handshake from that host with a matching
+> `--port`/callback. This is configured entirely on the D2L side; no change to
+> the helper bypasses it.
+
 ## Step 2 — Put the five vars in the server's environment
 
 Set all five (the four secrets + the URL) wherever the server runs. With
@@ -146,6 +156,10 @@ student-free).
 
 ## Troubleshooting
 
+- **"x_target does not match the allowed values" (Step 1):** the app's
+  registered Trusted URL doesn't cover the localhost callback. Have your D2L
+  admin add `http://localhost` to the application's allowed-redirect list (see
+  the Step 1 note).
 - **whoami fails (Step 3):** wrong `BRIGHTSPACE_URL`, expired/incorrect key
   pair, or you logged in as the wrong account in Step 1. Re-run the helper.
 - **Org-unit save shows "unverified":** the ID is wrong, or D2L was

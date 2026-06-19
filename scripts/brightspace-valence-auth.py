@@ -19,6 +19,11 @@ The two captured values become Chickadee's BRIGHTSPACE_USER_ID /
 BRIGHTSPACE_USER_KEY env vars (see docs/brightspace-setup.md). They are SECRETS
 — this tool only prints them to your terminal; it never writes them to disk.
 
+If the D2L auth page rejects the handshake with "x_target does not match the
+allowed values for this application," the localhost callback is not on the
+app's registered Trusted URL list — a D2L-admin setting. Ask them to allow
+`http://localhost` (prefix match). See docs/brightspace-setup.md.
+
 Usage (prefer env vars so the app key never lands in shell history):
 
     export BRIGHTSPACE_URL=https://learntest.uwaterloo.ca
