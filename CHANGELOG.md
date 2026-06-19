@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.466] - 2026-06-19
+
+### Changed
+
+- **Notebook editor cross-origin isolation is now unconditional** (removed the `NOTEBOOK_CROSS_ORIGIN_ISOLATION` flag introduced one release earlier). The student notebook page and the `/jupyterlite/*` iframe assets are always served with `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` (+ `Cross-Origin-Resource-Policy: same-origin` on the assets), so the iframe document — where the Pyodide kernel worker runs — is cross-origin isolated and the kernel gets `SharedArrayBuffer` for synchronous execution. This is the fix for the "Page Unresponsive" main-thread freeze: with the JupyterLite service worker disabled (the "Kernel Unknown" fix) and no `SharedArrayBuffer`, a synchronous kernel operation had no non-blocking path and hard-froze the page; cross-origin isolation restores `SharedArrayBuffer` while keeping the service worker disabled, so both failure modes are addressed. `require-corp` only constrains cross-origin subresources, which Chickadee vendors same-origin.
+
+
 ## [0.4.465] - 2026-06-19
 
 ### Added
