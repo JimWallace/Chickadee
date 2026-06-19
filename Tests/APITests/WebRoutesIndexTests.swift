@@ -105,6 +105,13 @@ import XCTVapor
                     #expect(
                         html.contains("(extension)"),
                         "Due column should annotate the personal extension")
+                    #expect(
+                        html.contains("tier-extended"),
+                        "Status badge should read as 'extended' (open-styled), not the misleading class-wide 'closed'")
+                    #expect(
+                        html.contains(">extended</span>"),
+                        "Extended badge label should be visible (the only status cue on phones, where the due column is hidden)"
+                    )
                 })
         }
     }

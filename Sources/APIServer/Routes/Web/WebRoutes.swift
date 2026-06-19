@@ -387,6 +387,14 @@ struct WebRoutes: RouteCollection {
                 isOpenForThisUser
                 || previouslyOpenedSetupIDs.contains(setupID)
                 || (assignment.map { assignmentVisibleToStudentByState($0) } ?? false)
+            // An active per-student extension keeps a class-closed assignment
+            // open for this one student, so the dashboard badge should read as
+            // actionable ("extended") rather than the misleading class-wide
+            // "closed" — the more so on phones, where the due column (with its
+            // "(extension)" note) is hidden and the badge is the only status
+            // signal. Scoped to the genuine published-then-closed case; preview /
+            // unpublished are untouched, and staff never carry extensions.
+            let displayStatus = (hasActiveExtension && status == "closed") ? "extended" : status
             let badgeSplit = AchievementBadge.dashboardSplit(latestBadgesBySetupID[setupID] ?? [])
             return TestSetupRow(
                 id: setupID,
@@ -398,7 +406,7 @@ struct WebRoutes: RouteCollection {
                 createdAt: setup.createdAt.map { fmt.string(from: $0) } ?? "—",
                 dueAt: assignment?.dueAt.map { fmt.string(from: $0) },
                 opensAtText: notYetOpen ? assignment?.startsAt.map { fmt.string(from: $0) } : nil,
-                status: status,
+                status: displayStatus,
                 staffOnly: staffOnly,
                 isOpen: isOpenForThisUser,
                 canEdit: canEdit,
