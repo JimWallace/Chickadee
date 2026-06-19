@@ -348,9 +348,10 @@ private func collectClaimCandidates(
         guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
         resolvedBySetupID[candidate.testSetupID] = (setup, manifest)
         // Accept both worker-mode and browser-mode pending submissions.
-        // Browser-mode submissions only become pending when the client-side
-        // runner fails or times out; the worker serves as a backstop that
-        // runs the .py test scripts natively via python3.
+        // Browser-mode submissions become pending when the client-side runner
+        // fails or freezes (the `browser-failover` endpoint enqueues them) or
+        // when an instructor retests; the worker serves as a backstop that runs
+        // the .py test scripts natively via python3.
         candidates.append((candidate, setup, manifest))
     }
 

@@ -712,6 +712,131 @@ import XCTVapor
         }
     }
 
+    // MARK: - Browser failover (freeze → worker backstop)
+
+    /// Helper: POST the JSON browser-failover body with the CSRF token in the
+    /// header (the freeze-watchdog worker / browser-runner both send it there).
+    private func postFailover(
+        setupID: String, notebook: String, csrf: String, cookie: String
+    ) async throws -> (HTTPStatus, String?) {
+        var status: HTTPStatus = .ok
+        var submissionID: String?
+        try await app.asyncTest(
+            .POST, "/api/v1/submissions/browser-failover",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                try req.content.encode(
+                    BrowserFailoverBody(testSetupID: setupID, notebook: notebook), as: .json)
+            },
+            afterResponse: { res in
+                status = res.status
+                if let json = try? JSONSerialization.jsonObject(
+                    with: Data(res.body.readableBytesView)) as? [String: String]
+                {
+                    submissionID = json["submissionID"]
+                }
+            })
+        return (status, submissionID)
+    }
+
+    /// A frozen/failed browser grade enqueues a `pending`, browser-mode student
+    /// submission that the worker backstop (WorkerJobRoutes) will claim.
+    @Test func browserFailoverEnqueuesPendingSubmission() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())  // browser
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (status, submissionID) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            #expect(status == .ok)
+            let id = try #require(submissionID)
+            #expect(id.isEmpty == false)
+
+            let sub = try #require(try await APISubmission.find(id, on: app.db))
+            #expect(sub.statusValue == .pending, "failover row must be pending for the backstop to claim")
+            #expect(sub.kind == APISubmission.Kind.student)
+            #expect(sub.testSetupID == setupID)
+            #expect(sub.userID != nil)
+        }
+    }
+
+    /// Repeated failover fires (watchdog + catch path, retries, reloads) reuse
+    /// the existing queued row instead of piling up duplicate grades.
+    @Test func browserFailoverIsIdempotentPerStudentAndSetup() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (_, first) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            let (_, second) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+
+            let firstID = try #require(first)
+            let secondID = try #require(second)
+            #expect(firstID == secondID, "second fire must reuse the first row")
+            let pending = try await APISubmission.query(on: app.db)
+                .filter(\.$status == SubmissionStatus.pending.rawValue)
+                .all()
+            #expect(pending.count == 1, "exactly one backstop row should exist, got \(pending.count)")
+        }
+    }
+
+    /// The failover is browser-only: a worker-graded setup already enqueues via
+    /// runner-submit, so the inverse is rejected and no row is created.
+    @Test func browserFailoverRejectsWorkerGradedSetup() async throws {
+        try await withApp(app) { _ in
+            let manifest = """
+                {
+                  "schemaVersion": 1,
+                  "gradingMode": "worker",
+                  "requiredFiles": [],
+                  "testSuites": [ { "tier": "public", "script": "test_public.py" } ],
+                  "timeLimitSeconds": 10,
+                  "makefile": null
+                }
+                """
+            let setupID = try await insertSetup(manifest: manifest)
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (status, _) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            #expect(status == .badRequest)
+
+            let all = try await APISubmission.query(on: app.db).all()
+            #expect(all.isEmpty, "worker-mode failover must not create a submission")
+        }
+    }
+
+    /// A closed (or overdue) assignment can't be graded via the failover any more
+    /// than via the normal browser submit path — same effective-open gate.
+    @Test func browserFailoverRejectsClosedAssignment() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: false)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (status, _) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            #expect(status == .forbidden, "closed assignment must reject the failover, got \(status)")
+
+            let all = try await APISubmission.query(on: app.db).all()
+            #expect(all.isEmpty, "closed-assignment failover must not create a submission")
+        }
+    }
+
     // MARK: - Private fixtures
 
     private func simpleManifest() -> String {
