@@ -952,6 +952,14 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     color: var(--gray-600);
 }
 
+/* A personal deadline extension keeps a class-closed assignment actionable for
+   one student: same palette as "open" (it reads as open, per design), but
+   labelled "extended" so the accommodation is visible. */
+.tier-extended {
+    background: var(--open-bg);
+    color: var(--open-fg);
+}
+
 /* Staff-only ("preview") badge on the student dashboard stays on one line. */
 .staff-only-tag { white-space: nowrap; }
 
