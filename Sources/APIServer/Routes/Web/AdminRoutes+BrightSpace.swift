@@ -52,6 +52,15 @@ extension AdminRoutes {
 
         let capturedAt = stored?.capturedAt.map { waterlooDateTimeFormatter().string(from: $0) }
 
+        // Relax `form-action` so the Re-authorize form on THIS page can POST →
+        // 303 to the LMS origin. The browser enforces form-action using the CSP
+        // of the page that *contains* the form, so it must be set here (when
+        // rendering the page), not on the POST response — matching the MCP
+        // consent page pattern (MCPOAuthRoutes.authorizeForm).
+        if let appCreds {
+            SecurityHeadersMiddleware.allowFormAction(lmsOrigin(appCreds.baseURL), on: req)
+        }
+
         let ctx = AdminBrightspaceContext(
             currentUser: req.currentUserContext,
             activeAdminTab: "brightspace",
@@ -88,13 +97,11 @@ extension AdminRoutes {
         // string breaks the match), so we can't echo a state token back through
         // the callback URL. Instead the callback is bound to an authorize that
         // *this* admin session initiated.
+        // (The form-action CSP that lets this POST 303 cross-origin to the LMS
+        // is set on the page render in brightspacePage — the browser enforces
+        // form-action using the CSP of the page that contains the form, not the
+        // POST response, so relaxing it here would be too late.)
         req.session.data["bs_valence_pending"] = "1"
-
-        // The CSP is globally `form-action 'self'`; this POST 303s to the LMS
-        // origin, and Chrome/Firefox enforce form-action across that redirect —
-        // so without relaxing it the navigation is silently blocked (the button
-        // appears to "do nothing"). Mirrors the SSO/MCP consent flows.
-        SecurityHeadersMiddleware.allowFormAction(lmsOrigin(appCreds.baseURL), on: req)
 
         // `x_target` must equal the registered Trusted URL exactly — no query.
         return req.redirect(to: appCreds.valenceAuthURL(callback: callback))
