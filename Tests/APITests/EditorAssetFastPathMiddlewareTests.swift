@@ -50,11 +50,13 @@ import XCTVapor
         try? FileManager.default.removeItem(atPath: tempRoot)
     }
 
-    private func makeApp() async throws -> Application {
+    private func makeApp(crossOriginIsolation: Bool = false) async throws -> Application {
         let app = try await Application.make(.testing)
         // Production order: fast path runs before any session/auth work,
         // the user-namespace guard and FileMiddleware after it.
-        app.middleware.use(EditorAssetFastPathMiddleware(publicDirectory: publicDir))
+        app.middleware.use(
+            EditorAssetFastPathMiddleware(
+                publicDirectory: publicDir, crossOriginIsolation: crossOriginIsolation))
         app.middleware.use(UserFileNamespaceMiddleware())
         app.middleware.use(FileMiddleware(publicDirectory: publicDir))
         return app
@@ -145,6 +147,50 @@ import XCTVapor
         try await withApp(try await makeApp()) { app in
             try await app.testable().test(.GET, "/jupyterlite/build/absent.js") { res async in
                 #expect(res.status == .notFound)
+            }
+        }
+    }
+
+    // When cross-origin isolation is OFF (the default), the fast path must NOT
+    // add COEP — the long-standing non-isolated behaviour the editor relies on
+    // for its service-worker sync path.
+    @Test func fastPathOmitsCOEPWhenIsolationDisabled() async throws {
+        try await withApp(try await makeApp(crossOriginIsolation: false)) { app in
+            for path in [
+                "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js",
+                "/pyodide/pyodide-lock.json",
+            ] {
+                try await app.testable().test(.GET, path) { res async in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+                }
+            }
+        }
+    }
+
+    // When cross-origin isolation is ON, the fast path must stamp the COOP +
+    // COEP + CORP trio on the vendored editor assets it serves — especially the
+    // Pyodide kernel WORKER chunk, whose missing COEP was the worker-block: an
+    // isolated editor page spawning a worker without COEP is blocked by Chrome.
+    @Test func fastPathIsolatesEditorAssetsWhenEnabled() async throws {
+        try await withApp(try await makeApp(crossOriginIsolation: true)) { app in
+            // The hashed extension chunk stands in for the kernel worker chunk.
+            for path in [
+                "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js",
+                "/jupyterlite/build/100.5a28c9e.js",
+                "/pyodide/pyodide-lock.json",
+                "/vendor/jszip.min.js",
+            ] {
+                try await app.testable().test(.GET, path) { res async in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp",
+                        "fast-path asset \(path) must carry COEP so the isolated worker can load")
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Resource-Policy") == "same-origin")
+                }
             }
         }
     }

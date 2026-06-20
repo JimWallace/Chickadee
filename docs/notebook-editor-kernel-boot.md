@@ -77,81 +77,114 @@ behind no flag with instant rollback. Watch `get_browser_diagnostics`
 (`watchdog_timeout` count and `byBrowser`) after deploy to confirm the rate
 drops.
 
-## The durable fix (plan C): cross-origin isolation + `SharedArrayBuffer`
+## The durable fix (plan C): cross-origin isolation + `SharedArrayBuffer` — IMPLEMENTED
 
 The deterministic fix is to give the kernel a synchronous path that does **not
 depend on SW control timing at all**: `SharedArrayBuffer`, which requires the
 editor iframe to be **cross-origin isolated** (COOP `same-origin` + COEP
 `require-corp`). With SAB available the kernel never needs the SW for sync, so
-the race disappears. The plumbing already exists, gated off:
+the race disappears. Driven by `NOTEBOOK_CROSS_ORIGIN_ISOLATION` (still default
+off — see rollout below):
 
 - `COEPMiddleware` stamps COOP/COEP on the `/testsetups/:id/notebook` page.
-- `NotebookAssetIsolationMiddleware` stamps COOP/COEP + `Cross-Origin-Resource-Policy: same-origin`
-  on `/jupyterlite/*` iframe assets.
-- Both are driven by `NOTEBOOK_CROSS_ORIGIN_ISOLATION` (default off).
+- `NotebookAssetIsolationMiddleware` stamps COOP/COEP/CORP on the slow-path
+  `/jupyterlite/*` editor HTML documents.
+- **`EditorAssetFastPathMiddleware` stamps the same trio on the vendored asset
+  trees it serves (`/jupyterlite/build`, `/jupyterlite/extensions`, `/pyodide`,
+  `/vendor`)** — the fast-path-isolation fix (see below).
 
-### Why it's still off — the blocker
+### Root cause of the historical worker-block (was: "why it's still off")
 
-This was tried unconditionally in v0.4.466 and reverted: under COEP
-`require-corp`, **the Pyodide kernel worker fails to start**. The v0.4.469
-editor-smoke *selftest* encodes this as a guarantee — it asserts the editor
-**passes** on the default config and **fails** under
-`NOTEBOOK_CROSS_ORIGIN_ISOLATION=true` ("the COEP worker-block"). So we cannot
-just flip the flag; the worker-block must be fixed first.
+Cross-origin isolation was tried unconditionally in v0.4.466 and reverted
+because **the Pyodide kernel worker failed to start** under COEP. The actual
+mechanism, confirmed both statically and by reproducing it with the smoke
+selftest:
 
-### Leading hypothesis (to verify, not assume)
+`EditorAssetFastPathMiddleware` is registered **near the top** of the chain and
+serves `/jupyterlite/build`, `/jupyterlite/extensions` (**including the Pyodide
+kernel worker chunk** `…/pyodide-kernel-extension/static/620.*.js`), `/pyodide`
+and `/vendor` by short-circuiting the responder chain — *before*
+`NotebookAssetIsolationMiddleware` runs. So with isolation on, the editor HTML
+became cross-origin isolated (`require-corp`) but the kernel **worker script was
+served with no `Cross-Origin-Embedder-Policy` header**. Chrome requires a
+dedicated worker spawned by a `require-corp` document to itself be served with
+COEP `require-corp`, so it blocked the worker with `net::ERR_BLOCKED_BY_RESPONSE`
+— the "fast-path-served kernel worker block".
 
-Under COEP `require-corp` on the iframe document, a dedicated Worker inherits
-the policy and **every resource it pulls must be isolation-compatible**
-(`Cross-Origin-Resource-Policy`, or CORS). The Pyodide kernel worker loads the
-runtime + wheels from **`/pyodide/*`**, but only **`/jupyterlite/*`** is
-stamped with CORP today (`NotebookAssetIsolationMiddleware` matches that prefix
-only). `/pyodide/*` (and any other same-origin asset the isolated worker
-fetches) is served by `FileMiddleware` with **no** CORP header. That mismatch
-is the most likely cause of the worker-block.
+(The earlier hypothesis was missing CORP on `/pyodide/*`. That was wrong:
+`SecurityHeadersMiddleware` already sets COOP+CORP globally, and same-origin
+subresources don't need CORP anyway. The single missing header was **COEP on
+the worker chunk**, which only the bypassed isolation middleware would have
+added.)
 
-### Proposed steps
+### The fix (fast-path isolation)
 
-1. **Reproduce locally** with the smoke selftest
-   (`Tools/editor-smoke-test/selftest.sh`) and capture the *exact* console /
-   network error from the COEP run — confirm whether it's a CORP rejection on
-   `/pyodide/*`, the worker script itself, a `Blob:`/`importScripts` path, or
-   a credentials issue. Do not proceed on the hypothesis alone.
-2. **Stamp CORP on every same-origin asset the isolated worker loads** — at
-   minimum extend `NotebookAssetIsolationMiddleware` (or add a sibling) to add
-   `Cross-Origin-Resource-Policy: same-origin` to `/pyodide/*` and any other
-   prefix the error implicates, *only when isolation is enabled* (keep the
-   non-isolated path byte-identical).
-3. **Re-run the selftest.** Success criterion: the COEP run **flips to PASS**.
-   Update `selftest.sh` so the COEP config is now an *expected pass* (and keep a
-   regression case for whatever the real failing config is, so the guard can't
-   rot — e.g. isolation on but CORP deliberately withheld from `/pyodide/*`).
-4. **Verify in real browsers** (Chrome + Safari + a managed device) via the
-   smoke harness; this path is not fully CI-verifiable.
-5. **Flip the default / make unconditional**, then **disable the JupyterLite
-   service worker** again (it's only there for sync, which SAB now provides) —
-   removing the freeze risk *and* the control race together. Reverse the
-   `JupyterLiteConfigTests` SW guard accordingly.
-6. **Promote the editor-smoke workflow from advisory to a required gate** once
-   it reliably passes on the isolated config — that is what actually closes out
-   "all editor-load issues fixed".
+`EditorAssetFastPathMiddleware` is now isolation-aware: when
+`NOTEBOOK_CROSS_ORIGIN_ISOLATION` is on it stamps COOP `same-origin` + COEP
+`require-corp` + CORP `same-origin` on every asset it serves (shared with
+`NotebookAssetIsolationMiddleware` via `Response.setCrossOriginIsolationHeaders()`
+so the two can't drift). When the flag is off it's byte-identical to before.
 
-### Fallback if isolation can't be made to work
+**Proven via the headless-browser smoke harness** (`Tools/editor-smoke-test/`),
+which boots a real server and drives the real JupyterLite kernel in Chromium.
+`selftest.sh` now asserts three configs against one build:
 
-If the worker-block proves intractable, the v0.4.467-named alternative remains:
-patch the pyodide-kernel so `mountDrive` waits on
-`navigator.serviceWorker.controller` before using the SW sync path. This is
-harder to do cleanly here than the nb_mypy wheel patch
-(`scripts/patch-pyodide-kernel.py`), because the gating logic lives in
-**content-hash-named webpack chunks** (`Public/jupyterlite/.../static/620.*.js`,
-`644.*.js`) rather than a fixed-name Python member, so editing it is a
-rebuild-the-bundle / upstream-patch effort and is not CI-verifiable.
-Prefer plan C.
+1. default (service-worker path) → **PASS**, `crossOriginIsolated=false`;
+2. `NOTEBOOK_CROSS_ORIGIN_ISOLATION=true` (SAB path) → **PASS**,
+   `crossOriginIsolated=true`, and `input()` round-trips over `SharedArrayBuffer`
+   with no service worker involved. This config is *also* the live worker-block
+   guard — if the fast-path isolation regresses, the worker block returns and it
+   flips to FAIL (and the new `SMOKE_EXPECT_ISOLATED=1` assertion catches a
+   *silent* isolation regression that would otherwise pass via the SW fallback);
+3. `SMOKE_SIMULATE_FROZEN=1` (no SW, no SAB) → **FAIL** (input freeze), proving
+   the detector is still discriminating.
+
+Swift unit coverage: `EditorAssetFastPathMiddlewareTests` now asserts the trio
+is present with the flag on and absent with it off.
+
+### Rollout (the remaining, deploy-time work)
+
+The fix makes isolation *work*; turning it on in production is deliberately left
+as an operator step so it can be staged with instant rollback (the flag needs no
+redeploy):
+
+1. **Enable on staging** (`NOTEBOOK_CROSS_ORIGIN_ISOLATION=true`) and verify the
+   editor boots in each target browser — **Chrome and especially Safari** and a
+   managed/locked-down device. Chromium is covered by the headless harness;
+   Safari is not, and is the residual risk (see below).
+2. **Enable in production.** Roll back instantly by clearing the flag if anything
+   regresses.
+3. **Then** consider disabling the JupyterLite service worker (it's only there
+   for sync, which SAB now provides) to remove the freeze risk and the control
+   race together, and reversing the `JupyterLiteConfigTests` SW guard. Keep the
+   SW until isolation is default-on and verified everywhere — under isolation the
+   kernel prefers SAB, so the SW just sits as a harmless fallback.
+4. **Promote the editor-smoke workflow from advisory to a required gate** once it
+   reliably passes on the isolated config.
+
+### Residual risk: Safari + the `Atomics.waitAsync` `data:` worker
+
+The pyodide-kernel polyfills `Atomics.waitAsync` (when the engine lacks it) with
+a `new Worker("data:application/javascript,…")`. `data:` workers are blocked
+under COEP `require-corp`. Chromium has native `Atomics.waitAsync`, so the
+polyfill never runs there and the headless test passes; **Safari** is the one to
+watch on staging — if it falls into the polyfill, the isolated kernel could
+break. This is the main reason isolation stays opt-in until real-browser
+verification.
+
+### Fallback if isolation can't be made to work in some browser
+
+The v0.4.467-named alternative remains: patch the pyodide-kernel so `mountDrive`
+waits on `navigator.serviceWorker.controller` before using the SW sync path.
+Harder to do cleanly here than the nb_mypy wheel patch
+(`scripts/patch-pyodide-kernel.py`) because the gating logic lives in
+content-hash-named webpack chunks rather than a fixed-name Python member.
+Prefer plan C; this is a per-browser safety net only.
 
 ## Quick reference
 
 | | Sync path | SW-control race? | Status |
 |---|---|---|---|
-| Today | JupyterLite service worker | **yes** (the bug) | shipped; mitigated by recovery ladder A |
-| Plan C | `SharedArrayBuffer` (cross-origin isolation) | no | blocked on the COEP kernel-worker fix |
-| Fallback | SW, gated on `serviceWorker.controller` | removed | last resort; webpack-chunk patch |
+| Default (flag off) | JupyterLite service worker | **yes** | shipped; mitigated by recovery ladder A |
+| Flag on (plan C) | `SharedArrayBuffer` (cross-origin isolation) | **no** | implemented + headless-proven; opt-in pending real-browser rollout |
+| Fallback | SW, gated on `serviceWorker.controller` | removed | per-browser safety net only |
