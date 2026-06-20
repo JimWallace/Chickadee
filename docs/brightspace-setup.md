@@ -12,10 +12,45 @@ operator runbook.
 
 Chickadee uses D2L's Valence **"App + User" key signing**. Every request is
 signed with two HMAC-SHA256 keys: the registered **app** key and a **user**
-key for one D2L service account. There is no token endpoint — signatures are
-computed per request (`BrightSpaceAPIClient.signed(url:method:)`). All pushes
-run *as that one service account*, so where a grade lands is decided by two
-IDs (org unit + grade object), **not** by the credentials.
+key. There is no token endpoint — signatures are computed per request
+(`BrightSpaceAPIClient.signed(url:method:)`).
+
+There are two identity models for the **user** key:
+
+- **Per-instructor (UW).** Each instructor connects their own LEARN account on
+  the instructor **LEARN** tab ("Connect my LEARN account"); each course
+  designates one connected instructor as its grade-sync identity, and pushes run
+  *as that instructor*. This is the model UW requires — a shared service account
+  can't be enrolled in courses, but instructors already are, so their key carries
+  the grade-write permission. See "Per-instructor identity" below.
+- **Deployment-wide service account (fallback).** A single env- or admin-
+  authorized key, used for every course that has no designated instructor. Where
+  a grade lands is then decided by two IDs (org unit + grade object), **not** by
+  the credentials.
+
+## Per-instructor identity
+
+Set up the deployment with only the three **app** vars (`BRIGHTSPACE_URL`,
+`BRIGHTSPACE_APP_ID`, `BRIGHTSPACE_APP_KEY`) — no `BRIGHTSPACE_USER_*`. Then each
+instructor connects their own LEARN account:
+
+1. **Connect.** On the instructor **LEARN** tab → "Connect my LEARN account",
+   paste a Valence **User ID + User Key** minted for *their* account (UW: from the
+   credential harvester `d2l-api-cred.fast.uwaterloo.ca`, Step 1C). Chickadee
+   `whoami`-verifies it and stores it against that instructor
+   (`brightspace_credentials.user_id`). Connecting also makes them the active
+   course's grade-sync identity if it has none yet.
+2. **Designate / reassign.** Each course pushes grades as one designated
+   instructor (`courses.brightspace_sync_user_id`). Any connected co-instructor
+   can take over with "Use my account for this course".
+3. **Bind + map as usual.** Org-unit binding (admin, course page), grade-item
+   mapping, and student matching (Steps 4–6) are unchanged — they just run as the
+   course's designated instructor's key.
+
+A course whose designated instructor hasn't connected yet **defers**: its results
+stay pending and push automatically once someone connects, so nothing is lost. If
+no instructor is designated, grade sync falls back to the deployment-wide service
+account (below), when one is configured.
 
 ## Credentials you need (four secrets + the URL)
 

@@ -49,6 +49,13 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_org_unit_name")
     var brightspaceOrgUnitName: String?
 
+    /// The instructor whose connected LEARN identity drives grade sync for this
+    /// course (the "designated" identity; grades push as that account). Defaults
+    /// to whoever first connects + claims the course; reassignable. Nil = fall
+    /// back to the deployment-wide (admin/env) identity.
+    @OptionalField(key: "brightspace_sync_user_id")
+    var brightspaceSyncUserID: UUID?
+
     /// When this course was archived. Set by `toggleCourseArchive` when a
     /// course is archived (and cleared when un-archived). Archiving is
     /// Chickadee's "end of term" signal, so this is the anchor for the

@@ -79,17 +79,6 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
 
     // MARK: Fixture helpers
 
-    private func syncConfig(debounceSecs: TimeInterval = 90) -> BrightSpaceSyncConfig {
-        BrightSpaceSyncConfig(
-            baseURL: "https://example.test",
-            appID: "app",
-            appKey: "appKey",
-            userID: "user",
-            userKey: "userKey",
-            debounceSecs: debounceSecs
-        )
-    }
-
     private func pointsJSON(earned: Int, total: Int) -> String {
         #"{"earnedPoints":\#(earned),"totalPoints":\#(total)}"#
     }
@@ -161,11 +150,25 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         return result
     }
 
+    /// Drives the sweep with a constant per-course identity (the fake), so the
+    /// existing tests exercise grade selection / debounce / caching unchanged.
     private func sweep(client: any BrightSpaceGrading, debounceSecs: TimeInterval = 90) async throws -> Int {
         try await sweepBrightSpaceGradeSync(
             on: app.db,
-            client: client,
-            config: syncConfig(debounceSecs: debounceSecs),
+            debounceSecs: debounceSecs,
+            resolveClient: { _ in client },
+            logger: app.logger,
+            application: app
+        )
+    }
+
+    /// Drives the sweep with a resolver that returns no identity for any course,
+    /// modelling a course whose designated instructor hasn't connected yet.
+    private func sweepWithNoIdentity(debounceSecs: TimeInterval = 90) async throws -> Int {
+        try await sweepBrightSpaceGradeSync(
+            on: app.db,
+            debounceSecs: debounceSecs,
+            resolveClient: { _ in nil },
             logger: app.logger,
             application: app
         )
@@ -326,6 +329,27 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             #expect(pushes.isEmpty)  // validation runs never sync grades
             let result = try #require(try await APIResult.query(on: app.db).first())
             #expect(result.brightspaceSyncPending == false)
+        }
+    }
+
+    @Test func noConnectedIdentityDefersAndLeavesPending() async throws {
+        // A course whose designated instructor hasn't connected (resolver → nil)
+        // must NOT clear the flag — the grade should push once an identity
+        // connects, so the row stays pending for a later sweep.
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 6, total: 10),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+
+            let processed = try await sweepWithNoIdentity()
+
+            #expect(processed == 0)
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncPending == true)
+            #expect(result.brightspaceSyncError == nil)
         }
     }
 

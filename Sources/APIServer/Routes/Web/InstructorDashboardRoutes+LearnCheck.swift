@@ -30,9 +30,9 @@ extension InstructorDashboardRoutes {
         else {
             return .unavailable("No active course selected.")
         }
-        guard let client = req.application.brightSpaceClient else {
+        guard let client = try await req.application.brightSpaceClient(forCourse: course) else {
             return .unavailable(
-                "BrightSpace is not configured on this server.", configured: false)
+                "BrightSpace isn't connected for this course yet.", configured: false)
         }
         guard let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty else {
             return .unavailable(

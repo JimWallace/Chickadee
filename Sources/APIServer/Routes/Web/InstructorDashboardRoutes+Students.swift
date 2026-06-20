@@ -62,7 +62,7 @@ extension InstructorDashboardRoutes {
                 courseEnrollmentMode = course.enrollmentMode.rawValue
                 courseIsArchived = course.isArchived
                 brightspaceLinkAvailable =
-                    req.application.brightSpaceClient != nil
+                    req.application.brightSpaceAppCredentials != nil
                     && !((course.brightspaceOrgUnitID ?? "").isEmpty)
             }
         }

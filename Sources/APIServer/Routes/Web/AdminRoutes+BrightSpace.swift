@@ -33,7 +33,7 @@ extension AdminRoutes {
     func brightspacePage(req: Request) async throws -> View {
         let appCreds = req.application.brightSpaceAppCredentials
         let authorized = req.application.brightSpaceClient != nil
-        let stored = try await BrightSpaceCredentialStore.load(on: req.db)
+        let stored = try await BrightSpaceCredentialStore.loadGlobal(on: req.db)
 
         let keySource: String
         if stored != nil {
@@ -173,7 +173,7 @@ extension AdminRoutes {
 
     @Sendable
     func brightspaceClearAuthorization(req: Request) async throws -> Response {
-        try await BrightSpaceCredentialStore.clear(on: req.db)
+        try await BrightSpaceCredentialStore.clearGlobal(on: req.db)
         // Fall back to an env-provided user key if one exists; otherwise disable.
         if let envConfig = req.application.appConfig.brightspace {
             req.application.brightSpaceSyncConfig = envConfig

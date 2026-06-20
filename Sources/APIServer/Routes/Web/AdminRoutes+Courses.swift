@@ -25,7 +25,7 @@ extension AdminRoutes {
             createdAt: "",
             brightspaceOrgUnitID: nil,
             brightspaceOrgUnitName: nil,
-            brightspaceSyncEnabled: req.application.brightSpaceClient != nil
+            brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil
         )
         return try await req.view.render(
             "admin-course",
@@ -446,7 +446,7 @@ extension AdminRoutes {
             createdAt: course.createdAt.map { ISO8601DateFormatter().string(from: $0) } ?? "—",
             brightspaceOrgUnitID: course.brightspaceOrgUnitID,
             brightspaceOrgUnitName: course.brightspaceOrgUnitName,
-            brightspaceSyncEnabled: req.application.brightSpaceClient != nil
+            brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil
         )
 
         // Load enrollments for this course, then fetch the corresponding users.

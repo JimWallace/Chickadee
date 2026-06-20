@@ -44,6 +44,11 @@ struct InstructorDashboardRoutes: RouteCollection {
         // BrightSpace tab: status, grade-item mapping, sync log, manual actions.
         r.get("brightspace", use: brightspacePage)
         r.post("brightspace", "test", use: brightspaceTestConnection)
+        // Per-instructor identity: connect your own LEARN account, designate it
+        // as this course's sync identity, or disconnect.
+        r.post("brightspace", "connect", use: brightspaceConnectAccount)
+        r.post("brightspace", "use-my-identity", use: brightspaceUseMyIdentity)
+        r.post("brightspace", "disconnect", use: brightspaceDisconnectAccount)
         r.get("brightspace", "grade-objects", use: brightspaceGradeObjects)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
         r.post("brightspace", "retry-failed", use: brightspaceRetryFailed)
@@ -440,7 +445,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             suiteSectionRows: suiteSectionShellRows(fromManifest: setup.manifest),
             globalVariableRows: globalVariableShellRows(fromManifest: setup.manifest),
             achievementSignalOptions: AchievementSignalPresentation.all,
-            brightspaceSyncEnabled: req.application.brightSpaceClient != nil,
+            brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             notice: q?.notice,
             error: q?.error

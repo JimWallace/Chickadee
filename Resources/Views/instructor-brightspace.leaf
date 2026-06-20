@@ -18,9 +18,70 @@ LEARN
 </section>
 #else:
 
+#if(flashSuccess):
+<div class="notice-banner"><p>#(flashSuccess)</p></div>
+#endif
+#if(flashError):
+<div class="form-error">#(flashError)</div>
+#endif
+
+<!-- ── Your LEARN account (per-instructor identity) ──────── -->
+<section class="bs-section">
+    <h2 class="bs-h2">Your LEARN account</h2>
+    #if(accountConnected):
+    <p class="card-meta bs-section-note">
+        <span class="tier tier-open">connected</span>
+        Connected as <strong>#(accountIdentity)</strong>. Courses that sync as you push
+        grades under this LEARN identity.
+    </p>
+    <div class="bs-connection-row">
+        #if(syncIdentityIsMe):
+        <span class="card-meta">This course syncs grades as you.</span>
+        #else:
+        <form method="post" action="/instructor/brightspace/use-my-identity" class="inline-form">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit">Use my account for this course</button>
+        </form>
+        #endif
+        <form method="post" action="/instructor/brightspace/disconnect" class="inline-form">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit">Disconnect</button>
+        </form>
+    </div>
+    #else:
+    <p class="card-meta bs-section-note">
+        Connect your own LEARN account so Chickadee can push grades as you. Mint a Valence
+        <strong>User ID</strong> + <strong>User Key</strong> from UW's credential service
+        (<code>d2l-api-cred.fast.uwaterloo.ca</code>), then paste them here.
+    </p>
+    <form method="post" action="/instructor/brightspace/connect" class="bs-connect-form">
+        #csrfFormField()
+        <label class="bs-connect-field">
+            <span class="bs-connect-label">User ID</span>
+            <input class="bs-connect-input" type="text" name="userID" autocomplete="off" required>
+        </label>
+        <label class="bs-connect-field">
+            <span class="bs-connect-label">User Key</span>
+            <input class="bs-connect-input" type="password" name="userKey" autocomplete="off" required>
+        </label>
+        <button class="btn btn-primary" type="submit">Connect</button>
+    </form>
+    #endif
+    #if(syncIdentityName):
+    <p class="card-meta bs-connection-note">
+        This course pushes grades as: <strong>#(syncIdentityName)</strong>.
+    </p>
+    #else:
+    <p class="card-meta bs-connection-note">
+        <span class="tier tier-closed">no identity</span>
+        No LEARN identity is connected for this course yet, so grades won't sync.
+    </p>
+    #endif
+</section>
+
 <!-- ── Connection & course link ──────────────────────────── -->
 <section class="bs-section">
-    <h2 class="bs-h2">Connection</h2>
+    <h2 class="bs-h2">Org-unit link</h2>
     <div class="bs-connection-row">
         <button class="btn action-btn" type="button" id="bs-test-btn">Test connection</button>
         <span id="bs-test-result" class="card-meta"></span>
@@ -222,6 +283,10 @@ LEARN
 .bs-card-value { margin-top: .2rem; font-size: 1.4rem; font-weight: 600; color: var(--gray-900); }
 .bs-connection-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .bs-connection-note { margin-top: .6rem; max-width: 60ch; }
+.bs-connect-form { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; margin: .4rem 0 0; }
+.bs-connect-field { display: flex; flex-direction: column; gap: .2rem; }
+.bs-connect-label { font-size: .78rem; color: var(--gray-600); }
+.bs-connect-input { width: 16rem; max-width: 100%; font-size: .85rem; padding: .3rem .45rem; }
 .bs-summary-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }

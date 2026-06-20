@@ -28,13 +28,13 @@ import Vapor
 @discardableResult
 func sweepBrightSpaceGradeSync(
     on db: Database,
-    client: any BrightSpaceGrading,
-    config: BrightSpaceSyncConfig,
+    debounceSecs: TimeInterval,
+    resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
     logger: Logger,
     application: Application,
     now: Date = Date()
 ) async throws -> Int {
-    let cutoff = now.addingTimeInterval(-config.debounceSecs)
+    let cutoff = now.addingTimeInterval(-debounceSecs)
 
     // All results that are past the debounce window.
     let pending = try await APIResult.query(on: db)
@@ -86,8 +86,10 @@ func sweepBrightSpaceGradeSync(
             user: context.usersByID[key.userID]
         )
         do {
-            try await pushGrade(for: target, db: db, client: client, logger: logger, application: application)
-            processed += results.count
+            let pushed = try await pushGrade(
+                for: target, db: db, resolveClient: resolveClient, logger: logger,
+                application: application)
+            if pushed { processed += results.count }
         } catch {
             await recordSweepFailure(results, error: error, db: db, logger: logger)
         }
@@ -219,13 +221,18 @@ private func clearPendingFlag(_ results: [APIResult], on db: Database) async thr
     }
 }
 
+/// Pushes one group's grade. Returns false when the push is *deferred* (the
+/// course has no grade-sync identity connected yet) so the caller leaves the
+/// rows pending for a later sweep; true on every terminal outcome (pushed,
+/// skipped, or a no-op flag clear).
+@discardableResult
 private func pushGrade(
     for target: GradePushTarget,
     db: Database,
-    client: any BrightSpaceGrading,
+    resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
     logger: Logger,
     application: Application
-) async throws {
+) async throws -> Bool {
     let userID = target.userID
     let testSetupID = target.testSetupID
 
@@ -236,7 +243,7 @@ private func pushGrade(
     else {
         // No BrightSpace grade item configured — no-op.
         try await clearPendingFlag(target.results, on: db)
-        return
+        return true
     }
 
     // The course must have an org unit ID.
@@ -245,7 +252,15 @@ private func pushGrade(
         !orgUnitID.isEmpty
     else {
         try await clearPendingFlag(target.results, on: db)
-        return
+        return true
+    }
+
+    // Resolve the identity this course pushes as (designated instructor, else
+    // the deployment-wide fallback). When none is connected yet, defer: leave
+    // the rows pending so the grade pushes once an instructor connects, rather
+    // than clearing the flag as a permanent no-op.
+    guard let client = try await resolveClient(course) else {
+        return false
     }
 
     // Best grade for this student across the test setup. nil → no submissions
@@ -253,7 +268,7 @@ private func pushGrade(
     guard let points = try await bestPointsForStudent(userID: userID, testSetupID: testSetupID, db: db)
     else {
         try await clearPendingFlag(target.results, on: db)
-        return
+        return true
     }
 
     // Username snapshot for the sync log (readable without a join).
@@ -293,7 +308,7 @@ private func pushGrade(
             try await result.save(on: db)
         }
         await appendSyncLog(.skipped, detail: "No BrightSpace account (orgDefinedId not found)")
-        return
+        return true
     }
 
     // Push the grade.
@@ -324,6 +339,7 @@ private func pushGrade(
     await appendSyncLog(.success, detail: nil)
 
     logger.info("BrightSpace grade synced: user \(userID) assignment '\(assignment.title)' → \(points) pts")
+    return true
 }
 
 /// Best (max) points for this student across all results for the test setup,
@@ -446,21 +462,23 @@ final class BrightSpaceGradeSyncMonitor: @unchecked Sendable {
     func start(application: Application) {
         guard task == nil else { return }
 
-        // The client/config are re-read each cycle rather than captured once, so
-        // an admin authorization (which rebuilds `app.brightSpaceClient` live)
-        // takes effect within one sweep interval without a server restart. When
-        // BrightSpace is configured at the app level but not yet authorized, the
-        // loop idles until a client appears.
+        // The identity is resolved per course each cycle (not captured once), so
+        // a fresh connect / re-designation takes effect within one sweep interval
+        // without a restart. The loop runs whenever BrightSpace is configured at
+        // the app level; each push resolves the course's designated instructor
+        // (or the deployment-wide fallback), deferring courses with no identity
+        // connected yet.
         task = Task {
             while !Task.isCancelled {
-                if let client = application.brightSpaceClient,
-                    let config = application.brightSpaceSyncConfig
-                {
+                if let app = application.brightSpaceAppCredentials {
+                    let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
                     do {
                         let n = try await sweepBrightSpaceGradeSync(
                             on: application.db,
-                            client: client,
-                            config: config,
+                            debounceSecs: debounce,
+                            resolveClient: { course in
+                                try await application.brightSpaceClient(forCourse: course)
+                            },
                             logger: application.logger,
                             application: application
                         )

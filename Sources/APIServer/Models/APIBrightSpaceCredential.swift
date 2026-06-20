@@ -34,12 +34,18 @@ final class APIBrightSpaceCredential: Model, @unchecked Sendable {
     @Field(key: "valence_user_key")
     var valenceUserKey: String
 
-    /// `whoami` display name captured at authorize time, shown in the admin UI
-    /// so the admin can confirm which account they authorized.
+    /// The instructor this credential belongs to. nil = the deployment-wide
+    /// (admin/env) service identity — the original single-row behaviour, kept
+    /// as a fallback when a course has no designated per-instructor identity.
+    @OptionalField(key: "user_id")
+    var userID: UUID?
+
+    /// `whoami` display name captured at authorize time, shown in the UI so the
+    /// instructor/admin can confirm which account they connected.
     @OptionalField(key: "identity_name")
     var identityName: String?
 
-    /// The admin who performed the authorization (audit).
+    /// The admin/instructor who performed the authorization (audit).
     @OptionalField(key: "captured_by_user_id")
     var capturedByUserID: UUID?
 
@@ -52,11 +58,13 @@ final class APIBrightSpaceCredential: Model, @unchecked Sendable {
         valenceUserID: String,
         valenceUserKey: String,
         identityName: String?,
-        capturedByUserID: UUID?
+        capturedByUserID: UUID?,
+        userID: UUID? = nil
     ) {
         self.valenceUserID = valenceUserID
         self.valenceUserKey = valenceUserKey
         self.identityName = identityName
         self.capturedByUserID = capturedByUserID
+        self.userID = userID
     }
 }
