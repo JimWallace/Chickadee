@@ -16,3 +16,9 @@
   blocked under COEP, and Chromium (covered by the harness) has the API natively
   while Safari may not. Rollback is reverting the change (no flag). See
   `docs/notebook-editor-kernel-boot.md`.
+- **Editor telemetry now reports cross-origin-isolation state.** The notebook
+  page's `sw_state` beacon includes `coi=<crossOriginIsolated>;sab=<SharedArrayBuffer present>`
+  so the admin browser-diagnostics breakdown can confirm — per browser/device
+  class — that the SharedArrayBuffer path is live after a deploy, and correlate
+  any "Kernel Unknown" failure with it (e.g. a browser reporting `coi=false`, or
+  `kernel-unhealthy` with `coi=true`, is the one to investigate).
