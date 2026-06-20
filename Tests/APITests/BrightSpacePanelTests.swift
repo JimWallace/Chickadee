@@ -94,6 +94,31 @@ import XCTVapor
         }
     }
 
+    @Test func brightspacePageWarnsWhenSyncIdentityDisconnected() async throws {
+        try await withAssignmentRoutesApp { app in
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            // Designate a user as the course's sync identity but give them NO stored
+            // key (disconnected) → the page must flag "needs reconnect".
+            let ghost = try await makeTestUser(
+                on: app, username: "ghost_\(UUID().uuidString.lowercased().prefix(6))")
+            let course = try #require(try await APICourse.find(courseID, on: app.db))
+            course.brightspaceSyncUserID = ghost.id
+            try await course.save(on: app.db)
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("needs reconnect"))
+                    #expect(html.contains("paused"))
+                })
+        }
+    }
+
     // MARK: - Org-unit binding (instructor self-serve)
 
     @Test func bindOrgUnitRejectedWhenNotConnected() async throws {

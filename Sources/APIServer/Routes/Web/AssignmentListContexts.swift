@@ -84,11 +84,21 @@ struct InstructorBrightspaceContext: Encodable {
     let accountConnected: Bool
     /// The requesting instructor's connected LEARN identity (whoami display).
     let accountIdentity: String?
+    /// When the requesting instructor connected their account (formatted), if connected.
+    let accountConnectedSince: String?
     /// Display name of the identity this course pushes grades as (its designated
     /// instructor, or the deployment-wide fallback). Nil = no identity connected.
     let syncIdentityName: String?
     /// True when the course's designated sync identity is the requesting user.
     let syncIdentityIsMe: Bool
+    /// False when the course names a designated instructor who no longer has a
+    /// stored key (disconnected) — grades are deferring until they reconnect.
+    let syncIdentityConnected: Bool
+    /// True when there's a designated identity but it's disconnected (the
+    /// "needs reconnect" / grades-paused state). Pre-computed so the template
+    /// can branch with flat sibling conditionals (LeafKit 1.14.2 mis-parses
+    /// `#if` nested inside an `#if/#else`).
+    let syncIdentityNeedsReconnect: Bool
     let flashSuccess: String?
     let flashError: String?
     let assignmentRows: [BrightspaceAssignmentRow]

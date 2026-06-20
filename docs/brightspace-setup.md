@@ -43,9 +43,9 @@ instructor connects their own LEARN account:
 2. **Designate / reassign.** Each course pushes grades as one designated
    instructor (`courses.brightspace_sync_user_id`). Any connected co-instructor
    can take over with "Use my account for this course".
-3. **Bind + map as usual.** Org-unit binding (admin, course page), grade-item
-   mapping, and student matching (Steps 4–6) are unchanged — they just run as the
-   course's designated instructor's key.
+3. **Bind + map.** Link the course to its org unit from the LEARN tab
+   ("Link course"), then map grade items and match students (Steps 4–6) — all
+   run as the course's designated instructor's key.
 
 A course whose designated instructor hasn't connected yet **defers**: its results
 stay pending and push automatically once someone connects, so nothing is lost. If
@@ -230,16 +230,28 @@ fastest auth smoke test — a bad key pair fails here, before any grade is at
 risk. (The helper in Step 1 already runs the same check, so if that passed
 this should too.)
 
-## Step 4 — Bind the course to its org unit (admin only)
+## Step 4 — Bind the course to its org unit
 
 A grade lands in a D2L **course**, identified by its **org unit ID** — the
 number in the course URL: `…/d2l/home/1106038` → org unit `1106038`.
 
-As an **admin**, on the Chickadee **course page**, set the BrightSpace
-org-unit ID. The server verifies it on save (`getOrgUnit`) and caches the D2L
-course name back into the page — **confirm that name matches** the course you
-intended. This is admin-only because the service account can usually write to
-many courses; instructors are then locked to their bound course.
+**Per-instructor (UW):** on the instructor **LEARN** tab, the **"Link course"**
+form sets the org-unit ID. The server verifies it with *your* connected LEARN
+key (`getOrgUnit`) and caches the D2L course name — **confirm that name matches**
+the course you intended. Binding also makes you the course's grade-sync identity.
+If your key can't see the org unit, verification fails at bind time (a clear
+signal you're not enrolled / it's the wrong ID) rather than silently at
+grade-push time.
+
+**Admin override:** an admin can still set the org-unit ID on the Chickadee
+**course page** (verified with the deployment-wide identity), e.g. for the
+shared-service-account model.
+
+> **Disconnected sync identity.** If the instructor a course syncs as later
+> disconnects their LEARN account, the LEARN tab flags the course **"needs
+> reconnect"** and grades **defer** (results stay pending, nothing is lost) until
+> they reconnect — or another connected instructor takes it over with "Use my
+> account for this course".
 
 ## Step 5 — Map each assignment to a grade item
 
