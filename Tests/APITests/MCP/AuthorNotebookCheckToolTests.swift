@@ -105,6 +105,43 @@ import Vapor
         }
     }
 
+    @Test func setsCheckTimeLimitAndSurfacesInGetSuite() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await AuthorNotebookCheckTool().execute(
+                .init(
+                    assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count",
+                    timeLimitSeconds: 45, minFigures: 2),
+                context(app))
+            let check = try await reloadCheck(assignment, id: "figs", on: app.db)
+            #expect(check.timeLimitSeconds == 45)
+
+            // get_suite returns the value on the check spec.
+            let readCtx = ToolContext(
+                request: Request(application: app, on: app.eventLoopGroup.any()),
+                subject: "tester", grantedScopes: [.read])
+            let suite = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
+            let row = try #require(suite.items.compactMap(\.check).first { $0.id == "figs" })
+            #expect(row.timeLimitSeconds == 45)
+        }
+    }
+
+    @Test func rejectsOutOfRangeCheckTimeLimit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await AuthorNotebookCheckTool().execute(
+                    .init(
+                        assignmentPublicID: assignment.publicID, id: "figs", kind: "figure_count",
+                        timeLimitSeconds: 601, minFigures: 1),
+                    context(app))
+            }
+        }
+    }
+
     @Test func rejectsUnknownKind() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

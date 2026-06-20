@@ -758,6 +758,65 @@ struct CoreCodableTests {
         #expect(decoded.requiredConstructs?.count == 3)
     }
 
+    // MARK: - Per-test time-limit overrides (families + checks)
+
+    @Test func patternDefaultsTimeLimitRoundTrip() throws {
+        let defaults = PatternDefaults(timeLimitSeconds: 30)
+        let decoded = try decoder.decode(PatternDefaults.self, from: encoder.encode(defaults))
+        #expect(decoded.timeLimitSeconds == 30)
+    }
+
+    @Test func patternDefaultsWithoutTimeLimitDecodesNil() throws {
+        let json = #"{ "tier": "public", "points": 1 }"#
+        let decoded = try decoder.decode(PatternDefaults.self, from: Data(json.utf8))
+        #expect(decoded.timeLimitSeconds == nil)
+    }
+
+    @Test func patternCaseTimeLimitRoundTrip() throws {
+        let c = PatternCase(
+            key: "01", label: "slow", args: [.int(1)], expected: .int(1),
+            timeLimitSeconds: 120)
+        let decoded = try decoder.decode(PatternCase.self, from: encoder.encode(c))
+        #expect(decoded.timeLimitSeconds == 120)
+    }
+
+    @Test func patternCaseWithoutTimeLimitDecodesNil() throws {
+        let json = #"{ "key": "01", "label": "L", "args": [1], "expected": 2 }"#
+        let decoded = try decoder.decode(PatternCase.self, from: Data(json.utf8))
+        #expect(decoded.timeLimitSeconds == nil)
+    }
+
+    @Test func patternCaseResolvedTimeLimitPrecedence() {
+        let defaults30 = PatternDefaults(timeLimitSeconds: 30)
+        let defaultsNil = PatternDefaults()
+        // Case override wins over the family default.
+        let withOverride = PatternCase(
+            key: "01", label: "L", args: [.int(1)], expected: .int(1), timeLimitSeconds: 120)
+        #expect(withOverride.resolvedTimeLimit(defaults: defaults30) == 120)
+        // No case override → falls back to the family default.
+        let noOverride = PatternCase(key: "02", label: "L", args: [.int(1)], expected: .int(1))
+        #expect(noOverride.resolvedTimeLimit(defaults: defaults30) == 30)
+        // Neither set → nil (inherit the assignment-wide default).
+        #expect(noOverride.resolvedTimeLimit(defaults: defaultsNil) == nil)
+    }
+
+    @Test func notebookCheckTimeLimitRoundTrip() throws {
+        let check = NotebookCheck(
+            id: "df_shape", kind: .dataFrameShape, timeLimitSeconds: 45,
+            variable: "df", expectedRows: 1, expectedCols: 1)
+        let decoded = try decoder.decode(NotebookCheck.self, from: encoder.encode(check))
+        #expect(decoded == check)
+        #expect(decoded.timeLimitSeconds == 45)
+    }
+
+    @Test func notebookCheckWithoutTimeLimitDecodesNil() throws {
+        let json = #"""
+            { "id": "c", "kind": "figure_count", "tier": "public", "points": 1, "minFigures": 1 }
+            """#
+        let decoded = try decoder.decode(NotebookCheck.self, from: Data(json.utf8))
+        #expect(decoded.timeLimitSeconds == nil)
+    }
+
     @Test func notebookCheckEqualityLegacyManifestDecodesCleanly() throws {
         // Pre-equality manifests don't carry the new fields; decode must
         // leave them nil rather than throwing.

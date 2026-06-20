@@ -45,6 +45,9 @@ struct AuthorNotebookCheckTool: ContentTool {
         /// replace, keep its current section).
         let sectionID: String?
         let hint: String?
+        /// Check-level per-test execution time limit (seconds), in `1...600`,
+        /// overriding the assignment default. 0 / omitted = inherit the default.
+        let timeLimitSeconds: Int?
 
         // Per-kind config (the validator enforces which are required per kind).
         let variable: String?
@@ -72,6 +75,7 @@ struct AuthorNotebookCheckTool: ContentTool {
             assignmentPublicID: String, id: String, kind: String,
             name: String? = nil, tier: String? = nil, points: Int? = nil,
             dependsOn: [String]? = nil, sectionID: String? = nil, hint: String? = nil,
+            timeLimitSeconds: Int? = nil,
             variable: String? = nil, expectedRows: Int? = nil, expectedCols: Int? = nil,
             expectedColumns: [String]? = nil, columnMatch: String? = nil, expectedCSV: String? = nil,
             checkDtype: Bool? = nil, checkLike: Bool? = nil, rtol: Double? = nil, atol: Double? = nil,
@@ -88,6 +92,7 @@ struct AuthorNotebookCheckTool: ContentTool {
             self.dependsOn = dependsOn
             self.sectionID = sectionID
             self.hint = hint
+            self.timeLimitSeconds = timeLimitSeconds
             self.variable = variable
             self.expectedRows = expectedRows
             self.expectedCols = expectedCols
@@ -134,8 +139,9 @@ struct AuthorNotebookCheckTool: ContentTool {
         + "function_exists / variable_exists / ast_structure), and that kind's config fields — e.g. "
         + "data_frame_shape needs variable + expectedRows + expectedCols; figure_count needs minFigures; "
         + "cell_contains needs containsText; ast_structure needs requiredConstructs. Optional tier "
-        + "(public/release/secret/student, default public), points, dependsOn, sectionID, and a \"💡 "
-        + "Hint\" shown on failure. Saving renders the check's script, validates it synchronously "
+        + "(public/release/secret/student, default public), points, dependsOn, sectionID, a \"💡 "
+        + "Hint\" shown on failure, and a per-test timeLimitSeconds (1–600s, overriding the assignment "
+        + "default; 0 inherits it). Saving renders the check's script, validates it synchronously "
         + "(rejecting missing/!malformed kind fields), closes the assignment if it was open (reported as "
         + "`assignmentClosed`), and re-runs validation. Read existing checks (and their exact specs) "
         + "from get_suite; remove one with delete_suite_item."
@@ -183,6 +189,12 @@ struct AuthorNotebookCheckTool: ContentTool {
             "hint": .object([
                 "type": .string("string"),
                 "description": .string("\"💡 Hint\" shown to the student only when this check fails."),
+            ]),
+            "timeLimitSeconds": .object([
+                "type": .string("integer"),
+                "description": .string(
+                    "Per-test execution time limit (seconds, 1–600) for this check, overriding the "
+                        + "assignment default. Omit / 0 to inherit the default."),
             ]),
             "variable": .object([
                 "type": .string("string"),
@@ -312,8 +324,9 @@ struct AuthorNotebookCheckTool: ContentTool {
             requestedSection
             ?? (existingIndex.flatMap { payload.items[$0].sectionID })
 
-        let check = Self.buildCheck(
-            input, id: checkID, kind: kind, tier: tier, columnMatch: columnMatch, sectionID: sectionID)
+        let check = try Self.buildCheck(
+            input, id: checkID, kind: kind, tier: tier, columnMatch: columnMatch,
+            sectionID: sectionID)
         let row = SuiteItemDTO(
             kind: "check", script: nil, family: nil, check: check,
             dependsOn: nil, sectionID: sectionID)
@@ -359,12 +372,20 @@ struct AuthorNotebookCheckTool: ContentTool {
         return mode
     }
 
+    /// Normalizes the check-level time limit: nil/0 → nil (inherit the default),
+    /// any non-zero value bound-checked to `1...600`.
+    private static func normalizedTimeLimit(_ raw: Int?) throws -> Int? {
+        guard let raw, raw != 0 else { return nil }
+        return try validateTimeLimitSeconds(raw, tool: name, field: "timeLimitSeconds")
+    }
+
     /// Builds the `NotebookCheck` from the input; per-kind field legality is left
-    /// to the validator that runs inside applySuiteEdit.
+    /// to the validator that runs inside applySuiteEdit. The time limit is
+    /// normalized here (0/nil → nil; non-zero bound-checked to 1...600).
     private static func buildCheck(
         _ input: Input, id: String, kind: NotebookCheckKind, tier: TestTier,
         columnMatch: ColumnMatchMode?, sectionID: String?
-    ) -> NotebookCheck {
+    ) throws -> NotebookCheck {
         NotebookCheck(
             id: id,
             name: input.name.flatMap { $0.isEmpty ? nil : $0 },
@@ -374,6 +395,7 @@ struct AuthorNotebookCheckTool: ContentTool {
             dependsOn: input.dependsOn ?? [],
             sectionID: sectionID,
             hint: input.hint.flatMap { $0.isEmpty ? nil : $0 },
+            timeLimitSeconds: try normalizedTimeLimit(input.timeLimitSeconds),
             variable: input.variable,
             expectedRows: input.expectedRows,
             expectedCols: input.expectedCols,

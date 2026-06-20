@@ -147,6 +147,10 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
     /// the generated script — see the `hintByFilename` join in
     /// `WebRoutes+Submission.swift`).  nil = no hint.
     public let hint: String?
+    /// Optional check-level per-test execution time limit (seconds), persisted
+    /// onto the generated `TestSuiteEntry.timeLimitSeconds`.  nil = inherit the
+    /// assignment-wide default.
+    public let timeLimitSeconds: Int?
 
     // MARK: Per-kind config (presence enforced by validator)
 
@@ -242,6 +246,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         tier: TestTier = .pub, points: Int = 1,
         dependsOn: [String] = [], sectionID: String? = nil,
         hint: String? = nil,
+        timeLimitSeconds: Int? = nil,
         variable: String? = nil,
         expectedRows: Int? = nil, expectedCols: Int? = nil,
         expectedColumns: [String]? = nil,
@@ -267,6 +272,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         self.dependsOn = dependsOn
         self.sectionID = sectionID
         self.hint = hint
+        self.timeLimitSeconds = timeLimitSeconds
         self.variable = variable
         self.expectedRows = expectedRows
         self.expectedCols = expectedCols
@@ -298,6 +304,7 @@ public struct NotebookCheck: Codable, Equatable, Sendable {
         dependsOn = try c.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
+        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
         variable = try c.decodeIfPresent(String.self, forKey: .variable)
         expectedRows = try c.decodeIfPresent(Int.self, forKey: .expectedRows)
         expectedCols = try c.decodeIfPresent(Int.self, forKey: .expectedCols)
