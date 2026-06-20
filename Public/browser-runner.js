@@ -272,6 +272,22 @@
             points: typeof entry.points === 'number' ? entry.points : 1,
         }));
 
+        // Per-script execution time-limit overrides (script name -> seconds).
+        // Resolved here, in the browser executor, NOT inside the shared
+        // RunnerCore wasm `executeSuites` loop — which is the wasm-pinned shared
+        // implementation and keeps receiving only the assignment default. The
+        // effective limit for a script is `perEntryTimeLimit[name] ?? limit`
+        // (mirrors the worker's NativeScriptExecutor.resolveTimeLimit). Only a
+        // positive number counts as an override; anything else inherits the
+        // assignment default.
+        const perEntryTimeLimit = {};
+        for (const entry of (manifest.testSuites || [])) {
+            if (entry && typeof entry.script === 'string'
+                && typeof entry.timeLimitSeconds === 'number' && entry.timeLimitSeconds > 0) {
+                perEntryTimeLimit[entry.script] = entry.timeLimitSeconds;
+            }
+        }
+
         // Section metadata, so the inline results can be grouped per section
         // exactly like the server-rendered submission view. Kept as a parallel
         // array (never stamped onto the outcomes, which must stay the canonical
@@ -296,7 +312,10 @@
         const executor = makeExecutor(files, assignmentSeed, runnerCore);
         try {
             const scriptExists = (name) => executor.scriptExists(name);
-            const runScript    = (name, limit) => executor.run(name, limit);
+            // Apply the per-script override before handing the limit to the
+            // executor. `limit` is the assignment default the wasm loop passes;
+            // a per-entry override (when present) wins for that one script.
+            const runScript    = (name, limit) => executor.run(name, perEntryTimeLimit[name] ?? limit);
 
             // Shared RunnerCore (wasm): the SAME Swift `executeSuites` loop the
             // native worker runs. Dependency gating, the "Skipped: prerequisite…"

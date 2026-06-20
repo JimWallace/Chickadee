@@ -794,6 +794,29 @@ struct CoreCodableTests {
         #expect(check.isGenerated == true)
     }
 
+    @Test func testSuiteEntryTimeLimitRoundTripsWhenPresent() throws {
+        let entry = TestSuiteEntry(tier: .pub, script: "slow.py", timeLimitSeconds: 45)
+        let data = try encoder.encode(entry)
+        // The synthesized encode must emit the field.
+        let text = try #require(String(data: data, encoding: .utf8))
+        #expect(text.contains("\"timeLimitSeconds\":45"))
+        let decoded = try decoder.decode(TestSuiteEntry.self, from: data)
+        #expect(decoded.timeLimitSeconds == 45)
+    }
+
+    @Test func testSuiteEntryTimeLimitAbsentDecodesToNil() throws {
+        // Back-compat: an entry with no timeLimitSeconds key decodes to nil
+        // (inherit the assignment default).
+        let entry = try decoder.decode(
+            TestSuiteEntry.self,
+            from: Data(#"{ "tier": "public", "script": "a.py" }"#.utf8))
+        #expect(entry.timeLimitSeconds == nil)
+        // And a round-trip of the nil case stays nil.
+        let reencoded = try encoder.encode(entry)
+        let decoded = try decoder.decode(TestSuiteEntry.self, from: reencoded)
+        #expect(decoded.timeLimitSeconds == nil)
+    }
+
     @Test func legacyManifestWithoutNotebookChecksDecodesAsEmpty() throws {
         // Pre-NotebookCheck manifests don't carry the notebookChecks field;
         // decoder must default to [].

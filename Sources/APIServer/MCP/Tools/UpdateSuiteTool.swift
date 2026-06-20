@@ -26,6 +26,27 @@ struct UpdateSuiteTool: ContentTool {
         /// Section id to move the script into; empty string ungroups it; absent
         /// leaves it unchanged.
         let sectionID: String?
+        /// Per-test execution time limit override (seconds). A value in 1...600
+        /// sets the override; 0 clears it (the script reverts to the assignment
+        /// default); absent/null leaves it unchanged.
+        let timeLimitSeconds: Int?
+
+        // Explicit init so `timeLimitSeconds` can default to nil — keeps the
+        // older positional/labelled call sites (which predate the field)
+        // compiling without threading nil through each one.
+        init(
+            script: String, tier: String? = nil, points: Int? = nil,
+            displayName: String? = nil, dependsOn: [String]? = nil,
+            sectionID: String? = nil, timeLimitSeconds: Int? = nil
+        ) {
+            self.script = script
+            self.tier = tier
+            self.points = points
+            self.displayName = displayName
+            self.dependsOn = dependsOn
+            self.sectionID = sectionID
+            self.timeLimitSeconds = timeLimitSeconds
+        }
     }
 
     struct Input: Decodable, Sendable {
@@ -47,7 +68,9 @@ struct UpdateSuiteTool: ContentTool {
     static let description =
         "Edit test-suite script metadata for an assignment, by its public ID. For each named "
         + "script provide any of: tier (public/release/secret/student), points, displayName, "
-        + "dependsOn (prerequisite script names), and sectionID (\"\" to ungroup). Does NOT change "
+        + "dependsOn (prerequisite script names), sectionID (\"\" to ungroup), and timeLimitSeconds "
+        + "(a per-test execution time limit override in seconds, 1–600; 0 clears the override so the "
+        + "script reverts to the assignment default set by set_time_limit). Does NOT change "
         + "script content or pattern families. Saving re-runs the assignment's validation and closes "
         + "the assignment if it was open (re-open with update_assignment once validation passes)."
     static let inputSchema: JSONValue = .object([
@@ -81,6 +104,13 @@ struct UpdateSuiteTool: ContentTool {
                         "sectionID": .object([
                             "type": .string("string"),
                             "description": .string("Section id, or \"\" to ungroup."),
+                        ]),
+                        "timeLimitSeconds": .object([
+                            "type": .string("integer"),
+                            "description": .string(
+                                "Per-test time-limit override in seconds "
+                                    + "(\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound)); "
+                                    + "0 clears the override (revert to the assignment default)."),
                         ]),
                     ]),
                     "required": .array([.string("script")]),
@@ -137,6 +167,16 @@ struct UpdateSuiteTool: ContentTool {
             if let dependsOn = edit.dependsOn { payload.items[idx].script?.dependsOn = dependsOn }
             if let sectionID = edit.sectionID {
                 payload.items[idx].sectionID = sectionID.isEmpty ? nil : sectionID
+            }
+            if let limit = edit.timeLimitSeconds {
+                // 0 clears the override (revert to the assignment default); any
+                // other value is validated to the accepted range.
+                if limit == 0 {
+                    payload.items[idx].script?.timeLimitSeconds = nil
+                } else {
+                    payload.items[idx].script?.timeLimitSeconds =
+                        try validateTimeLimitSeconds(limit, tool: Self.name, field: "timeLimitSeconds")
+                }
             }
             updated.append(edit.script)
         }

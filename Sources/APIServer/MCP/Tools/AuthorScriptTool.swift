@@ -44,6 +44,11 @@ struct AuthorScriptTool: ContentTool {
         let displayName: String?
         let dependsOn: [String]?
         let sectionID: String?
+        /// Per-test execution time limit override (seconds) for a test tier. A
+        /// value in 1...600 sets the override; 0 clears it (revert to the
+        /// assignment default); absent/null leaves an existing script's
+        /// override unchanged and a new script on the assignment default.
+        let timeLimitSeconds: Int?
     }
 
     struct Output: Encodable, Sendable {
@@ -82,7 +87,9 @@ struct AuthorScriptTool: ContentTool {
         + "\"support\" for a helper file that tests or personalization expressions can import but that "
         + "is not itself graded; omit tier to keep an existing file's kind (new files default to a "
         + "public test). For test tiers you may also set points, displayName, dependsOn (prerequisite "
-        + "script names or family:<id> tokens), and sectionID (an existing section). Cannot edit "
+        + "script names or family:<id> tokens), sectionID (an existing section), and timeLimitSeconds "
+        + "(a per-test execution time-limit override in seconds, 1–600; 0 clears it so the script uses "
+        + "the assignment default). Cannot edit "
         + "pattern-family or notebook-check generated scripts — edit the family/check instead. Saving "
         + "re-runs the assignment's validation and closes the assignment if it was open (re-open with "
         + "update_assignment once validation passes)."
@@ -144,6 +151,14 @@ struct AuthorScriptTool: ContentTool {
                 "description": .string(
                     "Existing section id to place a test row into (test tiers only); "
                         + "an unknown id is treated as ungrouped."),
+            ]),
+            "timeLimitSeconds": .object([
+                "type": .string("integer"),
+                "description": .string(
+                    "Per-test execution time-limit override in seconds for a test tier "
+                        + "(\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound)); 0 clears the "
+                        + "override (revert to the assignment default set by set_time_limit). Ignored for "
+                        + "support files."),
             ]),
         ]),
         // content/sourceUrl are a one-of (validated in execute), so neither is
@@ -345,6 +360,11 @@ struct AuthorScriptTool: ContentTool {
         let normalizedSection = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         let displayName = input.displayName.flatMap { $0.isEmpty ? nil : $0 }
         let points = max(0, input.points ?? 1)
+        // Resolve the override: a value in 1...600 sets it; 0 clears it; nil
+        // means "leave unchanged on replace / default on create".
+        let validatedLimit: Int? = try input.timeLimitSeconds.map { limit in
+            limit == 0 ? 0 : try validateTimeLimitSeconds(limit, tool: Self.name, field: "timeLimitSeconds")
+        }
 
         if let idx = payload.items.firstIndex(where: { $0.kind == "script" && $0.script?.script == filename }) {
             // Replace an existing hand-written script. Content + tier always
@@ -355,6 +375,9 @@ struct AuthorScriptTool: ContentTool {
             if let dn = input.displayName { payload.items[idx].script?.displayName = dn.isEmpty ? nil : dn }
             if let deps = input.dependsOn { payload.items[idx].script?.dependsOn = deps }
             if input.sectionID != nil { payload.items[idx].sectionID = normalizedSection }
+            if let validatedLimit {
+                payload.items[idx].script?.timeLimitSeconds = validatedLimit == 0 ? nil : validatedLimit
+            }
         } else {
             // Create a new hand-written script. Insert it adjacent to its
             // section's existing block (or the ungrouped block) so the
@@ -362,7 +385,8 @@ struct AuthorScriptTool: ContentTool {
             let dto = ScriptDTO(
                 script: filename, tier: tier, points: points,
                 displayName: displayName, dependsOn: input.dependsOn ?? [],
-                content: content, hint: nil)
+                content: content, hint: nil,
+                timeLimitSeconds: (validatedLimit == 0 ? nil : validatedLimit))
             let item = SuiteItemDTO(
                 kind: "script", script: dto, family: nil, check: nil,
                 dependsOn: nil, sectionID: normalizedSection)

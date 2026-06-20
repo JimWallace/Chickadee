@@ -50,6 +50,15 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     // hint comes from the family case / notebook check spec instead; this
     // field carries the hint for hand-written raw scripts. nil = none.
     public let hint: String?
+    // Optional per-test execution time limit (seconds). When nil the entry
+    // inherits the assignment-wide default `TestProperties.timeLimitSeconds`.
+    // Resolution happens in each executor (the worker's NativeScriptExecutor,
+    // the browser runner's JS) rather than in RunnerCore's `executeSuites`,
+    // which is the wasm-pinned shared loop and still receives the assignment
+    // default as the fallback timeLimit. Effective limit for a script is
+    // `entry.timeLimitSeconds ?? manifest.timeLimitSeconds`. Back-compat:
+    // absent in JSON decodes to nil (inherit the default).
+    public let timeLimitSeconds: Int?
 
     public init(
         tier: TestTier, script: String, name: String? = nil,
@@ -57,7 +66,8 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedBy: String? = nil,
         generatedByCheck: String? = nil,
         sectionID: String? = nil,
-        hint: String? = nil
+        hint: String? = nil,
+        timeLimitSeconds: Int? = nil
     ) {
         self.tier = tier
         self.script = script
@@ -68,6 +78,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         self.generatedByCheck = generatedByCheck
         self.sectionID = sectionID
         self.hint = hint
+        self.timeLimitSeconds = timeLimitSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -81,6 +92,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedByCheck = try c.decodeIfPresent(String.self, forKey: .generatedByCheck)
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
+        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
     }
 
     /// True if this entry was produced by a pattern family or a notebook

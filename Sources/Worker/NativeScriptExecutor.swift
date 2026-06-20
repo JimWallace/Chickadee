@@ -29,6 +29,23 @@ struct NativeScriptExecutor: ScriptExecutor, Sendable {
     /// Environment overrides merged into every script run (e.g. the
     /// `CHICKADEE_ASSIGNMENT_SEED`). Empty = inherit the parent env verbatim.
     let env: [String: String]
+    /// Per-script execution time-limit overrides (script name → seconds). A
+    /// script listed here runs with its own limit; everything else uses the
+    /// `timeLimitSeconds` that the shared `executeSuites` loop passes (the
+    /// assignment default). This is resolved here, in the executor, rather than
+    /// in RunnerCore's `executeSuites` — that loop is the wasm-pinned shared
+    /// implementation and must keep receiving only the assignment default.
+    let overrides: [String: Int]
+
+    init(
+        runner: any ScriptRunner, workDir: URL,
+        env: [String: String] = [:], overrides: [String: Int] = [:]
+    ) {
+        self.runner = runner
+        self.workDir = workDir
+        self.env = env
+        self.overrides = overrides
+    }
 
     func scriptExists(_ name: String) async -> Bool {
         FileManager.default.fileExists(atPath: workDir.appendingPathComponent(name).path)
@@ -38,8 +55,16 @@ struct NativeScriptExecutor: ScriptExecutor, Sendable {
         await runner.run(
             script: workDir.appendingPathComponent(script),
             workDir: workDir,
-            timeLimitSeconds: timeLimitSeconds,
+            timeLimitSeconds: resolveTimeLimit(
+                script: script, default: timeLimitSeconds, overrides: overrides),
             env: env
         )
     }
+}
+
+/// Resolves the effective per-test time limit for `script`: its override when
+/// present, otherwise the assignment `default`. Pure (no I/O) so the resolution
+/// rule can be unit-tested without a real subprocess.
+func resolveTimeLimit(script: String, default defaultLimit: Int, overrides: [String: Int]) -> Int {
+    overrides[script] ?? defaultLimit
 }

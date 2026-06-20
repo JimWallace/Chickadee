@@ -71,7 +71,8 @@ func updateManifestAddingScript(
             generatedBy: e.generatedBy,
             generatedByCheck: e.generatedByCheck,
             sectionID: e.sectionID,
-            hint: e.hint
+            hint: e.hint,
+            timeLimitSeconds: e.timeLimitSeconds
         )
     }
     let nextOrder = (existing.map(\.order).max() ?? 0) + 1
@@ -85,13 +86,15 @@ func updateManifestAddingScript(
         generatedBy: entry.generatedBy,
         generatedByCheck: entry.generatedByCheck,
         sectionID: entry.sectionID,
-        hint: entry.hint
+        hint: entry.hint,
+        timeLimitSeconds: entry.timeLimitSeconds
     )
     let updated = existing + [newEntry]
     return try? makeWorkerManifestJSON(
         testSuites: updated,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
+        timeLimitSeconds: props.timeLimitSeconds,
         starterNotebook: props.starterNotebook,
         patternFamilies: props.patternFamilies,
         notebookChecks: props.notebookChecks,
@@ -128,13 +131,15 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
                 generatedBy: e.generatedBy,
                 generatedByCheck: e.generatedByCheck,
                 sectionID: e.sectionID,
-                hint: e.hint
+                hint: e.hint,
+                timeLimitSeconds: e.timeLimitSeconds
             )
         }
     return try? makeWorkerManifestJSON(
         testSuites: updated,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
+        timeLimitSeconds: props.timeLimitSeconds,
         starterNotebook: props.starterNotebook,
         patternFamilies: props.patternFamilies,
         notebookChecks: props.notebookChecks,
@@ -148,6 +153,7 @@ func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],
     includeMakefile: Bool,
     gradingMode: String = "worker",
+    timeLimitSeconds: Int = 10,
     starterNotebook: String? = "assignment.ipynb",
     patternFamilies: [PatternFamily] = [],
     notebookChecks: [NotebookCheck] = [],
@@ -168,7 +174,7 @@ func makeWorkerManifestJSON(
         "gradingMode": gradingMode,
         "requiredFiles": [],
         "testSuites": testSuiteJSON,
-        "timeLimitSeconds": 10,
+        "timeLimitSeconds": timeLimitSeconds,
         "makefile": includeMakefile ? ["target": NSNull()] : NSNull(),
     ]
     if let starterNotebook {
@@ -267,6 +273,12 @@ private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any
     }
     if let hint = entry.hint, !hint.isEmpty {
         dict["hint"] = hint
+    }
+    // Per-test execution time limit override (seconds). Absent = inherit the
+    // assignment-wide default. Only positive values are meaningful; a nil/0
+    // value is omitted so the decoder falls back to the default.
+    if let limit = entry.timeLimitSeconds, limit > 0 {
+        dict["timeLimitSeconds"] = limit
     }
     return dict
 }

@@ -377,6 +377,9 @@ function makeFakeGradingWorkerFactory(options) {
       this.terminated = false;
       this.postedTypes = [];
       this.files = {};
+      // Records every `run` message's { script, limit } so a test can assert
+      // the per-script time limit the executor handed down.
+      this.runCalls = [];
       created.push(this);
     }
 
@@ -416,6 +419,7 @@ function makeFakeGradingWorkerFactory(options) {
         return;
       }
       if (msg.type === 'run') {
+        this.runCalls.push({ script: msg.script, limit: msg.limit });
         const behavior = this._behaviorFor(msg.script);
         if (behavior.pending) return;  // never reply — simulates a real hang
         this._reply({
@@ -973,6 +977,39 @@ test('GradingWorkerExecutor grades pass/fail through one worker and classifies n
   const runCount = workers[0].postedTypes.filter(t => t === 'run').length;
   assert.equal(runCount, 2, 'only the two python scripts reached the worker (shell handled on main thread)');
   assert.equal(harness.postBodies.length, 1, 'results are still posted');
+});
+
+test('per-script timeLimitSeconds in the manifest overrides the assignment default for that script', async () => {
+  // The assignment default is 12s; `slow.py` carries a 3s per-test override.
+  // The override must be the limit handed to the executor for `slow.py`, while
+  // `fast.py` (no override) still gets the assignment default.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: {
+      'slow.py': '# slow\nJSON_RESULT_PASS\n',
+      'fast.py': '# fast\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 12,
+      testSuites: [
+        { script: 'slow.py', tier: 'public', timeLimitSeconds: 3 },
+        { script: 'fast.py', tier: 'public' },
+      ],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_per_test_limit',
+  );
+
+  // The happy path reuses one worker; its runCalls record the { script, limit }
+  // each script was launched with — the override is applied before executor.run.
+  const worker = harness.gradingWorkerFactory.created[0];
+  const limitFor = name => worker.runCalls.find(c => c.script === name)?.limit;
+  assert.equal(limitFor('slow.py'), 3, 'the per-script override is the limit for slow.py');
+  assert.equal(limitFor('fast.py'), 12, 'an override-less script keeps the assignment default');
 });
 
 test('extensionless Python test scripts dispatch via their shebang instead of failing as unsupported', async () => {

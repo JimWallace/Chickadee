@@ -62,6 +62,12 @@ struct GetSuiteTool: ContentTool {
             let content: String?
             /// Instructor hint for a hand-written script (`kind == "script"`).
             let hint: String?
+            /// Per-test execution time-limit override (seconds) for a
+            /// hand-written script (`kind == "script"`), when one is set; nil
+            /// means the script inherits the assignment default
+            /// (`timeLimitSeconds` at the top level). Generated family/check
+            /// rows always inherit the default, so this is nil for them.
+            let timeLimitSeconds: Int?
             /// Full pattern-family spec — function, kind, paramNames, defaults
             /// (including the family `hint`), variables, and every case's
             /// args/expected/hint — for `kind == "family"` items. This is the
@@ -74,6 +80,9 @@ struct GetSuiteTool: ContentTool {
         let assignmentPublicID: String
         let sections: [Section]
         let items: [Item]
+        /// The assignment-wide default per-test execution time limit (seconds).
+        /// Every item without its own `timeLimitSeconds` override uses this.
+        let timeLimitSeconds: Int
     }
 
     static let name = "get_suite"
@@ -86,9 +95,11 @@ struct GetSuiteTool: ContentTool {
         + "(`family`) with every case's args and expected value; notebook checks include their "
         + "spec (`check`). For hand-written scripts, `filename` is the exact value to pass to "
         + "`author_script` / `update_suite`; generated rows list the file(s) they produce in "
-        + "`generatedFilenames` (read-only — edit the family/check instead). Read-only — use this "
-        + "to inspect exactly what each test checks (e.g. to explain why a submission lost points) "
-        + "before editing the suite."
+        + "`generatedFilenames` (read-only — edit the family/check instead). The response also "
+        + "reports the assignment's default per-test execution time limit (`timeLimitSeconds` at the "
+        + "top level) and any per-script override (`timeLimitSeconds` on a script item). Read-only — "
+        + "use this to inspect exactly what each test checks (e.g. to explain why a submission lost "
+        + "points) before editing the suite."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -104,6 +115,12 @@ struct GetSuiteTool: ContentTool {
         "type": .string("object"),
         "properties": .object([
             "assignmentPublicID": .object(["type": .string("string")]),
+            "timeLimitSeconds": .object([
+                "type": .string("integer"),
+                "description": .string(
+                    "The assignment-wide default per-test execution time limit (seconds); every item "
+                        + "without its own override uses this."),
+            ]),
             "sections": .object([
                 "type": .string("array"),
                 "items": .object([
@@ -157,6 +174,12 @@ struct GetSuiteTool: ContentTool {
                             "type": .string("string"),
                             "description": .string("Instructor hint for a hand-written script."),
                         ]),
+                        "timeLimitSeconds": .object([
+                            "type": .string("integer"),
+                            "description": .string(
+                                "Per-test execution time-limit override (seconds) for a hand-written "
+                                    + "script; absent means it inherits the assignment default."),
+                        ]),
                         "family": .object([
                             "type": .string("object"),
                             "description": .string(
@@ -179,6 +202,7 @@ struct GetSuiteTool: ContentTool {
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("sections"), .string("items"),
+            .string("timeLimitSeconds"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -224,7 +248,12 @@ struct GetSuiteTool: ContentTool {
         let items = payload.items.map {
             Self.item(from: $0, generatedByFamily: generatedByFamily, generatedByCheck: generatedByCheck)
         }
-        return Output(assignmentPublicID: assignment.publicID, sections: sections, items: items)
+        // The assignment-wide default every override-less item inherits.
+        // Falls back to the model default (10) for an undecodable manifest.
+        let defaultTimeLimit = manifest?.timeLimitSeconds ?? 10
+        return Output(
+            assignmentPublicID: assignment.publicID, sections: sections, items: items,
+            timeLimitSeconds: defaultTimeLimit)
     }
 
     private static func item(
@@ -248,6 +277,7 @@ struct GetSuiteTool: ContentTool {
                 familyID: family?.id,
                 content: nil,
                 hint: nil,
+                timeLimitSeconds: nil,
                 family: family,
                 check: nil)
         case "check":
@@ -265,6 +295,7 @@ struct GetSuiteTool: ContentTool {
                 familyID: nil,
                 content: nil,
                 hint: nil,
+                timeLimitSeconds: nil,
                 family: nil,
                 check: check)
         default:
@@ -282,6 +313,7 @@ struct GetSuiteTool: ContentTool {
                 familyID: nil,
                 content: script?.content,
                 hint: script?.hint,
+                timeLimitSeconds: script?.timeLimitSeconds,
                 family: nil,
                 check: nil)
         }

@@ -315,6 +315,53 @@ import Vapor
         }
     }
 
+    /// A raw script carrying a per-test `timeLimitSeconds` override persists it
+    /// onto the resulting `TestSuiteEntry`, and an `authoredItems == nil`
+    /// re-apply (the family/check-modal save path) preserves it.
+    @Test func apply_rawScriptTimeLimitPersistsAndSurvivesReapply() async throws {
+        try await withPatternFamilyFixture { fixture in
+
+            try updateScriptInZip(
+                zipPath: fixture.setup.zipPath,
+                filename: "publictest_slow.py",
+                content: "# slow\npassed('ok')\n"
+            )
+            let rawEntry = AuthoredRawScript(
+                script: "publictest_slow.py",
+                tier: .pub, points: 1, displayName: nil,
+                dependsOn: [], timeLimitSeconds: 45
+            )
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [pfBMIFamily()],
+                authoredItems: [.script(rawEntry), .family(id: "bmi_category")],
+                on: fixture.app.db
+            )
+
+            // The override is persisted onto the raw entry; generated entries
+            // inherit the default (nil).
+            let props = try pfDecodeManifest(fixture.setup.manifest)
+            let slow = try #require(props.testSuites.first { $0.script == "publictest_slow.py" })
+            #expect(slow.timeLimitSeconds == 45)
+            for generated in props.testSuites where generated.generatedBy != nil {
+                #expect(generated.timeLimitSeconds == nil, "Generated entries inherit the default")
+            }
+
+            // Re-apply through the legacy (authoredItems == nil) path — the
+            // family-modal save — which rebuilds AuthoredRawScript from the
+            // existing manifest. The override must survive.
+            let existingFamilies = props.patternFamilies
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: existingFamilies,
+                on: fixture.app.db
+            )
+            let reapplied = try pfDecodeManifest(fixture.setup.manifest)
+            let slowAfter = try #require(reapplied.testSuites.first { $0.script == "publictest_slow.py" })
+            #expect(slowAfter.timeLimitSeconds == 45, "Override must survive an authoredItems==nil re-apply")
+        }
+    }
+
     /// Family-level `dependsOn` propagates to every generated case, with
     /// family-ref tokens expanded to the referenced family's filenames.
     @Test func apply_familyLevelDepsExpandedAndInheritedByCases() async throws {
