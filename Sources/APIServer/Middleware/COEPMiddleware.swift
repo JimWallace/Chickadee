@@ -18,8 +18,14 @@
 //
 // COEP require-corp only restricts CROSS-origin subresources; same-origin ones
 // (Chickadee vendors Pyodide / CodeMirror / jszip same-origin) load unchanged.
-// The historical objection — that JupyterLite's service-worker synthesised
-// responses lacked CORP — no longer applies: that service worker is disabled.
+//
+// NOTE: this flag is OFF by default. The JupyterLite service worker (re-enabled
+// in v0.4.467) is currently the kernel's synchronous-execution path, so the
+// editor runs without cross-origin isolation today. Turning this on is the
+// SharedArrayBuffer route (see docs/notebook-editor-kernel-boot.md): it is
+// still gated because COEP require-corp blocks the fast-path-served Pyodide
+// kernel worker (the v0.4.469 editor-smoke selftest pins exactly that), so it
+// cannot be enabled until that worker is served CORP-clean.
 
 import Vapor
 

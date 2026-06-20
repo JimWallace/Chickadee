@@ -386,24 +386,41 @@ test('probeIframeReadiness: kernel failure surfaces evidence string', async () =
 });
 
 // ----------------------------------------------------------------
-// One-shot kernel recovery — first failure reloads, second gives up
+// Kernel recovery ladder — iframe reload, then full-page reload, then give up
+// (the full-page rung was added to fix "persisted after auto-reload" cases,
+// where the in-place iframe reset re-raced the service-worker control).
 // ----------------------------------------------------------------
 
-test('planKernelFailureResponse: first failure → recover (reload once)', async () => {
+test('planKernelFailureResponse: first failure → reload the iframe', async () => {
   const { planKernelFailureResponse } = await loadHarness();
   const plan = planKernelFailureResponse({
-    recoveryAlreadyAttempted: false,
+    iframeReloadAttempted: false,
+    pageReloadAttempted: false,
     evidence: 'kernel status: dead',
   });
-  assert.equal(plan.action, 'recover');
+  assert.equal(plan.action, 'reload-iframe');
   assert.equal(plan.diagnostic, undefined,
     'a recovery does not post a diagnostic — the editor gets one more chance');
 });
 
-test('planKernelFailureResponse: second failure → fail with annotated diagnostic', async () => {
+test('planKernelFailureResponse: iframe reload failed → reload the whole page', async () => {
   const { planKernelFailureResponse } = await loadHarness();
   const plan = planKernelFailureResponse({
-    recoveryAlreadyAttempted: true,
+    iframeReloadAttempted: true,
+    pageReloadAttempted: false,
+    evidence: 'kernel status: dead',
+  });
+  assert.equal(plan.action, 'reload-page',
+    'a same-document iframe reset cannot re-bootstrap SW control; the full-page reload can');
+  assert.equal(plan.diagnostic, undefined,
+    'the page reload is still a recovery — no diagnostic yet');
+});
+
+test('planKernelFailureResponse: both reloads failed → fail with annotated diagnostic', async () => {
+  const { planKernelFailureResponse } = await loadHarness();
+  const plan = planKernelFailureResponse({
+    iframeReloadAttempted: true,
+    pageReloadAttempted: true,
     evidence: 'kernel status: dead',
   });
   assert.equal(plan.action, 'fail');
@@ -421,10 +438,11 @@ test('planKernelFailureResponse: second failure → fail with annotated diagnost
     'annotates that recovery was attempted so persistent failures are distinguishable');
 });
 
-test('planKernelFailureResponse: second failure with no evidence → safe default message', async () => {
+test('planKernelFailureResponse: exhausted recovery with no evidence → safe default message', async () => {
   const { planKernelFailureResponse } = await loadHarness();
   const plan = planKernelFailureResponse({
-    recoveryAlreadyAttempted: true,
+    iframeReloadAttempted: true,
+    pageReloadAttempted: true,
     evidence: null,
   });
   assert.equal(plan.action, 'fail');
