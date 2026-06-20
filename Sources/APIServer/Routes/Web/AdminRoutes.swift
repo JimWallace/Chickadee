@@ -81,7 +81,7 @@ struct AdminRoutes: RouteCollection {
         let activeCourseIDs = allCourses.filter { !$0.isArchived }.compactMap { $0.id }
         let submissionCounts = try await SubmissionRetentionService.submissionCountsByCourse(
             courseIDs: activeCourseIDs, on: req.db)
-        let bsSyncEnabled = req.application.brightSpaceClient != nil
+        let bsSyncEnabled = req.application.brightSpaceAppCredentials != nil
         // Archived courses move out of Overview and live on the Retention tab.
         let iso = ISO8601DateFormatter()
         let courseRows = allCourses.compactMap { course -> AdminCourseRow? in

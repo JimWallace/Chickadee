@@ -122,8 +122,10 @@ struct ResultRoutes: RouteCollection {
             collectionJSON: json
         )
 
-        // Mark for BrightSpace sync if the assignment is configured for it.
-        if req.application.brightSpaceClient != nil {
+        // Mark for BrightSpace sync if the assignment is configured for it. Gate
+        // on app-level config (not a live global client) so per-instructor-only
+        // deployments still flag results for the per-course sync to pick up.
+        if req.application.brightSpaceAppCredentials != nil {
             if let assignment = try await APIAssignment.query(on: db)
                 .filter(\.$testSetupID == collection.testSetupID)
                 .first(),

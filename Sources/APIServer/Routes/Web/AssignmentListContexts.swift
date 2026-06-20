@@ -80,6 +80,17 @@ struct InstructorBrightspaceContext: Encodable {
     let courseLinked: Bool
     let orgUnitID: String?
     let orgUnitName: String?
+    /// True when the requesting instructor has connected their own LEARN account.
+    let accountConnected: Bool
+    /// The requesting instructor's connected LEARN identity (whoami display).
+    let accountIdentity: String?
+    /// Display name of the identity this course pushes grades as (its designated
+    /// instructor, or the deployment-wide fallback). Nil = no identity connected.
+    let syncIdentityName: String?
+    /// True when the course's designated sync identity is the requesting user.
+    let syncIdentityIsMe: Bool
+    let flashSuccess: String?
+    let flashError: String?
     let assignmentRows: [BrightspaceAssignmentRow]
     let hasAssignments: Bool
     let logRows: [BrightspaceLogRow]

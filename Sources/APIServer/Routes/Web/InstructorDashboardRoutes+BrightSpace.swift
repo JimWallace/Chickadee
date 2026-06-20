@@ -38,8 +38,10 @@ extension InstructorDashboardRoutes {
     /// any grade push fails.
     @Sendable
     func brightspaceTestConnection(req: Request) async throws -> BrightspaceTestResult {
-        guard let client = req.application.brightSpaceClient else {
-            return BrightspaceTestResult(ok: false, message: "BrightSpace is not configured on this server.")
+        let user = try req.auth.require(APIUser.self)
+        guard let client = try await activeCourseBrightSpaceClient(req: req, user: user) else {
+            return BrightspaceTestResult(
+                ok: false, message: "BrightSpace is not connected for this course yet.")
         }
         do {
             let who = try await client.whoami(on: req.application)
@@ -50,6 +52,147 @@ extension InstructorDashboardRoutes {
         }
     }
 
+    /// The BrightSpace client for the active course's designated identity (or
+    /// the deployment-wide fallback). Nil when BrightSpace isn't configured or
+    /// there's no active course.
+    private func activeCourseBrightSpaceClient(
+        req: Request, user: APIUser
+    ) async throws -> BrightSpaceAPIClient? {
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseUUID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseUUID, on: req.db)
+        else { return nil }
+        return try await req.application.brightSpaceClient(forCourse: course)
+    }
+
+    // MARK: - POST /instructor/brightspace/connect
+
+    /// Connects the requesting instructor's own LEARN account: verifies a pasted
+    /// Valence User ID + User Key via `whoami`, stores it against this user, and
+    /// — if the active course has no designated identity yet — makes them it
+    /// (so grades for this course push as their LEARN account). This is the
+    /// per-instructor path for institutions whose Valence Trusted URL is a
+    /// central credential harvester rather than this server's own callback.
+    @Sendable
+    func brightspaceConnectAccount(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        struct ConnectForm: Content {
+            let userID: String
+            let userKey: String
+        }
+        let form = try req.content.decode(ConnectForm.self)
+        let valenceUserID = form.userID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let valenceUserKey = form.userKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !valenceUserID.isEmpty, !valenceUserKey.isEmpty else {
+            req.session.data["bs_flash_error"] = "Both User ID and User Key are required."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        guard let appCreds = req.application.brightSpaceAppCredentials else {
+            req.session.data["bs_flash_error"] = "BrightSpace is not configured on this server."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        guard let userUUID = user.id else {
+            req.session.data["bs_flash_error"] = "Could not resolve your account."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        // Verify the pasted pair against D2L before persisting, so a bad paste
+        // fails loudly here rather than silently breaking grade sync.
+        let config = BrightSpaceSyncConfig(app: appCreds, userID: valenceUserID, userKey: valenceUserKey)
+        let candidate = BrightSpaceAPIClient(config: config)
+        let who: BrightSpaceWhoAmI
+        do {
+            who = try await candidate.whoami(on: req.application)
+        } catch {
+            req.logger.warning(
+                "BrightSpace connect: whoami verification failed: \(error.localizedDescription)")
+            req.session.data["bs_flash_error"] =
+                "Could not verify those credentials against D2L: \(error.localizedDescription)"
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        let identity = who.uniqueName.isEmpty ? who.displayName : "\(who.displayName) (\(who.uniqueName))"
+        try await BrightSpaceCredentialStore.save(
+            valenceUserID: valenceUserID,
+            valenceUserKey: valenceUserKey,
+            identityName: identity,
+            capturedByUserID: userUUID,
+            userID: userUUID,
+            on: req.db
+        )
+        await req.application.brightSpaceClientRegistry.invalidate(userUUID.uuidString)
+
+        // Claim the active course's sync identity if it has none yet (default =
+        // whoever connects; any connected instructor can reassign it below).
+        var claimedCourse = false
+        let courseState = try await req.resolveActiveCourse(for: user)
+        if let courseUUID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseUUID, on: req.db),
+            course.brightspaceSyncUserID == nil
+        {
+            course.brightspaceSyncUserID = userUUID
+            try await course.save(on: req.db)
+            claimedCourse = true
+        }
+
+        req.logger.info("BrightSpace connected by \(user.username) as \(identity)")
+        req.session.data["bs_flash_success"] =
+            claimedCourse
+            ? "Connected as \(identity). This course now syncs grades as your LEARN account."
+            : "Connected as \(identity)."
+        let response = req.redirect(to: "/instructor/brightspace")
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+        return response
+    }
+
+    // MARK: - POST /instructor/brightspace/use-my-identity
+
+    /// Designates the requesting instructor (who must be connected) as the active
+    /// course's grade-sync identity — the "reassign" action that lets a connected
+    /// co-instructor take over pushes for the course.
+    @Sendable
+    func brightspaceUseMyIdentity(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let userUUID = user.id else {
+            req.session.data["bs_flash_error"] = "Could not resolve your account."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        guard try await BrightSpaceCredentialStore.load(userID: userUUID, on: req.db) != nil else {
+            req.session.data["bs_flash_error"] =
+                "Connect your LEARN account first, then set it as this course's sync identity."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseUUID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseUUID, on: req.db)
+        else {
+            req.session.data["bs_flash_error"] = "No active course."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        course.brightspaceSyncUserID = userUUID
+        try await course.save(on: req.db)
+        req.session.data["bs_flash_success"] = "This course now syncs grades as your LEARN account."
+        return req.redirect(to: "/instructor/brightspace")
+    }
+
+    // MARK: - POST /instructor/brightspace/disconnect
+
+    /// Disconnects the requesting instructor's LEARN account (drops the stored
+    /// key + cached client). Any course designating them as its sync identity
+    /// then defers until someone reconnects — no grade is pushed with a stale key.
+    @Sendable
+    func brightspaceDisconnectAccount(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let userUUID = user.id else {
+            req.session.data["bs_flash_error"] = "Could not resolve your account."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        try await BrightSpaceCredentialStore.clear(userID: userUUID, on: req.db)
+        await req.application.brightSpaceClientRegistry.invalidate(userUUID.uuidString)
+        req.session.data["bs_flash_success"] = "Your LEARN account has been disconnected."
+        return req.redirect(to: "/instructor/brightspace")
+    }
+
     // MARK: - GET /instructor/brightspace/grade-objects
 
     /// Lists the active course's D2L grade items for the mapping dropdown.
@@ -58,12 +201,12 @@ extension InstructorDashboardRoutes {
     @Sendable
     func brightspaceGradeObjects(req: Request) async throws -> [BrightSpaceGradeObject] {
         let user = try req.auth.require(APIUser.self)
-        guard let client = req.application.brightSpaceClient else { return [] }
         let courseState = try await req.resolveActiveCourse(for: user)
         guard let courseUUID = courseState.activeCourseUUID,
             let course = try await APICourse.find(courseUUID, on: req.db),
             let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty
         else { return [] }
+        guard let client = try await req.application.brightSpaceClient(forCourse: course) else { return [] }
         do {
             return try await client.listGradeObjects(orgUnitID: orgUnitID, on: req.application)
         } catch {
@@ -154,19 +297,18 @@ extension InstructorDashboardRoutes {
     /// a manual "Sync now" click pushes everything currently pending.  No-op
     /// when BrightSpace isn't configured.
     private func runImmediateBrightspaceSweep(req: Request) async {
-        guard let client = req.application.brightSpaceClient,
-            let config = req.application.brightSpaceSyncConfig
-        else { return }
+        guard let app = req.application.brightSpaceAppCredentials else { return }
+        let debounce = req.application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
         // Pass a future `now` so the debounce cutoff lands ahead of every
         // pending row, forcing an immediate push instead of waiting out the
-        // window.
+        // window. Each course resolves its designated identity (or the fallback).
         _ = try? await sweepBrightSpaceGradeSync(
             on: req.db,
-            client: client,
-            config: config,
+            debounceSecs: debounce,
+            resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
             logger: req.logger,
             application: req.application,
-            now: Date().addingTimeInterval(config.debounceSecs + 1)
+            now: Date().addingTimeInterval(debounce + 1)
         )
     }
 
@@ -179,7 +321,25 @@ extension InstructorDashboardRoutes {
         let courseState = try await req.resolveActiveCourse(for: user)
         let userContext = CurrentUserContext(
             user: user, activeCourse: courseState.active, enrolledCourses: courseState.all)
-        let syncEnabled = req.application.brightSpaceClient != nil
+        // "Enabled" = configured at the app level (URL/App ID/App Key); a user
+        // key may still be awaited via per-instructor connect.
+        let syncEnabled = req.application.brightSpaceAppCredentials != nil
+
+        // One-shot flashes from the connect/disconnect/designate actions.
+        let flashSuccess = req.session.data["bs_flash_success"]
+        let flashError = req.session.data["bs_flash_error"]
+        req.session.data["bs_flash_success"] = nil
+        req.session.data["bs_flash_error"] = nil
+
+        // This instructor's own LEARN connection (course-independent).
+        let myCredential: APIBrightSpaceCredential?
+        if let uid = user.id {
+            myCredential = try await BrightSpaceCredentialStore.load(userID: uid, on: req.db)
+        } else {
+            myCredential = nil
+        }
+        let accountConnected = myCredential != nil
+        let accountIdentity = myCredential?.identityName
 
         guard let courseUUID = courseState.activeCourseUUID,
             let course = try await APICourse.find(courseUUID, on: req.db)
@@ -189,6 +349,9 @@ extension InstructorDashboardRoutes {
                 hasActiveCourse: courseState.active != nil, courseIsArchived: false,
                 brightspaceSyncEnabled: syncEnabled, courseLinked: false,
                 orgUnitID: nil, orgUnitName: nil,
+                accountConnected: accountConnected, accountIdentity: accountIdentity,
+                syncIdentityName: nil, syncIdentityIsMe: false,
+                flashSuccess: flashSuccess, flashError: flashError,
                 assignmentRows: [], hasAssignments: false,
                 logRows: [], hasLog: false,
                 summary: BrightspaceSyncSummary(synced: 0, pending: 0, errored: 0, unmapped: 0),
@@ -198,6 +361,22 @@ extension InstructorDashboardRoutes {
         let orgUnitID = course.brightspaceOrgUnitID
         let courseLinked = !(orgUnitID ?? "").isEmpty
         let fmt = waterlooDateTimeFormatter()
+
+        // The identity this course pushes grades as: its designated instructor
+        // (resolved to a display label), else the deployment-wide fallback.
+        var syncIdentityName: String?
+        let syncIdentityIsMe = course.brightspaceSyncUserID != nil && course.brightspaceSyncUserID == user.id
+        if let syncUserID = course.brightspaceSyncUserID {
+            if let cred = try await BrightSpaceCredentialStore.load(userID: syncUserID, on: req.db) {
+                syncIdentityName = cred.identityName
+            } else {
+                // Designated but disconnected — fall back to the username so the
+                // UI can flag that the identity needs to reconnect.
+                syncIdentityName = try await APIUser.find(syncUserID, on: req.db)?.username
+            }
+        } else if req.application.brightSpaceClient != nil {
+            syncIdentityName = "Deployment default account"
+        }
 
         // Assignments, sorted to match the dashboard ordering.
         let assignments = try await APIAssignment.query(on: req.db)
@@ -255,6 +434,9 @@ extension InstructorDashboardRoutes {
             hasActiveCourse: true, courseIsArchived: course.isArchived,
             brightspaceSyncEnabled: syncEnabled, courseLinked: courseLinked,
             orgUnitID: orgUnitID, orgUnitName: course.brightspaceOrgUnitName,
+            accountConnected: accountConnected, accountIdentity: accountIdentity,
+            syncIdentityName: syncIdentityName, syncIdentityIsMe: syncIdentityIsMe,
+            flashSuccess: flashSuccess, flashError: flashError,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
             logRows: logRows, hasLog: !logRows.isEmpty,
             summary: summary, unmappedStudents: unmapped, hasUnmapped: !unmapped.isEmpty)

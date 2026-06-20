@@ -47,6 +47,29 @@ import XCTVapor
         }
     }
 
+    @Test func brightspacePageRendersConnectionSectionWhenConfigured() async throws {
+        try await withAssignmentRoutesApp { app in
+            // Configure BrightSpace at the app level and give the instructor an
+            // (auto-enrolled) active course, so the configured + with-course
+            // branch renders — exercising the per-instructor connection UI.
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("Your LEARN account"))
+                    // Instructor hasn't connected yet → connect form + "no identity".
+                    #expect(html.contains("Connect your own LEARN account"))
+                    #expect(html.contains("no identity"))
+                })
+        }
+    }
+
     // MARK: - Grade-objects feed
 
     @Test func gradeObjectsEmptyWhenUnconfigured() async throws {
@@ -79,9 +102,10 @@ import XCTVapor
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok)
-                    // The "not configured" message only appears on the ok:false
-                    // path, so it's a JSON-spacing-robust proxy for the failure.
-                    #expect(res.body.string.contains("not configured"))
+                    // With no identity connected for the course, the test reports
+                    // failure — a JSON-spacing-robust proxy for the ok:false path.
+                    #expect(res.body.string.contains("ok\":false"))
+                    #expect(res.body.string.contains("not connected"))
                 })
         }
     }
