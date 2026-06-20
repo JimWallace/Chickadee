@@ -53,8 +53,8 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
     /// the cross-origin-isolation headers (COOP/COEP/CORP).  Required because the
     /// fast path short-circuits the chain BEFORE `NotebookAssetIsolationMiddleware`,
     /// so without this the isolated editor page would load a kernel worker chunk
-    /// that lacks COEP and Chrome would block it.  Gated by
-    /// `NOTEBOOK_CROSS_ORIGIN_ISOLATION` (off by default).
+    /// that lacks COEP and Chrome would block it.  Set unconditionally at the
+    /// bootstrap call site; kept as a parameter as a unit-test seam.
     private let crossOriginIsolation: Bool
 
     init(publicDirectory: String, crossOriginIsolation: Bool = false) {

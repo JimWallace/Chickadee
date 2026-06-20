@@ -22,22 +22,6 @@ struct AppSecurityConfiguration: Sendable {
     /// timeout; zero (or a disabled gate) suppresses the warning so the
     /// client logs out straight at the ceiling.
     let sessionIdleWarningSeconds: TimeInterval
-    /// When true, the student notebook editor page AND every editor asset
-    /// (the `/jupyterlite/*` documents, plus the fast-path-served
-    /// `/jupyterlite/build`, `/jupyterlite/extensions`, `/pyodide`, `/vendor`
-    /// trees) are served with COOP + COEP (`require-corp`) so the editor is
-    /// cross-origin isolated and the Pyodide kernel can use `SharedArrayBuffer`
-    /// for synchronous execution. SAB removes the kernel's dependence on the
-    /// JupyterLite service worker for synchronous stdin/Drive — eliminating both
-    /// the main-thread freeze and the SW-control "Kernel Unknown" race (see
-    /// docs/notebook-editor-kernel-boot.md). Set via
-    /// `NOTEBOOK_CROSS_ORIGIN_ISOLATION`, default false: COEP on the editor page
-    /// has broken the iframe before (#574), so this is gated behind a flag —
-    /// enable on staging, verify the editor boots in each target browser
-    /// (Chromium is covered by the editor-smoke harness; Safari is not), then
-    /// enable in production, with instant rollback by flipping the flag (no
-    /// redeploy).
-    let notebookCrossOriginIsolation: Bool
 
     static let `default` = AppSecurityConfiguration(
         publicBaseURL: nil,
@@ -45,8 +29,7 @@ struct AppSecurityConfiguration: Sendable {
         trustForwardedProto: true,
         sessionCookieSecure: false,
         sessionIdleTimeoutSeconds: 30 * 60,
-        sessionIdleWarningSeconds: 120,
-        notebookCrossOriginIsolation: false
+        sessionIdleWarningSeconds: 120
     )
 
     static func fromEnvironment(authMode: AuthMode) -> Self {
@@ -77,8 +60,7 @@ struct AppSecurityConfiguration: Sendable {
             trustForwardedProto: environmentBool("TRUST_X_FORWARDED_PROTO") ?? true,
             sessionCookieSecure: environmentBool("SESSION_COOKIE_SECURE") ?? (publicBaseIsHTTPS || authMode != .local),
             sessionIdleTimeoutSeconds: idleSeconds,
-            sessionIdleWarningSeconds: warningSeconds,
-            notebookCrossOriginIsolation: environmentBool("NOTEBOOK_CROSS_ORIGIN_ISOLATION") ?? false
+            sessionIdleWarningSeconds: warningSeconds
         )
     }
 }

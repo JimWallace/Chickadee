@@ -11,8 +11,12 @@
 # Env knobs:
 #   CHICKADEE_SERVER_BIN   path to the built server (default: debug build)
 #   PORT                   port to bind (default: 8099)
-#   NOTEBOOK_CROSS_ORIGIN_ISOLATION   forwarded as-is (selftest flips this to
-#                          reproduce the COEP worker-block)
+#   SMOKE_* knobs (SMOKE_SIMULATE_FROZEN / SMOKE_SIMULATE_NO_SYNC /
+#                  SMOKE_EXPECT_ISOLATED)  read by editor-check.mjs, inherited
+#                  from the environment (the selftest sets them per config).
+#
+# The editor is cross-origin isolated unconditionally now, so there is no
+# server-side isolation flag to forward.
 #
 # Exit 0 = editor healthy; non-zero = broken (or boot/setup failure).
 
@@ -43,7 +47,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "run-smoke: booting $BIN on 127.0.0.1:$PORT (isolation=${NOTEBOOK_CROSS_ORIGIN_ISOLATION:-unset})"
+echo "run-smoke: booting $BIN on 127.0.0.1:$PORT"
 # Launch from the repo root: Vapor's DirectoryConfiguration.detect() resolves
 # Public/ (the vended JupyterLite + Pyodide the editor loads) from the working
 # directory, so the server must run with the repo root as its CWD — not this
@@ -56,7 +60,6 @@ echo "run-smoke: booting $BIN on 127.0.0.1:$PORT (isolation=${NOTEBOOK_CROSS_ORI
   SQLITE_PATH="$WORKDIR/smoke.sqlite" \
   MCP_MODE=off \
   LOG_LEVEL=info \
-  NOTEBOOK_CROSS_ORIGIN_ISOLATION="${NOTEBOOK_CROSS_ORIGIN_ISOLATION:-false}" \
     exec "$BIN" serve --hostname 127.0.0.1 --port "$PORT"
 ) >"$LOG" 2>&1 &
 SRV_PID=$!

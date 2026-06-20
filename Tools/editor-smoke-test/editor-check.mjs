@@ -8,15 +8,15 @@
 // of `swift test` / render tests / BrowserRunnerJSTests can check, because
 // they never put a browser in front of the editor.
 //
-// It catches the three editor breakages we shipped blind:
+// It catches the editor breakages we shipped blind:
 //   • the COEP cross-origin-isolation worker-block — when the editor page is
 //     cross-origin isolated but its Pyodide kernel worker script is served
-//     without COEP, Chrome refuses the worker (ERR_BLOCKED_BY_RESPONSE).  This
-//     is now a SUPPORTED config (the fast path isolates the worker chunk too);
-//     run with NOTEBOOK_CROSS_ORIGIN_ISOLATION=true + SMOKE_EXPECT_ISOLATED=1
-//     to assert the SharedArrayBuffer path boots, and the same config is the
-//     live regression guard — if the fix regresses the worker-block returns
-//     and this fails;
+//     without COEP, Chrome refuses the worker (ERR_BLOCKED_BY_RESPONSE).  The
+//     editor is now isolated unconditionally and the asset middlewares stamp
+//     COEP on the worker chunk too; the default config asserts the
+//     SharedArrayBuffer path boots (SMOKE_EXPECT_ISOLATED=1) and is the live
+//     regression guard — if isolation regresses, the worker-block returns and
+//     this fails;
 //   • a dead kernel / "Kernel Unknown" (a cell never executes);
 //   • the "Page Unresponsive" freeze — input()/stdin hangs when the kernel has
 //     neither the service worker nor SharedArrayBuffer for synchronous stdin.
@@ -31,8 +31,11 @@
 //
 // Env:
 //   SMOKE_SIMULATE_FROZEN=1  rewrites jupyter-lite.json in-flight to disable the
-//     service-worker manager, reproducing the #959 freeze config so the selftest
-//     can prove the input() probe actually catches it.
+//     service-worker manager. With isolation on, SAB still carries stdin, so the
+//     editor must STAY healthy — proving the kernel no longer needs the SW.
+//   SMOKE_SIMULATE_NO_SYNC=1  disables the SW AND strips the isolation headers
+//     off the editor document (no SAB either), reproducing the #959 freeze so
+//     the selftest can prove the input() probe actually catches it.
 //   SMOKE_EXPECT_ISOLATED=1|0  asserts the page's crossOriginIsolated state so a
 //     config meant to exercise the SharedArrayBuffer path can't silently pass
 //     via the service-worker fallback (or vice versa).
@@ -44,7 +47,16 @@ const baseURL = (process.argv[2] || process.env.BASE_URL || "http://127.0.0.1:80
   ""
 );
 const replURL = `${baseURL}/jupyterlite/repl/index.html?kernel=python&toolbar=1`;
+// Disable the service worker on the wire (rewrite jupyter-lite.json). With
+// cross-origin isolation on, SAB still carries synchronous stdin, so the editor
+// must stay healthy — this proves the kernel no longer depends on the SW.
 const simulateFrozen = process.env.SMOKE_SIMULATE_FROZEN === "1";
+// The genuine freeze: ALSO strip the isolation headers from the editor document
+// so there is no SharedArrayBuffer either. With neither the SW nor SAB, input()
+// has no synchronous path and the page freezes — the scenario the freeze
+// detector must still catch.
+const simulateNoSync = process.env.SMOKE_SIMULATE_NO_SYNC === "1";
+const disableServiceWorker = simulateFrozen || simulateNoSync;
 // Optional assertion on the page's cross-origin-isolation state, so a config
 // that is SUPPOSED to be isolated (SharedArrayBuffer path) can't quietly pass
 // via the service-worker fallback if isolation silently regresses — and vice
@@ -96,10 +108,9 @@ async function main() {
   });
   const context = await browser.newContext();
 
-  // Freeze simulation: strip the service-worker manager out of the editor
-  // config on the wire, reproducing the #959 "Page Unresponsive" config (no SW;
-  // COEP off ⇒ no SAB either). The trivial cell still runs; input() hangs.
-  if (simulateFrozen) {
+  // Disable the service worker on the wire by stripping its manager extension
+  // out of the editor config. Used by both the frozen and no-sync configs.
+  if (disableServiceWorker) {
     await context.route("**/jupyter-lite.json*", async (route) => {
       const response = await route.fetch();
       let json;
@@ -113,6 +124,22 @@ async function main() {
       disabled.add(SERVICE_WORKER_MANAGER);
       opts.disabledExtensions = [...disabled];
       route.fulfill({ response, body: JSON.stringify(json), contentType: "application/json" });
+    });
+  }
+
+  // No-sync simulation: ALSO strip the isolation headers from the editor
+  // document so the page is not cross-origin isolated => no SharedArrayBuffer.
+  // With the SW disabled too, the kernel has no synchronous stdin path and
+  // input() freezes (the #959 "Page Unresponsive" scenario) — what the freeze
+  // detector must catch. (Subresources may still carry COEP/CORP; those headers
+  // only constrain a loader that is itself isolated, so the page still loads.)
+  if (simulateNoSync) {
+    await context.route("**/repl/index.html*", async (route) => {
+      const response = await route.fetch();
+      const headers = { ...response.headers() };
+      delete headers["cross-origin-embedder-policy"];
+      delete headers["cross-origin-opener-policy"];
+      route.fulfill({ response, headers });
     });
   }
 

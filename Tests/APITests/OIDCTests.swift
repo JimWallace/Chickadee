@@ -74,8 +74,7 @@ import XCTVapor
             trustForwardedProto: true,
             sessionCookieSecure: false,
             sessionIdleTimeoutSeconds: 0,
-            sessionIdleWarningSeconds: 0,
-            notebookCrossOriginIsolation: false
+            sessionIdleWarningSeconds: 0
         )
         return app
     }
