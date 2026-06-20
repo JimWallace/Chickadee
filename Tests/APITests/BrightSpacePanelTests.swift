@@ -70,6 +70,84 @@ import XCTVapor
         }
     }
 
+    @Test func brightspacePageShowsBindFormWhenConnected() async throws {
+        try await withAssignmentRoutesApp { app in
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
+            try await BrightSpaceCredentialStore.save(
+                valenceUserID: "vu", valenceUserKey: "vk", identityName: "Test Instructor",
+                capturedByUserID: instructor.id, userID: instructor.id, on: app.db)
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("D2L org unit ID"))
+                    #expect(html.contains("Link course"))
+                    #expect(html.contains("Connected as"))
+                })
+        }
+    }
+
+    // MARK: - Org-unit binding (instructor self-serve)
+
+    @Test func bindOrgUnitRejectedWhenNotConnected() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/instructor/brightspace/bind-org-unit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    try req.content.encode(["orgUnitID": "1106038"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.headers.first(name: .location) == "/instructor/brightspace")
+                })
+            // Not connected → binding is refused, course untouched.
+            let course = try #require(try await APICourse.find(courseID, on: app.db))
+            #expect(course.brightspaceOrgUnitID == nil)
+            #expect(course.brightspaceSyncUserID == nil)
+        }
+    }
+
+    @Test func bindOrgUnitSetsBindingAndSyncIdentityWhenConnected() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
+            // Simulate a connected LEARN account for the instructor.
+            try await BrightSpaceCredentialStore.save(
+                valenceUserID: "vu", valenceUserKey: "vk", identityName: "Test Instructor",
+                capturedByUserID: instructor.id, userID: instructor.id, on: app.db)
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/instructor/brightspace/bind-org-unit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    try req.content.encode(["orgUnitID": "1106038"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.headers.first(name: .location) == "/instructor/brightspace")
+                })
+            // The binder is recorded as the org unit + the course's sync identity
+            // (verification is skipped here — no app creds → no live D2L call).
+            let course = try #require(try await APICourse.find(courseID, on: app.db))
+            #expect(course.brightspaceOrgUnitID == "1106038")
+            #expect(course.brightspaceSyncUserID == instructor.id)
+        }
+    }
+
     // MARK: - Grade-objects feed
 
     @Test func gradeObjectsEmptyWhenUnconfigured() async throws {

@@ -193,6 +193,79 @@ extension InstructorDashboardRoutes {
         return req.redirect(to: "/instructor/brightspace")
     }
 
+    // MARK: - POST /instructor/brightspace/bind-org-unit
+
+    /// Instructor self-serve org-unit binding: sets (or clears) the active
+    /// course's D2L org unit, makes the binder the course's grade-sync identity
+    /// (the "binder = default" rule), and verifies the org unit with that
+    /// instructor's own LEARN key. Requires the instructor to have connected —
+    /// verification and every subsequent push run as their key, so a key that
+    /// can't see the org unit fails loudly here instead of at grade-push time.
+    @Sendable
+    func brightspaceBindOrgUnit(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        guard let userUUID = user.id else {
+            req.session.data["bs_flash_error"] = "Could not resolve your account."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        struct BindForm: Content { let orgUnitID: String? }
+        let rawOrgUnit = (try req.content.decode(BindForm.self).orgUnitID ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseUUID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseUUID, on: req.db)
+        else {
+            req.session.data["bs_flash_error"] = "No active course."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        // Clearing the binding (blank submit) — leave the sync identity alone.
+        if rawOrgUnit.isEmpty {
+            course.brightspaceOrgUnitID = nil
+            course.brightspaceOrgUnitName = nil
+            try await course.save(on: req.db)
+            req.session.data["bs_flash_success"] = "Org-unit binding cleared."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        // Binding requires a connected key — the org unit is verified with it,
+        // and pushes run as it.
+        guard try await BrightSpaceCredentialStore.load(userID: userUUID, on: req.db) != nil else {
+            req.session.data["bs_flash_error"] =
+                "Connect your LEARN account first — the org unit is verified with your key."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        // The binder becomes the course's sync identity, then we verify the org
+        // unit using their (now course-resolved) key.
+        course.brightspaceOrgUnitID = rawOrgUnit
+        course.brightspaceSyncUserID = userUUID
+        course.brightspaceOrgUnitName = nil
+        try await course.save(on: req.db)
+
+        guard let client = try await req.application.brightSpaceClient(forCourse: course) else {
+            req.session.data["bs_flash_success"] = "Org unit \(rawOrgUnit) saved (unverified)."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        do {
+            if let info = try await client.getOrgUnit(orgUnitID: rawOrgUnit, on: req.application) {
+                course.brightspaceOrgUnitName = info.name
+                try await course.save(on: req.db)
+                req.session.data["bs_flash_success"] =
+                    "Linked to \(info.name) (org unit \(rawOrgUnit)); this course syncs grades as your LEARN account."
+            } else {
+                req.session.data["bs_flash_error"] =
+                    "Saved org unit \(rawOrgUnit), but D2L reports no such org unit (or your key can't see it) — check the ID."
+            }
+        } catch {
+            req.logger.warning("BrightSpace org-unit verification failed for \(rawOrgUnit): \(error)")
+            req.session.data["bs_flash_error"] =
+                "Saved org unit \(rawOrgUnit), but couldn't verify it in D2L: \(error.localizedDescription)"
+        }
+        return req.redirect(to: "/instructor/brightspace")
+    }
+
     // MARK: - GET /instructor/brightspace/grade-objects
 
     /// Lists the active course's D2L grade items for the mapping dropdown.
