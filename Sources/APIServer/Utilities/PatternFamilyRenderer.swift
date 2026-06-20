@@ -30,6 +30,11 @@ struct GeneratedScript: Equatable {
     let displayName: String
     let caseKey: String
     let familyID: String
+    /// The resolved per-test execution time limit (seconds) for this generated
+    /// entry, or nil to inherit the assignment-wide default. For a case it is
+    /// `case.resolvedTimeLimit(defaults:)`; for the existence guard it is the
+    /// family default. A non-positive resolved value is normalised to nil.
+    let timeLimitSeconds: Int?
 }
 
 /// Top-level entry point.  Returns one `GeneratedScript` per **enabled** case
@@ -151,7 +156,11 @@ func existenceGuard(
         points: 0,
         displayName: label,
         caseKey: patternExistenceGuardCaseKey,
-        familyID: family.id
+        familyID: family.id,
+        // The guard applies to all the family's generated entries, so it
+        // inherits the family-level limit (the cases inherit it too unless
+        // they set their own).
+        timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
     )
 }
 
@@ -206,6 +215,16 @@ private func renderCase(
         points: c.resolvedPoints(defaults: family.defaults),
         displayName: c.label,
         caseKey: c.key,
-        familyID: family.id
+        familyID: family.id,
+        timeLimitSeconds: normalizedGeneratedTimeLimit(c.resolvedTimeLimit(defaults: family.defaults))
     )
+}
+
+/// Maps a resolved generated-entry time limit to the value persisted on the
+/// manifest: a positive value passes through, while nil / 0 / negative collapse
+/// to nil ("no override — inherit the assignment-wide default"). Used at every
+/// generated `GeneratedScript` construction so a 0/negative never reaches the
+/// manifest.
+func normalizedGeneratedTimeLimit(_ value: Int?) -> Int? {
+    (value ?? 0) > 0 ? value : nil
 }

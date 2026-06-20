@@ -60,7 +60,11 @@ func renderNotebookCheck(_ check: NotebookCheck) -> GeneratedCheck {
         points: check.points,
         displayName: displayName,
         caseKey: "",  // unused for checks; one file per check
-        familyID: ""  // unused for checks; the route field is generatedByCheck
+        familyID: "",  // unused for checks; the route field is generatedByCheck
+        // The check's per-test limit (0/negative → nil = inherit the default).
+        // The apply path re-derives this from `check.timeLimitSeconds` when it
+        // builds the entry; carrying it here keeps GeneratedScript self-describing.
+        timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds)
     )
     return GeneratedCheck(script: script, sidecars: sidecars)
 }

@@ -648,7 +648,9 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     points: guardScript.points,
                     displayName: guardScript.displayName,
                     generatedBy: guardScript.familyID,
-                    sectionID: familySection
+                    sectionID: familySection,
+                    // The guard inherits the family-level time limit.
+                    timeLimitSeconds: guardScript.timeLimitSeconds
                 ))
         }
         for generated in renderPatternFamily(
@@ -674,12 +676,9 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                 guard seen.insert(d).inserted else { continue }
                 combined.append(d)
             }
-            // TODO(per-test timeout): generated pattern-family entries inherit
-            // the assignment-wide default for now. A family-level (or per-case)
-            // override would thread through here as
-            // `timeLimitSeconds: family.timeLimitSeconds` (and a per-case
-            // value from `generated`), once those fields are added to
-            // `PatternFamily` / `PatternCase`.
+            // Per-test time limit is resolved by the renderer
+            // (`case.resolvedTimeLimit(defaults:)`, then normalised so a
+            // 0/negative becomes nil) and carried on `generated`.
             newConfigured.append(
                 ConfiguredSuiteEntry(
                     script: generated.filename,
@@ -689,7 +688,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     points: generated.points,
                     displayName: generated.displayName,
                     generatedBy: generated.familyID,
-                    sectionID: familySection
+                    sectionID: familySection,
+                    timeLimitSeconds: generated.timeLimitSeconds
                 ))
         }
     }
@@ -725,10 +725,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
             emittedCheckIDs.insert(cid)
             order += 1
             let inherited = expandDeps(check.dependsOn)
-            // TODO(per-test timeout): generated notebook-check entries inherit
-            // the assignment-wide default for now. A check-level override would
-            // thread through here as `timeLimitSeconds: check.timeLimitSeconds`
-            // once that field is added to `NotebookCheck`.
+            // Per-test time limit comes from the check spec (0/negative → nil,
+            // i.e. inherit the assignment-wide default).
             newConfigured.append(
                 ConfiguredSuiteEntry(
                     script: generated.filename,
@@ -739,7 +737,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     displayName: generated.displayName,
                     generatedBy: nil,
                     generatedByCheck: check.id,
-                    sectionID: checkSection
+                    sectionID: checkSection,
+                    timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds)
                 ))
         }
     }
@@ -768,7 +767,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                 displayName: generated.displayName,
                 generatedBy: nil,
                 generatedByCheck: check.id,
-                sectionID: nil
+                sectionID: nil,
+                timeLimitSeconds: normalizedGeneratedTimeLimit(check.timeLimitSeconds)
             ))
     }
 

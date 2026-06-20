@@ -171,8 +171,11 @@ enum MCPServerInstructions {
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
-        set_time_limit (the assignment's default per-test timeout in seconds; a hand-written script \
-        can override it per-test via author_script / update_suite timeLimitSeconds), \
+        set_time_limit (the assignment's default per-test timeout in seconds; a per-test \
+        timeLimitSeconds override, 1–600s, can be set on a hand-written script via author_script / \
+        update_suite, on a pattern family via create_pattern_family / update_pattern_family \
+        (family-wide defaultTimeLimitSeconds and/or per-case timeLimitSeconds), and on a notebook \
+        check via author_notebook_check — 0 clears an override), \
         update_suite (script metadata). To add or change a GRADED test, prefer Chickadee's native \
         check types — update_pattern_family (edit a family's defaults/cases) / create_pattern_family \
         (add a new family) and author_notebook_check (create/replace a notebook check) — over a \
