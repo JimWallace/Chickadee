@@ -8,6 +8,11 @@ name: Editor smoke test
 # blocks the kernel worker (the COEP cross-origin-isolation attempt) or leaves a
 # dead kernel ("Kernel Unknown") passes CI and only fails in front of a student.
 #
+# Runs the selftest, which exercises BOTH editor sync paths against one build —
+# the default service-worker path AND the cross-origin-isolation /
+# SharedArrayBuffer path — plus a known-broken (frozen) config to prove the
+# detector is discriminating. See Tools/editor-smoke-test/selftest.sh.
+#
 # Runs two ways:
 #   • nightly (schedule) — always-on insurance across the whole editor stack;
 #   • per-PR but PATH-FILTERED — only when a notebook/editor/middleware/asset
@@ -101,5 +106,13 @@ jobs:
           # --with-deps installs the browser's system libraries via apt.
           npx playwright install --with-deps chromium
 
-      - name: Run editor smoke test
-        run: Tools/editor-smoke-test/run-smoke.sh
+      # selftest.sh drives the editor THREE ways against this one build:
+      #   • default (service-worker path) — must PASS, crossOriginIsolated=false;
+      #   • NOTEBOOK_CROSS_ORIGIN_ISOLATION=true (SharedArrayBuffer path) — must
+      #     PASS, crossOriginIsolated=true (the fast-path-isolation fix; this is
+      #     also the live guard against the COEP kernel-worker block regressing);
+      #   • SMOKE_SIMULATE_FROZEN=1 — must FAIL (proves the freeze detector works).
+      # Using selftest (not the single-config run-smoke) means CI guards BOTH
+      # editor sync paths, not just the default one.
+      - name: Run editor smoke selftest (both sync paths + freeze detector)
+        run: Tools/editor-smoke-test/selftest.sh
