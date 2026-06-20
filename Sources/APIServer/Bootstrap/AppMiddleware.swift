@@ -48,6 +48,11 @@ import Vapor
 func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     let securityConfiguration = appConfig.security
     let scanModeConfiguration = appConfig.scanMode
+    // Cross-origin isolation for the notebook editor (NOTEBOOK_CROSS_ORIGIN_ISOLATION,
+    // default off).  Read once here because it is needed in two places in the
+    // chain: the fast path (which serves — and must isolate — the editor asset
+    // trees) and the slow-path asset / page middlewares below.
+    let isolateNotebook = securityConfiguration.notebookCrossOriginIsolation
 
     // MARK: - Storage seeding for auth/security configs
 
@@ -94,8 +99,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     }
     // Vendored editor assets short-circuit here, before any session work.
     // See EditorAssetFastPathMiddleware for the whitelist + cache policy.
+    // It serves the editor asset trees (/jupyterlite/build, /jupyterlite/extensions,
+    // /pyodide, /vendor) — including the Pyodide kernel WORKER chunk — and returns
+    // WITHOUT calling next, so the slow-path NotebookAssetIsolationMiddleware never
+    // sees them.  It must therefore carry the cross-origin-isolation headers itself
+    // when the flag is on, or the isolated editor page spawns a worker whose script
+    // lacks COEP and Chrome blocks it (ERR_BLOCKED_BY_RESPONSE).
     app.middleware.use(
-        EditorAssetFastPathMiddleware(publicDirectory: app.directory.publicDirectory))
+        EditorAssetFastPathMiddleware(
+            publicDirectory: app.directory.publicDirectory,
+            crossOriginIsolation: isolateNotebook))
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
@@ -152,10 +165,11 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // dynamic notebook page, while NotebookAssetIsolationMiddleware (before it)
     // is needed to decorate the static /jupyterlite/* responses. By default the
     // JupyterLite assets get no COEP (long-standing behaviour). Cross-origin
-    // isolation for the editor — the fix for the Pyodide main-thread freeze when
-    // there's no SharedArrayBuffer and the service-worker sync fallback is
-    // disabled — is opt-in via NOTEBOOK_CROSS_ORIGIN_ISOLATION (see
-    // COEPMiddleware / NotebookAssetIsolationMiddleware).
+    // isolation for the editor — which gives the Pyodide kernel SharedArrayBuffer
+    // so it no longer depends on the service worker for synchronous stdin/Drive
+    // (fixing both the main-thread freeze and the SW-control "Kernel Unknown"
+    // race) — is opt-in via NOTEBOOK_CROSS_ORIGIN_ISOLATION (see COEPMiddleware /
+    // NotebookAssetIsolationMiddleware / EditorAssetFastPathMiddleware).
     // Registered just OUTSIDE FileMiddleware so it can set immutable cache +
     // application/wasm headers on the content-hashed wasm runner served from
     // Public/runner-wasm/ (FileMiddleware short-circuits, so a middleware after
@@ -167,11 +181,13 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.middleware.use(StaticAssetCacheMiddleware())
     app.middleware.use(RunnerWasmCacheMiddleware())
     // Cross-origin isolation for the notebook editor (gated by
-    // NOTEBOOK_CROSS_ORIGIN_ISOLATION, default off). The asset middleware runs
-    // BEFORE FileMiddleware so it can decorate the short-circuited /jupyterlite/*
-    // static responses; COEPMiddleware (after FileMiddleware) covers the dynamic
-    // notebook page itself. Both no-op when the flag is off.
-    let isolateNotebook = securityConfiguration.notebookCrossOriginIsolation
+    // NOTEBOOK_CROSS_ORIGIN_ISOLATION, default off). This middleware runs BEFORE
+    // FileMiddleware so it can decorate the SLOW-PATH /jupyterlite/* responses
+    // FileMiddleware serves (the editor HTML documents — repl/lab/notebooks
+    // index.html — which are NOT on the fast path); the fast path above isolates
+    // the vendored asset trees it serves itself, and COEPMiddleware (after
+    // FileMiddleware) covers the dynamic notebook page. All three no-op when the
+    // flag is off.
     app.middleware.use(NotebookAssetIsolationMiddleware(enabled: isolateNotebook))
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware(isolateNotebook: isolateNotebook))

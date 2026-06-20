@@ -49,8 +49,17 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
 
     private let publicDirectory: String
 
-    init(publicDirectory: String) {
+    /// When true, the editor asset trees this middleware serves are stamped with
+    /// the cross-origin-isolation headers (COOP/COEP/CORP).  Required because the
+    /// fast path short-circuits the chain BEFORE `NotebookAssetIsolationMiddleware`,
+    /// so without this the isolated editor page would load a kernel worker chunk
+    /// that lacks COEP and Chrome would block it.  Gated by
+    /// `NOTEBOOK_CROSS_ORIGIN_ISOLATION` (off by default).
+    private let crossOriginIsolation: Bool
+
+    init(publicDirectory: String, crossOriginIsolation: Bool = false) {
         self.publicDirectory = publicDirectory.hasSuffix("/") ? publicDirectory : publicDirectory + "/"
+        self.crossOriginIsolation = crossOriginIsolation
     }
 
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
@@ -74,6 +83,11 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
         if Self.isContentHashedBundleAsset(path: path) {
             response.headers.replaceOrAdd(
                 name: .cacheControl, value: "public, max-age=31536000, immutable")
+        }
+        // The slow-path NotebookAssetIsolationMiddleware never sees these
+        // short-circuited responses, so the fast path must isolate them itself.
+        if crossOriginIsolation {
+            response.setCrossOriginIsolationHeaders()
         }
         return response
     }

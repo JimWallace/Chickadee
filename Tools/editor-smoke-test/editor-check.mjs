@@ -9,8 +9,14 @@
 // they never put a browser in front of the editor.
 //
 // It catches the three editor breakages we shipped blind:
-//   • the COEP cross-origin-isolation attempt that BLOCKED the Pyodide kernel
-//     worker (the page loaded a kernel only to refuse its worker script);
+//   • the COEP cross-origin-isolation worker-block — when the editor page is
+//     cross-origin isolated but its Pyodide kernel worker script is served
+//     without COEP, Chrome refuses the worker (ERR_BLOCKED_BY_RESPONSE).  This
+//     is now a SUPPORTED config (the fast path isolates the worker chunk too);
+//     run with NOTEBOOK_CROSS_ORIGIN_ISOLATION=true + SMOKE_EXPECT_ISOLATED=1
+//     to assert the SharedArrayBuffer path boots, and the same config is the
+//     live regression guard — if the fix regresses the worker-block returns
+//     and this fails;
 //   • a dead kernel / "Kernel Unknown" (a cell never executes);
 //   • the "Page Unresponsive" freeze — input()/stdin hangs when the kernel has
 //     neither the service worker nor SharedArrayBuffer for synchronous stdin.
@@ -23,9 +29,13 @@
 // Usage:   node editor-check.mjs <baseURL>
 // Exit 0 = editor healthy; exit 1 = editor broken (details printed).
 //
-// Env: SMOKE_SIMULATE_FROZEN=1 rewrites jupyter-lite.json in-flight to disable
-// the service-worker manager, reproducing the #959 freeze config so the
-// selftest can prove the input() probe actually catches it.
+// Env:
+//   SMOKE_SIMULATE_FROZEN=1  rewrites jupyter-lite.json in-flight to disable the
+//     service-worker manager, reproducing the #959 freeze config so the selftest
+//     can prove the input() probe actually catches it.
+//   SMOKE_EXPECT_ISOLATED=1|0  asserts the page's crossOriginIsolated state so a
+//     config meant to exercise the SharedArrayBuffer path can't silently pass
+//     via the service-worker fallback (or vice versa).
 
 import { chromium } from "playwright";
 
@@ -35,6 +45,12 @@ const baseURL = (process.argv[2] || process.env.BASE_URL || "http://127.0.0.1:80
 );
 const replURL = `${baseURL}/jupyterlite/repl/index.html?kernel=python&toolbar=1`;
 const simulateFrozen = process.env.SMOKE_SIMULATE_FROZEN === "1";
+// Optional assertion on the page's cross-origin-isolation state, so a config
+// that is SUPPOSED to be isolated (SharedArrayBuffer path) can't quietly pass
+// via the service-worker fallback if isolation silently regresses — and vice
+// versa.  "1" ⇒ require crossOriginIsolated; "0" ⇒ require NOT isolated;
+// unset ⇒ don't assert (just report).
+const expectIsolated = process.env.SMOKE_EXPECT_ISOLATED;
 
 const SERVICE_WORKER_MANAGER = "@jupyterlite/application-extension:service-worker-manager";
 
@@ -163,6 +179,18 @@ async function main() {
 
     const isolated = await page.evaluate(() => globalThis.crossOriginIsolated === true);
     console.log(`crossOriginIsolated = ${isolated}`);
+    if (expectIsolated === "1" && !isolated) {
+      return await fail(
+        "expected cross-origin isolation (crossOriginIsolated=true) but the page was NOT isolated — " +
+          "the SharedArrayBuffer path is not active (isolation headers missing?)"
+      );
+    }
+    if (expectIsolated === "0" && isolated) {
+      return await fail(
+        "expected NO cross-origin isolation but the page WAS isolated — " +
+          "isolation headers applied unexpectedly"
+      );
+    }
 
     // (1) Liveness: a trivial cell executes. Execution submitted before the
     // kernel finishes booting is queued and runs once it is ready, so we don't
