@@ -403,15 +403,18 @@
             }
 
             // Shell loaded.  Phase 2 fires ONLY on positive evidence the
-            // kernel has hit a known failure state.  The first time we see
-            // it we reload the editor once (recovery); only a SECOND failure
-            // surfaces the fallback UI + diagnostic.
+            // kernel has hit a known failure state.  We escalate through two
+            // reload rungs (iframe, then whole page) before surfacing the
+            // fallback UI + diagnostic — see planKernelFailureResponse.  Every
+            // reload first waits for the service worker to settle, so we don't
+            // just re-create the SW-control race that caused the failure.
             if (probe.kernelInFailureState) {
                 const plan = planKernelFailureResponse({
-                    recoveryAlreadyAttempted: kernelRecoveryAttempted,
-                    evidence: probe.kernelEvidence
+                    iframeReloadAttempted: kernelRecoveryAttempted,
+                    pageReloadAttempted:   kernelPageReloadUsed(),
+                    evidence:              probe.kernelEvidence
                 });
-                if (plan.action === 'recover') {
+                if (plan.action === 'reload-iframe') {
                     kernelRecoveryAttempted = true;
                     recovering = true;
                     setStatus('loading',
@@ -422,13 +425,33 @@
                     // IndexedDB on boot and the reseed preservation logic keeps
                     // their work, so this reboots the kernel without discarding
                     // edits.  `forcedEditorResetAt` keeps the locked-path
-                    // enforcer from fighting our navigation.
+                    // enforcer from fighting our navigation.  Wait for the SW to
+                    // settle first so the fresh boot doesn't re-race it.
                     forcedEditorResetAt = Date.now();
-                    try { frame.src = editorURL; } catch (_) { /* retry on next tick */ }
-                    // Re-arm both phases for the fresh boot.
-                    startedAt     = Date.now();
-                    shellLoadedAt = null;
-                    setTimeout(tick, 2000);
+                    whenServiceWorkerActive(5000).then(() => {
+                        if (cancelled) return;
+                        try { frame.src = editorURL; } catch (_) { /* retry on next tick */ }
+                        // Re-arm both phases for the fresh boot.
+                        startedAt     = Date.now();
+                        shellLoadedAt = null;
+                        setTimeout(tick, 2000);
+                    });
+                    return;
+                }
+                if (plan.action === 'reload-page') {
+                    // The iframe reload re-raced; a full-tab reload is the only
+                    // thing that re-bootstraps the SW→client control from
+                    // scratch.  Done at most once per tab session (guarded) so
+                    // it can never loop.  Stop this watchdog; the reloaded page
+                    // arms a fresh one.
+                    markKernelPageReloadUsed();
+                    recovering = true;
+                    cancelled  = true;
+                    setStatus('loading',
+                        'The notebook kernel didn’t start — reloading the page…');
+                    whenServiceWorkerActive(5000).then(() => {
+                        try { window.location.reload(); } catch (_) { /* nothing else to try */ }
+                    });
                     return;
                 }
                 cancelled = true;
@@ -633,18 +656,33 @@
     // badge).  Pure so it's unit-testable; the caller performs the reload /
     // showFailure side effects.
     //
-    //   * First failure  → 'recover': reload the editor once.  A dead/unknown
-    //                      kernel is usually a transient cold-boot race that a
-    //                      fresh load clears, so we retry before giving up.
-    //   * Second failure → 'fail': the reload didn't help.  Surface the upload
+    // The Pyodide kernel's synchronous-execution path (Drive + stdin) is served
+    // by the JupyterLite service worker, so a kernel that boots while the SW is
+    // registered-but-not-yet-*controlling* lands in "Kernel Unknown".  That race
+    // is usually transient, so we escalate through two reload rungs before
+    // giving up:
+    //
+    //   * First failure  → 'reload-iframe': reload just the editor iframe.  The
+    //                      cheapest recovery; clears most cold-boot races.
+    //   * Second failure → 'reload-page': the iframe reload re-raced.  Reload
+    //                      the whole tab once — only a full document load
+    //                      re-bootstraps the SW→client control relationship from
+    //                      scratch (an in-place iframe `src` reset cannot), which
+    //                      is what was missing when failures "persisted after
+    //                      auto-reload".  Guarded by the caller (one per tab
+    //                      session) so it can't loop.
+    //   * Third failure  → 'fail': neither reload helped.  Surface the upload
     //                      fallback and report the diagnostic, with the message
     //                      annotated so telemetry can distinguish a persistent
     //                      kernel failure from a first-try one.  The kind /
     //                      failedChecks / source are unchanged so the admin
     //                      browser-diagnostics breakdown keeps classifying it.
-    function planKernelFailureResponse({ recoveryAlreadyAttempted, evidence }) {
-        if (!recoveryAlreadyAttempted) {
-            return { action: 'recover' };
+    function planKernelFailureResponse({ iframeReloadAttempted, pageReloadAttempted, evidence }) {
+        if (!iframeReloadAttempted) {
+            return { action: 'reload-iframe' };
+        }
+        if (!pageReloadAttempted) {
+            return { action: 'reload-page' };
         }
         const reason = evidence || 'kernel in failure state';
         return {
@@ -656,6 +694,61 @@
                 message:      reason + ' (persisted after auto-reload)'
             }
         };
+    }
+
+    // Resolves once the service worker has activated (and ideally is controlling
+    // the page), or after `timeoutMs`.  The kernel's sync path is served by the
+    // JupyterLite service worker, so reloading *before* the SW has settled just
+    // re-creates the "Kernel Unknown" race — waiting first is what turns a
+    // re-racing reload into a real recovery.  Best-effort and never rejects: a
+    // missing/blocked SW resolves false after the timeout so recovery still
+    // proceeds (the reload itself may yet help).  Note the iframe's kernel SW is
+    // a different scope from this page, so `controller` here is a proxy for "the
+    // SW subsystem has settled", not a guarantee of control — hence the bound.
+    function whenServiceWorkerActive(timeoutMs) {
+        return new Promise((resolve) => {
+            try {
+                if (!('serviceWorker' in navigator)) { resolve(false); return; }
+                if (navigator.serviceWorker.controller) { resolve(true); return; }
+                let settled = false;
+                const finish = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    try {
+                        navigator.serviceWorker.removeEventListener('controllerchange', onController);
+                    } catch (_) { /* ignore */ }
+                    resolve(value);
+                };
+                const onController = () => finish(true);
+                try {
+                    navigator.serviceWorker.addEventListener('controllerchange', onController);
+                } catch (_) { /* ignore */ }
+                navigator.serviceWorker.ready.then(() => {
+                    if (navigator.serviceWorker.controller) finish(true);
+                }).catch(() => { /* fall through to timeout */ });
+                setTimeout(() => {
+                    finish(!!(navigator.serviceWorker && navigator.serviceWorker.controller));
+                }, timeoutMs);
+            } catch (_) {
+                resolve(false);
+            }
+        });
+    }
+
+    // One full-page reload per (tab session, setup): the flag survives the
+    // reload (sessionStorage is per-tab), so the escalation ladder can't loop
+    // into a reload storm.  A fresh tab starts with a clean flag, so a later
+    // genuine retry still gets the full ladder.
+    function kernelPageReloadStorageKey() {
+        return 'chickadee:kernel-page-reload:' + setupID;
+    }
+    function kernelPageReloadUsed() {
+        try { return sessionStorage.getItem(kernelPageReloadStorageKey()) === '1'; }
+        catch (_) { return false; }
+    }
+    function markKernelPageReloadUsed() {
+        try { sessionStorage.setItem(kernelPageReloadStorageKey(), '1'); }
+        catch (_) { /* sessionStorage unavailable — page reload simply won't be re-gated */ }
     }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
