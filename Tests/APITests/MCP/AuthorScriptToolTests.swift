@@ -76,12 +76,14 @@ import Vapor
         _ assignment: APIAssignment, filename: String, content: String? = nil,
         sourceUrl: String? = nil,
         tier: String? = nil, points: Int? = nil, displayName: String? = nil,
-        dependsOn: [String]? = nil, sectionID: String? = nil
+        dependsOn: [String]? = nil, sectionID: String? = nil,
+        timeLimitSeconds: Int? = nil
     ) -> AuthorScriptTool.Input {
         AuthorScriptTool.Input(
             assignmentPublicID: assignment.publicID, filename: filename, content: content,
             sourceUrl: sourceUrl,
-            tier: tier, points: points, displayName: displayName, dependsOn: dependsOn, sectionID: sectionID)
+            tier: tier, points: points, displayName: displayName, dependsOn: dependsOn,
+            sectionID: sectionID, timeLimitSeconds: timeLimitSeconds)
     }
 
     @Test func createsNewTestScriptWithMetadata() async throws {
@@ -109,6 +111,38 @@ import Vapor
             // The body landed in the zip verbatim.
             let body = try #require(readScriptFromZip(zipPath: reloaded.zipPath, filename: "secrettest_marker.py"))
             #expect(body.contains("print('ok')"))
+        }
+    }
+
+    @Test func createsTestScriptWithPerTestTimeLimitOverride() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await AuthorScriptTool().execute(
+                input(
+                    assignment, filename: "secrettest_slow.py",
+                    content: "#!/usr/bin/env python3\nprint('ok')\n",
+                    tier: "secret", timeLimitSeconds: 45),
+                context(app))
+            let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let items = buildSuitePayload(fromManifest: reloaded.manifest, zipPath: reloaded.zipPath).items
+            let row = try #require(items.first { $0.script?.script == "secrettest_slow.py" })
+            #expect(row.script?.timeLimitSeconds == 45)
+        }
+    }
+
+    @Test func rejectsOutOfRangePerTestTimeLimit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await AuthorScriptTool().execute(
+                    input(
+                        assignment, filename: "secrettest_huge.py",
+                        content: "#!/usr/bin/env python3\nprint('ok')\n",
+                        tier: "secret", timeLimitSeconds: 9999),
+                    context(app))
+            }
         }
     }
 

@@ -599,7 +599,18 @@ extension WorkerDaemon {
                 atomically: true, encoding: .utf8)
         }
 
-        let executor = NativeScriptExecutor(runner: runner, workDir: testSetupDir, env: scriptEnv)
+        // Per-test time-limit overrides resolved in the executor (the shared
+        // `executeSuites` loop still receives the assignment default below as
+        // the fallback). Only entries carrying an explicit positive override
+        // are mapped; everything else inherits `manifest.timeLimitSeconds`.
+        var timeLimitOverrides: [String: Int] = [:]
+        for entry in manifest.testSuites {
+            if let limit = entry.timeLimitSeconds, limit > 0 {
+                timeLimitOverrides[entry.script] = limit
+            }
+        }
+        let executor = NativeScriptExecutor(
+            runner: runner, workDir: testSetupDir, env: scriptEnv, overrides: timeLimitOverrides)
         let items = manifest.testSuites.map { entry in
             SuiteItem(
                 script: entry.script,

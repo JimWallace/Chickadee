@@ -161,7 +161,8 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
                         points: entry.points,
                         displayName: entry.name,
                         dependsOn: collapseDeps(entry.dependsOn),
-                        hint: entry.hint
+                        hint: entry.hint,
+                        timeLimitSeconds: entry.timeLimitSeconds
                     ),
                     family: nil,
                     check: nil,

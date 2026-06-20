@@ -47,12 +47,14 @@ struct ConfiguredSuiteEntry {
     let generatedByCheck: String?  // notebook check id; nil otherwise
     let sectionID: String?  // id into TestProperties.sections; nil = ungrouped
     let hint: String?  // instructor hint for raw scripts; nil for generated/no-hint
+    let timeLimitSeconds: Int?  // per-test override; nil = inherit assignment default
 
     init(
         script: String, tier: String, order: Int,
         dependsOn: [String], points: Int, displayName: String?,
         generatedBy: String? = nil, generatedByCheck: String? = nil,
-        sectionID: String? = nil, hint: String? = nil
+        sectionID: String? = nil, hint: String? = nil,
+        timeLimitSeconds: Int? = nil
     ) {
         self.script = script
         self.tier = tier
@@ -64,6 +66,7 @@ struct ConfiguredSuiteEntry {
         self.generatedByCheck = generatedByCheck
         self.sectionID = sectionID
         self.hint = hint
+        self.timeLimitSeconds = timeLimitSeconds
     }
 }
 

@@ -62,6 +62,38 @@ import Vapor
         }
     }
 
+    /// Manifest with a non-default assignment time limit and one per-script
+    /// override; the other script inherits the default (no override surfaced).
+    private let timeLimitManifest = """
+        {"schemaVersion":1,"testSuites":[\
+        {"tier":"public","script":"slow.sh","points":1,"timeLimitSeconds":45},\
+        {"tier":"public","script":"fast.sh","points":1}\
+        ],"timeLimitSeconds":20}
+        """
+
+    @Test func surfacesDefaultAndPerScriptTimeLimit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_tl", courseID: courseID, manifest: timeLimitManifest)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_tl", courseID: courseID, title: "Lab")
+
+            let output = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), context(app))
+
+            // Assignment-wide default is reported at the top level.
+            #expect(output.timeLimitSeconds == 20)
+            let slow = try #require(output.items.first { $0.name == "slow.sh" })
+            #expect(slow.timeLimitSeconds == 45)
+            let fast = try #require(output.items.first { $0.name == "fast.sh" })
+            #expect(fast.timeLimitSeconds == nil, "No override surfaces as nil (inherits the default)")
+        }
+    }
+
     /// Manifest with a section carrying its own variables + expressions.
     private let sectionInputsManifest = #"""
         {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test_a.sh","points":1,"sectionID":"sec1"}],"sections":[{"id":"sec1","name":"Part A","variables":[{"name":"cap","value":7}],"expressions":[{"name":"pick","expression":"seed % 4"}]}],"timeLimitSeconds":10}

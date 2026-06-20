@@ -113,6 +113,61 @@ import Vapor
         }
     }
 
+    @Test func setsPerTestTimeLimitOverride() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await UpdateSuiteTool().execute(
+                UpdateSuiteTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 30)]),
+                context(app))
+            let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            let a = try #require(items.first { $0.script?.script == "test_a.sh" })
+            #expect(a.script?.timeLimitSeconds == 30)
+            // The untouched script keeps no override (inherits the default).
+            let b = try #require(items.first { $0.script?.script == "test_b.sh" })
+            #expect(b.script?.timeLimitSeconds == nil)
+        }
+    }
+
+    @Test func clearsPerTestTimeLimitWithZero() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // Set, then clear with 0.
+            _ = try await UpdateSuiteTool().execute(
+                UpdateSuiteTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 30)]),
+                context(app))
+            _ = try await UpdateSuiteTool().execute(
+                UpdateSuiteTool.Input(
+                    assignmentPublicID: assignment.publicID,
+                    edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 0)]),
+                context(app))
+            let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let items = buildSuitePayload(fromManifest: reloaded.manifest).items
+            let a = try #require(items.first { $0.script?.script == "test_a.sh" })
+            #expect(a.script?.timeLimitSeconds == nil)
+        }
+    }
+
+    @Test func rejectsOutOfRangePerTestTimeLimit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateSuiteTool().execute(
+                    UpdateSuiteTool.Input(
+                        assignmentPublicID: assignment.publicID,
+                        edits: [UpdateSuiteTool.ScriptEdit(script: "test_a.sh", timeLimitSeconds: 1000)]),
+                    context(app))
+            }
+        }
+    }
+
     @Test func closesOpenAssignmentOnEdit() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

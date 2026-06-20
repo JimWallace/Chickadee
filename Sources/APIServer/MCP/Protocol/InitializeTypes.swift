@@ -171,6 +171,8 @@ enum MCPServerInstructions {
         preview_personalization to see the name→value map and starter-notebook placeholder audit a \
         student (or a given seed) would get.
         3. Edit: update_assignment (metadata), set_grading_mode (worker vs browser grading), \
+        set_time_limit (the assignment's default per-test timeout in seconds; a hand-written script \
+        can override it per-test via author_script / update_suite timeLimitSeconds), \
         update_suite (script metadata). To add or change a GRADED test, prefer Chickadee's native \
         check types — update_pattern_family (edit a family's defaults/cases) / create_pattern_family \
         (add a new family) and author_notebook_check (create/replace a notebook check) — over a \
@@ -226,8 +228,8 @@ enum MCPServerInstructions {
         you can see which check failed and why before fixing the suite or solution. It is \
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
-        Metadata-only edits (update_assignment, set_grading_mode, update_achievements, the \
-        section-organization tools) never trigger a regrade or a close.
+        Metadata-only edits (update_assignment, set_grading_mode, set_time_limit, \
+        update_achievements, the section-organization tools) never trigger a regrade or a close.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
         and pick up the new notebook when their copy is next reset. Call get_notebook first and edit \
         the returned JSON.

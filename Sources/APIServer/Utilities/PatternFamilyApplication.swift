@@ -43,11 +43,16 @@ struct AuthoredRawScript: Equatable {
     /// `TestSuiteEntry.hint` so it surfaces as a "💡 Hint" callout on failure
     /// (PR2's display-time join). nil = no hint.
     let hint: String?
+    /// Optional per-test execution time limit (seconds), persisted onto the
+    /// generated `TestSuiteEntry.timeLimitSeconds`. nil = inherit the
+    /// assignment-wide default. Only meaningful for hand-written raw scripts;
+    /// generated family / notebook-check entries currently inherit the default.
+    let timeLimitSeconds: Int?
 
     init(
         script: String, tier: TestTier, points: Int,
         displayName: String?, dependsOn: [String], sectionID: String? = nil,
-        content: String? = nil, hint: String? = nil
+        content: String? = nil, hint: String? = nil, timeLimitSeconds: Int? = nil
     ) {
         self.script = script
         self.tier = tier
@@ -57,6 +62,7 @@ struct AuthoredRawScript: Equatable {
         self.sectionID = sectionID
         self.content = content
         self.hint = hint
+        self.timeLimitSeconds = timeLimitSeconds
     }
 }
 
@@ -223,7 +229,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     dependsOn: s.dependsOn,
                     sectionID: normaliseSectionID(s.sectionID),
                     content: s.content,
-                    hint: s.hint
+                    hint: s.hint,
+                    timeLimitSeconds: s.timeLimitSeconds
                 )
             }
             return nil
@@ -240,7 +247,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                         dependsOn: s.dependsOn,
                         sectionID: normaliseSectionID(s.sectionID),
                         content: s.content,
-                        hint: s.hint
+                        hint: s.hint,
+                        timeLimitSeconds: s.timeLimitSeconds
                     ))
             case .family(let id, let sid):
                 return .family(id: id, sectionID: normaliseSectionID(sid))
@@ -259,7 +267,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     displayName: e.name,
                     dependsOn: e.dependsOn,
                     sectionID: normaliseSectionID(e.sectionID),
-                    hint: e.hint
+                    hint: e.hint,
+                    timeLimitSeconds: e.timeLimitSeconds
                 )
             }
         // Reconstruct authored ordering from the existing manifest: walk
@@ -308,7 +317,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                             displayName: entry.name,
                             dependsOn: entry.dependsOn,
                             sectionID: normaliseSectionID(entry.sectionID),
-                            hint: entry.hint
+                            hint: entry.hint,
+                            timeLimitSeconds: entry.timeLimitSeconds
                         )))
             }
         }
@@ -664,6 +674,12 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                 guard seen.insert(d).inserted else { continue }
                 combined.append(d)
             }
+            // TODO(per-test timeout): generated pattern-family entries inherit
+            // the assignment-wide default for now. A family-level (or per-case)
+            // override would thread through here as
+            // `timeLimitSeconds: family.timeLimitSeconds` (and a per-case
+            // value from `generated`), once those fields are added to
+            // `PatternFamily` / `PatternCase`.
             newConfigured.append(
                 ConfiguredSuiteEntry(
                     script: generated.filename,
@@ -692,7 +708,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     displayName: s.displayName,
                     generatedBy: nil,
                     sectionID: s.sectionID,
-                    hint: s.hint
+                    hint: s.hint,
+                    timeLimitSeconds: s.timeLimitSeconds
                 ))
 
         case .family(let fid, let familySection):
@@ -708,6 +725,10 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
             emittedCheckIDs.insert(cid)
             order += 1
             let inherited = expandDeps(check.dependsOn)
+            // TODO(per-test timeout): generated notebook-check entries inherit
+            // the assignment-wide default for now. A check-level override would
+            // thread through here as `timeLimitSeconds: check.timeLimitSeconds`
+            // once that field is added to `NotebookCheck`.
             newConfigured.append(
                 ConfiguredSuiteEntry(
                     script: generated.filename,
@@ -755,6 +776,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         testSuites: newConfigured,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
+        timeLimitSeconds: props.timeLimitSeconds,
         starterNotebook: props.starterNotebook,
         patternFamilies: nextFamilies,
         notebookChecks: resolvedChecks,
