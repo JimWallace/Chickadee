@@ -286,6 +286,15 @@ student-free).
 
 ## Troubleshooting
 
+- **"This application is not authorized on this LMS instance" (Step 1):** the
+  account you logged into the harvester as isn't permitted to authorize the app.
+  Tell-tale: a **service account succeeds** on the same host + App ID/Key but an
+  **instructor account fails**. That's a D2L per-user/role authorization gate
+  (not instance app-trust, not Chickadee) — only certain accounts may mint a key
+  for that app. Either have IST grant the instructor role permission to authorize
+  the app (per-instructor model), or enroll the service account in the course
+  **with grade-write** and use the deployment-wide fallback. See
+  [brightspace-per-instructor-status.md](brightspace-per-instructor-status.md).
 - **"x_target does not match the allowed values" (Step 1):** the app's
   registered Trusted URL doesn't cover the localhost callback. Have your D2L
   admin add `http://localhost` to the application's allowed-redirect list (see
