@@ -100,9 +100,31 @@ LEARN
         #else:
             <span class="tier tier-closed">not linked</span>
             This course isn't bound to a D2L org unit yet, so no grades will sync.
-            An admin sets the Org Unit ID on the course page.
         #endif
     </p>
+    <div class="bs-orgunit">
+        #if(accountConnected):
+        <form method="post" action="/instructor/brightspace/bind-org-unit" class="bs-connect-form">
+            #csrfFormField()
+            <label class="bs-connect-field">
+                <span class="bs-connect-label">D2L org unit ID</span>
+                <input class="bs-connect-input" type="text" name="orgUnitID" value="#(orgUnitID)"
+                       inputmode="numeric" autocomplete="off" placeholder="e.g. 1106038">
+            </label>
+            <button class="btn btn-primary" type="submit">Link course</button>
+        </form>
+        <p class="card-meta bs-section-note">
+            The org unit is the number in the course's D2L URL
+            (…/d2l/home/<strong>1106038</strong>). It's verified with your LEARN key, and
+            this course will sync grades as your account. Leave blank and save to unlink.
+            An admin can also set it on the course page.
+        </p>
+        #else:
+        <p class="card-meta bs-section-note">
+            Connect your LEARN account above to link this course to its D2L org unit.
+        </p>
+        #endif
+    </div>
 </section>
 
 <!-- ── Summary ───────────────────────────────────────────── -->
@@ -287,6 +309,7 @@ LEARN
 .bs-connect-field { display: flex; flex-direction: column; gap: .2rem; }
 .bs-connect-label { font-size: .78rem; color: var(--gray-600); }
 .bs-connect-input { width: 16rem; max-width: 100%; font-size: .85rem; padding: .3rem .45rem; }
+.bs-orgunit { margin-top: .7rem; }
 .bs-summary-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }

@@ -49,6 +49,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("brightspace", "connect", use: brightspaceConnectAccount)
         r.post("brightspace", "use-my-identity", use: brightspaceUseMyIdentity)
         r.post("brightspace", "disconnect", use: brightspaceDisconnectAccount)
+        r.post("brightspace", "bind-org-unit", use: brightspaceBindOrgUnit)
         r.get("brightspace", "grade-objects", use: brightspaceGradeObjects)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
         r.post("brightspace", "retry-failed", use: brightspaceRetryFailed)
