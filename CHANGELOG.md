@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.482] - 2026-06-20
+
+### Changed
+
+- **Docs:** added `docs/brightspace-per-instructor-status.md` — a status/decision
+  record for the per-instructor BrightSpace rollout (what shipped, the LMS
+  per-user app-authorization blocker hit during pilot prep, and the
+  service-account-fallback unblock), plus a `brightspace-setup.md` troubleshooting
+  entry for the "This application is not authorized on this LMS instance" error.
+
+
 ## [0.4.481] - 2026-06-20
 
 ### Added
