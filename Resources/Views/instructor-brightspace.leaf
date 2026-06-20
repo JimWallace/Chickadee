@@ -31,8 +31,8 @@ LEARN
     #if(accountConnected):
     <p class="card-meta bs-section-note">
         <span class="tier tier-open">connected</span>
-        Connected as <strong>#(accountIdentity)</strong>. Courses that sync as you push
-        grades under this LEARN identity.
+        Connected as <strong>#(accountIdentity)</strong>#(accountConnectedSince).
+        Courses that sync as you push grades under this LEARN identity.
     </p>
     <div class="bs-connection-row">
         #if(syncIdentityIsMe):
@@ -67,11 +67,20 @@ LEARN
         <button class="btn btn-primary" type="submit">Connect</button>
     </form>
     #endif
-    #if(syncIdentityName):
+    #if(syncIdentityConnected):
     <p class="card-meta bs-connection-note">
         This course pushes grades as: <strong>#(syncIdentityName)</strong>.
     </p>
-    #else:
+    #endif
+    #if(syncIdentityNeedsReconnect):
+    <p class="card-meta bs-connection-note">
+        <span class="tier tier-closed">needs reconnect</span>
+        This course is set to sync as <strong>#(syncIdentityName)</strong>, but that account
+        is disconnected — grades are <strong>paused</strong> until they reconnect, or another
+        connected instructor takes over with "Use my account for this course".
+    </p>
+    #endif
+    #if(!syncIdentityName):
     <p class="card-meta bs-connection-note">
         <span class="tier tier-closed">no identity</span>
         No LEARN identity is connected for this course yet, so grades won't sync.

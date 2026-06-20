@@ -385,6 +385,29 @@ extension InstructorDashboardRoutes {
         )
     }
 
+    /// Resolves how the active course's grade-sync identity is shown: the display
+    /// name (designated instructor, the disconnected instructor's username, or the
+    /// deployment-wide fallback), whether that identity still has a stored key, and
+    /// whether it's the requesting user.
+    private func resolveSyncIdentityDisplay(
+        course: APICourse, user: APIUser, req: Request
+    ) async throws -> (name: String?, connected: Bool, isMe: Bool) {
+        let isMe = course.brightspaceSyncUserID != nil && course.brightspaceSyncUserID == user.id
+        if let syncUserID = course.brightspaceSyncUserID {
+            if let cred = try await BrightSpaceCredentialStore.load(userID: syncUserID, on: req.db) {
+                return (cred.identityName, true, isMe)
+            }
+            // Designated but disconnected — fall back to the username so the UI
+            // can flag that the identity needs to reconnect.
+            let username = try await APIUser.find(syncUserID, on: req.db)?.username
+            return (username, false, isMe)
+        }
+        if req.application.brightSpaceClient != nil {
+            return ("Deployment default account", true, isMe)
+        }
+        return (nil, false, isMe)
+    }
+
     /// Assembles the full BrightSpace-tab context for the active course.
     private func buildBrightspaceContext(
         req: Request, user: APIUser
@@ -404,6 +427,8 @@ extension InstructorDashboardRoutes {
         req.session.data["bs_flash_success"] = nil
         req.session.data["bs_flash_error"] = nil
 
+        let fmt = waterlooDateTimeFormatter()
+
         // This instructor's own LEARN connection (course-independent).
         let myCredential: APIBrightSpaceCredential?
         if let uid = user.id {
@@ -413,6 +438,10 @@ extension InstructorDashboardRoutes {
         }
         let accountConnected = myCredential != nil
         let accountIdentity = myCredential?.identityName
+        // Pre-rendered " (since …)" suffix (empty when nil) so the template
+        // interpolates it directly — avoids an inline `#if` in the middle of a
+        // sentence, which LeafKit 1.14.2 mis-parses.
+        let accountConnectedSince = myCredential?.capturedAt.map { " (since \(fmt.string(from: $0)))" }
 
         guard let courseUUID = courseState.activeCourseUUID,
             let course = try await APICourse.find(courseUUID, on: req.db)
@@ -423,7 +452,9 @@ extension InstructorDashboardRoutes {
                 brightspaceSyncEnabled: syncEnabled, courseLinked: false,
                 orgUnitID: nil, orgUnitName: nil,
                 accountConnected: accountConnected, accountIdentity: accountIdentity,
+                accountConnectedSince: accountConnectedSince,
                 syncIdentityName: nil, syncIdentityIsMe: false,
+                syncIdentityConnected: false, syncIdentityNeedsReconnect: false,
                 flashSuccess: flashSuccess, flashError: flashError,
                 assignmentRows: [], hasAssignments: false,
                 logRows: [], hasLog: false,
@@ -433,23 +464,12 @@ extension InstructorDashboardRoutes {
 
         let orgUnitID = course.brightspaceOrgUnitID
         let courseLinked = !(orgUnitID ?? "").isEmpty
-        let fmt = waterlooDateTimeFormatter()
 
-        // The identity this course pushes grades as: its designated instructor
-        // (resolved to a display label), else the deployment-wide fallback.
-        var syncIdentityName: String?
-        let syncIdentityIsMe = course.brightspaceSyncUserID != nil && course.brightspaceSyncUserID == user.id
-        if let syncUserID = course.brightspaceSyncUserID {
-            if let cred = try await BrightSpaceCredentialStore.load(userID: syncUserID, on: req.db) {
-                syncIdentityName = cred.identityName
-            } else {
-                // Designated but disconnected — fall back to the username so the
-                // UI can flag that the identity needs to reconnect.
-                syncIdentityName = try await APIUser.find(syncUserID, on: req.db)?.username
-            }
-        } else if req.application.brightSpaceClient != nil {
-            syncIdentityName = "Deployment default account"
-        }
+        // How the course's grade-sync identity is shown + whether it's still connected.
+        let syncIdentity = try await resolveSyncIdentityDisplay(course: course, user: user, req: req)
+        let syncIdentityName = syncIdentity.name
+        let syncIdentityConnected = syncIdentity.connected
+        let syncIdentityIsMe = syncIdentity.isMe
 
         // Assignments, sorted to match the dashboard ordering.
         let assignments = try await APIAssignment.query(on: req.db)
@@ -508,7 +528,10 @@ extension InstructorDashboardRoutes {
             brightspaceSyncEnabled: syncEnabled, courseLinked: courseLinked,
             orgUnitID: orgUnitID, orgUnitName: course.brightspaceOrgUnitName,
             accountConnected: accountConnected, accountIdentity: accountIdentity,
+            accountConnectedSince: accountConnectedSince,
             syncIdentityName: syncIdentityName, syncIdentityIsMe: syncIdentityIsMe,
+            syncIdentityConnected: syncIdentityConnected,
+            syncIdentityNeedsReconnect: syncIdentityName != nil && !syncIdentityConnected,
             flashSuccess: flashSuccess, flashError: flashError,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
             logRows: logRows, hasLog: !logRows.isEmpty,
