@@ -159,261 +159,474 @@
      * @returns {{ outcomes: object[], collection: object }}
      */
     async function runScripts(submissionBytes, setupID, options = {}) {
-        let py, JSZip;
-        try {
-            setRunnerStatus('loading', 'Initializing Python runtime…');
-            py = await loadPyodideOnce();
-        } catch (e) {
-            throw new Error('Failed to initialize Python runtime: ' + toMessage(e));
-        }
+        let JSZip;
         try {
             JSZip = await loadJSZip();
         } catch (e) {
             throw new Error('Failed to load ZIP library: ' + toMessage(e));
         }
+
+        // The shared RunnerCore wasm must load before either executor: it both
+        // extracts the notebook (extractPython) and drives the suite loop
+        // (runnerExecuteSuites) + classification (classifyScript). It runs on the
+        // main thread regardless of which executor grades — only the *result
+        // strings* of extraction flow into the worker's file map.
+        const runnerCore = await loadRunnerCore();
+        if (typeof globalThis.runnerExecuteSuites !== 'function') {
+            throw new Error('RunnerCore wasm did not register runnerExecuteSuites');
+        }
+        // Submit-phase breadcrumb (student submit path only — instructor
+        // validation calls runScripts without reportPhase, so it stays silent).
+        // The heavy Pyodide load is now deferred into the executor (worker init
+        // or main-thread _ensureReady) and is covered by the suite_started →
+        // suite_done window, so a Pyodide-load hang shows up as "stuck after
+        // suite_started" rather than disappearing before runtime_loaded.
         if (options.reportPhase) options.reportPhase('runtime_loaded');
 
-        // Unique work directory per run to avoid state leakage.
-        const workDir = `/chickadee_work_${Date.now()}`;
+        // 1. Download and unpack the test setup zip into a plain JS file map
+        //    { <relativePath>: <string|Uint8Array> }. This is the canonical
+        //    workspace; the chosen executor (worker or main-thread Pyodide)
+        //    materializes it into its own filesystem.
+        setRunnerStatus('loading', 'Fetching test setup…');
+        let setupZip;
         try {
-            py.FS.mkdir(workDir);
+            setupZip = await fetchBytes(`/api/v1/browser-runner/testsetups/${setupID}/download`);
         } catch (e) {
-            throw new Error('Failed to create work directory: ' + toMessage(e));
+            throw new Error('Failed to download test setup: ' + toMessage(e));
+        }
+        let zip;
+        try {
+            zip = await JSZip.loadAsync(setupZip);
+        } catch (e) {
+            throw new Error('Failed to unpack test setup zip: ' + toMessage(e));
         }
 
+        const files = {};  // relativePath -> string | Uint8Array
+        for (const [name, file] of Object.entries(zip.files)) {
+            if (file.dir) continue;
+            files[name] = await file.async('uint8array');
+        }
+        if (options.reportPhase) options.reportPhase('setup_unpacked');
+
+        // 2. Runtime helper libraries.
+        files['test_runtime.py']  = TEST_RUNTIME_PY;
+        files['sitecustomize.py'] = SITECUSTOMIZE_PY;
+
+        // 3. Submitted solution bytes. Notebooks are extracted (on the main
+        //    thread, via the RunnerCore wasm) to a Python/R source file; plain
+        //    .py / .R files are used directly. Only the extraction *result
+        //    strings* enter the map — never the wasm itself.
+        const submissionFilename = safeSubmissionFilename(options.filename || 'submission.ipynb');
+        files[submissionFilename] = submissionBytes;
+        const lowerSubmissionName = submissionFilename.toLowerCase();
+        if (lowerSubmissionName.endsWith('.ipynb')) {
+            const notebookText = new TextDecoder().decode(submissionBytes);
+            extractNotebookToMap(files, runnerCore, submissionFilename, notebookText);
+        } else if (lowerSubmissionName.endsWith('.py') || lowerSubmissionName.endsWith('.r')) {
+            files['.chickadee_student_module'] = submissionFilename;
+        }
+
+        // Personalization parity (issue #461): the per-student seed and inputs.
+        // The seed sets CHICKADEE_ASSIGNMENT_SEED (matching RunnerDaemon's test
+        // subprocess); the inputs become _ck_inputs.py in the workspace (matching
+        // the worker writing Job.personalizedInputs). The server resolves both
+        // with the SAME AssignmentSeedStore.ensureSeed / gradingInputs the worker
+        // uses, so all paths share one value. A non-personalized setup (or an
+        // older server) yields no seed/inputs → unset env var, no _ck_inputs.py.
+        let assignmentSeed = null;
+        let personalizedInputs = null;
         try {
-            // 1. Download and unpack the test setup zip.
-            setRunnerStatus('loading', 'Fetching test setup…');
-            let setupZip;
-            try {
-                setupZip = await fetchBytes(`/api/v1/browser-runner/testsetups/${setupID}/download`);
-            } catch (e) {
-                throw new Error('Failed to download test setup: ' + toMessage(e));
+            const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
+            const parsed = JSON.parse(seedText);
+            if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
+                assignmentSeed = parsed.seed;
             }
-            let zip;
-            try {
-                zip = await JSZip.loadAsync(setupZip);
-            } catch (e) {
-                throw new Error('Failed to unpack test setup zip: ' + toMessage(e));
+            if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
+                personalizedInputs = parsed.personalizedInputs;
             }
-            for (const [name, file] of Object.entries(zip.files)) {
-                if (file.dir) continue;
-                const data     = await file.async('uint8array');
-                const fullPath = `${workDir}/${name}`;
-                // Create parent directories as needed.
-                const parts = name.split('/');
-                if (parts.length > 1) {
-                    let cur = workDir;
-                    for (const part of parts.slice(0, -1)) {
-                        cur += '/' + part;
-                        try { py.FS.mkdir(cur); } catch (_) { /* already exists */ }
-                    }
-                }
-                py.FS.writeFile(fullPath, data);
-            }
-            if (options.reportPhase) options.reportPhase('setup_unpacked');
+        } catch (_) {
+            assignmentSeed = null;  // grade without a seed rather than failing the run
+            personalizedInputs = null;
+        }
+        if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
+            files['_ck_inputs.py'] = personalizationInputsSource(personalizedInputs);
+        }
 
-            // 2. Write runtime helper libraries.
-            py.FS.writeFile(`${workDir}/test_runtime.py`,  TEST_RUNTIME_PY);
-            py.FS.writeFile(`${workDir}/sitecustomize.py`, SITECUSTOMIZE_PY);
+        // 4. Fetch manifest from server (test.properties.json is not in the zip;
+        //    the server serves it directly from the database via the manifest endpoint).
+        setRunnerStatus('loading', 'Loading test configuration…');
+        let manifest;
+        try {
+            const manifestText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/manifest`);
+            manifest = JSON.parse(manifestText);
+        } catch (e) {
+            throw new Error('Failed to load test configuration: ' + toMessage(e));
+        }
 
-            // 3. Write submitted solution bytes. Notebooks are extracted to a
-            // Python/R source file; plain .py files are used directly.
-            const submissionFilename = safeSubmissionFilename(options.filename || 'submission.ipynb');
-            py.FS.writeFile(`${workDir}/${submissionFilename}`, submissionBytes);
-            const lowerSubmissionName = submissionFilename.toLowerCase();
-            if (lowerSubmissionName.endsWith('.ipynb')) {
-                const notebookText = new TextDecoder().decode(submissionBytes);
-                await extractNotebook(py, workDir, submissionFilename, notebookText);
-            } else if (lowerSubmissionName.endsWith('.py')) {
-                py.FS.writeFile(`${workDir}/.chickadee_student_module`, submissionFilename);
-            } else if (lowerSubmissionName.endsWith('.r')) {
-                py.FS.writeFile(`${workDir}/.chickadee_student_module`, submissionFilename);
-            }
+        const timeLimitSeconds = manifest.timeLimitSeconds || 10;
+        const suites = (manifest.testSuites || []).map(entry => ({
+            script: entry.script || '',
+            tier: entry.tier || 'public',
+            displayName: (typeof entry.name === 'string' && entry.name.trim()) ? entry.name.trim() : null,
+            dependsOn: Array.isArray(entry.dependsOn) ? entry.dependsOn : [],
+            points: typeof entry.points === 'number' ? entry.points : 1,
+        }));
 
-            // Add working directory to Python's path and set up builtins.
-            //
-            // We cannot rely on sitecustomize.py being auto-imported in Pyodide:
-            // the interpreter is already running when we write the file, and
-            // "sitecustomize" is a special name that Python's site machinery may
-            // have already tried and cached.  Instead we import test_runtime
-            // directly and wire up the builtins ourselves — identical to what
-            // sitecustomize.py does, but without the name-based special-casing.
-            //
-            // We also flush stale copies of our helper/student modules so that
-            // repeated submissions in the same Pyodide session don't inherit the
-            // previous run's module state (especially test_runtime's
-            // _loaded_student_modules global).
-            try {
-                await py.runPythonAsync(`
-import sys, os, builtins
+        // Section metadata, so the inline results can be grouped per section
+        // exactly like the server-rendered submission view. Kept as a parallel
+        // array (never stamped onto the outcomes, which must stay the canonical
+        // worker TestOutcome shape): `sectionIDPerSuite[i]` is the section of the
+        // manifest entry that produces `outcomes[i]` — index correlation,
+        // matching groupOutcomesBySection on the server (a name-keyed map would
+        // collapse two families that share a case label — v0.4.105).
+        const sections = (Array.isArray(manifest.sections) ? manifest.sections : [])
+            .filter(s => s && typeof s.id === 'string')
+            .map(s => ({ id: s.id, name: typeof s.name === 'string' ? s.name : '' }));
+        const sectionIDPerSuite = (manifest.testSuites || []).map(entry =>
+            (entry && typeof entry.sectionID === 'string' && entry.sectionID) ? entry.sectionID : null);
 
-# Replace any stale chickadee work-directory on the path.
-sys.path = [p for p in sys.path if not p.startswith('/chickadee_work_')]
-sys.path.insert(0, '${workDir}')
-os.chdir('${workDir}')
+        // 5. Pick the executor. The Web-Worker executor is preferred: it runs
+        //    Pyodide off the main thread, so a CPU-bound infinite loop in student
+        //    code (which never yields to JS) can be killed via Worker.terminate()
+        //    when the per-test timeout fires — something the main-thread
+        //    Promise.race fallback cannot do (the timer never gets a turn). The
+        //    fallback path is preserved for environments with no Worker (and for
+        //    the Node test harness, which has neither Worker nor a factory
+        //    override, so it deterministically exercises the fallback).
+        const executor = makeExecutor(files, assignmentSeed, runnerCore);
+        try {
+            const scriptExists = (name) => executor.scriptExists(name);
+            const runScript    = (name, limit) => executor.run(name, limit);
 
-# Flush stale helper + student modules so fresh files are picked up.
-for _key in list(sys.modules.keys()):
-    if _key in ('sitecustomize', 'test_runtime') or _key.startswith('student_'):
-        del sys.modules[_key]
-
-# Import test_runtime — set functions in BOTH __main__ globals and builtins.
-# Pyodide may not resolve builtins the same way CPython does, so we need
-# them as __main__ globals too (runPythonAsync runs in __main__).
-from test_runtime import passed, failed, errored, require_function
-from test_runtime import load_student_modules, load_student_module
-from test_runtime import student_module_names_in_load_order
-
-builtins.passed           = passed
-builtins.failed           = failed
-builtins.errored          = errored
-builtins.require_function = require_function
-
-# Load student code and expose in both globals and builtins.
-_student_modules = load_student_modules()
-student_modules  = _student_modules
-builtins.student_modules = _student_modules
-_student_module  = load_student_module()
-student_module   = _student_module
-builtins.student_module  = _student_module
-for _module_name in student_module_names_in_load_order():
-    _module = _student_modules.get(_module_name)
-    if _module is None:
-        continue
-    for _name, _value in vars(_module).items():
-        if _name.startswith('_'):
-            continue
-        if callable(_value) and not hasattr(builtins, _name):
-            setattr(builtins, _name, _value)
-            globals()[_name] = _value
-`);
-            } catch (e) {
-                throw new Error('Failed to configure Python environment: ' + toMessage(e));
-            }
-
-            // Personalization parity (issue #461): inject the per-student seed so a
-            // test reading CHICKADEE_ASSIGNMENT_SEED behaves identically to the
-            // native worker, which sets the same env var in RunnerDaemon's test
-            // subprocess. The server resolves the seed with the SAME
-            // AssignmentSeedStore.ensureSeed call the worker and notebook
-            // substitution use, so all three share one value. os.environ persists
-            // for the whole Pyodide session, so one set covers every test script.
-            // A non-personalized setup (or an older server without the endpoint)
-            // yields no seed → leave the env var unset, preserving legacy behaviour.
-            let assignmentSeed = null;
-            let personalizedInputs = null;
-            try {
-                const seedText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/seed`);
-                const parsed = JSON.parse(seedText);
-                if (parsed && typeof parsed.seed === 'string' && parsed.seed) {
-                    assignmentSeed = parsed.seed;
-                }
-                if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
-                    personalizedInputs = parsed.personalizedInputs;
-                }
-            } catch (_) {
-                assignmentSeed = null;  // grade without a seed rather than failing the run
-                personalizedInputs = null;
-            }
-            if (assignmentSeed !== null) {
-                try {
-                    await py.runPythonAsync(
-                        `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(assignmentSeed)}`);
-                } catch (e) {
-                    throw new Error('Failed to set assignment seed: ' + toMessage(e));
-                }
-            }
-            // Per-student personalization inputs (issue #461, Slice B): mirror the
-            // native worker, which writes _ck_inputs.py into the grading workspace
-            // from Job.personalizedInputs. Each value is already a Python literal
-            // the server resolved for this student's seed (via the same
-            // gradingInputs helper); generated pattern-family scripts load this
-            // file by path. The filename is reserved in test_runtime so it can't
-            // be mistaken for the submission module.
-            if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
-                let ckSource = '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n_ck = {\n';
-                for (const key of Object.keys(personalizedInputs).sort()) {
-                    ckSource += `    ${JSON.stringify(key)}: ${personalizedInputs[key]},\n`;
-                }
-                ckSource += '}\n';
-                try {
-                    py.FS.writeFile(`${workDir}/_ck_inputs.py`, ckSource);
-                } catch (e) {
-                    throw new Error('Failed to write personalization inputs: ' + toMessage(e));
-                }
-            }
-
-            // 4. Fetch manifest from server (test.properties.json is not in the zip;
-            //    the server serves it directly from the database via the manifest endpoint).
-            setRunnerStatus('loading', 'Loading test configuration…');
-            let manifest;
-            try {
-                const manifestText = await fetchText(`/api/v1/browser-runner/testsetups/${setupID}/manifest`);
-                manifest = JSON.parse(manifestText);
-            } catch (e) {
-                throw new Error('Failed to load test configuration: ' + toMessage(e));
-            }
             // Shared RunnerCore (wasm): the SAME Swift `executeSuites` loop the
             // native worker runs. Dependency gating, the "Skipped: prerequisite…"
-            // messages, missing-script handling, and — crucially — output
-            // interpretation (exit code → status, JSON-footer parsing, longResult
-            // assembly) all live in RunnerCore now. The browser supplies only the
-            // one substrate-specific operation: run a script via Pyodide and
-            // report its RAW output (exit code + stdout/stderr), which RunnerCore
-            // interprets byte-for-byte the way the worker does. No grading logic
-            // or output interpretation remains in JS.
-            const runnerCore = await loadRunnerCore();
-            if (typeof globalThis.runnerExecuteSuites !== 'function') {
-                throw new Error('RunnerCore wasm did not register runnerExecuteSuites');
-            }
-
-            const timeLimitSeconds = manifest.timeLimitSeconds || 10;
-            const suites = (manifest.testSuites || []).map(entry => ({
-                script: entry.script || '',
-                tier: entry.tier || 'public',
-                displayName: (typeof entry.name === 'string' && entry.name.trim()) ? entry.name.trim() : null,
-                dependsOn: Array.isArray(entry.dependsOn) ? entry.dependsOn : [],
-                points: typeof entry.points === 'number' ? entry.points : 1,
-            }));
-
-            // Section metadata, so the inline results can be grouped per
-            // section exactly like the server-rendered submission view.  Kept
-            // as a parallel array (never stamped onto the outcomes, which must
-            // stay the canonical worker TestOutcome shape): `sectionIDPerSuite[i]`
-            // is the section of the manifest entry that produces `outcomes[i]`
-            // — index correlation, matching groupOutcomesBySection on the server
-            // (a name-keyed map would collapse two families that share a case
-            // label — v0.4.105).
-            const sections = (Array.isArray(manifest.sections) ? manifest.sections : [])
-                .filter(s => s && typeof s.id === 'string')
-                .map(s => ({ id: s.id, name: typeof s.name === 'string' ? s.name : '' }));
-            const sectionIDPerSuite = (manifest.testSuites || []).map(entry =>
-                (entry && typeof entry.sectionID === 'string' && entry.sectionID) ? entry.sectionID : null);
-
-            // Substrate callbacks handed to the Swift loop.
-            const scriptExists = (name) => {
-                try { py.FS.stat(`${workDir}/${name}`); return true; }
-                catch (_) { return false; }
-            };
-            const runScript = (name, limit) => runRawScript(py, runnerCore, workDir, name, limit);
-
+            // messages, missing-script handling, and output interpretation (exit
+            // code → status, JSON-footer parsing, longResult assembly) all live
+            // in RunnerCore. The executor supplies only the one substrate-specific
+            // operation: run a script and report its RAW output (exit code +
+            // stdout/stderr), which RunnerCore interprets byte-for-byte the way
+            // the worker does. No grading logic or interpretation remains in JS.
             if (options.reportPhase) options.reportPhase('suite_started', 'tests=' + suites.length);
             const outcomes = await globalThis.runnerExecuteSuites(
                 suites, timeLimitSeconds, 1, scriptExists, runScript);
             if (options.reportPhase) options.reportPhase('suite_done', 'n=' + outcomes.length);
 
-            // 5. Build collection. The caller decides whether to submit it.
+            // 6. Build collection. The caller decides whether to submit it.
             // `outcomes` stays the canonical worker TestOutcome shape — section
             // info rides alongside in a parallel array, never on the outcome
             // objects, so the posted collection is byte-identical to the worker's.
             const collection = buildCollection(setupID, outcomes);
             return { outcomes, collection, sections, sectionIDs: sectionIDPerSuite };
-
         } finally {
-            // Clean up MEMFS to avoid OOM on repeated submissions.
-            try { removeRecursive(py, workDir); } catch (_) { /* best-effort */ }
+            try { await executor.dispose(); } catch (_) { /* best-effort */ }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Executor selection (Web-Worker preferred, main-thread Pyodide fallback)
+    // -------------------------------------------------------------------------
+
+    // A grading worker can be used when the environment exposes the Worker
+    // constructor OR a test/embed override factory is present. The factory seam
+    // lets the Node harness inject a fake Worker (no real Pyodide); production
+    // uses the default `new Worker('/grading-worker.js')`.
+    function gradingWorkerFactory() {
+        const override = globalThis.__CHICKADEE_GRADING_WORKER_FACTORY__
+            || (typeof window !== 'undefined' ? window.__CHICKADEE_GRADING_WORKER_FACTORY__ : undefined);
+        if (typeof override === 'function') return override;
+        if (typeof Worker !== 'undefined') return () => new Worker('/grading-worker.js');
+        return null;
+    }
+
+    function makeExecutor(files, assignmentSeed, runnerCore) {
+        const factory = gradingWorkerFactory();
+        if (factory) return new GradingWorkerExecutor(files, assignmentSeed, runnerCore, factory);
+        return new MainThreadExecutor(files, assignmentSeed, runnerCore);
+    }
+
+    // -------------------------------------------------------------------------
+    // MainThreadExecutor — the legacy path, unchanged behaviour.
+    //
+    // Loads Pyodide on the main thread, materializes the file map into py.FS,
+    // runs the shared env-config + seed setup, then grades each script via
+    // runRawScript/runPyScriptRaw (which race a sleep() timer per the v0.4.x
+    // model). Used only when no Worker is available — e.g. the Node test harness,
+    // which deliberately has neither Worker nor a factory override. NOTE: this
+    // path CANNOT kill a CPU-bound infinite loop in student code (the sleep timer
+    // never gets a turn on a blocked main thread) — that's exactly the bug the
+    // GradingWorkerExecutor fixes. It stays only for Worker-less environments.
+    // -------------------------------------------------------------------------
+
+    class MainThreadExecutor {
+        constructor(files, assignmentSeed, runnerCore) {
+            this.files = files;
+            this.assignmentSeed = assignmentSeed;
+            this.runnerCore = runnerCore;
+            this.py = null;
+            this.workDir = null;
+            this._ready = null;
+        }
+
+        async _ensureReady() {
+            if (this._ready) return this._ready;
+            this._ready = (async () => {
+                try {
+                    setRunnerStatus('loading', 'Initializing Python runtime…');
+                    this.py = await loadPyodideOnce();
+                } catch (e) {
+                    throw new Error('Failed to initialize Python runtime: ' + toMessage(e));
+                }
+                const py = this.py;
+                this.workDir = `/chickadee_work_${Date.now()}`;
+                try {
+                    py.FS.mkdir(this.workDir);
+                } catch (e) {
+                    throw new Error('Failed to create work directory: ' + toMessage(e));
+                }
+                writeFilesToPyFS(py, this.workDir, this.files);
+                // Add working directory to Python's path and set up builtins.
+                // We cannot rely on sitecustomize.py being auto-imported in
+                // Pyodide (the interpreter is already running, and
+                // "sitecustomize" is a special name the site machinery may have
+                // cached). We import test_runtime directly and wire builtins
+                // ourselves; we also flush stale helper/student modules so
+                // repeated submissions in one Pyodide session don't inherit the
+                // previous run's module state.
+                try {
+                    await py.runPythonAsync(envConfigPython(this.workDir));
+                } catch (e) {
+                    throw new Error('Failed to configure Python environment: ' + toMessage(e));
+                }
+                // os.environ persists for the whole session, so one set covers
+                // every script (parity with the worker's test subprocess).
+                if (this.assignmentSeed !== null && this.assignmentSeed !== undefined) {
+                    try {
+                        await py.runPythonAsync(assignmentSeedPython(this.assignmentSeed));
+                    } catch (e) {
+                        throw new Error('Failed to set assignment seed: ' + toMessage(e));
+                    }
+                }
+            })();
+            return this._ready;
+        }
+
+        scriptExists(name) {
+            // Existence is answered from the file map (the source of truth) so the
+            // check doesn't depend on Pyodide being initialized yet.
+            return Object.prototype.hasOwnProperty.call(this.files, name);
+        }
+
+        async run(name, limitSeconds) {
+            await this._ensureReady();
+            return runRawScript(this.py, this.runnerCore, this.workDir, name, limitSeconds);
+        }
+
+        async dispose() {
+            if (this.py && this.workDir) {
+                // Clean up MEMFS to avoid OOM on repeated submissions.
+                try { removeRecursive(this.py, this.workDir); } catch (_) { /* best-effort */ }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GradingWorkerExecutor — Pyodide in a Web Worker so run-aways can be killed.
+    //
+    // Holds the file map + seed and lazily spawns a grading worker (via the
+    // injectable factory), sending it `init`. Each run posts `{type:'run', …}`
+    // and races the reply against a real setTimeout: classification (non-python
+    // kinds) is decided on the MAIN thread (so a shell/R/unsupported script never
+    // touches the worker), and a python script that blows the timeout is killed
+    // with Worker.terminate(). The next run detects the dead worker and spawns +
+    // re-inits a fresh one — re-sending the same file map + seed — before
+    // proceeding. This is the kill path the main-thread Promise.race could not
+    // provide against a synchronous CPU-bound loop.
+    // -------------------------------------------------------------------------
+
+    class GradingWorkerExecutor {
+        constructor(files, assignmentSeed, runnerCore, factory) {
+            this.files = files;
+            this.assignmentSeed = assignmentSeed ?? null;
+            this.runnerCore = runnerCore;
+            this.factory = factory;
+            this.worker = null;
+            this._initPromise = null;
+            this._nextID = 1;
+            this._pending = new Map();  // id -> { resolve, reject }
+            // Test-observable counters: how many workers we spawned and how many
+            // we terminated (a fresh spawn after a timeout proves the kill path).
+            this.spawnCount = 0;
+            this.terminateCount = 0;
+        }
+
+        scriptExists(name) {
+            return Object.prototype.hasOwnProperty.call(this.files, name);
+        }
+
+        _spawn() {
+            const worker = this.factory();
+            this.spawnCount += 1;
+            worker.onmessage = (e) => {
+                const msg = (e && e.data) || {};
+                const entry = this._pending.get(msg.id);
+                if (!entry) return;
+                this._pending.delete(msg.id);
+                entry.resolve(msg);
+            };
+            worker.onerror = (err) => {
+                // A hard worker error rejects every in-flight call; the next run
+                // rebuilds. (Pyodide load failures surface here.)
+                const reason = (err && (err.message || err.filename)) || 'grading worker error';
+                for (const [, entry] of this._pending) entry.reject(new Error(String(reason)));
+                this._pending.clear();
+                this._killWorker();
+            };
+            this.worker = worker;
+            return worker;
+        }
+
+        _killWorker() {
+            if (this.worker) {
+                try { this.worker.terminate(); } catch (_) { /* best-effort */ }
+                this.terminateCount += 1;
+                this.worker = null;
+            }
+            this._initPromise = null;
+            // Reject any still-pending calls so they don't hang forever.
+            for (const [, entry] of this._pending) entry.reject(new Error('grading worker terminated'));
+            this._pending.clear();
+        }
+
+        _post(message) {
+            const id = this._nextID++;
+            return new Promise((resolve, reject) => {
+                this._pending.set(id, { resolve, reject });
+                try {
+                    this.worker.postMessage(Object.assign({ id }, message));
+                } catch (e) {
+                    this._pending.delete(id);
+                    reject(e);
+                }
+            });
+        }
+
+        // Spawn (if needed) and init the worker with the file map + seed. Cached
+        // so concurrent/repeated runs share one init; cleared by _killWorker so
+        // the NEXT run after a terminate rebuilds from scratch.
+        _ensureWorker() {
+            if (this._initPromise) return this._initPromise;
+            this._spawn();
+            this._initPromise = (async () => {
+                const reply = await this._post({ type: 'init', files: this.files, seed: this.assignmentSeed });
+                if (!reply || !reply.ok) {
+                    throw new Error('Failed to configure Python environment: '
+                        + ((reply && reply.error) || 'grading worker init failed'));
+                }
+            })().catch((e) => {
+                // A failed init kills the worker so a later retry can rebuild.
+                this._killWorker();
+                throw e;
+            });
+            return this._initPromise;
+        }
+
+        async run(name, limitSeconds) {
+            // Classification on the MAIN thread (RunnerCore wasm) — identical to
+            // runRawScript. Non-python kinds never touch the worker; they return
+            // the SAME rawError messages so the shared interpreter surfaces them
+            // the same way for every runner.
+            const src = this.scriptExists(name) ? fileAsText(this.files[name]) : null;
+            const kind = interpreterToKind(this.runnerCore.classifyScript(name, src ?? ''));
+            if (kind === 'r') {
+                return rawError('R test scripts require WebR — not yet supported in browser runner');
+            }
+            if (kind === 'shell') {
+                return rawError('Shell scripts cannot run in the browser runner');
+            }
+            if (kind !== 'python') {
+                const ext = scriptExtension(name);
+                return rawError(`Unsupported test script type: ${ext ? '.' + ext : name}`);
+            }
+            if (src === null) {
+                return rawError(`Script not found: ${name}`);
+            }
+
+            const startMs = Date.now();
+            await this._ensureWorker();
+
+            // Race the worker reply against a REAL timer. Because the worker runs
+            // Pyodide on its own thread, the timer always fires even when student
+            // code is in a synchronous CPU-bound loop — so terminate() can kill it.
+            let timer = null;
+            const timeoutPromise = new Promise((resolve) => {
+                timer = setTimeout(() => resolve({ __timedOut: true }), limitSeconds * 1000);
+            });
+            const runPromise = this._post({ type: 'run', script: name, limit: limitSeconds });
+
+            let reply;
+            try {
+                reply = await Promise.race([runPromise, timeoutPromise]);
+            } finally {
+                if (timer !== null) clearTimeout(timer);
+            }
+
+            if (reply && reply.__timedOut) {
+                // Kill the run-away worker; the next run rebuilds a fresh one.
+                this._killWorker();
+                return { exitCode: -1, stdout: '', stderr: '', executionTimeMs: Date.now() - startMs, timedOut: true };
+            }
+            if (!reply || !reply.ok || !reply.result) {
+                // A worker-side failure → surface as an error outcome rather than
+                // throwing, matching the worker's exit-2 substrate-error path.
+                this._killWorker();
+                return rawError('Grading worker failed: ' + ((reply && reply.error) || 'unknown error'));
+            }
+            const r = reply.result;
+            return {
+                exitCode: r.exitCode,
+                stdout: r.stdout || '',
+                stderr: r.stderr || '',
+                executionTimeMs: Date.now() - startMs,
+                timedOut: false,
+            };
+        }
+
+        async dispose() {
+            // Terminate the worker so Pyodide's memory is reclaimed. This counts
+            // as a terminate, but a fresh run() would spawn a new worker anyway.
+            if (this.worker) {
+                try { this.worker.terminate(); } catch (_) { /* best-effort */ }
+                this.terminateCount += 1;
+                this.worker = null;
+            }
+            this._initPromise = null;
+            this._pending.clear();
+        }
+    }
+
+    // Materialize a plain file map { <relativePath>: <string|Uint8Array> } into a
+    // Pyodide MEMFS under workDir, creating parent directories as needed. Shared
+    // by the main-thread fallback; the worker has its own copy (drift-guarded).
+    function writeFilesToPyFS(py, workDir, files) {
+        for (const [relPath, value] of Object.entries(files)) {
+            const parts = relPath.split('/');
+            if (parts.length > 1) {
+                let cur = workDir;
+                for (const part of parts.slice(0, -1)) {
+                    cur += '/' + part;
+                    try { py.FS.mkdir(cur); } catch (_) { /* already exists */ }
+                }
+            }
+            py.FS.writeFile(`${workDir}/${relPath}`, value);
+        }
+    }
+
+    // Decode a file-map value (UTF-8 string or byte array) to text — used to
+    // classify a script on the main thread without round-tripping the worker.
+    function fileAsText(value) {
+        if (typeof value === 'string') return value;
+        try { return new TextDecoder().decode(value instanceof Uint8Array ? value : new Uint8Array(value)); }
+        catch (_) { return ''; }
     }
 
     // -------------------------------------------------------------------------
@@ -431,6 +644,25 @@ for _module_name in student_module_names_in_load_order():
     // -------------------------------------------------------------------------
 
     async function extractNotebook(py, workDir, filename, notebookText) {
+        const core = await loadRunnerCore();
+        const extracted = {};
+        extractNotebookToMap(extracted, core, filename, notebookText);
+        // Replay the produced relative paths into the live Pyodide FS — the
+        // map-based extractor (used by runScripts) and this py.FS variant (kept
+        // for the standalone extractNotebook test + any direct caller) share one
+        // implementation; only the sink differs.
+        for (const [relPath, value] of Object.entries(extracted)) {
+            py.FS.writeFile(`${workDir}/${relPath}`, value);
+        }
+    }
+
+    // Notebook extraction into a plain file map { <relativePath>: <string> }.
+    // Mirrors extractNotebook but writes to a JS object instead of py.FS, so the
+    // grading worker (which holds its own Pyodide FS) and the main-thread
+    // fallback both consume the same extraction result. Python extraction goes
+    // through the shared RunnerCore wasm (already loaded as `core`); only R stays
+    // on the JS path (RunnerCore is Python-only, matching the native worker).
+    function extractNotebookToMap(files, core, filename, notebookText) {
         let notebook;
         try { notebook = JSON.parse(notebookText); } catch (_) { return; }
 
@@ -443,8 +675,6 @@ for _module_name in student_module_names_in_load_order():
         const stem   = filename.replace(/\.ipynb$/i, '');
 
         if (isR) {
-            // R stays on the JS path — RunnerCore (the shared wasm extractor) is
-            // Python-only, matching the native worker.
             let code = `# Generated from ${filename}\n\n`;
             for (const cell of (notebook.cells || [])) {
                 if (cell.cell_type !== 'code') continue;
@@ -452,8 +682,8 @@ for _module_name in student_module_names_in_load_order():
                 const block = extractRCell(src);
                 if (block) code += block + '\n\n';
             }
-            py.FS.writeFile(`${workDir}/${stem}.R`, code);
-            py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.R`);
+            files[`${stem}.R`] = code;
+            files['.chickadee_student_module'] = `${stem}.R`;
             return;
         }
 
@@ -463,16 +693,29 @@ for _module_name in student_module_names_in_load_order():
             cell_type: cell.cell_type,
             source: Array.isArray(cell.source) ? cell.source.join('') : (cell.source || ''),
         }));
-        const core = await loadRunnerCore();
         const result = core.extractPython(cells, filename);
 
-        py.FS.writeFile(`${workDir}/${stem}.py`, result.executableModule);
-        py.FS.writeFile(`${workDir}/.chickadee_student_module`, `${stem}.py`);
+        files[`${stem}.py`] = result.executableModule;
+        files['.chickadee_student_module'] = `${stem}.py`;
 
         // Sidecar: the introspectable (un-exec-wrapped) source, so structural /
         // AST NotebookChecks can read real `def`s via student_source().
-        py.FS.writeFile(`${workDir}/${stem}.source.py`, result.introspectableSource);
-        py.FS.writeFile(`${workDir}/.chickadee_student_source`, `${stem}.source.py`);
+        files[`${stem}.source.py`] = result.introspectableSource;
+        files['.chickadee_student_source'] = `${stem}.source.py`;
+    }
+
+    // Build the _ck_inputs.py source from per-student personalization inputs
+    // (issue #461, Slice B). Each value is already a Python literal the server
+    // resolved for this student's seed (via the same gradingInputs helper);
+    // generated pattern-family scripts load this file by path. Keys are sorted
+    // for determinism. Mirrors the native worker writing Job.personalizedInputs.
+    function personalizationInputsSource(personalizedInputs) {
+        let ckSource = '# Auto-generated per-student grading inputs (issue #461). Do not edit.\n_ck = {\n';
+        for (const key of Object.keys(personalizedInputs).sort()) {
+            ckSource += `    ${JSON.stringify(key)}: ${personalizedInputs[key]},\n`;
+        }
+        ckSource += '}\n';
+        return ckSource;
     }
 
     // -------------------------------------------------------------------------
@@ -590,39 +833,18 @@ for _module_name in student_module_names_in_load_order():
         try { await py.loadPackagesFromImports(src); } catch (_) { /* non-fatal */ }
 
         // Redirect sys.stdout / sys.stderr to JS buffers.
-        await py.runPythonAsync(`
-import sys, io
-_br_stdout = io.StringIO()
-_br_stderr = io.StringIO()
-sys.stdout = _br_stdout
-sys.stderr = _br_stderr
-`);
+        await py.runPythonAsync(STDOUT_REDIRECT_PY);
 
         let timedOut = false;
         let pyErr    = null;
 
-        // compile(source, scriptName) gives inspect.stack() the real filename so
-        // test_runtime reads the correct test label; `except SystemExit` catches
-        // the exit that passed()/failed()/errored() raise (a clean subprocess
-        // exit on the native side); imports + exec share one globals dict.
-        const runSrc = `
-from test_runtime import passed, failed, errored, require_function
-_br_exit_code = None
-try:
-    _br_code = compile(open('${scriptName}', encoding='utf-8').read(), '${scriptName}', 'exec')
-    exec(_br_code, globals())
-except SystemExit as _e:
-    _br_exit_code = _e.code
-`;
-        const runPromise     = py.runPythonAsync(runSrc).catch(err => { pyErr = err; });
+        const runPromise     = py.runPythonAsync(runScriptPython(scriptName)).catch(err => { pyErr = err; });
         const timeoutPromise = sleep(timeLimitSeconds * 1000).then(() => { timedOut = true; });
         await Promise.race([runPromise, timeoutPromise]);
 
         let stdout = '', stderr = '', brExitCode = null;
         try {
-            const captured = await py.runPythonAsync(`
-(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
-`);
+            const captured = await py.runPythonAsync(CAPTURE_OUTPUT_PY);
             const result = captured.toJs ? captured.toJs() : [String(captured), '', null];
             stdout = result[0] || '';
             stderr = result[1] || '';
@@ -630,19 +852,25 @@ except SystemExit as _e:
             captured.destroy && captured.destroy();
         } catch (_) { /* fallback: no output */ }
 
-        await py.runPythonAsync(`
-sys.stdout = sys.__stdout__
-sys.stderr = sys.__stderr__
-`);
+        await py.runPythonAsync(RESTORE_STREAMS_PY);
 
         const executionTimeMs = Date.now() - startMs;
         if (timedOut) {
             return { exitCode: -1, stdout, stderr, executionTimeMs, timedOut: true };
         }
 
-        // Exit code: prefer the SystemExit code; otherwise mirror a `python3
-        // script` subprocess — 0 on clean completion, 1 on an uncaught exception
-        // (with the traceback on stderr so RunnerCore puts it in longResult).
+        const derived = deriveExitCode(brExitCode, pyErr, stderr);
+        return { exitCode: derived.exitCode, stdout, stderr: derived.stderr, executionTimeMs, timedOut: false };
+    }
+
+    // Derive the script's exit code from the captured SystemExit code (preferred)
+    // or — when none was captured — from the raised JS error, mirroring a
+    // `python3 script` subprocess: 0 on clean completion, 1 on an uncaught
+    // exception (with the traceback on stderr so RunnerCore puts it in
+    // longResult). Returns the (possibly augmented) stderr too, since an
+    // uncaught-exception message is folded into stderr when stderr is empty.
+    // Shared verbatim by grading-worker.js — see the drift guard.
+    function deriveExitCode(brExitCode, pyErr, stderr) {
         let exitCode;
         if (brExitCode !== null && brExitCode !== undefined) {
             exitCode = typeof brExitCode === 'number' ? brExitCode : (parseInt(brExitCode) || 1);
@@ -658,7 +886,7 @@ sys.stderr = sys.__stderr__
         } else {
             exitCode = 0;
         }
-        return { exitCode, stdout, stderr, executionTimeMs, timedOut: false };
+        return { exitCode, stderr };
     }
 
     // -------------------------------------------------------------------------
@@ -808,6 +1036,112 @@ sys.stderr = sys.__stderr__
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
+
+    // -------------------------------------------------------------------------
+    // Shared Python snippets (env config + per-script exec)
+    //
+    // These are run by BOTH the main-thread fallback (above) and the grading
+    // worker (Public/grading-worker.js), so they MUST stay byte-identical. The
+    // worker keeps its own copies; Tests/BrowserRunnerJSTests/grading-worker-drift.test.mjs
+    // asserts the two stay in sync (normalized whitespace). Edit both together.
+    // -------------------------------------------------------------------------
+
+    // CHICKADEE_DRIFT:envConfigPython:BEGIN
+    // Add workDir to sys.path, chdir, flush stale helper/student modules, import
+    // test_runtime, wire builtins, and load student modules into globals+builtins.
+    function envConfigPython(workDir) {
+        return `
+import sys, os, builtins
+
+# Replace any stale chickadee work-directory on the path.
+sys.path = [p for p in sys.path if not p.startswith('/chickadee_work_')]
+sys.path.insert(0, '${workDir}')
+os.chdir('${workDir}')
+
+# Flush stale helper + student modules so fresh files are picked up.
+for _key in list(sys.modules.keys()):
+    if _key in ('sitecustomize', 'test_runtime') or _key.startswith('student_'):
+        del sys.modules[_key]
+
+# Import test_runtime — set functions in BOTH __main__ globals and builtins.
+# Pyodide may not resolve builtins the same way CPython does, so we need
+# them as __main__ globals too (runPythonAsync runs in __main__).
+from test_runtime import passed, failed, errored, require_function
+from test_runtime import load_student_modules, load_student_module
+from test_runtime import student_module_names_in_load_order
+
+builtins.passed           = passed
+builtins.failed           = failed
+builtins.errored          = errored
+builtins.require_function = require_function
+
+# Load student code and expose in both globals and builtins.
+_student_modules = load_student_modules()
+student_modules  = _student_modules
+builtins.student_modules = _student_modules
+_student_module  = load_student_module()
+student_module   = _student_module
+builtins.student_module  = _student_module
+for _module_name in student_module_names_in_load_order():
+    _module = _student_modules.get(_module_name)
+    if _module is None:
+        continue
+    for _name, _value in vars(_module).items():
+        if _name.startswith('_'):
+            continue
+        if callable(_value) and not hasattr(builtins, _name):
+            setattr(builtins, _name, _value)
+            globals()[_name] = _value
+`;
+    }
+    // CHICKADEE_DRIFT:envConfigPython:END
+
+    // CHICKADEE_DRIFT:assignmentSeedPython:BEGIN
+    function assignmentSeedPython(seed) {
+        return `import os\nos.environ['CHICKADEE_ASSIGNMENT_SEED'] = ${JSON.stringify(seed)}`;
+    }
+    // CHICKADEE_DRIFT:assignmentSeedPython:END
+
+    // CHICKADEE_DRIFT:STDOUT_REDIRECT_PY:BEGIN
+    const STDOUT_REDIRECT_PY = `
+import sys, io
+_br_stdout = io.StringIO()
+_br_stderr = io.StringIO()
+sys.stdout = _br_stdout
+sys.stderr = _br_stderr
+`;
+    // CHICKADEE_DRIFT:STDOUT_REDIRECT_PY:END
+
+    // CHICKADEE_DRIFT:runScriptPython:BEGIN
+    // compile(source, scriptName) gives inspect.stack() the real filename so
+    // test_runtime reads the correct test label; `except SystemExit` catches the
+    // exit that passed()/failed()/errored() raise (a clean subprocess exit on the
+    // native side); imports + exec share one globals dict.
+    function runScriptPython(scriptName) {
+        return `
+from test_runtime import passed, failed, errored, require_function
+_br_exit_code = None
+try:
+    _br_code = compile(open('${scriptName}', encoding='utf-8').read(), '${scriptName}', 'exec')
+    exec(_br_code, globals())
+except SystemExit as _e:
+    _br_exit_code = _e.code
+`;
+    }
+    // CHICKADEE_DRIFT:runScriptPython:END
+
+    // CHICKADEE_DRIFT:CAPTURE_OUTPUT_PY:BEGIN
+    const CAPTURE_OUTPUT_PY = `
+(str(_br_stdout.getvalue()), str(_br_stderr.getvalue()), _br_exit_code)
+`;
+    // CHICKADEE_DRIFT:CAPTURE_OUTPUT_PY:END
+
+    // CHICKADEE_DRIFT:RESTORE_STREAMS_PY:BEGIN
+    const RESTORE_STREAMS_PY = `
+sys.stdout = sys.__stdout__
+sys.stderr = sys.__stderr__
+`;
+    // CHICKADEE_DRIFT:RESTORE_STREAMS_PY:END
 
     // -------------------------------------------------------------------------
     // Embedded runtime helpers (kept in sync with Sources/Worker/RunnerDaemon.swift)
@@ -1176,14 +1510,30 @@ for _module_name in _tr.student_module_names_in_load_order():
             // they stay in sync with Tools/runner-support/*.py.
             TEST_RUNTIME_PY,
             SITECUSTOMIZE_PY,
+            // Shared Python snippets — exposed so the grading-worker drift guard
+            // can assert grading-worker.js keeps byte-identical copies.
+            envConfigPython,
+            assignmentSeedPython,
+            STDOUT_REDIRECT_PY,
+            runScriptPython,
+            CAPTURE_OUTPUT_PY,
+            RESTORE_STREAMS_PY,
             runAndSubmit,
             runScripts,
             scriptExtension,
             extractNotebook,
+            extractNotebookToMap,
+            personalizationInputsSource,
             runRawScript,
             runPyScriptRaw,
+            deriveExitCode,
             buildCollection,
             removeRecursive,
+            writeFilesToPyFS,
+            fileAsText,
+            makeExecutor,
+            MainThreadExecutor,
+            GradingWorkerExecutor,
             fetchBytes,
             fetchText,
             toMessage,

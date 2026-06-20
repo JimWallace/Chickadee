@@ -19,8 +19,8 @@
 # /pyodide, and BOTH consumers load it:
 #   - the JupyterLite editor kernel (via pyodideUrl in
 #     Tools/jupyterlite/jupyter-lite.json), and
-#   - Chickadee's own browser paths (browser-runner.js, assignment-validate.js,
-#     pyodide-worker.js, setup-edit.js, notebook.js).
+#   - Chickadee's own browser paths (browser-runner.js, grading-worker.js,
+#     assignment-validate.js, pyodide-worker.js, setup-edit.js, notebook.js).
 # The version is NOT pinned here — it is DERIVED from the JupyterLite kernel
 # (jupyterlite-pyodide-kernel in Tools/jupyterlite/requirements.txt, surfaced
 # in the built bundle), because that kernel's bundled core wheels are

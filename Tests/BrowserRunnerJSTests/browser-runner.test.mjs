@@ -357,6 +357,91 @@ function resolveScriptBehavior(scriptName, fs, cwd, configured = {}) {
   };
 }
 
+// A fake grading worker (Public/grading-worker.js stand-in) for the
+// GradingWorkerExecutor path.  It speaks the same postMessage protocol:
+//   { id, type:'init', files, seed } -> { id, ok:true }
+//   { id, type:'run', script, limit } -> { id, ok:true, result:{exitCode,stdout,stderr} }
+// A `{ pending: true }` behavior NEVER replies — simulating a real worker stuck
+// in a synchronous CPU-bound loop (the exact case that hung the old
+// main-thread Promise.race).  The real worker can't be loaded under `node
+// --test` (it needs real Pyodide), so this double exercises the kill/respawn
+// glue the executor wraps around it.  The factory tracks every worker it spawns
+// so a test can assert a fresh worker was created after a terminate().
+function makeFakeGradingWorkerFactory(options) {
+  const created = [];
+
+  class FakeGradingWorker {
+    constructor() {
+      this.onmessage = null;
+      this.onerror = null;
+      this.terminated = false;
+      this.postedTypes = [];
+      this.files = {};
+      created.push(this);
+    }
+
+    _reply(message) {
+      // Replies are always async (matches a real Worker's message channel).
+      Promise.resolve().then(() => {
+        if (this.terminated) return;
+        if (typeof this.onmessage === 'function') this.onmessage({ data: message });
+      });
+    }
+
+    _behaviorFor(scriptName) {
+      const configured = options.scriptBehaviors || {};
+      if (configured[scriptName]) return configured[scriptName];
+      const raw = this.files[scriptName];
+      const text = typeof raw === 'string'
+        ? raw
+        : new TextDecoder().decode(raw instanceof Uint8Array ? raw : new Uint8Array(raw || []));
+      const lines = String(text).trim().split('\n');
+      const lastLine = lines[lines.length - 1] || '';
+      if (lastLine.includes('JSON_RESULT_PASS')) {
+        return { stdout: `${JSON.stringify({ shortResult: `${scriptName}: passed`, status: 'pass' })}\n`, stderr: '', exitCode: 0 };
+      }
+      if (lastLine.includes('JSON_RESULT_FAIL')) {
+        return { stdout: `${JSON.stringify({ shortResult: `${scriptName}: failed`, status: 'fail' })}\n`, stderr: 'assertion failed\n', exitCode: 1 };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+
+    postMessage(msg) {
+      this.postedTypes.push(msg.type);
+      if (this.terminated) return;
+      if (msg.type === 'init') {
+        this.files = msg.files || {};
+        this.seed = msg.seed ?? null;
+        this._reply({ id: msg.id, ok: true });
+        return;
+      }
+      if (msg.type === 'run') {
+        const behavior = this._behaviorFor(msg.script);
+        if (behavior.pending) return;  // never reply — simulates a real hang
+        this._reply({
+          id: msg.id,
+          ok: true,
+          result: {
+            exitCode: behavior.exitCode ?? 0,
+            stdout: behavior.stdout ?? '',
+            stderr: behavior.stderr ?? '',
+          },
+        });
+        return;
+      }
+      this._reply({ id: msg.id, ok: false, error: `unknown message type: ${msg.type}` });
+    }
+
+    terminate() {
+      this.terminated = true;
+    }
+  }
+
+  const factory = () => new FakeGradingWorker();
+  factory.created = created;
+  return factory;
+}
+
 async function loadRunnerHarness(options = {}) {
   const statusEl = { hidden: true, textContent: '', className: '' };
   const scriptLoads = [];
@@ -498,6 +583,17 @@ async function loadRunnerHarness(options = {}) {
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
+  // Web-Worker executor seam.  By default the harness exposes NO Worker and no
+  // factory override, so the runner falls back to the main-thread Pyodide path
+  // (the rest of the suite exercises that).  When a test opts in via
+  // `useGradingWorker`, install a fake-worker factory so the GradingWorkerExecutor
+  // path runs without real Pyodide.
+  let gradingWorkerFactory = null;
+  if (options.useGradingWorker) {
+    gradingWorkerFactory = options.workerFactory ?? makeFakeGradingWorkerFactory(options);
+    context.__CHICKADEE_GRADING_WORKER_FACTORY__ = gradingWorkerFactory;
+  }
+
   context.window = {
     document,
     fetch: fetchImpl,
@@ -522,6 +618,7 @@ async function loadRunnerHarness(options = {}) {
     fetchCalls,
     breadcrumbs,
     py,
+    gradingWorkerFactory,
   };
 }
 
@@ -770,6 +867,112 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
   assert.equal(result.outcomes[0].shortResult, 'timed out');
   assert.match(result.outcomes[1].shortResult, /Shell scripts cannot run/);
   assert.match(result.outcomes[2].shortResult, /WebR/);
+});
+
+test('GradingWorkerExecutor kills a CPU-bound run-away via terminate() and respawns for the next script', async () => {
+  // The bug: with Pyodide on the MAIN thread, a synchronous CPU-bound infinite
+  // loop in student code never yields to JS, so the Promise.race sleep timer
+  // never fires — the tab froze and the submission was lost.  The fix moves
+  // Pyodide into a Web Worker so the per-test timeout can call Worker.terminate()
+  // to forcibly kill the run-away thread (no SIGKILL on the main thread, no
+  // COOP/COEP needed), then spin up a fresh worker for the next script.
+  //
+  // The fake worker NEVER replies for the `{ pending: true }` script — a real
+  // worker stuck in `while True: pass` would be exactly this unresponsive.  The
+  // old main-thread code could not recover from this; the executor must time it
+  // out (terminate), then grade the next script in a brand-new worker.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: {
+      'runaway.py': '# runaway\nJSON_RESULT_PASS\n',  // would "pass" if it ever returned
+      'after.py': '# after\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 0.05,  // small, so the run-away trips it fast
+      testSuites: [
+        { script: 'runaway.py', tier: 'public' },
+        { script: 'after.py', tier: 'public' },
+      ],
+    },
+    scriptBehaviors: {
+      'runaway.py': { pending: true },  // hangs forever — never posts a reply
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_runaway',
+  );
+
+  // The hung script times out; the SUBSEQUENT script still grades — proving the
+  // run-away didn't take the whole submission down with it.
+  assert.deepEqual(
+    plain(result.outcomes.map(outcome => [outcome.testName, outcome.status])),
+    [
+      ['runaway', 'timeout'],
+      ['after', 'pass'],
+    ],
+  );
+  assert.equal(result.outcomes[0].shortResult, 'timed out');
+
+  // The kill path the old main-thread Promise.race could not provide: the first
+  // worker was terminated (forcibly killed mid-run), and a SECOND worker was
+  // spawned to grade `after.py`.
+  const workers = harness.gradingWorkerFactory.created;
+  assert.ok(workers.length >= 2, `expected a respawn after terminate, saw ${workers.length} worker(s)`);
+  assert.ok(workers[0].terminated, 'the run-away worker must be terminated');
+  // The fresh worker was re-initialized with the same workspace before running.
+  assert.ok(workers[1].postedTypes.includes('init'), 'respawned worker must be re-init()ed');
+  assert.ok(workers[1].postedTypes.includes('run'), 'respawned worker must run the next script');
+});
+
+test('GradingWorkerExecutor grades pass/fail through one worker and classifies non-python on the main thread', async () => {
+  // Happy path of the worker executor: one worker is spawned and re-used for
+  // every python script (no terminate), pass/fail are graded from the worker's
+  // RAW output, and a shell script is rejected on the MAIN thread without ever
+  // touching the worker (its 'run' never reaches the worker).
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: {
+      'test_pass.py': '# pass\nJSON_RESULT_PASS\n',
+      'test_fail.py': '# fail\nJSON_RESULT_FAIL\n',
+      'test_shell.sh': 'echo hi\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'test_pass.py', tier: 'public' },
+        { script: 'test_fail.py', tier: 'public' },
+        { script: 'test_shell.sh', tier: 'public' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_worker_happy',
+  );
+
+  assert.deepEqual(
+    plain(result.outcomes.map(outcome => [outcome.testName, outcome.status])),
+    [
+      ['test_pass', 'pass'],
+      ['test_fail', 'fail'],
+      ['test_shell', 'error'],
+    ],
+  );
+  assert.match(result.outcomes[2].shortResult, /Shell scripts cannot run/);
+
+  // Exactly one worker, never terminated mid-run (dispose() at the end may
+  // terminate it, which is fine) — and the shell script was classified on the
+  // main thread, so the worker only ever ran the two python scripts.
+  const workers = harness.gradingWorkerFactory.created;
+  assert.equal(workers.length, 1, 'a non-timing-out run reuses one worker');
+  const runCount = workers[0].postedTypes.filter(t => t === 'run').length;
+  assert.equal(runCount, 2, 'only the two python scripts reached the worker (shell handled on main thread)');
+  assert.equal(harness.postBodies.length, 1, 'results are still posted');
 });
 
 test('extensionless Python test scripts dispatch via their shebang instead of failing as unsupported', async () => {
