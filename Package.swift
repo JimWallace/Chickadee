@@ -31,7 +31,7 @@ let package = Package(
         // binary so CI / fresh checkouts don't pay a SwiftLint-from-source build.
         // Invoked on demand via `scripts/swiftlint.sh`; no `plugins:` entry on
         // any target, so `swift build` / `swift test` are unaffected.
-        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.63.3"),
+        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.64.0"),
     ],
     targets: [
         // MARK: - Runner core
