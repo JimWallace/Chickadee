@@ -17,39 +17,21 @@ name: Editor smoke test
 # check shipped blind (spurious phase-1 timeouts; the Atomics.waitAsync
 # data:-worker blocked under COEP).
 #
-# Runs two ways:
-#   • nightly (schedule) — always-on insurance across the whole editor stack;
-#   • per-PR but PATH-FILTERED — only when a notebook/editor/middleware/asset
-#     file changes, so the PRs that can actually break the editor get the gate
-#     without burdening every unrelated PR.
-#
-# Advisory for now (do NOT mark it a required check while it's path-filtered: a
-# required check that is skipped on most PRs blocks their merge). Promote to
-# required once it has proven stable — see docs/notebook-editor-smoke-test.md.
+# REQUIRED-GATE DESIGN. The trigger is intentionally NOT path-filtered: a path-
+# filtered workflow is *skipped* on unrelated PRs, and a required status check
+# that is skipped blocks those merges forever. Instead the workflow runs on every
+# PR, a `changes` job decides whether the editor surface was touched (fail-safe:
+# any uncertainty runs the smoke), the expensive `smoke` matrix runs only when it
+# was, and an always-running `editor-smoke-gate` job reports the single status to
+# require in branch protection: green when the smoke passed OR was skipped, red
+# only when it actually failed. To enforce it, mark **editor-smoke-gate** as a
+# required status check (see docs/notebook-editor-smoke-test.md).
 
 on:
   schedule:
     # ~03:30 America/Toronto (07:30 UTC) — off the nightly coverage slot.
     - cron: "30 7 * * *"
   pull_request:
-    paths:
-      - "Public/notebook*.js"
-      - "Public/browser-runner.js"
-      - "Public/pyodide-worker.js"
-      - "Public/assignment-validate.js"
-      - "Public/freeze-watchdog-worker.js"
-      - "Public/jupyterlite/**"
-      - "Public/pyodide/**"
-      - "Public/vendor/**"
-      - "Sources/APIServer/Middleware/COEPMiddleware.swift"
-      - "Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware.swift"
-      - "Sources/APIServer/Middleware/SecurityHeadersMiddleware.swift"
-      - "Sources/APIServer/Middleware/EditorAssetFastPathMiddleware.swift"
-      - "Sources/APIServer/Bootstrap/AppMiddleware.swift"
-      - "Sources/APIServer/Configuration/SecurityConfig.swift"
-      - "Tools/jupyterlite/**"
-      - "Tools/editor-smoke-test/**"
-      - ".github/workflows/editor-smoke.yml"
   workflow_dispatch:
 
 concurrency:
@@ -57,7 +39,59 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decide whether this PR touches any editor / grading / isolation surface.
+  # Filtering here (rather than at the trigger) keeps the workflow running on
+  # every PR so `editor-smoke-gate` always reports a status — while still
+  # skipping the expensive smoke when nothing relevant changed. Fail-safe: a
+  # non-PR event, a missing base commit, or an empty diff all run the smoke.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      editor: ${{ steps.detect.outputs.editor }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::non-PR event ($EVENT) — running editor smoke."
+            exit 0
+          fi
+          git fetch --no-tags --quiet origin "$BASE_REF" || true
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::base sha unavailable — running editor smoke (fail-safe)."
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA" HEAD)"
+          if [ -z "$changed" ]; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::no diff computed — running editor smoke (fail-safe)."
+            exit 0
+          fi
+          # Editor / grading / cross-origin-isolation surface. Keep in sync with
+          # the assets the editor actually loads and the middlewares that isolate
+          # them. Over-matching is safe (it just runs the smoke); under-matching
+          # is the dangerous direction.
+          pattern='^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/grading-worker\.js|Public/pyodide-worker\.js|Public/assignment-validate\.js|Public/freeze-watchdog-worker\.js|Public/jupyterlite/|Public/pyodide/|Public/vendor/|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml)'
+          if echo "$changed" | grep -qE "$pattern"; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::editor-relevant files changed — running editor smoke."
+          else
+            echo "editor=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no editor-relevant changes — skipping editor smoke."
+          fi
+
   smoke:
+    needs: changes
+    if: ${{ needs.changes.outputs.editor == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Run the editor against BOTH engines we ship to: Chromium (Chrome/Edge) and
@@ -129,3 +163,32 @@ jobs:
       # editor regressions in CI rather than in front of a student.
       - name: Run editor smoke selftest (${{ matrix.browser }}; both sync paths + freeze detector)
         run: SMOKE_BROWSER=${{ matrix.browser }} Tools/editor-smoke-test/selftest.sh
+
+  # Always-running required status. Green when the smoke passed OR was skipped
+  # (no editor-relevant changes), red only when the smoke actually failed — so
+  # this one check can be marked required without blocking unrelated PRs. Mark
+  # THIS job ("editor-smoke-gate") required in branch protection.
+  editor-smoke-gate:
+    needs: [changes, smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on editor smoke result
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+          EDITOR_CHANGED: ${{ needs.changes.outputs.editor }}
+        run: |
+          echo "changes job: ${CHANGES_RESULT}; editor-relevant: ${EDITOR_CHANGED}; smoke: ${SMOKE_RESULT}"
+          # If we couldn't even determine what changed, fail closed.
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::change-detection job did not succeed (${CHANGES_RESULT}) — failing closed."
+            exit 1
+          fi
+          # smoke is 'skipped' when no editor files changed (pass), 'success'
+          # when it ran green, 'failure'/'cancelled' when it broke.
+          if [ "$SMOKE_RESULT" = "failure" ] || [ "$SMOKE_RESULT" = "cancelled" ]; then
+            echo "::error::Editor smoke test failed — see the smoke job."
+            exit 1
+          fi
+          echo "Editor smoke gate passed (smoke: ${SMOKE_RESULT})."
