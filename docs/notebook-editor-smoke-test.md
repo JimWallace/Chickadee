@@ -36,24 +36,28 @@ SMOKE_SIMULATE_NO_SYNC=1 (no SW/SAB):  crossOriginIsolated=false  SMOKE FAIL  (i
 The decisions below were resolved as: **Chromium + WebKit** (CI runs the selftest
 under both engines via a matrix — `SMOKE_BROWSER`; WebKit is the Safari engine and
 is what catches the Safari-class regressions a Chromium-only check shipped blind);
-**advisory** (not a required check — it is path-filtered, so a required check would
-block the merge of every PR that skips it; promote to required after it proves
-stable — see "Make it a required gate" below); **full app** harness (it drives the
-real `/jupyterlite/repl` through the real middleware chain, no course seeding). The
-original proposal follows for context.
+**requireable** (the always-runs gate is now in place — see below); **full app**
+harness (it drives the real `/jupyterlite/repl` through the real middleware chain,
+no course seeding). The original proposal follows for context.
 
-## Make it a required gate (recommended)
+## Make it a required gate — IMPLEMENTED (one setting left)
 
-The smoke job is still *advisory* — a red run does not block merge. Given how many
-editor regressions have reached students, promote it to a **required** check. The
-GitHub gotcha: a path-filtered workflow is *skipped* on PRs that don't touch
-editor files, and a required check that is "skipped" blocks those merges forever.
-The fix is the standard always-runs gate: add a tiny companion job that has **no**
-path filter, `needs:` the smoke matrix, and passes iff every smoke leg succeeded
-**or was skipped** — then mark *that* job required in branch protection. That makes
-"editor changed ⇒ both engines must pass" enforceable without blocking unrelated
-PRs. (Branch protection itself is a repo setting, applied in GitHub, not in this
-file.)
+The always-runs gate is now built into `editor-smoke.yml`. The workflow no longer
+path-filters at the trigger; instead:
+
+1. a **`changes`** job decides whether the PR touched the editor/grading/isolation
+   surface (git-diff against the base; fail-safe — any uncertainty runs the smoke);
+2. the expensive **`smoke`** matrix (Chromium + WebKit) runs only when it did;
+3. an always-running **`editor-smoke-gate`** job reports the single status: green
+   when the smoke passed **or was skipped** (no editor changes), red only when the
+   smoke actually failed — and red if change-detection itself failed (fail closed).
+
+So every PR reports `editor-smoke-gate`, and it never spuriously blocks an unrelated
+PR. The **one remaining step is a repo setting** (not in this file): in branch
+protection for `main`, add **`editor-smoke-gate`** to the required status checks.
+Do NOT require the matrix legs (`smoke (chromium)` / `smoke (webkit)`) directly —
+they are skipped on non-editor PRs and would block those merges; require only the
+gate.
 
 ## Why
 
