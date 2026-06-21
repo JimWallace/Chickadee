@@ -1,32 +1,29 @@
 // Tests/APITests/JupyterLiteConfigTests.swift
 //
 // Regression guard for the JupyterLite bundle config (`Public/jupyterlite/
-// jupyter-lite.json`).  Asserts the service-worker-manager plugin is ENABLED
-// (i.e. NOT in disabledExtensions).
+// jupyter-lite.json`).  Asserts the service-worker-manager plugin is DISABLED
+// (i.e. listed in disabledExtensions).
 //
-// History — this guard was INVERTED:
+// History — this guard has flipped twice, tracking the kernel's sync mechanism:
 //
-//   * v0.4.150 (PR #467) DISABLED the service-worker-manager plugin because
-//     students saw 404s on `/jupyterlite/api/drive` and the kernel stuck in
-//     "Unknown".  Root cause was a never-fully-understood SW registration/
-//     controller race.  Disabling forced `mountDrive=false` and avoided it.
-//   * BUT disabling the SW also removed the kernel's ONLY synchronous-execution
-//     mechanism (the SW intercepts `/api/drive` AND `/api/stdin/` and broadcasts
-//     to the kernel).  With no SW and no SharedArrayBuffer, a synchronous kernel
-//     op (`input()`) hard-freezes the page — the "Page Unresponsive" freeze.
-//     v0.4.150's own changelog flagged this: "no stdin … input() in cells will
-//     hang."
-//   * Re-enabling the SW restores that sync mechanism and fixes the freeze. The
-//     vended SW already does `self.skipWaiting()` + `self.clients.claim()`
-//     (see Public/jupyterlite/service-worker.js), the standard lifecycle that
-//     addresses the original controller race.
+//   * v0.4.150 (PR #467) DISABLED the SW (kernel stuck "Unknown" from an SW
+//     registration/controller race) — but that removed the kernel's only
+//     synchronous-execution path, so `input()` hard-froze the page (#959).
+//   * v0.4.467 RE-ENABLED the SW to restore sync and kill the freeze — at the
+//     cost of reintroducing the SW-control "Kernel Unknown" race on devices
+//     where the SW failed to control the page in time.
+//   * Now: cross-origin isolation is unconditional, so the kernel uses
+//     `SharedArrayBuffer` for synchronous stdin/Drive and no longer needs the
+//     SW at all.  The SW is therefore DISABLED again — but this time there is no
+//     freeze (SAB carries sync) AND no control race (no SW to race).  This is
+//     the deterministic end state: one sync path, no fallback.
 //
-// ⚠️ Re-enabling reverses a guarded decision and reintroduces the risk of the
-// "Kernel Unknown" race on devices where the SW fails to control the page.
-// This MUST be browser-verified (Chrome + Safari + a managed device) before it
-// ships — CI cannot test it.  If Kernel Unknown recurs, the next step is a
-// kernel-wheel patch that gates `mountDrive` on the SW actually controlling the
-// page (graceful degradation), not re-disabling the SW.
+// This is browser-verified by the editor-smoke harness
+// (`Tools/editor-smoke-test`): the selftest boots the editor with no SW and
+// asserts the kernel + `input()` work over SAB, and the authenticated
+// notebook-page e2e loads the student's notebook from the Drive and grades a
+// real submission — both under Chromium AND WebKit (Safari engine).  If you ever
+// re-ENABLE the SW, restore the old "must be enabled" assertion and rationale.
 
 import Foundation
 import Testing
@@ -46,7 +43,7 @@ import Testing
     private static let serviceWorkerManager =
         "@jupyterlite/application-extension:service-worker-manager"
 
-    @Test func sourceConfigEnablesServiceWorkerManager() throws {
+    @Test func sourceConfigDisablesServiceWorkerManager() throws {
         let url = URL(fileURLWithPath: sourceConfigPath)
         let data = try Data(contentsOf: url)
         let root = try #require(
@@ -57,16 +54,16 @@ import Testing
 
         let disabled = cfg["disabledExtensions"] as? [String] ?? []
         let sourceMsg: Comment = """
-            Expected source JupyterLite config (\(sourceConfigPath)) to ENABLE the \
-            service-worker-manager plugin (not in disabledExtensions) so the kernel \
-            regains its SW-based stdin/Drive sync and the input()-freeze is fixed. \
-            Got disabledExtensions=\(disabled). Do not re-disable without restoring \
-            another sync mechanism — disabling alone reintroduces the freeze.
+            Expected source JupyterLite config (\(sourceConfigPath)) to DISABLE the \
+            service-worker-manager plugin (listed in disabledExtensions): the kernel \
+            now syncs stdin/Drive over SharedArrayBuffer (cross-origin isolation), so \
+            the SW is redundant. Got disabledExtensions=\(disabled). Do not re-enable \
+            without reverting the editor to the SW sync path — see the file header.
             """
-        #expect(!disabled.contains(Self.serviceWorkerManager), sourceMsg)
+        #expect(disabled.contains(Self.serviceWorkerManager), sourceMsg)
     }
 
-    @Test func bundleEnablesServiceWorkerManager() throws {
+    @Test func bundleDisablesServiceWorkerManager() throws {
         let url = URL(fileURLWithPath: configPath)
         let data = try Data(contentsOf: url)
         let root = try #require(
@@ -77,12 +74,12 @@ import Testing
 
         let disabled = cfg["disabledExtensions"] as? [String] ?? []
         let bundleMsg: Comment = """
-            Expected built JupyterLite bundle to ENABLE the service-worker-manager \
-            plugin (not in disabledExtensions). Got disabledExtensions=\(disabled). \
-            Remove it from Tools/jupyterlite/jupyter-lite.json and re-run \
-            scripts/build-jupyterlite.sh (or sync the served config).
+            Expected built JupyterLite bundle to DISABLE the service-worker-manager \
+            plugin (listed in disabledExtensions); the kernel uses SharedArrayBuffer \
+            now. Got disabledExtensions=\(disabled). Add it to \
+            Tools/jupyterlite/jupyter-lite.json and sync the served config.
             """
-        #expect(!disabled.contains(Self.serviceWorkerManager), bundleMsg)
+        #expect(disabled.contains(Self.serviceWorkerManager), bundleMsg)
     }
 
     @Test func bundleAppVersionMatchesRequirementsPin() throws {
