@@ -84,4 +84,4 @@ if [ "$ready" -ne 1 ]; then
   exit 2
 fi
 
-node editor-check.mjs "http://127.0.0.1:$PORT"
+node "${SMOKE_CHECK:-editor-check.mjs}" "http://127.0.0.1:$PORT"

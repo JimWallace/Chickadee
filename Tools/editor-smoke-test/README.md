@@ -14,6 +14,28 @@ of a student. This test catches that class of regression before it ships.
 See `docs/notebook-editor-smoke-test.md` for the rationale, phasing, and the
 open greenlight decisions (browser matrix, blocking-vs-advisory, CI wiring).
 
+## Two checks
+
+- **`editor-check.mjs`** (default; run via `selftest.sh`) — drives
+  `/jupyterlite/repl` standalone: kernel boots, `input()` round-trips over
+  SharedArrayBuffer, the app workers spawn under isolation, and a deliberately
+  no-sync config still freezes (so the detector is real).
+- **`notebook-page-check.mjs`** — the **full authenticated end-to-end** against
+  the REAL student page. It seeds a browser-graded assignment over the HTTP API
+  (register instructor → create course → auto-enroll → upload a browser test
+  setup → register + log in a student), then opens `/testsetups/:id/notebook`
+  (the isolated parent that embeds the editor iframe AND spawns our grading /
+  freeze workers) and asserts: the page is cross-origin isolated, the app
+  workers spawn (the #986 regression, on the *real* page), the editor loads the
+  notebook from the Drive, and a real **Submit** runs in-browser grading and
+  renders a passing result. Run it with:
+
+  ```bash
+  SMOKE_BROWSER=webkit SMOKE_CHECK=notebook-page-check.mjs ./run-smoke.sh
+  ```
+
+  CI runs both checks under the Chromium + WebKit matrix.
+
 ## What it asserts
 
 Loading `/jupyterlite/repl/index.html` (the same Pyodide kernel + vendored

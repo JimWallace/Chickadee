@@ -164,6 +164,16 @@ jobs:
       - name: Run editor smoke selftest (${{ matrix.browser }}; both sync paths + freeze detector)
         run: SMOKE_BROWSER=${{ matrix.browser }} Tools/editor-smoke-test/selftest.sh
 
+      # Full authenticated end-to-end against the REAL student notebook page:
+      # seed a browser-graded assignment over the HTTP API, log in as a student,
+      # open /testsetups/:id/notebook (the isolated parent that embeds the editor
+      # iframe AND spawns our grading/freeze workers), and assert it is isolated,
+      # the workers spawn, the editor loads the notebook from the Drive, and a
+      # real Submit grades. This drives the actual page (not /jupyterlite/repl) —
+      # the gap that hid the grading-worker COEP block (#986).
+      - name: Run authenticated notebook-page e2e (${{ matrix.browser }})
+        run: SMOKE_BROWSER=${{ matrix.browser }} SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
   # Always-running required status. Green when the smoke passed OR was skipped
   # (no editor-relevant changes), red only when the smoke actually failed — so
   # this one check can be marked required without blocking unrelated PRs. Mark
