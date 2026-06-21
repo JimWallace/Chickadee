@@ -42,8 +42,12 @@ const COURSE = { code: `E2E${STAMP}`.slice(0, 12), name: "E2E Browser Course" };
 // Budgets — the real page boots TWO Pyodide instances (editor kernel + grader),
 // both local but large, so be generous.
 const PAGE_LOAD_MS = 30_000;
-const KERNEL_BOOT_MS = parseInt(process.env.SMOKE_KERNEL_MS || "90000", 10);
-const SUBMIT_RESULT_MS = parseInt(process.env.SMOKE_SUBMIT_MS || "120000", 10);
+const KERNEL_BOOT_MS = parseInt(process.env.SMOKE_KERNEL_MS || "120000", 10);
+// Generous: the real page boots TWO Pyodides (editor kernel + grader). Without
+// the JupyterLite service worker's asset cache (disabled now that the kernel
+// syncs over SharedArrayBuffer) that double load is heavier — measurably so
+// under WebKit — so grading-to-result can take a few minutes on a cold runner.
+const SUBMIT_RESULT_MS = parseInt(process.env.SMOKE_SUBMIT_MS || "240000", 10);
 
 function fail(reason, extra) {
   console.log(`E2E FAIL — ${reason}`);
@@ -218,32 +222,14 @@ async function main() {
 
     // (2) Our app Web Workers must spawn from the real isolated page (the #986
     // regression: a require-corp page can't spawn a worker whose script lacks
-    // COEP). This is the same probe as editor-check, but on the REAL page.
-    const workerScripts = ["/grading-worker.js", "/freeze-watchdog-worker.js"];
-    const workerBlocked = [];
-    const onWorkerReqFail = (req) => {
-      const why = req.failure()?.errorText || "";
-      if (workerScripts.some((s) => req.url().includes(s)) && /ERR_BLOCKED/i.test(why)) {
-        workerBlocked.push(`${req.url()} — ${why}`);
-      }
-    };
-    page.on("requestfailed", onWorkerReqFail);
-    const spawnErrors = await page.evaluate(async (scripts) => {
-      const errs = [];
-      await Promise.all(scripts.map((s) => new Promise((resolve) => {
-        let w;
-        try { w = new Worker(s); } catch (e) { errs.push(`${s} threw ${(e && e.message) || e}`); return resolve(); }
-        setTimeout(() => { try { w.terminate(); } catch (_) { /* ignore */ } resolve(); }, 3000);
-      })));
-      return errs;
-    }, workerScripts);
-    await page.waitForTimeout(200);
-    page.off("requestfailed", onWorkerReqFail);
-    if (workerBlocked.length || spawnErrors.length) {
-      return fail("an app Web Worker was blocked under isolation on the real notebook page",
-        [...workerBlocked, ...spawnErrors].join("\n"));
-    }
-    console.log(`worker-spawn probe: ${workerScripts.join(", ")} spawned OK on the real page`);
+    // COEP). We do NOT spawn a synthetic probe worker here — that would start a
+    // second Pyodide load (grading-worker.js importScripts pyodide at startup)
+    // and contend with the real grading. Instead the page exercises the workers
+    // for us: notebook.js spawns /freeze-watchdog-worker.js on load and
+    // browser-runner.js spawns /grading-worker.js on Submit. A COEP block of
+    // either surfaces as an ERR_BLOCKED request, captured in `blocked` and
+    // asserted below (and the Submit step would also fail). Editor-check.mjs
+    // keeps the active probe for the standalone case.
 
     // (3) The editor iframe must boot the JupyterLite shell AND load the
     // student's notebook from the Drive. We probe the same-origin iframe's DOM
@@ -295,21 +281,27 @@ async function main() {
     }
     await submit.click();
     const results = page.locator("#nb-results");
+    // Wait for the grader to render a terminal result line ("N / M passed …").
     const gotResults = await page.waitForFunction(
       () => {
         const el = document.getElementById("nb-results");
         if (!el || el.hidden) return false;
-        const t = el.innerText || "";
-        return /passed|✓|fail|error/i.test(t);
+        return /\d+\s*\/\s*\d+\s*passed/i.test(el.innerText || "");
       },
       null, { timeout: SUBMIT_RESULT_MS }
     ).then(() => true).catch(() => false);
-    if (blocked.length) return fail("blocked resources during submit/grading", blocked.join("\n"));
+    if (blocked.length) return fail("blocked resources during submit/grading (a worker was COEP-blocked)", blocked.join("\n"));
     if (!gotResults) return fail(`no grading result rendered within ${SUBMIT_RESULT_MS}ms`);
     const resultText = (await results.innerText()).replace(/\s+/g, " ").trim().slice(0, 200);
     console.log(`grading result rendered: "${resultText}"`);
+    // The fixture's one public test (`print(...)`, exit 0) must PASS — a
+    // result of "1 / 1 passed" proves grading-worker.js spawned under isolation,
+    // loaded Pyodide, ran the test, and posted a correct outcome end-to-end.
+    if (!/1\s*\/\s*1\s*passed/i.test(resultText)) {
+      return fail(`grading did not pass cleanly (expected "1 / 1 passed"): ${resultText}`);
+    }
 
-    console.log(`E2E PASS — real notebook page isolated, workers spawned, kernel booted, submit graded (engine=${browserName})`);
+    console.log(`E2E PASS — real notebook page isolated, workers spawned, kernel booted, submit graded 1/1 (engine=${browserName})`);
     await finish(0);
   } catch (err) {
     return fail(`exception: ${(err && err.stack) || err}`, blocked.length ? blocked.join("\n") : undefined);

@@ -172,10 +172,27 @@ Harder to do cleanly here than the nb_mypy wheel patch
 content-hash-named webpack chunks rather than a fixed-name Python member.
 Prefer plan C; this is a per-browser safety net only.
 
+### Service worker disabled (no safety net)
+
+Now that cross-origin isolation is unconditional and `SharedArrayBuffer` carries
+the kernel's synchronous stdin/Drive, the JupyterLite **service worker is
+redundant and has been disabled** (`@jupyterlite/application-extension:service-worker-manager`
+in `disabledExtensions`, both `Tools/jupyterlite/jupyter-lite.json` and the served
+`Public/jupyterlite/jupyter-lite.json`). This is the deterministic end state:
+**one sync path (SAB), no fallback** — which also removes the SW-control race
+entirely (no SW to race) and the redundant SW asset cache. Guarded by
+`JupyterLiteConfigTests` (now asserts the SW manager *is* disabled) and proven by
+the editor-smoke selftest (editor boots + `input()` over SAB with no SW) and the
+authenticated notebook-page e2e (the real editor loads the notebook from the
+Drive and grades a real submission with no SW) — both under Chromium *and*
+WebKit. One observed trade-off: without the SW asset cache, the page's two
+Pyodide loads (editor kernel + grader) are heavier, so grading-to-result is
+somewhat slower (noticeably under WebKit); it still completes.
+
 ## Quick reference
 
 | | Sync path | SW-control race? | Status |
 |---|---|---|---|
 | Before | JupyterLite service worker | **yes** | the bug; recovery ladder A mitigates it |
-| Now (unconditional) | `SharedArrayBuffer` (cross-origin isolation) | **no** | shipped + headless-proven; SW kept as harmless fallback |
-| Fallback | SW, gated on `serviceWorker.controller` | removed | per-browser safety net only |
+| Now | `SharedArrayBuffer` (cross-origin isolation) | **no** | shipped + headless-proven (both engines); **SW disabled** — one sync path, no fallback |
+| Removed | SW, gated on `serviceWorker.controller` | n/a | the never-built fallback; unnecessary once SAB is the sole path |
