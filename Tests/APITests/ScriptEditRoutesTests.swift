@@ -10,7 +10,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -67,7 +67,7 @@ import XCTVapor
     /// Skips the test if Python 3 is unavailable (same pattern as ZipArchiverTests).
     private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
-            throw XCTSkip("env not available")
+            throw IssueRecorded("env not available")
         }
         // An empty zip can be made with a dummy entry then deleted, but it's easier
         // to always include a placeholder if no entries are given.
@@ -91,7 +91,7 @@ import XCTVapor
         try proc.run()
         proc.waitUntilExit()
         guard proc.terminationStatus == 0 else {
-            throw XCTSkip("python3 not available or failed to create zip")
+            throw IssueRecorded("python3 not available or failed to create zip")
         }
     }
 
@@ -102,7 +102,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             try await insertSetup(
@@ -134,7 +134,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             try await insertSetup(id: "sc_get2", withEntries: [("test_a.py", "pass\n")])
@@ -159,7 +159,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsStudent()
             try await insertSetup(id: "sc_get3", withEntries: [("test_a.py", "pass\n")])
@@ -204,7 +204,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -237,7 +237,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -266,7 +266,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsStudent()
             try await insertSetup(id: "sc_put3", withEntries: [("test_a.py", "pass\n")])
@@ -295,7 +295,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -334,7 +334,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -374,7 +374,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -403,7 +403,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -432,7 +432,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsStudent()
             try await insertSetup(id: "sc_post5", withEntries: [])
@@ -461,7 +461,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -499,7 +499,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -545,7 +545,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -588,7 +588,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsInstructor()
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -615,7 +615,7 @@ import XCTVapor
             guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
                 FileManager.default.fileExists(atPath: "/usr/bin/zip")
             else {
-                throw XCTSkip("zip/unzip not available")
+                throw IssueRecorded("zip/unzip not available")
             }
             let cookie = try await loginAsStudent()
             try await insertSetup(id: "sc_del5", withEntries: [("test_a.py", "pass\n")])

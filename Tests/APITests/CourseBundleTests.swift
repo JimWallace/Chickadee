@@ -11,7 +11,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -425,7 +425,7 @@ import XCTVapor
                 let course = try await APICourse.query(on: app.db)
                     .filter(\.$code == "IMP_RECORDS").first()
             else {
-                XCTFail("Imported course should exist in DB")
+                Issue.record("Imported course should exist in DB")
                 return
             }
             let courseID = try course.requireID()
@@ -470,7 +470,7 @@ import XCTVapor
                 .filter(\.$code == "USERMATCH_CB").first()
             #expect(course != nil)
             guard let courseID2 = try course?.requireID() else {
-                XCTFail("Imported course USERMATCH_CB not found in DB")
+                Issue.record("Imported course USERMATCH_CB not found in DB")
                 return
             }
             let enrollment = try await APICourseEnrollment.query(on: app.db)
@@ -544,7 +544,7 @@ import XCTVapor
                     .filter(\.$isArchived == false)
                     .first()
             else {
-                XCTFail("Imported course should exist and be active")
+                Issue.record("Imported course should exist and be active")
                 return
             }
             let importedID = try imported.requireID()

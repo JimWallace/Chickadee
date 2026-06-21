@@ -11,7 +11,7 @@ import Fluent
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -160,7 +160,7 @@ import XCTVapor
         try await app.asyncBoot()
         try await app.startup()
         guard let port = app.http.server.shared.localAddress?.port else {
-            throw XCTSkip("mock provider failed to bind a port")
+            throw IssueRecorded("mock provider failed to bind a port")
         }
         return (app, port, tokenEndpoint)
     }
@@ -193,7 +193,7 @@ import XCTVapor
         return mergedCookie(existing: existing, setCookieHeader: setCookie)
     }
 
-    private func mergedCookie(existing: String, from response: XCTHTTPResponse) -> String {
+    private func mergedCookie(existing: String, from response: TestingHTTPResponse) -> String {
         guard let setCookie = response.headers.first(name: .setCookie), !setCookie.isEmpty else {
             return existing
         }

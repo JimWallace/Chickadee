@@ -1,7 +1,7 @@
 import Fluent
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 

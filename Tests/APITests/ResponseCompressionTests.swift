@@ -4,7 +4,7 @@
 // tests bypass the compressor entirely.
 
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -33,7 +33,7 @@ import XCTVapor
 
     @Test func compressibleAssetIsGzippedOverTheWire() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .GET, "/styles.css",
                 headers: ["Accept-Encoding": "gzip"]
             ) { res async in
@@ -45,7 +45,7 @@ import XCTVapor
 
     @Test func htmlIsExcludedFromCompression() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .GET, "/page",
                 headers: ["Accept-Encoding": "gzip"]
             ) { res async in
@@ -59,7 +59,7 @@ import XCTVapor
 
     @Test func clientWithoutAcceptEncodingGetsIdentity() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .GET, "/styles.css"
             ) { res async in
                 #expect(res.status == .ok)

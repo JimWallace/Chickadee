@@ -5,7 +5,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -95,7 +95,7 @@ import XCTVapor
             let user = try await APIUser.query(on: app.db)
                 .filter(\.$username == username).first()
         else {
-            XCTFail("Expected user \(username) to exist")
+            Issue.record("Expected user \(username) to exist")
             return
         }
         try await APICourseEnrollment(

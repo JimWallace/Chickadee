@@ -6,7 +6,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -41,7 +41,7 @@ import XCTVapor
 
     @Test func noRedirectWhenEnforcementDisabled() async throws {
         try await withApp(try await makeApp(enforceHTTPS: false)) { app in
-            try await app.testable().test(.GET, "/test") { res async in
+            try await app.testing().test(.GET, "/test") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string == "ok")
             }
@@ -52,7 +52,7 @@ import XCTVapor
 
     @Test func httpsRequestPassesThrough() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/test",
                 beforeRequest: { req async in
                     req.headers.add(name: "X-Forwarded-Proto", value: "https")
@@ -67,7 +67,7 @@ import XCTVapor
 
     @Test func getRedirectsToHTTPS() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/test",
                 beforeRequest: { req async in
                     req.headers.add(name: .host, value: "example.com")
@@ -86,7 +86,7 @@ import XCTVapor
 
     @Test func postReturns426() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/submit",
                 beforeRequest: { req async in
                     req.headers.add(name: .host, value: "example.com")
@@ -101,7 +101,7 @@ import XCTVapor
 
     @Test func workerPostPassesThroughOverPlainHTTP() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/api/v1/worker/request",
                 beforeRequest: { req async in
                     req.headers.add(name: .host, value: "example.com")
@@ -115,7 +115,7 @@ import XCTVapor
 
     @Test func healthGetPassesThroughOverPlainHTTP() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/health",
                 beforeRequest: { req async in
                     req.headers.add(name: .host, value: "example.com")
@@ -131,7 +131,7 @@ import XCTVapor
 
     @Test func forwardedProtoHTTPSPassesThrough() async throws {
         try await withApp(try await makeApp(trustForwardedProto: true)) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/test",
                 beforeRequest: { req async in
                     req.headers.add(name: "X-Forwarded-Proto", value: "https")
@@ -144,7 +144,7 @@ import XCTVapor
 
     @Test func forwardedProtoHTTPRedirects() async throws {
         try await withApp(try await makeApp(trustForwardedProto: true)) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/test",
                 beforeRequest: { req async in
                     req.headers.add(name: "X-Forwarded-Proto", value: "http")
@@ -160,7 +160,7 @@ import XCTVapor
 
     @Test func redirectUsesForwardedHost() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/test",
                 beforeRequest: { req async in
                     req.headers.add(name: "X-Forwarded-Host", value: "public.example.com")
@@ -180,7 +180,7 @@ import XCTVapor
 
     @Test func redirectUsesPublicBaseURL() async throws {
         try await withApp(try await makeApp(publicBaseURL: "https://chickadee.example.edu")) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/test",
                 beforeRequest: { req async in
                     req.headers.add(name: .host, value: "internal.local")
@@ -199,7 +199,7 @@ import XCTVapor
 
     @Test func redirectFallsBackToLocalhost() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/test",
                 afterResponse: { res async in
                     #expect(res.status == .temporaryRedirect)
@@ -213,7 +213,7 @@ import XCTVapor
 
     @Test func headRedirectsLikeGET() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .HEAD, "/test",
                 beforeRequest: { req async in
                     req.headers.add(name: .host, value: "example.com")

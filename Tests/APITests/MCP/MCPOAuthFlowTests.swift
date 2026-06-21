@@ -10,7 +10,7 @@ import Fluent
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -91,7 +91,7 @@ import XCTVapor
     /// is the whole point (Safari/ITP drops the cookie on this cross-site hop).
     private func submitConsent(
         _ app: Application, token: String, decision: String, cookie: String? = nil
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/authorize",
             beforeRequest: { req in
@@ -105,7 +105,7 @@ import XCTVapor
     /// returns the POST response (a 303 to the client).
     private func consent(
         _ app: Application, cookie: String, scope: String, decision: String
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         let token = try await mintConsentToken(app, cookie: cookie, scope: scope)
         return try await submitConsent(app, token: token, decision: decision)
     }
@@ -115,13 +115,13 @@ import XCTVapor
         return components.queryItems?.first(where: { $0.name == name })?.value
     }
 
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> XCTHTTPResponse {
+    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/token",
             beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
     }
 
-    private func jsonField(_ name: String, in res: XCTHTTPResponse) -> String? {
+    private func jsonField(_ name: String, in res: TestingHTTPResponse) -> String? {
         let object = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
         return object?[name] as? String
     }

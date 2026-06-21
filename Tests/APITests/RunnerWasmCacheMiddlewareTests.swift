@@ -1,6 +1,6 @@
 import Fluent
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -18,7 +18,7 @@ import XCTVapor
 
     @Test func hashedWasmIsImmutableAndApplicationWasm() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/runner-wasm/RunnerWasm.deadbeef.wasm") { res async in
+            try await app.testing().test(.GET, "/runner-wasm/RunnerWasm.deadbeef.wasm") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .contentType) == "application/wasm")
                 #expect(
@@ -29,7 +29,7 @@ import XCTVapor
 
     @Test func loaderRevalidates() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/runner-wasm/runner-core.js") { res async in
+            try await app.testing().test(.GET, "/runner-wasm/runner-core.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .cacheControl) == "no-cache")
             }
@@ -38,7 +38,7 @@ import XCTVapor
 
     @Test func unrelatedAssetIsUntouched() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/styles.css") { res async in
+            try await app.testing().test(.GET, "/styles.css") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .cacheControl) == nil)
             }

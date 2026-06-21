@@ -1,7 +1,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 @testable import Core
@@ -230,7 +230,7 @@ import XCTVapor
     private func requestJob(
         workerID: String,
         profile: RunnerCapabilityProfile?
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         let path = "/api/v1/worker/request"
         let payload = WorkerActivityPayload(
             workerID: workerID,
@@ -284,7 +284,7 @@ import XCTVapor
 
     private func makeAssignment(setupID: String, title: String) async throws -> APIAssignment {
         guard let courseID = try await APITestSetup.find(setupID, on: app.db)?.courseID else {
-            throw XCTSkip("missing course for setup")
+            throw IssueRecorded("missing course for setup")
         }
         let assignment = APIAssignment(testSetupID: setupID, title: title, isOpen: true, courseID: courseID)
         try await assignment.save(on: app.db)

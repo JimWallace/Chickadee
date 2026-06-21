@@ -8,7 +8,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -337,8 +337,8 @@ import XCTVapor
                     let recentIndex = try #require(html.range(of: "recent_seen_student")?.lowerBound)
                     let olderIndex = try #require(html.range(of: "older_seen_student")?.lowerBound)
                     let neverIndex = try #require(html.range(of: "never_seen_student")?.lowerBound)
-                    XCTAssertLessThan(recentIndex, olderIndex)
-                    XCTAssertLessThan(olderIndex, neverIndex)
+                    #expect(recentIndex < olderIndex)
+                    #expect(olderIndex < neverIndex)
                 })
 
         }

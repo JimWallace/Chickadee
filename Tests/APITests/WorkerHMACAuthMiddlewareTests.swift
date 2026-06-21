@@ -1,7 +1,7 @@
 import Crypto
 import Fluent
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -62,7 +62,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -76,7 +76,7 @@ import XCTVapor
 
     @Test func rejectsMissingHeaders() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/internal/worker/ping",
                 beforeRequest: { req async in
                     req.headers.contentType = .json
@@ -101,7 +101,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -127,7 +127,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -137,7 +137,7 @@ import XCTVapor
                     #expect(res.status == .ok)
                 })
 
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -163,7 +163,7 @@ import XCTVapor
         headers.replaceOrAdd(name: "X-Worker-Signature", value: "deadbeef")
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -191,7 +191,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .POST,
                 path,
                 headers: headers,
@@ -216,7 +216,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .POST,
                 path,
                 headers: headers,

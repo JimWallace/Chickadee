@@ -12,7 +12,7 @@ import Leaf
 import LeafKit
 import SQLKit
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -288,18 +288,22 @@ extension Application {
         _ path: String,
         headers: HTTPHeaders = [:],
         body: ByteBuffer? = nil,
-        file: StaticString = #filePath,
-        line: UInt = #line,
-        afterResponse: (XCTHTTPResponse) throws -> Void
-    ) async throws -> XCTApplicationTester {
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column,
+        afterResponse: (TestingHTTPResponse) throws -> Void
+    ) async throws -> TestingApplicationTester {
         try await self.asyncTest(
             method: runnerMethod,
             method,
             path,
             headers: headers,
             body: body,
-            file: file,
+            fileID: fileID,
+            filePath: filePath,
             line: line,
+            column: column,
             beforeRequest: { _ in },
             afterResponse: afterResponse
         )
@@ -312,19 +316,23 @@ extension Application {
         _ path: String,
         headers: HTTPHeaders = [:],
         body: ByteBuffer? = nil,
-        file: StaticString = #filePath,
-        line: UInt = #line,
-        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in },
-        afterResponse: (XCTHTTPResponse) throws -> Void = { _ in }
-    ) async throws -> XCTApplicationTester {
-        let tester = try self.testable(method: runnerMethod)
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column,
+        beforeRequest: (inout TestingHTTPRequest) throws -> Void = { _ in },
+        afterResponse: (TestingHTTPResponse) throws -> Void = { _ in }
+    ) async throws -> TestingApplicationTester {
+        let tester = try self.testing(method: runnerMethod)
         return try await tester.test(
             method,
             path,
             headers: headers,
             body: body,
-            file: file,
+            fileID: fileID,
+            filePath: filePath,
             line: line,
+            column: column,
             beforeRequest: { request async throws in
                 try beforeRequest(&request)
             },
@@ -341,9 +349,9 @@ extension Application {
         _ path: String,
         headers: HTTPHeaders = [:],
         body: ByteBuffer? = nil,
-        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in }
-    ) async throws -> XCTHTTPResponse {
-        var captured: XCTHTTPResponse?
+        beforeRequest: (inout TestingHTTPRequest) throws -> Void = { _ in }
+    ) async throws -> TestingHTTPResponse {
+        var captured: TestingHTTPResponse?
         try await self.asyncTest(
             method, path,
             headers: headers,

@@ -1,5 +1,5 @@
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -64,7 +64,7 @@ import XCTVapor
 
     @Test func hashedBuildChunkIsServedWithImmutableCaching() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/jupyterlite/build/100.5a28c9e.js") { res async in
+            try await app.testing().test(.GET, "/jupyterlite/build/100.5a28c9e.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string == "hashed-chunk")
                 #expect(
@@ -76,7 +76,7 @@ import XCTVapor
 
     @Test func hashedExtensionAssetIsServedWithImmutableCaching() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js"
             ) { res async in
                 #expect(res.status == .ok)
@@ -89,14 +89,14 @@ import XCTVapor
 
     @Test func unhashedBundleFilenameKeepsRevalidating() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/jupyterlite/build/MathJax_Main-Regular.woff"
             ) { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .cacheControl) == nil)
                 #expect(res.headers.first(name: .eTag) != nil)
             }
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/jupyterlite/extensions/@jupyterlite/kernel/install.json"
             ) { res async in
                 #expect(res.status == .ok)
@@ -108,7 +108,7 @@ import XCTVapor
     @Test func pyodideAndVendorAreFastPathedWithoutImmutableCaching() async throws {
         try await withApp(try await makeApp()) { app in
             for path in ["/pyodide/pyodide-lock.json", "/vendor/jszip.min.js"] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(res.headers.first(name: .cacheControl) == nil)
                     #expect(res.headers.first(name: .eTag) != nil)
@@ -119,7 +119,7 @@ import XCTVapor
 
     @Test func userNamespaceFilesStillRequireAuthentication() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET,
                 "/jupyterlite/files/users/5f1c0b9a-0000-0000-0000-000000000000/work.ipynb"
             ) { res async in
@@ -135,7 +135,7 @@ import XCTVapor
                 "/jupyterlite/build/../../secret.txt",
                 "/jupyterlite/build/%2e%2e/%2e%2e/secret.txt",
             ] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status != .ok)
                     #expect(res.body.string.contains("top-secret") == false)
                 }
@@ -145,7 +145,7 @@ import XCTVapor
 
     @Test func missingFastPathFileFallsThroughToTheNormalChain() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/jupyterlite/build/absent.js") { res async in
+            try await app.testing().test(.GET, "/jupyterlite/build/absent.js") { res async in
                 #expect(res.status == .notFound)
             }
         }
@@ -160,7 +160,7 @@ import XCTVapor
                 "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js",
                 "/pyodide/pyodide-lock.json",
             ] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
                 }
@@ -181,7 +181,7 @@ import XCTVapor
                 "/pyodide/pyodide-lock.json",
                 "/vendor/jszip.min.js",
             ] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(
                         res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp",

@@ -6,7 +6,7 @@ import Fluent
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -25,13 +25,13 @@ import XCTVapor
         return app
     }
 
-    private func register(_ app: Application, body: String) async throws -> XCTHTTPResponse {
+    private func register(_ app: Application, body: String) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/register",
             headers: ["Content-Type": "application/json"], body: ByteBuffer(string: body))
     }
 
-    private func jsonObject(_ res: XCTHTTPResponse) -> [String: Any]? {
+    private func jsonObject(_ res: TestingHTTPResponse) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8))) as? [String: Any]
     }
 

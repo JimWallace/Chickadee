@@ -2,7 +2,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -322,8 +322,8 @@ private struct PassthroughResponder: AsyncResponder {
                     let recentIndex = try #require(body.range(of: "recent_seen")?.lowerBound)
                     let olderIndex = try #require(body.range(of: "older_seen")?.lowerBound)
                     let neverIndex = try #require(body.range(of: "never_seen")?.lowerBound)
-                    XCTAssertLessThan(recentIndex, olderIndex)
-                    XCTAssertLessThan(olderIndex, neverIndex)
+                    #expect(recentIndex < olderIndex)
+                    #expect(olderIndex < neverIndex)
                 })
 
         }

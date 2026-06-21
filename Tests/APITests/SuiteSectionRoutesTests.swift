@@ -16,7 +16,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -81,7 +81,7 @@ import XCTVapor
         guard let setup = try await APITestSetup.find(setupID, on: app.db),
             let data = setup.manifest.data(using: .utf8),
             let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { throw XCTSkip("manifest load failed") }
+        else { throw IssueRecorded("manifest load failed") }
         return dict
     }
 
