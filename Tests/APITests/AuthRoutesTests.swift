@@ -5,7 +5,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -249,8 +249,8 @@ import XCTVapor
                     #expect(res.status == .seeOther)
                 })
             let elapsed = Date().timeIntervalSince(start)
-            XCTAssertGreaterThan(
-                elapsed, 0.05,
+            #expect(
+                elapsed > 0.05,
                 "User-not-found login completed in \(elapsed)s; bcrypt verify likely skipped (cost 12 is ≥100 ms).")
 
         }

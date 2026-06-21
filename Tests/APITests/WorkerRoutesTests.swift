@@ -9,7 +9,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -101,7 +101,7 @@ import XCTVapor
 
     private func makeAssignment(setupID: String, title: String = "Assignment") async throws -> APIAssignment {
         guard let courseID = try await APITestSetup.find(setupID, on: app.db)?.courseID else {
-            throw XCTSkip("setup missing course")
+            throw IssueRecorded("setup missing course")
         }
         let assignment = APIAssignment(testSetupID: setupID, title: title, isOpen: true, courseID: courseID)
         try await assignment.save(on: app.db)
@@ -458,8 +458,8 @@ import XCTVapor
             let secret = workerSecret  // String — Sendable
             let testApp = app  // Application — @unchecked Sendable
 
-            var responses: [XCTHTTPResponse] = []
-            try await withThrowingTaskGroup(of: XCTHTTPResponse.self) { group in
+            var responses: [TestingHTTPResponse] = []
+            try await withThrowingTaskGroup(of: TestingHTTPResponse.self) { group in
                 for workerID in ["w1", "w2"] {
                     // Compute per-worker values outside the task so the closure
                     // captures only Sendable types and avoids capturing `self`.

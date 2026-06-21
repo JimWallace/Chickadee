@@ -8,7 +8,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -101,8 +101,8 @@ import XCTVapor
             let mtimeAfter =
                 (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date)
                 ?? Date.distantPast
-            XCTAssertGreaterThan(
-                mtimeAfter, mtimeBefore,
+            #expect(
+                mtimeAfter > mtimeBefore,
                 "Reset must bump the working-copy file mtime so notebook.js force-reseeds the browser's local copy.")
 
         }

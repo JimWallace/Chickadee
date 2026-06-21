@@ -1,6 +1,6 @@
 import Fluent
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -28,7 +28,7 @@ import XCTVapor
 
     @Test func notebookPageIsNotIsolatedByDefault() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/testsetups/setup_123/notebook") { res async in
+            try await app.testing().test(.GET, "/testsetups/setup_123/notebook") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
@@ -38,7 +38,7 @@ import XCTVapor
 
     @Test func jupyterliteAssetsAreNotIsolatedByDefault() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
+            try await app.testing().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
                 #expect(res.headers.first(name: "Cross-Origin-Resource-Policy") == nil)
@@ -50,7 +50,7 @@ import XCTVapor
 
     @Test func notebookPageIsIsolatedWhenEnabled() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testable().test(.GET, "/testsetups/setup_123/notebook") { res async in
+            try await app.testing().test(.GET, "/testsetups/setup_123/notebook") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
@@ -60,7 +60,7 @@ import XCTVapor
 
     @Test func jupyterliteAssetsAreIsolatedWhenEnabled() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testable().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
+            try await app.testing().test(.GET, "/jupyterlite/notebooks/index.html") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
@@ -73,7 +73,7 @@ import XCTVapor
 
     @Test func validatePageAlwaysReceivesCOEPHeaders() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/instructor/assignment_123/validate") { res async in
+            try await app.testing().test(.GET, "/instructor/assignment_123/validate") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
@@ -83,7 +83,7 @@ import XCTVapor
 
     @Test func unrelatedPageNeverReceivesCOEPHeaders() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testable().test(.GET, "/plain") { res async in
+            try await app.testing().test(.GET, "/plain") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
@@ -100,7 +100,7 @@ import XCTVapor
     @Test func isolatedPageWorkerScriptsReceiveCOEPWhenEnabled() async throws {
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
             for path in ["/grading-worker.js", "/freeze-watchdog-worker.js"] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(
                         res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp",
@@ -116,7 +116,7 @@ import XCTVapor
         // /pyodide-worker.js is spawned only by the (non-isolated) assignment
         // editor pages, so it must NOT be forced require-corp.
         try await withApp(try await makeApp(isolateNotebook: true)) { app in
-            try await app.testable().test(.GET, "/pyodide-worker.js") { res async in
+            try await app.testing().test(.GET, "/pyodide-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
@@ -125,7 +125,7 @@ import XCTVapor
 
     @Test func workerScriptsAreNotIsolatedWhenDisabled() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/grading-worker.js") { res async in
+            try await app.testing().test(.GET, "/grading-worker.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }

@@ -8,7 +8,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -54,7 +54,7 @@ import XCTVapor
         _ body: String,
         auth: (cookie: String, csrf: String),
         userAgent: String? = nil
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(.POST, "/api/v1/client-diagnostics") { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)

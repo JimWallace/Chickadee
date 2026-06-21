@@ -126,7 +126,7 @@ let package = Package(
             name: "APITests",
             dependencies: [
                 .target(name: "APIServer"),
-                .product(name: "XCTVapor", package: "vapor"),
+                .product(name: "VaporTesting", package: "vapor"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "CSRF", package: "CSRF"),

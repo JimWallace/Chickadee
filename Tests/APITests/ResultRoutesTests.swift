@@ -1,7 +1,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 @testable import Core
@@ -332,7 +332,7 @@ import XCTVapor
             try await ensureSubmissionExists(submissionID: collection.submissionID, testSetupID: collection.testSetupID)
             let body = try bodyData(for: collection)
 
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .POST,
                 self.resultsPath,
                 headers: workerHMACHeaders(
@@ -348,7 +348,7 @@ import XCTVapor
                     let response = try res.content.decode(ReportResponse.self)
                     #expect(response.received)
                 } catch {
-                    XCTFail("Failed to decode ReportResponse: \(error)")
+                    Issue.record("Failed to decode ReportResponse: \(error)")
                 }
             }
 

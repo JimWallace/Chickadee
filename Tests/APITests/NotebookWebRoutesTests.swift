@@ -1,7 +1,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -239,9 +239,9 @@ import XCTVapor
                         let valueRange = Range(match.range(at: 1), in: html),
                         let mtime = Int(html[valueRange])
                     else {
-                        XCTFail("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
+                        Issue.record("Expected data-working-copy-mtime=\"<int>\" attribute on iframe"); return
                     }
-                    XCTAssertGreaterThan(mtime, 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
+                    #expect(mtime > 0, "Working-copy mtime should be a positive Unix-epoch timestamp")
                 })
 
             let workingCopy = try String(

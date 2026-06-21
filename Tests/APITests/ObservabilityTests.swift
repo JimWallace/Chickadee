@@ -1,7 +1,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 @testable import Core
@@ -327,7 +327,7 @@ import XCTVapor
                 afterResponse: { response in
                     #expect(response.status == .ok)
                     let payload = try response.content.decode(InternalMetricsResponse.self)
-                    XCTAssertGreaterThanOrEqual(payload.activeRunners, 1)
+                    #expect(payload.activeRunners >= 1)
                     #expect(payload.jobsProcessed24h == 1)
                     #expect(payload.queueWait.averageMs != nil)
                     #expect(payload.jobStatusCounts.first(where: { $0.status == "passed" })?.count == 1)
@@ -446,16 +446,16 @@ import XCTVapor
             // the 210ms queueWait. The summed formula yields 311ms.
             #expect(metric?.totalProcessingMs == 311)
             if let total = metric?.totalProcessingMs, let queue = metric?.queueWaitMs {
-                XCTAssertGreaterThanOrEqual(total, queue)
+                #expect(total >= queue)
             } else {
-                XCTFail("expected queueWaitMs and totalProcessingMs to be populated")
+                Issue.record("expected queueWaitMs and totalProcessingMs to be populated")
             }
 
             // Same invariant on APISubmissionDiagnostics.turnaroundMs.
             let diag = try await APISubmissionDiagnostics.find("sub_clock_skew", on: app.db)
             #expect(diag?.turnaroundMs == 311)
             if let turnaround = diag?.turnaroundMs, let queue = diag?.queueWaitMs {
-                XCTAssertGreaterThanOrEqual(turnaround, queue)
+                #expect(turnaround >= queue)
             }
 
         }

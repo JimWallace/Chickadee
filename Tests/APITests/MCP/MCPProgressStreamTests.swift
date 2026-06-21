@@ -6,7 +6,7 @@
 import Fluent
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -43,7 +43,7 @@ import XCTVapor
 
     private func post(
         _ app: Application, body: String, token: String, accept: String
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/mcp",
             headers: [

@@ -4,7 +4,7 @@
 // AdminMCPBearerAuthMiddleware (the auth path is covered in AdminMCPBearerTests).
 
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -33,7 +33,7 @@ import XCTVapor
     @Test func postInitializeReturnsToolsOnlyResult() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/admin-mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .ok)
@@ -47,7 +47,7 @@ import XCTVapor
     @Test func postNotificationReturns202() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/admin-mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .accepted)
@@ -58,7 +58,7 @@ import XCTVapor
 
     @Test func unparseableBodyReturns400() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/admin-mcp", headers: jsonHeaders, body: ByteBuffer(string: "not json")
             ) { res async in
                 #expect(res.status == .badRequest)
@@ -69,7 +69,7 @@ import XCTVapor
 
     @Test func getReturns405() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/admin-mcp") { res async in
+            try await app.testing().test(.GET, "/admin-mcp") { res async in
                 #expect(res.status == .methodNotAllowed)
             }
         }
@@ -82,7 +82,7 @@ import XCTVapor
                 "Content-Type": "application/json", "Origin": "https://evil.example",
             ]
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/admin-mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .forbidden)

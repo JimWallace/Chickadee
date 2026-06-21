@@ -1,6 +1,6 @@
 import Core
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -30,7 +30,7 @@ import XCTVapor
 
     @Test func versionedAssetGetsImmutableCacheControl() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/styles.css?v=\(ChickadeeVersion.current)"
             ) { res async in
                 #expect(res.status == .ok)
@@ -41,7 +41,7 @@ import XCTVapor
 
     @Test func unversionedAssetKeepsDefaultRevalidation() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/styles.css") { res async in
+            try await app.testing().test(.GET, "/styles.css") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .cacheControl) == nil)
             }
@@ -50,7 +50,7 @@ import XCTVapor
 
     @Test func staleVersionIsNotStamped() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/styles.css?v=0.0.0-stale") { res async in
+            try await app.testing().test(.GET, "/styles.css?v=0.0.0-stale") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: .cacheControl) == nil)
             }
@@ -59,7 +59,7 @@ import XCTVapor
 
     @Test func existingCacheControlIsPreserved() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/runner-core.js?v=\(ChickadeeVersion.current)"
             ) { res async in
                 #expect(res.headers.first(name: .cacheControl) == "no-cache")
@@ -69,7 +69,7 @@ import XCTVapor
 
     @Test func nonAssetPathIsNotStamped() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/page?v=\(ChickadeeVersion.current)"
             ) { res async in
                 #expect(res.status == .ok)

@@ -14,7 +14,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -178,7 +178,7 @@ import XCTVapor
             guard let setup = try await APITestSetup.find(draftID, on: app.db),
                 let data = setup.manifest.data(using: .utf8),
                 let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { return XCTFail("manifest load failed") }
+            else { Issue.record("manifest load failed"); return }
             let entries = dict["testSuites"] as? [[String: Any]] ?? []
             #expect(entries.isEmpty, "Support file uploads must not add a testSuites entry")
 

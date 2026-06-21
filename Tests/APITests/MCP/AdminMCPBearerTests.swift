@@ -7,7 +7,7 @@ import Core
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -33,7 +33,7 @@ import XCTVapor
 
     private func post(
         _ app: Application, body: String, bearer: String?
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(.POST, "/admin-mcp") { req in
             req.headers.contentType = .json
             if let bearer { req.headers.add(name: .authorization, value: "Bearer \(bearer)") }

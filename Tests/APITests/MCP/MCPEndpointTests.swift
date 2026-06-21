@@ -6,7 +6,7 @@
 // MCPBearerAuthMiddlewareTests and MCPEndToEndTests for the auth path.
 
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -35,7 +35,7 @@ import XCTVapor
     @Test func postInitializeReturnsJSONResult() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .ok)
@@ -48,7 +48,7 @@ import XCTVapor
     @Test func postNotificationReturns202WithNoBody() async throws {
         try await withApp(try await makeApp()) { app in
             let body = #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/mcp", headers: jsonHeaders, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .accepted)
@@ -59,7 +59,7 @@ import XCTVapor
 
     @Test func unparseableBodyReturns400ParseError() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/mcp", headers: jsonHeaders, body: ByteBuffer(string: "not json")
             ) { res async in
                 #expect(res.status == .badRequest)
@@ -70,7 +70,7 @@ import XCTVapor
 
     @Test func getReturns405() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/mcp") { res async in
+            try await app.testing().test(.GET, "/mcp") { res async in
                 #expect(res.status == .methodNotAllowed)
             }
         }
@@ -82,7 +82,7 @@ import XCTVapor
                 var headers = jsonHeaders
                 headers.add(name: "MCP-Protocol-Version", value: version)
                 let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-                try await app.testable().test(
+                try await app.testing().test(
                     .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
                 ) { res async in
                     #expect(res.status == .ok)
@@ -99,7 +99,7 @@ import XCTVapor
             var headers = jsonHeaders
             headers.add(name: "MCP-Protocol-Version", value: "1999-01-01")
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .badRequest)
@@ -120,7 +120,7 @@ import XCTVapor
                 "Origin": "https://some-client.example",
             ]
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .ok)
@@ -136,7 +136,7 @@ import XCTVapor
                 "Origin": "https://evil.example",
             ]
             let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/mcp", headers: headers, body: ByteBuffer(string: body)
             ) { res async in
                 #expect(res.status == .forbidden)

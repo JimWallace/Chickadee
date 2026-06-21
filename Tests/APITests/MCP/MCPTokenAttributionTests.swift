@@ -5,7 +5,7 @@
 
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -41,7 +41,7 @@ import XCTVapor
                 subject: "instructor-jane", scopes: [.read, .write],
                 issuer: issuer, audience: resource, ttlSeconds: 3600,
                 clientID: "agent-xyz", agentName: "Claude Course Bot")
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/whoami", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .ok)
@@ -56,7 +56,7 @@ import XCTVapor
             let token = try await authority.mint(
                 subject: "service-bot", scopes: [.read],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/whoami", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .ok)

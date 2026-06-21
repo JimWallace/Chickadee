@@ -7,7 +7,7 @@ import Fluent
 import Logging
 import Testing
 import Vapor
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
