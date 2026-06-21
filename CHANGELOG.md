@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.493] - 2026-06-21
+
+### Changed
+
+- **SwiftLint bumped 0.63.3 → 0.64.0** (`SwiftLintPlugins`). The codebase
+  stays at zero violations under the new version's `--strict` gate; no rule
+  baselines were touched. Every other Swift dependency (direct and transitive)
+  was already pinned to its latest release.
+
+
 ## [0.4.492] - 2026-06-21
 
 ### Fixed
