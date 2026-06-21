@@ -8,10 +8,14 @@ name: Editor smoke test
 # blocks the kernel worker (the COEP cross-origin-isolation attempt) or leaves a
 # dead kernel ("Kernel Unknown") passes CI and only fails in front of a student.
 #
-# Runs the selftest, which exercises BOTH editor sync paths against one build —
-# the default service-worker path AND the cross-origin-isolation /
-# SharedArrayBuffer path — plus a known-broken (frozen) config to prove the
-# detector is discriminating. See Tools/editor-smoke-test/selftest.sh.
+# Runs the selftest (Tools/editor-smoke-test/selftest.sh) under a matrix of BOTH
+# engines we ship to — Chromium (Chrome/Edge) and WebKit (Safari) — against one
+# build. The selftest proves the editor boots cross-origin isolated, stays
+# healthy with the service worker disabled (SharedArrayBuffer carries stdin), and
+# still FAILS a deliberately no-sync config (so the freeze detector is real).
+# Adding WebKit is what catches the Safari-class breakages that a Chromium-only
+# check shipped blind (spurious phase-1 timeouts; the Atomics.waitAsync
+# data:-worker blocked under COEP).
 #
 # Runs two ways:
 #   • nightly (schedule) — always-on insurance across the whole editor stack;
@@ -56,6 +60,14 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Run the editor against BOTH engines we ship to: Chromium (Chrome/Edge) and
+    # WebKit (the engine behind Safari — every Safari-class editor bug we have
+    # shipped was invisible to a Chromium-only check). fail-fast:false so one
+    # engine's failure still reports the other.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
     # Run in the same swift image the other jobs use so the cached server binary
     # (dynamically linked against this image's Swift runtime) actually runs, and
     # so the vended Public/pyodide it serves is the exact build CI ships.
@@ -95,7 +107,7 @@ jobs:
       - name: Build chickadee-server
         run: swift build --product chickadee-server
 
-      - name: Install Node, Playwright and Chromium
+      - name: Install Node, Playwright and the ${{ matrix.browser }} engine
         working-directory: Tools/editor-smoke-test
         run: |
           set -eux
@@ -103,16 +115,17 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
           npm ci
-          # --with-deps installs the browser's system libraries via apt.
-          npx playwright install --with-deps chromium
+          # --with-deps installs the engine's system libraries via apt.
+          npx playwright install --with-deps ${{ matrix.browser }}
 
-      # selftest.sh drives the editor THREE ways against this one build:
-      #   • default (service-worker path) — must PASS, crossOriginIsolated=false;
-      #   • NOTEBOOK_CROSS_ORIGIN_ISOLATION=true (SharedArrayBuffer path) — must
-      #     PASS, crossOriginIsolated=true (the fast-path-isolation fix; this is
-      #     also the live guard against the COEP kernel-worker block regressing);
-      #   • SMOKE_SIMULATE_FROZEN=1 — must FAIL (proves the freeze detector works).
-      # Using selftest (not the single-config run-smoke) means CI guards BOTH
-      # editor sync paths, not just the default one.
-      - name: Run editor smoke selftest (both sync paths + freeze detector)
-        run: Tools/editor-smoke-test/selftest.sh
+      # selftest.sh drives the editor THREE ways against this one build, in the
+      # matrix engine (Chromium / WebKit):
+      #   • default boot — must PASS, crossOriginIsolated=true (SharedArrayBuffer
+      #     path; also the live guard against the COEP kernel-worker block);
+      #   • service worker disabled — must STILL PASS (SAB independent of the SW —
+      #     the "Kernel Unknown" race is gone);
+      #   • no SW and no SAB — must FAIL (proves the freeze detector works).
+      # Running it under WebKit too is what would have caught the Safari-class
+      # editor regressions in CI rather than in front of a student.
+      - name: Run editor smoke selftest (${{ matrix.browser }}; both sync paths + freeze detector)
+        run: SMOKE_BROWSER=${{ matrix.browser }} Tools/editor-smoke-test/selftest.sh

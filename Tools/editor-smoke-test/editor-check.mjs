@@ -40,7 +40,15 @@
 //     config meant to exercise the SharedArrayBuffer path can't silently pass
 //     via the service-worker fallback (or vice versa).
 
-import { chromium } from "playwright";
+import { chromium, webkit, firefox } from "playwright";
+
+// Which browser engine to drive. Chromium is the default; WebKit is the
+// CI-able proxy for Safari (the engine behind every Safari-class editor bug we
+// have shipped — spurious phase-1 timeouts, and the `Atomics.waitAsync`
+// `data:`-worker that COEP blocks). Firefox is available for completeness.
+const BROWSERS = { chromium, webkit, firefox };
+const browserName = process.env.SMOKE_BROWSER || "chromium";
+const browserType = BROWSERS[browserName] || chromium;
 
 const baseURL = (process.argv[2] || process.env.BASE_URL || "http://127.0.0.1:8099").replace(
   /\/$/,
@@ -97,15 +105,17 @@ function looksBlocked(text) {
 }
 
 async function main() {
+  console.log(`Browser engine: ${browserName}`);
   // `--no-sandbox` / chromiumSandbox:false: CI runs this in a root container,
   // where Chromium's setuid sandbox refuses to start. Chromium's *process*
   // sandbox is unrelated to the web-platform cross-origin-isolation / COEP
   // behaviour under test, so disabling it does not affect what we assert.
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox"],
-    chromiumSandbox: false,
-  });
+  // Those flags are chromium-only; webkit/firefox launch with defaults.
+  const launchOptions =
+    browserName === "chromium"
+      ? { headless: true, args: ["--no-sandbox"], chromiumSandbox: false }
+      : { headless: true };
+  const browser = await browserType.launch(launchOptions);
   const context = await browser.newContext();
 
   // Disable the service worker on the wire by stripping its manager extension

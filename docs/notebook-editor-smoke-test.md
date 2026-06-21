@@ -33,12 +33,27 @@ SMOKE_SIMULATE_NO_SYNC=1 (no SW/SAB):  crossOriginIsolated=false  SMOKE FAIL  (i
   exactly why a liveness-only check missed the freeze and the `input()` probe was
   needed.
 
-The decisions below were resolved as: **Chromium-only** to start (WebKit is a
-future add); **advisory** (not a required check — it is path-filtered, so a
-required check would block the merge of every PR that skips it; promote to
-required after it proves stable); **full app** harness (it drives the real
-`/jupyterlite/repl` through the real middleware chain, no course seeding). The
+The decisions below were resolved as: **Chromium + WebKit** (CI runs the selftest
+under both engines via a matrix — `SMOKE_BROWSER`; WebKit is the Safari engine and
+is what catches the Safari-class regressions a Chromium-only check shipped blind);
+**advisory** (not a required check — it is path-filtered, so a required check would
+block the merge of every PR that skips it; promote to required after it proves
+stable — see "Make it a required gate" below); **full app** harness (it drives the
+real `/jupyterlite/repl` through the real middleware chain, no course seeding). The
 original proposal follows for context.
+
+## Make it a required gate (recommended)
+
+The smoke job is still *advisory* — a red run does not block merge. Given how many
+editor regressions have reached students, promote it to a **required** check. The
+GitHub gotcha: a path-filtered workflow is *skipped* on PRs that don't touch
+editor files, and a required check that is "skipped" blocks those merges forever.
+The fix is the standard always-runs gate: add a tiny companion job that has **no**
+path filter, `needs:` the smoke matrix, and passes iff every smoke leg succeeded
+**or was skipped** — then mark *that* job required in branch protection. That makes
+"editor changed ⇒ both engines must pass" enforceable without blocking unrelated
+PRs. (Branch protection itself is a repo setting, applied in GitHub, not in this
+file.)
 
 ## Why
 

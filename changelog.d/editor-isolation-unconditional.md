@@ -22,3 +22,11 @@
   class — that the SharedArrayBuffer path is live after a deploy, and correlate
   any "Kernel Unknown" failure with it (e.g. a browser reporting `coi=false`, or
   `kernel-unhealthy` with `coi=true`, is the one to investigate).
+- **The editor smoke test now runs under WebKit (Safari) as well as Chromium.**
+  The headless harness is parameterized by engine (`SMOKE_BROWSER`) and the CI
+  `editor-smoke` workflow runs the selftest under a `chromium` + `webkit` matrix.
+  WebKit is the engine behind every Safari-class editor bug we have shipped
+  blind (spurious phase-1 timeouts; the `Atomics.waitAsync` `data:`-worker that
+  COEP blocks); both engines now pass all three configs (isolated boot, SW
+  disabled, no-sync freeze), so the Safari risk for cross-origin isolation is
+  covered in CI rather than only in front of a student.

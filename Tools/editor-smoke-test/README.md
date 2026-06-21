@@ -51,10 +51,21 @@ swift build                      # from the repo root
 ```
 
 `run-smoke.sh` honours `CHICKADEE_SERVER_BIN` and `PORT`; the `SMOKE_*` knobs
-(`SMOKE_SIMULATE_FROZEN`, `SMOKE_SIMULATE_NO_SYNC`, `SMOKE_EXPECT_ISOLATED`) are
-read by `editor-check.mjs`. The editor is cross-origin isolated unconditionally,
-so there is no server-side isolation flag. To point the check at an
-already-running server instead, call the check directly:
+(`SMOKE_SIMULATE_FROZEN`, `SMOKE_SIMULATE_NO_SYNC`, `SMOKE_EXPECT_ISOLATED`,
+`SMOKE_BROWSER`) are read by `editor-check.mjs`. The editor is cross-origin
+isolated unconditionally, so there is no server-side isolation flag.
+
+`SMOKE_BROWSER` selects the engine: `chromium` (default), `webkit` (the Safari
+engine — install with `npx playwright install webkit`), or `firefox`. CI runs the
+selftest under **both Chromium and WebKit**; run WebKit locally before shipping
+editor changes, since every Safari-class editor bug we have shipped was invisible
+to a Chromium-only check:
+
+```bash
+SMOKE_BROWSER=webkit ./selftest.sh
+```
+
+To point the check at an already-running server instead, call the check directly:
 
 ```bash
 node editor-check.mjs http://127.0.0.1:8080
