@@ -16,6 +16,9 @@ import XCTVapor
         app.get("testsetups", ":testSetupID", "notebook") { _ in "notebook" }
         app.get("instructor", ":assignmentID", "validate") { _ in "validate" }
         app.get("jupyterlite", "notebooks", "index.html") { _ in "iframe" }
+        app.get("grading-worker.js") { _ in "// grading worker" }
+        app.get("freeze-watchdog-worker.js") { _ in "// freeze worker" }
+        app.get("pyodide-worker.js") { _ in "// pyodide worker" }
         app.get("plain") { _ in "plain" }
 
         return app
@@ -83,6 +86,47 @@ import XCTVapor
             try await app.testable().test(.GET, "/plain") { res async in
                 #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Opener-Policy") == nil)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+            }
+        }
+    }
+
+    // MARK: - App Web Worker scripts spawned by the isolated notebook page
+    //
+    // A dedicated worker created by a require-corp page must itself be served
+    // with COEP, or the browser blocks the worker (ERR_BLOCKED_BY_RESPONSE) —
+    // which silently broke browser grading + the freeze failover.
+
+    @Test func isolatedPageWorkerScriptsReceiveCOEPWhenEnabled() async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            for path in ["/grading-worker.js", "/freeze-watchdog-worker.js"] {
+                try await app.testable().test(.GET, path) { res async in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp",
+                        "\(path) must carry COEP so an isolated page can spawn the worker")
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Resource-Policy") == "same-origin")
+                }
+            }
+        }
+    }
+
+    @Test func pyodideWorkerScriptIsNotForcedIsolated() async throws {
+        // /pyodide-worker.js is spawned only by the (non-isolated) assignment
+        // editor pages, so it must NOT be forced require-corp.
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testable().test(.GET, "/pyodide-worker.js") { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+            }
+        }
+    }
+
+    @Test func workerScriptsAreNotIsolatedWhenDisabled() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testable().test(.GET, "/grading-worker.js") { res async in
+                #expect(res.status == .ok)
                 #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
             }
         }

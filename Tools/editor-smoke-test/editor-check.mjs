@@ -229,6 +229,48 @@ async function main() {
       );
     }
 
+    // (0) Worker-spawn probe (only meaningful under cross-origin isolation).
+    // The app's OWN Web Workers — the browser grader and the freeze failover —
+    // are spawned via `new Worker(...)` from the isolated notebook page. Under
+    // COEP `require-corp`, a worker whose script lacks COEP is refused by the
+    // browser (ERR_BLOCKED_BY_RESPONSE), which silently breaks browser grading.
+    // This regressed once (the worker scripts are not on the fast path that
+    // stamps COEP); spawn them here so it can't regress unseen. These workers are
+    // message-driven and do nothing until posted to, so spawning is cheap.
+    if (isolated) {
+      const workerScripts = ["/grading-worker.js", "/freeze-watchdog-worker.js"];
+      const workerBlocked = [];
+      const onWorkerReqFail = (req) => {
+        const why = req.failure()?.errorText || "";
+        if (workerScripts.some((s) => req.url().includes(s)) &&
+            (looksBlocked(why) || /ERR_BLOCKED/i.test(why))) {
+          workerBlocked.push(`${req.url()} — ${why}`);
+        }
+      };
+      page.on("requestfailed", onWorkerReqFail);
+      // Spawn in-page to trigger each worker-script fetch; a COEP block fails the
+      // request (caught above). Synchronous SecurityErrors are returned too.
+      const spawnErrors = await page.evaluate(async (scripts) => {
+        const errs = [];
+        await Promise.all(scripts.map((s) => new Promise((resolve) => {
+          let w;
+          try { w = new Worker(s); }
+          catch (e) { errs.push(`${s} threw ${(e && e.message) || e}`); return resolve(); }
+          setTimeout(() => { try { w.terminate(); } catch (_) { /* ignore */ } resolve(); }, 3000);
+        })));
+        return errs;
+      }, workerScripts);
+      await page.waitForTimeout(200);
+      page.off("requestfailed", onWorkerReqFail);
+      if (workerBlocked.length || spawnErrors.length) {
+        return await fail(
+          "an app Web Worker was blocked under cross-origin isolation (its script needs " +
+            "COEP require-corp): " + [...workerBlocked, ...spawnErrors].join("; ")
+        );
+      }
+      console.log(`worker-spawn probe: ${workerScripts.join(", ")} spawned OK under isolation`);
+    }
+
     // (1) Liveness: a trivial cell executes. Execution submitted before the
     // kernel finishes booting is queued and runs once it is ready, so we don't
     // pre-wait on readiness.

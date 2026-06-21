@@ -7,6 +7,12 @@
 // giving the kernel `SharedArrayBuffer` for synchronous execution.
 // `COEPMiddleware` isolates the parent notebook page.
 //
+// It ALSO stamps COEP on the app's own Web Worker scripts that an isolated page
+// spawns (`/grading-worker.js`, `/freeze-watchdog-worker.js`) — see
+// `isolatedWorkerScripts`. Without COEP on the worker script, a `require-corp`
+// page cannot spawn the worker at all (Chrome `ERR_BLOCKED_BY_RESPONSE`), which
+// would break browser grading + the freeze failover on the notebook page.
+//
 // NOTE on coverage: the vendored asset *trees* (`/jupyterlite/build/`,
 // `/jupyterlite/extensions/` — including the Pyodide kernel WORKER chunk — plus
 // `/pyodide/` and `/vendor/`) are served by `EditorAssetFastPathMiddleware`,
@@ -33,12 +39,32 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
     /// middleware does nothing.
     let enabled: Bool
 
+    /// App-owned Web Worker scripts (served from the Public root, NOT under the
+    /// fast path) that are spawned via `new Worker(...)` from a cross-origin-
+    /// ISOLATED page (the student notebook page `/testsetups/:id/notebook`). A
+    /// dedicated worker created by a `require-corp` document must ITSELF be served
+    /// with COEP `require-corp`, or Chrome refuses the worker script with
+    /// `ERR_BLOCKED_BY_RESPONSE` — the same rule that blocked the kernel worker
+    /// chunk, but for our own workers. The global `SecurityHeadersMiddleware`
+    /// gives them CORP but never COEP, so without this they are blocked.
+    ///
+    /// Deliberately EXCLUDES `/pyodide-worker.js`: it is spawned only by the
+    /// assignment-editor pages, which are NOT cross-origin isolated, so it must
+    /// not be forced `require-corp`. If an isolated page is ever made to spawn it,
+    /// add it here — the editor-smoke worker-spawn probe will flag the regression.
+    static let isolatedWorkerScripts: Set<String> = [
+        "/grading-worker.js",  // browser submission grader (browser-runner.js)
+        "/freeze-watchdog-worker.js",  // main-thread freeze failover (notebook.js)
+    ]
+
     func respond(
         to request: Request,
         chainingTo next: any AsyncResponder
     ) async throws -> Response {
         let response = try await next.respond(to: request)
-        guard enabled, request.url.path.hasPrefix("/jupyterlite/") else { return response }
+        let path = request.url.path
+        guard enabled, path.hasPrefix("/jupyterlite/") || Self.isolatedWorkerScripts.contains(path)
+        else { return response }
 
         response.setCrossOriginIsolationHeaders()
         return response
