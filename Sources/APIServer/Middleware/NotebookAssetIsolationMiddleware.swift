@@ -21,10 +21,10 @@
 // middleware registered AFTER it never sees those static responses. Registered
 // before, this one decorates the response on the way back out.
 //
-// Gated by `NOTEBOOK_CROSS_ORIGIN_ISOLATION` (off by default): when disabled it
-// is a pure pass-through, preserving the long-standing behaviour of serving the
-// JupyterLite assets without COEP. See `COEPMiddleware` for the rationale and
-// the #574 history.
+// `enabled` is set unconditionally at the bootstrap call site (editor isolation
+// is no longer behind a flag); the parameter is kept as a unit-test seam, and
+// when false this middleware is a pure pass-through. See `COEPMiddleware` for
+// the rationale and the #574 history.
 
 import Vapor
 

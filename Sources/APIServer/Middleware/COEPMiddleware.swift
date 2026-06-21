@@ -9,23 +9,23 @@
 //
 //   • /instructor/…/validate — browser-side validation (assignment-validate.js).
 //   • /testsetups/:id/notebook — the student notebook editor (JupyterLite in an
-//     iframe), but ONLY when `isolateNotebook` is true. This is gated behind the
-//     `NOTEBOOK_CROSS_ORIGIN_ISOLATION` flag because COEP on the editor page has
-//     broken the iframe before (#574): the editor must be browser-verified to
-//     still boot under COEP. When enabled, `NotebookAssetIsolationMiddleware`
-//     applies the matching headers to the `/jupyterlite/*` iframe assets so the
-//     iframe document — where the kernel worker actually runs — is isolated too.
+//     iframe), when `isolateNotebook` is true (set unconditionally at the
+//     bootstrap call site). `NotebookAssetIsolationMiddleware` +
+//     `EditorAssetFastPathMiddleware` apply the matching headers to the
+//     `/jupyterlite/*` documents and the vendored asset trees so the iframe
+//     document — where the kernel worker actually runs — is isolated too.
 //
 // COEP require-corp only restricts CROSS-origin subresources; same-origin ones
 // (Chickadee vendors Pyodide / CodeMirror / jszip same-origin) load unchanged.
 //
-// NOTE: this flag is OFF by default. The JupyterLite service worker (re-enabled
-// in v0.4.467) is currently the kernel's synchronous-execution path, so the
-// editor runs without cross-origin isolation today. Turning this on is the
-// SharedArrayBuffer route (see docs/notebook-editor-kernel-boot.md): it is
-// still gated because COEP require-corp blocks the fast-path-served Pyodide
-// kernel worker (the v0.4.469 editor-smoke selftest pins exactly that), so it
-// cannot be enabled until that worker is served CORP-clean.
+// History: isolation was gated behind `NOTEBOOK_CROSS_ORIGIN_ISOLATION` while
+// the editor was verified to boot under COEP, because COEP on the editor page
+// had broken the iframe before (#574). It is now unconditional: the editor's
+// SharedArrayBuffer path is verified end-to-end by the editor-smoke harness
+// (Tools/editor-smoke-test), and SAB removes the kernel's dependence on the
+// service worker for synchronous stdin/Drive — see
+// docs/notebook-editor-kernel-boot.md. The `isolateNotebook` parameter is kept
+// as a unit-test seam.
 
 import Vapor
 

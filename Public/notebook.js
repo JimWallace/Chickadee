@@ -570,25 +570,40 @@
         }
     }
 
-    // Reports whether JupyterLite's service worker registered. The SW is the
-    // kernel's stdin/Drive sync path, so a missing/blocked SW is the signature
-    // of the "Kernel Unknown" failure — reporting it lets us correlate that
-    // with browser/device class. Fired a few seconds after mount to give the
-    // SW manager time to register.
+    // Reports the editor's sync-path state a few seconds after mount, so the
+    // admin browser-diagnostics breakdown can confirm — per browser/device
+    // class — that the cross-origin-isolation / SharedArrayBuffer path is
+    // actually live, and correlate any "Kernel Unknown" failure with it:
+    //
+    //   coi=<bool>  — crossOriginIsolated: the page is cross-origin isolated, so
+    //                 the kernel can use SharedArrayBuffer for synchronous
+    //                 stdin/Drive (the fix for the SW-control race). The signal
+    //                 to watch on a new deploy: coi should be true on every
+    //                 browser; any browser reporting coi=false (or kernel-
+    //                 unhealthy WITH coi=true — e.g. Safari's data:-worker
+    //                 polyfill blocked under COEP) is the one to investigate.
+    //   sab=<bool>  — SharedArrayBuffer constructor present (should track coi).
+    //   registrations=<n> — JupyterLite's service worker still registers; it is
+    //                 now a fallback rather than the primary sync path.
+    //
+    // Fired a few seconds after mount to give the SW manager time to register.
     function scheduleServiceWorkerStateBeacon() {
         setTimeout(function () {
             if (!failures || !failures.reportEvent) return;
+            var coi = (typeof crossOriginIsolated !== 'undefined') ? !!crossOriginIsolated : false;
+            var sab = (typeof SharedArrayBuffer !== 'undefined');
+            var isolation = ';coi=' + coi + ';sab=' + sab;
             if (!('serviceWorker' in navigator)) {
-                failures.reportEvent({ kind: 'sw_state', message: 'supported=false' });
+                failures.reportEvent({ kind: 'sw_state', message: 'supported=false' + isolation });
                 return;
             }
             navigator.serviceWorker.getRegistrations().then(function (regs) {
                 failures.reportEvent({
                     kind: 'sw_state',
-                    message: 'supported=true;registrations=' + (regs ? regs.length : 0)
+                    message: 'supported=true;registrations=' + (regs ? regs.length : 0) + isolation
                 });
             }).catch(function () {
-                failures.reportEvent({ kind: 'sw_state', message: 'supported=true;error=1' });
+                failures.reportEvent({ kind: 'sw_state', message: 'supported=true;error=1' + isolation });
             });
         }, 6000);
     }

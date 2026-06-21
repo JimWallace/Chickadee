@@ -50,9 +50,22 @@ swift build                      # from the repo root
 ./run-smoke.sh                   # boots a server, runs the check, tears down
 ```
 
-`run-smoke.sh` honours `CHICKADEE_SERVER_BIN`, `PORT`, and
-`NOTEBOOK_CROSS_ORIGIN_ISOLATION`. To point the check at an already-running
-server instead, call the check directly:
+`run-smoke.sh` honours `CHICKADEE_SERVER_BIN` and `PORT`; the `SMOKE_*` knobs
+(`SMOKE_SIMULATE_FROZEN`, `SMOKE_SIMULATE_NO_SYNC`, `SMOKE_EXPECT_ISOLATED`,
+`SMOKE_BROWSER`) are read by `editor-check.mjs`. The editor is cross-origin
+isolated unconditionally, so there is no server-side isolation flag.
+
+`SMOKE_BROWSER` selects the engine: `chromium` (default), `webkit` (the Safari
+engine — install with `npx playwright install webkit`), or `firefox`. CI runs the
+selftest under **both Chromium and WebKit**; run WebKit locally before shipping
+editor changes, since every Safari-class editor bug we have shipped was invisible
+to a Chromium-only check:
+
+```bash
+SMOKE_BROWSER=webkit ./selftest.sh
+```
+
+To point the check at an already-running server instead, call the check directly:
 
 ```bash
 node editor-check.mjs http://127.0.0.1:8080
@@ -60,28 +73,27 @@ node editor-check.mjs http://127.0.0.1:8080
 
 ## Self-test (proving the guard discriminates)
 
-`selftest.sh` runs the check three ways against the same build and asserts it
-**passes on the good config and fails on both the COEP block and the freeze** —
-so the smoke test can't silently rot into something that passes no matter what:
+`selftest.sh` runs the check three ways against the same build: the editor must
+**boot isolated, survive losing the service worker (SharedArrayBuffer), and the
+freeze probe must still catch a no-sync editor** — so the smoke test can't
+silently rot into something that passes no matter what:
 
 ```bash
 ./selftest.sh
 ```
 
-Demonstrated result (the production breakages, reproduced and caught):
+Demonstrated result:
 
 ```
-=== selftest 1/3: default config — expect PASS ===
-crossOriginIsolated = false
-SMOKE PASS — kernel ran 7*191=1337 and input() round-tripped (isolated=false)
-
-=== selftest 2/3: NOTEBOOK_CROSS_ORIGIN_ISOLATION=true — expect FAIL (COEP worker-block) ===
+=== selftest 1/3: default boot — expect PASS (isolated, SharedArrayBuffer path) ===
 crossOriginIsolated = true
-SMOKE FAIL — blocked resource detected while waiting for the kernel (COEP worker-block)
-  blocked resources:
-    - requestfailed: .../jupyterlite/extensions/@jupyterlite/pyodide-kernel-extension/static/620.*.js — net::ERR_BLOCKED_BY_RESPONSE
+SMOKE PASS — kernel ran 7*191=1337 and input() round-tripped (isolated=true)
 
-=== selftest 3/3: SMOKE_SIMULATE_FROZEN=1 (no service worker) — expect FAIL (input freeze) ===
+=== selftest 2/3: service worker disabled — expect PASS (SAB independent of the SW) ===
+crossOriginIsolated = true
+SMOKE PASS — kernel ran 7*191=1337 and input() round-tripped (isolated=true)
+
+=== selftest 3/3: no SW and no SAB — expect FAIL (input freeze) ===
 crossOriginIsolated = false
 SMOKE FAIL — input() did not return — editor froze on stdin (no service worker / SAB)
 ```

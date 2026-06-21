@@ -6,8 +6,8 @@ import XCTVapor
 
 @Suite struct COEPMiddlewareTests {
 
-    /// Wires both isolation middlewares the way `AppMiddleware` does, with the
-    /// `NOTEBOOK_CROSS_ORIGIN_ISOLATION` flag passed through.
+    /// Wires both isolation middlewares the way `AppMiddleware` does (which now
+    /// passes `true` unconditionally); the parameter drives both on/off cases.
     private func makeApp(isolateNotebook: Bool = false) async throws -> Application {
         let app = try await Application.make(.testing)
         app.middleware.use(NotebookAssetIsolationMiddleware(enabled: isolateNotebook))

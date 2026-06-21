@@ -10,30 +10,50 @@ Status: **implemented (Phase 1), advisory.** The harness lives in
 Phase 1 + assertion (5) are in: headless Chromium, full-app harness, assertions
 (1)–(5) below, advisory. It is **verified to catch the regressions it exists
 for** — run `Tools/editor-smoke-test/selftest.sh`, which boots the same server
-build and asserts the editor **passes on the default config and fails on both**
-known breakages:
+build three ways. The editor is now cross-origin isolated **unconditionally**
+(SharedArrayBuffer path), so the configs are:
 
 ```
-default config:                       crossOriginIsolated=false  SMOKE PASS  (kernel ran 7*191=1337, input() round-tripped)
-NOTEBOOK_CROSS_ORIGIN_ISOLATION=true: crossOriginIsolated=true   SMOKE FAIL  (kernel worker ERR_BLOCKED_BY_RESPONSE)
-SMOKE_SIMULATE_FROZEN=1 (no SW):      crossOriginIsolated=false  SMOKE FAIL  (input() hung — "Page Unresponsive")
+default boot:                          crossOriginIsolated=true   SMOKE PASS  (kernel ran 7*191=1337, input() round-tripped over SAB)
+SMOKE_SIMULATE_FROZEN=1 (no SW):       crossOriginIsolated=true   SMOKE PASS  (SAB carries stdin — kernel independent of the SW)
+SMOKE_SIMULATE_NO_SYNC=1 (no SW/SAB):  crossOriginIsolated=false  SMOKE FAIL  (input() hung — "Page Unresponsive")
 ```
 
-- **COEP worker-block** (#960/#961): the COEP attempt makes the cross-origin-
-  isolated editor page refuse its own fast-path-served Pyodide kernel worker.
-- **Freeze** (#959): `SMOKE_SIMULATE_FROZEN=1` rewrites `jupyter-lite.json`
-  in-flight to disable the service-worker manager (the config that shipped the
-  "Page Unresponsive" freeze); with COEP off there's no SAB either, so `input()`
-  has no synchronous stdin path and hangs. The trivial `7*191` cell still runs
-  in this config — which is exactly why a liveness-only check missed the freeze
-  and the `input()` probe was needed.
+- **COEP worker-block** (#960/#961): the cross-origin-isolated editor page used
+  to refuse its own fast-path-served Pyodide kernel worker (the worker script
+  lacked COEP). Fixed by stamping COEP on the fast-path assets; the default
+  config now *passes* isolated and is the live guard for that regression.
+- **SW independence**: `SMOKE_SIMULATE_FROZEN=1` disables the service-worker
+  manager; under isolation SAB still carries synchronous stdin, so the editor
+  stays healthy — proving the kernel no longer depends on the SW (the fix for
+  the "Kernel Unknown" SW-control race).
+- **Freeze** (#959): `SMOKE_SIMULATE_NO_SYNC=1` disables the SW *and* strips the
+  isolation headers off the document, so there is neither SW nor SAB and
+  `input()` hangs. The trivial `7*191` cell still runs in this config — which is
+  exactly why a liveness-only check missed the freeze and the `input()` probe was
+  needed.
 
-The decisions below were resolved as: **Chromium-only** to start (WebKit is a
-future add); **advisory** (not a required check — it is path-filtered, so a
-required check would block the merge of every PR that skips it; promote to
-required after it proves stable); **full app** harness (it drives the real
-`/jupyterlite/repl` through the real middleware chain, no course seeding). The
+The decisions below were resolved as: **Chromium + WebKit** (CI runs the selftest
+under both engines via a matrix — `SMOKE_BROWSER`; WebKit is the Safari engine and
+is what catches the Safari-class regressions a Chromium-only check shipped blind);
+**advisory** (not a required check — it is path-filtered, so a required check would
+block the merge of every PR that skips it; promote to required after it proves
+stable — see "Make it a required gate" below); **full app** harness (it drives the
+real `/jupyterlite/repl` through the real middleware chain, no course seeding). The
 original proposal follows for context.
+
+## Make it a required gate (recommended)
+
+The smoke job is still *advisory* — a red run does not block merge. Given how many
+editor regressions have reached students, promote it to a **required** check. The
+GitHub gotcha: a path-filtered workflow is *skipped* on PRs that don't touch
+editor files, and a required check that is "skipped" blocks those merges forever.
+The fix is the standard always-runs gate: add a tiny companion job that has **no**
+path filter, `needs:` the smoke matrix, and passes iff every smoke leg succeeded
+**or was skipped** — then mark *that* job required in branch protection. That makes
+"editor changed ⇒ both engines must pass" enforceable without blocking unrelated
+PRs. (Branch protection itself is a repo setting, applied in GitHub, not in this
+file.)
 
 ## Why
 
