@@ -351,24 +351,16 @@
         }
     }
 
-    // The kernel never reached ready within the observation window. Beacon it
-    // (so the hang is finally visible) and surface the runner path — but do NOT
-    // tear down the iframe: it may merely be slow, and hiding it would kill a
-    // still-loading kernel.
-    function reportKernelBootTimeout() {
-        setStatus('error',
-            'The Python kernel is taking unusually long to start. You can keep ' +
-            'waiting, or click Submit to grade your work on the server.');
-        reenableSubmit();
-        if (failures && failures.reportEvent) {
-            failures.reportEvent({
-                kind: 'watchdog_timeout',
-                failedChecks: ['kernel-boot-timeout'],
-                source: 'kernel',
-                message: isolationBeaconSuffix()
-            });
-        }
-    }
+    // NOTE: we intentionally do NOT report a "kernel-boot-timeout" on mere
+    // absence of a positive ready signal. In production the parent frequently
+    // cannot read the kernel's state inside the (cross-process) iframe, so
+    // `kernelLivenessReady` returns false even for HEALTHY kernels — which made
+    // a deadline-based beacon false-positive on Chrome AND Safari and show a
+    // spurious "kernel taking long" message over working editors. The genuine
+    // no-SAB hang (the data:-worker block) is pre-empted up front by the compat
+    // switch (browserNeedsDataWorkerCompat), not by watching for absence here.
+    // Restoring a positive kernel-boot-timeout needs a liveness probe validated
+    // against real JupyterLite in the editor-smoke harness first.
 
     function mountEditor() {
         // #1: drop any stale, redundant JupyterLite service worker before
@@ -639,15 +631,14 @@
                 return;
             }
 
-            // Shell up, but we never saw the kernel reach idle/busy AND never
-            // saw positive failure evidence. We used to silently assume healthy
-            // here — which made a kernel that spins forever (e.g. the COEP
-            // data:-worker block) completely invisible (logged only as a
-            // successful editor_ready). Now we beacon it and surface the runner
-            // path, without tearing down the iframe in case it is merely slow.
+            // Shell up, no positive failure evidence, and we could not confirm
+            // kernel-ready within the window. Stop watching SILENTLY — do not
+            // treat "couldn't confirm ready" as "hung": the parent often can't
+            // read the kernel state in a cross-process iframe, so a beacon here
+            // false-positives on healthy kernels (observed on Chrome + Safari in
+            // prod). Genuine no-SAB hangs are pre-empted by the compat switch.
             if (Date.now() - shellLoadedAt >= kernelMaxObserveMs) {
                 cancelled = true;
-                if (!kernelReadyReported) reportKernelBootTimeout();
                 return;
             }
             setTimeout(tick, 1000);
@@ -782,7 +773,12 @@
             if (!failures || !failures.reportEvent) return;
             var coi = (typeof crossOriginIsolated !== 'undefined') ? !!crossOriginIsolated : false;
             var sab = (typeof SharedArrayBuffer !== 'undefined');
-            var isolation = ';coi=' + coi + ';sab=' + sab;
+            // waitasync: native Atomics.waitAsync. coi=true with waitasync=false
+            // is the exact cohort the COEP data:-worker block hits (older
+            // Safari/iPadOS) — a reliable, probe-free way to size the at-risk
+            // population and confirm the compat switch is engaging.
+            var wa = (typeof Atomics !== 'undefined' && typeof Atomics.waitAsync === 'function');
+            var isolation = ';coi=' + coi + ';sab=' + sab + ';waitasync=' + wa;
             if (!('serviceWorker' in navigator)) {
                 failures.reportEvent({ kind: 'sw_state', message: 'supported=false' + isolation });
                 return;
