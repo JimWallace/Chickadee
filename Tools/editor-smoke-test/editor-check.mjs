@@ -19,7 +19,11 @@
 //     this fails;
 //   • a dead kernel / "Kernel Unknown" (a cell never executes);
 //   • the "Page Unresponsive" freeze — input()/stdin hangs when the kernel has
-//     neither the service worker nor SharedArrayBuffer for synchronous stdin.
+//     neither the service worker nor SharedArrayBuffer for synchronous stdin;
+//   • a dropped / CSP-blocked in-iframe kernel-boot collector —
+//     jl-kernel-diagnostics.js must actually run in the editor document and
+//     postMessage kernel_phase=boot_start (proves it's injected AND executes
+//     under the real CSP/COEP, beyond the build-time tag check).
 //
 // It is deliberately auth-free: the REPL and the vendored Pyodide/JupyterLite
 // assets are public static content served through the SAME middleware chain
@@ -173,6 +177,25 @@ async function main() {
     });
   }
 
+  // Capture the in-iframe kernel-boot collector's breadcrumbs. jl-kernel-
+  // diagnostics.js (injected into the editor document) postMessages
+  // kernel_phase / kernel_error to window.parent — which is `self` for the
+  // top-level REPL here — so a window 'message' listener installed before any
+  // page script (addInitScript) sees them. Lets us assert end-to-end that the
+  // collector is injected and that its ServiceManager status detection actually
+  // fires against the real JupyterLite kernel.
+  await context.addInitScript(() => {
+    try {
+      window.__ckKernelDiag = [];
+      window.addEventListener("message", (e) => {
+        const d = e && e.data;
+        if (d && d.ck === "kernel-diag") {
+          window.__ckKernelDiag.push({ kind: d.kind, source: d.source, message: d.message });
+        }
+      });
+    } catch (_) { /* ignore */ }
+  });
+
   const page = await context.newPage();
 
   const blocked = [];
@@ -302,6 +325,37 @@ async function main() {
     if (!ran) {
       return await fail(`kernel did not execute ${PROBE_EXPR} → ${PROBE_RESULT} within ${KERNEL_RUN_MS}ms`);
     }
+
+    // (1b) In-iframe kernel-boot collector: jl-kernel-diagnostics.js is injected
+    // into the editor document and must actually RUN under the real CSP/COEP and
+    // postMessage its first breadcrumb (kernel_phase=boot_start) to the parent.
+    // This is distinct coverage from verify-jupyterlite.sh (which only checks the
+    // <script> tag is present in the built HTML): it proves the script isn't
+    // CSP-blocked or broken and that its postMessage reaches a listener. We assert
+    // boot_start, not kernel_idle, because this harness drives the REPL, which —
+    // unlike the production notebooks editor — does not expose the
+    // `window.jupyterapp.serviceManager` hook the collector reads (the same hook
+    // notebook.js's shipped watchdog uses). The kernel_idle detection itself is
+    // covered by the Node unit test (mocking that ServiceManager shape) and by the
+    // production hook the watchdog already relies on.
+    const sawBootStart = await (async () => {
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const diag = await page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
+        if (diag.some((d) => d.kind === "kernel_phase" && d.source === "boot_start")) return true;
+        await page.waitForTimeout(500);
+      }
+      return false;
+    })();
+    if (!sawBootStart) {
+      const diag = await page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
+      return await fail(
+        "the in-iframe kernel-boot collector (jl-kernel-diagnostics.js) did not emit " +
+          "kernel_phase=boot_start — the script is not injected into the editor document, is " +
+          "CSP-blocked, or its postMessage bridge is broken. Observed: " + JSON.stringify(diag)
+      );
+    }
+    console.log("kernel-boot collector: observed kernel_phase=boot_start (collector running)");
 
     // (2) Freeze probe: input() must resolve without hanging the page. Needs
     // the service worker (or SAB) for synchronous stdin; without either, the

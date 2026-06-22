@@ -200,6 +200,49 @@ WebKit. One observed trade-off: without the SW asset cache, the page's two
 Pyodide loads (editor kernel + grader) are heavier, so grading-to-result is
 somewhat slower (noticeably under WebKit); it still completes.
 
+## Observability: the in-iframe kernel-boot collector
+
+The mitigations above fix *known* failure modes. But the parent notebook page
+has a structural blind spot: it **cannot read the Pyodide kernel's state across
+the cross-process editor iframe**. The shell mounting fires a green
+`editor_ready`; if the kernel then silently never starts (the spinning-forever
+symptom), the parent has no signal — `kernelLivenessReady` returns false even
+for *healthy* kernels in that case, which is exactly why a deadline-based
+parent-side beacon false-positived and had to be removed (see the NOTE in
+`notebook.js`). So a hung kernel was invisible to telemetry.
+
+`Public/jl-kernel-diagnostics.js` closes that gap. It is a passive observer
+injected into the editor documents (`notebooks/` + `repl/index.html`) so it runs
+**inside** the iframe — the one context where the boot is actually visible. It
+`postMessage`s two breadcrumb kinds to the parent, which forwards them through
+the normal client-diagnostics pipeline (the parent holds the session + CSRF
+token — the bridge is `handleKernelDiagMessage` in `notebook.js`, which accepts
+only same-origin `ck:'kernel-diag'` messages of an allowed kind):
+
+- **`kernel_phase`** — `boot_start → app_ready → kernel_starting → kernel_idle`.
+  The boot funnel; the drop-off point shows *where* a boot stalls. `kernel_idle`
+  is the positive "the kernel actually came up" signal the parent could never
+  get. Detection reads `window.jupyterapp.serviceManager` (the same hook
+  `notebook.js`'s shipped watchdog uses), with the status-bar text as a fallback.
+- **`kernel_error`** — the *why*: a CSP worker block (the historical
+  `data:`-worker case), a blocked/404 asset, a dead/unknown kernel, or a
+  boot-stall watchdog.
+
+Capture is scoped to the **boot window** (it stops once the kernel idles), so it
+never records student-code execution — same PII contract as the rest of
+client-diagnostics. The admin tool `get_browser_diagnostics` aggregates the
+`kernel_phase` events into a **`kernelBootFunnel`**: a `kernel_idle` count far
+below `boot_start` is the hung-kernel signature, and the `kernel_error` rows
+(in `bySource` / `recentSamples`) say why.
+
+Wiring: the `<script>` tag is injected at build time by
+`scripts/patch-jupyterlite-diagnostics.py` (run from `build-jupyterlite.sh`,
+since `jupyter lite build` regenerates the index.html files) and asserted present
+by `verify-jupyterlite.sh`. The editor-smoke harness asserts the collector
+actually *runs* in a real browser under the live CSP/COEP (it must emit
+`kernel_phase=boot_start`), and the collector + bridge logic is unit-tested in
+`Tests/BrowserRunnerJSTests/kernel-diagnostics.test.mjs`.
+
 ## Quick reference
 
 | | Sync path | SW-control race? | Status |

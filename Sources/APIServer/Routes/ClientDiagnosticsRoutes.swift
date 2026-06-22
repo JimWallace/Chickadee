@@ -70,10 +70,22 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         // distinct subtype from the positive-evidence "kernel-unhealthy" one.
         // sw_state reports service-worker registration + cross-origin-isolation
         // state ("supported=…;registrations=…;coi=…;sab=…;waitasync=…").
+        // "kernel_phase" / "kernel_error" are forwarded by the parent page from
+        // the IN-IFRAME collector (jl-kernel-diagnostics.js): the editor document
+        // observes the Pyodide kernel boot from inside the cross-process iframe —
+        // the one context where it is visible — and postMessages breadcrumbs out.
+        // kernel_phase carries the phase name in `source`
+        // (boot_start → app_ready → kernel_starting → kernel_idle), the boot
+        // funnel whose drop-off point localizes WHERE a boot stalls; kernel_error
+        // carries the failure (source = csp_violation / resource_error /
+        // kernel_dead / boot_stalled / …, message = detail) — the WHY the parent
+        // could never see across the iframe boundary. Infrastructure breadcrumbs
+        // only (capture stops once the kernel idles), never student-code output.
         let allowedKinds: Set<String> = [
             "preflight_fail", "watchdog_timeout", "editor_error",
             "submit_phase", "submit_error", "page_unresponsive",
             "editor_ready", "kernel_ready", "sw_state",
+            "kernel_phase", "kernel_error",
         ]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")

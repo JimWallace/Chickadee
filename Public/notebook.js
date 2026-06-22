@@ -195,6 +195,57 @@
         });
     }
 
+    // --- In-iframe kernel-boot diagnostics bridge --------------------
+    //
+    // The JupyterLite editor document loads jl-kernel-diagnostics.js, which
+    // observes the Pyodide kernel boot from INSIDE the iframe — the one place
+    // the boot is actually visible — and postMessages kernel_phase breadcrumbs
+    // (boot_start → app_ready → kernel_starting → kernel_idle) and kernel_error
+    // reports out to us. We cannot read the cross-process iframe's kernel state
+    // directly (the Safari/iPad blind spot that made hung kernels look healthy:
+    // the shell mounts → editor_ready fires green → the kernel silently never
+    // starts), but postMessage crosses that boundary, and THIS page holds the
+    // session + CSRF token to forward them through the normal client-diagnostics
+    // pipeline (kernelBootFunnel in get_browser_diagnostics).
+    //
+    // Trust: accept only same-origin messages (our editor iframe is same-origin)
+    // carrying our `ck` tag and one of the two expected kinds. We deliberately do
+    // NOT check event.source — it is unreliable across a cross-process iframe in
+    // Safari, the engine we most need to hear from. The kind allowlist + origin
+    // check + server-side per-(user,setup,kind,source) rate limit bound the blast
+    // radius of a misbehaving sender.
+    let kernelDiagForwarded = 0;
+    const KERNEL_DIAG_MAX = 24;   // the collector self-caps; this bounds POSTs
+
+    // Validate + forward one postMessage from the in-iframe collector. Returns
+    // true if it was forwarded (test seam). Accepts only same-origin messages
+    // carrying our `ck` tag and one of the two expected kinds; event.source is
+    // deliberately NOT checked (unreliable across a cross-process iframe in
+    // Safari, the engine we most need to hear from).
+    function handleKernelDiagMessage(e) {
+        try {
+            if (!failures || !failures.reportEvent) return false;
+            if (!e || e.origin !== window.location.origin) return false;
+            const d = e.data;
+            if (!d || d.ck !== 'kernel-diag') return false;
+            if (d.kind !== 'kernel_phase' && d.kind !== 'kernel_error') return false;
+            if (kernelDiagForwarded >= KERNEL_DIAG_MAX) return false;
+            kernelDiagForwarded += 1;
+            failures.reportEvent({
+                kind:    d.kind,
+                source:  d.source ? String(d.source).slice(0, 64) : undefined,
+                message: d.message ? String(d.message).slice(0, 1000) : undefined
+            });
+            return true;
+        } catch (_) {
+            return false;   // telemetry must never break the page
+        }
+    }
+
+    if (failures && failures.reportEvent) {
+        window.addEventListener('message', handleKernelDiagMessage);
+    }
+
     const preflightPromise = failures
         ? failures.runPreflight()
         : Promise.resolve({ ok: true, failed: [] });
@@ -1907,6 +1958,7 @@
             planKernelFailureResponse,
             shouldForceReseed,
             reseedPlan,
+            handleKernelDiagMessage,
         };
     }
 })();

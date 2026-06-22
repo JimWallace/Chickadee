@@ -60,6 +60,14 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         /// phases shows where in-browser submissions are lost to a freeze — the
         /// last phase a frozen student reaches has no successor record.
         let submitFunnel: [CountEntry]
+        /// Kernel-boot funnel: `kernel_phase` breadcrumb counts in phase order
+        /// (boot_start → app_ready → kernel_starting → kernel_idle), forwarded by
+        /// the in-iframe collector. The drop-off localizes WHERE a kernel boot
+        /// stalls — a kernel that spins forever reaches some phase and stops, so
+        /// `kernel_idle` far below `boot_start` is the hung-kernel signature the
+        /// parent page could never see across the iframe boundary. Pair with the
+        /// `kernel_error` rows in bySource/recentSamples for the WHY.
+        let kernelBootFunnel: [CountEntry]
         let recentSamples: [Sample]
     }
 
@@ -68,6 +76,12 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     static let submitPhaseOrder = [
         "grading_start", "runtime_loaded", "setup_unpacked",
         "suite_started", "suite_done", "result_posting", "result_posted",
+    ]
+
+    /// Canonical order of the kernel-boot breadcrumbs (emitted by the in-iframe
+    /// collector Public/jl-kernel-diagnostics.js, forwarded by notebook.js).
+    static let kernelPhaseOrder = [
+        "boot_start", "app_ready", "kernel_starting", "kernel_idle",
     ]
 
     static let name = "get_browser_diagnostics"
@@ -82,8 +96,13 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         + "(grading_start → runtime_loaded → setup_unpacked → suite_started → suite_done → "
         + "result_posting → result_posted) — the drop-off between consecutive phases shows where "
         + "in-browser submissions are lost to a freeze (a frozen student's last reached phase has no "
-        + "successor). Optionally filter by testSetupID. Read-only; reports infrastructure breadcrumbs "
-        + "only and never includes a student identifier."
+        + "successor). And kernelBootFunnel: the kernel_phase breadcrumb counts in phase order "
+        + "(boot_start → app_ready → kernel_starting → kernel_idle), forwarded by the in-iframe "
+        + "collector — the drop-off localizes WHERE a kernel boot stalls (a kernel that spins forever "
+        + "reaches some phase and stops, so kernel_idle far below boot_start is the hung-kernel "
+        + "signature); pair it with the kernel_error rows (in bySource / recentSamples: csp_violation, "
+        + "resource_error, kernel_dead, boot_stalled, …) for the WHY. Optionally filter by testSetupID. "
+        + "Read-only; reports infrastructure breadcrumbs only and never includes a student identifier."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -143,6 +162,18 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let knownPhases = Set(Self.submitPhaseOrder)
         submitFunnel += Self.sortedCounts(submitPhaseCounts.filter { !knownPhases.contains($0.key) })
 
+        // Kernel-boot funnel from the `kernel_phase` breadcrumbs, in phase order
+        // (then any unknown phases by count). The drop-off pinpoints where a boot
+        // stalls — the in-iframe collector's view of the cross-process kernel.
+        let kernelPhaseCounts = rows.reduce(into: [String: Int]()) { acc, row in
+            if row.kind == "kernel_phase", let source = row.source { acc[source, default: 0] += 1 }
+        }
+        var kernelBootFunnel = Self.kernelPhaseOrder.compactMap { phase -> CountEntry? in
+            kernelPhaseCounts[phase].map { CountEntry(key: phase, count: $0) }
+        }
+        let knownKernelPhases = Set(Self.kernelPhaseOrder)
+        kernelBootFunnel += Self.sortedCounts(kernelPhaseCounts.filter { !knownKernelPhases.contains($0.key) })
+
         let samples = rows.prefix(sampleLimit).map { row in
             Sample(
                 kind: row.kind,
@@ -163,6 +194,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             byFailedCheck: Self.sortedCounts(byCheck),
             byBrowser: Self.sortedCounts(byBrowser),
             submitFunnel: submitFunnel,
+            kernelBootFunnel: kernelBootFunnel,
             recentSamples: Array(samples))
     }
 
