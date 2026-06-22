@@ -32,7 +32,7 @@
     </a>
 
     #if(currentUser):
-        #if(currentUser.isInstructor && currentUser.activeCourse):
+        #if(currentUser.isInstructorInActiveCourse):
             <a class="nav-link" href="/instructor">#(currentUser.activeCourse.code)</a>
         #endif
         #if(currentUser.isAdmin):

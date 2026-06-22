@@ -12,6 +12,7 @@
 // are still enrollment-scoped (see ToolContext.authorizeCourseAccess), which
 // keeps agent scope ⊆ human scope for every role.
 
+import Core
 import Fluent
 import Vapor
 
@@ -44,15 +45,26 @@ func userIsEnrolled(userID: UUID, inCourse courseID: UUID, db: Database) async t
 /// resolver behind the web tab strip (`resolveActiveCourse`) and the MCP
 /// listing surface (`list_courses`, `resources/list`). No role widens this
 /// set: admins see — and their agents may act on — exactly what they are
-/// enrolled in.
+/// enrolled in. Defined in terms of `enrolledCoursesWithRoles` so the two
+/// can't drift on which courses are visible or in what order.
 func enrolledCourses(for userID: UUID, on db: Database) async throws -> [APICourse] {
+    try await enrolledCoursesWithRoles(for: userID, on: db).map(\.course)
+}
+
+/// Like `enrolledCourses`, but pairs each course with the caller's per-course
+/// role from the enrollment row (Phase 2 of docs/multi-course-roles.md). The
+/// web read path carries this into the nav; the role is web-only and never
+/// widens the visible set, and MCP keeps using the role-free `enrolledCourses`.
+func enrolledCoursesWithRoles(
+    for userID: UUID, on db: Database
+) async throws -> [(course: APICourse, role: CourseRole)] {
     let enrollments = try await APICourseEnrollment.query(on: db)
         .filter(\.$userID == userID)
         .with(\.$course)
         .all()
     return
         enrollments
-        .map(\.course)
-        .filter { !$0.isArchived }
-        .sorted { $0.code < $1.code }
+        .filter { !$0.course.isArchived }
+        .sorted { $0.course.code < $1.course.code }
+        .map { (course: $0.course, role: $0.role) }
 }

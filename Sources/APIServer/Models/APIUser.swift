@@ -289,18 +289,23 @@ extension Request {
 
         let activeCourseUUID = UUID(uuidString: activeCourseID)
         let markedCourses = enrolledContexts.map {
-            CourseContext(id: $0.id, code: $0.code, name: $0.name, isActive: $0.id == activeCourseID)
+            CourseContext(
+                id: $0.id, code: $0.code, name: $0.name,
+                isActive: $0.id == activeCourseID, role: $0.role)
         }
         let active = markedCourses.first(where: \.isActive)
         return ResolvedCourseState(active: active, all: markedCourses, activeCourseUUID: activeCourseUUID)
     }
 
     private func loadEnrolledCourseContexts(userID: UUID) async throws -> [CourseContext] {
-        // Delegates to the shared visibility resolver so the tab strip and the
-        // MCP listing surface stay in lockstep by construction.
-        try await enrolledCourses(for: userID, on: db).compactMap { course in
-            guard let id = course.id else { return nil }
-            return CourseContext(id: id.uuidString, code: course.code, name: course.name, isActive: false)
+        // Delegates to the shared visibility resolver (role-augmented) so the
+        // tab strip and the MCP listing surface stay in lockstep on which
+        // courses are visible; the per-course role rides along for the nav.
+        try await enrolledCoursesWithRoles(for: userID, on: db).compactMap { pair in
+            guard let id = pair.course.id else { return nil }
+            return CourseContext(
+                id: id.uuidString, code: pair.course.code, name: pair.course.name,
+                isActive: false, role: pair.role)
         }
     }
 }
@@ -313,6 +318,12 @@ struct CourseContext: Encodable {
     let code: String
     let name: String
     var isActive: Bool
+    /// The caller's per-course role in this course (Phase 2 of
+    /// docs/multi-course-roles.md). Carried so the nav can decide instructor
+    /// surfaces from the *active course's* role rather than the global one.
+    /// Behaviour-neutral today — every enrollment's role mirrors the global
+    /// role (Phase 1 backfill).
+    let role: CourseRole
 }
 
 /// The result of resolving which course is "active" for the current request.
@@ -337,6 +348,16 @@ struct CurrentUserContext: Encodable {
     let enrolledCourses: [CourseContext]
     /// True when the user is enrolled in more than one course (tab strip should show).
     let showCourseTabs: Bool
+    /// True when the user acts as an instructor *in the active course*: that
+    /// course's per-course role is `.instructor`, or the user is a global
+    /// instructor/admin (the transitional fallback, kept until the global role
+    /// is shrunk in Phase 5). The nav's Instructor tab keys off this instead
+    /// of the bare global `isInstructor`, so once per-course roles are
+    /// authorable (Phase 4) switching the active course switches the same
+    /// account between instructor and student views. Behaviour-neutral today:
+    /// every enrollment's role mirrors the global role, so this equals the
+    /// previous `isInstructor && activeCourse != nil`.
+    let isInstructorInActiveCourse: Bool
 
     init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
@@ -359,5 +380,7 @@ struct CurrentUserContext: Encodable {
         self.activeCourse = activeCourse
         self.enrolledCourses = enrolledCourses
         self.showCourseTabs = enrolledCourses.count > 1
+        self.isInstructorInActiveCourse =
+            activeCourse != nil && (activeCourse?.role == .instructor || user.isInstructor)
     }
 }
