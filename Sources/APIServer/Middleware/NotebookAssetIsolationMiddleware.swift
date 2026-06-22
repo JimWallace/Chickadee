@@ -65,6 +65,13 @@ struct NotebookAssetIsolationMiddleware: AsyncMiddleware {
         let path = request.url.path
         guard enabled, path.hasPrefix("/jupyterlite/") || Self.isolatedWorkerScripts.contains(path)
         else { return response }
+        // Editor compat mode: this client opted out of cross-origin isolation
+        // (the COEP `data:`-worker block), so leave its editor iframe documents
+        // and worker scripts non-isolated — the kernel uses the service-worker
+        // sync path that notebook.js re-registers in compat mode. The vendored
+        // asset trees on EditorAssetFastPathMiddleware keep their headers (a
+        // COEP-stamped worker script still loads fine from a non-isolated page).
+        if request.editorCompatModeRequested { return response }
 
         response.setCrossOriginIsolationHeaders()
         return response

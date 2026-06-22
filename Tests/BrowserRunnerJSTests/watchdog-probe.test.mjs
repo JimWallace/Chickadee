@@ -386,6 +386,66 @@ test('probeIframeReadiness: kernel failure surfaces evidence string', async () =
 });
 
 // ----------------------------------------------------------------
+// Kernel liveness — the positive kernel_ready signal (success numerator),
+// distinct from shell readiness. Its presence drives the kernel_ready beacon;
+// its ABSENCE at the deadline drives the new kernel-boot-timeout beacon, so a
+// kernel that spins forever is no longer logged only as a successful shell.
+// ----------------------------------------------------------------
+
+test('probeIframeReadiness: shell up, kernel idle session → kernelReady true', async () => {
+  const { probeIframeReadiness } = await loadHarness();
+  const fakeApp = {
+    serviceManager: { sessions: { running() { return [{ kernel: { status: 'idle' } }]; } } },
+  };
+  const frame = makeFrame({
+    winFactory: () => ({ jupyterapp: fakeApp, document: makeDoc() }),
+    docFactory: () => makeDoc(),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.shellReady, true);
+  assert.equal(r.kernelReady, true);
+});
+
+test('probeIframeReadiness: shell up via DOM, "| Idle" status text → kernelReady true', async () => {
+  const { probeIframeReadiness } = await loadHarness();
+  const frame = makeFrame({
+    winFactory: () => null,
+    docFactory: () => makeDoc({ classList: ['jp-Toolbar'], bodyText: 'Python (Pyodide) | Idle' }),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.shellReady, true);
+  assert.equal(r.kernelReady, true);
+});
+
+test('probeIframeReadiness: shell up but kernel still starting → kernelReady false', async () => {
+  // The hung-kernel case: the shell mounted (editor_ready fires) but the kernel
+  // never reached idle/busy, so kernel_ready must NOT fire — this is exactly
+  // the gap that let a spinning kernel be recorded as a success.
+  const { probeIframeReadiness } = await loadHarness();
+  const frame = makeFrame({
+    winFactory: () => null,
+    docFactory: () => makeDoc({ classList: ['jp-Toolbar'], bodyText: 'Python (Pyodide) | Starting' }),
+  });
+  const r = probeIframeReadiness(frame);
+  assert.equal(r.shellReady, true);
+  assert.equal(r.kernelReady, false, 'a kernel that has not reached idle/busy is not ready');
+});
+
+test('kernelLivenessReady: busy session → true; dead session → false', async () => {
+  const { kernelLivenessReady } = await loadHarness();
+  const busy = { jupyterapp: { serviceManager: { sessions: { running() { return [{ kernel: { status: 'busy' } }]; } } } } };
+  const dead = { jupyterapp: { serviceManager: { sessions: { running() { return [{ kernel: { status: 'dead' } }]; } } } } };
+  assert.equal(kernelLivenessReady(busy, makeDoc()), true);
+  assert.equal(kernelLivenessReady(dead, makeDoc()), false);
+});
+
+test('kernelLivenessReady: access throws → false (never a false positive)', async () => {
+  const { kernelLivenessReady } = await loadHarness();
+  const win = { get jupyterapp() { throw new Error('cross-origin'); } };
+  assert.equal(kernelLivenessReady(win, null), false);
+});
+
+// ----------------------------------------------------------------
 // Kernel recovery ladder — iframe reload, then full-page reload, then give up
 // (the full-page rung was added to fix "persisted after auto-reload" cases,
 // where the in-place iframe reset re-raced the service-worker control).

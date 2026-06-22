@@ -218,17 +218,184 @@
         mountEditor();
     });
 
+    // ----------------------------------------------------------------
+    // Editor delivery hardening (kernel boot)
+    // ----------------------------------------------------------------
+    //
+    // The editor is served cross-origin isolated so the Pyodide kernel runs on
+    // SharedArrayBuffer with no service worker
+    // (docs/notebook-editor-kernel-boot.md). Two failure modes can still leave
+    // the kernel spinning forever; these helpers detect and route around them
+    // — and beacon them, so a hung kernel is no longer invisible to the admin
+    // diagnostics (it used to be logged only as a successful editor_ready).
+
+    // True when the per-client compat cookie is set (the server then serves the
+    // editor NON-isolated; see EditorCompatMode.swift).
+    function isEditorCompatMode() {
+        try { return document.cookie.indexOf('ck-editor-compat=1') !== -1; }
+        catch (_) { return false; }
+    }
+
+    // #1 — Remove a stale, now-redundant JupyterLite service worker. The
+    // SAB-only architecture disabled the SW manager, but a SW registered by a
+    // pre-SAB build stays registered and keeps controlling /jupyterlite/* — it
+    // can serve stale/uncontrolled responses that break the kernel boot, and a
+    // plain refresh never clears it. Drop any we find (never in compat mode,
+    // where the SW IS the intended sync path) and reload once if one was
+    // actually controlling this load.
+    function cleanupRedundantServiceWorker() {
+        if (isEditorCompatMode()) return;
+        if (typeof navigator === 'undefined' || !navigator.serviceWorker ||
+            !navigator.serviceWorker.getRegistrations) return;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+            var removedControlling = false;
+            (regs || []).forEach(function (reg) {
+                var scope = (reg && reg.scope) || '';
+                if (scope.indexOf('/jupyterlite/') === -1) return;
+                if (navigator.serviceWorker.controller) removedControlling = true;
+                try { reg.unregister(); } catch (_) { /* best effort */ }
+            });
+            if (typeof caches !== 'undefined' && caches.delete) {
+                try { caches.delete('precache'); } catch (_) { /* best effort */ }
+            }
+            // A SW only stops controlling already-loaded clients on reload, so
+            // if one was controlling we reload once (guarded) for a clean,
+            // SW-free boot.
+            if (removedControlling && !staleSwReloadUsed()) {
+                markStaleSwReloadUsed();
+                try { window.location.reload(); } catch (_) { /* nothing else to try */ }
+            }
+        }).catch(function () { /* best effort */ });
+    }
+
+    function staleSwReloadUsed() {
+        try { return sessionStorage.getItem('chickadee:sw-cleanup:' + setupID) === '1'; }
+        catch (_) { return false; }
+    }
+    function markStaleSwReloadUsed() {
+        try { sessionStorage.setItem('chickadee:sw-cleanup:' + setupID, '1'); }
+        catch (_) { /* sessionStorage unavailable — reload simply won't be re-gated */ }
+    }
+
+    // #2 — The pyodide-kernel polyfills Atomics.waitAsync with a `data:` worker
+    // when the engine lacks it natively; `data:` workers are BLOCKED under COEP
+    // require-corp, so a cross-origin-isolated page on such an engine (older
+    // Safari / iPadOS) hangs the kernel with no fallback. Detect that exact
+    // combination and switch to a non-isolated, service-worker-backed boot.
+    function browserNeedsDataWorkerCompat() {
+        if (typeof crossOriginIsolated === 'undefined' || !crossOriginIsolated) return false;
+        if (typeof Atomics === 'undefined') return false;
+        return typeof Atomics.waitAsync !== 'function';
+    }
+
+    function compatAlreadyTried() {
+        try { return sessionStorage.getItem('chickadee:editor-compat:' + setupID) === '1'; }
+        catch (_) { return false; }
+    }
+    function markCompatTried() {
+        try { sessionStorage.setItem('chickadee:editor-compat:' + setupID, '1'); }
+        catch (_) { /* sessionStorage unavailable */ }
+    }
+
+    // Returns true if it kicked off a compat switch (a reload), so the caller
+    // stops the normal isolated mount.
+    function maybeEnterDataWorkerCompat() {
+        if (isEditorCompatMode()) return false;        // already non-isolated
+        if (!browserNeedsDataWorkerCompat()) return false;
+        if (compatAlreadyTried()) return false;        // never loop
+        markCompatTried();
+        try {
+            document.cookie = 'ck-editor-compat=1; path=/; max-age=86400; SameSite=Lax';
+        } catch (_) { /* cookies blocked — fall through; boot-timeout will catch it */ }
+        setStatus('loading', 'Preparing the notebook for your browser…');
+        try { window.location.reload(); return true; }
+        catch (_) { return false; }
+    }
+
+    // In compat (non-isolated) mode the SAB sync path is unavailable, so the
+    // kernel needs the JupyterLite service worker. The SW manager is disabled,
+    // so register it ourselves and wait for it to control /jupyterlite/ before
+    // the iframe mounts. Best-effort: on failure the boot-timeout path routes
+    // the student to the runner.
+    function ensureCompatServiceWorker() {
+        if (!isEditorCompatMode()) return Promise.resolve();
+        if (typeof navigator === 'undefined' || !navigator.serviceWorker) return Promise.resolve();
+        try {
+            return navigator.serviceWorker
+                .register('/jupyterlite/service-worker.js', { scope: '/jupyterlite/' })
+                .then(function () { return whenServiceWorkerActive(5000); })
+                .catch(function () { /* best effort */ });
+        } catch (_) {
+            return Promise.resolve();
+        }
+    }
+
+    // Isolation/engine context appended to kernel beacons so the admin
+    // diagnostics can tell WHY a kernel hung: coi=false → isolation not
+    // delivered (e.g. stale SW); waitasync=false under coi=true → the
+    // data:-worker block; compat=true → already on the service-worker fallback.
+    function isolationBeaconSuffix() {
+        var coi = (typeof crossOriginIsolated !== 'undefined') ? !!crossOriginIsolated : false;
+        var wa  = (typeof Atomics !== 'undefined' && typeof Atomics.waitAsync === 'function');
+        return 'coi=' + coi + ';waitasync=' + wa + ';compat=' + isEditorCompatMode();
+    }
+
+    // The kernel reached idle/busy — the success NUMERATOR (paired with
+    // editor_ready, the shell denominator).
+    function reportKernelReady(elapsedMs) {
+        if (failures && failures.reportEvent) {
+            failures.reportEvent({
+                kind: 'kernel_ready',
+                message: 'elapsed_ms=' + Math.round(elapsedMs) + ';' + isolationBeaconSuffix()
+            });
+        }
+    }
+
+    // The kernel never reached ready within the observation window. Beacon it
+    // (so the hang is finally visible) and surface the runner path — but do NOT
+    // tear down the iframe: it may merely be slow, and hiding it would kill a
+    // still-loading kernel.
+    function reportKernelBootTimeout() {
+        setStatus('error',
+            'The Python kernel is taking unusually long to start. You can keep ' +
+            'waiting, or click Submit to grade your work on the server.');
+        reenableSubmit();
+        if (failures && failures.reportEvent) {
+            failures.reportEvent({
+                kind: 'watchdog_timeout',
+                failedChecks: ['kernel-boot-timeout'],
+                source: 'kernel',
+                message: isolationBeaconSuffix()
+            });
+        }
+    }
+
     function mountEditor() {
+        // #1: drop any stale, redundant JupyterLite service worker before
+        // booting (no-op in compat mode, where the SW is the intended path).
+        cleanupRedundantServiceWorker();
+
+        // #2: engines that would hit the COEP data:-worker block switch to a
+        // non-isolated, service-worker-backed boot (this reloads).
+        if (maybeEnterDataWorkerCompat()) return;
+
         // The template renders the same URL into the iframe's src, so the
         // editor is already loading by the time the preflight resolves.
         // Re-assigning src aborts that in-flight navigation and starts it
         // over — only navigate when the attribute is missing or different
-        // (an older cached copy of the page).
-        if (frame.getAttribute('src') !== editorURL) {
-            frame.src = editorURL;
+        // (an older cached copy of the page). In compat mode we deliberately
+        // (re)mount AFTER the service worker is controlling /jupyterlite/.
+        var mountFrame = function () {
+            if (frame.getAttribute('src') !== editorURL) {
+                frame.src = editorURL;
+            }
+            scheduleServiceWorkerStateBeacon();
+        };
+        if (isEditorCompatMode()) {
+            ensureCompatServiceWorker().then(mountFrame);
+        } else {
+            mountFrame();
         }
-
-        scheduleServiceWorkerStateBeacon();
 
         // Quick reachability check helps explain blank/failed editor loads.
         fetch(notebookURL, { method: 'GET' }).then((res) => {
@@ -370,6 +537,8 @@
         // reloaded shell comes back up.
         let kernelRecoveryAttempted = false;
         let recovering              = false;
+        // The positive kernel-ready beacon is emitted at most once.
+        let kernelReadyReported     = false;
 
         function tick() {
             if (cancelled) return;
@@ -399,6 +568,16 @@
                     return;
                 }
                 setTimeout(tick, 500);
+                return;
+            }
+
+            // Positive kernel-ready: the kernel (not just the shell) reached
+            // idle/busy. This is the success numerator AND the signal that
+            // distinguishes a healthy boot from a hung one — once seen, stop.
+            if (probe.kernelReady && !kernelReadyReported) {
+                kernelReadyReported = true;
+                reportKernelReady(Date.now() - startedAt);
+                cancelled = true;
                 return;
             }
 
@@ -460,11 +639,15 @@
                 return;
             }
 
-            // No failure evidence + shell loaded.  Stop watching after
-            // a generous observation window — the user has a working
-            // editor and we shouldn't keep polling forever.
+            // Shell up, but we never saw the kernel reach idle/busy AND never
+            // saw positive failure evidence. We used to silently assume healthy
+            // here — which made a kernel that spins forever (e.g. the COEP
+            // data:-worker block) completely invisible (logged only as a
+            // successful editor_ready). Now we beacon it and surface the runner
+            // path, without tearing down the iframe in case it is merely slow.
             if (Date.now() - shellLoadedAt >= kernelMaxObserveMs) {
-                cancelled = true; // silent give-up; assume healthy
+                cancelled = true;
+                if (!kernelReadyReported) reportKernelBootTimeout();
                 return;
             }
             setTimeout(tick, 1000);
@@ -493,6 +676,7 @@
     // fires when we're sure something has broken.
     function probeIframeReadiness(frame) {
         let shellReady = false;
+        let kernelReady = false;
         let kernelInFailureState = false;
         let kernelEvidence = null;
         let win = null;
@@ -541,7 +725,13 @@
             } catch (_) { /* fall through */ }
         }
 
-        return { shellReady, kernelInFailureState, kernelEvidence };
+        // Positive kernel liveness (independent of failure evidence): a running
+        // session in idle/busy, or the "| Idle"/"| Busy" status text. Absence
+        // is "unknown", never "ready" — so kernel_ready never false-positives.
+        if (shellReady) {
+            kernelReady = kernelLivenessReady(win, doc);
+        }
+        return { shellReady, kernelReady, kernelInFailureState, kernelEvidence };
     }
 
     function reenableSubmit() {
@@ -664,6 +854,33 @@
         } catch (_) { /* fall through */ }
 
         return null;
+    }
+
+    // Returns true iff we have POSITIVE evidence the kernel is ALIVE — a running
+    // session reporting idle/busy, or the "| Idle"/"| Busy" status text in the
+    // iframe DOM. Absence is "unknown" (still booting, or an unprobeable
+    // cross-process Safari iframe), never "ready" — so the kernel_ready success
+    // signal never false-positives on a working-but-unprobeable editor.
+    function kernelLivenessReady(win, doc) {
+        try {
+            const app = win && win.jupyterapp;
+            const sm  = app && app.serviceManager;
+            if (sm && sm.sessions && typeof sm.sessions.running === 'function') {
+                const running = sm.sessions.running();
+                if (running) {
+                    const sessions = Array.from(running);
+                    for (let i = 0; i < sessions.length; i++) {
+                        const status = sessions[i] && sessions[i].kernel && sessions[i].kernel.status;
+                        if (status === 'idle' || status === 'busy') return true;
+                    }
+                }
+            }
+        } catch (_) { /* fall through */ }
+        try {
+            const text = (doc && doc.body && doc.body.textContent) || '';
+            if (text.indexOf('| Idle') !== -1 || text.indexOf('| Busy') !== -1) return true;
+        } catch (_) { /* fall through */ }
+        return false;
     }
 
     // Decides how the watchdog reacts to POSITIVE EVIDENCE that the kernel is
@@ -1758,6 +1975,7 @@
             parseStructuredPayload,
             probeIframeReadiness,
             kernelFailureEvidence,
+            kernelLivenessReady,
             planKernelFailureResponse,
             shouldForceReseed,
             reseedPlan,
