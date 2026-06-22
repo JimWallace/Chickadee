@@ -583,4 +583,37 @@ import VaporTesting
                 })
         }
     }
+
+    /// Phase 2 wiring, end-to-end: the nav's Instructor tab keys off the
+    /// *per-course* role. A global `student` whose enrollment in the active
+    /// course carries `.instructor` sees the Instructor tab there — the
+    /// "instructor here, student elsewhere" case the per-course role exists for.
+    @Test func studentWithPerCourseInstructorRoleSeesInstructorTab() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await loginUser(
+                username: "student_ic", password: "pass", role: "student", on: app)
+            let user = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student_ic").first())
+
+            let course = APICourse(code: "CS301", name: "Lab", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            try await APICourseEnrollment(
+                userID: try user.requireID(), courseID: try course.requireID(), role: .instructor
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"href="/instructor""#),
+                        "A per-course instructor (global student) must see the Instructor tab")
+                    #expect(
+                        html.contains(">CS301</a>"),
+                        "The Instructor tab is labelled with the active course code")
+                })
+        }
+    }
 }

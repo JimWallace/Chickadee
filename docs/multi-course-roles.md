@@ -1,11 +1,12 @@
 # Multi-course roles & university-scale organization
 
 **Status:** Active. Theme 1 (per-course roles) is being implemented in phases;
-**Phase 1 (Core `CourseRole` + the `course_enrollments.role` column + the
-behaviour-preserving backfill) has landed.** Companion to the earlier fix that
-scoped the home dashboard and the "Instructor" nav tab to course enrollment
-(PR #972) — that fix was the first concrete step toward the model described
-here.
+**Phases 1–2 have landed** — Core `CourseRole` + the `course_enrollments.role`
+column + the behaviour-preserving backfill (Phase 1), and the read-path wiring
+that carries the per-course role into the nav (Phase 2). Companion to the
+earlier fix that scoped the home dashboard and the "Instructor" nav tab to
+course enrollment (PR #972) — that fix was the first concrete step toward the
+model described here.
 
 The owner's design decisions are recorded in [§6](#6-decisions) and are
 settled; they shape Phases 4–5 (the behaviour-changing ones). Theme 2
@@ -110,16 +111,21 @@ representable and creatable.
   The behavior change only arrives when someone *authors* a mixed role
   (Phase 4).
 
-### 3.3 Read path (visibility / nav)
+### 3.3 Read path (visibility / nav) — **implemented**
 
-- `CourseContext` gains `role: CourseRole`; `resolveActiveCourse` /
-  `enrolledCourses` populate it from the enrollment row (it's already loaded —
-  one extra column, no extra query).
-- `CurrentUserContext` exposes the active course's role (e.g. a derived
-  `isInstructorInActiveCourse`). `base.leaf` keys the Instructor tab off
-  *that* instead of the global `isInstructor`. Switching the course tab then
-  switches the same account between instructor and student views — which is
-  exactly the desired UX for a TA-who-is-also-a-student.
+- `CourseContext` carries `role: CourseRole`, populated by a new
+  `enrolledCoursesWithRoles` resolver (the enrollment row is already loaded —
+  no extra query). `enrolledCourses` is now defined in terms of it, so the
+  role-free MCP visibility set can't drift from the web one.
+- `CurrentUserContext` exposes `isInstructorInActiveCourse`, and `base.leaf`
+  keys the Instructor tab off *that* instead of the global `isInstructor`. It
+  is `true` when the active course's role is `.instructor` **or** (a
+  transitional fallback) the user is a global instructor/admin — so today's
+  behaviour is identical (every enrollment's role mirrors the global role),
+  while a future global-student-who-is-instructor-here already lights up the
+  tab. The fallback is dropped in Phase 5 when the global role shrinks.
+  Switching the course tab then switches the same account between instructor
+  and student views — the desired UX for a TA-who-is-also-a-student.
 
 ### 3.4 Auth path (permissions)
 
@@ -156,8 +162,9 @@ representable and creatable.
 1. **Core + schema. ✓ Done.** `CourseRole`, the `AddCourseEnrollmentRole`
    migration, the backfill. No reads of the new column yet → zero behavior
    change.
-2. **Read path.** `CourseContext.role`, nav keyed off active-course role.
-   Still identical behavior (backfill mirrors the global role).
+2. **Read path. ✓ Done.** `CourseContext.role`, nav keyed off
+   `isInstructorInActiveCourse`. Still identical behavior (the role mirrors the
+   global role, plus a transitional global-role fallback in the nav predicate).
 3. **Auth path.** Helper + handler/middleware switch to role checks. Still
    identical (same reason).
 4. **Authoring UI.** Per-course role on enroll/roster. **This is where

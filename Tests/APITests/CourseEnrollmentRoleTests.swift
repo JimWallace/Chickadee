@@ -111,6 +111,70 @@ import Vapor
         }
     }
 
+    // MARK: - Read path (Phase 2)
+
+    /// `isInstructorInActiveCourse` (which the nav keys off) is driven by the
+    /// active course's per-course role, with a transitional fallback to the
+    /// global role.
+    @Test func instructorInActiveCourseReflectsPerCourseRoleAndGlobalFallback() {
+        func context(globalRole: UserRole, active: CourseContext?) -> CurrentUserContext {
+            let user = APIUser(username: "u", passwordHash: "x", role: globalRole.rawValue)
+            return CurrentUserContext(
+                user: user, activeCourse: active, enrolledCourses: active.map { [$0] } ?? [])
+        }
+        func course(_ role: CourseRole) -> CourseContext {
+            CourseContext(id: UUID().uuidString, code: "CS101", name: "Intro", isActive: true, role: role)
+        }
+
+        // No active course → never instructor-in-course, whatever the global role.
+        #expect(context(globalRole: .instructor, active: nil).isInstructorInActiveCourse == false)
+        // Global student, per-course student → no instructor surfaces.
+        #expect(context(globalRole: .student, active: course(.student)).isInstructorInActiveCourse == false)
+        // The Phase 2 point: a global *student* with a per-course instructor role → yes.
+        #expect(context(globalRole: .student, active: course(.instructor)).isInstructorInActiveCourse == true)
+        // Transitional fallback: a global instructor keeps the tab even where the
+        // per-course role is still student (the fallback is removed in Phase 5).
+        #expect(context(globalRole: .instructor, active: course(.student)).isInstructorInActiveCourse == true)
+        // Admin keeps deployment-wide instructor surfaces.
+        #expect(context(globalRole: .admin, active: course(.student)).isInstructorInActiveCourse == true)
+    }
+
+    /// `enrolledCoursesWithRoles` returns each enrolled (non-archived) course
+    /// paired with the caller's per-course role, sorted by code — the resolver
+    /// the nav's active-course role is read from.
+    @Test func enrolledCoursesWithRolesCarriesPerCourseRole() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            let user = makeUser(role: .student)
+            try await user.save(on: app.db)
+            let userID = try user.requireID()
+
+            let cs101 = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
+            let cs246 = APICourse(code: "CS246", name: "OOP", enrollmentMode: .closed)
+            let archived = APICourse(code: "CS999", name: "Retired", enrollmentMode: .closed)
+            archived.isArchived = true
+            for course in [cs101, cs246, archived] { try await course.save(on: app.db) }
+
+            try await APICourseEnrollment(
+                userID: userID, courseID: try cs101.requireID(), role: .student
+            ).save(on: app.db)
+            try await APICourseEnrollment(
+                userID: userID, courseID: try cs246.requireID(), role: .instructor
+            ).save(on: app.db)
+            try await APICourseEnrollment(
+                userID: userID, courseID: try archived.requireID(), role: .instructor
+            ).save(on: app.db)
+
+            let pairs = try await enrolledCoursesWithRoles(for: userID, on: app.db)
+
+            // Archived course excluded; the rest sorted by code, role carried through.
+            #expect(pairs.map(\.course.code) == ["CS101", "CS246"])
+            #expect(pairs.map(\.role) == [.student, .instructor])
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeUser(role: UserRole) -> APIUser {
