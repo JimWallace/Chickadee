@@ -1089,6 +1089,97 @@ import VaporTesting
         }
     }
 
+    @Test func editorResetPageRendersConfirmForm() async throws {
+        try await withApp(app) { _ in
+            // GET /reset-editor renders the confirmation form (no clearing yet),
+            // preserving a safe same-origin `next` and dropping an unsafe one.
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/reset-editor?next=/testsetups/abc/notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains(#"action="/reset-editor""#))
+                    #expect(html.contains("Reset editor"))
+                    // Safe next echoed into the hidden field + Cancel link.
+                    #expect(html.contains(#"value="/testsetups/abc/notebook""#))
+                    // The confirm GET must NOT clear anything.
+                    #expect(res.headers.first(name: "Clear-Site-Data") == nil)
+                })
+        }
+    }
+
+    @Test func editorResetPageSanitizesOpenRedirectNext() async throws {
+        try await withApp(app) { _ in
+            // An off-origin `next` must be neutralised to "/" so the page can't be
+            // turned into an open redirect (or attribute injection).
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .GET, "/reset-editor?next=https://evil.example.com/phish",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("evil.example.com") == false)
+                    #expect(html.contains(#"value="/""#))
+                })
+        }
+    }
+
+    @Test func performEditorResetSetsClearSiteDataAndKeepsSession() async throws {
+        try await withApp(app) { _ in
+            // POST /reset-editor returns the "done" page AND a Clear-Site-Data
+            // header that drops cache + storage (IndexedDB / service worker) but
+            // NOT cookies — the student must stay logged in.
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/reset-editor",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(
+                        ["_csrf": csrf, "next": "/testsetups/abc/notebook"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let clear = try #require(res.headers.first(name: "Clear-Site-Data"))
+                    #expect(clear.contains("\"cache\""))
+                    #expect(clear.contains("\"storage\""))
+                    #expect(clear.contains("cookies") == false, "must not log the student out")
+                    // The done page links back to the (safe) assignment.
+                    #expect(res.body.string.contains(#"href="/testsetups/abc/notebook""#))
+                })
+        }
+    }
+
+    @Test func performEditorResetRequiresCSRF() async throws {
+        try await withApp(app) { _ in
+            // Without a CSRF token the POST is rejected (the auth group's CSRF
+            // middleware) — a cross-origin page can't silently wipe a student's
+            // in-progress notebook.
+            let cookie = try await loginAsStudent()
+
+            try await app.asyncTest(
+                .POST, "/reset-editor",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    try req.content.encode(["next": "/"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                    #expect(res.headers.first(name: "Clear-Site-Data") == nil)
+                })
+        }
+    }
+
     @Test func notebookSourceFallsBackToFirstNestedNotebookWhenZipOnlySetupHasNoManifestStarter() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsStudent()

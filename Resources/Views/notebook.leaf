@@ -93,6 +93,12 @@ Notebook
     <p class="nb-fallback-text">
         <input type="file" id="nb-upload-file" accept=".ipynb,application/json">
     </p>
+    <p class="nb-fallback-text">
+        Still stuck? You can
+        <a id="nb-reset-editor-link" href="/reset-editor">reset the notebook editor</a>
+        &mdash; this clears cached editor data in your browser (your submitted
+        work is safe) so the kernel can start fresh.
+    </p>
     <details class="nb-fallback-diagnostic">
         <summary>Diagnostic details</summary>
         <pre id="nb-fallback-details" class="nb-fallback-pre"></pre>
