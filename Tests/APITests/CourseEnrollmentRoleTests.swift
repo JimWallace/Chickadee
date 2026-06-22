@@ -1,9 +1,12 @@
-// Tests/APITests/CourseEnrollmentRoleMigrationTests.swift
+// Tests/APITests/CourseEnrollmentRoleTests.swift
 //
-// Phase 1 of per-course roles (docs/multi-course-roles.md): the
-// `course_enrollments.role` column, its typed accessor, and the
-// behaviour-preserving backfill that seeds each enrollment's role from the
-// enrolled user's global role.
+// Per-course roles (docs/multi-course-roles.md):
+//   Phase 1 — the `course_enrollments.role` column, its typed accessor, and the
+//     behaviour-preserving backfill from each enrolled user's global role.
+//   Phase 2 — the read path: `enrolledCoursesWithRoles` and the nav predicate
+//     `isInstructorInActiveCourse`.
+//   Phase 3 — the auth chokepoint: `CourseRole` ordering and
+//     `requireCourseRole(atLeast:)`.
 
 import Core
 import Fluent
@@ -172,6 +175,70 @@ import Vapor
             // Archived course excluded; the rest sorted by code, role carried through.
             #expect(pairs.map(\.course.code) == ["CS101", "CS246"])
             #expect(pairs.map(\.role) == [.student, .instructor])
+        }
+    }
+
+    // MARK: - Auth path (Phase 3)
+
+    @Test func courseRoleLadderOrdersByPrivilege() {
+        #expect(CourseRole.student < CourseRole.instructor)
+        #expect(CourseRole.instructor >= .instructor)
+        #expect(CourseRole.student >= .student)
+        #expect(!(CourseRole.instructor < CourseRole.student))
+    }
+
+    /// `requireCourseRole` authorizes by the *per-course* role: a global student
+    /// enrolled as a per-course instructor passes the `.instructor` bar, while a
+    /// global student enrolled as a student does not. Admins bypass; an
+    /// unenrolled non-admin is forbidden even at `.student`.
+    @Test func requireCourseRoleEnforcesPerCourseRole() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            let course = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+
+            // All non-admins are global *students* — proving authority is per-course.
+            let asStudent = makeUser(role: .student)
+            let asInstructor = makeUser(role: .student)
+            let unenrolled = makeUser(role: .student)
+            let admin = makeUser(role: .admin)  // not enrolled anywhere
+            for user in [asStudent, asInstructor, unenrolled, admin] { try await user.save(on: app.db) }
+
+            try await APICourseEnrollment(
+                userID: try asStudent.requireID(), courseID: courseID, role: .student
+            ).save(on: app.db)
+            try await APICourseEnrollment(
+                userID: try asInstructor.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
+
+            // Per-course student: meets .student, not .instructor.
+            try await requireCourseRole(caller: asStudent, courseID: courseID, atLeast: .student, db: app.db)
+            await #expect(throws: Abort.self) {
+                try await requireCourseRole(
+                    caller: asStudent, courseID: courseID, atLeast: .instructor, db: app.db)
+            }
+
+            // Per-course instructor (a global student!): meets .instructor.
+            try await requireCourseRole(
+                caller: asInstructor, courseID: courseID, atLeast: .instructor, db: app.db)
+
+            // Admin bypasses without an enrollment.
+            try await requireCourseRole(caller: admin, courseID: courseID, atLeast: .instructor, db: app.db)
+
+            // Unenrolled non-admin is forbidden even at the student bar.
+            await #expect(throws: Abort.self) {
+                try await requireCourseRole(
+                    caller: unenrolled, courseID: courseID, atLeast: .student, db: app.db)
+            }
+
+            // requireCourseEnrollment still behaves as the `.student` case.
+            try await requireCourseEnrollment(caller: asStudent, courseID: courseID, db: app.db)
+            await #expect(throws: Abort.self) {
+                try await requireCourseEnrollment(caller: unenrolled, courseID: courseID, db: app.db)
+            }
         }
     }
 
