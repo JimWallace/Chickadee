@@ -46,8 +46,15 @@ jobs:
 
       - name: Install system dependencies
         run: |
+          # python3: the noble base image (unlike jammy) does not bundle it, and
+          # APITests run generated pattern-family cases / seed-expression grading
+          # that shell out to `#!/usr/bin/env python3`.  swift-tests.yml installs
+          # it in every test job for the same reason; this clean-build run executes
+          # *all* targets in one process, so it must match — without it the
+          # python3-dependent tests trap (broken pipe / leaked test Application →
+          # ServeCommand deinit assertion → SIGILL) and take down the whole run.
           for i in 1 2 3; do
-            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl file && break
+            apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl file python3 && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
             sleep 15
           done

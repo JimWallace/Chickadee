@@ -725,11 +725,16 @@ import VaporTesting
     // the same seed feeding `_ck_inputs.py`. Requires a real seed (→ user +
     // assignment) and `python3`.
     @Test func materializeValidation_resolvesExpressionForSeed() async throws {
-        let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
-        guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
-            return  // python3 unavailable on this platform — skip
-        }
         try await withApp(app) { _ in
+            // Keep the python3 skip-guard *inside* withApp so the test
+            // Application is always shut down.  An early `return` before withApp
+            // leaks the app, and its deinit then trips Vapor's
+            // `ServeCommand did not shutdown before deinit` assertion → SIGILL,
+            // which kills the whole test process (see TestHelpers.swift).
+            let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+            guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
+                return  // python3 unavailable on this platform — skip
+            }
             let manifest = """
                 {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],\
                 "timeLimitSeconds":10,\
