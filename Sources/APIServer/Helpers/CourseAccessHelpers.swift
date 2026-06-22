@@ -16,17 +16,48 @@ import Core
 import Fluent
 import Vapor
 
+/// Throws `.forbidden` unless `caller` is an admin or holds an enrollment in
+/// `courseID` whose per-course role is at least `minimum`. Admins bypass (they
+/// administer the whole deployment and can grant themselves enrollment anyway).
+/// This is the role-aware chokepoint for course access (Phase 3 of
+/// docs/multi-course-roles.md); `requireCourseEnrollment` is its `.student`
+/// case.
+///
+/// Authority is purely per-course here — there is no "global instructor"
+/// bypass. Today the only production callers pass `.student` (via
+/// `requireCourseEnrollment`), and every enrolled user is at least a student,
+/// so behaviour is identical to the prior enrollment-only check. The
+/// `.instructor` bar is wired into the authoring surfaces in Phase 4, once
+/// per-course roles are authorable; until then it is exercised only by tests.
+func requireCourseRole(
+    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
+) async throws {
+    guard !caller.isAdmin else { return }
+    guard let callerID = caller.id else { throw Abort(.unauthorized) }
+    guard let role = try await courseRole(of: callerID, inCourse: courseID, db: db) else {
+        throw Abort(.forbidden)
+    }
+    guard role >= minimum else { throw Abort(.forbidden) }
+}
+
 /// Throws `.forbidden` unless `caller` is an admin or is enrolled in the
 /// course identified by `courseID`. Instructors get no bypass: historically
 /// any instructor account could fetch another course's content — including
 /// test setups carrying secret tests and reference solutions — by URL, even
-/// though the dashboard never showed it to them.
+/// though the dashboard never showed it to them. Now the `.student` case of
+/// `requireCourseRole`.
 func requireCourseEnrollment(caller: APIUser, courseID: UUID, db: Database) async throws {
-    guard !caller.isAdmin else { return }
-    guard let callerID = caller.id else { throw Abort(.unauthorized) }
-    guard try await userIsEnrolled(userID: callerID, inCourse: courseID, db: db) else {
-        throw Abort(.forbidden)
-    }
+    try await requireCourseRole(caller: caller, courseID: courseID, atLeast: .student, db: db)
+}
+
+/// The caller's per-course role in `courseID`, or nil if they hold no
+/// enrollment there. The single role read behind `requireCourseRole`.
+func courseRole(of userID: UUID, inCourse courseID: UUID, db: Database) async throws -> CourseRole? {
+    try await APICourseEnrollment.query(on: db)
+        .filter(\.$userID == userID)
+        .filter(\.$course.$id == courseID)
+        .first()?
+        .role
 }
 
 /// True when the user holds an enrollment row in course `courseID`. The single

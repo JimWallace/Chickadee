@@ -1,10 +1,11 @@
 # Multi-course roles & university-scale organization
 
 **Status:** Active. Theme 1 (per-course roles) is being implemented in phases;
-**Phases 1–2 have landed** — Core `CourseRole` + the `course_enrollments.role`
-column + the behaviour-preserving backfill (Phase 1), and the read-path wiring
-that carries the per-course role into the nav (Phase 2). Companion to the
-earlier fix that scoped the home dashboard and the "Instructor" nav tab to
+**Phases 1–3 have landed** — Core `CourseRole` + the `course_enrollments.role`
+column + the behaviour-preserving backfill (Phase 1), the read-path wiring that
+carries the per-course role into the nav (Phase 2), and the role-aware
+authorization chokepoint `requireCourseRole(atLeast:)` (Phase 3). Companion to
+the earlier fix that scoped the home dashboard and the "Instructor" nav tab to
 course enrollment (PR #972) — that fix was the first concrete step toward the
 model described here.
 
@@ -127,24 +128,27 @@ representable and creatable.
   Switching the course tab then switches the same account between instructor
   and student views — the desired UX for a TA-who-is-also-a-student.
 
-### 3.4 Auth path (permissions)
+### 3.4 Auth path (permissions) — **chokepoint implemented**
 
-- `CourseAccessHelpers` is the chokepoint: add
-  `requireCourseRole(caller:courseID:atLeast: CourseRole, db:)` alongside the
-  existing `requireCourseEnrollment` (which becomes the `atLeast: .student`
-  case). Admin bypass stays.
-- Authoring endpoints (test-setup CRUD, assignment CRUD, suite editor, MCP
-  content tools) switch from "enrolled" to `atLeast: .instructor`. Submit /
-  view endpoints stay at "enrolled" (`atLeast: .student`).
-- `RoleMiddleware(.instructor)` on the `/instructor` group
-  (`routes.swift`) can no longer be the *fine-grained* check, because the
-  middleware doesn't know the target course. It becomes a **coarse gate**
-  ("is the caller an instructor in *some* course, or admin?" — enough to enter
-  the section), with the authoritative per-course check moving into the
-  handlers, which already resolve the course. (Most instructor handlers
-  already call `requireCourseEnrollment`; this is a one-line swap there.)
-- MCP: `ToolContext.authorizeCourseAccess` becomes role-aware (content tools
-  require instructor-in-course), preserving agent scope ⊆ human scope.
+- `CourseAccessHelpers` is the chokepoint: `requireCourseRole(caller:courseID:
+  atLeast: CourseRole, db:)` is in, and `requireCourseEnrollment` is now its
+  `.student` case (a one-call delegation, so every existing caller is
+  unchanged). Authority is **purely per-course** — admin bypass only, no global
+  instructor bypass — and `CourseRole` is `Comparable`, so `role >= .instructor`
+  reads naturally. `courseRole(of:inCourse:db:)` is the single role read behind
+  it. **(Done.)**
+- *Deferred to Phase 4* (the tightening): an audit showed the web authoring
+  surfaces are gated by `RoleMiddleware(.instructor)` — a **global**-role group
+  guard in `routes.swift` — not by a per-course `requireCourseEnrollment`, which
+  is used on the student/content endpoints. So flipping authoring to
+  `atLeast: .instructor`, relaxing `RoleMiddleware` to a coarse "instructor in
+  *some* course, or admin" gate, and making `ToolContext.authorizeCourseAccess`
+  role-aware are sequenced with Phase 4, when per-course instructor enrollments
+  become *authorable* — that is when these checks first change a real outcome
+  (a global student authoring in a course they instruct) and become testable
+  end-to-end. Until then `requireCourseRole(atLeast: .instructor)` is exercised
+  only by unit tests.
+- Submit / view endpoints stay at "enrolled" (`atLeast: .student`).
 
 ### 3.5 UI touchpoints
 
@@ -165,8 +169,11 @@ representable and creatable.
 2. **Read path. ✓ Done.** `CourseContext.role`, nav keyed off
    `isInstructorInActiveCourse`. Still identical behavior (the role mirrors the
    global role, plus a transitional global-role fallback in the nav predicate).
-3. **Auth path.** Helper + handler/middleware switch to role checks. Still
-   identical (same reason).
+3. **Auth path. ✓ Done (chokepoint).** `requireCourseRole(atLeast:)` +
+   `CourseRole` ordering; `requireCourseEnrollment` is its `.student` case.
+   Behaviour-neutral (only `.student` is called in production). Flipping
+   authoring handlers / `RoleMiddleware` / MCP to `.instructor` is folded into
+   Phase 4 — see §3.4.
 4. **Authoring UI.** Per-course role on enroll/roster. **This is where
    "instructor here, student there" goes live.**
 5. **Shrink the global role.** Collapse `APIUser.role` to `admin`-only (per
