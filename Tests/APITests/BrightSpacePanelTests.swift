@@ -39,19 +39,19 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
+                    // The LEARN tab renders; the per-instructor account + org-unit
+                    // sections are gone (service-account model only).
                     #expect(html.contains("LEARN"))
-                    // brightSpaceClient is nil in tests → the not-configured branch
-                    // renders nothing, but the CSV export section is always present.
-                    #expect(html.contains("Export grades"))
+                    #expect(!html.contains("Your LEARN account"))
                 })
         }
     }
 
-    @Test func brightspacePageRendersConnectionSectionWhenConfigured() async throws {
+    @Test func brightspacePageRendersDashboardWhenConfigured() async throws {
         try await withAssignmentRoutesApp { app in
-            // Configure BrightSpace at the app level and give the instructor an
-            // (auto-enrolled) active course, so the configured + with-course
-            // branch renders — exercising the per-instructor connection UI.
+            // Configured + active course → the cleaned-up dashboard renders:
+            // summary, grade-item mapping (+ auto-map), and the export button —
+            // and none of the removed per-instructor / org-unit UI.
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
                 baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
             _ = try await app.testCourseID(enrollmentMode: .auto)
@@ -62,59 +62,30 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("Your LEARN account"))
-                    // Instructor hasn't connected yet → connect form + "no identity".
-                    #expect(html.contains("Connect your own LEARN account"))
-                    #expect(html.contains("no identity"))
+                    #expect(html.contains("Grade-item mapping"))
+                    #expect(html.contains("Export Grades CSV"))
+                    #expect(html.contains("Auto-map by name"))
+                    #expect(!html.contains("Your LEARN account"))
+                    #expect(!html.contains("Org-unit link"))
                 })
         }
     }
 
-    @Test func brightspacePageShowsBindFormWhenConnected() async throws {
+    @Test func autoMapRedirectsWhenNotConfigured() async throws {
         try await withAssignmentRoutesApp { app in
-            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
-                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            // No live D2L in tests → brightSpaceClient is nil, so auto-map can't
+            // read the grade book; it should flash + redirect, not crash.
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
-            let instructor = try #require(
-                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
-            try await BrightSpaceCredentialStore.save(
-                valenceUserID: "vu", valenceUserKey: "vk", identityName: "Test Instructor",
-                capturedByUserID: instructor.id, userID: instructor.id, on: app.db)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await app.asyncTest(
-                .GET, "/instructor/brightspace",
-                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                .POST, "/instructor/brightspace/auto-map",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                },
                 afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let html = res.body.string
-                    #expect(html.contains("D2L org unit ID"))
-                    #expect(html.contains("Link course"))
-                    #expect(html.contains("Connected as"))
-                })
-        }
-    }
-
-    @Test func brightspacePageWarnsWhenSyncIdentityDisconnected() async throws {
-        try await withAssignmentRoutesApp { app in
-            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
-                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
-            let courseID = try await app.testCourseID(enrollmentMode: .auto)
-            let cookie = try await arLoginAsInstructor(on: app)
-            // Designate a user as the course's sync identity but give them NO stored
-            // key (disconnected) → the page must flag "needs reconnect".
-            let ghost = try await makeTestUser(
-                on: app, username: "ghost_\(UUID().uuidString.lowercased().prefix(6))")
-            let course = try #require(try await APICourse.find(courseID, on: app.db))
-            course.brightspaceSyncUserID = ghost.id
-            try await course.save(on: app.db)
-            try await app.asyncTest(
-                .GET, "/instructor/brightspace",
-                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let html = res.body.string
-                    #expect(html.contains("needs reconnect"))
-                    #expect(html.contains("paused"))
+                    #expect(res.headers.first(name: .location) == "/instructor/brightspace")
                 })
         }
     }

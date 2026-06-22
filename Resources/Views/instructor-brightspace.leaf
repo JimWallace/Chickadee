@@ -9,12 +9,16 @@ LEARN
     <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
 </nav>
 
-<h1 class="bs-title">LEARN</h1>
+#if(hasActiveCourse):
+<div class="bs-tabbar">
+    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+</div>
+#endif
 
 #if(!brightspaceSyncEnabled):
 #elseif(!hasActiveCourse):
 <section class="bs-section">
-    <p class="empty">Select a course to manage its BrightSpace grade sync.</p>
+    <p class="empty">Select a course to manage its LEARN grade sync.</p>
 </section>
 #else:
 
@@ -25,118 +29,7 @@ LEARN
 <div class="form-error">#(flashError)</div>
 #endif
 
-<!-- ── Your LEARN account (per-instructor identity) ──────── -->
-<section class="bs-section">
-    <h2 class="bs-h2">Your LEARN account</h2>
-    #if(accountConnected):
-    <p class="card-meta bs-section-note">
-        <span class="tier tier-open">connected</span>
-        Connected as <strong>#(accountIdentity)</strong>#(accountConnectedSince).
-        Courses that sync as you push grades under this LEARN identity.
-    </p>
-    <div class="bs-connection-row">
-        #if(syncIdentityIsMe):
-        <span class="card-meta">This course syncs grades as you.</span>
-        #else:
-        <form method="post" action="/instructor/brightspace/use-my-identity" class="inline-form">
-            #csrfFormField()
-            <button class="btn action-btn" type="submit">Use my account for this course</button>
-        </form>
-        #endif
-        <form method="post" action="/instructor/brightspace/disconnect" class="inline-form">
-            #csrfFormField()
-            <button class="btn action-btn" type="submit">Disconnect</button>
-        </form>
-    </div>
-    #else:
-    <p class="card-meta bs-section-note">
-        Connect your own LEARN account so Chickadee can push grades as you. Mint a Valence
-        <strong>User ID</strong> + <strong>User Key</strong> from UW's credential service
-        (<code>d2l-api-cred.fast.uwaterloo.ca</code>), then paste them here.
-    </p>
-    <form method="post" action="/instructor/brightspace/connect" class="bs-connect-form">
-        #csrfFormField()
-        <label class="bs-connect-field">
-            <span class="bs-connect-label">User ID</span>
-            <input class="bs-connect-input" type="text" name="userID" autocomplete="off" required>
-        </label>
-        <label class="bs-connect-field">
-            <span class="bs-connect-label">User Key</span>
-            <input class="bs-connect-input" type="password" name="userKey" autocomplete="off" required>
-        </label>
-        <button class="btn btn-primary" type="submit">Connect</button>
-    </form>
-    #endif
-    #if(syncIdentityConnected):
-    <p class="card-meta bs-connection-note">
-        This course pushes grades as: <strong>#(syncIdentityName)</strong>.
-    </p>
-    #endif
-    #if(syncIdentityNeedsReconnect):
-    <p class="card-meta bs-connection-note">
-        <span class="tier tier-closed">needs reconnect</span>
-        This course is set to sync as <strong>#(syncIdentityName)</strong>, but that account
-        is disconnected — grades are <strong>paused</strong> until they reconnect, or another
-        connected instructor takes over with "Use my account for this course".
-    </p>
-    #endif
-    #if(!syncIdentityName):
-    <p class="card-meta bs-connection-note">
-        <span class="tier tier-closed">no identity</span>
-        No LEARN identity is connected for this course yet, so grades won't sync.
-    </p>
-    #endif
-</section>
-
-<!-- ── Connection & course link ──────────────────────────── -->
-<section class="bs-section">
-    <h2 class="bs-h2">Org-unit link</h2>
-    <div class="bs-connection-row">
-        <button class="btn action-btn" type="button" id="bs-test-btn">Test connection</button>
-        <span id="bs-test-result" class="card-meta"></span>
-    </div>
-    <p class="card-meta bs-connection-note">
-        #if(courseLinked):
-            #if(orgUnitName):
-            <span class="tier tier-open">linked</span>
-            This course pushes grades to D2L org unit <strong>#(orgUnitName)</strong>
-            (ID <code>#(orgUnitID)</code>).
-            #else:
-            <span class="tier tier-closed">unverified</span>
-            Bound to org unit <code>#(orgUnitID)</code>, but it couldn't be confirmed in D2L.
-            An admin should re-save the binding on the course page.
-            #endif
-        #else:
-            <span class="tier tier-closed">not linked</span>
-            This course isn't bound to a D2L org unit yet, so no grades will sync.
-        #endif
-    </p>
-    <div class="bs-orgunit">
-        #if(accountConnected):
-        <form method="post" action="/instructor/brightspace/bind-org-unit" class="bs-connect-form">
-            #csrfFormField()
-            <label class="bs-connect-field">
-                <span class="bs-connect-label">D2L org unit ID</span>
-                <input class="bs-connect-input" type="text" name="orgUnitID" value="#(orgUnitID)"
-                       inputmode="numeric" autocomplete="off" placeholder="e.g. 1106038">
-            </label>
-            <button class="btn btn-primary" type="submit">Link course</button>
-        </form>
-        <p class="card-meta bs-section-note">
-            The org unit is the number in the course's D2L URL
-            (…/d2l/home/<strong>1106038</strong>). It's verified with your LEARN key, and
-            this course will sync grades as your account. Leave blank and save to unlink.
-            An admin can also set it on the course page.
-        </p>
-        #else:
-        <p class="card-meta bs-section-note">
-            Connect your LEARN account above to link this course to its D2L org unit.
-        </p>
-        #endif
-    </div>
-</section>
-
-<!-- ── Summary ───────────────────────────────────────────── -->
+<!-- ── Summary (dashboard) ────────────────────────────────── -->
 <section class="bs-section">
     <div class="bs-cards">
         <div class="bs-card"><div class="bs-card-label">Synced</div><div class="bs-card-value">#(summary.synced)</div></div>
@@ -158,16 +51,25 @@ LEARN
     #endif
 </section>
 
-<!-- ── Assignment → grade-item mapping ───────────────────── -->
+<!-- ── Assignment → grade-item mapping ────────────────────── -->
 <section class="bs-section">
-    <h2 class="bs-h2">Grade-item mapping</h2>
+    <div class="bs-mapping-head">
+        <h2 class="bs-h2">Grade-item mapping</h2>
+        #if(!courseIsArchived):
+        <form method="post" action="/instructor/brightspace/auto-map" class="inline-form">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit"
+                    title="Map unmapped assignments to grade items with a matching name">Auto-map by name</button>
+        </form>
+        #endif
+    </div>
     #if(!hasAssignments):
     <p class="empty">No assignments in this course yet.</p>
     #else:
     <p class="card-meta bs-section-note">
-        Map each assignment to its D2L grade item. Start typing to pick from the course's
-        grade book (when connected), or paste the numeric grade-item ID. Leave blank to skip
-        an assignment.
+        Map each assignment to its D2L grade item. Start typing to pick from the course's grade
+        book, or paste the numeric grade-item ID. Use <strong>Auto-map by name</strong> to fill
+        every unmapped assignment whose name matches a grade item. Leave blank to skip.
     </p>
     <datalist id="bs-grade-objects"></datalist>
     <div class="table-scroll"><table class="results-table">
@@ -225,7 +127,7 @@ LEARN
     #endif
 </section>
 
-<!-- ── Unmapped students ─────────────────────────────────── -->
+<!-- ── Unmapped students ──────────────────────────────────── -->
 #if(hasUnmapped):
 <section class="bs-section">
     <h2 class="bs-h2">Unmapped students (#(summary.unmapped))</h2>
@@ -248,7 +150,7 @@ LEARN
 </section>
 #endif
 
-<!-- ── Sync log ──────────────────────────────────────────── -->
+<!-- ── Sync log ───────────────────────────────────────────── -->
 <section class="bs-section">
     <h2 class="bs-h2">Recent sync activity</h2>
     #if(!hasLog):
@@ -288,23 +190,12 @@ LEARN
 </section>
 #endif
 
-<!-- ── Export grades (always available) ──────────────────── -->
-<section class="bs-section">
-    <h2 class="bs-h2">Export grades</h2>
-    <p class="card-meta bs-section-note">
-        Download a CSV of every enrolled student's best grade per assignment, formatted for
-        BrightSpace grade import (OrgDefinedId + per-assignment points columns).
-    </p>
-    #if(hasActiveCourse):
-    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
-    #else:
-    <p class="empty">Select a course to export grades.</p>
-    #endif
-</section>
-
 <style>
 .bs-section { margin-bottom: 2rem; }
+.bs-tabbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
 .bs-h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .6rem; }
+.bs-mapping-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.bs-mapping-head .bs-h2 { margin: 0; }
 .bs-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
 .bs-card {
     padding: .75rem .9rem; border: 1px solid var(--border);
@@ -312,13 +203,6 @@ LEARN
 }
 .bs-card-label { color: var(--gray-600); font-size: .82rem; }
 .bs-card-value { margin-top: .2rem; font-size: 1.4rem; font-weight: 600; color: var(--gray-900); }
-.bs-connection-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
-.bs-connection-note { margin-top: .6rem; max-width: 60ch; }
-.bs-connect-form { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; margin: .4rem 0 0; }
-.bs-connect-field { display: flex; flex-direction: column; gap: .2rem; }
-.bs-connect-label { font-size: .78rem; color: var(--gray-600); }
-.bs-connect-input { width: 16rem; max-width: 100%; font-size: .85rem; padding: .3rem .45rem; }
-.bs-orgunit { margin-top: .7rem; }
 .bs-summary-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
@@ -332,36 +216,6 @@ LEARN
 <script>
 (function () {
     'use strict';
-
-    // ── Test connection ──────────────────────────────────────────────
-    var testBtn = document.getElementById('bs-test-btn');
-    var testResult = document.getElementById('bs-test-result');
-    if (testBtn) {
-        testBtn.addEventListener('click', async function () {
-            var meta = document.querySelector('meta[name="csrf-token"]');
-            var csrf = meta ? meta.getAttribute('content') : '';
-            testBtn.disabled = true;
-            if (testResult) testResult.textContent = 'Testing…';
-            try {
-                var res = await fetch('/instructor/brightspace/test', {
-                    method: 'POST',
-                    headers: { 'x-csrf-token': csrf, 'Accept': 'application/json' }
-                });
-                var data = await res.json();
-                if (testResult) {
-                    testResult.textContent = data.message || (data.ok ? 'OK' : 'Failed');
-                    testResult.style.color = data.ok ? 'var(--green)' : 'var(--red)';
-                }
-            } catch (_) {
-                if (testResult) {
-                    testResult.textContent = 'Test request failed.';
-                    testResult.style.color = 'var(--red)';
-                }
-            } finally {
-                testBtn.disabled = false;
-            }
-        });
-    }
 
     // ── Grade-item dropdown (progressive enhancement) ─────────────────
     // Populate the shared <datalist> from D2L so the free-text inputs gain a
