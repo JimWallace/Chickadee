@@ -132,12 +132,19 @@ extension OperationalDiagnosticsService {
     ) -> (series: [Int?], peakActive: Int?, peakMax: Int?) {
         var series = [Int?](repeating: nil, count: grid.bucketCount)
 
+        // `points` is the full longest-window fetch shared across every card
+        // window, so the headline peak must be restricted to the points that
+        // actually land in this grid — otherwise the 24h / 7d headline reports
+        // a peak drawn from up to 30 days of data while its sparkline only
+        // spans the displayed window.
+        var inWindow: [RunnerLoadPoint] = []
         for point in points {
             guard point.totalMax > 0, let index = grid.bucketIndex(for: point.bucketStart) else { continue }
+            inWindow.append(point)
             let utilization = Int((Double(point.totalActive) / Double(point.totalMax) * 100).rounded())
             series[index] = series[index].map { Swift.max($0, utilization) } ?? utilization
         }
-        let peak = peakLoadPoint(from: points)
+        let peak = peakLoadPoint(from: inWindow)
         return (series, peak?.active, peak?.max)
     }
 
