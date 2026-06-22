@@ -263,6 +263,80 @@ import VaporTesting
         }
     }
 
+    @Test func bulkEnroll_enrollsTypedUsernamesWithoutFile() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_TYPED1")
+            _ = try await makeStudent(username: "typed_alice")
+            _ = try await makeStudent(username: "typed_bob")
+            let cookie = try await loginInstructor("typed_instructor1", in: course)
+            let courseID = try course.requireID().uuidString
+            let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+            // No `file` part at all — only the typed `usernames` textarea.
+            let typed = "typed_alice, typed_bob"
+            let boundary = "----TypedBoundary1"
+            let part =
+                "--\(boundary)\r\nContent-Disposition: form-data; name=\"usernames\"\r\n\r\n\(typed)\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID)/enroll-csv",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    var body = ByteBufferAllocator().buffer(capacity: 256)
+                    body.writeString(part)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": boundary])
+                    req.body = .init(buffer: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+            let enrollments = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)
+                .all()
+            #expect(enrollments.count == 2, "Both typed users should be enrolled")
+        }
+    }
+
+    @Test func bulkEnroll_rendersErrorWhenNothingSupplied() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_EMPTY1")
+            let cookie = try await loginInstructor("empty_instructor1", in: course)
+            let courseID = try course.requireID().uuidString
+            let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+            // Empty textarea, no file.
+            let boundary = "----EmptyBoundary1"
+            let part =
+                "--\(boundary)\r\nContent-Disposition: form-data; name=\"usernames\"\r\n\r\n   \r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID)/enroll-csv",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    var body = ByteBufferAllocator().buffer(capacity: 256)
+                    body.writeString(part)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": boundary])
+                    req.body = .init(buffer: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("type at least one user ID"))
+                })
+
+            let enrollments = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)
+                .all()
+            #expect(enrollments.isEmpty, "Nothing supplied should enroll no one")
+        }
+    }
+
     // MARK: - Pre-enrollment (no APIUser yet)
 
     @Test func bulkEnrollCSV_recordsPreEnrollmentForUnknownUsernames() async throws {

@@ -24,14 +24,6 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.noActiveCourse(action: "managing enrollments")
         }
 
-        struct EnrollCSVFormContext: Encodable {
-            let currentUser: CurrentUserContext?
-            let courseID: String
-            let courseCode: String
-            let courseName: String
-            let error: String?
-        }
-
         return try await req.view.render(
             "instructor-enroll-csv",
             EnrollCSVFormContext(
@@ -67,7 +59,13 @@ extension CourseAdminRoutes {
 
     @Sendable
     func instructorBulkEnrollCSV(req: Request) async throws -> View {
-        struct BulkEnrollForm: Content { var file: Data }
+        // Both inputs are optional: the instructor can upload a CSV, type
+        // user IDs into the textarea, or both.  Usernames from both sources
+        // are merged (and deduplicated by `enrollUsernamesInCourse`).
+        struct BulkEnrollForm: Content {
+            var file: Data?
+            var usernames: String?
+        }
 
         guard
             let idString = req.parameters.get("courseID"),
@@ -83,7 +81,26 @@ extension CourseAdminRoutes {
 
         let form = try req.content.decode(BulkEnrollForm.self)
 
-        let rawUsernames = parseUsernamesFromCSV(form.file)
+        var rawUsernames: [String] = []
+        if let file = form.file, !file.isEmpty {
+            rawUsernames += parseUsernamesFromCSV(file)
+        }
+        if let typed = form.usernames {
+            rawUsernames += parseUsernamesFromText(typed)
+        }
+
+        guard !rawUsernames.isEmpty else {
+            return try await req.view.render(
+                "instructor-enroll-csv",
+                EnrollCSVFormContext(
+                    currentUser: req.currentUserContext,
+                    courseID: idString,
+                    courseCode: course.code,
+                    courseName: course.name,
+                    error: "Upload a CSV file or type at least one user ID to enrol."
+                ))
+        }
+
         let result = try await enrollUsernamesInCourse(
             rawUsernames,
             courseID: courseID,
