@@ -106,6 +106,18 @@
         if (submit)   submit.style.display = 'none';
         if (fallback) fallback.hidden = false;
 
+        // Point the "reset the notebook editor" link back at THIS assignment, so
+        // after clearing site data the student lands on the same page (which now
+        // boots a clean kernel) instead of the dashboard.  The static href in the
+        // template ("/reset-editor") is the no-JS fallback.
+        const resetLink = document.getElementById('nb-reset-editor-link');
+        if (resetLink) {
+            try {
+                resetLink.href = '/reset-editor?next=' +
+                    encodeURIComponent(location.pathname + location.search);
+            } catch (_) { /* keep the static href */ }
+        }
+
         if (details) {
             const lines = [
                 'Failure: ' + info.kind,
