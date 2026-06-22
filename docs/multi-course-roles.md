@@ -1,13 +1,15 @@
 # Multi-course roles & university-scale organization
 
-**Status:** Design / planning. No implementation yet. Companion to the fix
-that scoped the home dashboard and the "Instructor" nav tab to course
-enrollment (PR #972) — that fix is the first concrete step toward the model
-described here.
+**Status:** Active. Theme 1 (per-course roles) is being implemented in phases;
+**Phase 1 (Core `CourseRole` + the `course_enrollments.role` column + the
+behaviour-preserving backfill) has landed.** Companion to the earlier fix that
+scoped the home dashboard and the "Instructor" nav tab to course enrollment
+(PR #972) — that fix was the first concrete step toward the model described
+here.
 
-This document is a starting point for "thinking on paper," not a committed
-plan. The decisions in [Open questions](#open-questions-for-the-owner) are
-the owner's to make.
+The owner's design decisions are recorded in [§6](#6-decisions) and are
+settled; they shape Phases 4–5 (the behaviour-changing ones). Theme 2
+(university-scale organization) remains design-only.
 
 ---
 
@@ -50,7 +52,7 @@ same way it is already *visibility*-scoped to a course.
 | Concern | Where | Shape |
 |---|---|---|
 | Global role | `Sources/APIServer/Models/APIUser.swift` — `UserRole` enum, `role` field, `isInstructor`/`isAdmin` | One string column on the user. `isInstructor == (role == .instructor \|\| role == .admin)`. |
-| Enrollment | `Sources/APIServer/Models/APICourseEnrollment.swift` | Join row `(user_id, course_id)` — **role-agnostic**. Its own header comment: *"The user's global role determines what they can do; enrollment determines which courses they can see."* |
+| Enrollment | `Sources/APIServer/Models/APICourseEnrollment.swift` | Join row `(user_id, course_id)`. As of Phase 1 it also carries a per-course `role` (`CourseRole`), seeded behaviour-preservingly from the global role and **not yet read** — the global role still governs capability until Phases 2–4 wire this in. |
 | Access policy | `Sources/APIServer/Helpers/CourseAccessHelpers.swift` — `requireCourseEnrollment`, `userIsEnrolled`, `enrolledCourses` | The single chokepoint both the web routes and MCP tools resolve course access through. Admin is the one bypass. |
 | Active-course resolution | `APIUser.swift` — `resolveActiveCourse`, `CourseContext`, `ResolvedCourseState` | Picks the active course from session/DB, auto-enrolls `.auto` courses, returns the enrolled set. |
 | View context | `APIUser.swift` — `CurrentUserContext` | Carries `isAdmin`, `isInstructor`, `activeCourse`, `enrolledCourses` into Leaf. The nav (`Resources/Views/base.leaf`) reads these. |
@@ -76,20 +78,28 @@ representable and creatable.
 ### 3.1 Data model
 
 - Add `role` to `course_enrollments` — a new `CourseRole` enum in `Core/`
-  (`Codable`, `Sendable`), mirroring `UserRole`: `student`, `instructor`
-  (and, when wanted, `ta` — see open questions). Default `student`.
+  (`Codable`, `Sendable`). Per [§6](#6-decisions) it ships with two rungs,
+  `student` and `instructor`; `ta` is deferred (the type is string-backed, so
+  adding it later needs no schema change). Default `student`. **(Implemented —
+  `Sources/Core/CourseRole.swift`.)**
 - Reinterpret `APIUser.role`:
   - `admin` stays a **deployment** super-user (manages courses, users,
     runners; bypasses course checks).
   - For everyone else the global role stops carrying course capability —
-    capability comes from the enrollment row. (Whether a vestigial global
-    `instructor` survives as a "may create a course" capability is an open
-    question; today instructors don't create courses, admins do.)
+    capability comes from the enrollment row. Per [§6](#6-decisions) course
+    creation stays **admin-only**, so the global `instructor` role collapses
+    entirely into "instructor on some enrollment" — there is no surviving
+    deployment-level `instructor`. (That collapse is Phase 5 work; the global
+    role is untouched through Phases 1–4.)
 
-### 3.2 Migration / backfill (behavior-preserving)
+### 3.2 Migration / backfill (behavior-preserving) — **implemented**
 
-- New migration adds `role` to `course_enrollments` (add nullable →
-  backfill → enforce default `student`, the SQLite-friendly three-step).
+- `AddCourseEnrollmentRole` adds `role` as a **nullable** column and backfills
+  it. It deliberately does not add a DB-level NOT NULL/default: Fluent +
+  SQLite can't add a NOT NULL column to an existing table post-hoc, so — like
+  `AddUrlTokenToUsers` — the column stays nullable and the "every row has a
+  role" invariant is held by the model-side `init` default plus the typed
+  accessor (which falls back to `.student` for a missing value).
 - **Backfill rule:** for each existing enrollment, set
   `role = (user.isInstructor ? .instructor : .student)`. A current global
   instructor therefore becomes instructor in *every course they're already
@@ -143,17 +153,20 @@ representable and creatable.
 
 ### 3.6 Suggested phasing
 
-1. **Core + schema.** `CourseRole`, the migration, the backfill. No reads of
-   the new column yet → zero behavior change.
+1. **Core + schema. ✓ Done.** `CourseRole`, the `AddCourseEnrollmentRole`
+   migration, the backfill. No reads of the new column yet → zero behavior
+   change.
 2. **Read path.** `CourseContext.role`, nav keyed off active-course role.
    Still identical behavior (backfill mirrors the global role).
 3. **Auth path.** Helper + handler/middleware switch to role checks. Still
    identical (same reason).
 4. **Authoring UI.** Per-course role on enroll/roster. **This is where
    "instructor here, student there" goes live.**
-5. **Shrink the global role.** Collapse `APIUser.role` toward `admin`-only;
-   revisit SSO role mapping (`SSO_INSTRUCTOR_USERS` currently sets the *global*
-   role — see open questions). Longest tail; can lag well behind 1–4.
+5. **Shrink the global role.** Collapse `APIUser.role` to `admin`-only (per
+   [§6](#6-decisions) the global `instructor` goes away entirely). Revisit SSO
+   role mapping here — per [§6](#6-decisions) `SSO_INSTRUCTOR_USERS` keeps its
+   current global-role behavior until this phase. Longest tail; can lag well
+   behind 1–4.
 
 ---
 
@@ -194,20 +207,27 @@ machinery cleanly rather than inventing a parallel one.
 
 ---
 
-## 6. Open questions (for the owner)
+## 6. Decisions
 
-1. **Does a global `instructor` survive at all?** Today instructors don't
-   create courses (admins do). If that stays true, global `instructor` may
-   collapse entirely into "instructor on some enrollment," leaving only
-   `admin` as a global role. If instructors should self-serve course
-   creation, we need a deployment-level "may create courses" capability —
-   which is itself a small scoped-admin question (Theme 2).
-2. **TA as a distinct `CourseRole` now or later?** A `ta` between `student`
-   and `instructor` (e.g. can view submissions + grade, cannot edit the
-   suite) is a natural third rung but adds policy surface.
-3. **SSO role mapping.** `SSO_INSTRUCTOR_USERS` / `SSO_ADMIN_USERS` currently
-   set the *global* role at login. Under per-course roles, does an SSO
-   "instructor" become instructor only in courses they're enrolled in, or
-   does it seed a course-creation capability? (Ties to Q1.)
+The Theme 1 questions were settled with the owner (2026-06-22). They shape the
+behaviour-changing Phases 4–5, not the behaviour-neutral Phases 1–3.
+
+1. **Course creation stays admin-only → the global `instructor` role
+   collapses.** Instructors do not self-serve course creation (admins do, as
+   today), so there is no deployment-level "may create courses" capability to
+   model. `instructor` becomes purely a per-course role; the only global role
+   that survives the Phase 5 shrink is `admin`.
+2. **`CourseRole` ships as `student` + `instructor` only; `ta` is deferred.**
+   A TA rung (view/grade submissions, no suite edits) is a natural future
+   addition but carries extra policy surface; the enum is string-backed, so it
+   can be added later without a schema change.
+3. **SSO mapping is deferred to Phase 5.** `SSO_INSTRUCTOR_USERS` /
+   `SSO_ADMIN_USERS` keep their current global-role behavior through
+   Phases 1–4 (which don't touch SSO). How an SSO "instructor" maps under the
+   collapsed model is decided when the global role is shrunk.
+
+### Still open (Theme 2)
+
 4. **Term model depth.** Is a lightweight `Term` label enough, or do we want
    term-scoped enrollment (re-enroll each term) and cross-term analytics?
+   Deferred with the rest of Theme 2.

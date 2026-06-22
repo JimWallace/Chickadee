@@ -329,4 +329,11 @@ func registerMigrations(on app: Application) {
     // Error-detail columns on client_diagnostics (message/stack/source) so
     // browser-side failures carry diagnosable signal.
     app.migrations.add(AddClientDiagnosticErrorDetail())
+
+    // Per-course role on each enrollment (Phase 1 of
+    // docs/multi-course-roles.md). Behaviour-preserving: backfills role from
+    // each user's current global role; nothing reads it yet. Runs after
+    // CreateCourseEnrollments (the table) and CreateUsers (the backfill reads
+    // users).
+    app.migrations.add(AddCourseEnrollmentRole())
 }
