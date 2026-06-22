@@ -20,9 +20,12 @@ import VaporTesting
     // MARK: - Auth helpers
 
     private func loginAsInstructor(on app: Application) async throws -> String {
-        return try await loginUser(
+        let cookie = try await loginUser(
             username: "testinstructor_nbscan", password: "testpassword",
             role: "instructor", on: app)
+        // Phase 5: /instructor is gated on the per-course role — enrol the instructor.
+        try await enrollAsTestInstructor(username: "testinstructor_nbscan", on: app)
+        return cookie
     }
 
     private func loginAsStudent(on app: Application) async throws -> String {

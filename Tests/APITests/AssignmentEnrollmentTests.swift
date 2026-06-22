@@ -32,8 +32,25 @@ import VaporTesting
     }
 
     private func enroll(user: APIUser, in course: APICourse) async throws {
-        let enrollment = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID())
+        // Seed the per-course role from the global role so a global-instructor
+        // caller becomes a per-course instructor (Phase 5: authority is per-course).
+        let role: CourseRole = user.isInstructor ? .instructor : .student
+        let enrollment = APICourseEnrollment(
+            userID: try user.requireID(), courseID: try course.requireID(), role: role)
         try await enrollment.save(on: app.db)
+    }
+
+    /// Logs in a global instructor and enrols them as a per-course instructor in
+    /// `course`, returning the session cookie. Phase 5 gates `/instructor` on the
+    /// per-course role, so an instructor managing a course must be enrolled in it.
+    private func loginInstructor(_ username: String, in course: APICourse) async throws -> String {
+        let cookie = try await loginUser(username: username, password: "pw", role: "instructor", on: app)
+        let user = try #require(
+            try await APIUser.query(on: app.db).filter(\.$username == username).first())
+        try await APICourseEnrollment(
+            userID: try user.requireID(), courseID: try course.requireID(), role: .instructor
+        ).save(on: app.db)
+        return cookie
     }
 
     // MARK: - POST /courses/:courseID/enrollment-mode
@@ -41,9 +58,7 @@ import VaporTesting
     @Test func setEnrollmentMode_instructorCanSetToOpen() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "OE_TOGGLE1", mode: .closed)
-            let cookie = try await loginUser(
-                username: "oe_instructor1", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("oe_instructor1", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -66,9 +81,7 @@ import VaporTesting
     @Test func setEnrollmentMode_instructorCanSetToClosed() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "OE_TOGGLE2", mode: .open)
-            let cookie = try await loginUser(
-                username: "oe_instructor2", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("oe_instructor2", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -112,9 +125,10 @@ import VaporTesting
 
     @Test func setEnrollmentMode_notFound() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginUser(
-                username: "oe_instructor3", password: "pw",
-                role: "instructor", on: app)
+            // Enrol the instructor in a real course so they clear the per-course
+            // section gate; the POST then targets a bogus course → 404.
+            let realCourse = try await makeCourse(code: "OE_NOTFOUND")
+            let cookie = try await loginInstructor("oe_instructor3", in: realCourse)
             let bogusID = UUID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -168,9 +182,7 @@ import VaporTesting
             let course = try await makeCourse(code: "CSV_ENROLL1")
             _ = try await makeStudent(username: "csv_alice")
             _ = try await makeStudent(username: "csv_bob")
-            let cookie = try await loginUser(
-                username: "csv_instructor1", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_instructor1", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -217,9 +229,7 @@ import VaporTesting
             let enrollment = APICourseEnrollment(userID: try student.requireID(), courseID: try course.requireID())
             try await enrollment.save(on: app.db)
 
-            let cookie = try await loginUser(
-                username: "csv_instructor2", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_instructor2", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -258,9 +268,7 @@ import VaporTesting
             let course = try await makeCourse(code: "CSV_PRE1")
             // alice exists; carol does not
             _ = try await makeStudent(username: "csv_pre_alice")
-            let cookie = try await loginUser(
-                username: "csv_pre_instructor1", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_pre_instructor1", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -355,9 +363,7 @@ import VaporTesting
     @Test func bulkEnrollCSV_isIdempotentOnReupload() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "CSV_PRE4")
-            let cookie = try await loginUser(
-                username: "csv_pre_instructor4", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_pre_instructor4", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -404,9 +410,7 @@ import VaporTesting
             try await pending.save(on: app.db)
             let preID = try pending.requireID().uuidString
 
-            let cookie = try await loginUser(
-                username: "csv_pre_instructor5", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_pre_instructor5", in: course)
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
             try await app.asyncTest(

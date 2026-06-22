@@ -86,8 +86,10 @@ Python interpreter, or any language runtime. Everything goes through
 `authProvider` + `externalSubject` for SSO identity. Both `.local` and `.sso`
 are fully implemented. The OIDC flow uses Authorization Code + PKCE; the
 discovery document and JWKS are fetched at startup from `OIDC_AUTH_SERVER`.
-Role assignment uses `SSO_ADMIN_USERS` / `SSO_INSTRUCTOR_USERS` env vars
-(comma-separated identity allowlists checked against JWT claims on every login).
+Role assignment uses the `SSO_ADMIN_USERS` env var (a comma-separated identity
+allowlist checked against JWT claims on every login); instructor authority is
+per-course (assigned from the course roster), so there is no SSO instructor
+allowlist (`SSO_INSTRUCTOR_USERS` was retired in the multi-course-roles work).
 The current implementation is tested against UWaterloo DUO; claim names
 (`winaccountname`, `user_id`) are in `OIDCIDTokenClaims.swift` and can be
 adjusted for other providers.

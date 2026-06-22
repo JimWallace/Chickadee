@@ -115,8 +115,7 @@ private func resolveAppConfig(
                 mode: override,
                 requestedMode: auth.requestedMode,
                 nonSSOModesEnabled: auth.nonSSOModesEnabled,
-                ssoAdminUsers: auth.ssoAdminUsers,
-                ssoInstructorUsers: auth.ssoInstructorUsers
+                ssoAdminUsers: auth.ssoAdminUsers
             )
             return AppConfig(
                 auth: auth,
@@ -179,9 +178,6 @@ struct SecurityConfigurationKey: StorageKey {
 struct SSOAdminUsersKey: StorageKey {
     typealias Value = Set<String>
 }
-struct SSOInstructorUsersKey: StorageKey {
-    typealias Value = Set<String>
-}
 
 extension Application {
     var authMode: AuthMode {
@@ -197,11 +193,6 @@ extension Application {
     var ssoAdminUsers: Set<String> {
         get { storage[SSOAdminUsersKey.self] ?? [] }
         set { storage[SSOAdminUsersKey.self] = newValue }
-    }
-
-    var ssoInstructorUsers: Set<String> {
-        get { storage[SSOInstructorUsersKey.self] ?? [] }
-        set { storage[SSOInstructorUsersKey.self] = newValue }
     }
 }
 

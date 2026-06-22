@@ -25,6 +25,9 @@ import VaporTesting
     private func loginAsInstructor(username: String = "test_instructor") async throws -> (cookie: String, csrf: String)
     {
         let cookie = try await loginUser(username: username, password: "pass", role: "instructor", on: app)
+        // Phase 5: the /instructor submission endpoints are gated on the
+        // per-course role — enrol the instructor in the setups' course.
+        try await enrollAsTestInstructor(username: username, on: app)
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
         return (sessionCookie, csrf)
     }

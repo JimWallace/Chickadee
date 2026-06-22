@@ -224,6 +224,8 @@ import VaporTesting
                 username: "profB", password: "testpassword", role: "instructor", on: app)
             try await createGrant(
                 app, cookie: profB, clientID: "agent-b", redirectURI: redirectURI, scope: "content:read")
+            // Phase 5: /agents is under the per-course-gated /instructor group.
+            try await enrollAsTestInstructor(username: "profB", on: app)
 
             try await app.asyncTest(
                 .GET, "/agents",
@@ -249,6 +251,8 @@ import VaporTesting
             // A second instructor, with a valid CSRF token, attempts the revoke.
             let profB = try await loginUser(
                 username: "profB", password: "testpassword", role: "instructor", on: app)
+            // Phase 5: /agents is under the per-course-gated /instructor group.
+            try await enrollAsTestInstructor(username: "profB", on: app)
             let (csrf, bound) = try await csrfFields(for: "/agents", cookie: profB, on: app)
             let res = try await app.asyncSendRequest(
                 .POST, "/agents/\(grantID.uuidString)/revoke",

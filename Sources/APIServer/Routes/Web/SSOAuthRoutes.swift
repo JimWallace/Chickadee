@@ -246,8 +246,7 @@ struct SSOAuthRoutes: RouteCollection {
                 username: username,
                 userIdentifier: userIdentifier,
                 email: email,
-                adminAllowlist: req.application.ssoAdminUsers,
-                instructorAllowlist: req.application.ssoInstructorUsers
+                adminAllowlist: req.application.ssoAdminUsers
             )
         )
 
@@ -410,10 +409,9 @@ extension SSOAuthRoutes {
         username: String,
         userIdentifier: String,
         email: String?,
-        adminAllowlist: Set<String>,
-        instructorAllowlist: Set<String>
+        adminAllowlist: Set<String>
     ) -> String? {
-        guard !adminAllowlist.isEmpty || !instructorAllowlist.isEmpty else {
+        guard !adminAllowlist.isEmpty else {
             return nil
         }
 
@@ -426,11 +424,11 @@ extension SSOAuthRoutes {
             .compactMap { $0 }
         )
 
+        // Only admins are SSO-assignable. Instructor authority is per-course
+        // (multi-course-roles Phase 5): SSO_INSTRUCTOR_USERS is retired and an
+        // admin assigns each course's instructor from the roster.
         if !adminAllowlist.isDisjoint(with: candidates) {
             return UserRole.admin.rawValue
-        }
-        if !instructorAllowlist.isDisjoint(with: candidates) {
-            return UserRole.instructor.rawValue
         }
         return nil
     }

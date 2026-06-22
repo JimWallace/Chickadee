@@ -25,15 +25,9 @@ import VaporTesting
     private func loginAsInstructor(on app: Application) async throws -> String {
         let cookie = try await loginUser(
             username: "testinstructor_edit", password: "testpassword", role: "instructor", on: app)
-        // Instructors are enrollment-scoped (no role bypass on the course
-        // guard), so the fixture instructor must be enrolled in the shared
-        // test course to reach its setups.
-        let user = try #require(
-            try await APIUser.query(on: app.db).filter(\.$username == "testinstructor_edit").first())
-        let courseID = try await app.testCourseID()
-        if try await !userIsEnrolled(userID: user.requireID(), inCourse: courseID, db: app.db) {
-            try await makeTestEnrollment(on: app, userID: user.requireID(), courseID: courseID)
-        }
+        // Instructor authority is per-course (Phase 5) — enrol the fixture
+        // instructor as a per-course instructor in the shared test course.
+        try await enrollAsTestInstructor(username: "testinstructor_edit", on: app)
         return cookie
     }
 

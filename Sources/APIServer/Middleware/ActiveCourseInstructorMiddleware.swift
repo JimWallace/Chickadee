@@ -24,17 +24,14 @@ struct ActiveCourseInstructorMiddleware: AsyncMiddleware {
             throw Abort(.unauthorized)
         }
 
-        // Admins (deployment-wide) and — transitionally, until the global role
-        // is shrunk in Phase 5 — global instructors are admitted to the section.
-        // The param-taking actions inside still check per-course instructor
-        // access on their target course, so this fallback widens "may open the
-        // instructor section", not "may act on any course".
-        if user.isInstructor {
+        // Admins administer the whole deployment.
+        if user.isAdmin {
             return try await next.respond(to: request)
         }
 
-        // A per-course instructor who is not a global instructor reaches the
-        // section only for the course they actually instruct (their active one).
+        // Everyone else must be an instructor in their active course. Instructor
+        // authority is per-course — the global instructor role no longer grants
+        // it (multi-course-roles Phase 5).
         let state = try await request.resolveActiveCourse(for: user)
         if let activeCourseUUID = state.activeCourseUUID,
             let userID = user.id,
