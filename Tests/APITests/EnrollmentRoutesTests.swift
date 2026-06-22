@@ -541,6 +541,13 @@ import VaporTesting
             let cookie = try await loginUser(
                 username: "ins_mode_instructor", password: "pw",
                 role: "instructor", on: app)
+            // Phase 4b: the param-taking enrollment endpoints require per-course
+            // instructor access on the target course, so enrol the caller there.
+            let instructorUser = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "ins_mode_instructor").first())
+            try await APICourseEnrollment(
+                userID: try instructorUser.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
 
             let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
             try await app.asyncTest(

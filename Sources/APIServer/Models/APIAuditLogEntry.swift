@@ -113,6 +113,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     // Enrollment
     case enrollmentBulkAdded = "enrollment.bulk_added"
     case enrollmentRemoved = "enrollment.removed"
+    case enrollmentRoleChanged = "enrollment.role_changed"
 
     // Submissions
     case submissionsPurged = "submission.retention_purged"
@@ -153,7 +154,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .courseCreated, .courseArchived, .courseUnarchived, .courseDeleted,
             .courseBundleImported, .courseBundleExported:
             return .courses
-        case .enrollmentBulkAdded, .enrollmentRemoved:
+        case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged:
             return .enrollment
         case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent:
             return .submissions
@@ -190,6 +191,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .courseBundleExported: return "Course bundle exported"
         case .enrollmentBulkAdded: return "Bulk enrollment"
         case .enrollmentRemoved: return "Unenrolled"
+        case .enrollmentRoleChanged: return "Per-course role changed"
         case .submissionsPurged: return "Submissions purged"
         case .submissionRetestAll: return "Retest all submissions"
         case .submissionRetestForStudent: return "Retest student submissions"
