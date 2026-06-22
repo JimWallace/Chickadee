@@ -242,6 +242,39 @@ import VaporTesting
         try await snapshot.save(on: app.db)
     }
 
+    /// The Max Load headline must be scoped to each card's own window.  The
+    /// load points are fetched once for the longest (30-day) window and reused
+    /// across windows, so a peak that lands outside the 24h window must not
+    /// leak into the 24h headline (regression: every window showed the 30-day
+    /// peak, e.g. a stale 13/13).
+    @Test func loadHeadlineScopedToEachWindow() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            // A saturated peak (13/13) two days ago: inside 7d / 30d, outside 24h.
+            try await saveSnapshot(
+                runner: "lhs_old", at: now.addingTimeInterval(-2 * 86400), active: 13, max: 13)
+            // A quieter, recent sample (2/13) ten minutes ago: inside every window.
+            try await saveSnapshot(
+                runner: "lhs_recent", at: now.addingTimeInterval(-600), active: 2, max: 13)
+
+            let response = try await app.diagnostics.metricsCardSeries(on: app.db, now: now)
+
+            let day = try #require(response.windows.first { $0.window == "24h" })
+            // 24h sees only the recent 2/13 — not the two-day-old saturation.
+            #expect(day.load.activeJobs == 2)
+            #expect(day.load.capacity == 13)
+
+            let week = try #require(response.windows.first { $0.window == "1w" })
+            // 7d (and 30d) include the saturated peak.
+            #expect(week.load.activeJobs == 13)
+            #expect(week.load.capacity == 13)
+
+            let month = try #require(response.windows.first { $0.window == "1m" })
+            #expect(month.load.activeJobs == 13)
+            #expect(month.load.capacity == 13)
+        }
+    }
+
     @Test func cardsEndpointRequiresAuthentication() async throws {
         try await withApp(app) { _ in
             try await app.asyncTest(
