@@ -55,6 +55,8 @@ extension CourseAdminRoutes {
         else {
             throw WebAssignmentError.notFound(resource: "Course")
         }
+        let caller = try req.auth.require(APIUser.self)
+        try await requireCourseInstructor(caller: caller, courseID: courseID, db: req.db)
         let body = try? req.content.decode(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
@@ -75,6 +77,9 @@ extension CourseAdminRoutes {
         else {
             throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid or archived course.")
         }
+
+        let caller = try req.auth.require(APIUser.self)
+        try await requireCourseInstructor(caller: caller, courseID: courseID, db: req.db)
 
         let form = try req.content.decode(BulkEnrollForm.self)
 
@@ -113,6 +118,9 @@ extension CourseAdminRoutes {
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
 
+        let caller = try req.auth.require(APIUser.self)
+        try await requireCourseInstructor(caller: caller, courseID: courseID, db: req.db)
+
         try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseID)
             .filter(\.$userID == userID)
@@ -148,11 +156,64 @@ extension CourseAdminRoutes {
                 name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
         }
 
+        let caller = try req.auth.require(APIUser.self)
+        try await requireCourseInstructor(caller: caller, courseID: courseID, db: req.db)
+
         try await APIPreEnrollment.query(on: req.db)
             .filter(\.$id == preID)
             .filter(\.$course.$id == courseID)
             .delete()
 
         return req.redirect(to: "/instructor")
+    }
+
+    // MARK: - POST /courses/:courseID/role/:userID
+    //
+    // Sets a roster member's per-course role (Phase 4b). Authorized per-course:
+    // the caller must be an instructor in *this* course (or an admin), not just
+    // an instructor somewhere — `requireCourseRole` checks the courseID param,
+    // so the relaxed `/instructor` gate can't be driven against another course.
+
+    @Sendable
+    func instructorSetEnrollmentRole(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
+        guard
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: courseIDString),
+            let userIDString = req.parameters.get("userID"),
+            let userID = UUID(uuidString: userIDString)
+        else {
+            throw WebAssignmentError.invalidParameter(
+                name: "courseID/userID", reason: "Invalid courseID or userID parameter")
+        }
+        try await requireCourseInstructor(caller: caller, courseID: courseID, db: req.db)
+
+        struct Body: Content { var role: String? }
+        let body = try? req.content.decode(Body.self)
+        guard let newRole = CourseRole(rawValue: body?.role ?? "") else {
+            throw WebAssignmentError.invalidParameter(name: "role", reason: "Unknown per-course role.")
+        }
+
+        guard
+            let enrollment = try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$course.$id == courseID)
+                .filter(\.$userID == userID)
+                .first()
+        else {
+            throw WebAssignmentError.notFound(resource: "Enrollment")
+        }
+        enrollment.role = newRole
+        try await enrollment.save(on: req.db)
+
+        await AuditLogger.record(
+            action: .enrollmentRoleChanged,
+            targetType: .enrollment,
+            targetID: userIDString,
+            metadata: [
+                "course_id": courseIDString, "subject_user_id": userIDString, "role": newRole.rawValue,
+            ],
+            on: req
+        )
+        return req.redirect(to: "/instructor/students")
     }
 }

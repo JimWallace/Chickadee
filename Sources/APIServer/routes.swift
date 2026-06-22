@@ -50,7 +50,9 @@ func routes(_ app: Application) throws {
 
     // MARK: - Instructor or admin only
 
-    let instructor = app.grouped(sessionAuth, RoleMiddleware(required: .instructor), csrf)
+    // Per-course instructor authority (Phase 4b): admits admins, or a user who
+    // is an instructor in their active course — not the bare global role.
+    let instructor = app.grouped(sessionAuth, ActiveCourseInstructorMiddleware(), csrf)
     try instructor.register(collection: InstructorDashboardRoutes())
     try instructor.register(collection: DraftAssignmentRoutes())
     try instructor.register(collection: PublishedAssignmentRoutes())

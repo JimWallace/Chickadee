@@ -93,9 +93,11 @@ extension InstructorDashboardRoutes {
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> CourseRosterData {
-        let enrolledUsers = try await loadEnrolledUsersForRoster(req: req, activeCourseUUID: activeCourseUUID)
+        let (enrolledUsers, rolesByUserID) = try await loadEnrolledUsersForRoster(
+            req: req, activeCourseUUID: activeCourseUUID)
         var enrolledStudents = buildEnrolledStudentRows(
             enrolledUsers: enrolledUsers,
+            rolesByUserID: rolesByUserID,
             activeCourseUUID: activeCourseUUID,
             activeCourseCode: activeCourseCode,
             fmt: fmt,
@@ -116,6 +118,9 @@ extension InstructorDashboardRoutes {
             )
         )
 
+        // The "Y students enrolled" denominator still keys off the global role
+        // (instructor/admin test accounts excluded). Switching it to the
+        // per-course role is a follow-up once mixed roles are in real use.
         let activeStudentIDs = Set(
             enrolledUsers
                 .filter { $0.roleValue == .student }
@@ -154,9 +159,11 @@ extension InstructorDashboardRoutes {
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> (rows: [EnrolledStudentRow], count: Int) {
-        let enrolledUsers = try await loadEnrolledUsersForRoster(req: req, activeCourseUUID: activeCourseUUID)
+        let (enrolledUsers, rolesByUserID) = try await loadEnrolledUsersForRoster(
+            req: req, activeCourseUUID: activeCourseUUID)
         var rows = buildEnrolledStudentRows(
             enrolledUsers: enrolledUsers,
+            rolesByUserID: rolesByUserID,
             activeCourseUUID: activeCourseUUID,
             activeCourseCode: activeCourseCode,
             fmt: fmt,
@@ -181,13 +188,15 @@ extension InstructorDashboardRoutes {
     private func loadEnrolledUsersForRoster(
         req: Request,
         activeCourseUUID: UUID
-    ) async throws -> [APIUser] {
+    ) async throws -> (users: [APIUser], rolesByUserID: [UUID: CourseRole]) {
         let enrollments = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == activeCourseUUID)
             .all()
         let enrolledUserIDs = enrollments.map(\.userID)
-        guard !enrolledUserIDs.isEmpty else { return [] }
-        return try await APIUser.query(on: req.db)
+        guard !enrolledUserIDs.isEmpty else { return ([], [:]) }
+        var rolesByUserID: [UUID: CourseRole] = [:]
+        for enrollment in enrollments { rolesByUserID[enrollment.userID] = enrollment.role }
+        let users = try await APIUser.query(on: req.db)
             .filter(\.$id ~~ enrolledUserIDs)
             // Exclude `mcp` service accounts: they may be enrolled to scope an
             // agent's access (admin MCP tab) but are not roster members.
@@ -206,10 +215,12 @@ extension InstructorDashboardRoutes {
                 }
                 return lhs.username.localizedStandardCompare(rhs.username) == .orderedAscending
             }
+        return (users, rolesByUserID)
     }
 
     private func buildEnrolledStudentRows(
         enrolledUsers: [APIUser],
+        rolesByUserID: [UUID: CourseRole],
         activeCourseUUID: UUID,
         activeCourseCode: String,
         fmt: DateFormatter,
@@ -226,7 +237,7 @@ extension InstructorDashboardRoutes {
                 id: id.uuidString,
                 username: u.username,
                 displayName: u.displayName ?? u.username,
-                role: u.role,
+                role: (rolesByUserID[id] ?? .student).rawValue,
                 lastSeenAtText: u.lastSeenAt.map { fmt.string(from: $0) } ?? "—",
                 lastSeenAtISO: u.lastSeenAt.map { isoFormatter.string(from: $0) },
                 submissionsURL: studentSubmissionsURL(
