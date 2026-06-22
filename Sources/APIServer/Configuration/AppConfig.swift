@@ -188,8 +188,7 @@ extension AppConfig {
             mode: authMode,
             requestedMode: authMode,
             nonSSOModesEnabled: true,
-            ssoAdminUsers: [],
-            ssoInstructorUsers: []
+            ssoAdminUsers: []
         )
         return AppConfig(
             auth: auth,

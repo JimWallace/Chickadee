@@ -24,7 +24,26 @@ func withAssignmentRoutesApp(
 // MARK: - Auth helpers
 
 func arLoginAsInstructor(on app: Application) async throws -> String {
-    try await loginUser(username: "testinstructor", password: "testpassword", role: "instructor", on: app)
+    let cookie = try await loginUser(
+        username: "testinstructor", password: "testpassword", role: "instructor", on: app)
+    // Phase 5: instructor authority is per-course. Ensure the test instructor is
+    // enrolled as a per-course instructor in the shared TEST101 course, so the
+    // /instructor gate admits them deterministically (independent of when the
+    // course is created relative to the first /instructor request).
+    let courseID = try await app.testCourseID(enrollmentMode: .auto)
+    if let user = try await APIUser.query(on: app.db)
+        .filter(\.$username == "testinstructor").first()
+    {
+        let userID = try user.requireID()
+        let alreadyEnrolled =
+            try await APICourseEnrollment.query(on: app.db)
+            .filter(\.$userID == userID).filter(\.$course.$id == courseID).first() != nil
+        if !alreadyEnrolled {
+            try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
+                .save(on: app.db)
+        }
+    }
+    return cookie
 }
 
 func arLoginAsStudent(on app: Application) async throws -> String {

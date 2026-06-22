@@ -100,14 +100,12 @@ func enrolledCoursesWithRoles(
         .map { (course: $0.course, role: $0.role) }
 }
 
-/// Transitional instructor-authorization for a specific course (Phase 4b):
-/// admits an admin or a **global** instructor (the pre-per-course crutch,
-/// removed in Phase 5), or a per-course instructor. The param-taking
-/// `/instructor` endpoints use this so existing global instructors keep their
-/// access, while a per-course instructor (a global student with an instructor
-/// enrollment) is scoped to the course they actually instruct.
+/// Instructor-authorization for a specific course: admits an admin or a
+/// per-course instructor (an `.instructor` enrollment). Used by the param-taking
+/// `/instructor` endpoints so a course's instructor can't be driven against
+/// another course. Instructor authority is purely per-course as of
+/// multi-course-roles Phase 5 (the global instructor role no longer grants it).
 func requireCourseInstructor(caller: APIUser, courseID: UUID, db: Database) async throws {
-    if caller.isInstructor { return }  // admin or global instructor (transitional)
     try await requireCourseRole(caller: caller, courseID: courseID, atLeast: .instructor, db: db)
 }
 

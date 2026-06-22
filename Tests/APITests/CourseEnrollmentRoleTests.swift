@@ -121,7 +121,7 @@ import Vapor
     /// `isInstructorInActiveCourse` (which the nav keys off) is driven by the
     /// active course's per-course role, with a transitional fallback to the
     /// global role.
-    @Test func instructorInActiveCourseReflectsPerCourseRoleAndGlobalFallback() {
+    @Test func instructorInActiveCourseReflectsPerCourseRole() {
         func context(globalRole: UserRole, active: CourseContext?) -> CurrentUserContext {
             let user = APIUser(username: "u", passwordHash: "x", role: globalRole.rawValue)
             return CurrentUserContext(
@@ -137,9 +137,9 @@ import Vapor
         #expect(context(globalRole: .student, active: course(.student)).isInstructorInActiveCourse == false)
         // The Phase 2 point: a global *student* with a per-course instructor role → yes.
         #expect(context(globalRole: .student, active: course(.instructor)).isInstructorInActiveCourse == true)
-        // Transitional fallback: a global instructor keeps the tab even where the
-        // per-course role is still student (the fallback is removed in Phase 5).
-        #expect(context(globalRole: .instructor, active: course(.student)).isInstructorInActiveCourse == true)
+        // Phase 5: authority is purely per-course — a global instructor whose
+        // per-course role is student does NOT get the instructor tab here.
+        #expect(context(globalRole: .instructor, active: course(.student)).isInstructorInActiveCourse == false)
         // Admin keeps deployment-wide instructor surfaces.
         #expect(context(globalRole: .admin, active: course(.student)).isInstructorInActiveCourse == true)
     }

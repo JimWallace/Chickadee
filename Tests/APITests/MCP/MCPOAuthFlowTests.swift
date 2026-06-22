@@ -448,6 +448,8 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // Phase 5: /agents is under the per-course-gated /instructor group.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let refresh = try await obtainRefreshToken(app, cookie: cookie)
 
             let grantID = try #require(try await MCPGrant.query(on: app.db).first()).requireID()

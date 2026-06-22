@@ -163,6 +163,24 @@ extension Application {
     }
 }
 
+/// Enrols `username` as a per-course instructor in the shared TEST101 course so
+/// the per-course `/instructor` gate (Phase 5) admits them. Idempotent.
+func enrollAsTestInstructor(
+    username: String, on app: Application, courseCode: String = "TEST101"
+) async throws {
+    let courseID = try await app.testCourseID(code: courseCode)
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+    else { return }
+    let userID = try user.requireID()
+    let exists =
+        try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).filter(\.$course.$id == courseID).first() != nil
+    if !exists {
+        try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
+            .save(on: app.db)
+    }
+}
+
 // MARK: - Async app lifecycle
 
 /// Runs an async test body with a Vapor application and always shuts it down.

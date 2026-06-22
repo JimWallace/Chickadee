@@ -193,8 +193,9 @@ Admin implies instructor. Role is stored on `APIUser` and enforced by
 
 SSO implementation lives in `SSOAuthRoutes.swift` and `OIDCConfiguration.swift`.
 The discovery document and JWKS are fetched from `OIDC_AUTH_SERVER` at startup.
-Role assignment uses `SSO_ADMIN_USERS` / `SSO_INSTRUCTOR_USERS` allowlists
-(comma-separated, checked against JWT claims on every login).
+Role assignment uses the `SSO_ADMIN_USERS` allowlist (comma-separated, checked
+against JWT claims on every login); instructor authority is per-course
+(assigned from the course roster), so there is no SSO instructor allowlist.
 
 `ENABLE_NON_SSO_AUTH_MODES` controls whether `.local` and `.dual` are available
 (useful when the deployment policy mandates SSO-only).

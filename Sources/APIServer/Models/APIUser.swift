@@ -380,6 +380,6 @@ struct CurrentUserContext: Encodable {
         self.enrolledCourses = enrolledCourses
         self.showCourseTabs = enrolledCourses.count > 1
         self.isInstructorInActiveCourse =
-            activeCourse != nil && (activeCourse?.role == .instructor || user.isInstructor)
+            activeCourse != nil && (activeCourse?.role == .instructor || user.isAdmin)
     }
 }

@@ -7,13 +7,12 @@ import Testing
 
     private let routes = SSOAuthRoutes(configuredCallbackPath: "/auth/sso/callback")
 
-    @Test func noAllowlistsReturnsNil() {
+    @Test func noAdminAllowlistReturnsNil() {
         let role = routes.mappedSSORole(
             username: "alice",
             userIdentifier: "alice123",
             email: "alice@example.edu",
-            adminAllowlist: [],
-            instructorAllowlist: []
+            adminAllowlist: []
         )
         #expect(role == nil)
     }
@@ -23,42 +22,51 @@ import Testing
             username: "Alice",
             userIdentifier: "alice123",
             email: "alice@example.edu",
-            adminAllowlist: ["alice"],
-            instructorAllowlist: []
+            adminAllowlist: ["alice"]
         )
         #expect(role == "admin")
     }
 
-    @Test func instructorAllowlistMatchesUserIdentifierWhenNotAdmin() {
+    @Test func adminAllowlistMatchesUserIdentifier() {
         let role = routes.mappedSSORole(
             username: "bob",
             userIdentifier: "B12345",
             email: "bob@example.edu",
-            adminAllowlist: [],
-            instructorAllowlist: ["b12345"]
+            adminAllowlist: ["b12345"]
         )
-        #expect(role == "instructor")
+        #expect(role == "admin")
     }
 
-    @Test func adminAllowlistBeatsInstructorAllowlist() {
+    @Test func adminAllowlistMatchesEmail() {
         let role = routes.mappedSSORole(
             username: "carol",
             userIdentifier: "c999",
             email: "carol@example.edu",
-            adminAllowlist: ["carol@example.edu"],
-            instructorAllowlist: ["carol", "c999"]
+            adminAllowlist: ["carol@example.edu"]
         )
         #expect(role == "admin")
+    }
+
+    /// Instructor authority is per-course as of Phase 5 — SSO never assigns an
+    /// instructor (or any non-admin) role; a non-match returns nil so the caller
+    /// leaves the existing role untouched / defaults a new user to student.
+    @Test func nonAdminMatchReturnsNil() {
+        let role = routes.mappedSSORole(
+            username: "dave",
+            userIdentifier: "d111",
+            email: "dave@example.edu",
+            adminAllowlist: ["someone-else"]
+        )
+        #expect(role == nil)
     }
 
     @Test func blankValuesAreIgnored() {
         let role = routes.mappedSSORole(
             username: "   ",
             userIdentifier: "   ",
-            email: "Instructor@example.edu ",
-            adminAllowlist: [],
-            instructorAllowlist: ["instructor@example.edu"]
+            email: "Admin@example.edu ",
+            adminAllowlist: ["admin@example.edu"]
         )
-        #expect(role == "instructor")
+        #expect(role == "admin")
     }
 }

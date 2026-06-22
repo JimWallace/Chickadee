@@ -13,16 +13,14 @@ struct AuthConfig: Sendable {
     /// Whether non-SSO modes are explicitly enabled.
     let nonSSOModesEnabled: Bool
     /// Lowercased SSO identifiers that should be granted admin on first login.
+    /// (Instructor authority is per-course as of Phase 5 — SSO assigns only admin.)
     let ssoAdminUsers: Set<String>
-    /// Lowercased SSO identifiers that should be granted instructor on first login.
-    let ssoInstructorUsers: Set<String>
 
     static let defaultLocal = AuthConfig(
         mode: .local,
         requestedMode: .local,
         nonSSOModesEnabled: true,
-        ssoAdminUsers: [],
-        ssoInstructorUsers: []
+        ssoAdminUsers: []
     )
 
     static func fromEnvironment(override: AuthMode? = nil) -> AuthConfig {
@@ -33,8 +31,7 @@ struct AuthConfig: Sendable {
             mode: effective,
             requestedMode: requested,
             nonSSOModesEnabled: nonSSO,
-            ssoAdminUsers: parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS")),
-            ssoInstructorUsers: parseSSOIdentityAllowlist(Environment.get("SSO_INSTRUCTOR_USERS"))
+            ssoAdminUsers: parseSSOIdentityAllowlist(Environment.get("SSO_ADMIN_USERS"))
         )
     }
 }

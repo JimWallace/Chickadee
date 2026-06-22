@@ -62,7 +62,11 @@ func wrEnrollUser(_ user: APIUser, on app: Application) async throws {
         .filter(\.$course.$id == courseID)
         .first() == nil
     {
-        let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+        // Seed the per-course role from the global role, mirroring production
+        // (saveSeededEnrollment), so a global-instructor caller becomes a
+        // per-course instructor — Phase 5 made instructor authority per-course.
+        let role: CourseRole = user.isInstructor ? .instructor : .student
+        let enrollment = APICourseEnrollment(userID: userID, courseID: courseID, role: role)
         try await enrollment.save(on: app.db)
     }
 }

@@ -1,16 +1,17 @@
 # Multi-course roles & university-scale organization
 
-**Status:** Active. Theme 1 (per-course roles) is being implemented in phases.
-**Phases 1–4a have landed** — Core `CourseRole` + the `course_enrollments.role`
+**Status:** Active. Theme 1 (per-course roles) is essentially complete.
+**Phases 1–4b have landed** — Core `CourseRole` + the `course_enrollments.role`
 column + the behaviour-preserving backfill (Phase 1), the read-path wiring that
 carries the per-course role into the nav (Phase 2), the role-aware authorization
-chokepoint `requireCourseRole(atLeast:)` (Phase 3), and per-course role seeding
-on new enrollments (Phase 4a). **Phase 4b** — the access-control flip
-(`ActiveCourseInstructorMiddleware` gates `/instructor` on per-course instructor
-role; the roster role dropdown) — is **implemented and held for the owner's
-review**. Companion to the earlier fix that scoped the home dashboard and the
-"Instructor" nav tab to course enrollment (PR #972) — that fix was the first
-concrete step toward the model described here.
+chokepoint `requireCourseRole(atLeast:)` (Phase 3), per-course role seeding on
+new enrollments (Phase 4a), and the access-control flip
+(`ActiveCourseInstructorMiddleware` + the roster role dropdown, Phase 4b).
+**Phase 5 (pragmatic)** removes the transitional global-instructor fallbacks
+(authority is now purely per-course) and retires `SSO_INSTRUCTOR_USERS`; the
+`UserRole.instructor` enum case is kept for decode compatibility. Companion to
+the earlier fix that scoped the home dashboard and the "Instructor" nav tab to
+course enrollment (PR #972) — the first concrete step toward this model.
 
 The owner's design decisions are recorded in [§6](#6-decisions) and are
 settled; they shape Phases 4–5 (the behaviour-changing ones). Theme 2
@@ -192,11 +193,16 @@ representable and creatable.
      student there" goes live.** The global-instructor fallback is removed in
      Phase 5; MCP content-tool role-awareness is a small follow-up (today every
      MCP subject is a global instructor, so it's a no-op).
-5. **Shrink the global role.** Collapse `APIUser.role` to `admin`-only (the
-   global `instructor` goes away entirely). **Remove the `SSO_INSTRUCTOR_USERS`
-   handling** — keep `SSO_ADMIN_USERS` — per [§6](#6-decisions). Drop the nav's
-   transitional global-role fallback (Phase 2). Longest tail; can lag well
-   behind 1–4.
+5. **Shrink the global role (pragmatic slice — done).** Removed the three
+   transitional global-instructor fallbacks (nav, the `/instructor` gate, and
+   `requireCourseInstructor`) so instructor authority is purely per-course; and
+   retired the `SSO_INSTRUCTOR_USERS` handling (kept `SSO_ADMIN_USERS`).
+   **Deferred:** physically
+   removing the `UserRole.instructor` enum case (kept for decode compatibility —
+   a future migration), and removing the global-instructor option from the admin
+   user-management UI (needs careful display handling for existing instructor
+   rows). The global instructor role is now inert for authority but still seeds
+   the per-course role on enrollment.
 
 ---
 

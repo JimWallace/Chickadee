@@ -56,7 +56,6 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.storage[ScanModeConfigurationKey.self] = scanModeConfiguration
     app.storage[LoginRateLimitConfigurationKey.self] = appConfig.lockout
     app.storage[SSOAdminUsersKey.self] = appConfig.auth.ssoAdminUsers
-    app.storage[SSOInstructorUsersKey.self] = appConfig.auth.ssoInstructorUsers
 
     // MARK: - Sessions (Fluent-backed; persisted in the database)
 
