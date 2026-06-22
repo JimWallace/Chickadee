@@ -271,8 +271,17 @@ extension WebRoutes {
         // on the deadline); secret is never itemized.  The grade itself spans
         // every tier — see `processDisplayResult` — so it is stable across the
         // deadline and matches the dashboard.
+        //
+        // Release *output* is gated on the *effective* deadline — the later of
+        // the assignment due date and the viewer's own per-student extension —
+        // so a student with an active extension keeps the hidden release output
+        // redacted until their extended window closes.  A non-instructor may
+        // only view their own submission (guarded above), so `user` is the
+        // submission owner; instructors see release output regardless.
         let itemized = itemizedTiers(for: user)
-        let releaseOutput = releaseOutputVisible(for: user, assignment: submissionAssignment)
+        let releaseDeadline = try await releaseVisibilityDeadline(
+            for: submissionAssignment, user: user, on: req.db)
+        let releaseOutput = releaseOutputVisible(for: user, effectiveDueAt: releaseDeadline)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

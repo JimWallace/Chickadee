@@ -99,11 +99,20 @@ struct SubmissionQueryRoutes: RouteCollection {
 
         // `fullCollection` carries the real grade across every tier.  The caller
         // may only *inspect* certain outcomes: secret never, release after the
-        // deadline (instructors see all tiers).
+        // deadline (instructors see all tiers).  Release is gated on the
+        // *effective* deadline — the later of the assignment due date and the
+        // caller's own per-student extension — so an accommodated student does
+        // not get release output revealed while their extended window is still
+        // open.  A non-instructor caller can only reach their own submission
+        // (`canViewSubmission`), so the caller is the submission owner; for
+        // instructors the deadline is unused (they see every tier).
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
-        let visible = fullCollection.filtering(tiers: visibleTiers(for: caller, assignment: assignment))
+        let releaseDeadline = try await releaseVisibilityDeadline(
+            for: assignment, user: caller, on: req.db)
+        let visible = fullCollection.filtering(
+            tiers: visibleTiers(for: caller, effectiveDueAt: releaseDeadline))
 
         let responseCollection: TestOutcomeCollection
         if let tiersParam = req.query[String.self, at: "tiers"] {

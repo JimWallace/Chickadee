@@ -655,6 +655,105 @@ import VaporTesting
         }
     }
 
+    /// A student with an *active* per-student extension keeps `release` output
+    /// hidden even after the class-wide deadline has passed — release is gated on
+    /// their *effective* (extended) deadline, so they cannot read the hidden
+    /// tests early while their own submission window is still open.
+    @Test func getResultsHidesReleaseForStudentWithActiveExtension() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_ext_active"
+            let username = "student_ext_active"
+            let cookie = try await loginAsStudent(username: username)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            // Class deadline already passed…
+            let assignment = try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(-3600))  // 1 hr ago
+            // …but this student's extension is still in the future.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(86_400)  // 1 day out
+            ).save(on: app.db)
+            try await insertSubmission(
+                id: "sub_ext_active", testSetupID: setupID,
+                userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_ext_active",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_ext_active", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_ext_active/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(
+                        body.outcomes.count == 1,
+                        "an active extension keeps release hidden past the class deadline")
+                    #expect(body.outcomes[0].testName == "test_pub")
+                    #expect(body.outcomes.contains { $0.tier == .release } == false)
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
+    /// Once a student's extension has *also* lapsed, `release` is revealed just
+    /// like any other student past the deadline — the extension only postpones
+    /// the reveal, it does not suppress it forever.
+    @Test func getResultsShowsReleaseAfterLapsedExtension() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_ext_lapsed"
+            let username = "student_ext_lapsed"
+            let cookie = try await loginAsStudent(username: username)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            let assignment = try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(-7200))  // 2 hr ago
+            // Extension granted but already in the past.
+            try await APIAssignmentExtension(
+                assignmentID: try assignment.requireID(),
+                userID: try student.requireID(),
+                extendedDueAt: Date().addingTimeInterval(-3600)  // 1 hr ago
+            ).save(on: app.db)
+            try await insertSubmission(
+                id: "sub_ext_lapsed", testSetupID: setupID,
+                userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_ext_lapsed",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                    makeOutcome(name: "test_secret", tier: .secret, status: .pass),
+                ]
+            )
+            try await insertResult(submissionID: "sub_ext_lapsed", collection: collection)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_ext_lapsed/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(
+                        body.outcomes.count == 2,
+                        "a lapsed extension behaves like any past-deadline student")
+                    #expect(body.outcomes.contains { $0.tier == .release })
+                    #expect(body.outcomes.contains { $0.tier == .secret } == false)
+                })
+
+        }
+    }
+
     /// `secret` outcomes are never visible to students, even after the deadline.
     @Test func getResultsAlwaysHidesSecretFromStudent() async throws {
         try await withApp(app) { _ in
