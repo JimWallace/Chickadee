@@ -4,8 +4,11 @@ Notebook
 #endexport
 #export("content"):
 <style>
-/* Override the 900px max-width for this page only */
-.main { max-width: 100%; padding: 0 1rem; }
+/* Override the 900px max-width for this page only.  The default .main also
+   carries a 2rem top+bottom margin (styles.css) — wasted vertical space on the
+   editor page, where every pixel counts on laptops/iPads — so trim it to a
+   hairline top margin and no bottom margin. */
+.main { max-width: 100%; padding: 0 1rem; margin: .5rem auto 0; }
 
 /* Closed-assignment "view only" notice + fallback/small-screen text. */
 .nb-closed-notice { color: var(--gray-600); font-size: .9rem; }

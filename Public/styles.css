@@ -751,7 +751,7 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: .75rem;
+    margin-bottom: .35rem;
     flex-wrap: wrap;
     gap: .75rem;
 }
@@ -777,10 +777,13 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     color: var(--gray-600);
 }
 
-/* Full-viewport iframe minus the nav + header */
+/* Full-viewport iframe minus the nav + the (now-compacted) Submit/Download
+   header.  The 8rem reserve tracks the trimmed chrome above (nav + colour bar +
+   the .5rem .main margin + the slim header row); previously 9rem, which left
+   the outer page itself scrolling because the real chrome exceeded it. */
 .jl-frame {
     width: 100%;
-    height: calc(100vh - 9rem);
+    height: calc(100vh - 8rem);
     border: 1px solid var(--gray-200);
     border-radius: .5rem;
     background: var(--surface);
