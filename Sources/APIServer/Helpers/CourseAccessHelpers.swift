@@ -99,3 +99,29 @@ func enrolledCoursesWithRoles(
         .sorted { $0.course.code < $1.course.code }
         .map { (course: $0.course, role: $0.role) }
 }
+
+// MARK: - Enrollment creation (role seeding)
+
+/// Creates and saves a new enrollment for `user` in `courseID`, seeding the
+/// per-course role from the user's current global role: a global instructor or
+/// admin becomes a per-course instructor, everyone else a student. The single
+/// place the creation-time seeding rule lives (Phase 4a of
+/// docs/multi-course-roles.md), so moving authorization onto the per-course
+/// role later doesn't drop anyone's existing access — the roster can override
+/// afterward. Callers handle their own "already enrolled?" dedup.
+func saveSeededEnrollment(for user: APIUser, courseID: UUID, on db: Database) async throws {
+    try await APICourseEnrollment(
+        userID: try user.requireID(), courseID: courseID,
+        role: user.isInstructor ? .instructor : .student
+    ).save(on: db)
+}
+
+/// `saveSeededEnrollment` for callers that hold only the user's ID; loads the
+/// user to read its global role. A missing user falls back to `.student`.
+func saveSeededEnrollment(userID: UUID, courseID: UUID, on db: Database) async throws {
+    let isInstructor = try await APIUser.find(userID, on: db)?.isInstructor ?? false
+    try await APICourseEnrollment(
+        userID: userID, courseID: courseID,
+        role: isInstructor ? .instructor : .student
+    ).save(on: db)
+}

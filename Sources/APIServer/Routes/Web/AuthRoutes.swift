@@ -439,8 +439,7 @@ func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response
             .filter(\.$course.$id == courseID)
             .count()
         if existing == 0 {
-            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-            try await enrollment.save(on: req.db)
+            try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
         }
     }
 
