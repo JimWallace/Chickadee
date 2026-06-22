@@ -191,6 +191,21 @@ func isAssignmentEffectivelyOpen(
     )
 }
 
+/// The deadline that gates release-tier *result visibility* for `user` viewing
+/// `assignment`'s results: the effective (extension-aware) deadline, or nil when
+/// there is no assignment or no deadline at all (release then visible
+/// immediately).  A non-instructor may only view their own submission, so the
+/// viewer is the submission owner and their extension is the right one to honour;
+/// instructors see every tier regardless, so the value is unused for them.
+func releaseVisibilityDeadline(
+    for assignment: APIAssignment?,
+    user: APIUser,
+    on db: Database
+) async throws -> Date? {
+    guard let assignment else { return nil }
+    return try await effectiveDueAt(for: assignment, user: user, on: db)
+}
+
 @discardableResult
 func closeAssignmentIfExpired(
     _ assignment: APIAssignment,

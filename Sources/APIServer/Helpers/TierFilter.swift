@@ -84,15 +84,22 @@ extension TestOutcomeCollection {
 /// - Students see `public` always, `release` after the deadline passes
 ///   (or immediately when there is no deadline), and never `secret`.
 ///
+/// `effectiveDueAt` is the deadline that actually applies to the student whose
+/// submission is being viewed — the *later* of the assignment-wide due date and
+/// that student's per-student extension (see `effectiveDueAt(for:user:on:)`).
+/// Gating on the effective deadline rather than the bare assignment due date
+/// means an accommodated student does not get the hidden release tests revealed
+/// while their own extended window is still open.
+///
 /// The student *web* view is more nuanced — it lists release tests by name
 /// before the deadline but redacts their output — so it uses `itemizedTiers`
 /// and `releaseOutputVisible` instead.
-func visibleTiers(for user: APIUser, assignment: APIAssignment?) -> Set<String> {
+func visibleTiers(for user: APIUser, effectiveDueAt: Date?, now: Date = Date()) -> Set<String> {
     if user.isInstructor {
         return ["public", "release", "secret"]
     }
-    // nil dueAt → no deadline → release is immediately visible.
-    let releaseVisible = assignment?.dueAt.map { $0 <= Date() } ?? true
+    // nil effectiveDueAt → no deadline → release is immediately visible.
+    let releaseVisible = effectiveDueAt.map { $0 <= now } ?? true
     return releaseVisible ? ["public", "release"] : ["public"]
 }
 
@@ -111,9 +118,14 @@ func itemizedTiers(for user: APIUser) -> Set<String> {
 /// is shown to `user`.  Release rows are always listed by name for students,
 /// but their detailed output stays hidden until the deadline passes so students
 /// can't read the expected/actual values early.  Instructors always see it.
-func releaseOutputVisible(for user: APIUser, assignment: APIAssignment?) -> Bool {
+///
+/// `effectiveDueAt` is the deadline that applies to the viewing student — the
+/// later of the assignment due date and their own extension — so a student with
+/// an active extension keeps release output hidden until *their* deadline
+/// passes, not the (earlier) class-wide one.
+func releaseOutputVisible(for user: APIUser, effectiveDueAt: Date?, now: Date = Date()) -> Bool {
     if user.isInstructor { return true }
-    return assignment?.dueAt.map { $0 <= Date() } ?? true
+    return effectiveDueAt.map { $0 <= now } ?? true
 }
 
 /// Decodes a stored collection JSON with no tier filtering — the full,
