@@ -1468,7 +1468,15 @@
         if (!doc.getElementById('chickadee-notebook-lock-style')) {
             const rules = [
                 '.jp-SideBar, .jp-SidePanel, .jp-FileBrowser, .jp-FileBrowser-Panel, .jp-DirListing { display: none !important; }',
-                '.lm-MenuBar, .jp-MenuBar, .jp-TopBar { display: none !important; }'
+                '.lm-MenuBar, .jp-MenuBar, .jp-TopBar, .jp-top-panel { display: none !important; }',
+                // Notebook 7 top header strip — the jupyter/kernel logos, the
+                // filename + "Last Checkpoint" line, and the trust indicator.
+                // All redundant in our single-locked-notebook flow and pure
+                // vertical-space cost; hiding them lets the editor surface fill
+                // more of the viewport (laptops/iPads).  These are NOT in the
+                // notebook toolbar (.jp-NotebookPanel-toolbar — Save/Run stay
+                // visible), which is hidden separately only in read-only mode.
+                '.jp-NotebookLogo, .jp-NotebookKernelLogo, .jp-NotebookCheckpoint, .jp-NotebookTrustedStatus { display: none !important; }'
             ];
             if (readOnly) {
                 rules.push(
