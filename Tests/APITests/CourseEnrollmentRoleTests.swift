@@ -7,6 +7,8 @@
 //     `isInstructorInActiveCourse`.
 //   Phase 3 — the auth chokepoint: `CourseRole` ordering and
 //     `requireCourseRole(atLeast:)`.
+//   Phase 4a — `saveSeededEnrollment`: new enrollments seed their role from the
+//     user's global role.
 
 import Core
 import Fluent
@@ -239,6 +241,35 @@ import Vapor
             await #expect(throws: Abort.self) {
                 try await requireCourseEnrollment(caller: unenrolled, courseID: courseID, db: app.db)
             }
+        }
+    }
+
+    // MARK: - Enrollment seeding (Phase 4a)
+
+    /// New enrollments seed their per-course role from the user's global role,
+    /// so moving authorization onto the per-course role doesn't drop anyone's
+    /// access. Exercises both the `for:` overload and the userID overload.
+    @Test func saveSeededEnrollmentSeedsRoleFromGlobalRole() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            let course = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+
+            let instructor = makeUser(role: .instructor)
+            let admin = makeUser(role: .admin)
+            let student = makeUser(role: .student)
+            for user in [instructor, admin, student] { try await user.save(on: app.db) }
+
+            try await saveSeededEnrollment(for: instructor, courseID: courseID, on: app.db)
+            try await saveSeededEnrollment(userID: try admin.requireID(), courseID: courseID, on: app.db)
+            try await saveSeededEnrollment(userID: try student.requireID(), courseID: courseID, on: app.db)
+
+            #expect(try await courseRole(of: instructor, on: app.db) == .instructor)
+            #expect(try await courseRole(of: admin, on: app.db) == .instructor, "admin implies instructor")
+            #expect(try await courseRole(of: student, on: app.db) == .student)
         }
     }
 

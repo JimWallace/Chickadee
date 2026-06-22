@@ -264,8 +264,7 @@ extension Request {
             guard let courseID = course.id else { continue }
             let alreadyEnrolled = enrolledContexts.contains { $0.id == courseID.uuidString }
             if !alreadyEnrolled {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-                try? await enrollment.save(on: db)
+                try? await saveSeededEnrollment(for: user, courseID: courseID, on: db)
                 didEnroll = true
             }
         }

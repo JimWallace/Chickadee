@@ -212,8 +212,7 @@ func enrollUsernamesInCourse(
             if alreadyEnrolledUserIDs.contains(userID) {
                 alreadyEnrolledCount += 1
             } else {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-                try await enrollment.save(on: db)
+                try await saveSeededEnrollment(for: user, courseID: courseID, on: db)
                 enrolledCount += 1
             }
             continue
@@ -272,9 +271,8 @@ func resolvePendingPreEnrollments(
         for row in pending {
             let courseID = row.$course.id
             if !existingCourseIDs.contains(courseID) {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
                 do {
-                    try await enrollment.save(on: db)
+                    try await saveSeededEnrollment(for: user, courseID: courseID, on: db)
                 } catch {
                     logger.warning("Pre-enrollment resolve: failed to enroll \(username) in \(courseID): \(error)")
                     continue

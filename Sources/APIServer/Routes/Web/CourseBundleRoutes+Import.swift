@@ -343,8 +343,7 @@ private func importBundledEnrollments(
             .filter(\.$course.$id == courseID)
             .first()
         if alreadyEnrolled == nil {
-            let enrollment = APICourseEnrollment(userID: uid, courseID: courseID)
-            try await enrollment.save(on: db)
+            try await saveSeededEnrollment(userID: uid, courseID: courseID, on: db)
         }
     }
 }

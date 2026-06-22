@@ -98,8 +98,7 @@ struct AccountRoutes: RouteCollection {
             .count()
 
         if existing == 0 {
-            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-            try await enrollment.save(on: req.db)
+            try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
         }
 
         return req.redirect(to: "/account")

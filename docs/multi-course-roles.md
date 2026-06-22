@@ -4,10 +4,14 @@
 **Phases 1–3 have landed** — Core `CourseRole` + the `course_enrollments.role`
 column + the behaviour-preserving backfill (Phase 1), the read-path wiring that
 carries the per-course role into the nav (Phase 2), and the role-aware
-authorization chokepoint `requireCourseRole(atLeast:)` (Phase 3). Companion to
-the earlier fix that scoped the home dashboard and the "Instructor" nav tab to
-course enrollment (PR #972) — that fix was the first concrete step toward the
-model described here.
+authorization chokepoint `requireCourseRole(atLeast:)` (Phase 3). Phase 4 is
+split: **4a** seeds each new enrollment's role from the user's global role (so
+no current instructor loses access when authorization moves onto the per-course
+role); **4b** (held for review) adds the editable roster role control and flips
+authoring authorization onto the per-course role. Companion to the earlier fix
+that scoped the home dashboard and the "Instructor" nav tab to course
+enrollment (PR #972) — that fix was the first concrete step toward the model
+described here.
 
 The owner's design decisions are recorded in [§6](#6-decisions) and are
 settled; they shape Phases 4–5 (the behaviour-changing ones). Theme 2
@@ -174,8 +178,16 @@ representable and creatable.
    Behaviour-neutral (only `.student` is called in production). Flipping
    authoring handlers / `RoleMiddleware` / MCP to `.instructor` is folded into
    Phase 4 — see §3.4.
-4. **Authoring UI.** Per-course role on enroll/roster. **This is where
-   "instructor here, student there" goes live.**
+4. **Authoring UI (split).**
+   - **4a. ✓ Done.** Enrollment creation seeds each new enrollment's role from
+     the user's global role (`saveSeededEnrollment`), so the per-course role
+     stays accurate and nobody loses access when 4b flips authorization.
+   - **4b (held for review).** The editable roster role control **plus** the
+     access-control flip (relax `RoleMiddleware(.instructor)` to a coarse gate,
+     authoring handlers → `atLeast: .instructor`, MCP role-aware) — shipped
+     together so promoting a student to per-course instructor works end-to-end
+     with no broken interim. **This is where "instructor here, student there"
+     goes live.**
 5. **Shrink the global role.** Collapse `APIUser.role` to `admin`-only (per
    [§6](#6-decisions) the global `instructor` goes away entirely). Revisit SSO
    role mapping here — per [§6](#6-decisions) `SSO_INSTRUCTOR_USERS` keeps its
