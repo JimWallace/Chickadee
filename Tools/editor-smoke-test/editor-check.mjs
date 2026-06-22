@@ -65,6 +65,13 @@ const simulateFrozen = process.env.SMOKE_SIMULATE_FROZEN === "1";
 // detector must still catch.
 const simulateNoSync = process.env.SMOKE_SIMULATE_NO_SYNC === "1";
 const disableServiceWorker = simulateFrozen || simulateNoSync;
+// Simulate an engine WITHOUT native Atomics.waitAsync (older Safari / iPadOS):
+// delete it before any page script runs, so the pyodide-kernel falls into its
+// `data:`-worker polyfill — which COEP require-corp blocks on the cross-origin-
+// isolated editor. This is the engine condition CI's modern Chromium/WebKit
+// can't otherwise reach (both ship native waitAsync), and the exact trigger for
+// the kernel hang the compat fallback exists to catch.
+const simulateNoWaitAsync = process.env.SMOKE_SIMULATE_NO_WAITASYNC === "1";
 // Optional assertion on the page's cross-origin-isolation state, so a config
 // that is SUPPOSED to be isolated (SharedArrayBuffer path) can't quietly pass
 // via the service-worker fallback if isolation silently regresses — and vice
@@ -150,6 +157,19 @@ async function main() {
       delete headers["cross-origin-embedder-policy"];
       delete headers["cross-origin-opener-policy"];
       route.fulfill({ response, headers });
+    });
+  }
+
+  // Delete native Atomics.waitAsync so the kernel takes its `data:`-worker
+  // polyfill path (the older-Safari / iPadOS condition). Registered on the
+  // context so it runs in every document/frame — including the editor iframe —
+  // before any page script reads `Atomics.waitAsync`.
+  if (simulateNoWaitAsync) {
+    await context.addInitScript(() => {
+      try { delete Atomics.waitAsync; } catch (_) { /* ignore */ }
+      try {
+        Object.defineProperty(Atomics, "waitAsync", { value: undefined, configurable: true });
+      } catch (_) { /* ignore */ }
     });
   }
 

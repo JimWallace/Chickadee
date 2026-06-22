@@ -223,28 +223,19 @@
     // ----------------------------------------------------------------
     //
     // The editor is served cross-origin isolated so the Pyodide kernel runs on
-    // SharedArrayBuffer with no service worker
-    // (docs/notebook-editor-kernel-boot.md). Two failure modes can still leave
-    // the kernel spinning forever; these helpers detect and route around them
-    // — and beacon them, so a hung kernel is no longer invisible to the admin
-    // diagnostics (it used to be logged only as a successful editor_ready).
-
-    // True when the per-client compat cookie is set (the server then serves the
-    // editor NON-isolated; see EditorCompatMode.swift).
-    function isEditorCompatMode() {
-        try { return document.cookie.indexOf('ck-editor-compat=1') !== -1; }
-        catch (_) { return false; }
-    }
+    // SharedArrayBuffer with no service worker (docs/notebook-editor-kernel-boot.md).
+    // The kernel works on engines without native Atomics.waitAsync too: its
+    // waitAsync polyfill worker is vended as a blob: URL (not data:), which the
+    // CSP worker-src and COEP both allow — so older Safari / iPadOS boot isolated
+    // with no fallback needed (guarded by SMOKE_SIMULATE_NO_WAITASYNC).
 
     // #1 — Remove a stale, now-redundant JupyterLite service worker. The
     // SAB-only architecture disabled the SW manager, but a SW registered by a
     // pre-SAB build stays registered and keeps controlling /jupyterlite/* — it
     // can serve stale/uncontrolled responses that break the kernel boot, and a
-    // plain refresh never clears it. Drop any we find (never in compat mode,
-    // where the SW IS the intended sync path) and reload once if one was
+    // plain refresh never clears it. Drop any we find and reload once if one was
     // actually controlling this load.
     function cleanupRedundantServiceWorker() {
-        if (isEditorCompatMode()) return;
         if (typeof navigator === 'undefined' || !navigator.serviceWorker ||
             !navigator.serviceWorker.getRegistrations) return;
         navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -277,67 +268,14 @@
         catch (_) { /* sessionStorage unavailable — reload simply won't be re-gated */ }
     }
 
-    // #2 — The pyodide-kernel polyfills Atomics.waitAsync with a `data:` worker
-    // when the engine lacks it natively; `data:` workers are BLOCKED under COEP
-    // require-corp, so a cross-origin-isolated page on such an engine (older
-    // Safari / iPadOS) hangs the kernel with no fallback. Detect that exact
-    // combination and switch to a non-isolated, service-worker-backed boot.
-    function browserNeedsDataWorkerCompat() {
-        if (typeof crossOriginIsolated === 'undefined' || !crossOriginIsolated) return false;
-        if (typeof Atomics === 'undefined') return false;
-        return typeof Atomics.waitAsync !== 'function';
-    }
-
-    function compatAlreadyTried() {
-        try { return sessionStorage.getItem('chickadee:editor-compat:' + setupID) === '1'; }
-        catch (_) { return false; }
-    }
-    function markCompatTried() {
-        try { sessionStorage.setItem('chickadee:editor-compat:' + setupID, '1'); }
-        catch (_) { /* sessionStorage unavailable */ }
-    }
-
-    // Returns true if it kicked off a compat switch (a reload), so the caller
-    // stops the normal isolated mount.
-    function maybeEnterDataWorkerCompat() {
-        if (isEditorCompatMode()) return false;        // already non-isolated
-        if (!browserNeedsDataWorkerCompat()) return false;
-        if (compatAlreadyTried()) return false;        // never loop
-        markCompatTried();
-        try {
-            document.cookie = 'ck-editor-compat=1; path=/; max-age=86400; SameSite=Lax';
-        } catch (_) { /* cookies blocked — fall through; boot-timeout will catch it */ }
-        setStatus('loading', 'Preparing the notebook for your browser…');
-        try { window.location.reload(); return true; }
-        catch (_) { return false; }
-    }
-
-    // In compat (non-isolated) mode the SAB sync path is unavailable, so the
-    // kernel needs the JupyterLite service worker. The SW manager is disabled,
-    // so register it ourselves and wait for it to control /jupyterlite/ before
-    // the iframe mounts. Best-effort: on failure the boot-timeout path routes
-    // the student to the runner.
-    function ensureCompatServiceWorker() {
-        if (!isEditorCompatMode()) return Promise.resolve();
-        if (typeof navigator === 'undefined' || !navigator.serviceWorker) return Promise.resolve();
-        try {
-            return navigator.serviceWorker
-                .register('/jupyterlite/service-worker.js', { scope: '/jupyterlite/' })
-                .then(function () { return whenServiceWorkerActive(5000); })
-                .catch(function () { /* best effort */ });
-        } catch (_) {
-            return Promise.resolve();
-        }
-    }
-
     // Isolation/engine context appended to kernel beacons so the admin
-    // diagnostics can tell WHY a kernel hung: coi=false → isolation not
-    // delivered (e.g. stale SW); waitasync=false under coi=true → the
-    // data:-worker block; compat=true → already on the service-worker fallback.
+    // diagnostics can tell WHY a kernel struggled: coi=false → isolation not
+    // delivered (e.g. a stale SW); waitasync=false under coi=true → an engine on
+    // the blob: waitAsync-polyfill path (older Safari / iPadOS).
     function isolationBeaconSuffix() {
         var coi = (typeof crossOriginIsolated !== 'undefined') ? !!crossOriginIsolated : false;
         var wa  = (typeof Atomics !== 'undefined' && typeof Atomics.waitAsync === 'function');
-        return 'coi=' + coi + ';waitasync=' + wa + ';compat=' + isEditorCompatMode();
+        return 'coi=' + coi + ';waitasync=' + wa;
     }
 
     // The kernel reached idle/busy — the success NUMERATOR (paired with
@@ -356,38 +294,24 @@
     // cannot read the kernel's state inside the (cross-process) iframe, so
     // `kernelLivenessReady` returns false even for HEALTHY kernels — which made
     // a deadline-based beacon false-positive on Chrome AND Safari and show a
-    // spurious "kernel taking long" message over working editors. The genuine
-    // no-SAB hang (the data:-worker block) is pre-empted up front by the compat
-    // switch (browserNeedsDataWorkerCompat), not by watching for absence here.
-    // Restoring a positive kernel-boot-timeout needs a liveness probe validated
-    // against real JupyterLite in the editor-smoke harness first.
+    // spurious "kernel taking long" message over working editors. Restoring a
+    // positive kernel-boot-timeout needs a liveness probe validated against real
+    // JupyterLite in the editor-smoke harness first.
 
     function mountEditor() {
-        // #1: drop any stale, redundant JupyterLite service worker before
-        // booting (no-op in compat mode, where the SW is the intended path).
+        // Drop any stale, now-redundant JupyterLite service worker before booting
+        // (the SAB-only editor doesn't use it; a leftover one can break the boot).
         cleanupRedundantServiceWorker();
-
-        // #2: engines that would hit the COEP data:-worker block switch to a
-        // non-isolated, service-worker-backed boot (this reloads).
-        if (maybeEnterDataWorkerCompat()) return;
 
         // The template renders the same URL into the iframe's src, so the
         // editor is already loading by the time the preflight resolves.
         // Re-assigning src aborts that in-flight navigation and starts it
         // over — only navigate when the attribute is missing or different
-        // (an older cached copy of the page). In compat mode we deliberately
-        // (re)mount AFTER the service worker is controlling /jupyterlite/.
-        var mountFrame = function () {
-            if (frame.getAttribute('src') !== editorURL) {
-                frame.src = editorURL;
-            }
-            scheduleServiceWorkerStateBeacon();
-        };
-        if (isEditorCompatMode()) {
-            ensureCompatServiceWorker().then(mountFrame);
-        } else {
-            mountFrame();
+        // (an older cached copy of the page).
+        if (frame.getAttribute('src') !== editorURL) {
+            frame.src = editorURL;
         }
+        scheduleServiceWorkerStateBeacon();
 
         // Quick reachability check helps explain blank/failed editor loads.
         fetch(notebookURL, { method: 'GET' }).then((res) => {

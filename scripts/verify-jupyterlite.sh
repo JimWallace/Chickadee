@@ -112,5 +112,20 @@ piplite_shas = [u.split("sha256=", 1)[1] for u in piplite_urls if "sha256=" in u
 if all_json_sha not in piplite_shas:
     fail(f"sha256(all.json)={all_json_sha} not referenced by pipliteUrls {piplite_shas}")
 
+# The Atomics.waitAsync polyfill worker must be the blob: form
+# (scripts/patch-pyodide-waitasync-worker.py). A data: worker is blocked by our
+# CSP (worker-src 'self' blob:) and COEP, so an un-patched chunk hangs the kernel
+# on engines without native waitAsync (older Safari / iPadOS). Assert the patch is
+# applied so a rebuild that drops it fails here, not in front of a student.
+data_worker_chunks = [
+    p.name for p in remote_entry_dir.glob("*.js")
+    if "data:application/javascript,onmessage" in p.read_text()
+]
+if data_worker_chunks:
+    fail(
+        f"pyodide-kernel waitAsync polyfill still uses a data: worker in {data_worker_chunks} — "
+        "run scripts/patch-pyodide-waitasync-worker.py (build-jupyterlite.sh does this)."
+    )
+
 print("JupyterLite verification passed.")
 PY

@@ -152,16 +152,27 @@ The CI `editor-smoke` workflow runs this selftest on every editor-touching PR.
 Swift unit coverage: `EditorAssetFastPathMiddlewareTests` asserts the header trio
 is present when isolating and absent when not.
 
-### Residual risk: Safari + the `Atomics.waitAsync` `data:` worker
+### Resolved: Safari/iPadOS + the `Atomics.waitAsync` `data:` worker
 
-The pyodide-kernel polyfills `Atomics.waitAsync` (when the engine lacks it) with
-a `new Worker("data:application/javascript,…")`. `data:` workers are blocked
-under COEP `require-corp`. Chromium has native `Atomics.waitAsync`, so the
-polyfill never runs there and the headless test passes. **Safari** is the one to
-confirm — if it falls into the polyfill under isolation, the kernel could break.
-Because isolation is now unconditional, **verify the editor on Safari on dev
-before promoting the build to production**; rollback is reverting the change (no
-flag). If Safari proves a problem, the fallback below is the mitigation.
+The pyodide-kernel polyfills `Atomics.waitAsync` (when the engine lacks it
+natively — older Safari / iPadOS) with `new Worker("data:application/javascript,…")`.
+A `data:` worker is blocked by our CSP (`worker-src 'self' blob:`) **and** by COEP
+`require-corp` on the isolated editor, so the kernel hung ("Kernel Unknown"-class)
+— confirmed by reproducing it with `SMOKE_SIMULATE_NO_WAITASYNC` (deletes native
+`waitAsync`): `Refused to create a worker from 'data:…' … worker-src 'self' blob:`.
+
+Fixed by vending the polyfill worker as a `blob:` URL instead
+(`scripts/patch-pyodide-waitasync-worker.py`, run from `build-jupyterlite.sh` and
+asserted by `verify-jupyterlite.sh`): a `blob:` worker is same-origin, inherits
+the page's COEP, and is already allowed by the CSP — so these engines boot the
+kernel **with cross-origin isolation (SharedArrayBuffer) intact, no fallback
+needed**. Guarded in CI by the `SMOKE_SIMULATE_NO_WAITASYNC` editor-smoke config
+(Chromium + WebKit), which deletes native `waitAsync` and asserts the editor
+still boots isolated — the regression guard CI previously couldn't provide
+(modern Chromium/WebKit both ship native `waitAsync`, so they never hit the
+polyfill). The earlier per-client `ck-editor-compat` cookie fallback (which
+dropped isolation to use the service-worker path) is removed: this fix keeps
+isolation for everyone.
 
 ### Fallback if isolation can't be made to work in some browser
 
