@@ -190,19 +190,19 @@
 <!-- ── BrightSpace grade sync ─────────────────────────── -->
 <div class="editor-block">
     <details>
-        <summary class="bs-summary">BrightSpace Grade Sync</summary>
+        <summary class="bs-summary">LEARN Grade Sync</summary>
         <div class="bs-body">
             <form method="post" action="/instructor/#(assignmentID)/brightspace">
                 #csrfFormField()
                 <label class="form-label field-gap">
-                    BrightSpace Grade Item ID
+                    LEARN Grade Item ID
                     <input class="form-input input-block" type="text" name="gradeObjectID"
                            value="#(brightspaceGradeObjectID)"
                            placeholder="e.g. 78901">
                 </label>
                 <p class="card-meta bs-note">
                     Enter the D2L grade item (grade object) ID for this assignment.
-                    Find it in BrightSpace → Grades → hover the column → Properties → Grade Object ID in the URL.
+                    Find it in LEARN → Grades → hover the column → Properties → Grade Object ID in the URL.
                     Leave blank to disable sync for this assignment.
                 </p>
                 <button class="btn btn-primary" type="submit">Save grade item ID</button>

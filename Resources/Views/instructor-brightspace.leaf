@@ -113,7 +113,7 @@ LEARN
                     #if(!courseIsArchived):
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace/push-all"
                           class="inline-form"
-                          onsubmit="return confirm('Re-push every student’s best grade for #(row.title) to BrightSpace?')">
+                          onsubmit="return confirm('Re-push every student’s best grade for #(row.title) to LEARN?')">
                         #csrfFormField()
                         <button class="btn action-btn" type="submit"
                                 title="Re-push all grades for this assignment">Push all</button>
@@ -132,7 +132,7 @@ LEARN
 <section class="bs-section">
     <h2 class="bs-h2">Unmapped students (#(summary.unmapped))</h2>
     <p class="card-meta bs-section-note">
-        These students' grades can't sync because Chickadee can't resolve a BrightSpace account
+        These students' grades can't sync because Chickadee can't resolve a LEARN account
         for them. Fix the student number on file, or confirm they're enrolled in the D2L course.
     </p>
     <div class="table-scroll"><table class="results-table">
