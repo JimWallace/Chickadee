@@ -147,6 +147,46 @@ import VaporTesting
         }
     }
 
+    @Test func acceptsKernelReadyTelemetry() async throws {
+        try await withApp(app) { _ in
+            // kernel_ready is the stronger success signal — the Pyodide kernel
+            // (not just the shell) reached idle/busy — so a hung kernel is
+            // distinguishable from a healthy boot. Accepted + persisted.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_kready")
+            let body = #"""
+                {"kind":"kernel_ready","testSetupID":"setup_kready","message":"elapsed_ms=4200;coi=true;waitasync=true;compat=false"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.kind == "kernel_ready")
+            #expect(rec.testSetupID == "setup_kready")
+        }
+    }
+
+    @Test func persistsKernelBootTimeoutSubtype() async throws {
+        try await withApp(app) { _ in
+            // A kernel that mounts the shell but never reaches ready is reported
+            // as watchdog_timeout with the distinct failedChecks
+            // ["kernel-boot-timeout"] subtype (vs the positive-evidence
+            // "kernel-unhealthy" one), so the silent spinner is finally counted.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_boot_timeout")
+            let body = #"""
+                {"kind":"watchdog_timeout","testSetupID":"setup_boot_timeout","failedChecks":["kernel-boot-timeout"],"source":"kernel","message":"coi=true;waitasync=false;compat=false"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "TestUA/5.0")
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.kind == "watchdog_timeout")
+            #expect(rec.failedChecks == "kernel-boot-timeout")
+            #expect(rec.source == "kernel")
+        }
+    }
+
     @Test func persistsPreflightFailRecord() async throws {
         try await withApp(app) { _ in
             let auth = try await loginAsStudent()
