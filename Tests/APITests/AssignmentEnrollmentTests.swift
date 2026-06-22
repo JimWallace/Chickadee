@@ -215,6 +215,7 @@ import VaporTesting
 
             let enrollments = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)  // exclude the instructor fixture
                 .all()
             #expect(enrollments.count == 2, "Both existing users should be enrolled")
 
@@ -255,6 +256,7 @@ import VaporTesting
 
             let enrollments = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)  // exclude the instructor fixture
                 .all()
             #expect(enrollments.count == 1, "Should still be exactly one enrollment (no duplicate)")
 
@@ -295,6 +297,7 @@ import VaporTesting
             // alice was enrolled directly.
             let enrollments = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)  // exclude the instructor fixture
                 .all()
             #expect(enrollments.count == 1)
 
