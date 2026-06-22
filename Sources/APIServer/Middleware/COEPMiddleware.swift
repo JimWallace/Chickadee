@@ -42,16 +42,7 @@ struct COEPMiddleware: AsyncMiddleware {
         chainingTo next: any AsyncResponder
     ) async throws -> Response {
         let response = try await next.respond(to: request)
-        let path = request.url.path
-        guard needsCOEP(path: path) else { return response }
-        // Editor compat mode: a client that hit the COEP `data:`-worker block
-        // (cross-origin isolated but no native `Atomics.waitAsync`) opted out of
-        // isolation so the kernel can use the service-worker sync path instead.
-        // Scoped to the student notebook editor only — never the instructor
-        // validate page, a separate Pyodide surface that is not affected.
-        if request.editorCompatModeRequested, isStudentNotebookEditor(path: path) {
-            return response
-        }
+        guard needsCOEP(path: request.url.path) else { return response }
         response.headers.replaceOrAdd(
             name: "Cross-Origin-Opener-Policy",
             value: "same-origin"
@@ -61,12 +52,6 @@ struct COEPMiddleware: AsyncMiddleware {
             value: "require-corp"
         )
         return response
-    }
-
-    /// True for the student notebook editor page (`/testsetups/:id/notebook`).
-    private func isStudentNotebookEditor(path: String) -> Bool {
-        let parts = path.split(separator: "/").map(String.init)
-        return parts.count == 3 && parts[0] == "testsetups" && parts.last == "notebook"
     }
 
     /// Returns true for paths whose pages opt into cross-origin isolation.
