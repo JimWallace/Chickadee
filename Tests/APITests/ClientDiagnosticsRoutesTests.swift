@@ -166,6 +166,34 @@ import VaporTesting
         }
     }
 
+    @Test func acceptsInIframeKernelPhaseAndErrorTelemetry() async throws {
+        try await withApp(app) { _ in
+            // The in-iframe collector (jl-kernel-diagnostics.js), forwarded by
+            // notebook.js, reports the kernel boot from inside the cross-process
+            // iframe: kernel_phase breadcrumbs (phase name in `source`) and
+            // kernel_error (failure source + detail). Both are accepted and feed
+            // get_browser_diagnostics (kernelBootFunnel / bySource).
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_kphase")
+            let bodies = [
+                #"{"kind":"kernel_phase","testSetupID":"setup_kphase","source":"boot_start"}"#,
+                #"{"kind":"kernel_phase","testSetupID":"setup_kphase","source":"kernel_idle"}"#,
+                #"{"kind":"kernel_error","testSetupID":"setup_kphase","source":"csp_violation","message":"worker-src blocked data:"}"#,
+            ]
+            for body in bodies {
+                let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
+                #expect(res.status == .accepted)
+            }
+
+            let records = try await APIClientDiagnostic.query(on: app.db).all()
+            let kinds = records.map(\.kind).sorted()
+            #expect(kinds == ["kernel_error", "kernel_phase", "kernel_phase"])
+            let err = try #require(records.first { $0.kind == "kernel_error" })
+            #expect(err.source == "csp_violation")
+            #expect(err.message == "worker-src blocked data:")
+        }
+    }
+
     @Test func persistsKernelBootTimeoutSubtype() async throws {
         try await withApp(app) { _ in
             // A kernel that mounts the shell but never reaches ready is reported

@@ -127,5 +127,22 @@ if data_worker_chunks:
         "run scripts/patch-pyodide-waitasync-worker.py (build-jupyterlite.sh does this)."
     )
 
+# The in-iframe kernel-boot diagnostics collector must be injected into the
+# kernel-bearing editor documents (scripts/patch-jupyterlite-diagnostics.py). A
+# `jupyter lite build` regenerates these index.html files and would drop the
+# <script> tag; without it the collector never runs and the kernel boot is
+# invisible again. Assert it's present so a rebuild that forgets the patch fails
+# here, not silently in front of a student.
+diag_tag = '<script src="/jl-kernel-diagnostics.js"></script>'
+for rel in ("notebooks/index.html", "repl/index.html"):
+    index_path = build_dir / rel
+    if not index_path.is_file():
+        fail(f"missing editor document: {index_path}")
+    if diag_tag not in index_path.read_text():
+        fail(
+            f"{rel} is missing the kernel-diagnostics collector tag — "
+            "run scripts/patch-jupyterlite-diagnostics.py (build-jupyterlite.sh does this)."
+        )
+
 print("JupyterLite verification passed.")
 PY

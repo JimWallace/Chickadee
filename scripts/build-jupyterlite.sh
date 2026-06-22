@@ -78,5 +78,10 @@ PY
 # cross-origin isolated. Idempotent; fails if the upstream polyfill string drifts.
 python3 "$ROOT_DIR/scripts/patch-pyodide-waitasync-worker.py" "$OUTPUT_DIR"
 
+# Inject the in-iframe kernel-boot diagnostics collector (jl-kernel-diagnostics.js)
+# into the editor index.html documents. `jupyter lite build` regenerates those, so
+# this re-adds the <script> tag every build. Idempotent.
+python3 "$ROOT_DIR/scripts/patch-jupyterlite-diagnostics.py" "$OUTPUT_DIR"
+
 "$ROOT_DIR/scripts/verify-jupyterlite.sh" "$OUTPUT_DIR"
 echo "JupyterLite rebuilt at $OUTPUT_DIR"
