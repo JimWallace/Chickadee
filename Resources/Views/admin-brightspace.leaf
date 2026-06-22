@@ -1,6 +1,6 @@
 #extend("base"):
 #export("title"):
-BrightSpace
+LEARN
 #endexport
 #export("content"):
 <p class="admin-version-banner">Chickadee v#appVersion()</p>
@@ -9,7 +9,7 @@ BrightSpace
     <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
     <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
     <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
-    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>BrightSpace</a>
+    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
     #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
     <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
@@ -23,18 +23,18 @@ BrightSpace
     #endif
 
     <p class="bs-intro">
-        BrightSpace grade sync runs as one D2L service account. The app
-        credentials (URL / App ID / App Key) come from the server environment;
-        this page captures the matching <strong>Valence user key</strong> by
-        authorizing the app against D2L — no env change or restart needed. An
-        authorized key takes precedence over <code>BRIGHTSPACE_USER_KEY</code>.
+        LEARN grade sync runs as one D2L service account. The app credentials
+        (URL / App ID / App Key) come from the server environment; this page sets
+        the matching <strong>Valence user key</strong> — harvested from your
+        institution's credential service — with no env change or restart. A key
+        set here takes precedence over <code>BRIGHTSPACE_USER_KEY</code>.
     </p>
 
     #if(!configured):
     <p class="bs-muted">
         Not configured. Set <code>BRIGHTSPACE_URL</code>,
         <code>BRIGHTSPACE_APP_ID</code>, and <code>BRIGHTSPACE_APP_KEY</code> in
-        the server environment, then reload this page to authorize.
+        the server environment, then reload this page to set the user key.
     </p>
     #else:
     <dl class="bs-status">
@@ -55,27 +55,7 @@ BrightSpace
         #endif
     </dl>
 
-    #if(!publicBaseURLSet):
-    <p class="bs-muted">
-        <strong>PUBLIC_BASE_URL is not set.</strong> Authorizing in-browser
-        needs it to build the redirect callback. Set it to this deployment's
-        public URL (e.g. <code>https://chickadee.uwaterloo.ca</code>), or use
-        <code>scripts/brightspace-valence-auth.py</code> instead.
-    </p>
-    #else:
-    <p class="bs-muted">
-        D2L redirects back to <code>#(callbackURL)</code> after you authorize.
-        This must be covered by the app's registered <strong>Trusted URL</strong>.
-    </p>
-    #endif
-
     <div class="bs-actions">
-        <form method="post" action="/admin/brightspace/authorize" class="inline-form">
-            #csrfFormField()
-            <button class="btn" type="submit"#if(!publicBaseURLSet): disabled#endif>
-                #if(authorized):Re-authorize#else:Authorize BrightSpace#endif
-            </button>
-        </form>
         #if(authorized):
         <form method="post" action="/admin/brightspace/test" class="inline-form">
             #csrfFormField()

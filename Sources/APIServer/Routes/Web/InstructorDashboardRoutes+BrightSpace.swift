@@ -288,6 +288,62 @@ extension InstructorDashboardRoutes {
         }
     }
 
+    // MARK: - POST /instructor/brightspace/auto-map
+
+    /// Auto-maps unmapped assignments to D2L grade items whose name matches the
+    /// assignment title (trimmed, case-insensitive). Only fills empty mappings —
+    /// never overrides an existing one — so it's safe to re-run. Saves a manual
+    /// pass over the grade book when names already line up.
+    @Sendable
+    func brightspaceAutoMap(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseUUID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseUUID, on: req.db),
+            let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty,
+            let client = try await req.application.brightSpaceClient(forCourse: course)
+        else {
+            req.session.data["bs_flash_error"] =
+                "Link the course to its LEARN org unit first, then auto-map."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        let gradeObjects: [BrightSpaceGradeObject]
+        do {
+            gradeObjects = try await client.listGradeObjects(orgUnitID: orgUnitID, on: req.application)
+        } catch {
+            req.session.data["bs_flash_error"] =
+                "Couldn't read the LEARN grade book: \(error.localizedDescription)"
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        // Index grade items by normalized name; first wins if D2L has duplicates.
+        var idByName: [String: String] = [:]
+        for object in gradeObjects {
+            let key = object.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !key.isEmpty, idByName[key] == nil { idByName[key] = object.id }
+        }
+
+        let assignments = try await APIAssignment.query(on: req.db)
+            .filter(\.$courseID == courseUUID)
+            .all()
+        var mapped = 0
+        for assignment in assignments where (assignment.brightspaceGradeObjectID ?? "").isEmpty {
+            let key = assignment.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if let objectID = idByName[key] {
+                assignment.brightspaceGradeObjectID = objectID
+                try await assignment.save(on: req.db)
+                mapped += 1
+            }
+        }
+
+        req.session.data["bs_flash_success"] =
+            mapped == 0
+            ? "No new matches — every assignment is already mapped or has no grade item with the same name."
+            : "Auto-mapped \(mapped) assignment\(mapped == 1 ? "" : "s") by name."
+        return req.redirect(to: "/instructor/brightspace")
+    }
+
     // MARK: - POST /instructor/brightspace/sync-now
 
     @Sendable
