@@ -150,6 +150,32 @@ struct InstructorDashboardMetric: Encodable {
     let value: String
 }
 
+/// One bar of a server-rendered sparkline.  `heightPercent` is already
+/// normalized to 0–100 against the series maximum, so the Leaf template
+/// needs no arithmetic and the chart renders without JavaScript.  A zero-count
+/// bin still draws the 2px baseline from `.spark-fill`'s `min-height`, so a
+/// gap reads as "zero here", not "no data".  `title` is the hover tooltip.
+struct SparklineBar: Encodable {
+    let heightPercent: Int
+    let title: String
+}
+
+/// A statistic card on the assignment-submissions page.  Carries the same
+/// `{label, value}` headline as `InstructorDashboardMetric`, plus an optional
+/// server-rendered distribution sparkline (`bars`) visualizing the spread
+/// behind the number — the grade distribution, the attempts-per-student
+/// distribution, or submissions-over-time.  `hasSpark` gates rendering (Leaf's
+/// `array.isEmpty` is unreliable) and `sparkSummary` is the screen-reader
+/// caption; a card with no sparkline renders as a plain number, exactly like
+/// the instructor-dashboard cards.
+struct AssignmentStatCard: Encodable {
+    let label: String
+    let value: String
+    let hasSpark: Bool
+    let sparkSummary: String
+    let bars: [SparklineBar]
+}
+
 struct EnrolledStudentRow: Content {
     let id: String
     let username: String
@@ -173,7 +199,7 @@ struct AssignmentSubmissionsContext: Encodable {
     let currentUser: CurrentUserContext?
     let assignmentID: String
     let assignmentTitle: String
-    let metrics: [InstructorDashboardMetric]
+    let metrics: [AssignmentStatCard]
     let rows: [AssignmentStudentRow]
 }
 

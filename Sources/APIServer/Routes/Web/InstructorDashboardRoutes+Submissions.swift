@@ -172,9 +172,11 @@ extension InstructorDashboardRoutes {
         rows: [AssignmentStudentRow],
         submissions: [APISubmission],
         enrolledStudentRosterCount: Int
-    ) -> [InstructorDashboardMetric] {
-        let windowStart = Date().addingTimeInterval(-24 * 60 * 60)
-        let submittedCount = rows.filter { $0.submissionCount > 0 }.count
+    ) -> [AssignmentStatCard] {
+        let now = Date()
+        let windowStart = now.addingTimeInterval(-24 * 60 * 60)
+        let submittedRows = rows.filter { $0.submissionCount > 0 }
+        let submittedCount = submittedRows.count
         let submissions24h = submissions.filter { submission in
             guard let submittedAt = submission.submittedAt else { return false }
             return submittedAt >= windowStart
@@ -196,7 +198,6 @@ extension InstructorDashboardRoutes {
             let median = sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
             medianBestGrade = "\(median)%"
         }
-        let submittedRows = rows.filter { $0.submissionCount > 0 }
         let avgAttempts: String
         if submittedRows.isEmpty {
             avgAttempts = "—"
@@ -205,14 +206,119 @@ extension InstructorDashboardRoutes {
             let avg = Double(total) / Double(submittedRows.count)
             avgAttempts = String(format: "%.1f", avg)
         }
+
+        let attemptBars = attemptDistributionBars(submittedRows)
+        let timelineBars = submissionTimelineBars(submissions, now: now)
+        let gradeBars = gradeDistributionBars(gradedRows)
+
         return [
-            InstructorDashboardMetric(
-                label: "Students Submitted", value: "\(submittedCount)/\(enrolledStudentRosterCount)"),
-            InstructorDashboardMetric(label: "Avg Attempts/Student", value: avgAttempts),
-            InstructorDashboardMetric(label: "Submissions (24h)", value: "\(submissions24h)"),
-            InstructorDashboardMetric(label: "Queued Jobs", value: "\(pendingLatestCount)"),
-            InstructorDashboardMetric(label: "Median Grade", value: medianBestGrade),
+            AssignmentStatCard(
+                label: "Students Submitted",
+                value: "\(submittedCount)/\(enrolledStudentRosterCount)",
+                hasSpark: false, sparkSummary: "", bars: []),
+            AssignmentStatCard(
+                label: "Avg Attempts/Student", value: avgAttempts,
+                hasSpark: !attemptBars.isEmpty,
+                sparkSummary: "Submission attempts per student.", bars: attemptBars),
+            AssignmentStatCard(
+                label: "Submissions (24h)", value: "\(submissions24h)",
+                hasSpark: !timelineBars.isEmpty,
+                sparkSummary: "Submissions per day over the last 14 days.", bars: timelineBars),
+            AssignmentStatCard(
+                label: "Queued Jobs", value: "\(pendingLatestCount)",
+                hasSpark: false, sparkSummary: "", bars: []),
+            AssignmentStatCard(
+                label: "Median Grade", value: medianBestGrade,
+                hasSpark: !gradeBars.isEmpty,
+                sparkSummary: "Grade distribution across \(countNoun(gradedRows.count, "graded student")).",
+                bars: gradeBars),
         ]
+    }
+
+    // MARK: - Distribution sparklines
+
+    /// Best-grade distribution in ten 10-point bins (`0–9%` … `90–100%`); the
+    /// top bin absorbs 100.  Empty when no student has a graded result.
+    private func gradeDistributionBars(_ grades: [Int]) -> [SparklineBar] {
+        guard !grades.isEmpty else { return [] }
+        var counts = [Int](repeating: 0, count: 10)
+        for grade in grades {
+            let bin = min(min(max(grade, 0), 100) / 10, 9)
+            counts[bin] += 1
+        }
+        let titles = counts.indices.map { bin -> String in
+            let upper = bin == 9 ? 100 : bin * 10 + 9
+            return "\(bin * 10)–\(upper)%: \(countNoun(counts[bin], "student"))"
+        }
+        return sparklineBars(counts: counts, titles: titles)
+    }
+
+    /// Attempts-per-student distribution in buckets `1, 2, 3, 4, 5, 6+`.
+    /// Empty when no student has submitted.
+    private func attemptDistributionBars(_ submittedRows: [AssignmentStudentRow]) -> [SparklineBar] {
+        guard !submittedRows.isEmpty else { return [] }
+        let bucketCount = 6  // 1, 2, 3, 4, 5, 6+
+        var counts = [Int](repeating: 0, count: bucketCount)
+        for row in submittedRows {
+            counts[min(max(row.submissionCount, 1), bucketCount) - 1] += 1
+        }
+        let titles = counts.indices.map { bin -> String in
+            let attempts: String
+            if bin == bucketCount - 1 {
+                attempts = "\(bucketCount)+ attempts"
+            } else {
+                attempts = countNoun(bin + 1, "attempt")
+            }
+            return "\(attempts): \(countNoun(counts[bin], "student"))"
+        }
+        return sparklineBars(counts: counts, titles: titles)
+    }
+
+    /// Daily submission counts over the most recent 14 days (Waterloo days, to
+    /// match the rest of the UI).  Empty when there is no activity in the
+    /// window, so the card falls back to its plain headline number.
+    private func submissionTimelineBars(_ submissions: [APISubmission], now: Date) -> [SparklineBar] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? calendar.timeZone
+        let today = calendar.startOfDay(for: now)
+        let dayCount = 14
+        let dayStarts: [Date] = stride(from: dayCount - 1, through: 0, by: -1).compactMap {
+            calendar.date(byAdding: .day, value: -$0, to: today)
+        }
+        guard dayStarts.count == dayCount else { return [] }
+        var counts = [Int](repeating: 0, count: dayCount)
+        for submission in submissions {
+            guard let submittedAt = submission.submittedAt else { continue }
+            if let index = dayStarts.firstIndex(of: calendar.startOfDay(for: submittedAt)) {
+                counts[index] += 1
+            }
+        }
+        guard counts.contains(where: { $0 > 0 }) else { return [] }
+        let labelFormatter = DateFormatter()
+        labelFormatter.locale = Locale(identifier: "en_US_POSIX")
+        labelFormatter.timeZone = calendar.timeZone
+        labelFormatter.dateFormat = "MMM d"
+        let titles = dayStarts.indices.map { index in
+            "\(labelFormatter.string(from: dayStarts[index])): \(countNoun(counts[index], "submission"))"
+        }
+        return sparklineBars(counts: counts, titles: titles)
+    }
+
+    /// Normalizes a count series to `[SparklineBar]`, scaling each bar's height
+    /// to a 0–100 percentage of the series maximum (matching the JS
+    /// `ChickadeeUI.renderSparkline` path used on the dashboards).
+    private func sparklineBars(counts: [Int], titles: [String]) -> [SparklineBar] {
+        let maxValue = counts.max() ?? 0
+        return counts.indices.map { index in
+            let height = maxValue > 0 ? Int((Double(counts[index]) / Double(maxValue) * 100).rounded()) : 0
+            return SparklineBar(
+                heightPercent: height,
+                title: index < titles.count ? titles[index] : "")
+        }
+    }
+
+    private func countNoun(_ count: Int, _ singular: String) -> String {
+        "\(count) \(singular)\(count == 1 ? "" : "s")"
     }
 
 }
