@@ -83,9 +83,12 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = String(buffer: res.body)
+                    // Active Users is now a cyclable diagnostic card (the old
+                    // standalone bar chart with 24h/1w/1m buttons was folded
+                    // into the metric-cards row, taking the Max Queue slot).
                     #expect(body.contains("Active Users"))
-                    #expect(body.contains("activity-bars"))
-                    #expect(body.contains("data-window=\"1m\""))
+                    #expect(body.contains("data-activity-card"))
+                    #expect(body.contains("activity-card-spark"))
                 })
         }
     }

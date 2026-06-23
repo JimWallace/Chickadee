@@ -151,29 +151,48 @@ struct InstructorDashboardMetric: Encodable {
 }
 
 /// One bar of a server-rendered sparkline.  `heightPercent` is already
-/// normalized to 0–100 against the series maximum, so the Leaf template
-/// needs no arithmetic and the chart renders without JavaScript.  A zero-count
-/// bin still draws the 2px baseline from `.spark-fill`'s `min-height`, so a
-/// gap reads as "zero here", not "no data".  `title` is the hover tooltip.
+/// normalized to 0–100 against the series maximum, so the Leaf template needs
+/// no arithmetic and the chart renders without JavaScript.  Populated buckets
+/// are floored to a clearly visible height so a lone student/submission isn't a
+/// 2px sliver indistinguishable from an empty bin; `isEmpty` marks a zero-count
+/// bucket, which renders flat/transparent (`.spark-fill-empty`) so "no one
+/// here" reads differently from "a few here".  `title` is the hover tooltip.
 struct SparklineBar: Encodable {
     let heightPercent: Int
+    let isEmpty: Bool
     let title: String
+}
+
+/// One time-window of the cyclable submissions-over-time card.  `key` is the
+/// window-chip text (`24h` / `7d` / `30d`), `headline` the submission count in
+/// that window, and `bars` the per-bucket sparkline.  `initiallyHidden` is true
+/// for every window after the first, so the page renders the 24h view
+/// server-side (works without JS) and the click handler reveals the others.
+struct SubmissionsTrendWindow: Encodable {
+    let key: String
+    let headline: String
+    let initiallyHidden: Bool
+    let bars: [SparklineBar]
 }
 
 /// A statistic card on the assignment-submissions page.  Carries the same
 /// `{label, value}` headline as `InstructorDashboardMetric`, plus an optional
-/// server-rendered distribution sparkline (`bars`) visualizing the spread
-/// behind the number — the grade distribution, the attempts-per-student
-/// distribution, or submissions-over-time.  `hasSpark` gates rendering (Leaf's
-/// `array.isEmpty` is unreliable) and `sparkSummary` is the screen-reader
-/// caption; a card with no sparkline renders as a plain number, exactly like
-/// the instructor-dashboard cards.
+/// server-rendered distribution sparkline (`bars`, gated by `hasSpark`) — the
+/// grade distribution or the attempts-per-student distribution.  The
+/// Submissions card instead sets `cyclable` and carries three `windows`
+/// (24h/7d/30d) the browser cycles on click, like the dashboard cards.
+/// `sparkSummary` is the screen-reader caption; a card with neither a spark nor
+/// windows renders as a plain number, exactly like the instructor-dashboard
+/// cards.
 struct AssignmentStatCard: Encodable {
     let label: String
     let value: String
     let hasSpark: Bool
     let sparkSummary: String
     let bars: [SparklineBar]
+    let cyclable: Bool
+    let windowChip: String
+    let windows: [SubmissionsTrendWindow]
 }
 
 struct EnrolledStudentRow: Content {
