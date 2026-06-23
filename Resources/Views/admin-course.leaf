@@ -78,7 +78,7 @@
         </label>
         #if(course.brightspaceSyncEnabled):
         <label class="form-label course-field-bs">
-            BrightSpace Org Unit ID
+            LEARN Org Unit ID
             <input class="form-input course-input-block" type="text" name="brightspaceOrgUnitID"
                    value="#(course.brightspaceOrgUnitID)"
                    placeholder="e.g. 123456">
@@ -99,11 +99,11 @@
             (wrong ID, or D2L unreachable). Re-save to retry verification.
             #endif
         #else:
-            BrightSpace grade sync is active. Set the Org Unit ID to bind this course to its D2L
+            LEARN grade sync is active. Set the Org Unit ID to bind this course to its D2L
             grade book — it's verified against D2L on save.
         #endif
         Per-assignment grade item IDs are configured on the
-        <a href="/instructor/brightspace">BrightSpace</a> tab.
+        <a href="/instructor/brightspace">LEARN</a> tab.
     </p>
     #endif
 </section>
