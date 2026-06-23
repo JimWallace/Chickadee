@@ -52,11 +52,11 @@
         } catch (_) { /* never throw */ }
     }
 
-    function reportPhase(phase) {
+    function reportPhase(phase, message) {
         if (reportedPhases[phase]) return;
         reportedPhases[phase] = true;
         lastPhase = phase;
-        post('kernel_phase', phase);
+        post('kernel_phase', phase, message);
     }
 
     function reportError(source, message) {
@@ -178,12 +178,21 @@
     function poll() {
         if (done) return;
         try {
-            if (!reportedPhases.app_ready && shellReady()) reportPhase('app_ready');
+            // Each phase carries elapsed_ms since boot_start, so the parent gets
+            // a phase-localized boot-time breakdown (shell vs kernel) and we can
+            // see the distribution — is a 2-min boot a freak or a fat tail?
+            if (!reportedPhases.app_ready && shellReady()) {
+                reportPhase('app_ready', 'elapsed_ms=' + (Date.now() - startedAt));
+            }
             var status = kernelStatus();
             if (status) {
-                if (!reportedPhases.kernel_starting) reportPhase('kernel_starting');
+                if (!reportedPhases.kernel_starting) {
+                    reportPhase('kernel_starting', 'elapsed_ms=' + (Date.now() - startedAt));
+                }
                 if (status === 'idle' || status === 'busy') {
-                    reportPhase('kernel_idle');   // SUCCESS — the missing signal
+                    // SUCCESS — the missing signal. elapsed_ms is the total kernel
+                    // boot time (boot_start → idle).
+                    reportPhase('kernel_idle', 'elapsed_ms=' + (Date.now() - startedAt));
                     done = true;
                     return;
                 }

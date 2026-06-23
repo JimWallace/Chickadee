@@ -104,6 +104,20 @@ test('collector reportPhase de-duplicates a phase', () => {
   assert.equal(appReady.length, 1);
 });
 
+test('collector reportPhase forwards an optional elapsed_ms message', () => {
+  const { posted, exports } = loadCollector();
+  exports.reportPhase('kernel_idle', 'elapsed_ms=1234');
+  const idle = posted.filter(p => p.payload.source === 'kernel_idle');
+  assert.equal(idle.length, 1);
+  assert.deepEqual({ ...idle[0].payload }, {
+    ck: 'kernel-diag', kind: 'kernel_phase', source: 'kernel_idle', message: 'elapsed_ms=1234',
+  });
+  // boot_start (posted on load) carries no message — the boot clock is reported
+  // from app_ready onward, so the boot_start payload stays message-free.
+  const bootStart = posted.find(p => p.payload.source === 'boot_start');
+  assert.equal('message' in bootStart.payload, false);
+});
+
 test('collector reportError forwards source + message and de-dupes', () => {
   const { posted, exports } = loadCollector();
   exports.reportError('csp_violation', "worker-src blocked data:");
@@ -214,6 +228,15 @@ test('bridge forwards a same-origin kernel_phase', () => {
   assert.equal(ok, true);
   assert.deepEqual(kernelEvents().map(e => ({ ...e })),
     [{ kind: 'kernel_phase', source: 'kernel_idle', message: undefined }]);
+});
+
+test('bridge forwards a kernel_phase elapsed_ms message to the server', () => {
+  const { handleKernelDiagMessage, kernelEvents } = loadBridge();
+  handleKernelDiagMessage(msg({
+    ck: 'kernel-diag', kind: 'kernel_phase', source: 'kernel_idle', message: 'elapsed_ms=1500',
+  }));
+  assert.deepEqual(kernelEvents().map(e => ({ ...e })),
+    [{ kind: 'kernel_phase', source: 'kernel_idle', message: 'elapsed_ms=1500' }]);
 });
 
 test('bridge forwards a kernel_error with source + message', () => {
