@@ -17,6 +17,8 @@
 // of the seed hex drives a hand-rolled SplitMix64 PRNG, consumed by a manual
 // partial Fisher-Yates selection.
 
+import Foundation
+
 /// Produces a student's slice of a source support file.
 public enum DatasetMaterializer {
 
@@ -33,17 +35,22 @@ public enum DatasetMaterializer {
     /// Deterministically sample `sampleSize` data rows from a CSV `csv`,
     /// preserving the header and the original order of the chosen rows.
     ///
-    /// Line endings are normalized to `\n`; a trailing newline is preserved if
-    /// the input had one.  Row-level splitting assumes records are not split
-    /// across physical lines (no quoted embedded newlines) — true for the
-    /// tabular health datasets this targets (e.g. VitalDB case tables).
-    /// Returns `csv` unchanged when it has no data rows, when `sampleSize` is
-    /// non-positive, or when `sampleSize` is ≥ the number of data rows.
+    /// Line endings are normalized to `\n` (a sampled result is always
+    /// LF-terminated); a trailing newline is preserved if the input had one.
+    /// Row-level splitting assumes records are not split across physical lines
+    /// (no quoted embedded newlines) — true for the tabular health datasets
+    /// this targets (e.g. VitalDB case tables).  Returns `csv` unchanged when
+    /// it has no data rows, when `sampleSize` is non-positive, or when
+    /// `sampleSize` is ≥ the number of data rows.
     static func sampleRows(csv: String, sampleSize: Int, seedHex: String) -> String {
-        let hadTrailingNewline = csv.hasSuffix("\n")
-        var lines = csv.split(separator: "\n", omittingEmptySubsequences: false).map {
-            $0.hasSuffix("\r") ? $0.dropLast() : $0
-        }
+        // CR+LF is a single Swift `Character` (one extended grapheme cluster),
+        // so `split(separator: "\n")` would not see the LF inside a CRLF line
+        // ending and would return the whole file as one "line".  Normalize to
+        // LF via string replacement (which matches the CRLF grapheme) first.
+        let normalized = csv.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let hadTrailingNewline = normalized.hasSuffix("\n")
+        var lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
         if hadTrailingNewline, lines.last?.isEmpty == true {
             lines.removeLast()
         }
