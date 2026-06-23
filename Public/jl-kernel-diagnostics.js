@@ -110,33 +110,43 @@
 
     // ---- boot-phase detection (the WHERE) ------------------------------
     //
-    // Reliable IN-CONTEXT (unlike the parent across the iframe boundary): a
-    // running kernel's execution_state/status via the ServiceManager, with the
-    // status-bar text as a fallback.
+    // This JupyterLite build (Notebook 7) does NOT expose window.jupyterapp, so
+    // we read the kernel state from the DOM the shell renders — verified against
+    // the real editor by the authenticated notebook-page smoke test. The notebook
+    // execution indicator carries a structured data-status (idle/busy/starting),
+    // with the "Kernel status: …" tooltip text as a secondary signal. (This is
+    // also why the parent-side watchdog could never read kernel state: the global
+    // it reaches for simply isn't there.) Cheap by design — a couple of
+    // querySelectors — so the per-second poll never competes with the kernel.
+    function shellReady() {
+        try {
+            if (document.querySelector('.jp-Notebook-ExecutionIndicator, .jp-NotebookPanel, .jp-Notebook')) {
+                return true;
+            }
+            return document.querySelectorAll('[class^="jp-"],[class*=" jp-"]').length > 20;
+        } catch (_) { return false; }
+    }
+
     function kernelStatus() {
         try {
-            var app = window.jupyterapp;
-            var sm = app && app.serviceManager;
-            if (sm) {
-                var managers = [sm.kernels, sm.sessions];
-                for (var m = 0; m < managers.length; m++) {
-                    var mgr = managers[m];
-                    if (mgr && typeof mgr.running === 'function') {
-                        var running = Array.from(mgr.running() || []);
-                        for (var i = 0; i < running.length; i++) {
-                            var k = running[i];
-                            var status = (k && (k.execution_state || k.status))
-                                || (k && k.kernel && (k.kernel.execution_state || k.kernel.status));
-                            if (status) return status;
-                        }
-                    }
-                }
+            // Primary: the execution indicator's data-status (idle/busy/starting/…).
+            var ind = document.querySelector('.jp-Notebook-ExecutionIndicator[data-status]');
+            if (ind) {
+                var s = ind.getAttribute('data-status');
+                if (s) return s;
             }
+            if (document.querySelector('.jp-KernelStatus-error')) return 'unknown';
         } catch (_) { /* fall through */ }
         try {
+            // Text fallback (console/REPL, or a layout change in a future build).
             var txt = (document.body && document.body.textContent) || '';
-            if (txt.indexOf('| Idle') !== -1 || txt.indexOf('| Busy') !== -1) return 'idle';
-            if (txt.indexOf('Kernel Unknown') !== -1) return 'unknown';
+            if (txt.indexOf('Kernel status: Idle') !== -1 || txt.indexOf('Kernel status: Busy') !== -1
+                || txt.indexOf('| Idle') !== -1 || txt.indexOf('| Busy') !== -1) {
+                return 'idle';
+            }
+            if (txt.indexOf('Kernel status: Unknown') !== -1 || txt.indexOf('Kernel Unknown') !== -1) {
+                return 'unknown';
+            }
         } catch (_) { /* fall through */ }
         return null;
     }
@@ -146,7 +156,7 @@
     function poll() {
         if (done) return;
         try {
-            if (!reportedPhases.app_ready && window.jupyterapp) reportPhase('app_ready');
+            if (!reportedPhases.app_ready && shellReady()) reportPhase('app_ready');
             var status = kernelStatus();
             if (status) {
                 if (!reportedPhases.kernel_starting) reportPhase('kernel_starting');

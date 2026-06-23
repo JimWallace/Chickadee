@@ -222,8 +222,15 @@ only same-origin `ck:'kernel-diag'` messages of an allowed kind):
 - **`kernel_phase`** — `boot_start → app_ready → kernel_starting → kernel_idle`.
   The boot funnel; the drop-off point shows *where* a boot stalls. `kernel_idle`
   is the positive "the kernel actually came up" signal the parent could never
-  get. Detection reads `window.jupyterapp.serviceManager` (the same hook
-  `notebook.js`'s shipped watchdog uses), with the status-bar text as a fallback.
+  get. This JupyterLite build (Notebook 7) does not expose `window.jupyterapp`
+  at all — which is *why* the parent-side watchdog could never read kernel state
+  — so detection reads the shell DOM instead: the notebook execution indicator's
+  `data-status` (`.jp-Notebook-ExecutionIndicator[data-status]`, idle/busy/…),
+  with the "Kernel status: …" text as a fallback. Cheap (a couple of
+  `querySelector`s) and verified against the real editor by the authenticated
+  `notebook-page-check.mjs` smoke test, which asserts the funnel reaches
+  `kernel_idle` — without that, a detection mismatch would silently stall the
+  funnel at `boot_start` and leave the collector polling the full boot deadline.
 - **`kernel_error`** — the *why*: a CSP worker block (the historical
   `data:`-worker case), a blocked/404 asset, a dead/unknown kernel, or a
   boot-stall watchdog.

@@ -198,6 +198,23 @@ async function main() {
       : { headless: true };
   const browser = await browserType.launch(launchOptions);
   const context = await browser.newContext({ storageState: seeded.storageState });
+  // Capture the in-iframe kernel-boot collector's breadcrumbs on the PARENT
+  // window (the collector posts to window.parent, which IS the notebook page
+  // here). Installed in every frame before any page script. Lets us assert the
+  // funnel advances past boot_start in the REAL notebooks editor — the surface
+  // editor-check.mjs (the REPL) can't exercise because the REPL has no
+  // window.jupyterapp for the collector's status detection.
+  await context.addInitScript(() => {
+    try {
+      window.__ckKernelDiag = window.__ckKernelDiag || [];
+      window.addEventListener("message", (e) => {
+        const d = e && e.data;
+        if (d && d.ck === "kernel-diag") {
+          window.__ckKernelDiag.push({ kind: d.kind, source: d.source, message: d.message });
+        }
+      });
+    } catch (_) { /* ignore */ }
+  });
   const page = await context.newPage();
 
   const blocked = [];
@@ -263,6 +280,50 @@ async function main() {
       return fail(`editor iframe did not load the notebook within ${KERNEL_BOOT_MS}ms`, dump);
     }
     console.log("editor iframe shell is up and the notebook loaded from the Drive");
+
+    // (3b) Kernel-boot collector: in the REAL notebooks editor the collector
+    // must actually advance past boot_start to kernel_idle. This both validates
+    // the kernelBootFunnel end-to-end (the gap editor-check.mjs leaves) AND
+    // proves the collector's poll loop terminates — if its status detection
+    // failed here it would never set done=true and would poll for the full 75s
+    // boot deadline, wasted main-thread work on every editor open. Probe the
+    // iframe's own ServiceManager too, so a failure says WHICH side broke.
+    const idleDeadline = Date.now() + 60_000;
+    let sawIdle = false;
+    while (Date.now() < idleDeadline) {
+      const diag = await page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
+      if (diag.some((d) => d.kind === "kernel_phase" && d.source === "kernel_idle")) { sawIdle = true; break; }
+      await page.waitForTimeout(1000);
+    }
+    if (!sawIdle) {
+      const diag = await page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
+      let smProbe = "(probe failed)";
+      try {
+        smProbe = await jlFrame.evaluate(() => {
+          const app = window.jupyterapp;
+          const sm = app && app.serviceManager;
+          const out = { hasJupyterapp: typeof app, hasServiceManager: !!sm };
+          // Hunt for the real kernel-status signal in the DOM.
+          out.dataStatus = Array.from(document.querySelectorAll("[data-status]"))
+            .map((el) => ({ tag: el.tagName, cls: el.className, status: el.getAttribute("data-status") }))
+            .slice(0, 10);
+          out.statusish = Array.from(document.querySelectorAll("*"))
+            .filter((el) => typeof el.className === "string" &&
+              /(ernelStatus|ExecutionIndicator|jp-KernelName|StatusBar)/.test(el.className))
+            .map((el) => ({ cls: el.className, title: el.getAttribute("title"), text: (el.textContent || "").slice(0, 40) }))
+            .slice(0, 12);
+          out.bodyTail = ((document.body && document.body.textContent) || "").replace(/\s+/g, " ").slice(-200);
+          return out;
+        }).then(JSON.stringify);
+      } catch { /* ignore */ }
+      return fail(
+        "the kernel-boot collector never reported kernel_idle in the real notebooks editor — " +
+          "its status detection does not match this app's ServiceManager, so the funnel is stuck at " +
+          "boot_start AND the collector polls the full boot deadline. " +
+          `Captured=${JSON.stringify(diag)} iframeServiceManager=${smProbe}`
+      );
+    }
+    console.log("kernel-boot collector: funnel reached kernel_idle in the real notebooks editor");
 
     // (4) Full submit: click Submit (enabled once the notebook syncs) and wait
     // for an inline result. This exercises in-browser grading end-to-end —
