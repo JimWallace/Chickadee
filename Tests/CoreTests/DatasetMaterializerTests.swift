@@ -81,7 +81,7 @@ import Testing
     @Test func headerOnlyOrEmptyReturnedUnchanged() {
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 5)
         #expect(DatasetMaterializer.materialize(source: "id\n", spec: spec, seedHex: seedA) == "id\n")
-        #expect(DatasetMaterializer.materialize(source: "", spec: spec, seedHex: seedA) == "")
+        #expect(DatasetMaterializer.materialize(source: "", spec: spec, seedHex: seedA).isEmpty)
     }
 
     @Test func trailingNewlinePreservedOrAbsentAsInInput() {
