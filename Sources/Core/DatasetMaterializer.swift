@@ -7,7 +7,7 @@
 // JupyterLite editor, the worker job, the browser runner).  Nobody
 // re-materializes, so there is a single implementation and no cross-runtime
 // drift.  That makes determinism the whole job of this file: the same
-// (master, spec, seed) must yield byte-identical output on macOS and Linux,
+// (source, spec, seed) must yield byte-identical output on macOS and Linux,
 // across Swift versions, forever — a student's `describe()` numbers in the
 // editor must match what the worker grades.
 //
@@ -17,16 +17,16 @@
 // of the seed hex drives a hand-rolled SplitMix64 PRNG, consumed by a manual
 // partial Fisher-Yates selection.
 
-/// Produces a student's slice of a master support file.
+/// Produces a student's slice of a source support file.
 public enum DatasetMaterializer {
 
-    /// Materialize `master` for the given spec and per-student seed.
-    /// Returns the master unchanged for any kind/size that implies "the whole
+    /// Materialize `source` for the given spec and per-student seed.
+    /// Returns the source unchanged for any kind/size that implies "the whole
     /// file" so callers can deliver the result unconditionally.
-    public static func materialize(master: String, spec: DatasetSpec, seedHex: String) -> String {
+    public static func materialize(source: String, spec: DatasetSpec, seedHex: String) -> String {
         switch spec.kind {
         case .rowSample:
-            return sampleRows(csv: master, sampleSize: spec.sampleSize ?? .max, seedHex: seedHex)
+            return sampleRows(csv: source, sampleSize: spec.sampleSize ?? .max, seedHex: seedHex)
         }
     }
 

@@ -12,10 +12,10 @@
 // `DatasetSpec` (it is stripped by `TestProperties.runnerSanitized()`), only
 // the already-materialized file.
 
-/// How a per-student dataset slice is produced from the master support file.
+/// How a per-student dataset slice is produced from the source support file.
 ///
 /// - `rowSample`: a deterministic sample of `sampleSize` data rows from a
-///   tabular (CSV) master, keyed to the per-(student, assignment) seed.  The
+///   tabular (CSV) source, keyed to the per-(student, assignment) seed.  The
 ///   header row is always preserved and the chosen rows keep their original
 ///   order.
 public enum DatasetKind: String, Codable, Sendable, Equatable {
@@ -25,12 +25,12 @@ public enum DatasetKind: String, Codable, Sendable, Equatable {
 /// Marks one bundled support file as a per-student dataset.
 public struct DatasetSpec: Codable, Equatable, Sendable {
     /// The support filename that is a per-student dataset.  This is both the
-    /// master's name in the test setup zip and the name the student sees; the
+    /// source's name in the test setup zip and the name the student sees; the
     /// per-student slice is delivered under this same name.
     public let file: String
     public let kind: DatasetKind
     /// Rows per student for `.rowSample`.  `nil` (or a value ≥ the row count)
-    /// means "the whole file" — every student gets the full master.
+    /// means "the whole file" — every student gets the full source.
     public let sampleSize: Int?
 
     public init(file: String, kind: DatasetKind = .rowSample, sampleSize: Int? = nil) {

@@ -404,7 +404,7 @@ Support file   assignment4_vitaldb_cases.csv  [download]   [ Personalize ▾ ] [
 ```
 
 Persisted via a small `PUT /instructor/:id/datasets` endpoint mirroring
-`PUT /global-variables`. The uploaded file becomes the server-side *master*;
+`PUT /global-variables`. The uploaded file becomes the server-side *source*;
 students receive only their sample.
 
 ### Data model (Core)
@@ -432,7 +432,7 @@ spec — so `runnerSanitized()` drops it via the memberwise default, exactly lik
 `Sources/Core/DatasetMaterializer.swift`: a pure, Foundation-light function
 
 ```swift
-DatasetMaterializer.materialize(master: String, spec: DatasetSpec, seedHex: String) -> String
+DatasetMaterializer.materialize(source: String, spec: DatasetSpec, seedHex: String) -> String
 ```
 
 For `.rowSample` it derives a `UInt64` from the 64-hex seed (FNV-1a, **not**
@@ -444,23 +444,23 @@ delivers them to all consumers; nobody re-samples.
 
 ### The three delivery paths
 
-The master and the sample share a filename, so each path delivers the sample
-and hides the master (treat dataset-source support files as server-side-only,
+The source and the sample share a filename, so each path delivers the sample
+and hides the source (treat dataset-source support files as server-side-only,
 like `solution.py`):
 
 1. **Editor** (`NotebookWorkingCopyStore.swift:446–477`): for a dataset
    filename, **skip** the read-only shared symlink and instead write the
    materialized sample as a real file at notebook open (next to the existing
    `applyNotebookSubstitutionsIfNeeded` resolution, `:200`). Re-materialize
-   when seed/master/params change.
+   when seed/source/params change.
 2. **Worker** (`RunnerDaemon+JobProcessing.swift:583–600`): right where
    `_ck_inputs.py` is written into the **per-job scratch** workspace, also
-   write the per-student dataset files (overwriting the master copied from the
+   write the per-student dataset files (overwriting the source copied from the
    cached prepared dir). Resolve + attach in `WorkerJobRoutes.buildJobPayload`
    alongside `personalizedInputs`.
 3. **Browser** (`BrowserRunnerRoutes` seed endpoint + `browser-runner.js`):
    extend the seed response with a per-student `files` map; the browser writes
-   them into the Pyodide FS and the test-setup download strips the master.
+   them into the Pyodide FS and the test-setup download strips the source.
    **Not needed for A4** (worker-graded) — only when a personalized dataset is
    used on a browser-graded assignment.
 
@@ -494,7 +494,7 @@ pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
    strip, `DatasetMaterializer`, unit tests. *(self-contained; this slice)*
 2. **Server resolution + worker delivery** — a `resolvedDatasetFiles` helper
    beside `PersonalizationSubstitution.gradingInputs`, job-payload plumbing,
-   the per-job file write, master-hiding from student-facing zips/symlinks.
+   the per-job file write, source-hiding from student-facing zips/symlinks.
 3. **Editor delivery** — per-student file write + symlink suppression.
 4. **UI** — the Files-panel inline control + `PUT /datasets` endpoint.
 5. **Browser delivery** — only when a personalized dataset is used on a
