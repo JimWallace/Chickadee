@@ -123,6 +123,29 @@ test('collector reportError caps at MAX_ERRORS distinct errors', () => {
   assert.equal(errs.length, 8);   // MAX_ERRORS
 });
 
+test('collector trackUnhealthy ignores a transient unknown but flags a sustained one', () => {
+  const { exports } = loadCollector();
+  const t = exports.trackUnhealthy;
+  // First unhealthy poll starts the clock; nothing reported yet.
+  const first = t('unknown', 0, 1000);
+  assert.equal(first.unhealthySince, 1000);
+  assert.equal(first.report, false);
+  // Still unhealthy but under the threshold (passing the streak start back in):
+  // the start is preserved and no report fires.
+  const held = t('unknown', 1000, 5000);
+  assert.equal(held.unhealthySince, 1000);
+  assert.equal(held.report, false);
+  // Held continuously past SUSTAINED_UNHEALTHY_MS (10s): now report. 'dead'
+  // behaves identically.
+  assert.equal(t('unknown', 1000, 11000).report, true);
+  assert.equal(t('dead', 1000, 11000).report, true);
+  // Any healthy/indeterminate poll resets the clock — no report, streak cleared —
+  // so a momentary unknown that flips back to idle/null never reports.
+  for (const status of ['idle', 'busy', 'starting', null]) {
+    assert.deepEqual({ ...t(status, 1000, 11000) }, { unhealthySince: 0, report: false });
+  }
+});
+
 // ----------------------------------------------------------------
 // Parent bridge (notebook.js handleKernelDiagMessage)
 // ----------------------------------------------------------------
