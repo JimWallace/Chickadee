@@ -1,21 +1,31 @@
 <!--
-    Diagnostic-cards loop shared by the instructor dashboard
-    (`assignments.leaf`) and the per-assignment submissions drilldown
-    (`assignment-submissions.leaf`).  Expects a `metrics` array in
-    scope, each entry shaped `{ label, value }`.  The outer `<section>`
-    wrapper stays in the caller so the caller can scope styling via
-    its own section class (`instructor-diagnostics`,
-    `assignment-diagnostics`, …).
+    Diagnostic-cards loop for the per-assignment submissions drilldown
+    (`assignment-submissions.leaf`).  Expects a `metrics` array in scope, each
+    entry an `AssignmentStatCard` shaped `{ label, value, hasSpark,
+    sparkSummary, bars[] }`.  When `hasSpark` is true the card also draws a
+    server-rendered distribution sparkline (grade spread, attempts, or
+    submissions-over-time) from pre-normalized bar heights — no JS needed.
+    The outer `<section>` wrapper stays in the caller so it can scope styling
+    via its own section class (`assignment-diagnostics`).
 
-    `admin.leaf` keeps its own hardcoded 5-card structure — those
-    cards have JS-targeted `id="diag-…"` attributes filled in by
-    polling, not a Swift-side `metrics` array.
+    The instructor dashboard (`assignments.leaf`) and admin dashboard
+    (`admin.leaf`) keep their own card markup — their sparklines poll a
+    `/metrics/cards` endpoint and cycle the time window, rather than rendering
+    a fixed distribution server-side.
 -->
 <div class="diagnostics-cards">
     #for(metric in metrics):
     <article class="diagnostic-card">
         <div class="diagnostic-label">#(metric.label)</div>
         <div class="diagnostic-value">#(metric.value)</div>
+        #if(metric.hasSpark):
+        <div class="diagnostic-spark" aria-hidden="true">
+            #for(bar in metric.bars):
+            <div class="spark-slot" title="#(bar.title)"><span class="spark-fill" style="--bar-h:#(bar.heightPercent)%"></span></div>
+            #endfor
+        </div>
+        <span class="visually-hidden">#(metric.sparkSummary)</span>
+        #endif
     </article>
     #endfor
 </div>
