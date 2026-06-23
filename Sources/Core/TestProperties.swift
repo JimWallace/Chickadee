@@ -257,6 +257,16 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `seed`.
     public let globalExpressions: [PersonalizationExpression]
 
+    /// Per-student dataset specs (Phase 1 — see docs/datasets.md).  Each entry
+    /// marks one bundled support file as a per-student dataset: the server
+    /// materializes a deterministic slice from the assignment seed (see
+    /// `DatasetMaterializer`) and delivers the bytes to grading + the editor
+    /// under the same filename.  A save-time authoring concern — the runner
+    /// receives the already-materialized file, never the spec — so
+    /// `runnerSanitized()` strips it via the memberwise default (like
+    /// `patternFamilies` / `globalExpressions`).
+    public let datasets: [DatasetSpec]
+
     /// True when the manifest declares any per-student `=` expression, global
     /// or section-scoped.  Expressions are the only personalization inputs
     /// that need a per-(student, assignment) seed to resolve — use this to
@@ -305,6 +315,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         sections: [TestSuiteSection] = [],
         globalVariables: [FamilyVariable] = [],
         globalExpressions: [PersonalizationExpression] = [],
+        datasets: [DatasetSpec] = [],
         achievements: [Achievement] = [],
         disabledBuiltInAwardIDs: [String] = [],
         builtInAchievementsSeeded: Bool = false,
@@ -327,6 +338,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.sections = sections
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
+        self.datasets = datasets
         self.achievements = achievements
         self.disabledBuiltInAwardIDs = disabledBuiltInAwardIDs
         self.builtInAchievementsSeeded = builtInAchievementsSeeded
@@ -360,6 +372,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
             try c.decodeIfPresent(
                 [PersonalizationExpression].self,
                 forKey: .globalExpressions) ?? []
+        datasets = try c.decodeIfPresent([DatasetSpec].self, forKey: .datasets) ?? []
         achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
         disabledBuiltInAwardIDs =
             try c.decodeIfPresent([String].self, forKey: .disabledBuiltInAwardIDs) ?? []
@@ -385,6 +398,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case sections
         case globalVariables
         case globalExpressions
+        case datasets
         case achievements
         case disabledBuiltInAwardIDs
         case builtInAchievementsSeeded
@@ -407,6 +421,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(sections, forKey: .sections)
         try c.encode(globalVariables, forKey: .globalVariables)
         try c.encode(globalExpressions, forKey: .globalExpressions)
+        try c.encode(datasets, forKey: .datasets)
         try c.encode(achievements, forKey: .achievements)
         try c.encode(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs)
         try c.encode(builtInAchievementsSeeded, forKey: .builtInAchievementsSeeded)
@@ -448,6 +463,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
             },
             globalVariables: globalVariables,
             globalExpressions: [],
+            // `datasets` is dropped via the memberwise default: the runner
+            // receives the materialized per-student file (delivered with the
+            // job, like `_ck_inputs.py`), never the slice spec.
             achievements: []
         )
     }

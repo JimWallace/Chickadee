@@ -1,0 +1,514 @@
+# Datasets & living databases in assignments — design
+
+A design note for two new authoring concepts in Chickadee, motivated by
+HLTH 230 (Introduction to Health Informatics) and the desire to build
+assignments where students **query data to solve a problem** rather than
+just write standalone functions.
+
+Status: **design / not yet built.** This doc proposes the shape; the
+issues and PRs that implement it should link back here.
+
+---
+
+## Motivation
+
+Two existing HLTH 230 assignments bracket where we are today:
+
+- **Assignment 4** (`J9L7x8`) ships a static clinical CSV
+  (`assignment4_vitaldb_cases.csv`, VitalDB perioperative cases) as a
+  *support file* and grades exploratory analysis with notebook checks
+  (`df` is a `DataFrame`, expected columns present, ≥2 figures, uses
+  `describe()` / `groupby()`). The "dataset" is a file checked into the
+  test-setup zip.
+- **The Outbreak Investigation practice lab** (`jc56o4`) tells a 10-stage
+  narrative ("Intake desk" → "The outbreak report") but mechanically it is
+  a sequence of pure-function pattern families (`to_celsius`,
+  `is_confirmed`, `positivity_rate`, `outbreak_summary`…). The "data" lives
+  as literals inside the test cases.
+
+Neither lets a student **interrogate a body of records** — issue a query,
+look at what comes back, follow the thread, and reach a conclusion. That is
+the experience we want: a student investigating a *living* dataset (an
+outbreak, a drug-interaction signal, a billing-fraud pattern, a patient's
+tangled history) where the answer is discovered, not computed from a
+formula — and ideally where **every student gets a different mystery**, so
+the work is genuinely their own.
+
+This note proposes two layers:
+
+1. **Datasets** — a first-class, instructor-hosted, versioned static-data
+   artifact, attachable to many assignments, sliceable per student. This
+   generalizes "a CSV in the zip."
+2. **Databases** — a thin, in-process query/simulation layer *on top of* a
+   dataset that makes it *feel* like a live database or clinical system the
+   student queries, without ever being a network service.
+
+---
+
+## The constraint that shapes everything: no network at grade time
+
+Chickadee grades student code in a deliberately air-gapped environment.
+This is not incidental; it is the core of the security model, and it is the
+single fact that decides the architecture below.
+
+- **Worker path** (`Sources/Worker/SandboxedScriptRunner.swift`): on Linux,
+  test scripts run under `unshare --user --net` — a private network
+  namespace with **no outbound connectivity**. On macOS, `sandbox-exec`
+  enforces `(deny network* (remote ip))`. Student code cannot open a socket.
+- **Browser path** (Pyodide): the CSP is `connect-src 'self'`
+  (`SecurityHeadersMiddleware.swift`), so in-browser student code can reach
+  **same-origin endpoints only** — nothing external.
+
+**Consequence:** "host an HL7/FHIR server and let students query it during
+grading" is a non-starter against the worker, and browser-only and CSP-bound
+against Pyodide. A real external server (HAPI FHIR + Synthea, a public FHIR
+sandbox, etc.) remains a fine tool for *interactive exploration on the
+student's own machine*, but it cannot participate in autograding.
+
+So both layers below are built to run **in-process, from local files**, with
+no network — and to work under **both** grading paths (worker `python3` and
+in-browser Pyodide), or to be explicitly scoped to one with a stated reason.
+
+---
+
+## What we reuse
+
+The good news: almost every primitive we need already exists. The two new
+concepts are mostly *new payloads pointed at existing machinery*.
+
+| Need | Existing mechanism |
+|------|--------------------|
+| Ship data into the grading workspace | Support-file extraction to `shared/{setupID}/` (worker) and into the Pyodide FS alongside the test-setup zip (browser, `BrowserRunnerRoutes`) |
+| Per-student variation, deterministic & server-side | `CHICKADEE_ASSIGNMENT_SEED` (64-hex per `(student, assignment)`), `PersonalizationEvaluator` (env-allowlisted `python3` subprocess), `_ck_inputs.py` delivery (worker) + browser seed endpoint — see `docs/personalization-phase1.md`, `docs/inputs.md` |
+| Per-student *expected answers* without revealing them | Pattern-family `expectedVarRef` → server-resolved into `_ck_inputs.py` — see `docs/personalization-pattern-families.md` |
+| Reproducible, cache-safe materialization | Runner-side `TestSetupCache` (content-hashed prepared dirs); generated scripts stay byte-identical across students |
+| Re-grade on content change | `retestAllSubmissionsForSetup` / manifest-hash gating (v0.4.93) |
+| Agent authoring surface | MCP content tools (`author_script(tier:"support")`, `get_support_files`, families, notebook checks) |
+
+---
+
+## Phase 1 — Datasets (static, instructor-hosted)
+
+### Goal
+
+Promote "a CSV bundled in the test-setup zip" into a first-class artifact:
+uploaded once, **versioned**, **reusable across assignments**, carrying
+**provenance/licence metadata**, and **sliceable per student**.
+
+### Why bother (vs. just using support files)
+
+- **Reuse.** A course's VitalDB extract, a synthetic EHR, a SNOMED subset —
+  attach the same dataset to many labs/assignments without re-uploading.
+- **Versioning + reproducibility.** A dataset has a version and a content
+  hash. Attachments **pin a version**, so bumping a dataset does not
+  silently change how a closed assignment grades until the instructor
+  re-pins and re-validates (mirrors the existing manifest-hash retest gate).
+- **Size.** Stored once in a blob store, not duplicated into every zip.
+- **Governance.** A central place for licence + provenance — load-bearing
+  for health data (see "Privacy" below).
+- **Per-student slicing as a first-class operation**, not ad-hoc code in
+  each test script.
+
+### Sketch
+
+**Core model** (`Sources/Core/`, `Codable`/`Sendable`, no Vapor):
+
+```swift
+struct Dataset: Codable, Sendable {
+    let id: UUID
+    let courseID: UUID
+    let name: String
+    let slug: String              // per-course unique
+    let version: Int              // monotonic; attachments pin a version
+    let files: [DatasetFile]      // path, sizeBytes, sha256, mediaType
+    let schema: DatasetSchema?    // optional column/table description
+    let provenance: String?       // where it came from
+    let licence: String?          // licence / usage terms
+    let createdAt: Date
+}
+```
+
+**Storage.** On-disk blob store, e.g. `datasets/{courseID}/{datasetID}/{version}/…`,
+plus a `datasets` table. Instructor/admin-authored only; **never**
+student-writable.
+
+**Attachment.** An `assignment_datasets` join: `(assignmentID, datasetID,
+versionPin, mountPath, sliceSpec?)`. `mountPath` defaults to `data/`. The
+attachment is part of the assignment's manifest hash, so attaching/swapping
+a dataset re-triggers validation and the retest fan-out like any other
+content change.
+
+**Materialization at grade time.** When the grading workspace is built, the
+pinned dataset version is copied/symlinked in at `mountPath`:
+
+- *Worker:* extend the `TestSetupCache` key to include dataset content
+  hashes so a version bump busts the entry cleanly. The dataset rides the
+  same prepared-dir cache as the test setup.
+- *Browser:* `BrowserRunnerRoutes` already streams the test-setup zip into
+  the Pyodide FS; add a parallel dataset fetch into `mountPath`. **Caveat:**
+  large datasets over the browser path mean a large per-grade download —
+  worker mode is the better home for big datasets (see "Open questions").
+
+**Per-student slicing.** An attachment may carry a server-side slice
+expression evaluated with the student's seed (reusing
+`PersonalizationEvaluator`), producing either:
+
+- a per-student `_ck_inputs.py` (e.g. `patient_ids = [...]`, `ward = "3B"`)
+  that student/test code reads, or
+- a per-student materialized *view* file written into the workspace.
+
+Deterministic and server-side, exactly like today's personalization.
+
+**MCP surface** (natural extension of existing content tools):
+`create_dataset`, `list_datasets`, `get_dataset` (list files / read a head,
+like `get_support_files`), `attach_dataset` / `detach_dataset`,
+`set_dataset_slice`.
+
+### Migration
+
+Support-file CSVs are the v0 of this. Assignment 4 is the first consumer:
+its `assignment4_vitaldb_cases.csv` becomes a Dataset, attached at
+`data/`, and the existing notebook checks are unchanged.
+
+---
+
+## Phase 2 — Databases (a living, queryable layer on top of a dataset)
+
+### Goal
+
+Give students something they **query and investigate** that *feels* like a
+real database / clinical system, layered on a Phase 1 dataset, running
+in-process with no network, **per student**, and gradeable — so we can
+build mystery / investigation assignments.
+
+### The core idea: ship a query *shim*, not a server
+
+A **Database** is a versioned artifact = one or more datasets + a
+**pure-Python query module** (the "shim") + a **scenario spec**. The shim is
+materialized into the workspace and the student imports it:
+
+```python
+from hospital import db          # the shim, backed by the local dataset
+
+# feels like a database — but it is reading local files, no network
+patient = db.read("Patient", id="P0412")
+labs    = db.search("Observation", patient="P0412", code="WBC")
+rows    = db.query("SELECT ward, COUNT(*) FROM admissions "
+                   "WHERE positive = 1 GROUP BY ward")
+```
+
+Two API flavours, both pure-Python and available under **both** grading
+paths:
+
+1. **Relational / SQL** — back the shim with **`sqlite3`** (in the CPython
+   stdlib *and* compiled into Pyodide) over an in-memory DB built from the
+   dataset at import time. Students write real SQL — a genuinely valuable
+   health-informatics skill — with zero network and zero server process.
+   This is the cleanest "feels like a real database."
+2. **FHIR-/record-shaped** — `db.read(resourceType, id)` /
+   `db.search(resourceType, **params)` returning record objects from local
+   bundles. Good for "navigate an EHR" framing; a thin wrapper over the same
+   local store.
+
+### The "living / simulation" layer (the step higher)
+
+Static reads are not yet *alive*. The simulation layer makes the world
+**respond** to the student:
+
+- **State & time.** A `db.tick()` / simulated clock; lab results that
+  "arrive" after they're ordered; vitals that drift; an outbreak that
+  spreads a little with each simulated day. The student investigates by
+  issuing queries; the world evolves in response.
+- **Deterministic from the seed.** The *entire* simulation is a pure
+  function of `(dataset, seed, the student's query sequence)`. This is
+  non-negotiable for autograding: the grader can replay the same sequence
+  and verify the student reached the right conclusion, and the **correct
+  answer** for each student (patient zero, the contaminated ward, the
+  interacting drug pair) is derivable server-side from the seed.
+- **Per-student mysteries.** The seed selects scenario parameters, so every
+  student investigates a different case. Copy-paste fails: a peer's answer
+  is the answer to the *peer's* mystery.
+
+### How a mystery assignment grades
+
+1. The student uses the shim to investigate and writes their conclusion,
+   e.g. `answer_ward = "3B"` or `patient_zero = "P0412"`.
+2. A pattern family / notebook check verifies the conclusion. The expected
+   value is per-student via **`expectedVarRef`** (already supported for
+   `boundary_equality`): the server resolves the seed-derived correct answer
+   into `_ck_inputs.py` so the visible test never contains the answer.
+3. *(Optional, later)* grade **method**, not just the answer: the shim can
+   log the student's query trace and checks can assert they used the
+   expected query shapes (analogous to today's `cell_contains` checks).
+
+### Where it runs
+
+The shim is just a pure-Python module shipped with the Database artifact
+(stdlib `sqlite3` only — present in both CPython and Pyodide). The scenario
+seed arrives via `CHICKADEE_ASSIGNMENT_SEED` (worker) / the browser seed
+endpoint, exactly like personalization today. Generated test scripts stay
+byte-identical across students; only the seed-resolved scenario differs —
+so `spec_hash` / `TestSetupCache` keys are stable (matches the v0.4.343–347
+per-student pattern-family design).
+
+### Authoring
+
+The instructor authors, server-side (like personalization expressions /
+`solution.py`):
+
+- the schema/tables (from the attached dataset),
+- the query surface they want students to use,
+- the simulation rules, and
+- a **scenario generator**: `seed → (scenario params, correct answer)`.
+
+The platform handles distribution and answer-key resolution. MCP tools
+(`create_database`, `set_scenario_generator`, …) and a browser authoring
+panel follow the existing patterns.
+
+---
+
+## Trust boundary — mysteries need a *secret*, and the browser cannot keep one
+
+This is the most important design point in Phase 2, and it diverges from
+ordinary personalization.
+
+Normal personalization inputs (a student's ciphertext, their sampled rows)
+are *meant to be visible* to the student — that is fine. A **mystery's
+solution is a secret**. And **anything in the Pyodide filesystem is
+inspectable** by a determined student (open devtools, read `_ck_inputs.py`).
+So a seed-derived correct answer must **never be shipped to the browser**.
+
+Therefore, secret-answer mystery assignments must use one of:
+
+- **Worker grading (recommended).** `_ck_inputs.py` carrying the answer
+  lives only in the server-side worker workspace and never reaches the
+  student. The student's submitted conclusion is checked there.
+- **Server-side answer check.** The browser submits the student's
+  conclusion; the server compares it against the seed-derived answer it
+  computes itself, and never sends the answer down. (Note the v0.4.x audit
+  already moved attempt-number / first-pass reconciliation server-side for
+  browser results — same spirit.)
+
+Set the default grading mode for these assignments to `worker` and document
+why. A purely browser-graded mystery with the answer in the workspace is not
+secure.
+
+A second, smaller concern: the seed itself reaches the browser (it must, for
+visible personalization). For mysteries, ensure the *answer* is not trivially
+recomputable from the seed by client-side code — i.e. keep the scenario
+generator / answer function server-side, not shipped in the shim.
+
+---
+
+## Determinism discipline
+
+The simulation must produce identical results under worker CPython and
+in-browser Pyodide (also CPython, compiled to WASM). The usual hazards
+apply, the same ones personalization already manages:
+
+- Seed all randomness explicitly (`random.Random(seed)` /
+  `numpy.random.default_rng(seed)`); never rely on `hash()` (salted per
+  process) — use `hashlib`.
+- Iterate deterministically (sort before iterating where order matters).
+- Avoid platform-dependent float formatting in expected-answer comparisons;
+  prefer tolerant comparison (`approximate_equality`) for numeric answers.
+
+---
+
+## Privacy & governance
+
+HLTH 230 is health data; this is load-bearing, not a footnote.
+
+- **Synthetic or licensed only.** Datasets must be synthetic
+  (e.g. Synthea-generated) or carry a licence that permits classroom use.
+  Real PHI must never enter the system. The `provenance` / `licence`
+  fields exist to make this explicit and auditable.
+- **No external leakage.** This is automatic — the air-gapped grading model
+  means student code cannot exfiltrate a dataset over the network even if it
+  tried (the same FIPPA/PIPEDA reasoning behind vendoring Pyodide locally).
+- **Instructor/admin authored, never student-writable.** Datasets and
+  databases follow the same role gating as other course content.
+
+---
+
+## Open questions / decisions
+
+1. **Browser vs worker for large datasets.** Worker is the better home for
+   anything sizeable (no per-grade download). Do we cap browser-path dataset
+   size, or steer dataset-backed assignments to worker mode by default?
+2. **Dataset vs Database as one artifact or two.** Model a Database as a
+   *kind* of Dataset (dataset + shim + scenario), or a separate artifact
+   that *references* datasets? Leaning: separate artifact referencing
+   datasets, so one dataset feeds several database "framings."
+3. **Answer-checking vs method-checking.** Start with answer-checking
+   (cheap, reuses `expectedVarRef`); add query-trace/method grading later.
+4. **Authoring language for the scenario generator.** Python server-side
+   (consistent with personalization) is the obvious first answer; revisit if
+   `docs/personalization-eval-runtime.md`'s move toward runner/browser eval
+   lands.
+5. **How much "shim" is canonical vs per-assignment.** Ship a small canonical
+   query/simulation library, or let each Database carry its own module? A
+   canonical core + per-assignment scenario is probably the right split.
+
+---
+
+## Phasing summary
+
+- **Phase 1 — Datasets.** First-class, versioned, reusable, per-student-
+  sliceable static data. Assignment 4's VitalDB CSV is the first consumer.
+  Mostly new storage + a thin attachment/materialization seam over existing
+  support-file and personalization machinery.
+- **Phase 2 — Databases.** A pure-Python query shim + deterministic,
+  seeded simulation layered on a dataset, gradeable via `expectedVarRef`,
+  **worker-graded for secret-answer mysteries.** Enables per-student
+  investigation/mystery assignments — the genuinely unique experience.
+
+External live servers (HAPI FHIR + Synthea, public FHIR sandboxes) remain
+useful for *interactive exploration outside grading*, but are explicitly
+**not** part of the graded path, by the network constraint above.
+
+---
+
+## Phase 1 implementation plan — A4 worked example
+
+This section is the concrete build plan, grounded in Assignment 4 (`J9L7x8`,
+HLTH 230), which today bundles one support file `assignment4_vitaldb_cases.csv`
+and grades exploratory analysis with five *structural* notebook checks (`df`
+is a `DataFrame`, expected columns present as a superset, ≥2 figures, a cell
+uses `describe`, a cell uses `groupby`).
+
+### The shape
+
+A dataset is **a support file marked "personalize", plus a sample size.** The
+instructor uploads the *full pool* as an ordinary support file and flips a
+toggle; each student receives a deterministic N-row sample **under the same
+filename**, so the notebook's `pd.read_csv("assignment4_vitaldb_cases.csv")`
+is unchanged and the student only ever sees their slice.
+
+### Student view
+
+No UI change. The editor opens, `pd.read_csv(...)` works as before, but the
+rows are a per-student sample keyed to `CHICKADEE_ASSIGNMENT_SEED`. Their
+`describe()` / charts / `groupby` numbers differ from every peer's, and what
+they explore in the editor is exactly what the worker grades.
+
+### Instructor view
+
+In the **Files** panel (`Resources/Views/assignment-edit.leaf:119–130`) the
+support-file row gains one inline control, modeled on the existing **Global
+Inputs** name+value pattern (`:136–187`):
+
+```
+Support file   assignment4_vitaldb_cases.csv  [download]   [ Personalize ▾ ] [Remove]
+   └─ expanded:   Sample [ 500 ] rows per student        ✓ saved
+```
+
+Persisted via a small `PUT /instructor/:id/datasets` endpoint mirroring
+`PUT /global-variables`. The uploaded file becomes the server-side *source*;
+students receive only their sample.
+
+### Data model (Core)
+
+`Sources/Core/Models/DatasetSpec.swift`:
+
+```swift
+public enum DatasetKind: String, Codable, Sendable, Equatable { case rowSample }
+
+public struct DatasetSpec: Codable, Equatable, Sendable {
+    public let file: String         // the support filename that is a per-student dataset
+    public let kind: DatasetKind     // .rowSample for MVP
+    public let sampleSize: Int?      // rows per student; nil = whole file
+}
+```
+
+`TestProperties` gains `datasets: [DatasetSpec]` (decoded with
+`decodeIfPresent ?? []` for back-compat). It is a **server-side authoring
+concern** — the worker receives the *materialized per-student file*, never the
+spec — so `runnerSanitized()` drops it via the memberwise default, exactly like
+`patternFamilies` / `globalExpressions`.
+
+### Materialization (server-side, deterministic, one implementation)
+
+`Sources/Core/DatasetMaterializer.swift`: a pure, Foundation-light function
+
+```swift
+DatasetMaterializer.materialize(source: String, spec: DatasetSpec, seedHex: String) -> String
+```
+
+For `.rowSample` it derives a `UInt64` from the 64-hex seed (FNV-1a, **not**
+`hashValue`/`Hasher` — those are process-salted), drives a hand-rolled
+SplitMix64 PRNG, picks `sampleSize` distinct data-row indices, and re-emits
+the header plus the chosen rows **in original order**. Pure integer math →
+identical bytes on macOS and Linux. The server resolves the bytes **once** and
+delivers them to all consumers; nobody re-samples.
+
+### The three delivery paths
+
+The source and the sample share a filename, so each path delivers the sample
+and hides the source (treat dataset-source support files as server-side-only,
+like `solution.py`):
+
+1. **Editor** (`NotebookWorkingCopyStore.swift:446–477`): for a dataset
+   filename, **skip** the read-only shared symlink and instead write the
+   materialized sample as a real file at notebook open (next to the existing
+   `applyNotebookSubstitutionsIfNeeded` resolution, `:200`). Re-materialize
+   when seed/source/params change.
+2. **Worker** (`RunnerDaemon+JobProcessing.swift:583–600`): right where
+   `_ck_inputs.py` is written into the **per-job scratch** workspace, also
+   write the per-student dataset files (overwriting the source copied from the
+   cached prepared dir). Resolve + attach in `WorkerJobRoutes.buildJobPayload`
+   alongside `personalizedInputs`.
+3. **Browser** (`BrowserRunnerRoutes` seed endpoint + `browser-runner.js`):
+   extend the seed response with a per-student `files` map; the browser writes
+   them into the Pyodide FS and the test-setup download strips the source.
+   **Not needed for A4** (worker-graded) — only when a personalized dataset is
+   used on a browser-graded assignment.
+
+### Runner cache is preserved
+
+The `TestSetupCache` is keyed by test-setup **content** (`testSetupID` + the
+manifest/zip `downloadVersion` hash) — **no student identity**. Per-student
+bytes never enter the cached `prepared/` dir; they are layered into the
+**per-job scratch copy**, exactly as `_ck_inputs.py` already is. So the cache
+stays shared and byte-identical across students. The cache would only break if
+per-student data were baked into the cache key or the prepared dir — which this
+design explicitly avoids. Editing the sample size changes the manifest hash and
+busts the cache **once, for everyone** (and triggers the v0.4.93 retest
+fan-out), which is correct.
+
+### Grading impact for A4: zero check changes
+
+All five A4 checks are structural, not value-based; a row sample preserves
+columns and dtypes, so they pass unchanged. Pick N large enough (e.g. 500 of
+6,388) that every category still appears for `groupby`.
+
+### Trust boundary
+
+For A4 this is **variety, not secrecy** — the sample is meant to be seen, so
+delivering it to the editor/browser is fine. The only thing hidden is the full
+pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
+
+### Build slices
+
+1. **Core** — `DatasetSpec`, `TestProperties.datasets` + `runnerSanitized`
+   strip, `DatasetMaterializer`, unit tests. *(self-contained; this slice)*
+2. **Server resolution + worker delivery** — a `resolvedDatasetFiles` helper
+   beside `PersonalizationSubstitution.gradingInputs`, job-payload plumbing,
+   the per-job file write, source-hiding from student-facing zips/symlinks.
+3. **Editor delivery** — per-student file write + symlink suppression.
+4. **UI** — the Files-panel inline control + `PUT /datasets` endpoint.
+5. **Browser delivery** — only when a personalized dataset is used on a
+   browser-graded assignment.
+6. **Phase 1.5** — stratified sampling + the arbitrary-Python `slice` escape
+   hatch (reuses `PersonalizationEvaluator`'s file-writing subprocess), the
+   bridge to Phase 2.
+
+## See also
+
+- `docs/personalization-phase1.md` — the per-student seed contract
+- `docs/inputs.md` — Global / section inputs and `$name` references
+- `docs/personalization-pattern-families.md` — `expectedVarRef` server
+  resolution (the mechanism mystery grading leans on)
+- `docs/personalization-eval-runtime.md` — where personalization expressions
+  are evaluated, and the direction of travel
+- `docs/architecture.md` — targets, grading pipeline, sandboxing
