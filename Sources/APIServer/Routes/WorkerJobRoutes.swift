@@ -210,6 +210,18 @@ struct WorkerJobRoutes: RouteCollection {
                 manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir)
         }
 
+        // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
+        // Cheap and deterministic (a file read + in-memory sample, no
+        // subprocess), so we resolve live for both student and validation
+        // submissions rather than caching it on the materialization row. A
+        // strict no-op for every assignment that declares no datasets — which is
+        // all of them until the dataset editor ships — so existing jobs are
+        // byte-identical to before. The runner-sanitized manifest below drops
+        // the dataset specs; only the resolved bytes travel, in `personalizedFiles`.
+        let datasetSharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+        let personalizedFiles = DatasetResolver.resolve(
+            manifest: claimed.manifest, seedHex: assignmentSeed, sourceDirectory: datasetSharedDir)
+
         return Job(
             submissionID: submissionID,
             testSetupID: setupID,
@@ -219,7 +231,8 @@ struct WorkerJobRoutes: RouteCollection {
             manifest: claimed.manifest.runnerSanitized(),
             submissionFilename: submission.filename,
             assignmentSeed: assignmentSeed,
-            personalizedInputs: personalizedInputs
+            personalizedInputs: personalizedInputs,
+            personalizedFiles: personalizedFiles
         )
     }
 

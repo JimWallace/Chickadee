@@ -41,6 +41,18 @@ public struct Job: Codable, Sendable {
     /// with a clear message.
     public let personalizedInputs: [String: String]?
 
+    /// Per-student dataset files, resolved server-side for this submission's
+    /// `assignmentSeed` (Phase 1 datasets — see docs/datasets.md). Maps each
+    /// dataset's delivered filename to its sliced contents (a deterministic
+    /// per-student slice of the instructor's source pool, produced by
+    /// `DatasetMaterializer`). The worker writes each into the grading
+    /// workspace, overwriting the source pool copied from the cached test-setup
+    /// so student scripts read only their slice. Nil when the assignment
+    /// declares no datasets or no seed is available — grading then proceeds
+    /// against the file as shipped. Same delivery shape as `personalizedInputs`:
+    /// the server resolves the bytes; the worker only writes them.
+    public let personalizedFiles: [String: String]?
+
     public init(
         submissionID: String,
         testSetupID: String,
@@ -50,7 +62,8 @@ public struct Job: Codable, Sendable {
         manifest: TestProperties,
         submissionFilename: String? = nil,
         assignmentSeed: String? = nil,
-        personalizedInputs: [String: String]? = nil
+        personalizedInputs: [String: String]? = nil,
+        personalizedFiles: [String: String]? = nil
     ) {
         self.submissionID = submissionID
         self.testSetupID = testSetupID
@@ -61,5 +74,6 @@ public struct Job: Codable, Sendable {
         self.submissionFilename = submissionFilename
         self.assignmentSeed = assignmentSeed
         self.personalizedInputs = personalizedInputs
+        self.personalizedFiles = personalizedFiles
     }
 }
