@@ -29,16 +29,36 @@ const notebookSource = await fs.readFile(
 // Collector (jl-kernel-diagnostics.js)
 // ----------------------------------------------------------------
 
-function loadCollector({ jupyterapp, bodyText = '' } = {}) {
+function loadCollector({ executionStatus, jpCount = 0, kernelError = false, bodyText = '' } = {}) {
   const posted = [];
   const hooks = {};
   const win = {
     location: { origin: 'https://example.test' },
     parent: { postMessage(payload, origin) { posted.push({ payload, origin }); } },
     addEventListener() {},
-    jupyterapp,
   };
-  const document = { body: { textContent: bodyText }, addEventListener() {} };
+  // Mock the JupyterLite shell DOM the collector reads (this build exposes no
+  // window.jupyterapp): the execution indicator's data-status, the kernel-status
+  // error class, and the jp-* shell-element count.
+  const document = {
+    body: { textContent: bodyText },
+    addEventListener() {},
+    querySelector(sel) {
+      if (/jp-Notebook-ExecutionIndicator\[data-status\]/.test(sel)) {
+        return executionStatus != null
+          ? { getAttribute: (a) => (a === 'data-status' ? executionStatus : null) }
+          : null;
+      }
+      if (/jp-KernelStatus-error/.test(sel)) return kernelError ? {} : null;
+      if (/jp-Notebook-ExecutionIndicator|jp-NotebookPanel|jp-Notebook/.test(sel)) {
+        return jpCount > 0 ? {} : null;
+      }
+      return null;
+    },
+    querySelectorAll(sel) {
+      return { length: /class\^=/.test(sel) ? jpCount : 0 };
+    },
+  };
   const context = {
     console, JSON, Error,
     setTimeout: () => 0,   // don't auto-run the poll loop; we drive via hooks
@@ -63,24 +83,17 @@ test('collector posts boot_start to the parent on load, same-origin', () => {
   assert.equal(posted[0].origin, 'https://example.test');
 });
 
-test('collector kernelStatus reads execution_state from the ServiceManager', () => {
-  const jupyterapp = {
-    serviceManager: {
-      kernels: { running() { return [{ execution_state: 'idle' }]; } },
-      sessions: { running() { return []; } },
-    },
-  };
-  const { exports } = loadCollector({ jupyterapp });
-  assert.equal(exports.kernelStatus(), 'idle');
+test('collector kernelStatus reads data-status from the execution indicator', () => {
+  assert.equal(loadCollector({ executionStatus: 'idle' }).exports.kernelStatus(), 'idle');
+  assert.equal(loadCollector({ executionStatus: 'busy' }).exports.kernelStatus(), 'busy');
+  assert.equal(loadCollector({ executionStatus: 'starting' }).exports.kernelStatus(), 'starting');
+  assert.equal(loadCollector({ kernelError: true }).exports.kernelStatus(), 'unknown');
 });
 
-test('collector kernelStatus falls back to the status-bar text', () => {
-  const idle = loadCollector({ bodyText: 'Python (Pyodide) | Idle' });
-  assert.equal(idle.exports.kernelStatus(), 'idle');
-  const unknown = loadCollector({ bodyText: 'Kernel Unknown' });
-  assert.equal(unknown.exports.kernelStatus(), 'unknown');
-  const nothing = loadCollector({ bodyText: '' });
-  assert.equal(nothing.exports.kernelStatus(), null);
+test('collector kernelStatus falls back to the kernel-status text', () => {
+  assert.equal(loadCollector({ bodyText: 'Python (Pyodide) Kernel status: Idle' }).exports.kernelStatus(), 'idle');
+  assert.equal(loadCollector({ bodyText: 'Kernel status: Unknown' }).exports.kernelStatus(), 'unknown');
+  assert.equal(loadCollector({ bodyText: '' }).exports.kernelStatus(), null);
 });
 
 test('collector reportPhase de-duplicates a phase', () => {
