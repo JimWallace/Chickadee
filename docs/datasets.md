@@ -369,6 +369,140 @@ useful for *interactive exploration outside grading*, but are explicitly
 
 ---
 
+## Phase 1 implementation plan — A4 worked example
+
+This section is the concrete build plan, grounded in Assignment 4 (`J9L7x8`,
+HLTH 230), which today bundles one support file `assignment4_vitaldb_cases.csv`
+and grades exploratory analysis with five *structural* notebook checks (`df`
+is a `DataFrame`, expected columns present as a superset, ≥2 figures, a cell
+uses `describe`, a cell uses `groupby`).
+
+### The shape
+
+A dataset is **a support file marked "personalize", plus a sample size.** The
+instructor uploads the *full pool* as an ordinary support file and flips a
+toggle; each student receives a deterministic N-row sample **under the same
+filename**, so the notebook's `pd.read_csv("assignment4_vitaldb_cases.csv")`
+is unchanged and the student only ever sees their slice.
+
+### Student view
+
+No UI change. The editor opens, `pd.read_csv(...)` works as before, but the
+rows are a per-student sample keyed to `CHICKADEE_ASSIGNMENT_SEED`. Their
+`describe()` / charts / `groupby` numbers differ from every peer's, and what
+they explore in the editor is exactly what the worker grades.
+
+### Instructor view
+
+In the **Files** panel (`Resources/Views/assignment-edit.leaf:119–130`) the
+support-file row gains one inline control, modeled on the existing **Global
+Inputs** name+value pattern (`:136–187`):
+
+```
+Support file   assignment4_vitaldb_cases.csv  [download]   [ Personalize ▾ ] [Remove]
+   └─ expanded:   Sample [ 500 ] rows per student        ✓ saved
+```
+
+Persisted via a small `PUT /instructor/:id/datasets` endpoint mirroring
+`PUT /global-variables`. The uploaded file becomes the server-side *master*;
+students receive only their sample.
+
+### Data model (Core)
+
+`Sources/Core/Models/DatasetSpec.swift`:
+
+```swift
+public enum DatasetKind: String, Codable, Sendable, Equatable { case rowSample }
+
+public struct DatasetSpec: Codable, Equatable, Sendable {
+    public let file: String         // the support filename that is a per-student dataset
+    public let kind: DatasetKind     // .rowSample for MVP
+    public let sampleSize: Int?      // rows per student; nil = whole file
+}
+```
+
+`TestProperties` gains `datasets: [DatasetSpec]` (decoded with
+`decodeIfPresent ?? []` for back-compat). It is a **server-side authoring
+concern** — the worker receives the *materialized per-student file*, never the
+spec — so `runnerSanitized()` drops it via the memberwise default, exactly like
+`patternFamilies` / `globalExpressions`.
+
+### Materialization (server-side, deterministic, one implementation)
+
+`Sources/Core/DatasetMaterializer.swift`: a pure, Foundation-light function
+
+```swift
+DatasetMaterializer.materialize(master: String, spec: DatasetSpec, seedHex: String) -> String
+```
+
+For `.rowSample` it derives a `UInt64` from the 64-hex seed (FNV-1a, **not**
+`hashValue`/`Hasher` — those are process-salted), drives a hand-rolled
+SplitMix64 PRNG, picks `sampleSize` distinct data-row indices, and re-emits
+the header plus the chosen rows **in original order**. Pure integer math →
+identical bytes on macOS and Linux. The server resolves the bytes **once** and
+delivers them to all consumers; nobody re-samples.
+
+### The three delivery paths
+
+The master and the sample share a filename, so each path delivers the sample
+and hides the master (treat dataset-source support files as server-side-only,
+like `solution.py`):
+
+1. **Editor** (`NotebookWorkingCopyStore.swift:446–477`): for a dataset
+   filename, **skip** the read-only shared symlink and instead write the
+   materialized sample as a real file at notebook open (next to the existing
+   `applyNotebookSubstitutionsIfNeeded` resolution, `:200`). Re-materialize
+   when seed/master/params change.
+2. **Worker** (`RunnerDaemon+JobProcessing.swift:583–600`): right where
+   `_ck_inputs.py` is written into the **per-job scratch** workspace, also
+   write the per-student dataset files (overwriting the master copied from the
+   cached prepared dir). Resolve + attach in `WorkerJobRoutes.buildJobPayload`
+   alongside `personalizedInputs`.
+3. **Browser** (`BrowserRunnerRoutes` seed endpoint + `browser-runner.js`):
+   extend the seed response with a per-student `files` map; the browser writes
+   them into the Pyodide FS and the test-setup download strips the master.
+   **Not needed for A4** (worker-graded) — only when a personalized dataset is
+   used on a browser-graded assignment.
+
+### Runner cache is preserved
+
+The `TestSetupCache` is keyed by test-setup **content** (`testSetupID` + the
+manifest/zip `downloadVersion` hash) — **no student identity**. Per-student
+bytes never enter the cached `prepared/` dir; they are layered into the
+**per-job scratch copy**, exactly as `_ck_inputs.py` already is. So the cache
+stays shared and byte-identical across students. The cache would only break if
+per-student data were baked into the cache key or the prepared dir — which this
+design explicitly avoids. Editing the sample size changes the manifest hash and
+busts the cache **once, for everyone** (and triggers the v0.4.93 retest
+fan-out), which is correct.
+
+### Grading impact for A4: zero check changes
+
+All five A4 checks are structural, not value-based; a row sample preserves
+columns and dtypes, so they pass unchanged. Pick N large enough (e.g. 500 of
+6,388) that every category still appears for `groupby`.
+
+### Trust boundary
+
+For A4 this is **variety, not secrecy** — the sample is meant to be seen, so
+delivering it to the editor/browser is fine. The only thing hidden is the full
+pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
+
+### Build slices
+
+1. **Core** — `DatasetSpec`, `TestProperties.datasets` + `runnerSanitized`
+   strip, `DatasetMaterializer`, unit tests. *(self-contained; this slice)*
+2. **Server resolution + worker delivery** — a `resolvedDatasetFiles` helper
+   beside `PersonalizationSubstitution.gradingInputs`, job-payload plumbing,
+   the per-job file write, master-hiding from student-facing zips/symlinks.
+3. **Editor delivery** — per-student file write + symlink suppression.
+4. **UI** — the Files-panel inline control + `PUT /datasets` endpoint.
+5. **Browser delivery** — only when a personalized dataset is used on a
+   browser-graded assignment.
+6. **Phase 1.5** — stratified sampling + the arbitrary-Python `slice` escape
+   hatch (reuses `PersonalizationEvaluator`'s file-writing subprocess), the
+   bridge to Phase 2.
+
 ## See also
 
 - `docs/personalization-phase1.md` — the per-student seed contract
