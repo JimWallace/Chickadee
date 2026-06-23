@@ -424,10 +424,13 @@ each request URL per call (HMAC-SHA256) — no token endpoint.
   item (column). Instructors map these on the BrightSpace tab, picking from a
   dropdown sourced from `listGradeObjects` (free-text fallback).
 
-**Student identity.** `users.student_id` is the D2L `OrgDefinedId`;
-`users.brightspace_user_id` caches the resolved internal D2L user ID
-(`lookupUserID`, looked up lazily on first sync). Students with no resolvable
-account surface in the BrightSpace tab's "unmapped students" list.
+**Student identity.** A Chickadee user is matched to a LEARN account against the
+course **classlist**, by `username` (the WatIAM id, primary) then `student_id`
+(the D2L `OrgDefinedId`, fallback — incl. the legacy `lookupUserID`
+`users/?orgDefinedId=` call). The resolved internal D2L user id caches on
+`users.brightspace_user_id` on first sync and is reused thereafter. Students
+with no resolvable account surface in the BrightSpace tab's "unmapped students"
+list.
 
 **Sync engine.** On a worker result save, `ResultRoutes` flags the `APIResult`
 row pending. `BrightSpaceGradeSyncMonitor` sweeps every 60 s and pushes the
