@@ -69,11 +69,30 @@ jobs:
         # and an occasional "Index out of range" crash that kills the whole
         # test process.  This job is the worst case: it runs *all* targets in
         # one process (no --filter split) with code coverage, so it's the most
-        # pool-pressured run we have, yet it was the only one missing the cap
-        # that swift-tests.yml already applies.  Match that cap here.
+        # pool-pressured run we have — strictly more so than any single
+        # --filter'd swift-tests.yml job.  So it gets a *tighter* cap than the
+        # per-PR jobs (2 vs. 4) to halve the concurrent-pool count.
+        #
+        # Second layer: the test step is retried once.  A lone transient
+        # pool-pressure flake should not redden the canary or auto-file a
+        # tracking issue — but a *real* break fails both attempts and still
+        # reports failure (the canary's signal for deterministic breaks is
+        # preserved).  A flaky first attempt is surfaced as a ::warning:: so
+        # the flakiness stays visible instead of being silently swallowed.
         env:
-          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
-        run: swift test --enable-code-coverage
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "2"
+        run: |
+          run_tests() { swift test --enable-code-coverage; }
+          if run_tests; then
+            exit 0
+          fi
+          echo "::warning::Nightly clean-build tests failed on attempt 1; retrying once to distinguish a transient pool-pressure flake from a real break."
+          if run_tests; then
+            echo "::warning::Nightly clean-build tests passed on retry — attempt 1 was a flake. Investigate if this recurs (consider lowering parallelism further or raising the AsyncKit pool timeout)."
+            exit 0
+          fi
+          echo "::error::Nightly clean-build tests failed on both attempts — treating as a real failure."
+          exit 1
 
       - name: Export coverage to lcov
         run: |
