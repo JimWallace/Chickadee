@@ -16,11 +16,15 @@ Admin
 </nav>
 <section class="admin-section admin-diagnostics">
     <div class="diagnostics-cards" id="diagnostics-cards">
-        <article class="diagnostic-card diagnostic-card-cyclable" data-card="maxQueueDepth"
-                 role="button" tabindex="0" aria-label="Max queue depth, last 24 hours. Press to change time window.">
-            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> Max Queue</div>
-            <div class="diagnostic-value" id="diag-queue-depth">—</div>
-            <div class="diagnostic-spark" aria-hidden="true"></div>
+        <article class="diagnostic-card diagnostic-card-cyclable" data-activity-card
+                 role="button" tabindex="0" aria-label="Active users, last 24 hours. Press to change the time window.">
+            <div class="diagnostic-label"><span class="diagnostic-window-chip" id="activity-card-window">24h</span> Active Users</div>
+            <div class="diagnostic-value" id="activity-card-value">—</div>
+            <div class="diagnostic-spark" id="activity-card-spark" aria-hidden="true">
+            #for(bucket in activityChart.buckets):
+                <div class="spark-slot" data-count="#(bucket.count)" data-label="#(bucket.label)"><span class="spark-fill"></span></div>
+            #endfor
+            </div>
         </article>
         <article class="diagnostic-card diagnostic-card-cyclable" data-card="jobsProcessed"
                  role="button" tabindex="0" aria-label="Jobs processed, last 24 hours. Press to change time window.">
@@ -175,27 +179,6 @@ Admin
 
 </section>
 
-<!-- ── Active users over time ─────────────────────────── -->
-<section class="admin-section activity-section">
-    <div class="activity-header">
-        <h2>Active Users</h2>
-        <div class="activity-windows" role="group" aria-label="Activity time range">
-            <button type="button" class="activity-window-btn activity-window-active" data-window="24h" aria-pressed="true">24h</button>
-            <button type="button" class="activity-window-btn" data-window="1w" aria-pressed="false">1 week</button>
-            <button type="button" class="activity-window-btn" data-window="1m" aria-pressed="false">1 month</button>
-        </div>
-    </div>
-    <p class="activity-caption" id="activity-caption">&nbsp;</p>
-    <div class="activity-chart">
-        <div class="activity-bars" id="activity-bars" role="img" aria-label="Distinct active users per time bucket">
-        #for(bucket in activityChart.buckets):
-            <div class="activity-bar" data-count="#(bucket.count)" data-label="#(bucket.label)"><span class="activity-bar-fill"></span></div>
-        #endfor
-        </div>
-        <p class="activity-empty" id="activity-empty" hidden>No activity recorded in this window.</p>
-    </div>
-</section>
-
 <style>
 .admin-diagnostics {
     padding-bottom: 1rem;
@@ -259,90 +242,6 @@ Admin
 tr.runner-row-offline {
     opacity: .5;
 }
-/* ── Active-users activity chart ─────────────────────── */
-.activity-header h2 { margin: 0; }
-.activity-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: .5rem;
-    margin-bottom: .25rem;
-}
-.activity-windows {
-    display: inline-flex;
-    border: 1px solid var(--border);
-    border-radius: .375rem;
-    overflow: hidden;
-}
-.activity-window-btn {
-    padding: .3rem .7rem;
-    font-size: .8rem;
-    font-weight: 500;
-    background: var(--surface);
-    color: var(--gray-600);
-    border: none;
-    border-left: 1px solid var(--border);
-    cursor: pointer;
-    transition: background .12s, color .12s;
-}
-.activity-window-btn:first-child { border-left: none; }
-.activity-window-btn:hover { background: var(--hover-bg); color: var(--gray-900); }
-.activity-window-active,
-.activity-window-active:hover {
-    background: var(--health-teal-dark);
-    color: #fff;
-}
-.activity-caption {
-    margin: 0 0 .5rem;
-    font-size: .8rem;
-    color: var(--gray-600);
-}
-.activity-chart {
-    border: 1px solid var(--border);
-    border-radius: .5rem;
-    background: var(--surface);
-    padding: 1rem 1rem 1.9rem;
-}
-.activity-bars {
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-    height: 180px;
-    margin-bottom: 1.4rem;
-}
-.activity-bar {
-    position: relative;
-    flex: 1 1 0;
-    height: 100%;
-    display: flex;
-    align-items: flex-end;
-}
-.activity-bar-fill {
-    width: 100%;
-    height: var(--bar-h, 0);
-    background: var(--health-teal);
-    border-radius: 3px 3px 0 0;
-    transition: height .25s ease;
-}
-.activity-bar:hover .activity-bar-fill { background: var(--health-teal-dark); }
-.activity-bar-label {
-    position: absolute;
-    bottom: -1.35rem;
-    left: -50%;
-    right: -50%;
-    text-align: center;
-    font-size: .65rem;
-    color: var(--gray-500);
-    white-space: nowrap;
-    pointer-events: none;
-}
-.activity-empty {
-    color: var(--gray-500);
-    font-size: .85rem;
-    text-align: center;
-    margin: -2.5rem 0 0;
-}
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
 <script>
@@ -356,7 +255,6 @@ tr.runner-row-offline {
     var escapeHtml = ChickadeeUI.escapeHtml;
 
     var collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-    var diagQueueDepth = document.getElementById('diag-queue-depth');
     var diagJobsProcessed = document.getElementById('diag-jobs-processed');
     var diagMaxLoad = document.getElementById('diag-max-load');
     var diagQueueP95 = document.getElementById('diag-queue-p95');
@@ -406,11 +304,6 @@ tr.runner-row-offline {
     var windowNouns = { '24h': 'last 24 hours', '1w': 'last 7 days', '1m': 'last 30 days' };
     var cardWindowIndex = {};
     var sparkCards = [
-        {
-            key: 'maxQueueDepth', name: 'Max queue depth', valueEl: diagQueueDepth,
-            headline: function (data) { return data.headline == null ? '—' : String(data.headline); },
-            point: function (v) { return v + (v === 1 ? ' job queued' : ' jobs queued'); }
-        },
         {
             key: 'jobsProcessed', name: 'Jobs processed', valueEl: diagJobsProcessed,
             headline: function (data) { return data.headline == null ? '—' : String(data.headline); },
@@ -748,49 +641,44 @@ tr.runner-row-offline {
     }, 5000);
     setInterval(refreshCards, 60000);
 
-    // ── Active-users activity chart ──────────────────────────────────
-    var activityBars = document.getElementById('activity-bars');
-    if (activityBars) {
-        var activityCaption = document.getElementById('activity-caption');
-        var activityEmpty = document.getElementById('activity-empty');
-        var activityButtons = Array.from(document.querySelectorAll('.activity-window-btn'));
+    // Active Users card: sparkline + click-cycle 24h/7d/30d.
+    // Reuses the GET /admin/activity endpoint (24h/1w/1m windows). The card's
+    // headline is the peak distinct active users in a single bucket; the spark
+    // shows the per-bucket trend. The 24h view is server-rendered into the card
+    // so there's no fetch-on-load flash; clicking the card cycles the window.
+    var activitySpark = document.getElementById('activity-card-spark');
+    if (activitySpark) {
+        var activityCard = document.querySelector('[data-activity-card]');
+        var activityValue = document.getElementById('activity-card-value');
+        var activityWindowChip = document.getElementById('activity-card-window');
+        var activityWindows = ['24h', '1w', '1m'];
+        var activityChipText = { '24h': '24h', '1w': '7d', '1m': '30d' };
         var activityWindow = '24h';
 
-        var windowCaptions = { '24h': 'last 24 hours', '1w': 'last 7 days', '1m': 'last 30 days' };
-
-        function renderActivity(buckets) {
+        function renderActivityCard(buckets) {
             buckets = Array.isArray(buckets) ? buckets : [];
             var max = buckets.reduce(function (m, b) { return Math.max(m, Number(b.count) || 0); }, 0);
-            // Thin the x-axis labels so 24/30 bars don't collide: aim for ~8.
-            var labelEvery = Math.max(1, Math.ceil(buckets.length / 8));
-
-            activityBars.innerHTML = buckets.map(function (b, i) {
+            activitySpark.innerHTML = buckets.map(function (b) {
                 var count = Number(b.count) || 0;
-                var pct = max > 0 ? (count / max) * 100 : 0;
-                var label = b.label || '';
-                var showLabel = (i % labelEvery === 0) || i === buckets.length - 1;
+                // Floor populated buckets so a lone active user shows a visible
+                // bar, not a 2px sliver indistinguishable from an empty bucket.
+                var pct = (max > 0 && count > 0) ? Math.max((count / max) * 100, 20) : 0;
                 var noun = count === 1 ? 'user' : 'users';
-                return '<div class="activity-bar" title="' + escapeHtml(label) + ': ' + count + ' active ' + noun + '">'
-                    + '<span class="activity-bar-fill" style="--bar-h:' + pct.toFixed(1) + '%"></span>'
-                    + (showLabel ? '<span class="activity-bar-label">' + escapeHtml(label) + '</span>' : '')
-                    + '</div>';
+                return '<div class="spark-slot" data-count="' + count + '" data-label="' + escapeHtml(b.label || '')
+                    + '" title="' + escapeHtml(b.label || '') + ': ' + count + ' active ' + noun + '">'
+                    + '<span class="spark-fill' + (count > 0 ? '' : ' spark-fill-empty')
+                    + '" style="--bar-h:' + pct.toFixed(1) + '%"></span></div>';
             }).join('');
-
-            if (activityEmpty) activityEmpty.hidden = max > 0;
-            if (activityCaption) {
-                activityCaption.textContent = max > 0
-                    ? ('Peak ' + max + ' active in a single bucket · ' + (windowCaptions[activityWindow] || ''))
-                    : ' ';
-            }
+            if (activityValue) activityValue.textContent = String(max);
         }
 
-        function bucketsFromDOM() {
-            return Array.from(activityBars.querySelectorAll('.activity-bar')).map(function (el) {
+        function activityBucketsFromDOM() {
+            return Array.from(activitySpark.querySelectorAll('.spark-slot')).map(function (el) {
                 return { count: Number(el.getAttribute('data-count')) || 0, label: el.getAttribute('data-label') || '' };
             });
         }
 
-        async function refreshActivity() {
+        async function refreshActivityCard() {
             try {
                 var res = await fetch('/admin/activity?window=' + encodeURIComponent(activityWindow), {
                     headers: { 'Accept': 'application/json', 'X-Background-Refresh': '1' },
@@ -798,29 +686,33 @@ tr.runner-row-offline {
                 });
                 if (!res.ok) return;
                 var data = await res.json();
-                renderActivity(data.buckets);
+                renderActivityCard(data.buckets);
             } catch (_) {
-                // Keep current chart on transient polling errors.
+                // Keep the current bars on transient polling errors.
             }
         }
 
-        activityButtons.forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                if (btn.getAttribute('data-window') === activityWindow) return;
-                activityWindow = btn.getAttribute('data-window') || '24h';
-                activityButtons.forEach(function (other) {
-                    var active = other === btn;
-                    other.classList.toggle('activity-window-active', active);
-                    other.setAttribute('aria-pressed', active ? 'true' : 'false');
-                });
-                refreshActivity();
-            });
-        });
+        function cycleActivityWindow() {
+            var idx = activityWindows.indexOf(activityWindow);
+            activityWindow = activityWindows[(idx + 1) % activityWindows.length];
+            if (activityWindowChip) activityWindowChip.textContent = activityChipText[activityWindow] || activityWindow;
+            refreshActivityCard();
+        }
 
-        // Size the server-rendered bars immediately (no fetch, no flash), then
-        // keep them fresh on the same cadence as the runners table.
-        renderActivity(bucketsFromDOM());
-        setInterval(refreshActivity, 60000);
+        if (activityCard) {
+            activityCard.addEventListener('click', cycleActivityWindow);
+            activityCard.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    cycleActivityWindow();
+                }
+            });
+        }
+
+        // Size the server-rendered 24h bars immediately (no fetch, no flash),
+        // then keep fresh on the runners-table cadence.
+        renderActivityCard(activityBucketsFromDOM());
+        setInterval(refreshActivityCard, 60000);
     }
 
     // ── Import course ────────────────────────────────────────────────

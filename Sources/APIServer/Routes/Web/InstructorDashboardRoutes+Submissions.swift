@@ -208,30 +208,47 @@ extension InstructorDashboardRoutes {
         }
 
         let attemptBars = attemptDistributionBars(submittedRows)
-        let timelineBars = submissionTimelineBars(submissions, now: now)
+        let trendWindows = submissionTrendWindows(submissions, now: now)
         let gradeBars = gradeDistributionBars(gradedRows)
+
+        // The Submissions card is cyclable across 24h/7d/30d when there's been
+        // activity in the last 30 days; otherwise it falls back to a plain
+        // "Submissions (24h)" count, matching its pre-sparkline behaviour.
+        let submissionsCard: AssignmentStatCard
+        if let firstWindow = trendWindows.first {
+            submissionsCard = AssignmentStatCard(
+                label: "Submissions", value: firstWindow.headline,
+                hasSpark: false, sparkSummary: "", bars: [],
+                cyclable: true, windowChip: firstWindow.key, windows: trendWindows)
+        } else {
+            submissionsCard = AssignmentStatCard(
+                label: "Submissions (24h)", value: "\(submissions24h)",
+                hasSpark: false, sparkSummary: "", bars: [],
+                cyclable: false, windowChip: "", windows: [])
+        }
 
         return [
             AssignmentStatCard(
                 label: "Students Submitted",
                 value: "\(submittedCount)/\(enrolledStudentRosterCount)",
-                hasSpark: false, sparkSummary: "", bars: []),
+                hasSpark: false, sparkSummary: "", bars: [],
+                cyclable: false, windowChip: "", windows: []),
             AssignmentStatCard(
                 label: "Avg Attempts/Student", value: avgAttempts,
                 hasSpark: !attemptBars.isEmpty,
-                sparkSummary: "Submission attempts per student.", bars: attemptBars),
-            AssignmentStatCard(
-                label: "Submissions (24h)", value: "\(submissions24h)",
-                hasSpark: !timelineBars.isEmpty,
-                sparkSummary: "Submissions per day over the last 14 days.", bars: timelineBars),
+                sparkSummary: "Submission attempts per student.", bars: attemptBars,
+                cyclable: false, windowChip: "", windows: []),
+            submissionsCard,
             AssignmentStatCard(
                 label: "Queued Jobs", value: "\(pendingLatestCount)",
-                hasSpark: false, sparkSummary: "", bars: []),
+                hasSpark: false, sparkSummary: "", bars: [],
+                cyclable: false, windowChip: "", windows: []),
             AssignmentStatCard(
                 label: "Median Grade", value: medianBestGrade,
                 hasSpark: !gradeBars.isEmpty,
                 sparkSummary: "Grade distribution across \(countNoun(gradedRows.count, "graded student")).",
-                bars: gradeBars),
+                bars: gradeBars,
+                cyclable: false, windowChip: "", windows: []),
         ]
     }
 
@@ -274,45 +291,116 @@ extension InstructorDashboardRoutes {
         return sparklineBars(counts: counts, titles: titles)
     }
 
-    /// Daily submission counts over the most recent 14 days (Waterloo days, to
-    /// match the rest of the UI).  Empty when there is no activity in the
-    /// window, so the card falls back to its plain headline number.
-    private func submissionTimelineBars(_ submissions: [APISubmission], now: Date) -> [SparklineBar] {
+    // MARK: - Submissions-over-time (cyclable card)
+
+    /// The three time windows for the cyclable Submissions card — 24 hourly
+    /// buckets (24h), 7 daily buckets (7d), and 30 daily buckets (30d), all in
+    /// Waterloo time.  Empty when there's been no submission in the last 30
+    /// days, so the card falls back to a plain "Submissions (24h)" count.
+    private func submissionTrendWindows(
+        _ submissions: [APISubmission], now: Date
+    ) -> [SubmissionsTrendWindow] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Toronto") ?? calendar.timeZone
+
+        let (monthStarts, monthCounts) = dailyBuckets(submissions, dayCount: 30, calendar: calendar, now: now)
+        guard monthCounts.contains(where: { $0 > 0 }) else { return [] }
+        let (hourStarts, hourCounts) = hourlyBuckets(submissions, calendar: calendar, now: now)
+        let (weekStarts, weekCounts) = dailyBuckets(submissions, dayCount: 7, calendar: calendar, now: now)
+
+        let hourFormatter = DateFormatter()
+        hourFormatter.locale = Locale(identifier: "en_US_POSIX")
+        hourFormatter.timeZone = calendar.timeZone
+        hourFormatter.dateFormat = "h a"
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = calendar.timeZone
+        dayFormatter.dateFormat = "MMM d"
+
+        return [
+            trendWindow(
+                key: "24h", starts: hourStarts, counts: hourCounts,
+                formatter: hourFormatter, initiallyHidden: false),
+            trendWindow(
+                key: "7d", starts: weekStarts, counts: weekCounts,
+                formatter: dayFormatter, initiallyHidden: true),
+            trendWindow(
+                key: "30d", starts: monthStarts, counts: monthCounts,
+                formatter: dayFormatter, initiallyHidden: true),
+        ]
+    }
+
+    private func trendWindow(
+        key: String, starts: [Date], counts: [Int], formatter: DateFormatter, initiallyHidden: Bool
+    ) -> SubmissionsTrendWindow {
+        let titles = starts.indices.map { index in
+            "\(formatter.string(from: starts[index])): \(countNoun(counts[index], "submission"))"
+        }
+        return SubmissionsTrendWindow(
+            key: key, headline: "\(counts.reduce(0, +))",
+            initiallyHidden: initiallyHidden,
+            bars: sparklineBars(counts: counts, titles: titles))
+    }
+
+    /// Buckets submissions into `dayCount` daily buckets ending today.
+    private func dailyBuckets(
+        _ submissions: [APISubmission], dayCount: Int, calendar: Calendar, now: Date
+    ) -> ([Date], [Int]) {
         let today = calendar.startOfDay(for: now)
-        let dayCount = 14
-        let dayStarts: [Date] = stride(from: dayCount - 1, through: 0, by: -1).compactMap {
+        let starts: [Date] = stride(from: dayCount - 1, through: 0, by: -1).compactMap {
             calendar.date(byAdding: .day, value: -$0, to: today)
         }
-        guard dayStarts.count == dayCount else { return [] }
-        var counts = [Int](repeating: 0, count: dayCount)
+        var counts = [Int](repeating: 0, count: starts.count)
         for submission in submissions {
             guard let submittedAt = submission.submittedAt else { continue }
-            if let index = dayStarts.firstIndex(of: calendar.startOfDay(for: submittedAt)) {
+            if let index = starts.firstIndex(of: calendar.startOfDay(for: submittedAt)) {
                 counts[index] += 1
             }
         }
-        guard counts.contains(where: { $0 > 0 }) else { return [] }
-        let labelFormatter = DateFormatter()
-        labelFormatter.locale = Locale(identifier: "en_US_POSIX")
-        labelFormatter.timeZone = calendar.timeZone
-        labelFormatter.dateFormat = "MMM d"
-        let titles = dayStarts.indices.map { index in
-            "\(labelFormatter.string(from: dayStarts[index])): \(countNoun(counts[index], "submission"))"
-        }
-        return sparklineBars(counts: counts, titles: titles)
+        return (starts, counts)
     }
 
-    /// Normalizes a count series to `[SparklineBar]`, scaling each bar's height
-    /// to a 0–100 percentage of the series maximum (matching the JS
-    /// `ChickadeeUI.renderSparkline` path used on the dashboards).
+    /// Buckets submissions into 24 hourly buckets ending at the current hour.
+    private func hourlyBuckets(
+        _ submissions: [APISubmission], calendar: Calendar, now: Date
+    ) -> ([Date], [Int]) {
+        let hourUnits: Set<Calendar.Component> = [.year, .month, .day, .hour]
+        let currentHour = calendar.date(from: calendar.dateComponents(hourUnits, from: now)) ?? now
+        let starts: [Date] = stride(from: 23, through: 0, by: -1).compactMap {
+            calendar.date(byAdding: .hour, value: -$0, to: currentHour)
+        }
+        var counts = [Int](repeating: 0, count: starts.count)
+        for submission in submissions {
+            guard let submittedAt = submission.submittedAt,
+                let bucket = calendar.date(from: calendar.dateComponents(hourUnits, from: submittedAt))
+            else { continue }
+            if let index = starts.firstIndex(of: bucket) {
+                counts[index] += 1
+            }
+        }
+        return (starts, counts)
+    }
+
+    /// Normalizes a count series to `[SparklineBar]`.  Each populated bucket is
+    /// scaled to a 0–100 percentage of the series maximum and floored to a
+    /// clearly visible height, so a single student/submission doesn't collapse
+    /// to a 2px sliver indistinguishable from an empty bin; empty buckets are
+    /// flagged so they render flat/transparent rather than at the `.spark-fill`
+    /// min-height (the floor that made small bins read as empty).
     private func sparklineBars(counts: [Int], titles: [String]) -> [SparklineBar] {
         let maxValue = counts.max() ?? 0
+        let minVisibleHeight = 20
         return counts.indices.map { index in
-            let height = maxValue > 0 ? Int((Double(counts[index]) / Double(maxValue) * 100).rounded()) : 0
+            let count = counts[index]
+            let height: Int
+            if count <= 0 || maxValue <= 0 {
+                height = 0
+            } else {
+                height = max(Int((Double(count) / Double(maxValue) * 100).rounded()), minVisibleHeight)
+            }
             return SparklineBar(
                 heightPercent: height,
+                isEmpty: count <= 0,
                 title: index < titles.count ? titles[index] : "")
         }
     }

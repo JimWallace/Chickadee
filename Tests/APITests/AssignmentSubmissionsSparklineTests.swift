@@ -1,11 +1,11 @@
 // Tests/APITests/AssignmentSubmissionsSparklineTests.swift
 //
-// Render tests for the server-rendered distribution sparklines on the
-// instructor assignment-submissions page (GET /instructor/:assignmentID/
-// submissions).  The three statistic cards with a distribution behind their
-// number — Avg Attempts/Student, Submissions (24h), Median Grade — draw a
-// `.diagnostic-spark` chart from pre-normalized bar heights; the remaining two
-// stay plain numbers, and the whole spark is omitted when there is no activity.
+// Render tests for the server-rendered sparklines on the instructor
+// assignment-submissions page (GET /instructor/:assignmentID/submissions).
+// Avg Attempts/Student and Median Grade draw a fixed distribution chart;
+// Submissions is a cyclable card carrying pre-rendered 24h/7d/30d windows the
+// browser swaps on click.  All are server-rendered from pre-normalized bar
+// heights; the charts are omitted when there is no activity.
 
 import Fluent
 import Foundation
@@ -50,10 +50,14 @@ struct AssignmentSubmissionsSparklineTests {
                     #expect(body.contains("--bar-h:"), "bars carry a normalized height")
                     // Attempts distribution tooltip: one student, one attempt.
                     #expect(body.contains("1 attempt: 1 student"), "attempts distribution bins by count")
-                    // Accessible captions for the three distribution cards.
+                    // Accessible captions for the fixed distribution cards.
                     #expect(body.contains("Grade distribution across 1 graded student"))
                     #expect(body.contains("Submission attempts per student"))
-                    #expect(body.contains("Submissions per day over the last 14 days"))
+                    // Submissions card is cyclable: all three windows render server-side.
+                    #expect(body.contains("data-subm-trend"), "Submissions card is cyclable")
+                    #expect(body.contains("data-subm-window=\"24h\""))
+                    #expect(body.contains("data-subm-window=\"7d\""))
+                    #expect(body.contains("data-subm-window=\"30d\""))
                 }
             )
         }
@@ -80,8 +84,12 @@ struct AssignmentSubmissionsSparklineTests {
                     // The headline cards still render…
                     #expect(body.contains("Median Grade"))
                     #expect(body.contains("Avg Attempts/Student"))
-                    // …but with no submissions there is no distribution to chart.
+                    // …but with no submissions there is no distribution to chart,
+                    // and the Submissions card stays a plain number (not cyclable).
+                    // (`data-subm-trend` also appears in the always-present cycling
+                    // script, so key off the per-window markup the card alone emits.)
                     #expect(!body.contains("diagnostic-spark"), "no sparkline without activity")
+                    #expect(!body.contains("data-subm-window="), "Submissions card not cyclable without activity")
                 }
             )
         }
