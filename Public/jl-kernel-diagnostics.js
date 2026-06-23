@@ -29,6 +29,7 @@
     'use strict';
 
     var KERNEL_BOOT_DEADLINE_MS = 75000;  // generous; a healthy kernel idles in seconds
+    var SUSTAINED_UNHEALTHY_MS = 10000;   // ignore transient mid-boot dead/unknown blips
     var MAX_ERRORS = 8;
 
     var origin;
@@ -151,7 +152,28 @@
         return null;
     }
 
+    // Decide whether a dead/unknown kernel status has persisted long enough to
+    // report. PURE (no globals beyond the constant) so it unit-tests cleanly.
+    // A healthy boot routinely flashes "Kernel Unknown" for a beat before it
+    // reaches idle, so a single unhealthy poll is noise — reporting it produced
+    // a false kernel_unknown on most *successful* boots. So: start a clock on
+    // the first unhealthy poll, report only once the state has held continuously
+    // for SUSTAINED_UNHEALTHY_MS, and reset the clock the instant the status is
+    // anything else (idle/busy/starting/null).
+    //   status         — current kernelStatus() value (may be null)
+    //   unhealthySince — ms timestamp the current streak began, or 0 if none
+    //   now            — current time in ms
+    // returns { unhealthySince, report }.
+    function trackUnhealthy(status, unhealthySince, now) {
+        if (status === 'dead' || status === 'unknown') {
+            var since = unhealthySince || now;   // first unhealthy poll starts the clock
+            return { unhealthySince: since, report: now - since >= SUSTAINED_UNHEALTHY_MS };
+        }
+        return { unhealthySince: 0, report: false };
+    }
+
     var startedAt = Date.now();
+    var unhealthySince = 0;   // ms timestamp the current dead/unknown streak began; 0 = healthy
 
     function poll() {
         if (done) return;
@@ -165,10 +187,15 @@
                     done = true;
                     return;
                 }
-                if (status === 'dead' || status === 'unknown') {
-                    reportError('kernel_' + status, 'kernel status ' + status);
-                    // keep watching — a recovery may still reach idle
-                }
+            }
+            // Report dead/unknown only when it PERSISTS — runs every poll
+            // (including status === null) so a momentary unknown that flips back
+            // resets the clock and never reports.
+            var tracked = trackUnhealthy(status, unhealthySince, Date.now());
+            unhealthySince = tracked.unhealthySince;
+            if (tracked.report) {
+                reportError('kernel_' + status, 'kernel status ' + status);
+                // keep watching — a recovery may still reach idle
             }
         } catch (_) { /* ignore */ }
         if (Date.now() - startedAt >= KERNEL_BOOT_DEADLINE_MS) {
@@ -186,6 +213,9 @@
     // Test seam (Node vm): exercise detection + reporting without a browser.
     try {
         var hooks = (typeof globalThis !== 'undefined') && globalThis.__CK_KERNEL_DIAG_TEST_HOOKS__;
-        if (hooks) hooks.exports = { kernelStatus: kernelStatus, reportPhase: reportPhase, reportError: reportError };
+        if (hooks) hooks.exports = {
+            kernelStatus: kernelStatus, reportPhase: reportPhase,
+            reportError: reportError, trackUnhealthy: trackUnhealthy,
+        };
     } catch (_) { /* ignore */ }
 })();
