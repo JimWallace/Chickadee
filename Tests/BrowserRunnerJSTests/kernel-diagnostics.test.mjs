@@ -242,12 +242,49 @@ function loadBridge() {
   // Drop any non-kernel telemetry emitted during load (e.g. sw_state).
   const kernelEvents = () => events.filter(
     e => e.kind === 'kernel_phase' || e.kind === 'kernel_error');
-  return { handleKernelDiagMessage: hooks.exports.handleKernelDiagMessage, kernelEvents };
+  return { handleKernelDiagMessage: hooks.exports.handleKernelDiagMessage, kernelEvents, frame };
 }
 
 function msg(data, origin = 'https://example.test') {
   return { origin, data };
 }
+
+test('bridge self-heals an exec_hang: one reload + a recover_attempt event', async () => {
+  const { handleKernelDiagMessage, frame, kernelEvents } = loadBridge();
+  const editorUrl = frame.dataset.editorUrl;
+  // First exec_hang → reload the editor iframe once. whenServiceWorkerActive
+  // resolves false synchronously (no navigator in the harness), so the reload
+  // .then() runs on a microtask we flush with two awaits.
+  frame.src = 'SENTINEL-A';
+  handleKernelDiagMessage(msg({
+    ck: 'kernel-diag', kind: 'kernel_error', source: 'exec_hang', message: 'busy_ms=45000',
+  }));
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(frame.src, editorUrl);
+  assert.equal(kernelEvents().filter(e => e.source === 'recover_attempt').length, 1);
+  // A second exec_hang must NOT reload again — guarded so a persistently
+  // deadlocking kernel can't reload-loop.
+  frame.src = 'SENTINEL-B';
+  handleKernelDiagMessage(msg({
+    ck: 'kernel-diag', kind: 'kernel_error', source: 'exec_hang', message: 'busy_ms=45000',
+  }));
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(frame.src, 'SENTINEL-B');
+});
+
+test('bridge reports recover_failed when the rebooted kernel hangs again', () => {
+  const { handleKernelDiagMessage, kernelEvents } = loadBridge();
+  // Two exec_hangs without yielding: the reload .then() hasn't run, so the
+  // reset-window guard is still open and the second hang reaches the
+  // persistent-hang branch — exactly the "self-heal didn't take" case.
+  const hang = () => handleKernelDiagMessage(msg({
+    ck: 'kernel-diag', kind: 'kernel_error', source: 'exec_hang', message: 'busy_ms=45000',
+  }));
+  hang();   // recover_attempt + schedules the reload
+  hang();   // already-recovered, guard still open → recover_failed
+  assert.equal(kernelEvents().filter(e => e.source === 'recover_attempt').length, 1);
+  assert.equal(kernelEvents().filter(e => e.source === 'recover_failed').length, 1);
+});
 
 test('bridge forwards a same-origin kernel_phase', () => {
   const { handleKernelDiagMessage, kernelEvents } = loadBridge();

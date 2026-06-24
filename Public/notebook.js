@@ -229,6 +229,13 @@
             const d = e.data;
             if (!d || d.ck !== 'kernel-diag') return false;
             if (d.kind !== 'kernel_phase' && d.kind !== 'kernel_error') return false;
+            // Self-heal: a post-idle exec_hang means the kernel booted then wedged
+            // on execute (the boot-failure watchdog doesn't cover it). Trigger the
+            // one-shot work-preserving editor reload — independent of the telemetry
+            // cap below, so a flood of breadcrumbs can't gate recovery.
+            if (d.kind === 'kernel_error' && d.source === 'exec_hang') {
+                recoverHungKernelOnce();
+            }
             if (kernelDiagForwarded >= KERNEL_DIAG_MAX) return false;
             kernelDiagForwarded += 1;
             failures.reportEvent({
@@ -935,6 +942,56 @@
             } catch (_) {
                 resolve(false);
             }
+        });
+    }
+
+    // Self-heal for a post-idle EXECUTION hang (the collector's `exec_hang`): the
+    // kernel booted to idle, then wedged on a cell. The watchdog's reload ladder
+    // only covers kernels that never *registered*, so nothing recovers this case
+    // today — students just sit on `[*]`. One work-preserving iframe reload (the
+    // same mechanism the watchdog uses; JupyterLite restores the student's saved
+    // copy from IndexedDB on boot, so edits survive), guarded to once per page so
+    // a persistently-deadlocking kernel can't reload-loop — a second hang points
+    // the student at the heavier /reset-editor clear instead. The flag is
+    // module-scoped so it survives the iframe reload (only the iframe reloads,
+    // not this page).
+    let kernelHangRecoverUsed = false;
+    // Recovery telemetry so the self-heal's usage IS the bug's KPI: `recover_attempt`
+    // (the self-heal fired) and `recover_failed` (the rebooted kernel hung AGAIN).
+    // Success ≈ attempts − failures; both should fall toward zero once the
+    // underlying kernel deadlock is actually fixed, so a drop is the signal the
+    // root-cause fix worked. Reuses the kernel_error kind (free-form source), so no
+    // server change and it never inflates the instructor error card (which counts
+    // only preflight_fail / watchdog_timeout / page_unresponsive).
+    function reportRecovery(source) {
+        if (!failures || !failures.reportEvent) return;
+        try { failures.reportEvent({ kind: 'kernel_error', source: source }); }
+        catch (_) { /* telemetry must never break recovery */ }
+    }
+    function recoverHungKernelOnce() {
+        // Don't fight a reset/reload that just happened (watchdog or locked-path).
+        if (forcedEditorResetAt && Date.now() - forcedEditorResetAt < 20000) return;
+        if (kernelHangRecoverUsed) {
+            // The reboot's kernel hung again — the self-heal didn't take.
+            reportRecovery('recover_failed');
+            try {
+                setStatus('error',
+                    'The notebook kernel is still not responding. Open /reset-editor '
+                    + 'for a clean restart, or try a different browser.');
+            } catch (_) { /* status is cosmetic */ }
+            return;
+        }
+        kernelHangRecoverUsed = true;
+        reportRecovery('recover_attempt');
+        try {
+            setStatus('loading',
+                'The notebook kernel stopped responding — reloading the editor…');
+        } catch (_) { /* status is cosmetic; recover regardless */ }
+        // Wait for the SW to settle, stamp forcedEditorResetAt so the locked-path
+        // enforcer doesn't fight the navigation, then re-point the iframe.
+        whenServiceWorkerActive(5000).then(() => {
+            forcedEditorResetAt = Date.now();
+            try { frame.src = editorURL; } catch (_) { /* nothing else to try */ }
         });
     }
 
