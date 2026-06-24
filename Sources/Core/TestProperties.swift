@@ -267,6 +267,21 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `patternFamilies` / `globalExpressions`).
     public let datasets: [DatasetSpec]
 
+    /// Filenames the instructor has designated as **grader-only** (option B —
+    /// see docs/datasets.md): bundled in the test setup so the native worker's
+    /// grading scripts can read them, but withheld from every student-facing
+    /// path (editor symlinks, browser-runner download, student support-file
+    /// download).  This is the reserved holdout / secret test set.  A
+    /// grader-only entry is otherwise an ordinary support file; this list just
+    /// flags it as student-hidden.  Server-side only — the worker receives the
+    /// file via the test-setup zip and needs no marker — so `runnerSanitized()`
+    /// strips it via the memberwise default (like `datasets`).
+    public let graderOnlyFiles: [String]
+
+    /// The grader-only filenames as a set, for unioning into the student-facing
+    /// `reservedNames` filters at each delivery point.
+    public var graderOnlyFileSet: Set<String> { Set(graderOnlyFiles) }
+
     /// True when the manifest declares any per-student `=` expression, global
     /// or section-scoped.  Expressions are the only personalization inputs
     /// that need a per-(student, assignment) seed to resolve — use this to
@@ -316,6 +331,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         globalVariables: [FamilyVariable] = [],
         globalExpressions: [PersonalizationExpression] = [],
         datasets: [DatasetSpec] = [],
+        graderOnlyFiles: [String] = [],
         achievements: [Achievement] = [],
         disabledBuiltInAwardIDs: [String] = [],
         builtInAchievementsSeeded: Bool = false,
@@ -339,6 +355,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
         self.datasets = datasets
+        self.graderOnlyFiles = graderOnlyFiles
         self.achievements = achievements
         self.disabledBuiltInAwardIDs = disabledBuiltInAwardIDs
         self.builtInAchievementsSeeded = builtInAchievementsSeeded
@@ -373,6 +390,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
                 [PersonalizationExpression].self,
                 forKey: .globalExpressions) ?? []
         datasets = try c.decodeIfPresent([DatasetSpec].self, forKey: .datasets) ?? []
+        graderOnlyFiles = try c.decodeIfPresent([String].self, forKey: .graderOnlyFiles) ?? []
         achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
         disabledBuiltInAwardIDs =
             try c.decodeIfPresent([String].self, forKey: .disabledBuiltInAwardIDs) ?? []
@@ -399,6 +417,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case globalVariables
         case globalExpressions
         case datasets
+        case graderOnlyFiles
         case achievements
         case disabledBuiltInAwardIDs
         case builtInAchievementsSeeded
@@ -422,6 +441,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(globalVariables, forKey: .globalVariables)
         try c.encode(globalExpressions, forKey: .globalExpressions)
         try c.encode(datasets, forKey: .datasets)
+        try c.encode(graderOnlyFiles, forKey: .graderOnlyFiles)
         try c.encode(achievements, forKey: .achievements)
         try c.encode(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs)
         try c.encode(builtInAchievementsSeeded, forKey: .builtInAchievementsSeeded)
@@ -463,9 +483,10 @@ public struct TestProperties: Codable, Equatable, Sendable {
             },
             globalVariables: globalVariables,
             globalExpressions: [],
-            // `datasets` is dropped via the memberwise default: the runner
-            // receives the materialized per-student file (delivered with the
-            // job, like `_ck_inputs.py`), never the slice spec.
+            // `datasets` and `graderOnlyFiles` are dropped via the memberwise
+            // default: the runner receives the materialized per-student file
+            // (delivered with the job, like `_ck_inputs.py`) and the grader-only
+            // file (via the test-setup zip) directly — never the specs/markers.
             achievements: []
         )
     }
