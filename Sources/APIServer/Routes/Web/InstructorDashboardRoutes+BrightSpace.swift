@@ -354,9 +354,10 @@ extension InstructorDashboardRoutes {
     /// but backfilled + ensured enrolled.
     ///
     /// Provisioned accounts carry `authProvider = "learn-roster"` and no
-    /// `externalSubject`. Until SSO-adoption-on-login ships (Phase 2), a real
-    /// student who later logs in via SSO would collide on the unique username —
-    /// so this is for test accounts that won't log in, not yet a live class.
+    /// `externalSubject`. When the real student later logs in via SSO they adopt
+    /// this account in place (`adoptRosterShadowAccount`), inheriting its cached
+    /// ids + grades — no duplicate or unique-username collision. Safe on a live
+    /// class.
     @Sendable
     func brightspaceImportRoster(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)

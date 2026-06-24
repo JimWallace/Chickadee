@@ -250,6 +250,11 @@ struct SSOAuthRoutes: RouteCollection {
             )
         )
 
+        let profile = SSOResolvedProfile(
+            username: username, subject: subject, preferredName: preferredName,
+            userIdentifier: userIdentifier, studentID: studentID, email: email,
+            displayName: displayName, mappedRole: mappedRole)
+
         if let existing = try await APIUser.query(on: req.db)
             .filter(\.$authProvider == "duo-oidc")
             .filter(\.$externalSubject == subject)
@@ -289,18 +294,46 @@ struct SSOAuthRoutes: RouteCollection {
             return existing
         }
 
+        // Adopt a roster-imported shadow account (provisioned from the LEARN
+        // classlist, `learn-roster`, never logged in) for its rightful owner —
+        // matched by the IdP-authoritative username — instead of creating a
+        // duplicate that would collide on the unique username. Only
+        // `learn-roster` accounts with no SSO subject are eligible, so real
+        // local/SSO accounts are never claimed.
+        if let adopted = try await adoptRosterShadowAccount(profile, on: req.db) {
+            await AuditLogger.record(
+                action: .userProvisioned,
+                targetType: .user,
+                targetID: adopted.id?.uuidString,
+                metadata: [
+                    "username": adopted.username,
+                    "role": adopted.role,
+                    "provider": "duo-oidc",
+                    "source": "adopted_learn_roster_account",
+                ],
+                actorUsernameOverride: "sso",
+                on: req
+            )
+            return adopted
+        }
+
+        return try await createSSOUser(profile, on: req)
+    }
+
+    /// Creates a fresh SSO-provisioned user from the resolved profile + audits it.
+    private func createSSOUser(_ profile: SSOResolvedProfile, on req: Request) async throws -> APIUser {
         let now = Date()
         let newUser = APIUser(
-            username: username,
+            username: profile.username,
             passwordHash: "",  // SSO users have no local password
-            role: mappedRole ?? UserRole.student.rawValue,
+            role: profile.mappedRole ?? UserRole.student.rawValue,
             authProvider: "duo-oidc",
-            externalSubject: subject,
-            email: email,
-            preferredName: preferredName,
-            userIdentifier: userIdentifier,
-            studentID: studentID,
-            displayName: displayName,
+            externalSubject: profile.subject,
+            email: profile.email,
+            preferredName: profile.preferredName,
+            userIdentifier: profile.userIdentifier,
+            studentID: profile.studentID,
+            displayName: profile.displayName,
             lastLoginAt: now,
             lastSeenAt: now
         )
@@ -460,4 +493,58 @@ private extension String {
     func normalizedIdentityKey() -> String? {
         nilIfBlank()?.lowercased()
     }
+}
+
+// MARK: - Roster-account adoption
+
+/// Adopts a roster-imported shadow account — provisioned from the LEARN
+/// classlist (`authProvider == "learn-roster"`, no `externalSubject`, never
+/// logged in) — for the SSO user identified by `username` / `subject`, if one
+/// exists, converting it to a real SSO account in place. Returns the adopted
+/// user, or nil when there's no shadow to claim.
+///
+/// This is what makes roster import safe on a live class: when an imported
+/// student logs in via SSO for the first time, they take over their existing
+/// account (and its cached BrightSpace ids + any grades) instead of hitting the
+/// unique-username constraint. Match is by the IdP-authoritative username
+/// (lowercased, as import stores it); only `learn-roster` shells are eligible,
+/// so real local/SSO accounts are never claimed.
+/// The SSO identity fields resolved from the IdP claims, bundled so the
+/// upsert / adopt / create paths share one parameter.
+struct SSOResolvedProfile {
+    let username: String
+    let subject: String
+    let preferredName: String?
+    let userIdentifier: String
+    let studentID: String?
+    let email: String?
+    let displayName: String?
+    let mappedRole: String?
+}
+
+func adoptRosterShadowAccount(
+    _ profile: SSOResolvedProfile, on db: Database
+) async throws -> APIUser? {
+    guard
+        let shadow = try await APIUser.query(on: db)
+            .filter(\.$authProvider == "learn-roster")
+            .filter(\.$externalSubject == nil)
+            .filter(\.$username == profile.username.lowercased())
+            .first()
+    else { return nil }
+
+    shadow.authProvider = "duo-oidc"
+    shadow.externalSubject = profile.subject
+    shadow.preferredName = profile.preferredName ?? shadow.preferredName
+    shadow.userIdentifier = profile.userIdentifier
+    // Keep the classlist-cached OrgDefinedId when the IdP sends no student_id.
+    shadow.studentID = profile.studentID ?? shadow.studentID
+    shadow.email = profile.email ?? shadow.email
+    shadow.displayName = profile.displayName ?? shadow.displayName
+    if let mappedRole = profile.mappedRole { shadow.role = mappedRole }
+    let now = Date()
+    shadow.lastLoginAt = now
+    shadow.lastSeenAt = now
+    try await shadow.save(on: db)
+    return shadow
 }

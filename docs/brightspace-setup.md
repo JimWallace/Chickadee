@@ -307,9 +307,11 @@ or to test sync without anyone logging in):
    override), then **Sync now** — override-only (no-submission) students push
    to LEARN alongside the submitters.
 
-> **Not yet for live classes.** Imported accounts have no SSO subject, so until
-> SSO-adoption-on-login ships, a real student who later logs in via SSO would
-> collide on the unique username. Use this for test accounts that won't log in.
+> **Safe on a live class.** When an imported student later logs in via SSO, they
+> **adopt** their provisioned account in place (matched by username), inheriting
+> its cached BrightSpace ids and any grades — no duplicate, no username
+> collision. Only never-logged-in roster shells are adoptable; real local/SSO
+> accounts are never claimed.
 
 ## Troubleshooting
 

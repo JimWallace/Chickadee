@@ -218,6 +218,42 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
+    @Test func adoptRosterShadowAccountClaimsImportedStudentOnFirstLogin() async throws {
+        try await withApp(app) { _ in
+            // A roster-imported shadow: learn-roster, no SSO subject, cached ids.
+            let shadow = APIUser(
+                username: "jdoe", passwordHash: "", role: UserRole.student.rawValue,
+                authProvider: "learn-roster", studentID: "20850001")
+            shadow.brightspaceUserID = "d2l-1"
+            try await shadow.save(on: app.db)
+            let shadowID = try shadow.requireID()
+
+            // Owner logs in via SSO (username arrives mixed-case, no student_id claim).
+            let adopted = try await adoptRosterShadowAccount(
+                SSOResolvedProfile(
+                    username: "JDoe", subject: "oidc-sub-123", preferredName: "Jane",
+                    userIdentifier: "jdoe", studentID: nil, email: "jdoe@uw.ca",
+                    displayName: "Jane Doe", mappedRole: nil), on: app.db)
+            let user = try #require(adopted)
+            #expect(user.id == shadowID)  // same account, not a duplicate
+            #expect(user.authProvider == "duo-oidc")
+            #expect(user.externalSubject == "oidc-sub-123")
+            #expect(user.studentID == "20850001")  // cached OrgDefinedId kept (no claim)
+            #expect(user.brightspaceUserID == "d2l-1")  // cached LEARN UserId preserved
+
+            // No duplicate account exists for the username.
+            let count = try await APIUser.query(on: app.db).filter(\.$username == "jdoe").count()
+            #expect(count == 1)
+
+            // A username with no shadow is not adopted (returns nil → caller creates fresh).
+            let none = try await adoptRosterShadowAccount(
+                SSOResolvedProfile(
+                    username: "nobody", subject: "x", preferredName: nil, userIdentifier: "nobody",
+                    studentID: nil, email: nil, displayName: nil, mappedRole: nil), on: app.db)
+            #expect(none == nil)
+        }
+    }
+
     // MARK: - Roster import + override-only push
 
     @Test func provisionStudentsFromClasslistCreatesEnrolledGradeableAccounts() async throws {
