@@ -43,12 +43,6 @@
             <div class="diagnostic-value" id="idash-browser-errors">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
-        #for(metric in metrics):
-        <article class="diagnostic-card">
-            <div class="diagnostic-label">#(metric.label)</div>
-            <div class="diagnostic-value">#(metric.value)</div>
-        </article>
-        #endfor
     </div>
 </section>
 <div class="section-toolbar">

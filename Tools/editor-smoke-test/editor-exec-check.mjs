@@ -11,21 +11,12 @@
 // real page — the editor kernel running a cell beside the grading/freeze workers.
 //
 // This probe closes that gap: open the REAL student notebook page, wait for
-// kernel_idle, then run the seeded editor cell and assert its stdout appears.
-//
-// It runs TWO arms to localise the cause (and answer "can type-checking stay?"):
-//   • immediate — run the cell the instant kernel_idle fires (delay 0), which
-//     maximally RACES the post-idle nb_mypy background load (asyncio.ensure_future
-//     in scripts/patch-pyodide-kernel.py → loadPackage(mypy WASM) + a per-cell
-//     pre_run_cell mypy hook). This is the worst case and should reproduce.
-//   • settled — wait EXEC_SETTLE_MS after idle (let that background load finish)
-//     before running. If the hang DISAPPEARS when settled, the cause is the
-//     load-vs-execute race and nb_mypy can be DEFERRED rather than dropped; if it
-//     still hangs, the synchronous per-cell mypy run itself is the cost.
-//
-// Looping each arm measures the hang RATE; on a hang it captures the in-iframe
-// kernel-diag breadcrumbs (incl. exec_hang), the execution-indicator data-status,
-// console errors, and any unhandledrejection text, so a hung run is diagnostic.
+// kernel_idle, then IMMEDIATELY run the seeded editor cell (maximising the race
+// against the post-idle nb_mypy background load) and assert its stdout appears.
+// Looping (EXEC_ITER) measures the hang RATE; on a hang it captures the in-iframe
+// kernel-diag breadcrumbs (including `exec_hang`), the execution-indicator
+// data-status, and console errors, so a hung run is diagnostic rather than a
+// black box.
 //
 // DIAGNOSTIC harness — run via the `editor-exec-probe` workflow, deliberately NOT
 // wired into the required editor-smoke gate while we hunt the root cause, so an
@@ -34,12 +25,11 @@
 // → student), then drives the page with the student's session.
 //
 // Usage:  node editor-exec-check.mjs <baseURL>
-// Env:    SMOKE_BROWSER (chromium|webkit|firefox), EXEC_ITER (cycles per arm,
-//         default 5), EXEC_BUDGET_MS (per-cell execute budget, default 60000 —
-//         > the 45s exec_hang threshold so a real hang also trips the beacon),
-//         EXEC_SETTLE_MS (settle wait for the "settled" arm, default 45000).
-// Exit 0 = the immediate arm saw no hangs (bug gone); exit 1 = it reproduced (or
-// a setup failure). The settled arm is reported but does not set the exit code.
+// Env:    SMOKE_BROWSER (chromium|webkit|firefox), EXEC_ITER (default 1),
+//         EXEC_BUDGET_MS (default 60000 — > the 45s exec_hang threshold so a real
+//         hang also trips the in-iframe exec_hang beacon), EXEC_DELAY_MS (default
+//         0 — ms to wait after kernel_idle before running, to vary the race).
+// Exit 0 = no hangs observed; exit 1 = at least one hang (or a setup failure).
 
 import { chromium, webkit, firefox } from "playwright";
 import { request as pwRequest } from "playwright";
@@ -50,9 +40,9 @@ const browserName = process.env.SMOKE_BROWSER || "chromium";
 const browserType = BROWSERS[browserName] || chromium;
 const baseURL = (process.argv[2] || process.env.BASE_URL || "http://127.0.0.1:8099").replace(/\/$/, "");
 
-const ITER = Math.max(1, parseInt(process.env.EXEC_ITER || "5", 10));
+const ITER = Math.max(1, parseInt(process.env.EXEC_ITER || "1", 10));
 const EXEC_BUDGET_MS = parseInt(process.env.EXEC_BUDGET_MS || "60000", 10);
-const EXEC_SETTLE_MS = parseInt(process.env.EXEC_SETTLE_MS || "45000", 10);
+const EXEC_DELAY_MS = parseInt(process.env.EXEC_DELAY_MS || "0", 10);
 const PAGE_LOAD_MS = 30_000;
 const KERNEL_BOOT_MS = parseInt(process.env.SMOKE_KERNEL_MS || "120000", 10);
 const IDLE_WAIT_MS = 90_000;
@@ -171,36 +161,27 @@ async function seed() {
   return { setupID, storageState };
 }
 
-// One open→idle→(wait delayMs)→execute cycle in a fresh context (fresh kernel +
-// SAB + IndexedDB). Returns { hung, ms, status, note, diag, errors, rej }.
-async function probeOnce(browser, storageState, notebookURL, delayMs) {
+// One open→idle→execute cycle in a fresh context (fresh kernel + SAB + IndexedDB).
+// Returns { hung, ms, status, note, diag, errors }.
+async function probeOnce(browser, storageState, notebookURL) {
   const context = await browser.newContext({ storageState });
-  // Capture the in-iframe collector's breadcrumbs AND any unhandledrejection
-  // text on the parent (the notebook page) — same bridge the production
-  // telemetry uses. The rejection text is best-effort: a kernel-worker rejection
-  // may not reach the iframe window, but page console still surfaces its type.
+  // Capture the in-iframe collector's breadcrumbs on the parent (the notebook
+  // page), same bridge the production telemetry uses.
   await context.addInitScript(() => {
     try {
       window.__ckKernelDiag = [];
-      window.__ckRej = [];
       window.addEventListener("message", (e) => {
         const d = e && e.data;
         if (d && d.ck === "kernel-diag") window.__ckKernelDiag.push({ kind: d.kind, source: d.source, message: d.message });
-      });
-      window.addEventListener("unhandledrejection", (e) => {
-        try {
-          const r = e && e.reason;
-          window.__ckRej.push(String((r && (r.message || r.stack)) || r || "rejection").slice(0, 1200));
-        } catch (_) { /* ignore */ }
       });
     } catch (_) { /* ignore */ }
   });
   const page = await context.newPage();
   const errors = [];
-  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 800)); });
-  page.on("pageerror", (e) => errors.push(((e && (e.stack || e.message)) || String(e)).slice(0, 800)));
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 200)); });
+  page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
 
-  const result = { hung: true, ms: 0, status: null, note: "", diag: [], errors, rej: [] };
+  const result = { hung: true, ms: 0, status: null, note: "", diag: [], errors };
   const readDiag = () => page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
   try {
     await page.goto(notebookURL, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS });
@@ -220,7 +201,7 @@ async function probeOnce(browser, storageState, notebookURL, delayMs) {
     }, null, { timeout: KERNEL_BOOT_MS }).then(() => true).catch(() => false);
     if (!loaded) { result.note = "editor never rendered the seeded cell"; return result; }
 
-    // Wait for kernel_idle (the collector breadcrumb), then wait delayMs, then run.
+    // Wait for kernel_idle (the collector breadcrumb), then run immediately.
     const idleDeadline = Date.now() + IDLE_WAIT_MS;
     let sawIdle = false;
     while (Date.now() < idleDeadline) {
@@ -230,7 +211,7 @@ async function probeOnce(browser, storageState, notebookURL, delayMs) {
     }
     if (!sawIdle) { result.note = "kernel never reported idle"; result.diag = await readDiag(); return result; }
 
-    if (delayMs > 0) await page.waitForTimeout(delayMs);
+    if (EXEC_DELAY_MS > 0) await page.waitForTimeout(EXEC_DELAY_MS);
 
     // Run the first code cell in the NOTEBOOK editor (Shift+Enter is the run
     // binding). This is the path the REPL smoke can't exercise.
@@ -253,7 +234,6 @@ async function probeOnce(browser, storageState, notebookURL, delayMs) {
       return ind ? ind.getAttribute("data-status") : null;
     }).catch(() => null);
     result.diag = await readDiag();
-    result.rej = await page.evaluate(() => window.__ckRej || []).catch(() => []);
   } catch (e) {
     result.note = `exception: ${(e && e.message) || e}`;
   } finally {
@@ -262,33 +242,8 @@ async function probeOnce(browser, storageState, notebookURL, delayMs) {
   return result;
 }
 
-// Run one arm of `n` cycles at a fixed post-idle delay; returns { hangs, lat }.
-async function runArm(label, delayMs, browser, storageState, notebookURL, n) {
-  let hangs = 0;
-  const lat = [];
-  for (let i = 0; i < n; i++) {
-    const r = await probeOnce(browser, storageState, notebookURL, delayMs);
-    if (r.hung) {
-      hangs++;
-      const exec = (r.diag || []).find((d) => d.source === "exec_hang");
-      console.log(
-        `  [${label}] ${i + 1}/${n}: HANG${r.note ? " (" + r.note + ")" : ""} — ` +
-          `indicator=${r.status} waited=${r.ms}ms exec_hang=${exec ? exec.message : "none"}`
-      );
-      if (r.rej && r.rej.length) console.log(`      rejection: ${r.rej[0]}`);
-      else if (r.errors && r.errors.length) console.log(`      console: ${r.errors.slice(0, 3).join(" | ")}`);
-    } else {
-      lat.push(r.ms);
-      console.log(`  [${label}] ${i + 1}/${n}: ok — ran in ${r.ms}ms (indicator=${r.status})`);
-    }
-  }
-  const avg = lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : 0;
-  console.log(`  [${label}] arm result — hangs=${hangs}/${n} ok=${n - hangs} avgRunMs=${avg}`);
-  return { hangs, avg };
-}
-
 async function main() {
-  console.log(`Browser engine: ${browserName}; iterations/arm=${ITER}; budget=${EXEC_BUDGET_MS}ms; settle=${EXEC_SETTLE_MS}ms`);
+  console.log(`Browser engine: ${browserName}; iterations=${ITER}; budget=${EXEC_BUDGET_MS}ms; delay=${EXEC_DELAY_MS}ms`);
   let seeded;
   try { seeded = await seed(); }
   catch (e) { console.log(`EXEC PROBE SETUP FAIL — ${(e && e.message) || e}`); process.exit(1); }
@@ -301,23 +256,28 @@ async function main() {
       : { headless: true };
   const browser = await browserType.launch(launchOptions);
 
-  // Arm A: run the instant the kernel idles — maximally races the nb_mypy load.
-  console.log(`--- arm: immediate (delay 0 — races the post-idle background load) ---`);
-  const immediate = await runArm("immediate", 0, browser, seeded.storageState, notebookURL, ITER);
-  // Arm B: wait for that background load to finish before running.
-  console.log(`--- arm: settled (delay ${EXEC_SETTLE_MS}ms — background load has finished) ---`);
-  const settled = await runArm("settled", EXEC_SETTLE_MS, browser, seeded.storageState, notebookURL, ITER);
-
+  let hangs = 0;
+  const latencies = [];
+  for (let i = 0; i < ITER; i++) {
+    const r = await probeOnce(browser, seeded.storageState, notebookURL);
+    if (r.hung) {
+      hangs++;
+      const exec = (r.diag || []).find((d) => d.source === "exec_hang");
+      console.log(
+        `  iter ${i + 1}/${ITER}: HANG${r.note ? " (" + r.note + ")" : ""} — ` +
+          `indicator=${r.status} waited=${r.ms}ms exec_hang=${exec ? exec.message : "none"}`
+      );
+      if (r.errors && r.errors.length) console.log(`    console: ${r.errors.slice(0, 4).join(" | ")}`);
+    } else {
+      latencies.push(r.ms);
+      console.log(`  iter ${i + 1}/${ITER}: ok — ran in ${r.ms}ms (indicator=${r.status})`);
+    }
+  }
   await browser.close();
 
-  console.log(
-    `EXEC PROBE RESULT — engine=${browserName} ` +
-      `immediate=${immediate.hangs}/${ITER} hangs (avgOk=${immediate.avg}ms) | ` +
-      `settled=${settled.hangs}/${ITER} hangs (avgOk=${settled.avg}ms)`
-  );
-  // Exit code keyed on the immediate arm: red while it reproduces, green when a
-  // fix (drop/defer nb_mypy) makes it stop hanging.
-  process.exit(immediate.hangs > 0 ? 1 : 0);
+  const avg = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
+  console.log(`EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ok=${ITER - hangs} avgRunMs=${avg}`);
+  process.exit(hangs > 0 ? 1 : 0);
 }
 
 main();
