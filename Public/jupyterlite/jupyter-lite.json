@@ -396,8 +396,8 @@
       "@jupyterlite/pyodide-kernel-extension:kernel": {
         "disablePyPIFallback": true,
         "pipliteUrls": [
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=783d01f64a330ecbbd82318ba2fde8842bc8eece502b821b8c0f57cacdde5cdc",
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=b9716dbed8ec49193ad09d5dcc9ff682b55bc5b7f5d03a93a13cd3f737d46f2d"
+          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=33904e41d19fd0d0669c34d171692bdfdfe47a27596a1a9744cefa9fd90e3235",
+          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=33904e41d19fd0d0669c34d171692bdfdfe47a27596a1a9744cefa9fd90e3235"
         ],
         "pyodideUrl": "/pyodide/pyodide.js"
       }
