@@ -27,6 +27,7 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
     }
 
     private let userIDsByOrgDefinedId: [String: String]
+    private let classlist: [BrightSpaceClasslistEntry]
     private let lookupError: (any Error)?
     private let pushError: (any Error)?
     private(set) var pushes: [RecordedPush] = []
@@ -34,10 +35,12 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
 
     init(
         userIDsByOrgDefinedId: [String: String] = [:],
+        classlist: [BrightSpaceClasslistEntry] = [],
         lookupError: (any Error)? = nil,
         pushError: (any Error)? = nil
     ) {
         self.userIDsByOrgDefinedId = userIDsByOrgDefinedId
+        self.classlist = classlist
         self.lookupError = lookupError
         self.pushError = pushError
     }
@@ -46,6 +49,12 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         lookupCount += 1
         if let lookupError { throw lookupError }
         return userIDsByOrgDefinedId[orgDefinedId]
+    }
+
+    func fetchClasslist(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceClasslistEntry] {
+        classlist
     }
 
     func pushGrade(
@@ -206,6 +215,37 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             #expect(user?.brightspaceUserID == "d2l-999")
             let lookupCount = await fake.lookupCount
             #expect(lookupCount == 1)
+        }
+    }
+
+    @Test func resolvesByUsernameFromClasslistWhenNoStudentID() async throws {
+        try await withApp(app) { _ in
+            // SSO-typical: the student has a username but no student number.
+            let scenario = try await makeConfiguredScenario(studentID: nil)
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 7, total: 10),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let user = try #require(try await APIUser.find(scenario.userID, on: app.db))
+            // Classlist carries the username (UPPER-cased to prove case-insensitive
+            // matching) + the D2L UserId; no OrgDefinedId, empty lookup table.
+            let fake = FakeBrightSpaceGrading(
+                classlist: [
+                    BrightSpaceClasslistEntry(
+                        orgDefinedID: nil, username: user.username.uppercased(), userID: "d2l-777")
+                ])
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)
+            let pushes = await fake.pushes
+            #expect(pushes.first?.bsUserID == "d2l-777")
+            // Resolved by username via the classlist — the org-level lookup never ran.
+            let lookupCount = await fake.lookupCount
+            #expect(lookupCount == 0)
+            let reloaded = try await APIUser.find(scenario.userID, on: app.db)
+            #expect(reloaded?.brightspaceUserID == "d2l-777")
         }
     }
 

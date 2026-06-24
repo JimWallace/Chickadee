@@ -48,6 +48,9 @@ func sweepBrightSpaceGradeSync(
 
     var processed = 0
 
+    // One classlist read per course is shared across all of this sweep's pushes.
+    let classlistCache = ClasslistUserIDCache()
+
     // Group pushable results by (student, test setup).  Results whose
     // submission is missing or isn't a student submission are no-ops handled
     // row-by-row, exactly as before.
@@ -87,8 +90,8 @@ func sweepBrightSpaceGradeSync(
         )
         do {
             let pushed = try await pushGrade(
-                for: target, db: db, resolveClient: resolveClient, logger: logger,
-                application: application)
+                for: target, db: db, resolveClient: resolveClient,
+                classlistCache: classlistCache, logger: logger, application: application)
             if pushed { processed += results.count }
         } catch {
             await recordSweepFailure(results, error: error, db: db, logger: logger)
@@ -230,6 +233,7 @@ private func pushGrade(
     for target: GradePushTarget,
     db: Database,
     resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
+    classlistCache: ClasslistUserIDCache,
     logger: Logger,
     application: Application
 ) async throws -> Bool {
@@ -294,8 +298,19 @@ private func pushGrade(
     }
 
     // Resolve D2L user ID (cached on APIUser, looked up on first sync).
+    // The course's classlist identity map (username/student-number → D2L UserId),
+    // fetched once per org unit per sweep. A read failure degrades to the
+    // org-level OrgDefinedId fallback rather than aborting the push.
+    var identityMap: [String: String] = [:]
+    do {
+        identityMap = try await classlistCache.identityMap(
+            orgUnitID: orgUnitID, client: client, application: application)
+    } catch {
+        logger.warning("BrightSpace classlist resolve failed for org unit \(orgUnitID): \(error)")
+    }
     let bsUserID = try await resolvedBrightSpaceUserID(
         for: target.user,
+        identityMap: identityMap,
         db: db,
         client: client,
         application: application
@@ -421,11 +436,48 @@ private func suiteTotalPoints(testSetupID: String, db: Database) async throws ->
     return total > 0 ? Double(total) : nil
 }
 
-/// Returns the cached D2L user ID for `user`, looking it up via studentID if
-/// not yet cached.  Takes the already batch-loaded `APIUser?` (nil when the
-/// sweep found no such user — same outcome as the old per-result `find`).
+/// Per-sweep cache of each course's LEARN classlist, reduced to an identity →
+/// D2L UserId map. The classlist carries both the student's login username and
+/// their student number (OrgDefinedId), so a Chickadee user is resolved by
+/// whichever identity is on file — username first (always present for SSO/local
+/// logins, == the LEARN username at UW), student number second. Fetched once
+/// per org unit per sweep.
+private actor ClasslistUserIDCache {
+    private var mapsByOrgUnit: [String: [String: String]] = [:]
+
+    /// The org unit's classlist as an identity → D2L UserId map, keyed by both
+    /// lowercased username and lowercased OrgDefinedId. Fetched once per org
+    /// unit per sweep; subsequent calls return the cached map.
+    func identityMap(
+        orgUnitID: String, client: any BrightSpaceGrading, application: Application
+    ) async throws -> [String: String] {
+        if let cached = mapsByOrgUnit[orgUnitID] { return cached }
+        let classlist = try await client.fetchClasslist(orgUnitID: orgUnitID, on: application)
+        var map: [String: String] = [:]
+        for entry in classlist {
+            guard let userID = entry.userID, !userID.isEmpty else { continue }
+            for identity in [entry.username, entry.orgDefinedID] {
+                let key = identity?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if let key, !key.isEmpty { map[key] = userID }
+            }
+        }
+        mapsByOrgUnit[orgUnitID] = map
+        return map
+    }
+}
+
+/// Returns the cached D2L user ID for `user`, resolving it on first sync. Takes
+/// the already batch-loaded `APIUser?` (nil when the sweep found no such user)
+/// and the course's pre-built classlist identity map.
+///
+/// Resolution matches the classlist by **username first, student number
+/// second** — the username is the identity Chickadee always has (SSO or local)
+/// and equals the LEARN username at UW, so grade sync works without a
+/// student-number claim. Falls back to the org-level `users/?orgDefinedId=`
+/// lookup only when the classlist match misses but a student number is on file.
 private func resolvedBrightSpaceUserID(
     for user: APIUser?,
+    identityMap: [String: String],
     db: Database,
     client: any BrightSpaceGrading,
     application: Application
@@ -436,12 +488,18 @@ private func resolvedBrightSpaceUserID(
         return cached
     }
 
-    // Look up by studentID (= BrightSpace OrgDefinedId).
-    guard let orgDefinedId = user.studentID, !orgDefinedId.isEmpty else {
-        return nil
+    var bsUserID: String?
+    for key in [user.username, user.studentID].compactMap({ $0 }) {
+        let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !normalized.isEmpty, let resolved = identityMap[normalized] {
+            bsUserID = resolved
+            break
+        }
     }
-
-    let bsUserID = try await client.lookupUserID(orgDefinedId: orgDefinedId, on: application)
+    // Fallback: the legacy org-level OrgDefinedId lookup (needs a student number).
+    if bsUserID == nil, let orgDefinedId = user.studentID, !orgDefinedId.isEmpty {
+        bsUserID = try await client.lookupUserID(orgDefinedId: orgDefinedId, on: application)
+    }
 
     if let bsUserID {
         user.brightspaceUserID = bsUserID

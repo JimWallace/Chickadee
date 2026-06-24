@@ -5,7 +5,7 @@ import Testing
 @Suite struct LearnRosterReconcilerTests {
 
     private func entry(_ org: String?, _ user: String?) -> BrightSpaceClasslistEntry {
-        BrightSpaceClasslistEntry(orgDefinedID: org, username: user)
+        BrightSpaceClasslistEntry(orgDefinedID: org, username: user, userID: nil)
     }
 
     @Test func identitySetLowercasesBothFieldsAndDropsBlanks() {

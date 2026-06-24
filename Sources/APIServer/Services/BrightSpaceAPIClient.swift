@@ -128,6 +128,8 @@ struct BrightSpaceGradeObject: Content, Sendable {
 struct BrightSpaceClasslistEntry: Content, Sendable {
     let orgDefinedID: String?
     let username: String?
+    /// D2L internal user id (`Identifier`) — the key a grade push targets.
+    let userID: String?
 }
 
 // MARK: - Paged list envelope
@@ -167,6 +169,10 @@ struct ValencePagedEnvelope<Element: Decodable>: Decodable {
 /// caching logic can be exercised without a live D2L endpoint.
 protocol BrightSpaceGrading: Sendable {
     func lookupUserID(orgDefinedId: String, on application: Application) async throws -> String?
+    func fetchClasslist(
+        orgUnitID: String, on application: Application
+    ) async throws
+        -> [BrightSpaceClasslistEntry]
     func pushGrade(
         orgUnitID: String,
         gradeObjectID: String,
@@ -510,12 +516,14 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         // The non-paged /classlist/ can truncate on large courses; /classlist/paged/
         // returns a bookmark-paged envelope we walk to completion (see fetchAllPages).
         let rawURL = "\(config.baseURL)/d2l/api/le/\(leVersion)/\(encoded)/classlist/paged/"
-        // D2L returns ClasslistUser objects; we keep only the two identity fields
-        // we match on.
+        // D2L returns ClasslistUser objects; we keep the identity fields we
+        // match on plus `Identifier`, the internal user id a grade push targets.
         struct ClasslistUserResponse: Decodable {
+            let identifier: String?
             let orgDefinedId: String?
             let username: String?
             enum CodingKeys: String, CodingKey {
+                case identifier = "Identifier"
                 case orgDefinedId = "OrgDefinedId"
                 case username = "Username"
             }
@@ -526,7 +534,8 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             .classlistFetchFailed(orgUnitID: orgUnitID, status: status)
         }
         return rows.map {
-            BrightSpaceClasslistEntry(orgDefinedID: $0.orgDefinedId, username: $0.username)
+            BrightSpaceClasslistEntry(
+                orgDefinedID: $0.orgDefinedId, username: $0.username, userID: $0.identifier)
         }
     }
 }

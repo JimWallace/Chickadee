@@ -262,12 +262,20 @@ each Chickadee assignment to the column it should write to.
 
 ## Step 6 — Match student identities
 
-Grades route by **student number**: a Chickadee user's `student_id` must equal
-the D2L **OrgDefinedId** of the matching LEARN account. Enroll the test
-students in your Chickadee course with their `learntest` org-defined IDs. The
-BrightSpace tab's **classlist reconcile** and **"unmapped students"** list flag
-anyone who can't be resolved (no student ID on file, or not found in
-BrightSpace).
+Grades route by matching a Chickadee user to a LEARN account, resolved against
+the course **classlist** by **username first, student number second**:
+
+- **Username** — a Chickadee user's `username` (the WatIAM id, set for both SSO
+  and local logins) matched against the LEARN classlist `Username`. This is the
+  primary path and needs no student number, so SSO students just work.
+- **Student number** — a user's `student_id` matched against the D2L
+  `OrgDefinedId`, used when the username doesn't match (or as the legacy
+  `users/?orgDefinedId=` fallback).
+
+The resolved internal D2L user id is cached on `users.brightspace_user_id` on
+first sync and reused thereafter. The **classlist reconcile** and **"unmapped
+students"** list flag anyone who can't be resolved by either key (username not
+in the LEARN classlist and no usable student number).
 
 ## Step 7 — End-to-end test
 
@@ -304,7 +312,9 @@ student-free).
 - **Org-unit save shows "unverified":** the ID is wrong, or D2L was
   unreachable (egress). Verification failures don't block the save — the
   cached name just stays empty.
-- **Student shows as unmapped:** missing `student_id` in Chickadee, or it
-  doesn't match the LEARN OrgDefinedId. Fix the enrollment record.
+- **Student shows as unmapped:** Chickadee couldn't find them in the LEARN
+  classlist by **username** (the WatIAM id) or by student number. Confirm their
+  Chickadee `username` matches their LEARN username, and that they're enrolled
+  in the D2L course.
 - **Grade pushed but not visible:** confirm the grade item is the right column
   and the assignment is mapped to it; check the sync log row's detail.
