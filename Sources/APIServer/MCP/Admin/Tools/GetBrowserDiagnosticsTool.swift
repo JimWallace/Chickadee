@@ -101,7 +101,10 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         + "collector — the drop-off localizes WHERE a kernel boot stalls (a kernel that spins forever "
         + "reaches some phase and stops, so kernel_idle far below boot_start is the hung-kernel "
         + "signature); pair it with the kernel_error rows (in bySource / recentSamples: csp_violation, "
-        + "resource_error, kernel_dead, boot_stalled, …) for the WHY. Optionally filter by testSetupID. "
+        + "resource_error, kernel_dead, boot_stalled, exec_hang, …) for the WHY. exec_hang is the "
+        + "POST-IDLE hang the boot funnel can't see: the kernel booted to idle (counted as success) "
+        + "then wedged on execute, so cells sit busy forever; its count is distinct students who hit a "
+        + "sustained-busy hang, message busy_ms=… the hang duration. Optionally filter by testSetupID. "
         + "Read-only; reports infrastructure breadcrumbs only and never includes a student identifier."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
