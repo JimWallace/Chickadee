@@ -508,38 +508,3 @@ test('planKernelFailureResponse: exhausted recovery with no evidence → safe de
   assert.equal(plan.action, 'fail');
   assert.equal(plan.diagnostic.message, 'kernel in failure state (persisted after auto-reload)');
 });
-
-// ----------------------------------------------------------------
-// Post-idle exec-hang recovery ladder — the `[*]`-forever kernel. The boot
-// watchdog can't act on this (it stopped at kernel-ready), so the in-iframe
-// collector's exec_hang beacon drives its own ladder: reload-iframe →
-// reload-page → surface the upload fallback. Mirrors planKernelFailureResponse;
-// each rung is sessionStorage-guarded in recoverFromExecHang so it can't loop.
-// ----------------------------------------------------------------
-
-test('planExecHangResponse: first hang → reload the iframe (clean kernel, code preserved)', async () => {
-  const { planExecHangResponse } = await loadHarness();
-  const plan = planExecHangResponse({ iframeReloadAttempted: false, pageReloadAttempted: false });
-  assert.equal(plan.action, 'reload-iframe');
-  assert.equal(plan.diagnostic, undefined,
-    'a recovery does not post a diagnostic — the kernel gets a fresh boot first');
-});
-
-test('planExecHangResponse: iframe reload spent → reload the whole page', async () => {
-  const { planExecHangResponse } = await loadHarness();
-  const plan = planExecHangResponse({ iframeReloadAttempted: true, pageReloadAttempted: false });
-  assert.equal(plan.action, 'reload-page');
-  assert.equal(plan.diagnostic, undefined);
-});
-
-test('planExecHangResponse: both reloads spent → fail and surface the upload fallback', async () => {
-  const { planExecHangResponse } = await loadHarness();
-  const plan = planExecHangResponse({ iframeReloadAttempted: true, pageReloadAttempted: true });
-  assert.equal(plan.action, 'fail');
-  // Distinct failedCheck so the admin browser-diagnostics breakdown buckets a
-  // surviving exec-hang separately from a boot-time kernel-unhealthy.
-  assert.equal(plan.diagnostic.kind, 'watchdog_timeout');
-  assert.equal(plan.diagnostic.failedChecks.length, 1);
-  assert.equal(plan.diagnostic.failedChecks[0], 'kernel-exec-hang');
-  assert.equal(plan.diagnostic.source, 'exec_hang');
-});

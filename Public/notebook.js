@@ -229,12 +229,12 @@
             const d = e.data;
             if (!d || d.ck !== 'kernel-diag') return false;
             if (d.kind !== 'kernel_phase' && d.kind !== 'kernel_error') return false;
-            // A post-idle execution hang (the `[*]`-forever kernel) is the one
-            // failure the watchdog can't act on — it has already stopped at
-            // kernel-ready. Drive recovery from here, independent of the forward
-            // cap below, so a wedged kernel self-heals instead of hanging.
+            // Self-heal: a post-idle exec_hang means the kernel booted then wedged
+            // on execute (the boot-failure watchdog doesn't cover it). Trigger the
+            // one-shot work-preserving editor reload — independent of the telemetry
+            // cap below, so a flood of breadcrumbs can't gate recovery.
             if (d.kind === 'kernel_error' && d.source === 'exec_hang') {
-                try { recoverFromExecHang(); } catch (_) { /* recovery is best-effort */ }
+                recoverHungKernelOnce();
             }
             if (kernelDiagForwarded >= KERNEL_DIAG_MAX) return false;
             kernelDiagForwarded += 1;
@@ -945,6 +945,56 @@
         });
     }
 
+    // Self-heal for a post-idle EXECUTION hang (the collector's `exec_hang`): the
+    // kernel booted to idle, then wedged on a cell. The watchdog's reload ladder
+    // only covers kernels that never *registered*, so nothing recovers this case
+    // today — students just sit on `[*]`. One work-preserving iframe reload (the
+    // same mechanism the watchdog uses; JupyterLite restores the student's saved
+    // copy from IndexedDB on boot, so edits survive), guarded to once per page so
+    // a persistently-deadlocking kernel can't reload-loop — a second hang points
+    // the student at the heavier /reset-editor clear instead. The flag is
+    // module-scoped so it survives the iframe reload (only the iframe reloads,
+    // not this page).
+    let kernelHangRecoverUsed = false;
+    // Recovery telemetry so the self-heal's usage IS the bug's KPI: `recover_attempt`
+    // (the self-heal fired) and `recover_failed` (the rebooted kernel hung AGAIN).
+    // Success ≈ attempts − failures; both should fall toward zero once the
+    // underlying kernel deadlock is actually fixed, so a drop is the signal the
+    // root-cause fix worked. Reuses the kernel_error kind (free-form source), so no
+    // server change and it never inflates the instructor error card (which counts
+    // only preflight_fail / watchdog_timeout / page_unresponsive).
+    function reportRecovery(source) {
+        if (!failures || !failures.reportEvent) return;
+        try { failures.reportEvent({ kind: 'kernel_error', source: source }); }
+        catch (_) { /* telemetry must never break recovery */ }
+    }
+    function recoverHungKernelOnce() {
+        // Don't fight a reset/reload that just happened (watchdog or locked-path).
+        if (forcedEditorResetAt && Date.now() - forcedEditorResetAt < 20000) return;
+        if (kernelHangRecoverUsed) {
+            // The reboot's kernel hung again — the self-heal didn't take.
+            reportRecovery('recover_failed');
+            try {
+                setStatus('error',
+                    'The notebook kernel is still not responding. Open /reset-editor '
+                    + 'for a clean restart, or try a different browser.');
+            } catch (_) { /* status is cosmetic */ }
+            return;
+        }
+        kernelHangRecoverUsed = true;
+        reportRecovery('recover_attempt');
+        try {
+            setStatus('loading',
+                'The notebook kernel stopped responding — reloading the editor…');
+        } catch (_) { /* status is cosmetic; recover regardless */ }
+        // Wait for the SW to settle, stamp forcedEditorResetAt so the locked-path
+        // enforcer doesn't fight the navigation, then re-point the iframe.
+        whenServiceWorkerActive(5000).then(() => {
+            forcedEditorResetAt = Date.now();
+            try { frame.src = editorURL; } catch (_) { /* nothing else to try */ }
+        });
+    }
+
     // One full-page reload per (tab session, setup): the flag survives the
     // reload (sessionStorage is per-tab), so the escalation ladder can't loop
     // into a reload storm.  A fresh tab starts with a clean flag, so a later
@@ -959,125 +1009,6 @@
     function markKernelPageReloadUsed() {
         try { sessionStorage.setItem(kernelPageReloadStorageKey(), '1'); }
         catch (_) { /* sessionStorage unavailable — page reload simply won't be re-gated */ }
-    }
-
-    // --- Post-idle kernel exec-hang recovery -------------------------------
-    //
-    // The in-iframe collector (jl-kernel-diagnostics.js) emits a single
-    // `kernel_error/exec_hang` when a cell sits BUSY past EXEC_HANG_MS (45s) —
-    // the `[*]`-forever hang students hit in the lab. The boot watchdog can't
-    // see it: it has already stopped at kernel-ready (the kernel DID boot, then
-    // wedged on execute). Until now that beacon was telemetry-only and the
-    // student hung forever. Drive the same recovery ladder the watchdog uses —
-    // reload the iframe, then the page, then surface the upload fallback — each
-    // rung guarded against a reload storm.
-    //
-    // A wedged kernel holds no useful state after 45s busy, so a fresh iframe
-    // (clean Pyodide kernel) is a real recovery, not a loss: JupyterLite
-    // restores the student's saved notebook from IndexedDB on boot, so their
-    // code is preserved across the reload.
-
-    // PURE planner (mirrors planKernelFailureResponse) — unit-testable.
-    function planExecHangResponse({ iframeReloadAttempted, pageReloadAttempted }) {
-        if (!iframeReloadAttempted) {
-            return { action: 'reload-iframe' };
-        }
-        if (!pageReloadAttempted) {
-            return { action: 'reload-page' };
-        }
-        return {
-            action: 'fail',
-            diagnostic: {
-                kind:         'watchdog_timeout',
-                failedChecks: ['kernel-exec-hang'],
-                source:       'exec_hang',
-                message:      'kernel stuck busy after restart'
-            }
-        };
-    }
-
-    // One iframe reload per (tab session, setup), mirroring the page-reload
-    // guard so the exec-hang ladder can't loop into a reload storm if the fresh
-    // kernel wedges again immediately.
-    function execHangIframeReloadStorageKey() {
-        return 'chickadee:exec-hang-iframe-reload:' + setupID;
-    }
-    function execHangIframeReloadUsed() {
-        try { return sessionStorage.getItem(execHangIframeReloadStorageKey()) === '1'; }
-        catch (_) { return false; }
-    }
-    function markExecHangIframeReloadUsed() {
-        try { sessionStorage.setItem(execHangIframeReloadStorageKey(), '1'); }
-        catch (_) { /* sessionStorage unavailable — reload simply won't be re-gated */ }
-    }
-
-    // Recovery KPI telemetry so the self-heal's usage IS the bug's metric:
-    // `recover_attempt` (a reload rung fired) and `recover_failed` (the ladder
-    // was exhausted and the kernel hung AGAIN). Success ≈ attempts − failures,
-    // and both fall toward zero once the underlying SAB/Atomics kernel deadlock
-    // is actually fixed — the headline KPI for that root-cause work. Reuses the
-    // `kernel_error` kind (free-form source) so there's no server change and it
-    // never inflates the instructor error card (which counts only
-    // preflight_fail / watchdog_timeout / page_unresponsive). Surfaced in
-    // get_browser_diagnostics `bySource` alongside exec_hang.
-    function reportRecovery(source) {
-        if (!failures || !failures.reportEvent) return;
-        try { failures.reportEvent({ kind: 'kernel_error', source: source }); }
-        catch (_) { /* telemetry must never break recovery */ }
-    }
-
-    // The in-iframe collector emits exactly one exec_hang per page load
-    // (execHangReported), so each rung fires at most once per iframe lifetime; the
-    // sessionStorage rung guards (which survive both the iframe reload and a
-    // full-page reload) carry the escalation across reloads without an in-memory
-    // re-entry flag that a missed `load` event could wedge.
-    function recoverFromExecHang() {
-        // Reuse the watchdog's page-reload guard: one full-tab reload total, no
-        // matter which ladder (boot or exec-hang) consumed it.
-        const plan = planExecHangResponse({
-            iframeReloadAttempted: execHangIframeReloadUsed(),
-            pageReloadAttempted:   kernelPageReloadUsed()
-        });
-        if (plan.action === 'reload-iframe') {
-            markExecHangIframeReloadUsed();
-            reportRecovery('recover_attempt');
-            setStatus('loading', 'The notebook kernel stopped responding — restarting it…');
-            // Clear the transient status once the fresh shell commits (one-shot
-            // load listener; cosmetic, so a harness that never fires load is fine).
-            frame.addEventListener('load', function clearOnce() {
-                frame.removeEventListener('load', clearOnce);
-                setStatus('', '');
-                reenableSubmit();
-            });
-            // Wait for the SW subsystem to settle first, same as the boot ladder,
-            // so the fresh boot doesn't re-race it. Stamp forcedEditorResetAt at
-            // navigation time so the locked-path enforcer doesn't fight it.
-            whenServiceWorkerActive(5000).then(() => {
-                forcedEditorResetAt = Date.now();
-                try { frame.src = editorURL; } catch (_) { /* nothing else to try */ }
-            });
-            return;
-        }
-        if (plan.action === 'reload-page') {
-            markKernelPageReloadUsed();
-            reportRecovery('recover_attempt');
-            setStatus('loading', 'The notebook kernel stopped responding — reloading the page…');
-            whenServiceWorkerActive(5000).then(() => {
-                forcedEditorResetAt = Date.now();
-                try { window.location.reload(); } catch (_) { /* nothing else to try */ }
-            });
-            return;
-        }
-        // Both reload rungs spent and it wedged again — the self-heal didn't take.
-        // Stop auto-recovering and give the student a working path: the
-        // server-side upload fallback.
-        reportRecovery('recover_failed');
-        if (failures && failures.showFailure) {
-            failures.showFailure(plan.diagnostic);
-        }
-        setStatus('error',
-            'The notebook kernel is stuck. Use “Upload & submit” below, or reset the editor at /reset-editor.');
-        reenableSubmit();
     }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
@@ -2082,7 +2013,6 @@
             kernelFailureEvidence,
             kernelLivenessReady,
             planKernelFailureResponse,
-            planExecHangResponse,
             shouldForceReseed,
             reseedPlan,
             handleKernelDiagMessage,

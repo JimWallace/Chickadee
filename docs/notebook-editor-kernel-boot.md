@@ -270,16 +270,16 @@ handshake** (the main thread's `Atomics.notify` is deferred while the worker
 blocks in `Atomics.wait`), which is why it is post-*idle* and why a headless CI
 run cannot reproduce it (a Playwright tab is never backgrounded).
 
-**Recovery (this change).** `exec_hang` was telemetry-only; the student hung
-forever. The parent bridge (`notebook.js`) now drives a guarded recovery ladder
-off that beacon — iframe-reload → page-reload → upload-fallback
-(`planExecHangResponse`), reusing the boot ladder's reload primitives. A wedged
-kernel holds no useful state after 45s busy, and JupyterLite restores the saved
-notebook from IndexedDB on reboot, so the reload is a real recovery, not a loss.
-The self-heal emits `recover_attempt` (a reload rung fired) and `recover_failed`
-(ladder exhausted, still hanging) through the same `kernel_error` pipeline, so
-**success ≈ attempts − failures** — and both fall toward zero once the root cause
-is fixed, the headline KPI for that work (`get_browser_diagnostics` `bySource`).
+**Recovery (v0.4.523).** `exec_hang` was telemetry-only; the student hung
+forever. The parent bridge (`notebook.js` `recoverHungKernelOnce`) now drives a
+work-preserving recovery off that beacon — one iframe reload (JupyterLite
+restores the saved notebook from IndexedDB on reboot, so edits survive), guarded
+to once per page so a persistently-deadlocking kernel can't reload-loop; a second
+hang surfaces the `/reset-editor` fallback. The self-heal emits `recover_attempt`
+(the reload fired) and `recover_failed` (the rebooted kernel hung again) through
+the same `kernel_error` pipeline, so **success ≈ attempts − failures** — and both
+fall toward zero once the root cause is fixed, the headline KPI for that work
+(`get_browser_diagnostics` `bySource`).
 
 **CI reproducer (this change).** `editor-exec-check.mjs` (the `editor-exec-probe`
 workflow, non-gating) opens the *real* notebook page, waits for `kernel_idle`,
@@ -288,10 +288,10 @@ editor-cell execute the required smoke never exercised (it checks boot + browser
 grading, never an editor cell). While the root cause is open a reproduced hang is
 the signal; a fix must turn it consistently green before it becomes a guard.
 
-**Observability (this change).** The `editorKernelHang` health-alert rule fires
-when ≥`ALERT_EDITOR_HANG_THRESHOLD` exec_hangs land within
-`ALERT_EDITOR_HANG_WINDOW_MINUTES`, so a recurrence pages instead of waiting for
-a lab report.
+**Observability.** The `editorKernelHang` health-alert rule fires when
+≥`ALERT_EDITOR_HANG_THRESHOLD` exec_hangs land within
+`ALERT_EDITOR_HANG_WINDOW_MINUTES`, so a recurrence pages the operator instead of
+waiting for a lab report.
 
 **Root cause is still open.** The recovery + alert are a mitigation. The
 underlying SAB/Atomics execution deadlock is not yet reproduced or fixed; a
@@ -324,4 +324,4 @@ follow-up.
 | Failure mode | Phase | Seen by | Recovery |
 |---|---|---|---|
 | Boot hang (Kernel Unknown / never idles) | boot | boot funnel + watchdog | reload-iframe → reload-page (ladder A) |
-| `exec_hang` (booted, then wedges busy) | post-idle execute | in-iframe `exec_hang` watcher | reload-iframe → reload-page → upload (`planExecHangResponse`) |
+| `exec_hang` (booted, then wedges busy) | post-idle execute | in-iframe `exec_hang` watcher | one work-preserving iframe reload, then `/reset-editor` (`recoverHungKernelOnce`, v0.4.523) |

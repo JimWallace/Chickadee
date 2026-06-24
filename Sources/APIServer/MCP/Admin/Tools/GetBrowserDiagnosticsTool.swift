@@ -105,10 +105,10 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         + "POST-IDLE hang the boot funnel can't see: the kernel booted to idle (counted as success) "
         + "then wedged on execute, so cells sit busy forever; its count is distinct students who hit a "
         + "sustained-busy hang, message busy_ms=… the hang duration. recover_attempt / recover_failed "
-        + "track the editor's self-heal for that hang (auto-reload the kernel): recover_attempt fired a "
-        + "reload rung, recover_failed means the ladder was exhausted and the kernel hung AGAIN — so "
-        + "success ≈ attempts − failures, and both should drop toward zero once the underlying deadlock "
-        + "is fixed (the headline KPI for it). Optionally filter by testSetupID. "
+        + "track the editor's self-heal for that hang (auto-reload the kernel): recover_attempt fired the "
+        + "reload, recover_failed means the rebooted kernel hung AGAIN — so success ≈ attempts − failures, "
+        + "and both should drop toward zero once the underlying deadlock is fixed (the headline KPI for it). "
+        + "Optionally filter by testSetupID. "
         + "Read-only; reports infrastructure breadcrumbs only and never includes a student identifier."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
