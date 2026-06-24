@@ -128,7 +128,6 @@ struct InstructorDashboardRoutes: RouteCollection {
                 req: req,
                 activeCourseUUID: activeCourseUUID,
                 activeCourseCode: courseState.active?.code ?? "",
-                allSetupIDs: allSetupIDs,
                 fmt: fmt,
                 isoFormatter: isoFormatter
             )
@@ -136,8 +135,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             roster = CourseRosterData(
                 enrolledStudents: [],
                 enrolledStudentIDs: [],
-                enrolledStudentCount: 0,
-                metrics: Self.placeholderDashboardMetrics()
+                enrolledStudentCount: 0
             )
         }
 
@@ -173,7 +171,6 @@ struct InstructorDashboardRoutes: RouteCollection {
         let ctx = AssignmentsContext(
             currentUser: userContext,
             activeInstructorTab: "overview",
-            metrics: roster.metrics,
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
             hasSections: !allSections.isEmpty,

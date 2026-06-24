@@ -1407,8 +1407,12 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     border-radius: 1px 1px 0 0;
 }
 .spark-fill-empty {
-    min-height: 0;
-    background: transparent;
+    /* An empty bucket still draws a faint 2px baseline tick (not transparent)
+       so a histogram always shows its full axis — e.g. the grade distribution
+       reads as a fixed 0–100% range even when most buckets have no students.
+       Populated buckets rise in --health-teal well above this baseline. */
+    min-height: 2px;
+    background: var(--border);
 }
 
 /* ── Assignment editor: header + suite editor (new + edit pages) ─────────

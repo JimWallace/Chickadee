@@ -44,12 +44,6 @@ Admin
             <div class="diagnostic-value" id="diag-queue-p95">—</div>
             <div class="diagnostic-spark" aria-hidden="true"></div>
         </article>
-        <article class="diagnostic-card diagnostic-card-cyclable" data-card="executionP95Ms"
-                 role="button" tabindex="0" aria-label="P95 execution time, last 24 hours. Press to change time window.">
-            <div class="diagnostic-label"><span class="diagnostic-window-chip">24h</span> P95 Execution Time</div>
-            <div class="diagnostic-value" id="diag-exec-p95">—</div>
-            <div class="diagnostic-spark" aria-hidden="true"></div>
-        </article>
     </div>
 </section>
 
@@ -258,7 +252,6 @@ tr.runner-row-offline {
     var diagJobsProcessed = document.getElementById('diag-jobs-processed');
     var diagMaxLoad = document.getElementById('diag-max-load');
     var diagQueueP95 = document.getElementById('diag-queue-p95');
-    var diagExecP95 = document.getElementById('diag-exec-p95');
     var totalRunnerCount = workersBody.querySelectorAll('tr').length;
     var totalRunnerCapacity = 0;
     var totalAssignedJobs = 0;
@@ -319,11 +312,6 @@ tr.runner-row-offline {
         },
         {
             key: 'queueWaitP95Ms', name: 'P95 wait time', valueEl: diagQueueP95,
-            headline: function (data) { return formatDuration(data.headline); },
-            point: formatDuration
-        },
-        {
-            key: 'executionP95Ms', name: 'P95 execution time', valueEl: diagExecP95,
             headline: function (data) { return formatDuration(data.headline); },
             point: formatDuration
         }

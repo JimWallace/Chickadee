@@ -15,13 +15,12 @@ import Vapor
 
 // MARK: - Intermediate query results
 
-/// Aggregated student-roster data + dashboard metrics for the active course.
+/// Aggregated student-roster data for the active course.
 /// `enrolledStudents` includes pending pre-enrollments at the tail.
 struct CourseRosterData {
     let enrolledStudents: [EnrolledStudentRow]
     let enrolledStudentIDs: Set<UUID>
     let enrolledStudentCount: Int
-    let metrics: [InstructorDashboardMetric]
 }
 
 extension InstructorDashboardRoutes {
@@ -76,20 +75,18 @@ extension InstructorDashboardRoutes {
             .all()
     }
 
-    // MARK: - Roster + dashboard metrics
+    // MARK: - Roster
 
-    /// Builds the enrolled-students table and the five dashboard metric
-    /// cards.  Only enrolled users with `role == "student"` count toward the
-    /// numerators / denominators on the per-assignment "X / Y" badge — admin
-    /// or instructor users enrolled for testing must not inflate the
-    /// student-facing counters.  Pending CSV-uploaded pre-enrollments are
-    /// shown as muted rows in the same table and are counted toward the
-    /// "Y students enrolled" denominator.
+    /// Builds the enrolled-students table.  Only enrolled users with
+    /// `role == "student"` count toward the numerators / denominators on the
+    /// per-assignment "X / Y" badge — admin or instructor users enrolled for
+    /// testing must not inflate the student-facing counters.  Pending
+    /// CSV-uploaded pre-enrollments are shown as muted rows in the same table
+    /// and are counted toward the "Y students enrolled" denominator.
     func buildCourseRoster(
         req: Request,
         activeCourseUUID: UUID,
         activeCourseCode: String,
-        allSetupIDs: [String],
         fmt: DateFormatter,
         isoFormatter: ISO8601DateFormatter
     ) async throws -> CourseRosterData {
@@ -132,26 +129,18 @@ extension InstructorDashboardRoutes {
         // not just who's logged in.
         let enrolledStudentCount = activeStudentIDs.count + pendingPreEnrollments.count
 
-        let metrics = try await buildCourseRosterMetrics(
-            req: req,
-            allSetupIDs: allSetupIDs,
-            activeStudentIDs: activeStudentIDs
-        )
-
         return CourseRosterData(
             enrolledStudents: enrolledStudents,
             enrolledStudentIDs: activeStudentIDs,
-            enrolledStudentCount: enrolledStudentCount,
-            metrics: metrics
+            enrolledStudentCount: enrolledStudentCount
         )
     }
 
-    /// Enrolled-student rows + active-student count for the active course,
-    /// without the (relatively expensive) dashboard-metric computation.
-    /// Shared by the Students-tab page render and its polling endpoint, which
-    /// only need the roster.  Mirrors the roster half of `buildCourseRoster`:
-    /// active enrollments first (last-seen-desc), pending CSV pre-enrollments
-    /// appended as muted rows, with the count covering both.
+    /// Enrolled-student rows + active-student count for the active course.
+    /// Shared by the Students-tab page render and its polling endpoint.
+    /// Mirrors `buildCourseRoster`: active enrollments first (last-seen-desc),
+    /// pending CSV pre-enrollments appended as muted rows, with the count
+    /// covering both.
     func loadEnrolledStudentRows(
         req: Request,
         activeCourseUUID: UUID,
@@ -268,50 +257,6 @@ extension InstructorDashboardRoutes {
                 isPending: true
             )
         }
-    }
-
-    /// Computes the five dashboard metric cards from recent submissions,
-    /// queue depth, and client diagnostics.
-    private func buildCourseRosterMetrics(
-        req: Request,
-        allSetupIDs: [String],
-        activeStudentIDs: Set<UUID>
-    ) async throws -> [InstructorDashboardMetric] {
-        let workerModeSetupIDs = try await req.application.diagnostics.workerModeTestSetupIDs(
-            for: allSetupIDs,
-            on: req.db
-        )
-
-        // SQL COUNT instead of loading every course submission ever made just
-        // to tally the in-flight ones (June 2026 audit, P1.6).
-        let pendingNow: Int
-        if workerModeSetupIDs.isEmpty || activeStudentIDs.isEmpty {
-            pendingNow = 0
-        } else {
-            pendingNow = try await APISubmission.query(on: req.db)
-                .filter(\.$testSetupID ~~ Array(workerModeSetupIDs))
-                .filter(\.$kind == APISubmission.Kind.student)
-                .filter(\.$status ~~ [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue])
-                .filter(\.$userID ~~ Array(activeStudentIDs))
-                .count()
-        }
-
-        // Submissions / active students / active assignments / browser errors
-        // are now cyclable sparkline cards (fed by GET /instructor/metrics/cards);
-        // only the live "Queued Right Now" gauge remains a static card here.
-        return [
-            InstructorDashboardMetric(label: "Queued Right Now", value: "\(pendingNow)")
-        ]
-    }
-
-    /// "—" placeholder card for use when no course is active.  The
-    /// submissions / active-students / active-assignments / browser-error cards
-    /// are the cyclable sparkline cards (rendered separately), so only the live
-    /// queue gauge appears here.
-    static func placeholderDashboardMetrics() -> [InstructorDashboardMetric] {
-        [
-            InstructorDashboardMetric(label: "Queued Right Now", value: "—")
-        ]
     }
 
     // MARK: - Per-assignment unique-submitter counts
