@@ -111,9 +111,13 @@ struct GetSupportFilesTool: ContentTool {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
             publicID: input.assignmentPublicID, tool: Self.name)
 
-        let suiteScripts = Set(setup.decodedManifest()?.testSuites.map(\.script) ?? [])
+        let manifest = setup.decodedManifest()
+        let suiteScripts = Set(manifest?.testSuites.map(\.script) ?? [])
+        // Grader-only files (option B — docs/datasets.md) are hidden from the
+        // support-file listing/read.
+        let graderOnly = manifest?.graderOnlyFileSet ?? []
         let supportNames = listZipEntries(zipPath: setup.zipPath).filter {
-            !suiteScripts.contains($0) && !Self.reservedNames.contains($0)
+            !suiteScripts.contains($0) && !Self.reservedNames.contains($0) && !graderOnly.contains($0)
         }
 
         guard let filename = input.filename else {

@@ -59,7 +59,19 @@ struct BrowserRunnerRoutes: RouteCollection {
         if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
-        return try await req.fileio.asyncStreamFile(at: setup.zipPath)
+
+        // Grader-only files (option B — docs/datasets.md) must never reach the
+        // student's browser. The canonical stored zip keeps them (the native
+        // worker downloads it over the HMAC route); here we stream a filtered
+        // copy with them removed. Strict no-op — stream the stored zip as-is —
+        // when none are declared, so non-grader-only assignments are unchanged.
+        let graderOnly = setup.decodedManifest()?.graderOnlyFileSet ?? []
+        guard !graderOnly.isEmpty else {
+            return try await req.fileio.asyncStreamFile(at: setup.zipPath)
+        }
+        let filtered = try filteredZipCopy(sourceZip: setup.zipPath, excluding: graderOnly)
+        defer { try? FileManager.default.removeItem(at: filtered.deletingLastPathComponent()) }
+        return buildFileResponse(data: try Data(contentsOf: filtered), filename: "\(setupID).zip")
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/manifest
@@ -88,11 +100,28 @@ struct BrowserRunnerRoutes: RouteCollection {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
 
+        // Strip grader-only filenames (option B — docs/datasets.md) from the
+        // student-facing manifest so their names don't leak here (their contents
+        // are already withheld at every download path). Targeted JSON-key edit —
+        // every other field is served exactly as stored. No-op when none.
+        var manifestBody = setup.manifest
+        if let data = setup.manifest.data(using: .utf8),
+            var obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            obj["graderOnlyFiles"] != nil
+        {
+            obj["graderOnlyFiles"] = [String]()
+            if let reencoded = try? JSONSerialization.data(withJSONObject: obj),
+                let stripped = String(data: reencoded, encoding: .utf8)
+            {
+                manifestBody = stripped
+            }
+        }
+
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
         return Response(
             status: .ok, headers: headers,
-            body: .init(string: setup.manifest))
+            body: .init(string: manifestBody))
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/seed

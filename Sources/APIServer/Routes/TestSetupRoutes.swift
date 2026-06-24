@@ -458,13 +458,13 @@ struct TestSetupRoutes: RouteCollection {
         let allEntries = listZipEntries(zipPath: setup.zipPath)
         guard allEntries.contains(filename) else { throw Abort(.notFound) }
 
-        let testScripts: Set<String> = {
-            guard let props = setup.decodedManifest()
-
-            else { return [] }
-            return Set(props.testSuites.map(\.script))
-        }()
-        let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+        let manifest = setup.decodedManifest()
+        let testScripts = Set(manifest?.testSuites.map(\.script) ?? [])
+        // Grader-only files (option B — docs/datasets.md) are never
+        // student-downloadable: union them into the reserved set alongside the
+        // canonical notebooks.
+        var reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+        reservedNames.formUnion(manifest?.graderOnlyFiles ?? [])
         guard !testScripts.contains(filename), !reservedNames.contains(filename) else {
             throw AppError.forbidden(action: "download '\(filename)' (not a support file)")
         }

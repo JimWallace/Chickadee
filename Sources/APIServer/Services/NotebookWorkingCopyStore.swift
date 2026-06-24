@@ -453,7 +453,10 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
     else { return }
 
     let testScriptNames = Set(props.testSuites.map { $0.script })
-    let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+    // Grader-only files (option B — docs/datasets.md) are withheld from the
+    // student editor: union them into the reserved set so no symlink is created.
+    var reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
+    reservedNames.formUnion(props.graderOnlyFiles)
     // Cached: this pass runs on every notebook visit (the symlinks are
     // idempotent), so listing the zip fresh each time would spawn a serialized
     // `unzip` subprocess per load. The cache busts when the zip's mtime/size

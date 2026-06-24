@@ -303,6 +303,31 @@ func removeScriptFromZip(zipPath: String, filename: String) throws {
     try repackZipFromDirectory(zipPath: zipPath, sourceDir: tempDir)
 }
 
+/// Builds a NEW temp zip copy of `sourceZip` with `excluding` entries removed,
+/// leaving `sourceZip` itself untouched.  Returns the temp zip's URL; the caller
+/// must delete its parent directory (`url.deletingLastPathComponent()`) when
+/// done streaming it.
+///
+/// Used to serve a student-facing test-setup zip that withholds grader-only
+/// files (option B — docs/datasets.md) while the canonical stored zip — which
+/// the native worker downloads over the HMAC route — keeps them.
+func filteredZipCopy(sourceZip: String, excluding: Set<String>) throws -> URL {
+    let fm = FileManager.default
+    let workDir = fm.temporaryDirectory
+        .appendingPathComponent("chickadee_zip_filter_\(UUID().uuidString)")
+    let stageDir = workDir.appendingPathComponent("stage")
+    try fm.createDirectory(at: stageDir, withIntermediateDirectories: true)
+    for entry in listZipEntries(zipPath: sourceZip) where !excluding.contains(entry) {
+        guard let data = extractZipEntry(zipPath: sourceZip, entryName: entry) else { continue }
+        let dest = stageDir.appendingPathComponent(entry)
+        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: dest)
+    }
+    let outZip = workDir.appendingPathComponent("filtered.zip")
+    try repackZipFromDirectory(zipPath: outZip.path, sourceDir: stageDir)
+    return outZip
+}
+
 func extractZipEntry(zipPath: String, entryName: String) -> Data? {
     let result: (Int32, Data)? = try? withZipProcessLock {
         let process = Process()
