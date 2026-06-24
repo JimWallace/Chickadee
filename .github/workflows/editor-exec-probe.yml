@@ -22,14 +22,14 @@ on:
         description: "Engine to probe (chromium | webkit | both)"
         default: "both"
       iterations:
-        description: "open→idle→execute cycles per engine"
-        default: "8"
+        description: "open→idle→execute cycles per engine PER ARM"
+        default: "5"
       budget_ms:
         description: "per-cell execute budget in ms (>45000 also trips exec_hang)"
         default: "60000"
-      delay_ms:
-        description: "ms to wait after kernel_idle before running the cell"
-        default: "0"
+      settle_ms:
+        description: "ms to wait after kernel_idle in the 'settled' arm"
+        default: "45000"
   pull_request:
     paths:
       - "Tools/editor-smoke-test/**"
@@ -100,7 +100,7 @@ jobs:
         env:
           SMOKE_BROWSER: ${{ matrix.browser }}
           SMOKE_CHECK: editor-exec-check.mjs
-          EXEC_ITER: ${{ github.event.inputs.iterations || '8' }}
+          EXEC_ITER: ${{ github.event.inputs.iterations || '5' }}
           EXEC_BUDGET_MS: ${{ github.event.inputs.budget_ms || '60000' }}
-          EXEC_DELAY_MS: ${{ github.event.inputs.delay_ms || '0' }}
+          EXEC_SETTLE_MS: ${{ github.event.inputs.settle_ms || '45000' }}
         run: Tools/editor-smoke-test/run-smoke.sh
