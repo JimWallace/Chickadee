@@ -503,6 +503,84 @@ pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
    hatch (reuses `PersonalizationEvaluator`'s file-writing subprocess), the
    bridge to Phase 2.
 
+## Train/test splits & grader-only files (option B)
+
+The dataset feature also supports **train/test splits**, built from two
+composable building blocks (decided for v1; the auto-split and per-student
+complement variants are deferred):
+
+- **A — per-student served sample** (slices 1–2, shipped): each student is
+  served a deterministic random subset of the pool as their *training* data.
+- **B — reserved grader-only file** (this work): a bundled file served to
+  **no student** — present only in the native worker's grading workspace.
+
+Combined, **A + B** gives both the classic *shared-train / secret-test* split
+(a plain served file + a grader-only test file) and the stronger
+*random-train + reserved-holdout* (a per-student sample + a grader-only test
+file).
+
+### "Holdout" means nobody sees it — and which kind matters
+
+- **Reserved holdout (globally secret):** rows/files served to no student,
+  only in the worker workspace. Collusion-proof — the whole class pooling its
+  training data still can't reconstruct it. This is option B and the default
+  meaning of "holdout".
+- **Per-student complement (individually unseen only):** grading a student on
+  the rows that weren't in *their* sample. Cheap and uses all the data, but a
+  row in student A's "test" set was student B's *training* data, so two
+  students colluding can reconstruct it. **Not** secret — deferred (option D),
+  and named "complement" to keep it distinct from a true holdout.
+
+### Grader-only delivery matrix
+
+A grader-only file must reach the worker and nothing student-facing. The
+codebase already enforces exactly this shape for `solution.ipynb` via a
+`reservedNames` set; grader-only files union the manifest's
+`graderOnlyFiles` into that same set at each classification point:
+
+| Path | Handler | Student-facing? | Grader-only action |
+|------|---------|-----------------|--------------------|
+| Worker download | `WorkerArtifactRoutes.downloadTestSetup` (HMAC) | no (trusted) | **keep** — streams the full stored zip as-is |
+| Browser-runner download | `BrowserRunnerRoutes.downloadTestSetup` | **yes** | **filter** — stream a copy with grader-only entries removed (guarded no-op when none) |
+| Student support-file download | `TestSetupRoutes.downloadSupportFile` | **yes** | **block** — union into `reservedNames` (already gates by name) |
+| Editor symlinks | `NotebookWorkingCopyStore.createSupportFileSymlinks` | **yes** | **skip** — union into `reservedNames` |
+| shared/ extraction | `extractSupportFilesToSharedDirectory` | (symlink source) | **skip** — union into `reservedNames` |
+| MCP support listing | `GetSupportFilesTool` | yes (instructor) | **hide** — union into `reservedNames` |
+| Instructor zip download | `TestSetupRoutes.downloadTestSetup` | no (`isInstructor` gate) | keep |
+
+The stored zip keeps the grader-only file (so the worker gets it via its
+download); only the *student-facing* paths exclude it. The browser-runner path
+is the one that needs an active filter (it streams the whole zip); everything
+else is a name-set union.
+
+### Data model
+
+`TestProperties.graderOnlyFiles: [String]` (decoded with `decodeIfPresent`
+default `[]`; **stripped by `runnerSanitized()`** — the worker receives the
+file via the zip and needs no marker). A grader-only file is otherwise an
+ordinary support file; this list just flags it as student-hidden.
+
+### Trust boundary & worker-grading
+
+A grader-only file is a secret, so an assignment that declares one must be
+**worker-graded** — the browser path can't keep it from the student even with
+the download filter (a determined student controls their browser). The editor
+ships the grading-mode lock + the 🔒 cues described under the UI section.
+
+### Build order (safety)
+
+Implement in this order so a grader-only file can never be *authored* before
+it is *enforced*:
+
+1. **Foundation** — `graderOnlyFiles` on `TestProperties` + `runnerSanitized`
+   strip + tests. Inert: no authoring surface, so nothing can create one yet.
+2. **Enforcement** — union `graderOnlyFiles` into `reservedNames` at the four
+   student-facing classification points + the browser-runner filtered
+   download, with tests asserting the worker download *includes* and the
+   student/browser paths *exclude* a grader-only file.
+3. **Authoring (last)** — the editor control + MCP, plus the worker-grading
+   lock. Only after enforcement is in place.
+
 ## See also
 
 - `docs/personalization-phase1.md` — the per-student seed contract
