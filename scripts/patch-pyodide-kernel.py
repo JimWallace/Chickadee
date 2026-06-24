@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Patch the bundled pyodide-kernel wheel to enable nb_mypy by default.
+"""Patch the bundled pyodide-kernel wheel's kernel-startup activation block.
+
+Two things are injected (both fail-safe):
+
+1. exec_hang FIX (synchronous): wrap `os.chdir` to create the target directory
+   first. The notebook frontend chdir's the kernel into the notebook's Drive
+   folder, which is absent from the kernel FS when the DriveFS service worker is
+   disabled (our SAB-only isolation), so the bare chdir raises FileNotFoundError
+   and wedges the cell execute forever (the production exec_hang). See the block
+   comment for the full mechanism.
+2. nb_mypy type-checking (lazy, background) — enabled by default.
 
 JupyterLite has no config hook for "run Python at kernel startup", so we append
 a fail-safe activation block to `pyodide_kernel/__init__.py` inside the
@@ -58,6 +68,40 @@ TARGET_MEMBER = "pyodide_kernel/__init__.py"
 ACTIVATION = '''
 
 # --- CHICKADEE_NB_MYPY_ACTIVATION -----------------------------------------------------------
+# exec_hang FIX (synchronous — must run at kernel import, before the first cell
+# execute). The JupyterLite notebook frontend sets the kernel's working directory
+# to the notebook's Drive folder by running os.chdir("users/<uid>/<setup>/") on
+# the first execute. That folder only exists in the kernel's Pyodide filesystem
+# if the DriveFS is mounted, which needs the service worker we disable to run
+# SAB-only under cross-origin isolation (SecurityHeadersMiddleware / #989/#1003).
+# With no service worker the folder is absent, so chdir raises FileNotFoundError;
+# that error is unhandled inside Pyodide's WebLoop, so the execute coroutine never
+# completes and the cell wedges "[*]"-forever — the production exec_hang (~1 in 4
+# students; 100% in the headless repro; students carrying a stale SW registration
+# have a working DriveFS and never hit it, which is exactly the partial rate).
+#
+# Fix: make chdir create the target directory first. SAFE + TARGETED — when the
+# DriveFS already provides the folder (the working majority) makedirs is a no-op
+# and behaviour is unchanged; when it is missing the kernel runs in a (possibly
+# empty) folder instead of hanging. (Support files the DriveFS would surface into
+# that folder are a separate follow-up; a working kernel strictly beats a hung
+# one.) Verified: 100% headless hang -> 0% with this patch.
+try:  # pragma: no cover - exercised only in the in-browser kernel
+    import os as _chickadee_os
+
+    _chickadee_orig_chdir = _chickadee_os.chdir
+
+    def _chickadee_chdir(path):
+        try:
+            _chickadee_os.makedirs(path, exist_ok=True)
+        except Exception:  # noqa: BLE001
+            pass
+        return _chickadee_orig_chdir(path)
+
+    _chickadee_os.chdir = _chickadee_chdir
+except Exception:  # noqa: BLE001
+    pass
+
 # Enable nb_mypy type-checking for the in-browser editor — LAZILY, off the
 # kernel-boot critical path. nb_mypy (+ mypy, astor) lives in the vended Pyodide
 # lock but is deliberately NOT in loadPyodideOptions.packages: loading it there
