@@ -149,8 +149,9 @@ struct BrightspaceUnmappedStudentRow: Encodable {
 /// no arithmetic and the chart renders without JavaScript.  Populated buckets
 /// are floored to a clearly visible height so a lone student/submission isn't a
 /// 2px sliver indistinguishable from an empty bin; `isEmpty` marks a zero-count
-/// bucket, which renders flat/transparent (`.spark-fill-empty`) so "no one
-/// here" reads differently from "a few here".  `title` is the hover tooltip.
+/// bucket, which renders as a faint baseline tick (`.spark-fill-empty`) so "no
+/// one here" reads differently from "a few here" while the chart still shows
+/// its full axis.  `title` is the hover tooltip.
 struct SparklineBar: Encodable {
     let heightPercent: Int
     let isEmpty: Bool

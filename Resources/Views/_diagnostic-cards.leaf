@@ -10,8 +10,9 @@
                       (24h/7d/30d); the 24h view shows server-side and the
                       page's click handler reveals the others (cycle.js inline).
 
-    Empty buckets carry `isEmpty` and render flat/transparent so a populated
-    bucket is always visibly distinct.  The outer `<section>` wrapper stays in
+    Empty buckets carry `isEmpty` and render as a faint baseline tick (see
+    `.spark-fill-empty`) so a populated bucket is always visibly distinct while
+    the chart still shows its full axis.  The outer `<section>` wrapper stays in
     the caller so it can scope styling via its own section class
     (`assignment-diagnostics`).
 
