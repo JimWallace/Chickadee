@@ -52,6 +52,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("brightspace", "bind-org-unit", use: brightspaceBindOrgUnit)
         r.get("brightspace", "grade-objects", use: brightspaceGradeObjects)
         r.post("brightspace", "auto-map", use: brightspaceAutoMap)
+        r.post("brightspace", "import-roster", use: brightspaceImportRoster)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
         r.post("brightspace", "retry-failed", use: brightspaceRetryFailed)
         r.get("grades.csv", use: exportGradesCSV)

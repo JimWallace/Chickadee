@@ -344,11 +344,65 @@ extension InstructorDashboardRoutes {
         return req.redirect(to: "/instructor/brightspace")
     }
 
+    // MARK: - POST /instructor/brightspace/import-roster
+
+    /// Imports the bound course's LEARN classlist as real, enrolled,
+    /// passwordless Chickadee student accounts so their grades can be entered
+    /// and synced before they ever log in. Each member's D2L UserId +
+    /// OrgDefinedId are cached up front (from the classlist), so sync resolves
+    /// with no lookup. Existing users (matched by username) are left in place
+    /// but backfilled + ensured enrolled.
+    ///
+    /// Provisioned accounts carry `authProvider = "learn-roster"` and no
+    /// `externalSubject`. Until SSO-adoption-on-login ships (Phase 2), a real
+    /// student who later logs in via SSO would collide on the unique username —
+    /// so this is for test accounts that won't log in, not yet a live class.
+    @Sendable
+    func brightspaceImportRoster(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseUUID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseUUID, on: req.db),
+            let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty,
+            let client = try await req.application.brightSpaceClient(forCourse: course)
+        else {
+            req.session.data["bs_flash_error"] =
+                "Link the course to its LEARN org unit first, then import the roster."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        let classlist: [BrightSpaceClasslistEntry]
+        do {
+            classlist = try await client.fetchClasslist(orgUnitID: orgUnitID, on: req.application)
+        } catch {
+            req.session.data["bs_flash_error"] =
+                "Couldn't read the LEARN classlist: \(error.localizedDescription)"
+            return req.redirect(to: "/instructor/brightspace")
+        }
+
+        let result = try await provisionStudentsFromClasslist(
+            classlist, courseID: courseUUID, on: req.db)
+        req.session.data["bs_flash_success"] =
+            "Imported \(classlist.count) LEARN roster member(s): \(result.created) new account(s), "
+            + "\(result.enrolled) newly enrolled. Enter grades for them, then Sync now."
+        return req.redirect(to: "/instructor/brightspace")
+    }
+
     // MARK: - POST /instructor/brightspace/sync-now
 
     @Sendable
     func brightspaceSyncNow(req: Request) async throws -> Response {
         await runImmediateBrightspaceSweep(req: req)
+        // Also push override-only (no-submission) students for the active course —
+        // the result-based sweep can't see them (its queue is submission results).
+        if let user = req.auth.get(APIUser.self),
+            let courseUUID = try? await req.resolveActiveCourse(for: user).activeCourseUUID
+        {
+            _ = try? await pushOverrideOnlyGrades(
+                courseID: courseUUID,
+                resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
+                db: req.db, application: req.application, logger: req.logger)
+        }
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -677,4 +731,62 @@ extension InstructorDashboardRoutes {
 struct BrightspaceTestResult: Content {
     let ok: Bool
     let message: String
+}
+
+/// Provisions (or backfills) Chickadee student accounts + course enrollments
+/// from a LEARN classlist. Returns `(created, enrolled)` counts. New accounts
+/// are passwordless `learn-roster` students with their D2L UserId +
+/// OrgDefinedId cached from the classlist; an existing user (by lowercased
+/// username) is left in place but gets those ids backfilled and is ensured
+/// enrolled. Extracted from the import route so the creation logic is
+/// unit-testable without a live D2L client.
+func provisionStudentsFromClasslist(
+    _ classlist: [BrightSpaceClasslistEntry], courseID: UUID, on db: Database
+) async throws -> (created: Int, enrolled: Int) {
+    var created = 0
+    var enrolledNow = 0
+    for entry in classlist {
+        guard
+            let rawUsername = entry.username?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !rawUsername.isEmpty
+        else { continue }
+        let username = rawUsername.lowercased()
+
+        let existing = try await APIUser.query(on: db).filter(\.$username == username).first()
+        let student: APIUser
+        if let existing {
+            if (existing.brightspaceUserID ?? "").isEmpty, let uid = entry.userID, !uid.isEmpty {
+                existing.brightspaceUserID = uid
+            }
+            if (existing.studentID ?? "").isEmpty, let org = entry.orgDefinedID, !org.isEmpty {
+                existing.studentID = org
+            }
+            try await existing.save(on: db)
+            student = existing
+        } else {
+            let newUser = APIUser(
+                username: username,
+                passwordHash: "",
+                role: UserRole.student.rawValue,
+                authProvider: "learn-roster",
+                studentID: entry.orgDefinedID
+            )
+            newUser.brightspaceUserID = entry.userID
+            try await newUser.save(on: db)
+            student = newUser
+            created += 1
+        }
+
+        guard let studentID = student.id else { continue }
+        let alreadyEnrolled =
+            try await APICourseEnrollment.query(on: db)
+            .filter(\.$userID == studentID)
+            .filter(\.$course.$id == courseID)
+            .first() != nil
+        if !alreadyEnrolled {
+            try await saveSeededEnrollment(userID: studentID, courseID: courseID, on: db)
+            enrolledNow += 1
+        }
+    }
+    return (created, enrolledNow)
 }

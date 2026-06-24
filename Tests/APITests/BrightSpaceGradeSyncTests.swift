@@ -218,6 +218,87 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
+    // MARK: - Roster import + override-only push
+
+    @Test func provisionStudentsFromClasslistCreatesEnrolledGradeableAccounts() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeTestCourse(on: app, code: "BS200")
+            let courseID = try course.requireID()
+            let classlist = [
+                BrightSpaceClasslistEntry(orgDefinedID: "20850001", username: "JDoe", userID: "d2l-1"),
+                BrightSpaceClasslistEntry(orgDefinedID: "20850002", username: "asmith", userID: "d2l-2"),
+                // No username → skipped.
+                BrightSpaceClasslistEntry(orgDefinedID: "x", username: nil, userID: "d2l-x"),
+            ]
+            let result = try await provisionStudentsFromClasslist(
+                classlist, courseID: courseID, on: app.db)
+            #expect(result.created == 2)
+            #expect(result.enrolled == 2)
+
+            // Username lowercased; D2L ids cached; passwordless student.
+            let jdoe = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "jdoe").first())
+            #expect(jdoe.brightspaceUserID == "d2l-1")
+            #expect(jdoe.studentID == "20850001")
+            #expect(jdoe.roleValue == .student)
+            #expect(jdoe.passwordHash.isEmpty)
+            let enrolled =
+                try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$userID == jdoe.requireID())
+                .filter(\.$course.$id == courseID)
+                .first() != nil
+            #expect(enrolled)
+
+            // Re-running is idempotent — no duplicate accounts or enrollments.
+            let again = try await provisionStudentsFromClasslist(
+                classlist, courseID: courseID, on: app.db)
+            #expect(again.created == 0)
+            #expect(again.enrolled == 0)
+        }
+    }
+
+    @Test func pushOverrideOnlyGradesPushesNoSubmissionStudent() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeTestCourse(on: app, code: "BS300")
+            course.brightspaceOrgUnitID = "ou-300"
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+
+            let setupID = "ts_\(UUID().uuidString.lowercased().prefix(8))"
+            let manifest =
+                #"{"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"t.sh","points":10}],"timeLimitSeconds":10,"makefile":null}"#
+            _ = try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: setupID, courseID: courseID, title: "Lab")
+            assignment.brightspaceGradeObjectID = "go-300"
+            try await assignment.save(on: app.db)
+
+            // A student with an override but NO submission.
+            let student = try await makeTestUser(
+                on: app, username: "ovr_\(UUID().uuidString.lowercased().prefix(6))")
+            let studentID = try student.requireID()
+            try await applyGradeOverride(
+                testSetupID: setupID, studentUserID: studentID, percent: 90, note: nil,
+                grantedByUserID: nil, on: app.db)
+
+            // Classlist resolves the student's username → D2L UserId.
+            let fake = FakeBrightSpaceGrading(classlist: [
+                BrightSpaceClasslistEntry(
+                    orgDefinedID: nil, username: student.username, userID: "d2l-555")
+            ])
+            let pushed = try await pushOverrideOnlyGrades(
+                courseID: courseID, resolveClient: { _ in fake }, db: app.db,
+                application: app, logger: app.logger)
+
+            #expect(pushed == 1)
+            let pushes = await fake.pushes
+            #expect(pushes.count == 1)
+            #expect(pushes.first?.bsUserID == "d2l-555")
+            #expect(pushes.first?.gradeObjectID == "go-300")
+            #expect(pushes.first?.earnedPoints == 9)  // 90% of 10
+        }
+    }
+
     @Test func resolvesByUsernameFromClasslistWhenNoStudentID() async throws {
         try await withApp(app) { _ in
             // SSO-typical: the student has a username but no student number.

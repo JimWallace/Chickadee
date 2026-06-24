@@ -292,6 +292,25 @@ For ops-level diagnosis, the admin diagnostic MCP surface exposes
 `get_brightspace_sync_status` (counts by status + recent D2L error detail,
 student-free).
 
+## Grading students who haven't logged into Chickadee
+
+Grades attach to a real Chickadee user with a submission or an instructor
+override; a manual enrolment is only a placeholder until that student first logs
+in. To grade students who never used Chickadee (e.g. for a participation mark,
+or to test sync without anyone logging in):
+
+1. Bind the course to its LEARN org unit and connect the service key.
+2. On the LEARN tab, click **Import students from LEARN** — this provisions the
+   classlist as real, enrolled, passwordless student accounts, caching each
+   one's D2L UserId + student number so sync resolves immediately.
+3. Set a grade override for each student (per-assignment submissions page →
+   override), then **Sync now** — override-only (no-submission) students push
+   to LEARN alongside the submitters.
+
+> **Not yet for live classes.** Imported accounts have no SSO subject, so until
+> SSO-adoption-on-login ships, a real student who later logs in via SSO would
+> collide on the unique username. Use this for test accounts that won't log in.
+
 ## Troubleshooting
 
 - **"This application is not authorized on this LMS instance" (Step 1):** the

@@ -47,6 +47,12 @@ LEARN
             #csrfFormField()
             <button class="btn action-btn" type="submit">Retry failed</button>
         </form>
+        <form method="post" action="/instructor/brightspace/import-roster" class="inline-form"
+              onsubmit="return confirm('Create Chickadee student accounts for everyone in the LEARN classlist? Intended for test accounts that won’t log in.')">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit"
+                    title="Create enrolled Chickadee accounts from the LEARN roster so you can grade students who haven’t logged in">Import students from LEARN</button>
+        </form>
     </div>
     #endif
 </section>

@@ -508,6 +508,91 @@ private func resolvedBrightSpaceUserID(
     return bsUserID
 }
 
+// MARK: - Override-only push (no-submission students)
+
+/// Pushes LEARN grades for students who have an instructor **override but no
+/// submission** for an assignment — the no-submission case the result-based
+/// sweep never sees (its queue is submission `APIResult` rows). Used by the
+/// manual "Sync now" action for the active course, so an instructor can grade
+/// students who never submitted (e.g. roster-imported, not-yet-logged-in
+/// students). Students who *do* have a submission are skipped here — the
+/// result-based sweep already pushes them (incorporating their override).
+/// Best-effort per student; returns the number pushed.
+@discardableResult
+func pushOverrideOnlyGrades(
+    courseID: UUID,
+    resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
+    db: Database,
+    application: Application,
+    logger: Logger
+) async throws -> Int {
+    guard let course = try await APICourse.find(courseID, on: db),
+        let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty
+    else { return 0 }
+
+    let assignments = try await APIAssignment.query(on: db)
+        .filter(\.$courseID == courseID)
+        .all()
+        .filter { !($0.brightspaceGradeObjectID ?? "").isEmpty }
+    guard !assignments.isEmpty, let client = try await resolveClient(course) else { return 0 }
+
+    let classlistCache = ClasslistUserIDCache()
+    let identityMap =
+        (try? await classlistCache.identityMap(
+            orgUnitID: orgUnitID, client: client, application: application)) ?? [:]
+
+    var pushed = 0
+    for assignment in assignments {
+        guard let gradeObjectID = assignment.brightspaceGradeObjectID, !gradeObjectID.isEmpty,
+            let total = try await suiteTotalPoints(testSetupID: assignment.testSetupID, db: db)
+        else { continue }
+        let overrides = try await APIGradeOverride.query(on: db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .all()
+        for override in overrides {
+            // Students with a submission are handled by the result-based sweep.
+            let hasSubmission =
+                try await APISubmission.query(on: db)
+                .filter(\.$userID == override.userID)
+                .filter(\.$testSetupID == assignment.testSetupID)
+                .filter(\.$kind == APISubmission.Kind.student)
+                .first() != nil
+            if hasSubmission { continue }
+            guard let user = try await APIUser.find(override.userID, on: db) else { continue }
+            let points = Double(override.overridePercent) / 100.0 * total
+
+            func log(_ status: APIBrightSpaceSyncLog.Status, _ detail: String?) async {
+                let entry = APIBrightSpaceSyncLog(
+                    courseID: course.id, testSetupID: assignment.testSetupID,
+                    assignmentTitle: assignment.title, userID: override.userID,
+                    username: user.username, orgUnitID: orgUnitID, gradeObjectID: gradeObjectID,
+                    points: points, status: status, detail: detail)
+                try? await entry.save(on: db)
+            }
+
+            guard
+                let bsUserID = try await resolvedBrightSpaceUserID(
+                    for: user, identityMap: identityMap, db: db, client: client,
+                    application: application)
+            else {
+                await log(.skipped, "No LEARN account match (username / student number)")
+                continue
+            }
+            do {
+                try await client.pushGrade(
+                    orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, bsUserID: bsUserID,
+                    earnedPoints: points, on: application)
+                await log(.success, nil)
+                pushed += 1
+            } catch {
+                await log(.error, error.localizedDescription)
+                logger.warning("BrightSpace override-only push failed for \(user.username): \(error)")
+            }
+        }
+    }
+    return pushed
+}
+
 // MARK: - Monitor
 
 final class BrightSpaceGradeSyncMonitor: @unchecked Sendable {
