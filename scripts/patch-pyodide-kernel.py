@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Patch the bundled pyodide-kernel wheel to enable nb_mypy by default.
+"""Patch the bundled pyodide-kernel wheel's `pyodide_kernel/__init__.py`.
+
+nb_mypy type-checking is DISABLED: the injected activation block (below) now
+contains NO code. It used to schedule a background task that ran nb_mypy's
+synchronous compiled-WASM `mypy.api.run` before every cell, which wedged the
+editor kernel on the first execute (the exec_hang) — see the block for details.
+The block + its CHICKADEE_NB_MYPY_ACTIVATION markers are kept so re-enabling is a
+one-line change and the sha-cascade machinery below is unchanged.
 
 JupyterLite has no config hook for "run Python at kernel startup", so we append
-a fail-safe activation block to `pyodide_kernel/__init__.py` inside the
+the (now empty) activation block to `pyodide_kernel/__init__.py` inside the
 pyodide_kernel wheel that the pyodide-kernel labextension ships (the one
-`jupyter lite build` bundles into Public/jupyterlite/.../pypi/). At kernel boot
-the editor schedules a background task that loads nb_mypy and runs
-`%load_ext nb_mypy; %nb_mypy On`, so mypy diagnostics show on every cell —
-across every notebook, with no setup cell.
+`jupyter lite build` bundles into Public/jupyterlite/.../pypi/).
 
 LAZY + NON-FATAL by design. nb_mypy is deliberately NOT listed in
 `loadPyodideOptions.packages` (the kernel-boot critical path): a package named
@@ -58,38 +62,23 @@ TARGET_MEMBER = "pyodide_kernel/__init__.py"
 ACTIVATION = '''
 
 # --- CHICKADEE_NB_MYPY_ACTIVATION -----------------------------------------------------------
-# Enable nb_mypy type-checking for the in-browser editor — LAZILY, off the
-# kernel-boot critical path. nb_mypy (+ mypy, astor) lives in the vended Pyodide
-# lock but is deliberately NOT in loadPyodideOptions.packages: loading it there
-# would tie kernel boot to nb_mypy, so any load failure would brick the whole
-# editor. Instead we schedule a background task that loads it AFTER the kernel
-# is up, then turns type-checking on. Fail-safe: any failure (missing or
-# incompatible wheel, bad lock key, scheduling error) degrades to "no type
-# warnings" — the kernel stays healthy and usable.
-try:  # pragma: no cover - exercised only in the in-browser kernel
-    import asyncio as _chickadee_asyncio
-
-    async def _chickadee_enable_nb_mypy():
-        try:
-            import pyodide_js as _chickadee_pyodide_js
-
-            await _chickadee_pyodide_js.loadPackage("nb-mypy")
-            ipython_shell.run_line_magic("load_ext", "nb_mypy")
-            ipython_shell.run_line_magic("nb_mypy", "On")
-        except Exception as _chickadee_nbmypy_err:  # noqa: BLE001
-            import warnings as _chickadee_warnings
-
-            _chickadee_warnings.warn(
-                f"Chickadee: nb_mypy type-checking not enabled: {_chickadee_nbmypy_err!r}"
-            )
-
-    _chickadee_asyncio.ensure_future(_chickadee_enable_nb_mypy())
-except Exception as _chickadee_nbmypy_sched_err:  # noqa: BLE001
-    import warnings as _chickadee_warnings
-
-    _chickadee_warnings.warn(
-        f"Chickadee: nb_mypy activation could not be scheduled: {_chickadee_nbmypy_sched_err!r}"
-    )
+# nb_mypy type-checking is DISABLED — deliberately injects NO code.
+#
+# nb_mypy registered an IPython `pre_run_cell` hook that ran a full, synchronous,
+# compiled-WASM `mypy.api.run(...)` before EVERY cell, on the kernel's single
+# thread. In the real notebook editor the first cell execute wedged the kernel
+# ("[*]" forever — the exec_hang ~1 in 4 students hit on lab day). It reproduced
+# deterministically in CI (Tools/editor-smoke-test/editor-exec-check.mjs): on
+# both Chromium and WebKit, the first editor-cell execute hung 5/5 whether run
+# immediately at idle OR after a 45s settle — so deferring the background load
+# does not help, the per-cell mypy run itself is the cost. In the race case the
+# background load colliding with the execute could even fatally crash Pyodide
+# ("JSON Parse error: Unterminated string").
+#
+# So the activation is removed. The nb_mypy / mypy / astor wheels stay vended in
+# the Pyodide lock (harmless, just unloaded) so this is a one-line revert if a
+# non-blocking design lands. Revisit type-checking as a background-worker /
+# language-server feature that NEVER runs on the cell-execute path.
 # --- end CHICKADEE_NB_MYPY_ACTIVATION -------------------------------------------------------
 '''
 
@@ -138,7 +127,7 @@ def repack_wheel(wheel: pathlib.Path) -> None:
             info.compress_type = zipfile.ZIP_STORED
             info.external_attr = 0o644 << 16
             zout.writestr(info, members[name])
-    print(f"patch-pyodide-kernel: nb_mypy activation injected into {wheel.name}")
+    print(f"patch-pyodide-kernel: nb_mypy activation block (DISABLED) written into {wheel.name}")
 
 
 def refresh_all_json(pypi_dir: pathlib.Path, wheel: pathlib.Path) -> None:
