@@ -181,13 +181,6 @@ extension InstructorDashboardRoutes {
             guard let submittedAt = submission.submittedAt else { return false }
             return submittedAt >= windowStart
         }.count
-        let pendingLatestCount = rows.reduce(into: 0) { count, row in
-            guard row.hasLatestSubmission,
-                let latest = submissions.first(where: { $0.id == row.latestSubmissionID }),
-                [SubmissionStatus.pending.rawValue, SubmissionStatus.assigned.rawValue].contains(latest.status)
-            else { return }
-            count += 1
-        }
         let gradedRows = rows.compactMap(\.bestGradePercent)
         let medianBestGrade: String
         if gradedRows.isEmpty {
@@ -239,10 +232,6 @@ extension InstructorDashboardRoutes {
                 sparkSummary: "Submission attempts per student.", bars: attemptBars,
                 cyclable: false, windowChip: "", windows: []),
             submissionsCard,
-            AssignmentStatCard(
-                label: "Queued Jobs", value: "\(pendingLatestCount)",
-                hasSpark: false, sparkSummary: "", bars: [],
-                cyclable: false, windowChip: "", windows: []),
             AssignmentStatCard(
                 label: "Median Grade", value: medianBestGrade,
                 hasSpark: !gradeBars.isEmpty,
