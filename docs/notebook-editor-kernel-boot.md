@@ -276,6 +276,17 @@ off that beacon — iframe-reload → page-reload → upload-fallback
 (`planExecHangResponse`), reusing the boot ladder's reload primitives. A wedged
 kernel holds no useful state after 45s busy, and JupyterLite restores the saved
 notebook from IndexedDB on reboot, so the reload is a real recovery, not a loss.
+The self-heal emits `recover_attempt` (a reload rung fired) and `recover_failed`
+(ladder exhausted, still hanging) through the same `kernel_error` pipeline, so
+**success ≈ attempts − failures** — and both fall toward zero once the root cause
+is fixed, the headline KPI for that work (`get_browser_diagnostics` `bySource`).
+
+**CI reproducer (this change).** `editor-exec-check.mjs` (the `editor-exec-probe`
+workflow, non-gating) opens the *real* notebook page, waits for `kernel_idle`,
+then runs an editor cell and measures the hang rate per engine — the post-idle
+editor-cell execute the required smoke never exercised (it checks boot + browser
+grading, never an editor cell). While the root cause is open a reproduced hang is
+the signal; a fix must turn it consistently green before it becomes a guard.
 
 **Observability (this change).** The `editorKernelHang` health-alert rule fires
 when ≥`ALERT_EDITOR_HANG_THRESHOLD` exec_hangs land within

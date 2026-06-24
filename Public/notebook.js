@@ -1011,9 +1011,27 @@
         catch (_) { /* sessionStorage unavailable — reload simply won't be re-gated */ }
     }
 
-    let execHangRecovering = false;   // one recovery action in flight at a time
+    // Recovery KPI telemetry so the self-heal's usage IS the bug's metric:
+    // `recover_attempt` (a reload rung fired) and `recover_failed` (the ladder
+    // was exhausted and the kernel hung AGAIN). Success ≈ attempts − failures,
+    // and both fall toward zero once the underlying SAB/Atomics kernel deadlock
+    // is actually fixed — the headline KPI for that root-cause work. Reuses the
+    // `kernel_error` kind (free-form source) so there's no server change and it
+    // never inflates the instructor error card (which counts only
+    // preflight_fail / watchdog_timeout / page_unresponsive). Surfaced in
+    // get_browser_diagnostics `bySource` alongside exec_hang.
+    function reportRecovery(source) {
+        if (!failures || !failures.reportEvent) return;
+        try { failures.reportEvent({ kind: 'kernel_error', source: source }); }
+        catch (_) { /* telemetry must never break recovery */ }
+    }
+
+    // The in-iframe collector emits exactly one exec_hang per page load
+    // (execHangReported), so each rung fires at most once per iframe lifetime; the
+    // sessionStorage rung guards (which survive both the iframe reload and a
+    // full-page reload) carry the escalation across reloads without an in-memory
+    // re-entry flag that a missed `load` event could wedge.
     function recoverFromExecHang() {
-        if (execHangRecovering) return;
         // Reuse the watchdog's page-reload guard: one full-tab reload total, no
         // matter which ladder (boot or exec-hang) consumed it.
         const plan = planExecHangResponse({
@@ -1021,37 +1039,39 @@
             pageReloadAttempted:   kernelPageReloadUsed()
         });
         if (plan.action === 'reload-iframe') {
-            execHangRecovering = true;
             markExecHangIframeReloadUsed();
+            reportRecovery('recover_attempt');
             setStatus('loading', 'The notebook kernel stopped responding — restarting it…');
-            // forcedEditorResetAt keeps the locked-path enforcer from fighting
-            // our navigation; clear the transient status once the fresh shell
-            // commits (one-shot load listener).
-            forcedEditorResetAt = Date.now();
+            // Clear the transient status once the fresh shell commits (one-shot
+            // load listener; cosmetic, so a harness that never fires load is fine).
             frame.addEventListener('load', function clearOnce() {
                 frame.removeEventListener('load', clearOnce);
-                execHangRecovering = false;
                 setStatus('', '');
                 reenableSubmit();
             });
             // Wait for the SW subsystem to settle first, same as the boot ladder,
-            // so the fresh boot doesn't re-race it.
+            // so the fresh boot doesn't re-race it. Stamp forcedEditorResetAt at
+            // navigation time so the locked-path enforcer doesn't fight it.
             whenServiceWorkerActive(5000).then(() => {
+                forcedEditorResetAt = Date.now();
                 try { frame.src = editorURL; } catch (_) { /* nothing else to try */ }
             });
             return;
         }
         if (plan.action === 'reload-page') {
-            execHangRecovering = true;
             markKernelPageReloadUsed();
+            reportRecovery('recover_attempt');
             setStatus('loading', 'The notebook kernel stopped responding — reloading the page…');
             whenServiceWorkerActive(5000).then(() => {
+                forcedEditorResetAt = Date.now();
                 try { window.location.reload(); } catch (_) { /* nothing else to try */ }
             });
             return;
         }
-        // Both reload rungs spent and it wedged again — stop auto-recovering and
-        // give the student a working path: the server-side upload fallback.
+        // Both reload rungs spent and it wedged again — the self-heal didn't take.
+        // Stop auto-recovering and give the student a working path: the
+        // server-side upload fallback.
+        reportRecovery('recover_failed');
         if (failures && failures.showFailure) {
             failures.showFailure(plan.diagnostic);
         }

@@ -221,8 +221,18 @@ function loadBridge() {
     reportEditorError() {},
     showFailure() {},
   };
+  // Map-backed sessionStorage shim so the exec-hang recovery ladder's rung
+  // guards (which a real browser persists across reloads) work in-process, making
+  // the iframe→page→fail escalation deterministically drivable.
+  const store = new Map();
+  const sessionStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+  };
+  let pageReloads = 0;
   const context = {
-    console, document, fetch,
+    console, document, fetch, sessionStorage,
     // No-op timers: the bridge installs synchronously at load, so we never need
     // a real tick — and a real one would fire mountEditor's deferred sw_state
     // beacon (which touches an undefined `navigator`) after the test ended.
@@ -230,7 +240,7 @@ function loadBridge() {
     setInterval: () => 1, clearInterval: () => {},
     URL, JSON, Error, Promise,
     window: {
-      location: { origin: 'https://example.test' },
+      location: { origin: 'https://example.test', reload() { pageReloads += 1; } },
       addEventListener() {},
       matchMedia: null,
       ChickadeeNotebookFailures: failures,
@@ -242,12 +252,48 @@ function loadBridge() {
   // Drop any non-kernel telemetry emitted during load (e.g. sw_state).
   const kernelEvents = () => events.filter(
     e => e.kind === 'kernel_phase' || e.kind === 'kernel_error');
-  return { handleKernelDiagMessage: hooks.exports.handleKernelDiagMessage, kernelEvents };
+  return {
+    handleKernelDiagMessage: hooks.exports.handleKernelDiagMessage,
+    kernelEvents, frame, pageReloadCount: () => pageReloads,
+  };
 }
 
 function msg(data, origin = 'https://example.test') {
   return { origin, data };
 }
+
+const execHang = () => msg({
+  ck: 'kernel-diag', kind: 'kernel_error', source: 'exec_hang', message: 'busy_ms=45000',
+});
+const sources = (kernelEvents) => kernelEvents().map(e => e.source);
+
+test('exec_hang self-heal: first hang reloads the iframe + emits recover_attempt', async () => {
+  const { handleKernelDiagMessage, kernelEvents, frame } = loadBridge();
+  const editorURL = frame.dataset.editorUrl;
+  frame.src = 'SENTINEL';
+  handleKernelDiagMessage(execHang());
+  // whenServiceWorkerActive resolves false synchronously (no navigator), so the
+  // reload runs on a microtask we flush with two awaits.
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(frame.src, editorURL, 'iframe re-pointed at the editor URL');
+  assert.equal(sources(kernelEvents).filter(s => s === 'recover_attempt').length, 1);
+});
+
+test('exec_hang self-heal: escalates iframe → page → fail across repeated hangs', async () => {
+  const { handleKernelDiagMessage, kernelEvents, pageReloadCount } = loadBridge();
+  // Rung 1: iframe reload.
+  handleKernelDiagMessage(execHang());
+  await Promise.resolve(); await Promise.resolve();
+  // Rung 2: the rebooted kernel hung again → full-page reload.
+  handleKernelDiagMessage(execHang());
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(pageReloadCount(), 1, 'second hang escalates to a full-page reload');
+  // Rung 3: still hanging, ladder exhausted → recover_failed + upload fallback.
+  handleKernelDiagMessage(execHang());
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(sources(kernelEvents).filter(s => s === 'recover_attempt').length, 2);
+  assert.equal(sources(kernelEvents).filter(s => s === 'recover_failed').length, 1);
+});
 
 test('bridge forwards a same-origin kernel_phase', () => {
   const { handleKernelDiagMessage, kernelEvents } = loadBridge();
