@@ -1,6 +1,6 @@
 {
   "jupyter-config-data": {
-    "appVersion": "0.7.6-chickadee.1",
+    "appVersion": "0.8.0-chickadee.1",
     "defaultKernelName": "python",
     "fullLabextensionsUrl": "./extensions",
     "disabledExtensions": [
@@ -10,12 +10,13 @@
       {
         "name": "@jupyterlite/pyodide-kernel-extension",
         "extension": "./extension",
-        "load": "static/remoteEntry.a117bd216cefa0b341fe.js"
+        "load": "static/remoteEntry.c6732262d69c5d22.js"
       }
     ],
+    "contentsAllJsonFile": "all.json",
     "litePluginSettings": {
       "@jupyterlite/pyodide-kernel-extension:kernel": {
-        "pyodideUrl": "/pyodide/pyodide.js",
+        "pyodideUrl": "/pyodide/pyodide.mjs",
         "disablePyPIFallback": true,
         "pipliteUrls": [
           "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=783d01f64a330ecbbd82318ba2fde8842bc8eece502b821b8c0f57cacdde5cdc"
