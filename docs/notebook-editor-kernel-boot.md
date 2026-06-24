@@ -250,6 +250,58 @@ actually *runs* in a real browser under the live CSP/COEP (it must emit
 `kernel_phase=boot_start`), and the collector + bridge logic is unit-tested in
 `Tests/BrowserRunnerJSTests/kernel-diagnostics.test.mjs`.
 
+## The post-idle exec_hang (a second, distinct failure mode)
+
+Everything above is about the kernel **boot**. There is a second hang that the
+boot story does not cover: a kernel that **boots to idle cleanly, then wedges
+BUSY forever on a later cell** — the `[*]`-forever deadlock students hit in the
+lab. It is invisible to the boot funnel and the watchdog *by construction*: both
+stop the instant the kernel reaches `kernel_idle` (a successful boot), so a
+kernel that fails *after* that point reports only success.
+
+**Telemetry (`exec_hang`, shipped 0.4.522).** The in-iframe collector keeps one
+narrow, PII-safe watcher alive after idle: it reads only the busy/idle indicator
+and emits a single `kernel_error/source=exec_hang` (`busy_ms=…`) when a cell sits
+busy past 45s. Production `get_browser_diagnostics` shows these on fully-capable
+modern Chrome/Edge with `coi=true; sab=true; waitasync=true; registrations=0` —
+i.e. **not** the no-SAB / no-waitAsync cohort the boot fixes targeted. The
+signature is consistent with **background-tab throttling of the SAB/Atomics
+handshake** (the main thread's `Atomics.notify` is deferred while the worker
+blocks in `Atomics.wait`), which is why it is post-*idle* and why a headless CI
+run cannot reproduce it (a Playwright tab is never backgrounded).
+
+**Recovery (this change).** `exec_hang` was telemetry-only; the student hung
+forever. The parent bridge (`notebook.js`) now drives a guarded recovery ladder
+off that beacon — iframe-reload → page-reload → upload-fallback
+(`planExecHangResponse`), reusing the boot ladder's reload primitives. A wedged
+kernel holds no useful state after 45s busy, and JupyterLite restores the saved
+notebook from IndexedDB on reboot, so the reload is a real recovery, not a loss.
+
+**Observability (this change).** The `editorKernelHang` health-alert rule fires
+when ≥`ALERT_EDITOR_HANG_THRESHOLD` exec_hangs land within
+`ALERT_EDITOR_HANG_WINDOW_MINUTES`, so a recurrence pages instead of waiting for
+a lab report.
+
+**Root cause is still open.** The recovery + alert are a mitigation. The
+underlying SAB/Atomics execution deadlock is not yet reproduced or fixed; a
+falling `exec_hang` / `editorKernelHang` count is the success signal for that
+follow-up.
+
+### Lessons (so the 4-week arc doesn't repeat)
+
+1. **A security-header change is an editor-runtime change.** Cross-origin
+   isolation (COOP/CORP, #568) silently moved the kernel from the
+   service-worker sync path onto SharedArrayBuffer+Atomics. Treat any change
+   that flips `crossOriginIsolated` as a kernel change and gate it on the
+   editor-smoke suite, not just the security review.
+2. **Don't remove a fallback to "simplify" until the remaining path is proven
+   across the full lifecycle.** "SAB only, no fallback" (#989) was verified at
+   *boot*, on Chromium+WebKit, at t≈0 — not at steady-state or post-idle. The
+   exec_hang appeared in exactly the lifecycle phase CI never exercised.
+3. **Lead with telemetry, don't trail it.** Each round of this arc added
+   observability *after* the incident. The post-idle watcher and the
+   `editorKernelHang` alert now make this class of regression visible up front.
+
 ## Quick reference
 
 | | Sync path | SW-control race? | Status |
@@ -257,3 +309,8 @@ actually *runs* in a real browser under the live CSP/COEP (it must emit
 | Before | JupyterLite service worker | **yes** | the bug; recovery ladder A mitigates it |
 | Now | `SharedArrayBuffer` (cross-origin isolation) | **no** | shipped + headless-proven (both engines); **SW disabled** — one sync path, no fallback |
 | Removed | SW, gated on `serviceWorker.controller` | n/a | the never-built fallback; unnecessary once SAB is the sole path |
+
+| Failure mode | Phase | Seen by | Recovery |
+|---|---|---|---|
+| Boot hang (Kernel Unknown / never idles) | boot | boot funnel + watchdog | reload-iframe → reload-page (ladder A) |
+| `exec_hang` (booted, then wedges busy) | post-idle execute | in-iframe `exec_hang` watcher | reload-iframe → reload-page → upload (`planExecHangResponse`) |

@@ -46,15 +46,25 @@ PORT="${PORT_FROZEN:-8101}" SMOKE_SIMULATE_NO_SYNC=1 ./run-smoke.sh
 frozen_failed=$([ $? -ne 0 ] && echo 1 || echo 0)
 
 echo
-echo "=== selftest 4/4: no native Atomics.waitAsync — expect PASS (blob: polyfill worker) ==="
+echo "=== selftest 4/5: no native Atomics.waitAsync — expect PASS (blob: polyfill worker) ==="
 PORT="${PORT_NOWAITASYNC:-8102}" SMOKE_SIMULATE_NO_WAITASYNC=1 SMOKE_EXPECT_ISOLATED=1 ./run-smoke.sh
 no_waitasync_ok=$([ $? -eq 0 ] && echo 1 || echo 0)
 
 echo
-if [ "$good_ok" -eq 1 ] && [ "$no_sw_ok" -eq 1 ] && [ "$frozen_failed" -eq 1 ] && [ "$no_waitasync_ok" -eq 1 ]; then
+echo "=== selftest 5/5: post-idle execute — expect PASS (cell still runs after idling) ==="
+# Closes the lifecycle gap that hid the post-idle exec_hang: every other probe
+# runs at t≈0; this idles, then executes again. Can't reproduce the prod hang
+# (a headless tab is never throttled) but guards that post-idle execution works.
+PORT="${PORT_POSTIDLE:-8103}" SMOKE_POST_IDLE_MS=8000 SMOKE_EXPECT_ISOLATED=1 ./run-smoke.sh
+post_idle_ok=$([ $? -eq 0 ] && echo 1 || echo 0)
+
+echo
+if [ "$good_ok" -eq 1 ] && [ "$no_sw_ok" -eq 1 ] && [ "$frozen_failed" -eq 1 ] \
+   && [ "$no_waitasync_ok" -eq 1 ] && [ "$post_idle_ok" -eq 1 ]; then
   echo "SELFTEST PASS — editor boots isolated, survives losing the service worker"
   echo "(SharedArrayBuffer), boots on engines without native Atomics.waitAsync"
-  echo "(blob: polyfill worker), and the freeze probe still catches a no-sync editor."
+  echo "(blob: polyfill worker), executes a cell after idling (post-idle guard),"
+  echo "and the freeze probe still catches a no-sync editor."
   exit 0
 fi
 echo "SELFTEST FAIL — the editor / smoke test is not behaving:"
@@ -62,4 +72,5 @@ echo "  default isolated boot passed?     $good_ok       (want 1)"
 echo "  survives SW removal (SAB)?        $no_sw_ok      (want 1)"
 echo "  no-sync freeze detected?          $frozen_failed (want 1)"
 echo "  boots with no native waitAsync?   $no_waitasync_ok (want 1)"
+echo "  post-idle execute passed?         $post_idle_ok  (want 1)"
 exit 1

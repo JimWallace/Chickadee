@@ -103,6 +103,19 @@ const KERNEL_RUN_MS = 90_000;
 const STDIN_PROMPT_MS = 20_000;
 const STDIN_ECHO_MS = 25_000;
 
+// Post-idle execute probe (SMOKE_POST_IDLE_MS=<ms>, default 0 = skip). After the
+// kernel reaches idle, sit idle for this long, then execute one more cell and
+// require it to complete. This closes the lifecycle test gap that hid the
+// post-idle `exec_hang` regression: every other probe runs at t≈0, so a kernel
+// whose SAB/Atomics handshake wedges only AFTER an idle period (the `[*]`-forever
+// hang students hit) was never exercised. NOTE: a headless Playwright tab is
+// never backgrounded/throttled, so this cannot reproduce the *production* deadlock
+// (which correlates with tab-throttling on real Chrome/Edge); it is a regression
+// guard that post-idle execution works at all over the live sync path.
+const POST_IDLE_MS = parseInt(process.env.SMOKE_POST_IDLE_MS || "0", 10) || 0;
+const POST_IDLE_EXPR = "13*53";
+const POST_IDLE_RESULT = "689";
+
 /** Console / network evidence of a blocked resource — the COEP worker-block. */
 function looksBlocked(text) {
   if (!text) return false;
@@ -382,6 +395,27 @@ async function main() {
 
     if (blocked.length) {
       return await fail("cells ran but blocked-resource errors were observed");
+    }
+
+    // (2.5) Post-idle execute regression guard (opt-in via SMOKE_POST_IDLE_MS).
+    // The kernel is idle here; sit idle, then run one more cell. A kernel whose
+    // execution path wedges only after idling fails this where every t≈0 probe
+    // above passed. See POST_IDLE_MS for why this can't reproduce the prod hang.
+    if (POST_IDLE_MS > 0) {
+      console.log(`post-idle probe: idling ${POST_IDLE_MS}ms before a fresh execute…`);
+      await page.waitForTimeout(POST_IDLE_MS);
+      await runCell(POST_IDLE_EXPR);
+      const ranAfterIdle = await waitForText(POST_IDLE_RESULT, KERNEL_RUN_MS);
+      if (ranAfterIdle === "blocked") {
+        return await fail("blocked resource detected during the post-idle execute probe");
+      }
+      if (!ranAfterIdle) {
+        return await fail(
+          `post-idle execute hung — kernel did not run ${POST_IDLE_EXPR} → ${POST_IDLE_RESULT} ` +
+            `within ${KERNEL_RUN_MS}ms after idling ${POST_IDLE_MS}ms (exec_hang regression)`
+        );
+      }
+      console.log(`post-idle probe: kernel ran ${POST_IDLE_EXPR}=${POST_IDLE_RESULT} after idle`);
     }
 
     console.log(

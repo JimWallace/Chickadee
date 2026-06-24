@@ -229,6 +229,13 @@
             const d = e.data;
             if (!d || d.ck !== 'kernel-diag') return false;
             if (d.kind !== 'kernel_phase' && d.kind !== 'kernel_error') return false;
+            // A post-idle execution hang (the `[*]`-forever kernel) is the one
+            // failure the watchdog can't act on — it has already stopped at
+            // kernel-ready. Drive recovery from here, independent of the forward
+            // cap below, so a wedged kernel self-heals instead of hanging.
+            if (d.kind === 'kernel_error' && d.source === 'exec_hang') {
+                try { recoverFromExecHang(); } catch (_) { /* recovery is best-effort */ }
+            }
             if (kernelDiagForwarded >= KERNEL_DIAG_MAX) return false;
             kernelDiagForwarded += 1;
             failures.reportEvent({
@@ -952,6 +959,105 @@
     function markKernelPageReloadUsed() {
         try { sessionStorage.setItem(kernelPageReloadStorageKey(), '1'); }
         catch (_) { /* sessionStorage unavailable — page reload simply won't be re-gated */ }
+    }
+
+    // --- Post-idle kernel exec-hang recovery -------------------------------
+    //
+    // The in-iframe collector (jl-kernel-diagnostics.js) emits a single
+    // `kernel_error/exec_hang` when a cell sits BUSY past EXEC_HANG_MS (45s) —
+    // the `[*]`-forever hang students hit in the lab. The boot watchdog can't
+    // see it: it has already stopped at kernel-ready (the kernel DID boot, then
+    // wedged on execute). Until now that beacon was telemetry-only and the
+    // student hung forever. Drive the same recovery ladder the watchdog uses —
+    // reload the iframe, then the page, then surface the upload fallback — each
+    // rung guarded against a reload storm.
+    //
+    // A wedged kernel holds no useful state after 45s busy, so a fresh iframe
+    // (clean Pyodide kernel) is a real recovery, not a loss: JupyterLite
+    // restores the student's saved notebook from IndexedDB on boot, so their
+    // code is preserved across the reload.
+
+    // PURE planner (mirrors planKernelFailureResponse) — unit-testable.
+    function planExecHangResponse({ iframeReloadAttempted, pageReloadAttempted }) {
+        if (!iframeReloadAttempted) {
+            return { action: 'reload-iframe' };
+        }
+        if (!pageReloadAttempted) {
+            return { action: 'reload-page' };
+        }
+        return {
+            action: 'fail',
+            diagnostic: {
+                kind:         'watchdog_timeout',
+                failedChecks: ['kernel-exec-hang'],
+                source:       'exec_hang',
+                message:      'kernel stuck busy after restart'
+            }
+        };
+    }
+
+    // One iframe reload per (tab session, setup), mirroring the page-reload
+    // guard so the exec-hang ladder can't loop into a reload storm if the fresh
+    // kernel wedges again immediately.
+    function execHangIframeReloadStorageKey() {
+        return 'chickadee:exec-hang-iframe-reload:' + setupID;
+    }
+    function execHangIframeReloadUsed() {
+        try { return sessionStorage.getItem(execHangIframeReloadStorageKey()) === '1'; }
+        catch (_) { return false; }
+    }
+    function markExecHangIframeReloadUsed() {
+        try { sessionStorage.setItem(execHangIframeReloadStorageKey(), '1'); }
+        catch (_) { /* sessionStorage unavailable — reload simply won't be re-gated */ }
+    }
+
+    let execHangRecovering = false;   // one recovery action in flight at a time
+    function recoverFromExecHang() {
+        if (execHangRecovering) return;
+        // Reuse the watchdog's page-reload guard: one full-tab reload total, no
+        // matter which ladder (boot or exec-hang) consumed it.
+        const plan = planExecHangResponse({
+            iframeReloadAttempted: execHangIframeReloadUsed(),
+            pageReloadAttempted:   kernelPageReloadUsed()
+        });
+        if (plan.action === 'reload-iframe') {
+            execHangRecovering = true;
+            markExecHangIframeReloadUsed();
+            setStatus('loading', 'The notebook kernel stopped responding — restarting it…');
+            // forcedEditorResetAt keeps the locked-path enforcer from fighting
+            // our navigation; clear the transient status once the fresh shell
+            // commits (one-shot load listener).
+            forcedEditorResetAt = Date.now();
+            frame.addEventListener('load', function clearOnce() {
+                frame.removeEventListener('load', clearOnce);
+                execHangRecovering = false;
+                setStatus('', '');
+                reenableSubmit();
+            });
+            // Wait for the SW subsystem to settle first, same as the boot ladder,
+            // so the fresh boot doesn't re-race it.
+            whenServiceWorkerActive(5000).then(() => {
+                try { frame.src = editorURL; } catch (_) { /* nothing else to try */ }
+            });
+            return;
+        }
+        if (plan.action === 'reload-page') {
+            execHangRecovering = true;
+            markKernelPageReloadUsed();
+            setStatus('loading', 'The notebook kernel stopped responding — reloading the page…');
+            whenServiceWorkerActive(5000).then(() => {
+                try { window.location.reload(); } catch (_) { /* nothing else to try */ }
+            });
+            return;
+        }
+        // Both reload rungs spent and it wedged again — stop auto-recovering and
+        // give the student a working path: the server-side upload fallback.
+        if (failures && failures.showFailure) {
+            failures.showFailure(plan.diagnostic);
+        }
+        setStatus('error',
+            'The notebook kernel is stuck. Use “Upload & submit” below, or reset the editor at /reset-editor.');
+        reenableSubmit();
     }
 
     // Hard fallback: if the notebook hasn't synced within 15 seconds (e.g. the
@@ -1956,6 +2062,7 @@
             kernelFailureEvidence,
             kernelLivenessReady,
             planKernelFailureResponse,
+            planExecHangResponse,
             shouldForceReseed,
             reseedPlan,
             handleKernelDiagMessage,

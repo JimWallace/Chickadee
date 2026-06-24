@@ -45,6 +45,12 @@ func evaluateHealthRules(
             configuration: configuration,
             now: now
         )) ?? .ok
+    results[.editorKernelHang] =
+        (try? await evaluateEditorKernelHang(
+            on: application,
+            configuration: configuration,
+            now: now
+        )) ?? .ok
 
     return results
 }
@@ -205,6 +211,51 @@ private func evaluateErrorRateSpike(
             "system_failure_rate_percent": String(percent),
             "threshold_percent": String(Int((configuration.errorRateThreshold * 100).rounded())),
         ]
+    )
+}
+
+/// Decides the editor-kernel-hang rule purely from a count, so the firing
+/// threshold is table-testable without a database. Fire when at least
+/// `threshold` post-idle `exec_hang` reports landed inside the window — a
+/// recurrence of the SAB/Atomics kernel deadlock that the boot funnel and
+/// watchdog cannot see (the kernel booted to idle, then wedged on execute).
+func decideEditorKernelHang(
+    hangCount: Int,
+    threshold: Int,
+    windowMinutes: Int
+) -> RuleEvaluation {
+    guard threshold > 0, hangCount >= threshold else { return .ok }
+    return RuleEvaluation(
+        isFiring: true,
+        summary:
+            "\(hangCount) editor kernel hang(s) reported in the last \(windowMinutes)m "
+            + "(post-idle exec_hang; threshold \(threshold))",
+        details: [
+            "exec_hang_count": String(hangCount),
+            "window_minutes": String(windowMinutes),
+            "threshold": String(threshold),
+        ]
+    )
+}
+
+private func evaluateEditorKernelHang(
+    on application: Application,
+    configuration: ServerHealthAlertConfiguration,
+    now: Date
+) async throws -> RuleEvaluation {
+    let windowStart = now.addingTimeInterval(-Double(configuration.editorHangWindowMinutes) * 60)
+    // exec_hang rides the free-form `source` on the `kernel_error` kind
+    // (jl-kernel-diagnostics.js → ClientDiagnosticsRoutes). One row per distinct
+    // student-page that hit a sustained post-idle busy hang.
+    let hangCount = try await APIClientDiagnostic.query(on: application.db)
+        .filter(\.$kind == "kernel_error")
+        .filter(\.$source == "exec_hang")
+        .filter(\.$createdAt >= windowStart)
+        .count()
+    return decideEditorKernelHang(
+        hangCount: hangCount,
+        threshold: configuration.editorHangThreshold,
+        windowMinutes: configuration.editorHangWindowMinutes
     )
 }
 

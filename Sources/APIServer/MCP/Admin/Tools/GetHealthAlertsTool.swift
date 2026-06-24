@@ -31,10 +31,11 @@ struct GetHealthAlertsTool: DiagnosticTool {
     static let name = "get_health_alerts"
     static let description =
         "Live server-health rule evaluation: for each rule (database unreachable, runner offline, "
-        + "queue backed up, error-rate spike) reports whether it is currently firing, a human "
-        + "summary, and the supporting numbers (pending count, oldest-pending age, system-failure "
-        + "rate, configured thresholds). Evaluated on demand, independent of whether alert delivery "
-        + "is enabled. Read-only; counts and thresholds only — no student identifiers."
+        + "queue backed up, error-rate spike, editor kernel hang spike) reports whether it is "
+        + "currently firing, a human summary, and the supporting numbers (pending count, "
+        + "oldest-pending age, system-failure rate, post-idle exec_hang count, configured "
+        + "thresholds). Evaluated on demand, independent of whether alert delivery is enabled. "
+        + "Read-only; counts and thresholds only — no student identifiers."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([:]),
