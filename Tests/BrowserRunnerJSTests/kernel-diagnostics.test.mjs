@@ -160,6 +160,33 @@ test('collector trackUnhealthy ignores a transient unknown but flags a sustained
   }
 });
 
+test('collector executionStatusRaw reads only the data-status indicator', () => {
+  assert.equal(loadCollector({ executionStatus: 'busy' }).exports.executionStatusRaw(), 'busy');
+  assert.equal(loadCollector({ executionStatus: 'idle' }).exports.executionStatusRaw(), 'idle');
+  // No data-status indicator → null (watcher reports nothing; never scans body text).
+  assert.equal(loadCollector({ bodyText: 'Kernel status: Busy' }).exports.executionStatusRaw(), null);
+});
+
+test('collector trackExecHang flags a sustained-busy cell but not a quick one', () => {
+  const { exports } = loadCollector();
+  const t = exports.trackExecHang;
+  // First busy poll starts the clock; nothing flagged yet.
+  const first = t('busy', 0, 1000);
+  assert.equal(first.execBusySince, 1000);
+  assert.equal(first.hang, false);
+  // Still busy but under EXEC_HANG_MS (45s): clock preserved, no hang.
+  const held = t('busy', 1000, 20000);
+  assert.equal(held.execBusySince, 1000);
+  assert.equal(held.hang, false);
+  // Busy held continuously past EXEC_HANG_MS: now a hang.
+  assert.equal(t('busy', 1000, 46000).hang, true);
+  // Any non-busy status (finished cell or none running) resets the clock — a
+  // quick cell, or an idle kernel, is never a hang.
+  for (const status of ['idle', 'starting', null]) {
+    assert.deepEqual({ ...t(status, 1000, 46000) }, { execBusySince: 0, hang: false });
+  }
+});
+
 // ----------------------------------------------------------------
 // Parent bridge (notebook.js handleKernelDiagMessage)
 // ----------------------------------------------------------------

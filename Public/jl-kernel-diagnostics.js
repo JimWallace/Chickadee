@@ -19,11 +19,18 @@
 //     signal the parent-side probe could never get.
 //   • kernel_error — the actual failure: a CSP worker block (the data:-worker
 //     case), an IndexedDB / Drive exception, a blocked/404 asset, a dead/unknown
-//     kernel, or a boot-stall watchdog — the WHY.
+//     kernel, a boot-stall watchdog, or a post-idle execution hang
+//     (source `exec_hang`) — the WHY.
 //
-// Capture is scoped to the BOOT window (it stops once the kernel is idle), so it
-// never records student-code execution — infrastructure breadcrumbs only, same
-// PII contract as the rest of client-diagnostics.
+// Boot-window error capture (CSP / resource / unhandledrejection / dead-unknown /
+// boot-stall) stops the instant the kernel reaches idle, so it never records
+// student-code execution. AFTER idle, ONE narrow watcher remains: it polls only
+// the kernel's busy/idle status indicator (never the notebook content) and emits
+// a single `exec_hang` when a cell sits `busy` past EXEC_HANG_MS — the post-idle
+// hang the boot funnel goes blind on (the kernel booted fine, then wedged on
+// execute, so `kernel_idle` already reported "success"). It transmits a duration
+// only (`busy_ms=…`), never code or output — same PII contract as the rest of
+// client-diagnostics.
 
 (function () {
     'use strict';
@@ -31,6 +38,8 @@
     var KERNEL_BOOT_DEADLINE_MS = 75000;  // generous; a healthy kernel idles in seconds
     var SUSTAINED_UNHEALTHY_MS = 10000;   // ignore transient mid-boot dead/unknown blips
     var MAX_ERRORS = 8;
+    var EXEC_HANG_MS = 45000;     // a cell BUSY this long post-idle is a hang, not a slow cell
+    var POST_IDLE_MAX_MS = 900000;  // watch the post-idle exec window this long, then stop (hygiene)
 
     var origin;
     try { origin = window.location.origin; } catch (_) { origin = '*'; }
@@ -172,8 +181,64 @@
         return { unhealthySince: 0, report: false };
     }
 
+    // Raw execution-indicator status for the post-idle watcher: ONLY the
+    // structured data-status (idle/busy/starting/…), never the body-text fallback
+    // — after idle the page body holds the student's code/output, and this watcher
+    // must read infrastructure state only. Returns null when the indicator is
+    // absent (the watcher then reports nothing: graceful, no false positive, no
+    // content scan).
+    function executionStatusRaw() {
+        try {
+            var ind = document.querySelector('.jp-Notebook-ExecutionIndicator[data-status]');
+            if (ind) return ind.getAttribute('data-status');
+        } catch (_) { /* ignore */ }
+        return null;
+    }
+
+    // Decide whether the kernel has been continuously BUSY long enough to be a
+    // hang rather than a slow cell. PURE, mirrors trackUnhealthy. Start a clock on
+    // the first busy poll; flag once busy has held for EXEC_HANG_MS; any non-busy
+    // status (idle/starting/null — a finished cell or none running) resets it.
+    //   status        — raw execution-indicator status (may be null)
+    //   execBusySince — ms timestamp the current busy run began, or 0 if none
+    //   now           — current time in ms
+    // returns { execBusySince, hang }.
+    function trackExecHang(status, execBusySince, now) {
+        if (status === 'busy') {
+            var since = execBusySince || now;
+            return { execBusySince: since, hang: now - since >= EXEC_HANG_MS };
+        }
+        return { execBusySince: 0, hang: false };
+    }
+
     var startedAt = Date.now();
     var unhealthySince = 0;   // ms timestamp the current dead/unknown streak began; 0 = healthy
+    var execBusySince = 0;        // ms timestamp the current post-idle busy run began; 0 = idle
+    var execHangReported = false; // de-dupe: one exec_hang per page
+    var execWatchStartedAt = 0;
+
+    // Post-idle execution-hang watcher. Starts the instant the kernel reaches idle
+    // (handed off from poll, which has stopped). Reads ONLY the busy/idle indicator
+    // and reports a SINGLE `exec_hang` (duration only — never student content) when
+    // a cell hangs busy past EXEC_HANG_MS: the post-idle case the boot funnel can't
+    // see. Stops after the first report or POST_IDLE_MAX_MS, whichever is first.
+    function watchExec() {
+        try {
+            var now = Date.now();
+            if (now - execWatchStartedAt >= POST_IDLE_MAX_MS) return;
+            var tracked = trackExecHang(executionStatusRaw(), execBusySince, now);
+            execBusySince = tracked.execBusySince;
+            if (tracked.hang && !execHangReported) {
+                execHangReported = true;
+                // PII-safe: kernel busy-duration only — never student code/output.
+                // Reuses the kernel_error kind so the existing parent bridge +
+                // server forward it unchanged; source `exec_hang` distinguishes it.
+                post('kernel_error', 'exec_hang', 'busy_ms=' + (now - tracked.execBusySince));
+                return;   // one report per page; stop watching
+            }
+        } catch (_) { /* never throw */ }
+        setTimeout(watchExec, 2000);
+    }
 
     function poll() {
         if (done) return;
@@ -194,6 +259,11 @@
                     // boot time (boot_start → idle).
                     reportPhase('kernel_idle', 'elapsed_ms=' + (Date.now() - startedAt));
                     done = true;
+                    // Boot capture stops here; hand off to the post-idle hang
+                    // watcher (status-only, PII-safe) so the blind spot after idle
+                    // — a kernel that booted then wedged on execute — is covered.
+                    execWatchStartedAt = Date.now();
+                    setTimeout(watchExec, 2000);
                     return;
                 }
             }
@@ -225,6 +295,7 @@
         if (hooks) hooks.exports = {
             kernelStatus: kernelStatus, reportPhase: reportPhase,
             reportError: reportError, trackUnhealthy: trackUnhealthy,
+            trackExecHang: trackExecHang, executionStatusRaw: executionStatusRaw,
         };
     } catch (_) { /* ignore */ }
 })();
