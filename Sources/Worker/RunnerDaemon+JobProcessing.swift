@@ -599,6 +599,23 @@ extension WorkerDaemon {
                 atomically: true, encoding: .utf8)
         }
 
+        // Materialize per-student dataset slices (Phase 1 datasets — see
+        // docs/datasets.md) into the grading workspace, overwriting the source
+        // pool copied from the cached test-setup so student scripts read only
+        // their slice. Same delivery shape as `_ck_inputs.py`: the server
+        // resolved the bytes (`DatasetResolver` over the seed); we only write
+        // them. A failed write would silently grade the student against the
+        // wrong (pool) data, so throw — the job is reported buildStatus:failed
+        // and stays retestable, matching the `_ck_inputs.py` rationale above.
+        if let files = job.personalizedFiles, !files.isEmpty {
+            for name in files.keys.sorted() {
+                guard let content = files[name] else { continue }
+                try content.write(
+                    to: testSetupDir.appendingPathComponent(name),
+                    atomically: true, encoding: .utf8)
+            }
+        }
+
         // Per-test time-limit overrides resolved in the executor (the shared
         // `executeSuites` loop still receives the assignment default below as
         // the fallback). Only entries carrying an explicit positive override

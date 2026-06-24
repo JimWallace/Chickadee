@@ -127,16 +127,16 @@ jobs:
         run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       # Read-only restore of the shared build cache produced by the Swift Tests
-      # `build` job (same key). On a hit, building just the server product is a
-      # near-no-op; on the nightly/cold path, restore-keys gets the most recent
-      # main build and only changed files recompile.
+      # `build` job (same exact key).  EXACT-MATCH ONLY: a `restore-keys` prefix
+      # fallback would incrementally build the server over a mismatched tree,
+      # which is unsound for the same mangled-symbol reason documented in
+      # swift-tests.yml's `build` job.  On a hit, building the server product is
+      # a near-no-op; on a miss we build it cold.
       - name: Restore build artifacts
         uses: actions/cache/restore@v5
         with:
           path: .build
           key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-          restore-keys: |
-            ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-
 
       - name: Build chickadee-server
         run: swift build --product chickadee-server
