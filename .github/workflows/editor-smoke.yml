@@ -81,7 +81,14 @@ jobs:
           # them. Over-matching is safe (it just runs the smoke); under-matching
           # is the dangerous direction.
           pattern='^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/grading-worker\.js|Public/pyodide-worker\.js|Public/assignment-validate\.js|Public/freeze-watchdog-worker\.js|Public/jupyterlite/|Public/pyodide/|Public/vendor/|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml)'
-          if echo "$changed" | grep -qE "$pattern"; then
+          # Use a here-string, NOT `echo "$changed" | grep -qE`: with a large
+          # changed-file list (e.g. a full JupyterLite bundle re-vendor) grep -q
+          # matches early and closes the pipe, echo takes SIGPIPE, and the
+          # `set -o pipefail` above then makes the pipeline exit non-zero EVEN ON
+          # A MATCH — silently misclassifying the PR as "no editor changes" and
+          # skipping the required smoke (a falsely-green gate). A here-string has
+          # no upstream writer process to receive SIGPIPE, so the match stands.
+          if grep -qE "$pattern" <<< "$changed"; then
             echo "editor=true" >> "$GITHUB_OUTPUT"
             echo "::notice::editor-relevant files changed — running editor smoke."
           else
