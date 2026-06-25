@@ -266,13 +266,14 @@ async function dumpDrive(ctx) {
       const dbs = await indexedDB.databases();
       out.dbs = dbs.map((d) => d.name).filter(Boolean);
     } catch (e) { out.err = "databases(): " + (e && e.message || e); }
-    if (out.dbs.includes("JupyterLite Storage")) {
+    const driveName = out.dbs.find((n) => typeof n === "string" && n.indexOf("JupyterLite Storage") === 0);
+    if (driveName) {
       out.filesKeys = await new Promise((resolve) => {
         let done = false;
         const finish = (v) => { if (!done) { done = true; resolve(v); } };
         setTimeout(() => finish("(timeout)"), 4000);
         try {
-          const req = indexedDB.open("JupyterLite Storage");
+          const req = indexedDB.open(driveName);
           req.onerror = () => finish("(open error)");
           req.onsuccess = () => {
             const db = req.result;

@@ -1605,29 +1605,32 @@
     // normal contents.save reseed therefore can't run.
     //
     // JupyterLite (@jupyterlite/contents, via localforage) stores contents in
-    // an IndexedDB database named "JupyterLite Storage"; the notebook bytes live
-    // in the `files` store keyed by path, with parallel `checkpoints` / `counters`
-    // entries. localforage may key by the bare path or a normalized variant, so
-    // rather than guess the exact key we cursor each store and delete any key
-    // that equals, or ends with, the working-copy path (the paths are unique per
-    // user+setup, so a suffix match can't collateral-damage another notebook).
+    // an IndexedDB database whose name is "JupyterLite Storage - <baseUrl>"
+    // (e.g. "JupyterLite Storage - /jupyterlite/") — NOT a bare "JupyterLite
+    // Storage" — so we enumerate databases and prefix-match. The notebook bytes
+    // live in the `files` store keyed by path, with parallel `checkpoints` /
+    // `counters` entries. localforage may key by the bare path or a normalized
+    // variant, so rather than guess the exact key we cursor each store and
+    // delete any key that equals, or ends with, the working-copy path (paths are
+    // unique per user+setup, so a suffix match can't hit another notebook).
     //
-    // Best-effort and self-contained: resolves true only if the file entry was
+    // Best-effort and self-contained: resolves true only if a `files` entry was
     // actually removed; any error (no DB, schema drift, blocked) resolves false
     // so the caller leaves the editor untouched (degrades to "reset not visible",
     // never to data loss).
     function evictNotebookFromDrive(path) {
-        return new Promise((resolve) => {
-            let settled = false;
-            const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
-            // Don't hang the sync if IndexedDB never responds.
+        const matches = (key) => {
+            const k = typeof key === 'string' ? key : String(key);
+            return k === path || k.endsWith('/' + path) || k.endsWith(path);
+        };
+        // Evict matching entries from one named IndexedDB database. Resolves true
+        // iff a `files` entry was removed.
+        const evictFromDb = (name) => new Promise((resolve) => {
+            let done = false;
+            const finish = (v) => { if (!done) { done = true; resolve(v); } };
             const guard = setTimeout(() => finish(false), 4000);
-            const matches = (key) => {
-                const k = typeof key === 'string' ? key : String(key);
-                return k === path || k.endsWith('/' + path) || k.endsWith(path);
-            };
             try {
-                const open = indexedDB.open('JupyterLite Storage');
+                const open = indexedDB.open(name);
                 open.onerror = () => { clearTimeout(guard); finish(false); };
                 open.onsuccess = () => {
                     const db = open.result;
@@ -1658,11 +1661,25 @@
                         finish(false);
                     }
                 };
-            } catch (_) {
-                clearTimeout(guard);
-                finish(false);
-            }
+            } catch (_) { clearTimeout(guard); finish(false); }
         });
+        return (async () => {
+            let names = [];
+            try {
+                if (typeof indexedDB.databases === 'function') {
+                    const dbs = await indexedDB.databases();
+                    names = (dbs || [])
+                        .map((x) => x && x.name)
+                        .filter((n) => typeof n === 'string' && n.indexOf('JupyterLite Storage') === 0);
+                }
+            } catch (_) { names = []; }
+            if (!names.length) names = ['JupyterLite Storage'];  // best-effort fallback
+            let any = false;
+            for (const name of names) {
+                try { if (await evictFromDb(name)) any = true; } catch (_) { /* keep going */ }
+            }
+            return any;
+        })();
     }
 
     function applyLockedNotebookUI() {
