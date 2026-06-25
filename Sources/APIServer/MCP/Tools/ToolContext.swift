@@ -40,6 +40,20 @@ struct ToolContext {
     var db: any Database {
         request.application.usesDedicatedMCPDatabase ? request.db(.mcp) : request.db
     }
+
+    /// The privileged (owner) database pool — always the shared default pool,
+    /// never the least-privilege `.mcp` pool. Use this for acting-user
+    /// bookkeeping that is a *side effect* of an MCP call but is NOT
+    /// agent-facing content access — e.g. ensuring the acting account's own
+    /// per-assignment personalization seed (`assignment_personalization_seeds`,
+    /// a table the `chickadee_mcp` role is deliberately denied). This mirrors
+    /// the content-edit re-grade in `ContentEditClose.swift`, which likewise
+    /// runs its student-row regrade on `request.db`. All *content* reads and
+    /// writes stay on `db` (the `.mcp` pool when configured) so the
+    /// student-data wall holds. With no dedicated MCP pool configured this is
+    /// the same connection as `db`, so behaviour is unchanged.
+    var mainDB: any Database { request.db }
+
     var logger: Logger { request.logger }
 
     /// Resolves the token subject and confirms it may use the MCP interface at

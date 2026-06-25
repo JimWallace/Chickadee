@@ -127,7 +127,11 @@ struct UpdateSectionVariablesTool: ContentTool {
                     assignmentID: assignment.id,
                     testSetupID: assignment.testSetupID,
                     testSetupsDirectory: context.request.application.testSetupsDirectory),
-                on: context.db)
+                on: context.db,
+                // Content edits run on the (least-privilege) MCP pool; the
+                // acting-user seed bookkeeping runs on the owner pool, which is
+                // the only one granted `assignment_personalization_seeds`.
+                seedDB: context.mainDB)
         } catch let error as WebAssignmentError {
             throw MCPToolError.from(error, tool: Self.name)
         }

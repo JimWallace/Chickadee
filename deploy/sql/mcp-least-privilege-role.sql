@@ -11,8 +11,10 @@
 -- which registers a dedicated connection pool (DatabaseID.mcp) that every MCP
 -- tool query runs on (see Sources/APIServer/Utilities/DatabaseConfiguration.swift
 -- and ToolContext.db). The main app keeps using its own (owner) role, so the
--- web UI, worker, and migrations are unaffected. The MCP audit row and the
--- content-edit re-grade run on the main pool, not this one.
+-- web UI, worker, and migrations are unaffected. The MCP audit row, the
+-- content-edit re-grade, and the acting-user personalization-seed bookkeeping
+-- (assignment_personalization_seeds, via ToolContext.mainDB) all run on the
+-- main (owner) pool, not this one -- so none of them need a grant here.
 --
 -- IMPORTANT: review and TEST this against your schema before production use.
 -- Grants must cover everything the MCP write tools do; a missing grant surfaces
@@ -70,8 +72,23 @@ CREATE POLICY mcp_validation_results ON results
 --      user_activity_events, brightspace_sync_log, pre_enrollments, audit_log,
 --      request_metrics, runner_profiles, runner_snapshots, oauth_* ...
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.
+--
+--    assignment_personalization_seeds STAYS DENIED. The MCP personalization
+--    tools (update_global_inputs, update_section_variables,
+--    preview_personalization) DO ensure the acting account's own per-assignment
+--    seed, but that bookkeeping runs on the MAIN (owner) pool via
+--    ToolContext.mainDB — never this role — so it needs no grant here. (If you
+--    applied the temporary stopgap
+--        GRANT SELECT, INSERT ON assignment_personalization_seeds TO chickadee_mcp;
+--    REVOKE it after deploying the build that routes the seed write to the owner
+--    pool:
+--        REVOKE SELECT, INSERT ON assignment_personalization_seeds FROM chickadee_mcp;
+--    Leaving the grant in place would re-open the very table this wall denies.)
 
 -- 6. Verify (run as chickadee_mcp):
 --      SELECT count(*) FROM submissions;            -- only validation rows
 --      SELECT * FROM grade_overrides LIMIT 1;       -- must ERROR: permission denied
 --      SELECT * FROM users LIMIT 1;                 -- allowed (authz)
+--      SELECT * FROM assignment_personalization_seeds LIMIT 1;
+--                                                   -- must ERROR: permission denied
+--                                                   -- (seed bookkeeping runs on the owner pool)

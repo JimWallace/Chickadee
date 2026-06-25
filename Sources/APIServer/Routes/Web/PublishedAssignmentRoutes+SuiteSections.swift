@@ -104,7 +104,10 @@ extension PublishedAssignmentRoutes {
                 assignmentID: assignment.id,
                 testSetupID: assignment.testSetupID,
                 testSetupsDirectory: req.application.testSetupsDirectory),
-            on: req.db
+            on: req.db,
+            // Web requests use one (owner) pool; seed bookkeeping and content
+            // share it here. The split only matters on the MCP least-privilege path.
+            seedDB: req.db
         )
 
         return redirectToEdit(req: req)

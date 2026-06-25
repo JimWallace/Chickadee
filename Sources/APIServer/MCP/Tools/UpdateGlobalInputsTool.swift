@@ -125,7 +125,11 @@ struct UpdateGlobalInputsTool: ContentTool {
                 actingUserID: actingUser.id,
                 inputs: .init(variables: input.variables, expressions: input.expressions ?? []),
                 testSetupsDirectory: context.request.application.testSetupsDirectory,
-                on: context.db)
+                on: context.db,
+                // Content edits run on the (least-privilege) MCP pool; the
+                // acting-user seed bookkeeping runs on the owner pool, which is
+                // the only one granted `assignment_personalization_seeds`.
+                seedDB: context.mainDB)
         } catch let error as WebAssignmentError {
             throw MCPToolError.from(error, tool: Self.name)
         }

@@ -55,13 +55,20 @@ enum GlobalInputsService {
     ///   still run.
     /// - `testSetupsDirectory`: the app's test-setups root, used to resolve the
     ///   per-setup `shared/<id>/` support-files directory for expression eval.
+    /// - `db`: the pool for content reads/writes (the manifest re-render). On
+    ///   the MCP path this is the least-privilege `.mcp` pool.
+    /// - `seedDB`: the pool for the acting-user seed bookkeeping
+    ///   (`assignment_personalization_seeds`). On the MCP path this MUST be the
+    ///   owner pool (`ToolContext.mainDB`), because the `chickadee_mcp` role is
+    ///   denied that table; web callers pass `req.db` (same as `db`).
     static func apply(
         setup: APITestSetup,
         assignment: APIAssignment,
         actingUserID: UUID?,
         inputs: Inputs,
         testSetupsDirectory: String,
-        on db: any Database
+        on db: any Database,
+        seedDB: any Database
     ) async throws -> Result {
         let manifest = try decoded(setup)
 
@@ -72,14 +79,16 @@ enum GlobalInputsService {
         try validateAgainstSections(seenNames: seenNames, manifest: manifest)
         // 3. Starter-notebook `{{undeclared}}` scan.
         try validateStarterNotebookPlaceholders(seenNames: seenNames, manifest: manifest, setup: setup)
-        // 4. Save-time eval check against the acting user's own seed.
+        // 4. Save-time eval check against the acting user's own seed. The seed
+        // lookup/insert runs on `seedDB` (the owner pool on the MCP path), not
+        // the content `db`, so it never needs a grant on the `.mcp` role.
         try await evaluateForActingSeed(
             actingUserID: actingUserID,
             assignment: assignment,
             manifest: manifest,
             inputs: inputs,
             testSetupsDirectory: testSetupsDirectory,
-            on: db)
+            seedDB: seedDB)
 
         // 5. Re-render through `applyPatternFamilies` so generated tests and raw
         // scripts pick up the new literal values.  Expressions flow through
@@ -183,20 +192,25 @@ enum GlobalInputsService {
     /// error / runtime exception surfaces here so typos don't reach students.
     /// Skipped when no expressions were declared, or no acting seed is
     /// available.
+    ///
+    /// `seedDB` is the pool the acting-user seed bookkeeping runs on — the owner
+    /// pool on the MCP path (`assignment_personalization_seeds` is denied to the
+    /// `chickadee_mcp` role). The expression eval itself is a `python3`
+    /// subprocess and touches no database.
     static func evaluateForActingSeed(
         actingUserID: UUID?,
         assignment: APIAssignment,
         manifest: TestProperties,
         inputs: Inputs,
         testSetupsDirectory: String,
-        on db: any Database
+        seedDB: any Database
     ) async throws {
         guard !inputs.expressions.isEmpty,
             let userID = actingUserID,
             let assignmentID = assignment.id
         else { return }
         let seedHex = try await AssignmentSeedStore.ensureSeed(
-            userID: userID, assignmentID: assignmentID, on: db)
+            userID: userID, assignmentID: assignmentID, on: seedDB)
         // Combine globals + section vars so expressions can reference the same
         // static names they would at student first-open.
         var staticVars: [FamilyVariable] = inputs.variables
