@@ -59,11 +59,17 @@
             freezeWorker = new Worker('/freeze-watchdog-worker.js');
             let freezeCsrf = '';
             try { freezeCsrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+            let freezeAppVersion = '';
+            try {
+                const vm = document.querySelector('meta[name="app-version"]');
+                freezeAppVersion = (vm && vm.content) ? String(vm.content).slice(0, 32) : '';
+            } catch (_) { /* no meta — fine */ }
             freezeWorker.postMessage({
                 type: 'init',
                 beaconUrl: '/api/v1/client-diagnostics',
                 setupID: setupID,
                 csrfToken: freezeCsrf,
+                appVersion: freezeAppVersion,
                 thresholdMs: 8000,
             });
             const sendFreezeBeat = () => {

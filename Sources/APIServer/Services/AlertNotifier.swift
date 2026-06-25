@@ -5,7 +5,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     case runnerOffline
     case queueBackedUp
     case errorRateSpike
-    case editorKernelHang
+    case editorKernelUnrecoverable
     case databaseUnreachable
 
     var humanReadable: String {
@@ -13,7 +13,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .runnerOffline: return "Runner offline"
         case .queueBackedUp: return "Submission queue backed up"
         case .errorRateSpike: return "System-level failure rate spike"
-        case .editorKernelHang: return "Editor kernel hang spike"
+        case .editorKernelUnrecoverable: return "Editor kernel unrecoverable"
         case .databaseUnreachable: return "Database unreachable"
         }
     }
@@ -24,7 +24,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .runnerOffline: return "warning"
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
-        case .editorKernelHang: return "warning"
+        case .editorKernelUnrecoverable: return "warning"
         }
     }
 }

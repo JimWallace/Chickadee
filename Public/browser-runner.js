@@ -63,6 +63,12 @@
                 message: parts.join(';'),
             };
             if (setupID) body.testSetupID = setupID;
+            // Page-build version (the `app-version` meta), so submit breadcrumbs
+            // are attributable to a build like the editor diagnostics. Best-effort.
+            try {
+                const m = document.querySelector('meta[name="app-version"]');
+                if (m && m.content) body.appVersion = String(m.content).slice(0, 32);
+            } catch (_) { /* meta absent — fine */ }
             let csrf = '';
             try { csrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
             fetch('/api/v1/client-diagnostics', {

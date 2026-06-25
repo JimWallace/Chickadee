@@ -330,6 +330,11 @@ func registerMigrations(on app: Application) {
     // browser-side failures carry diagnosable signal.
     app.migrations.add(AddClientDiagnosticErrorDetail())
 
+    // app_version column on client_diagnostics: the page build that emitted each
+    // report, so a diagnostic can be attributed to a build (an old value flags a
+    // stale browser tab / cached bundle, not a live regression).
+    app.migrations.add(AddClientDiagnosticAppVersion())
+
     // Per-course role on each enrollment (Phase 1 of
     // docs/multi-course-roles.md). Behaviour-preserving: backfills role from
     // each user's current global role; nothing reads it yet. Runs after
