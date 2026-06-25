@@ -76,7 +76,15 @@
             }
         }
 
-        return { ok: failed.length === 0, failed: failed };
+        // Proactive low-memory hint (non-blocking — NOT a `failed` capability).
+        // `navigator.deviceMemory` is GB rounded to a power of two, and is exposed
+        // on Chromium only (Safari/Firefox omit it for fingerprinting privacy), so
+        // this catches low-RAM Chromebooks/Android but can't see iOS — the runtime
+        // `wasm_crash` recovery covers the WebKit case where this signal is absent.
+        var dm = (navigator && typeof navigator.deviceMemory === 'number') ? navigator.deviceMemory : null;
+        var lowMemory = (dm !== null && dm > 0 && dm <= 2);
+
+        return { ok: failed.length === 0, failed: failed, lowMemory: lowMemory, deviceMemory: dm };
     }
 
     // ----------------------------------------------------------------
@@ -105,6 +113,23 @@
         if (frame)    frame.style.display = 'none';
         if (submit)   submit.style.display = 'none';
         if (fallback) fallback.hidden = false;
+
+        // Memory-crash variant: the editor DID load, but the kernel died on a
+        // fatal WASM/OOM crash mid-session — swap in memory-specific copy on the
+        // same fallback panel (which already offers .ipynb upload + reset link),
+        // instead of the generic "Editor didn't load" message.
+        if (info.variant === 'memory' && fallback) {
+            const titleEl = fallback.querySelector('.nb-fallback-title');
+            const textEl  = fallback.querySelector('.nb-fallback-text');
+            if (titleEl) titleEl.textContent = 'Your browser ran low on memory';
+            if (textEl) {
+                textEl.textContent =
+                    'The Python kernel stopped because your browser hit a memory limit — ' +
+                    'common on Safari and on phones, tablets, or low-memory computers. ' +
+                    'Reload to try again, or open this assignment on a laptop or desktop in ' +
+                    'Chrome or Firefox. You can also submit by uploading your .ipynb file below.';
+            }
+        }
 
         // Point the "reset the notebook editor" link back at THIS assignment, so
         // after clearing site data the student lands on the same page (which now
@@ -213,12 +238,53 @@
     }
 
     // ----------------------------------------------------------------
+    // Proactive low-memory warning (non-blocking)
+    // ----------------------------------------------------------------
+    //
+    // Shown when the preflight PASSES but `navigator.deviceMemory` reports a
+    // low-RAM device. Reveals a dismissible banner WITHOUT hiding the editor —
+    // the student can still work; it just sets expectations. Dismissal persists
+    // per-device (localStorage) so it doesn't nag on every visit. The
+    // `device_warning` beacon fires regardless of dismissal, which also gives us
+    // the real low-memory-device rate to calibrate against.
+
+    let _deviceWarningShown = false;
+    function showDeviceWarning(info) {
+        if (_deviceWarningShown) return;
+        _deviceWarningShown = true;
+        const dm = (info && typeof info.deviceMemory === 'number') ? info.deviceMemory : null;
+
+        let dismissed = false;
+        try { dismissed = localStorage.getItem('ck_device_warn_dismissed') === '1'; } catch (_) { /* ignore */ }
+
+        const banner = document.getElementById('nb-device-warning');
+        if (banner && !dismissed) {
+            banner.hidden = false;
+            const closeBtn = document.getElementById('nb-device-warning-dismiss');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () {
+                    banner.hidden = true;
+                    try { localStorage.setItem('ck_device_warn_dismissed', '1'); } catch (_) { /* ignore */ }
+                });
+            }
+        }
+
+        // Telemetry fires even if the banner was previously dismissed.
+        reportEvent({
+            kind:    'device_warning',
+            source:  'low_memory',
+            message: 'deviceMemory=' + (dm !== null ? dm : 'unknown')
+        });
+    }
+
+    // ----------------------------------------------------------------
     // Public surface
     // ----------------------------------------------------------------
 
     window.ChickadeeNotebookFailures = {
-        runPreflight:     runPreflight,
-        showFailure:      showFailure,
+        runPreflight:      runPreflight,
+        showFailure:       showFailure,
+        showDeviceWarning: showDeviceWarning,
         reportEditorError: reportEditorError,
         reportEvent:       reportEvent
     };

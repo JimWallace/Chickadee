@@ -118,6 +118,38 @@
         });
     } catch (_) { /* ignore */ }
 
+    // ---- fatal WASM / OOM crash (the kernel DIED) ----------------------
+    //
+    // The fatal upstream WebKit/Safari WASM crash (WebKit #286266 — "Out of
+    // bounds memory access" in __pyproxy_apply) and genuine WASM OOM aborts kill
+    // the kernel mid-execute, which is AFTER the boot window — so the done-gated
+    // reportError() above deliberately ignores them. A dead kernel always
+    // matters, so capture the fatal-crash signature separately: NOT done-gated,
+    // one-shot, forwarded as a distinct `wasm_crash` source the parent turns into
+    // a memory-specific recovery notice (instead of a silently wedged cell).
+    var WASM_CRASH_RE = /out of bounds memory access|Pyodide has suffered a fatal error|__pyproxy_apply|RangeError: Bad value|abort\(.*[Oo]ut of memory|abort\(OOM\)|memory access out of bounds/;
+    var wasmCrashReported = false;
+    function reportWasmCrashIfMatch(message) {
+        try {
+            if (wasmCrashReported) return;
+            var msg = String(message || '');
+            if (!WASM_CRASH_RE.test(msg)) return;
+            wasmCrashReported = true;
+            post('kernel_error', 'wasm_crash', msg);
+        } catch (_) { /* never throw */ }
+    }
+    try {
+        window.addEventListener('unhandledrejection', function (e) {
+            try {
+                var reason = e && e.reason;
+                reportWasmCrashIfMatch((reason && reason.message) || String(reason || ''));
+            } catch (_) { /* ignore */ }
+        });
+        window.addEventListener('error', function (e) {
+            try { if (e && e.message) reportWasmCrashIfMatch(e.message); } catch (_) { /* ignore */ }
+        }, true);
+    } catch (_) { /* ignore */ }
+
     // ---- boot-phase detection (the WHERE) ------------------------------
     //
     // This JupyterLite build (Notebook 7) does NOT expose window.jupyterapp, so
