@@ -116,6 +116,8 @@ async function seed() {
   // skips the validation run, so no runner is needed. The instructor's single
   // enrolled course is auto-selected as active.
   csrf = await csrfFrom(instr, "/instructor/new");
+  // Require a redirect: a failed publish re-renders the form with 200, which we
+  // must NOT mistake for success.
   await expectOK("publish assignment",
     instr.post("/instructor/new/save", {
       multipart: {
@@ -132,7 +134,7 @@ async function seed() {
       headers: { "x-csrf-token": csrf },
       maxRedirects: 0,
     }),
-    [200, 302, 303]);
+    [302, 303]);
   // Find the published assignment from the INSTRUCTOR dashboard (reliable — no
   // student visibility gating) and OPEN it: createNewAssignmentRow publishes
   // with visibility=.closed, so the student can't see it until it's opened. A
@@ -141,8 +143,12 @@ async function seed() {
   const instrDash = await instr.get("/instructor");
   const instrHtml = await instrDash.text();
   const publicID = (instrHtml.match(/\/instructor\/([A-Za-z0-9]+)\/edit/) || [])[1];
+  // A published row exposes its setupID via a hidden `testSetupID` input; the
+  // /instructor/setup/:id/delete link only renders for UNPUBLISHED setups, so
+  // don't rely on it.
   const setupID =
-    (instrHtml.match(/\/instructor\/setup\/([A-Za-z0-9_-]+)\/delete/) || [])[1]
+    (instrHtml.match(/name=['"]testSetupID['"]\s+value=['"]([^'"]+)['"]/) || [])[1]
+    || (instrHtml.match(/value=['"]([^'"]+)['"]\s+name=['"]testSetupID['"]/) || [])[1]
     || (instrHtml.match(/\/testsetups\/([A-Za-z0-9_-]+)\//) || [])[1];
   if (!publicID || !setupID) {
     throw new Error(`could not find the published assignment on /instructor (publicID=${publicID}, setupID=${setupID}):\n` + instrHtml.slice(0, 2500));
