@@ -1,156 +1,101 @@
-# Editor `exec_hang` — investigation log & current understanding
+# Editor `exec_hang` — root cause, fix, and retrospective
 
-**Status:** root cause **localized, not yet named to the exact line.** This is
-the master notes file for the in-browser notebook editor cell-execute hang.
-Keep it current as the hunt continues.
-
-Related: `docs/jupyterlite-0.8-investigation.md` (the 0.8 upgrade experiment),
-`docs/jupyterlite-0.8-integration-followups.md` (remaining 0.8 robustness work),
-`docs/notebook-editor-kernel-boot.md` (kernel-boot history).
+**Status: RESOLVED.** Root-caused, fixed, shipped in **v0.4.526** (#1029), and
+verified in production. This is the durable record of the in-browser notebook
+editor cell-execute hang.
 
 ---
 
 ## Symptom
 
-The in-browser JupyterLite/Pyodide notebook editor (`/testsetups/:id/notebook`)
-boots normally to `kernel_idle`, then **the first cell execute wedges**: the
-cell sits `[*]`/`[ ]` forever (past the 45 s watchdog), a kernel restart does
-**not** clear it, and it happens **across browsers**. In production (HLTH 230
-lab) roughly **~25 % of sessions** hit it; in the headless CI/local repro it
-reproduces **100 %**.
+The JupyterLite/Pyodide notebook editor (`/testsetups/:id/notebook`) booted
+normally to `kernel_idle`, then **the first cell execute wedged** — the cell sat
+`[*]`/`[ ]` forever (past the ~45 s watchdog), a kernel restart did **not** clear
+it, and it happened **across browsers**. Roughly **~25 %** of production sessions
+(HLTH 230 lab) hit it; the headless repro reproduced it **100 %**. In JS it
+surfaced as a bare, message-less `PythonError` at
+`callPyObjectMaybePromising → wrapper → MessageChannel.onmessage`.
 
-**Failure fingerprint (consistent across every version tested):**
-- A bare, **message-less `PythonError`** at
-  `callPyObjectKwargs → callPyObjectMaybePromising → wrapper`
-  (+ `MessageChannel.port1.onmessage` on Pyodide 314). The empty message means
-  the Python-side traceback could not be formatted — a fatal/abort-class error,
-  not an ordinary exception.
-- The `exec_hang` beacon reports `busy_ms ≈ 46000`, which is just the watchdog
-  threshold ("hung past ~46 s"), **not** a fingerprint of the cause.
-- Occasionally a fatal `JSON Parse error: Unterminated string` (a truncated
-  SharedArrayBuffer message), seen in some sessions.
+## Root cause
 
----
+The kernel runs `os.chdir("users/<uid>/<setup>/")` at startup to set its working
+directory to the notebook's Drive folder (the pyodide-kernel init script, gated
+on `mountDrive`). **That folder only exists in the kernel's Pyodide filesystem
+when the DriveFS is mounted — and the DriveFS has only a
+`ServiceWorkerContentsAPI`, i.e. it needs the service worker.** We disable that
+service worker to run **SAB-only under cross-origin isolation** (#989/#1003;
+`SecurityHeadersMiddleware` keeps COEP off because the SW synthesises responses
+without CORP). With no service worker the folder is absent, so `chdir` raises
+`FileNotFoundError: [Errno 44] … 'users/<uid>/setup_<id>'`; that error is
+**unhandled inside Pyodide's WebLoop**, so the execute coroutine never completes
+and the cell hangs.
 
-## What it is NOT — ruled out with evidence
+This explains every symptom:
+- **REPL works** (`/jupyterlite/repl`): no notebook → no `chdir`.
+- **~25 % vs 100 % headless**: students carrying a **stale SW registration** (from
+  before #989) still had a working DriveFS, so the folder existed and they never
+  hit it. Fresh / cleared clients (and every headless run) had no SW.
+- **A kernel restart doesn't help**: restarting doesn't register a SW.
 
-Each of these was tested, not assumed:
+The real exception was invisible because it's a fatal-class error with no
+formatted traceback; it was captured by instrumenting the kernel worker with an
+asyncio loop exception handler + `sys.excepthook` (the `run()` wrapper never
+fired — the coroutine dies before its body runs). NB: the earlier hypothesis that
+this was a "SAB / MessageChannel deadlock in Pyodide's promising-call path" was
+wrong — the `MessageChannel.onmessage` frame is just the WebLoop pumping the
+coroutine that raises; the failure is the `chdir`, not the transport.
 
-| Hypothesis | How it was ruled out |
-|---|---|
-| **nb_mypy** (the in-editor type checker) | Stripped it from the kernel wheel; the controlled repro still hung **8/8**, identical. (#1028) |
-| **JupyterLite / pyodide-kernel version** | Hang **survives 0.7.6 → 0.8** (a full rewrite of the kernel/worker layer, incl. the switch to `coincident`). |
-| **Pyodide version** | Survives **0.28 → 314**. |
-| **Python version** | Survives **3.13 → 3.14**. |
-| **Our iframe / `notebook.js` wrapper / orchestration** | The **bare** notebook app loaded **top-level (no iframe, no wrapper, no browser-runner, no freeze-watchdog)** hangs **identically**. (`bare-notebook-check.mjs`) |
-| **Kernel core / Pyodide execute mechanism in general** | The **REPL** (`/jupyterlite/repl`, `editor-check.mjs`) executes cells fine on the same kernel + Pyodide. |
-| **IPython cold-init in general** | The REPL cold-inits the same IPython shell and works. |
-| **SAB/Atomics stdin transport** | The REPL's `input()` round-trip (which rides exactly that path) works. |
-| **An HTTP Drive/contents fetch stuck** | No `/api/drive`, `/api/contents`, or `/files` request is **pending** at hang time — the worker is blocked in-process, not on the network. |
-| **Grading-Pyodide / freeze-watchdog contention** | The grading Pyodide loads **lazily** (only on submit; absent at first-execute). The freeze-watchdog is a passive heartbeat observer (no SAB/Atomics). The REPL test page spawns both and still executes. |
+## The fix (v0.4.526)
 
----
+`scripts/patch-pyodide-kernel.py` injects a kernel-startup wrapper that makes
+`os.chdir` **create the target directory first** (`os.makedirs(path,
+exist_ok=True)` then `chdir`). Properties:
 
-## What it IS — current localization
+- **Safe + targeted.** When the DriveFS already provides the folder (the working
+  majority) `makedirs` is a no-op and behaviour is unchanged; when it's missing
+  the kernel runs in the folder instead of hanging.
+- **Restores support files too — not a partial fix.** Once the folder exists,
+  JupyterLite populates it with the Drive's support files. Verified end-to-end:
+  a no-DriveFS kernel reads a seeded support file (`open("data.txt")`) reliably.
+- **Only the kernel wheel + its sha chain change** (wheel → `all.json` digest →
+  `pipliteUrls` sha); the rest of the bundle and Pyodide are untouched.
+- **Verified**: 100 % headless hang → **0 %**; `exec-probe` green on Chromium
+  **and** WebKit.
 
-The hang is specific to the **notebook frontend's asynchronous cell-execute
-path** — `run_cell_async` → Pyodide's WebLoop (`callPyObjectMaybePromising`,
-driven by a `MessageChannel`) — which dies with the message-less fatal
-`PythonError` and never resolves, so the frontend waits forever.
+It is **not** version-specific — the same bug and fix apply on 0.7.6 and on the
+0.8 branch (which predates the fix; rebase to pick it up).
 
-The **discriminator** between "notebook hangs" and "REPL works," on an identical
-kernel, is the kernel's **runtime environment**: the notebook session opens a
-file from a per-student **Drive subdirectory** (`users/<uid>/<setup>/…`) and the
-kernel mounts/operates in that Drive context; the REPL has **no file and no
-mounted Drive**. The deadlock is **in-worker** (SAB, no HTTP), so the leading
-mechanism is the **emscripten DriveFS synchronous path** (or something the
-notebook *session* sets up around it), not a network call.
+## Retrospective — what introduced and spread it (both ~2026-06-22)
 
-This makes it **our integration/config**, not a JupyterLite bug:
+- **#989 "Disable the redundant JupyterLite service worker — SAB only" — lit the
+  fuse.** The DriveFS that mounts the notebook folder is serviced by that SW;
+  disabling it made the `chdir` target absent. The SW was *not* redundant — it
+  was load-bearing for the DriveFS.
+- **#999 "restore kernel-boot fallback…" — spread it.** It added code
+  (`notebook.js`, `cleanupRedundantServiceWorker`) that **actively unregisters the
+  SW on every notebook load**. Students still carrying a working SW had their
+  DriveFS deleted out from under them, so the hang rate climbed into the lab. The
+  cleanup believed stale SWs *caused* boot failures; for the DriveFS they were
+  keeping the kernel alive.
 
-- We **disable the service worker** (`disabledExtensions:
-  ["@jupyterlite/application-extension:service-worker-manager"]`) to run
-  **SAB-only** under cross-origin isolation (#989, #1003). The bundle still
-  ships `service-worker.js`, but it is **never registered**.
-- JupyterLite's DriveFS classically services **synchronous** FS operations
-  through that **service worker** (it intercepts `/api/drive/…`, using a
-  `BroadcastChannel` + `Atomics`). The kernel chunk references `ServiceWorker`,
-  `DriveFS`, `mountDrive`, `BroadcastChannel`, and `/api/drive`. With no SW
-  registered, a synchronous DriveFS op during execute has **no responder** and
-  blocks on `Atomics.wait` forever.
+The self-heal (#1025) and `exec_hang` telemetry (#1023) treated the symptom and
+remain useful (the self-heal recovered ~67 % of hangs before this fix).
 
-**Caveat:** re-enabling the SW in a single-load headless test did **not** clear
-the hang — but that test is inconclusive (the SW almost certainly wasn't
-*active/controlling* before the kernel mounted the Drive; SW activation needs a
-second load, which the production `notebook.js` handles via
-`whenServiceWorkerActive` but the bare probe does not).
+## Follow-ups (optional, not blocking)
 
-### Why ~25 % in prod but 100 % headless (hypothesis)
-
-Timing- and state-dependent. One plausible contributor: students with a
-**leftover service-worker registration** from a pre-#989 build still have a
-working DriveFS transport (no hang), while fresh/cleared clients have none
-(hang). That would also explain "a kernel restart doesn't help" (restarting
-doesn't register a SW) and the cross-browser spread. Not yet confirmed.
-
----
-
-## Evidence harness (reproduce it)
-
-All under `Tools/editor-smoke-test/`, run via
-`SMOKE_CHECK=<probe> bash Tools/editor-smoke-test/run-smoke.sh` (boots a local
-`chickadee-server` on SQLite, seeds through the real HTTP API, drives headless
-Chromium/WebKit):
-
-- **`editor-check.mjs`** — the REPL. **Passes** (executes cells, `input()`
-  round-trips). The "kernel core is fine" control.
-- **`editor-exec-check.mjs`** — the full `/testsetups/:id/notebook` page. **Hangs**
-  (the production path). Loops `EXEC_ITER` to measure rate; reports `exec_hang`.
-- **`bare-notebook-check.mjs`** — the **bare** notebook app, top-level, no
-  wrapper. **Hangs** identically. The experiment that excluded our wrapper and
-  pinned it to the notebook frontend. Captures the pageerror message + any
-  drive/contents/files request still pending at hang time.
-
-The `.github/workflows/editor-exec-probe.yml` runs `editor-exec-check.mjs` on
-chromium + webkit (non-required diagnostic).
-
----
-
-## Live mitigations (already shipped)
-
-- **Self-heal** (v0.4.523, #1025): on an `exec_hang` beacon the parent bridge
-  **auto-reloads the kernel iframe once** (work-preserving). Production recovery
-  ≈ **63 %** (`recover_attempt` − `recover_failed` in `get_browser_diagnostics`).
-  Still the main thing keeping the lab usable.
-- **`/reset-editor`** (#1005): `Clear-Site-Data` page for a wedged student.
-- **Telemetry** (#1023): the `exec_hang` beacon itself (`busy_ms`), surfaced in
-  `get_browser_diagnostics` `bySource`.
-
----
-
-## Open questions / next steps
-
-1. **Name the exact failing call.** The bare `PythonError` carries no Python
-   traceback. **Instrument the kernel worker** (patch `pyodide_kernel`'s `run()`
-   / the WebLoop to log the live exception + the FS/await op preceding it) so the
-   real failure is visible instead of a fatal blank. ← *the immediate next step.*
-2. **Confirm/refute the DriveFS-without-SW theory** decisively — e.g. re-enable
-   the SW *with* a proper activation+reload (as production `notebook.js` does)
-   and re-test; or mount the kernel with **no** Drive and see if the notebook
-   executes.
-3. **Candidate fixes to evaluate** once the call is named: re-enable the SW
-   correctly for the DriveFS (preserving cross-origin isolation); or deliver
-   support files to the kernel **without** mounting the server-backed Drive; or
-   change the notebook session's working-directory/FS setup.
-4. **Prod vs headless rate** — verify the leftover-SW-registration hypothesis
-   against real `get_browser_diagnostics` data.
+- The proper long-term answer to the SW/DriveFS tension is making the kernel's
+  DriveFS work under SAB-only isolation (a SAB ContentsAPI, or re-enabling the SW
+  in a COI-compatible way). The chdir fix makes this non-urgent — support files
+  already reach the kernel.
+- 0.8 upgrade is deferred: it doesn't fix this hang and regresses browser grading
+  (see `docs/jupyterlite-0.8-integration-followups.md`).
 
 ---
 
 ## One-line summary
 
-Same kernel, two frontends: the **REPL executes, the notebook hangs** — a
-message-less fatal `PythonError` in the notebook's async execute path, in-worker
-(no HTTP), tied to the notebook's **mounted per-student Drive** under our
-**SW-disabled SAB-only** configuration. Survives every JupyterLite/Pyodide/Python
-version bump, so it's our integration, not upstream.
+The kernel `chdir`'d into the notebook's Drive folder, which our SW-disabled
+SAB-only config left unmounted, so a `FileNotFoundError` died unhandled in the
+WebLoop and wedged the cell. Creating the folder first fixes the hang and lets
+JupyterLite deliver the support files. Shipped v0.4.526; #989 introduced it,
+#999 spread it.

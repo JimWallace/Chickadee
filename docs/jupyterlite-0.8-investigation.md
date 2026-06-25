@@ -6,6 +6,15 @@ Python 3.14 does **not** fix the in-browser editor cell-execute hang
 non-merge reference** so the integration work isn't lost and the negative
 result is reproducible.
 
+> **Update (resolved):** the `exec_hang` was later root-caused and fixed on
+> `main` — **v0.4.526 / #1029** — a kernel `os.chdir` wrapper that creates the
+> notebook's Drive folder before chdir'ing into it. The fix is **not 0.8-related**
+> (it applies on 0.7.6 and 0.8 alike), so this doc's verdict stands — *0.8 itself
+> doesn't fix the hang* — but the hang is no longer open. The "Why the negative
+> result is valuable" section below drew the **wrong** mechanism (it guessed a
+> SAB/MessageChannel deadlock); see `docs/exec-hang-investigation.md` for the
+> actual cause (a `FileNotFoundError` from an unmounted Drive folder).
+
 ## What was upgraded
 
 - `Tools/jupyterlite/requirements.txt`: `jupyterlite`, `jupyterlite-core`,
@@ -73,12 +82,16 @@ watchdog threshold (a "hung past 46 s" marker), **not** a fingerprint.
 
 The hang **survives** a full rewrite of everything above it: JupyterLite
 0.7→0.8, the kernel worker switching to `coincident`, Pyodide **0.28→314**, and
-Python **3.13→3.14**. That eliminates the entire JupyterLite / kernel /
-Python-version surface. The bug lives in **Pyodide's promising-call path**
-(`callPyObjectMaybePromising` — how the kernel drives an async cell execute and
-calls back into Python), almost certainly a deadlock in the SAB /
-MessageChannel round-trip under cross-origin isolation. Next root-cause work
-should instrument that worker round-trip directly.
+Python **3.13→3.14**. That eliminated the entire JupyterLite / kernel /
+Python-version surface and correctly pointed root-cause work at the **kernel
+worker itself** rather than any version. (The original guess here — "a deadlock
+in the SAB / MessageChannel round-trip" — was **wrong**; that frame is just the
+WebLoop pumping.) Instrumenting the worker with an asyncio loop exception handler
+then revealed the real failure: the kernel `os.chdir`'d into the notebook's Drive
+folder, which our SW-disabled SAB-only config leaves **unmounted**, so a
+`FileNotFoundError` died unhandled in the WebLoop and wedged the cell. Fixed on
+`main` by creating the folder first (v0.4.526). Full record:
+`docs/exec-hang-investigation.md`.
 
 ## Reproduce
 
@@ -96,7 +109,10 @@ Headless Chromium hangs 100% on both 0.7.6 and 0.8 (worst case; prod 0.7.6 is
 
 ## Status
 
-Self-heal (v0.4.523: parent auto-reloads the iframe on `exec_hang`) remains the
-live production mitigation (~63% recovery). This branch is **not for merge**;
-it documents that 0.8 is not the fix and preserves the two integration fixes in
-case 0.8 is wanted later for unrelated reasons.
+The `exec_hang` is **fixed** on `main` (v0.4.526 — the kernel `os.chdir`
+wrapper); the self-heal (v0.4.523, ~63 % recovery) is now a backstop, not the
+primary fix. This branch is still **not for merge**: 0.8 doesn't fix the hang
+(the chdir fix does) **and** regresses browser grading (~1/6 intermittent hang —
+see `docs/jupyterlite-0.8-integration-followups.md`). It preserves the two 0.8
+integration fixes in case 0.8 is wanted later for the newer runtime; whoever
+takes that up should **rebase on `main` first** to inherit the chdir fix.
