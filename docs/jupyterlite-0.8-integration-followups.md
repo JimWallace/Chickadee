@@ -129,19 +129,32 @@ grading work above; it's an independent durability win.
   diagnostic) drives `docmanager:save` directly through the bridge AND via the
   migrated `window.chickadeeSaveNotebook()`, asserting both persist across reload.
 
-**Still on the `jupyterapp` poke (NOT yet bridged) — needs a custom labextension:**
+**⚠️ `window.jupyterapp` is ABSENT on the 0.8 Notebook build.** Verified
+empirically (the shell renders ~46 `jp-` nodes but the global never appears) and
+already noted in `jl-kernel-diagnostics.js`. Consequence: every `notebook.js`
+path that reaches for `frame.contentWindow.jupyterapp` was *silently* taking its
+fallback on 0.8 — `readNotebookFromJupyterFrame` always falls back to the server
+snapshot (fine, kept current by #1036's reliable saves), but the **reseed that
+makes "Reset notebook" visible was a no-op → reset was broken on 0.8**. Fixed:
 
-These live *inside* functions that already require direct `app` access, so the
-bridge adds no value piecemeal — comlink can only ferry structured-cloneable
-data, not live JupyterLab objects:
+- **Server-snapshot reseed** (`syncNotebookFromServerSnapshot`) now has a
+  jupyterapp-independent fallback. When the server working copy is newer than
+  the seen baseline (a reset), it evicts the stale entry from JupyterLite's
+  IndexedDB contents Drive (`"JupyterLite Storage"` → `files`, format-robust
+  suffix match) via `evictNotebookFromDrive` and reloads with `reset=1`, so the
+  editor re-fetches the freshly-reset static working copy from the server. Safe:
+  a key mismatch makes eviction a no-op. (The old `contents.save` +
+  `docmanager:open`/`revert` app path is kept for builds that *do* expose the
+  global.) **Needs dev validation** — can't be exercised in the local static
+  harness (the notebooks interface won't boot without the server's seeded
+  per-student working copy + contents routes).
+
+**Still on the `jupyterapp` poke (low value to bridge) — would need a custom labextension:**
 
 - **Notebook read-back** (`readNotebookFromJupyterFrame` → `app.shell`,
-  `notebookWidgetFromShell`, `widget.context.model.toJSON()`,
-  `app.serviceManager.contents.get`). Falls back to the server snapshot
-  (`fetchNotebookSnapshot`) when the frame read fails, so it's already resilient.
-- **Server-snapshot reseed** (`syncNotebookFromServerSnapshot` → `contents.save`,
-  then `docmanager:open` returning a `widget` whose `context.revert()` is called).
-  The widget can't cross the comlink boundary.
+  `widget.context.model.toJSON()`, `app.serviceManager.contents.get`). Already
+  falls back to the server snapshot, which #1036 keeps current — so bridging it
+  is now low value.
 - **Readiness probes** (`probeIframeReadiness`, `waitForJupyterApp`) read
   `win.jupyterapp`; already hardened with DOM-presence fallbacks.
 
