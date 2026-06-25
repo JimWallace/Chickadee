@@ -81,7 +81,10 @@ extension PublishedAssignmentRoutes {
             actingUserID: actingUserID,
             inputs: .init(variables: body.variables, expressions: body.expressions ?? []),
             testSetupsDirectory: req.application.testSetupsDirectory,
-            on: req.db
+            on: req.db,
+            // Web requests use one (owner) pool; seed bookkeeping and content
+            // share it here. The split only matters on the MCP least-privilege path.
+            seedDB: req.db
         )
         return GlobalVariablesResponse(
             variables: result.variables,

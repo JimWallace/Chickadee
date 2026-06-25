@@ -160,8 +160,12 @@ struct PreviewPersonalizationTool: ContentTool {
         guard manifest.hasExpressions else { return nil }
         let actingUser = try await context.requireEligibleSubject(tool: Self.name)
         guard let userID = actingUser.id, let assignmentID = assignment.id else { return nil }
+        // Acting-user seed bookkeeping runs on the owner pool, not the
+        // least-privilege `.mcp` pool: `assignment_personalization_seeds` is
+        // denied to the `chickadee_mcp` role. The notebook/expression content
+        // this previews is still read through the `.mcp`-backed paths.
         return try await AssignmentSeedStore.ensureSeed(
-            userID: userID, assignmentID: assignmentID, on: context.db)
+            userID: userID, assignmentID: assignmentID, on: context.mainDB)
     }
 
     private static func placeholderAudit(
