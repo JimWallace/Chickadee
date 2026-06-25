@@ -1388,11 +1388,6 @@
             const snapshotNotebook = await snapshotRes.json();
             if (!looksLikeNotebook(snapshotNotebook)) return;
 
-            const app = await waitForJupyterApp(8000);
-            if (!app) return;
-
-            const contents = app.serviceManager && app.serviceManager.contents;
-
             // Server-side overwrite detection.  The server stamps the iframe
             // with `data-working-copy-mtime` = the Unix-epoch mtime of the
             // working-copy file on disk.  We persist the last mtime this
@@ -1403,6 +1398,12 @@
             // preserve the local IndexedDB copy: we force-overwrite it
             // with the server snapshot so the reset is visible without a
             // manual cache-clear.
+            //
+            // Computed BEFORE we look for the in-iframe app: the 0.8 Notebook
+            // build does NOT expose `window.jupyterapp`, so `waitForJupyterApp`
+            // returns null and the contents.save + docmanager:open/revert reseed
+            // can't run — but a reset still has to take effect, via the
+            // IndexedDB-Drive eviction fallback below.
             //
             // CRITICAL SAFETY: a missing localStorage entry (`seenMtime`
             // === 0) is treated as "no baseline" — NOT as "any server
@@ -1419,6 +1420,50 @@
             let seenMtime = 0;
             try { seenMtime = parseInt(localStorage.getItem(seenKey) || '0', 10) || 0; } catch (_) {}
             const serverIsNewer = shouldForceReseed({ serverMtime, seenMtime });
+
+            const app = await waitForJupyterApp(8000);
+            if (!app) {
+                // 0.8 path: window.jupyterapp isn't exposed, so the contents.save
+                // + docmanager:open/revert reseed below can't run. If the server
+                // overwrote the working copy (instructor/self "Reset notebook"),
+                // evict the stale entry from JupyterLite's IndexedDB contents
+                // Drive and reload so the editor re-seeds the fresh server
+                // snapshot. Gated on serverIsNewer so a normal revisit never
+                // discards the student's in-progress work. Safe: a key/format
+                // mismatch makes eviction a no-op — it degrades to the prior
+                // behaviour (reset not visible), never worse, and only ever
+                // touches a copy the server just changed.
+                let reseeded = false;
+                if (serverIsNewer) {
+                    reseeded = await evictNotebookFromDrive(lockedNotebookPath);
+                }
+                // Establish/refresh the seen-mtime baseline. The pre-0.8
+                // early-return here never stamped, so serverIsNewer could never
+                // flip true on this build; stamping now makes a FUTURE reset
+                // detectable. Safe — eviction above is gated on a real baseline
+                // (serverIsNewer is false until one exists), so a first visit
+                // never reseeds and never wipes in-progress work.
+                if (serverMtime > 0) {
+                    try { localStorage.setItem(seenKey, String(serverMtime)); } catch (_) {}
+                }
+                if (reseeded) {
+                    // Reload with reset=1 so JupyterLite discards the stale
+                    // workspace and — with the Drive entry now evicted —
+                    // re-fetches the freshly-reset static working copy from the
+                    // server (jupyterlite/files/…), mirroring the submission view.
+                    let reseedURL = editorURL;
+                    try {
+                        const u = new URL(editorURL, window.location.origin);
+                        u.searchParams.set('reset', '1');
+                        reseedURL = u.pathname + u.search;
+                    } catch (_) { reseedURL = editorURL; }
+                    serverSyncComplete = true;   // avoid a reload loop
+                    frame.src = reseedURL;
+                }
+                return;
+            }
+
+            const contents = app.serviceManager && app.serviceManager.contents;
 
             // Preservation logic: if the browser already has the notebook in
             // IndexedDB AND the server hasn't overwritten it since we last
@@ -1552,6 +1597,72 @@
             await delay(100);
         }
         return null;
+    }
+
+    // Evict a notebook from JupyterLite's IndexedDB contents Drive so a reload
+    // re-seeds it from the server. The jupyterapp-independent reseed path used
+    // when `window.jupyterapp` isn't exposed (the 0.8 Notebook build) and the
+    // normal contents.save reseed therefore can't run.
+    //
+    // JupyterLite (@jupyterlite/contents, via localforage) stores contents in
+    // an IndexedDB database named "JupyterLite Storage"; the notebook bytes live
+    // in the `files` store keyed by path, with parallel `checkpoints` / `counters`
+    // entries. localforage may key by the bare path or a normalized variant, so
+    // rather than guess the exact key we cursor each store and delete any key
+    // that equals, or ends with, the working-copy path (the paths are unique per
+    // user+setup, so a suffix match can't collateral-damage another notebook).
+    //
+    // Best-effort and self-contained: resolves true only if the file entry was
+    // actually removed; any error (no DB, schema drift, blocked) resolves false
+    // so the caller leaves the editor untouched (degrades to "reset not visible",
+    // never to data loss).
+    function evictNotebookFromDrive(path) {
+        return new Promise((resolve) => {
+            let settled = false;
+            const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+            // Don't hang the sync if IndexedDB never responds.
+            const guard = setTimeout(() => finish(false), 4000);
+            const matches = (key) => {
+                const k = typeof key === 'string' ? key : String(key);
+                return k === path || k.endsWith('/' + path) || k.endsWith(path);
+            };
+            try {
+                const open = indexedDB.open('JupyterLite Storage');
+                open.onerror = () => { clearTimeout(guard); finish(false); };
+                open.onsuccess = () => {
+                    const db = open.result;
+                    try {
+                        const stores = ['files', 'checkpoints', 'counters']
+                            .filter((s) => db.objectStoreNames.contains(s));
+                        if (!stores.length) { db.close(); clearTimeout(guard); return finish(false); }
+                        const tx = db.transaction(stores, 'readwrite');
+                        let removedFile = false;
+                        for (const storeName of stores) {
+                            const store = tx.objectStore(storeName);
+                            const cursorReq = store.openCursor();
+                            cursorReq.onsuccess = (e) => {
+                                const cursor = e.target.result;
+                                if (!cursor) return;
+                                if (matches(cursor.key)) {
+                                    try { cursor.delete(); if (storeName === 'files') removedFile = true; } catch (_) { /* skip */ }
+                                }
+                                cursor.continue();
+                            };
+                        }
+                        tx.oncomplete = () => { db.close(); clearTimeout(guard); finish(removedFile); };
+                        tx.onerror = () => { db.close(); clearTimeout(guard); finish(false); };
+                        tx.onabort = () => { db.close(); clearTimeout(guard); finish(false); };
+                    } catch (_) {
+                        try { db.close(); } catch (_) { /* ignore */ }
+                        clearTimeout(guard);
+                        finish(false);
+                    }
+                };
+            } catch (_) {
+                clearTimeout(guard);
+                finish(false);
+            }
+        });
     }
 
     function applyLockedNotebookUI() {
