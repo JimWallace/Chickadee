@@ -359,22 +359,33 @@ async function main() {
     if (!(await waitForEditorWithSource(jlFrame, STARTER_MARKER))) {
       return fail("editor did not re-render the notebook after reset + reload", (await bodyText(jlFrame)).slice(0, 300));
     }
-    // The fix may itself reload the iframe (reset=1) — give the re-seed a moment.
-    await page.waitForTimeout(4000);
-    const stillEdited = await jlFrame
-      .evaluate((m) => ((document.body && document.body.innerText) || "").includes(m), EDIT_MARKER)
-      .catch(() => false);
-    if (stillEdited) {
-      // Diagnose WHY the eviction didn't take: dump IndexedDB from both frames
-      // (does the parent see "JupyterLite Storage"? what are the files keys?).
+    // The fix reseeds ASYNCHRONOUSLY: syncNotebookFromServerSnapshot waits up to
+    // 8s for window.jupyterapp (never present on 0.8), then evicts the Drive
+    // entry and reloads the iframe with reset=1, which re-boots the editor from
+    // the freshly-reset server file. Poll for the edit marker to clear, re-finding
+    // the frame each round (the fix detaches/reloads it), over a generous budget
+    // that covers the 8s app-wait + eviction + reload + kernel re-boot.
+    const RESEED_BUDGET_MS = 75_000;
+    const reseedDeadline = Date.now() + RESEED_BUDGET_MS;
+    let cleared = false;
+    while (Date.now() < reseedDeadline) {
+      const fr = await findEditorFrame(page);
+      if (fr) {
+        const txt = await fr.evaluate(() => (document.body && document.body.innerText) || "").catch(() => "");
+        if (txt.includes(STARTER_MARKER) && !txt.includes(EDIT_MARKER)) { cleared = true; jlFrame = fr; break; }
+      }
+      await page.waitForTimeout(2500);
+    }
+    if (!cleared) {
+      jlFrame = (await findEditorFrame(page)) || jlFrame;
       const parentDrive = await dumpDrive(page);
-      const frameDrive = await dumpDrive(jlFrame);
+      const frameDrive = jlFrame ? await dumpDrive(jlFrame) : null;
       return fail(
         "the student's edit marker SURVIVED the reset — reset did not take effect " +
           "(the 0.8 reseed regression: stale IndexedDB copy not replaced by the server starter)\n" +
           "PARENT IndexedDB: " + JSON.stringify(parentDrive) + "\n" +
           "IFRAME IndexedDB: " + JSON.stringify(frameDrive),
-        (await bodyText(jlFrame)).slice(0, 300)
+        jlFrame ? (await bodyText(jlFrame)).slice(0, 300) : "(no frame)"
       );
     }
     console.log("step 4 ok: edit marker gone — reset is visible on the 0.8 editor");
