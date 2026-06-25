@@ -25,11 +25,14 @@
 //     change; a rebuild produces a new hash → new URL.  Cached immutably
 //     for a year, eliminating the per-boot revalidation storm.
 //   * Everything else on the fast path (unhashed names like the MathJax
-//     fonts, all of /pyodide/, /vendor/) keeps default ETag revalidation:
-//     re-vendoring rewrites those bytes IN PLACE under stable names —
-//     including the deterministically patched pyodide-kernel wheel — so
-//     immutable caching would pin stale bytes across an upgrade (#574's
-//     failure class).
+//     fonts, all of /pyodide/, /vendor/) is stamped `no-cache` so it
+//     revalidates: re-vendoring rewrites those bytes IN PLACE under stable
+//     names — including the deterministically patched pyodide-kernel wheel —
+//     so immutable caching would pin stale bytes across an upgrade (#574's
+//     failure class). `no-cache` (an explicit "revalidate before use", a cheap
+//     304 via ETag when unchanged) is required because an ETag ALONE lets the
+//     browser cache heuristically and skip the check — which is how a deployed
+//     wheel fix failed to reach already-loaded students until they hard-refreshed.
 //
 // On any miss (file absent, traversal attempt, undecodable path) the
 // request falls through to the normal chain unchanged, so worst case is
@@ -83,6 +86,16 @@ struct EditorAssetFastPathMiddleware: AsyncMiddleware {
         if Self.isContentHashedBundleAsset(path: path) {
             response.headers.replaceOrAdd(
                 name: .cacheControl, value: "public, max-age=31536000, immutable")
+        } else {
+            // Stable-name vendored bytes (the patched kernel wheel, all.json, the
+            // Pyodide runtime, MathJax fonts) are rewritten IN PLACE across a
+            // re-vendor, so they must revalidate. An ETag ALONE is not enough:
+            // with no Cache-Control the browser caches heuristically and skips the
+            // conditional request, which is exactly how a deployed wheel fix
+            // failed to reach already-loaded students for hours. `no-cache` forces
+            // a conditional GET — a cheap 304 when unchanged — so a deploy
+            // propagates on the next load instead of waiting on cache heuristics.
+            response.headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
         }
         // The slow-path NotebookAssetIsolationMiddleware never sees these
         // short-circuited responses, so the fast path must isolate them itself.

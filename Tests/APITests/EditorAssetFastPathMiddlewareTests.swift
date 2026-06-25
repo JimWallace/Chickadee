@@ -11,8 +11,9 @@ import VaporTesting
 ///      fast path must not serve student working copies to anonymous
 ///      callers just because they live under /jupyterlite/.
 ///   2. Immutable cache headers land only on content-hashed bundle
-///      filenames; everything else keeps default revalidation so a
-///      re-vendor that rewrites bytes in place is picked up.
+///      filenames; everything else gets an explicit `no-cache` so a
+///      re-vendor that rewrites bytes in place is picked up on the next load
+///      (an ETag alone lets the browser cache heuristically and skip the check).
 @Suite final class EditorAssetFastPathMiddlewareTests {
     private let publicDir: String
     private let tempRoot: String
@@ -93,14 +94,14 @@ import VaporTesting
                 .GET, "/jupyterlite/build/MathJax_Main-Regular.woff"
             ) { res async in
                 #expect(res.status == .ok)
-                #expect(res.headers.first(name: .cacheControl) == nil)
+                #expect(res.headers.first(name: .cacheControl) == "no-cache")
                 #expect(res.headers.first(name: .eTag) != nil)
             }
             try await app.testing().test(
                 .GET, "/jupyterlite/extensions/@jupyterlite/kernel/install.json"
             ) { res async in
                 #expect(res.status == .ok)
-                #expect(res.headers.first(name: .cacheControl) == nil)
+                #expect(res.headers.first(name: .cacheControl) == "no-cache")
             }
         }
     }
@@ -110,7 +111,7 @@ import VaporTesting
             for path in ["/pyodide/pyodide-lock.json", "/vendor/jszip.min.js"] {
                 try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
-                    #expect(res.headers.first(name: .cacheControl) == nil)
+                    #expect(res.headers.first(name: .cacheControl) == "no-cache")
                     #expect(res.headers.first(name: .eTag) != nil)
                 }
             }
