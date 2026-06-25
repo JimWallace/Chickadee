@@ -309,7 +309,7 @@
         //    fallback path is preserved for environments with no Worker (and for
         //    the Node test harness, which has neither Worker nor a factory
         //    override, so it deterministically exercises the fallback).
-        const executor = makeExecutor(files, assignmentSeed, runnerCore);
+        const executor = makeExecutor(files, assignmentSeed, runnerCore, options.reportPhase);
         try {
             const scriptExists = (name) => executor.scriptExists(name);
             // Apply the per-script override before handing the limit to the
@@ -357,9 +357,9 @@
         return null;
     }
 
-    function makeExecutor(files, assignmentSeed, runnerCore) {
+    function makeExecutor(files, assignmentSeed, runnerCore, reportPhase) {
         const factory = gradingWorkerFactory();
-        if (factory) return new GradingWorkerExecutor(files, assignmentSeed, runnerCore, factory);
+        if (factory) return new GradingWorkerExecutor(files, assignmentSeed, runnerCore, factory, reportPhase);
         return new MainThreadExecutor(files, assignmentSeed, runnerCore);
     }
 
@@ -462,12 +462,31 @@
     // provide against a synchronous CPU-bound loop.
     // -------------------------------------------------------------------------
 
+    // Bounded init: how long to wait for a grading worker to finish loadPyodide +
+    // env-config before declaring it wedged, terminating it, and retrying once on
+    // a fresh worker. The init path used to be UNBOUNDED — unlike run(), which
+    // races a timer — so a Pyodide load/boot that never completed (observed
+    // intermittently when the editor kernel boots a SECOND Pyodide beside the
+    // grader under cross-origin isolation) hung the whole grade forever, with no
+    // telemetry, since the per-test timer only covers the 'run' message. A real
+    // cold init is seconds, so a generous default never trips a healthy boot; it
+    // only converts an infinite hang into a bounded, observable, self-healing
+    // failure. Overridable for tests via __CHICKADEE_GRADING_INIT_TIMEOUT_MS__.
+    const GRADING_INIT_TIMEOUT_MS =
+        (typeof globalThis !== 'undefined' && Number(globalThis.__CHICKADEE_GRADING_INIT_TIMEOUT_MS__) > 0)
+            ? Number(globalThis.__CHICKADEE_GRADING_INIT_TIMEOUT_MS__)
+            : 120000;
+
     class GradingWorkerExecutor {
-        constructor(files, assignmentSeed, runnerCore, factory) {
+        constructor(files, assignmentSeed, runnerCore, factory, reportPhase) {
             this.files = files;
             this.assignmentSeed = assignmentSeed ?? null;
             this.runnerCore = runnerCore;
             this.factory = factory;
+            // Submit-phase breadcrumb sink (student submit path only). Undefined
+            // on the instructor-validation path, so init telemetry stays silent
+            // there, matching the existing reportPhase scoping.
+            this.reportPhase = (typeof reportPhase === 'function') ? reportPhase : function () {};
             this.worker = null;
             this._initPromise = null;
             this._nextID = 1;
@@ -476,6 +495,12 @@
             // we terminated (a fresh spawn after a timeout proves the kill path).
             this.spawnCount = 0;
             this.terminateCount = 0;
+        }
+
+        // Forward a diagnostic breadcrumb to the submit-phase telemetry. Best
+        // effort: never let telemetry break grading.
+        _report(phase, detail) {
+            try { this.reportPhase(phase, detail); } catch (_) { /* telemetry is best-effort */ }
         }
 
         scriptExists(name) {
@@ -487,6 +512,14 @@
             this.spawnCount += 1;
             worker.onmessage = (e) => {
                 const msg = (e && e.data) || {};
+                // Diagnostic breadcrumbs (no `id`) emitted from inside the worker
+                // during init — forward to submit-phase telemetry so an init hang
+                // is localizable to the loadPyodide vs env-config step. Never
+                // grading state; ignored if telemetry is unwired.
+                if (msg.type === 'phase') {
+                    this._report(msg.phase, (msg.ms != null) ? ('ms=' + msg.ms) : undefined);
+                    return;
+                }
                 const entry = this._pending.get(msg.id);
                 if (!entry) return;
                 this._pending.delete(msg.id);
@@ -504,16 +537,24 @@
             return worker;
         }
 
-        _killWorker() {
+        // Terminate the current worker process and reject its in-flight calls,
+        // but LEAVE _initPromise intact — used by the init retry loop, which owns
+        // and manages _initPromise across attempts itself.
+        _terminateWorker() {
             if (this.worker) {
                 try { this.worker.terminate(); } catch (_) { /* best-effort */ }
                 this.terminateCount += 1;
                 this.worker = null;
             }
-            this._initPromise = null;
             // Reject any still-pending calls so they don't hang forever.
             for (const [, entry] of this._pending) entry.reject(new Error('grading worker terminated'));
             this._pending.clear();
+        }
+
+        _killWorker() {
+            this._terminateWorker();
+            // Drop the init cache so the NEXT run rebuilds a fresh worker.
+            this._initPromise = null;
         }
 
         _post(message) {
@@ -529,24 +570,67 @@
             });
         }
 
+        // Post a message and race the reply against a REAL timer. Resolves to
+        // { __timedOut: true } if the worker doesn't answer within timeoutMs; the
+        // timer is always cleared. Used for both init (bounded) and run (per-test
+        // limit) so neither path can hang the grade indefinitely.
+        _postWithTimeout(message, timeoutMs) {
+            let timer = null;
+            const timeoutPromise = new Promise((resolve) => {
+                timer = setTimeout(() => resolve({ __timedOut: true }), timeoutMs);
+            });
+            return Promise.race([this._post(message), timeoutPromise])
+                .finally(() => { if (timer !== null) clearTimeout(timer); });
+        }
+
         // Spawn (if needed) and init the worker with the file map + seed. Cached
         // so concurrent/repeated runs share one init; cleared by _killWorker so
         // the NEXT run after a terminate rebuilds from scratch.
         _ensureWorker() {
             if (this._initPromise) return this._initPromise;
-            this._spawn();
-            this._initPromise = (async () => {
-                const reply = await this._post({ type: 'init', files: this.files, seed: this.assignmentSeed });
-                if (!reply || !reply.ok) {
-                    throw new Error('Failed to configure Python environment: '
-                        + ((reply && reply.error) || 'grading worker init failed'));
+            const p = this._initWithRetry();
+            this._initPromise = p;
+            // On ultimate failure, drop the cache so a later run can try fresh.
+            p.catch(() => { if (this._initPromise === p) this._initPromise = null; });
+            return p;
+        }
+
+        // Init the worker, bounded by GRADING_INIT_TIMEOUT_MS and retried once on
+        // a fresh worker. A wedged loadPyodide/env-config (e.g. two Pyodides
+        // contending at boot under cross-origin isolation) terminates + respawns
+        // instead of hanging the whole grade forever; a second failure surfaces
+        // as a clear error (matching the old throw-on-init-failure contract),
+        // never an infinite hang. Each attempt is breadcrumbed so a future hang
+        // is visible server-side via the keepalive submit-phase telemetry.
+        async _initWithRetry() {
+            const attempts = 2;
+            let lastErr = null;
+            for (let attempt = 1; attempt <= attempts; attempt++) {
+                const startMs = Date.now();
+                this._report('grading_init_start', 'attempt=' + attempt);
+                this._spawn();
+                try {
+                    const reply = await this._postWithTimeout(
+                        { type: 'init', files: this.files, seed: this.assignmentSeed },
+                        GRADING_INIT_TIMEOUT_MS);
+                    if (reply && reply.__timedOut) {
+                        throw new Error('grading worker init timed out after ' + GRADING_INIT_TIMEOUT_MS + 'ms');
+                    }
+                    if (!reply || !reply.ok) {
+                        throw new Error('Failed to configure Python environment: '
+                            + ((reply && reply.error) || 'grading worker init failed'));
+                    }
+                    this._report('grading_init_done', 'attempt=' + attempt + ';ms=' + (Date.now() - startMs));
+                    return;  // success — worker is live, _initPromise stays cached
+                } catch (e) {
+                    lastErr = e;
+                    // Drop the wedged/failed worker but keep _initPromise (this
+                    // loop owns it); a fresh worker is spawned on the next attempt.
+                    this._terminateWorker();
+                    this._report('grading_init_failed', 'attempt=' + attempt + ';' + toMessage(e));
                 }
-            })().catch((e) => {
-                // A failed init kills the worker so a later retry can rebuild.
-                this._killWorker();
-                throw e;
-            });
-            return this._initPromise;
+            }
+            throw lastErr || new Error('grading worker init failed');
         }
 
         async run(name, limitSeconds) {
@@ -576,18 +660,8 @@
             // Race the worker reply against a REAL timer. Because the worker runs
             // Pyodide on its own thread, the timer always fires even when student
             // code is in a synchronous CPU-bound loop — so terminate() can kill it.
-            let timer = null;
-            const timeoutPromise = new Promise((resolve) => {
-                timer = setTimeout(() => resolve({ __timedOut: true }), limitSeconds * 1000);
-            });
-            const runPromise = this._post({ type: 'run', script: name, limit: limitSeconds });
-
-            let reply;
-            try {
-                reply = await Promise.race([runPromise, timeoutPromise]);
-            } finally {
-                if (timer !== null) clearTimeout(timer);
-            }
+            const reply = await this._postWithTimeout(
+                { type: 'run', script: name, limit: limitSeconds }, limitSeconds * 1000);
 
             if (reply && reply.__timedOut) {
                 // Kill the run-away worker; the next run rebuilds a fresh one.

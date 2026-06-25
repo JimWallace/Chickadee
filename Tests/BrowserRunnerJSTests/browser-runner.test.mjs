@@ -415,6 +415,10 @@ function makeFakeGradingWorkerFactory(options) {
       if (msg.type === 'init') {
         this.files = msg.files || {};
         this.seed = msg.seed ?? null;
+        // `initPending` simulates a worker whose loadPyodide()/env-config never
+        // completes (the intermittent Pyodide-314 init hang) — it NEVER replies,
+        // so the executor's bounded-init timeout must terminate + retry it.
+        if (options.initPending) return;
         this._reply({ id: msg.id, ok: true });
         return;
       }
@@ -598,6 +602,12 @@ async function loadRunnerHarness(options = {}) {
     context.__CHICKADEE_GRADING_WORKER_FACTORY__ = gradingWorkerFactory;
   }
 
+  // Optional override for the GradingWorkerExecutor's bounded-init budget (read
+  // once at module-eval from globalThis), so a timeout test runs in milliseconds.
+  if (options.gradingInitTimeoutMs != null) {
+    context.__CHICKADEE_GRADING_INIT_TIMEOUT_MS__ = options.gradingInitTimeoutMs;
+  }
+
   context.window = {
     document,
     fetch: fetchImpl,
@@ -722,6 +732,9 @@ test('runAndSubmit emits ordered submit-phase breadcrumbs; validation stays sile
 
   // The breadcrumb funnel must cover the whole grading flow, in order, so a
   // freeze in any phase leaves a server-visible "last reached" record.
+  // This case runs on the MAIN-THREAD executor (no useGradingWorker), so the
+  // GradingWorkerExecutor's bounded-init breadcrumbs do not appear here; they are
+  // covered by the worker-path test below.
   assert.deepEqual(
     harness.breadcrumbs.map(b => b.source),
     [
@@ -929,6 +942,86 @@ test('GradingWorkerExecutor kills a CPU-bound run-away via terminate() and respa
   // The fresh worker was re-initialized with the same workspace before running.
   assert.ok(workers[1].postedTypes.includes('init'), 'respawned worker must be re-init()ed');
   assert.ok(workers[1].postedTypes.includes('run'), 'respawned worker must run the next script');
+});
+
+test('GradingWorkerExecutor brackets the worker init with start/done breadcrumbs', async () => {
+  // The init path (loadPyodide + env-config) used to be awaited with NO timer, so
+  // a wedged boot hung the whole grade with zero telemetry. It is now bracketed
+  // by grading_init_start/grading_init_done breadcrumbs (and bounded — see the
+  // timeout test below) so a future init hang is localizable server-side via the
+  // keepalive submit-phase funnel. Only the student submit path emits them
+  // (runAndSubmit wires reportPhase; instructor validation stays silent).
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'tests/test_pass.py', tier: 'public' }],
+    },
+    scriptBehaviors: {
+      'tests/test_pass.py': {
+        stdout: `${JSON.stringify({ shortResult: 'ok', status: 'pass' })}\n`,
+        stderr: '',
+        exitCode: 0,
+      },
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_init_bc',
+  );
+
+  const sources = harness.breadcrumbs.map(b => b.source);
+  // Exactly one start/done pair (init is cached across the suite's scripts).
+  assert.deepEqual(
+    sources.filter(s => s.startsWith('grading_init')),
+    ['grading_init_start', 'grading_init_done'],
+  );
+  // …and it brackets the run, between suite_started and suite_done.
+  const ordered = ['suite_started', 'grading_init_start', 'grading_init_done', 'suite_done']
+    .map(s => sources.indexOf(s));
+  assert.ok(ordered.every((idx, i) => idx >= 0 && (i === 0 || idx > ordered[i - 1])),
+    `init breadcrumbs out of order in ${JSON.stringify(sources)}`);
+});
+
+test('GradingWorkerExecutor bounds a wedged worker init: times out, retries once, then fails instead of hanging', async () => {
+  // A worker whose init never replies (loadPyodide that never resolves — the
+  // intermittent Pyodide-314 init hang) must NOT hang the grade forever. With a
+  // tiny init budget the executor times out, terminates, retries once on a fresh
+  // worker, and — when that also hangs — surfaces a bounded failure. Two
+  // grading_init_start breadcrumbs (the attempts) prove the retry; the run never
+  // exceeds the budget. This is the safety net the old unbounded init lacked.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    initPending: true,          // fake worker never replies to 'init'
+    gradingInitTimeoutMs: 25,   // tiny budget so the test is fast
+    zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'tests/test_pass.py', tier: 'public' }],
+    },
+  });
+
+  await assert.rejects(
+    harness.window.BrowserRunner.runAndSubmit(
+      new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+      'setup_init_hang',
+    ),
+    /init|configure Python/i,
+  );
+
+  const sources = harness.breadcrumbs.map(b => b.source);
+  assert.equal(sources.filter(s => s === 'grading_init_start').length, 2, 'two init attempts');
+  assert.equal(sources.filter(s => s === 'grading_init_failed').length, 2, 'both attempts reported failed');
+  assert.ok(!sources.includes('grading_init_done'), 'init must not report done when it never succeeds');
+
+  // Both spawned workers were terminated (the kill path on a wedged init).
+  const workers = harness.gradingWorkerFactory.created;
+  assert.equal(workers.length, 2, `expected two init attempts, saw ${workers.length}`);
+  assert.ok(workers.every(w => w.terminated), 'every wedged init worker must be terminated');
 });
 
 test('GradingWorkerExecutor grades pass/fail through one worker and classifies non-python on the main thread', async () => {
