@@ -99,61 +99,58 @@ inject extra wheels; `check-pyodide-parity.sh` asserts they're present. After th
   don't hardcode it.
 - `Public/pyodide` is ~510 MB on 314 (down from ~1.4 GB on 0.28); checked in.
 
-## Robustness upgrade — the iframe command bridge (PROTOTYPED)
+## Robustness upgrade — the iframe command bridge
 
 0.8's ecosystem ships **`jupyter-iframe-commands`** — a supported replacement for
 `notebook.js`'s fragile `frame.contentWindow.jupyterapp.commands.execute(…)`
-poking (16 touch-points; the `jupyterapp` global is reachable in Chromium but
-flaky/absent in WebKit, which is why those sites are wrapped in defensive
+poking (the `jupyterapp` global is reachable in Chromium but flaky/absent in
+WebKit, which is why those sites are wrapped in defensive
 `if (win && win.jupyterapp)` guards and try/catch). It does **not** fix the
 grading work above; it's an independent durability win.
 
-**The prototype is on branch `claude/iframe-command-bridge` (additive, no change
-to `notebook.js`'s production save path):**
+**Shipped (#1035 — the bridge) + (this PR — save migration):**
 
-- `jupyter-iframe-commands==0.3.0` added to `Tools/jupyterlite/requirements.txt`
-  → federated into the 0.8 bundle (auto-discovered by `jupyter lite build`,
-  appears in `Public/jupyterlite/jupyter-lite.json`'s `federated_extensions`;
-  the labextension auto-starts inside the iframe and `expose`s the command
-  registry over comlink/postMessage).
-- `jupyter-iframe-commands-host` vendored to `Public/vendor/iframe-commands-host.js`
-  (ESM, comlink folded in; built by `scripts/setup-vendor.sh` from
-  `Tools/vendor/iframe-commands-host-entry.js`). `createBridge({ iframeId })`
-  returns `.ready`, `.execute(cmd, args)`, `.listCommands()`.
-- The editor iframe already carries `id="jl-frame"` — no template change needed.
+- `jupyter-iframe-commands==0.3.0` is in `Tools/jupyterlite/requirements.txt`,
+  federated into the bundle (auto-discovered by `jupyter lite build`, in
+  `Public/jupyterlite/jupyter-lite.json`'s `federated_extensions`; the
+  labextension auto-starts inside the iframe and `expose`s the command registry
+  over comlink/postMessage).
+- `jupyter-iframe-commands-host` is vendored to
+  `Public/vendor/iframe-commands-host.js` (ESM, comlink folded in; built by
+  `scripts/setup-vendor.sh` from `Tools/vendor/iframe-commands-host-entry.js`).
+  `createBridge({ iframeId })` → `.ready` / `.execute(cmd, args)` / `.listCommands()`.
+- `notebook.js` has a `getCommandBridge()` (lazy, cached, readiness-bounded) +
+  `executeEditorCommand(command, args)` helper: **bridge-first with a
+  `jupyterapp` poke fallback**. The save flushes — `window.chickadeeSaveNotebook`
+  (idle-logout) and the pre-read flush in `readNotebookFromJupyterFrame` — now
+  route through it, so they're reliable under WebKit isolation.
 - **CI probe:** `Tools/editor-smoke-test/notebook-bridge-check.mjs` +
   `.github/workflows/notebook-bridge-probe.yml` (chromium+webkit, non-required
-  diagnostic). Boots the real student editor, types an unsaved marker, then from
-  the PARENT frame builds the bridge, asserts `listCommands()` RPCs back
-  `docmanager:save`, drives `execute("docmanager:save")`, reloads, and asserts
-  the bridge-driven save persisted to the Drive.
+  diagnostic) drives `docmanager:save` directly through the bridge AND via the
+  migrated `window.chickadeeSaveNotebook()`, asserting both persist across reload.
 
-**Validated locally** against the freshly-built 0.8 bundle (server-free static
-harness, chromium): the extension activates, `bridge.ready` resolves,
-`listCommands()` returns 400 commands incl. `docmanager:save`, and
-`execute("notebook:create-new")` drives a real command. WebKit + save-persistence
-are left to the CI probe (WebKit isn't installable in the sandbox).
+**Still on the `jupyterapp` poke (NOT yet bridged) — needs a custom labextension:**
 
-**Cutover assessment (for the full `notebook.js` migration):**
+These live *inside* functions that already require direct `app` access, so the
+bridge adds no value piecemeal — comlink can only ferry structured-cloneable
+data, not live JupyterLab objects:
 
-- ✅ **Fire-and-forget saves** (lines ~1114–1132: `docmanager:save` /
-  `docmanager:save-all`) map cleanly to `await bridge.execute(...)`. This is the
-  bulk of the touch-points and the most engine-fragile, so it's the
-  highest-value, lowest-risk slice to cut over first.
-- ⚠️ **The widget-returning open/revert** (line ~1393:
-  `const widget = await app.commands.execute('docmanager:open', …)` then
-  `widget.context.revert()`) does **NOT** translate to a drop-in bridge call:
-  comlink RPC structured-clones the return value, so the live `widget` (with its
-  `context.revert()` method) does not cross the frame boundary. Options: (a) keep
-  this one path on the existing `jupyterapp` poke (hybrid); (b) register a custom
-  command in a thin Chickadee labextension that does open+revert atomically
-  inside the iframe and returns a plain boolean; (c) `bridge.execute('docmanager:open')`
-  then a separate `bridge.execute('docmanager:reload')`-style command if one
-  exists. Resolve before deleting the `jupyterapp` fallback entirely.
+- **Notebook read-back** (`readNotebookFromJupyterFrame` → `app.shell`,
+  `notebookWidgetFromShell`, `widget.context.model.toJSON()`,
+  `app.serviceManager.contents.get`). Falls back to the server snapshot
+  (`fetchNotebookSnapshot`) when the frame read fails, so it's already resilient.
+- **Server-snapshot reseed** (`syncNotebookFromServerSnapshot` → `contents.save`,
+  then `docmanager:open` returning a `widget` whose `context.revert()` is called).
+  The widget can't cross the comlink boundary.
+- **Readiness probes** (`probeIframeReadiness`, `waitForJupyterApp`) read
+  `win.jupyterapp`; already hardened with DOM-presence fallbacks.
 
-Recommended path: land this prototype (extension + vendor + probe) so the bridge
-ships and is CI-guarded, then migrate `notebook.js`'s save paths to it in a
-follow-up, keeping the open/revert path on the fallback until (b)/(c) is decided.
+**To fully retire the `jupyterapp` poke:** add a thin Chickadee labextension that
+registers serializable commands inside the iframe — e.g. `chickadee:read-notebook`
+(returns the notebook JSON) and `chickadee:reseed` (does the `contents.save` +
+open + `context.revert` atomically and returns a boolean). Then the read/reseed
+paths can move to `bridge.execute(...)` too. Larger effort (new labextension +
+build/federation wiring + tests); its own PR.
 Docs: https://jupyterlite.readthedocs.io/en/latest/howto/configure/advanced/iframe.html
 
 ## Note on the iframe itself

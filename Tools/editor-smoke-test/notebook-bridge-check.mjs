@@ -1,6 +1,6 @@
 // notebook-bridge-check.mjs
 //
-// Headless PROTOTYPE probe for the jupyter-iframe-commands command bridge — the
+// Headless probe for the jupyter-iframe-commands command bridge — the
 // supported replacement for notebook.js's fragile
 // `frame.contentWindow.jupyterapp.commands.execute(...)` cross-frame poking.
 //
@@ -13,8 +13,9 @@
 //     /vendor/iframe-commands-host.js — runs in the PARENT frame and wraps the
 //     iframe's comlink endpoint.
 //
-// This probe proves the bridge end-to-end WITHOUT touching notebook.js's
-// production save path (that cutover is a follow-up decision). It:
+// This probe proves the bridge end-to-end AND that notebook.js's production
+// save path (window.chickadeeSaveNotebook, the idle-logout flush) is wired
+// through it. It:
 //
 //   1. Boots the editor on the real student page; the seeded starter cell
 //      renders and the kernel reaches idle.
@@ -23,12 +24,17 @@
 //   3. From the PARENT page, imports the vendored host bundle, builds the bridge
 //      against iframe#jl-frame, awaits `.ready`, asserts `listCommands()` RPCs
 //      back an array containing "docmanager:save" (a real round-trip that
-//      returns data), then `execute("docmanager:save")`.
-//   4. Reloads the same context and asserts the marker survived — i.e. the
-//      bridge-driven save actually wrote to the IndexedDB Drive.
+//      returns data), then `execute("docmanager:save")`. A regression here fails
+//      even if the jupyterapp fallback would have saved.
+//   4. Types a second marker (CKPROD_<stamp>) and calls the MIGRATED production
+//      helper window.chickadeeSaveNotebook() — the idle-logout flush now routed
+//      through the bridge in notebook.js.
+//   5. Reloads the same context and asserts BOTH markers survived — i.e. the
+//      direct bridge save AND the production save path wrote to the Drive.
 //
-// A PASS means the bridge can both READ (listCommands) and DRIVE (execute) the
-// in-iframe JupyterLab app from the parent frame on the 0.8 stack.
+// A PASS means the bridge can READ (listCommands) and DRIVE (execute) the
+// in-iframe JupyterLab app from the parent, and that the migrated production
+// save path persists through it on the 0.8 stack.
 //
 // Seeds through the real HTTP API exactly like notebook-lifecycle-check.mjs.
 //
@@ -54,6 +60,7 @@ const FRAME_ID = "jl-frame";
 const STAMP = Date.now().toString(36);
 const STARTER_MARKER = "CKSTARTER";
 const BRIDGE_MARKER = `CKBRIDGE_${STAMP}`;
+const PROD_MARKER = `CKPROD_${STAMP}`;
 const STARTER_SOURCE = `# ${STARTER_MARKER}\nx = 1\n`;
 
 const INSTRUCTOR = { username: `br_instr_${STAMP}`, password: "instructor-pw-123" };
@@ -273,6 +280,24 @@ async function driveSaveViaBridge(page) {
   }, { frameId: FRAME_ID, readyMs: BRIDGE_READY_MS });
 }
 
+// Drive the MIGRATED production save path: notebook.js's window.chickadeeSaveNotebook
+// (the idle-logout flush) now routes through executeEditorCommand → the bridge
+// (with a jupyterapp fallback). Calling it from the parent page proves the
+// production wiring, not just an ad-hoc bridge. Returns { ok, detail }.
+async function driveProductionSave(page) {
+  return await page.evaluate(async () => {
+    if (typeof window.chickadeeSaveNotebook !== "function") {
+      return { ok: false, detail: "window.chickadeeSaveNotebook is not defined (notebook.js not loaded / not wired)" };
+    }
+    try {
+      await window.chickadeeSaveNotebook();
+      return { ok: true, detail: "called window.chickadeeSaveNotebook()" };
+    } catch (e) {
+      return { ok: false, detail: "chickadeeSaveNotebook() threw: " + (e && e.message || e) };
+    }
+  });
+}
+
 async function main() {
   console.log(`Browser engine: ${browserName}`);
   console.log(`Seeding browser-graded assignment via ${baseURL} …`);
@@ -318,33 +343,46 @@ async function main() {
     if (typed !== "ok") return fail(`could not type the marker into the notebook: ${typed}`);
     console.log("step 2 ok: typed marker into cell 0 (unsaved)");
 
-    // ---- Step 3: drive docmanager:save THROUGH THE BRIDGE ----------------
+    // ---- Step 3: drive docmanager:save THROUGH THE BRIDGE directly -------
+    // Proves the bridge MECHANISM (a regression here fails even if the
+    // jupyterapp fallback would have saved).
     const bridge = await driveSaveViaBridge(page);
     if (!bridge.ok) return fail(`bridge could not drive the save: ${bridge.detail}`);
     console.log(`step 3 ok: ${bridge.detail} (listCommands → ${bridge.commandCount} commands)`);
 
-    // ---- Step 4: reload and assert the bridge save persisted -------------
+    // ---- Step 4: drive the MIGRATED production save path -----------------
+    // Dirty the doc again, then call window.chickadeeSaveNotebook() — the
+    // idle-logout flush now wired through the bridge in notebook.js.
+    const typed2 = await typeMarkerIntoCell(page, jlFrame, PROD_MARKER);
+    if (typed2 !== "ok") return fail(`could not type the production marker: ${typed2}`);
+    const prod = await driveProductionSave(page);
+    if (!prod.ok) return fail(`production save path failed: ${prod.detail}`);
+    console.log(`step 4 ok: ${prod.detail}`);
+
+    // ---- Step 5: reload and assert BOTH saves persisted ------------------
     await page.waitForTimeout(2000); // let the Drive write flush
-    console.log("step 4: reloading to confirm the bridge-driven save reached the Drive…");
+    console.log("step 5: reloading to confirm both saves reached the Drive…");
     await page.reload({ waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS });
     jlFrame = await findEditorFrame(page);
-    if (!jlFrame) return fail("editor iframe never re-attached after bridge save + reload");
+    if (!jlFrame) return fail("editor iframe never re-attached after save + reload");
     if (!(await waitForEditorWithSource(jlFrame, STARTER_MARKER))) {
-      return fail("editor did not re-render the notebook after bridge save + reload", (await bodyText(jlFrame)).slice(0, 300));
+      return fail("editor did not re-render the notebook after save + reload", (await bodyText(jlFrame)).slice(0, 300));
     }
-    const persisted = await jlFrame.waitForFunction(
-      (needle) => ((document.body && document.body.innerText) || "").includes(needle),
-      BRIDGE_MARKER, { timeout: 30_000 }
-    ).then(() => true).catch(() => false);
-    if (!persisted) {
-      return fail(
-        "marker did NOT survive reload — bridge execute(docmanager:save) did not actually persist to the Drive",
-        (await bodyText(jlFrame)).slice(0, 300)
-      );
+    for (const [label, marker, why] of [
+      ["bridge", BRIDGE_MARKER, "bridge execute(docmanager:save) did not persist to the Drive"],
+      ["production", PROD_MARKER, "window.chickadeeSaveNotebook() (migrated to the bridge) did not persist to the Drive"],
+    ]) {
+      const ok = await jlFrame.waitForFunction(
+        (needle) => ((document.body && document.body.innerText) || "").includes(needle),
+        marker, { timeout: 30_000 }
+      ).then(() => true).catch(() => false);
+      if (!ok) {
+        return fail(`${label} marker did NOT survive reload — ${why}`, (await bodyText(jlFrame)).slice(0, 300));
+      }
+      console.log(`step 5 ok: ${label} save persisted across reload`);
     }
-    console.log("step 4 ok: bridge-driven save persisted across reload");
 
-    console.log(`BRIDGE PASS — jupyter-iframe-commands bridge read + drove docmanager:save on the real 0.8 editor (engine=${browserName})`);
+    console.log(`BRIDGE PASS — jupyter-iframe-commands bridge drove docmanager:save directly AND via the migrated window.chickadeeSaveNotebook on the real 0.8 editor (engine=${browserName})`);
     await finish(0);
   } catch (err) {
     return fail(`exception: ${(err && err.stack) || err}`);
