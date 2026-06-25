@@ -190,39 +190,34 @@ async function waitForKernelIdle(page) {
   return false;
 }
 
-// Append a marker comment to cell 0 via the notebook model, then save to the
-// Drive. Returns "ok" or a diagnostic string. Tolerant of the JupyterLab 4 /
-// Notebook 7 shared-model API shape JupyterLite 0.8 ships.
-async function appendToCellAndSave(jlFrame, marker) {
-  return await jlFrame.evaluate(async (mk) => {
-    const app = window.jupyterapp;
-    if (!app || !app.shell) return "no jupyterapp/shell";
-    function panelFrom(w) { return w && w.content && w.content.model ? w : null; }
-    let panel = panelFrom(app.shell.currentWidget);
-    if (!panel) {
-      try {
-        const it = app.shell.widgets ? app.shell.widgets("main") : null;
-        if (it) { let r; while (!(r = it.next()).done) { const p = panelFrom(r.value); if (p) { panel = p; break; } } }
-      } catch (_) { /* ignore */ }
-    }
-    if (!panel) return "no notebook panel";
-    const model = panel.content.model;
-    if (!model || !model.cells || model.cells.length === 0) return "no cells in model";
-    const cell = model.cells.get(0);
-    const sm = cell.sharedModel || cell;
-    let cur = "";
-    try { cur = typeof sm.getSource === "function" ? sm.getSource() : (sm.source || ""); } catch (_) { cur = ""; }
-    const next = `${cur}\n# ${mk}\n`;
-    try {
-      if (typeof sm.setSource === "function") sm.setSource(next);
-      else if ("source" in sm) sm.source = next;
-      else return "no setSource/source on shared model";
-    } catch (e) { return "setSource threw: " + (e && e.message ? e.message : e); }
-    try {
-      await app.commands.execute("docmanager:save");
-    } catch (e) { return "docmanager:save threw: " + (e && e.message ? e.message : e); }
-    return "ok";
-  }, marker);
+// Append a marker comment to cell 0 and save it to the Drive, using UI
+// interaction (the approach editor-exec-check.mjs proved works headlessly):
+// focus the first code cell's CodeMirror editor, move to the end, type the
+// marker, then Ctrl+S (the docmanager:save keybinding). Avoids reaching into
+// `window.jupyterapp`, which isn't reliably exposed to frame.evaluate. Returns
+// "ok" or a diagnostic string.
+async function editCellAndSave(page, jlFrame, marker) {
+  const cell = jlFrame.locator(".jp-Notebook .jp-CodeCell .cm-content").first();
+  try {
+    await cell.click({ timeout: 15_000 });
+  } catch (e) {
+    return "could not focus the cell editor: " + (e && e.message ? e.message : e);
+  }
+  await page.waitForTimeout(300);
+  // Cursor to end of the cell, then append a marker comment line.
+  await page.keyboard.press("Control+End").catch(() => {});
+  await page.keyboard.type(`\n# ${marker}\n`);
+  await page.waitForTimeout(300);
+  // Confirm the edit actually registered in the editor before we depend on it
+  // persisting — separates "typing failed" from "save/reseed dropped it".
+  const registered = await jlFrame
+    .evaluate((m) => ((document.body && document.body.innerText) || "").includes(m), marker)
+    .catch(() => false);
+  if (!registered) return "edit did not register in the editor (typing into CodeMirror failed)";
+  // Save to the Drive (Accel+S → docmanager:save), then let it flush.
+  await page.keyboard.press("Control+s");
+  await page.waitForTimeout(2000);
+  return "ok";
 }
 
 async function bodyText(jlFrame) {
@@ -270,7 +265,7 @@ async function main() {
     console.log("step 1 ok: editor booted, starter rendered, kernel idle");
 
     // ---- Step 2: edit + save, then reload and assert it persisted --------
-    const editResult = await appendToCellAndSave(jlFrame, SAVE_MARKER);
+    const editResult = await editCellAndSave(page, jlFrame, SAVE_MARKER);
     if (editResult !== "ok") return fail(`could not edit + save the notebook: ${editResult}`);
     // Give the Drive write a moment to flush before reloading.
     await page.waitForTimeout(2000);
