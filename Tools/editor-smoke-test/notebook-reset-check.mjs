@@ -130,6 +130,8 @@ async function seed() {
       requiredLanguagesCSV: "",
       requiredCapabilitiesCSV: "",
       assignmentNotebookFile: { name: "assignment.ipynb", mimeType: "application/json", buffer: starterNotebookBuffer() },
+      // Publish requires a solution notebook ("Solution notebook (.ipynb) is required").
+      solutionNotebookFile: { name: "solution.ipynb", mimeType: "application/json", buffer: starterNotebookBuffer() },
     },
     headers: { "x-csrf-token": csrf },
     maxRedirects: 0,
