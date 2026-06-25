@@ -133,10 +133,29 @@ async function seed() {
       maxRedirects: 0,
     }),
     [200, 302, 303]);
+  // Find the published assignment from the INSTRUCTOR dashboard (reliable — no
+  // student visibility gating) and OPEN it: createNewAssignmentRow publishes
+  // with visibility=.closed, so the student can't see it until it's opened. A
+  // no-suite assignment has validationStatus=nil, which setOpenState permits to
+  // open without a runner.
+  const instrDash = await instr.get("/instructor");
+  const instrHtml = await instrDash.text();
+  const publicID = (instrHtml.match(/\/instructor\/([A-Za-z0-9]+)\/edit/) || [])[1];
+  const setupID =
+    (instrHtml.match(/\/instructor\/setup\/([A-Za-z0-9_-]+)\/delete/) || [])[1]
+    || (instrHtml.match(/\/testsetups\/([A-Za-z0-9_-]+)\//) || [])[1];
+  if (!publicID || !setupID) {
+    throw new Error(`could not find the published assignment on /instructor (publicID=${publicID}, setupID=${setupID}):\n` + instrHtml.slice(0, 2500));
+  }
+  csrf = await csrfFrom(instr, "/instructor");
+  await expectOK("open assignment",
+    instr.post(`/instructor/${publicID}/open`, { form: { _csrf: csrf }, headers: { "x-csrf-token": csrf }, maxRedirects: 0 }),
+    [302, 303]);
   await instr.dispose();
 
   // Student registers + logs in; an auto-enroll course enrolls them on the next
-  // authenticated course-state resolution.
+  // authenticated course-state resolution. They reach the now-open assignment
+  // directly at /testsetups/:setupID/notebook (no dashboard scraping needed).
   const stud = await pwRequest.newContext({ baseURL });
   csrf = await csrfFrom(stud, "/register");
   await expectOK("register student",
@@ -146,32 +165,9 @@ async function seed() {
   await expectOK("login student",
     stud.post("/login", { form: { username: STUDENT.username, password: STUDENT.password, _csrf: csrf }, maxRedirects: 0 }),
     [200, 302, 303]);
-
-  // Find the assignment's notebook URL from the student dashboard (triggers
-  // auto-enrollment as a side effect of resolving course state).
-  const dash = await stud.get("/");
-  const dashHtml = await dash.text();
-  // The dashboard row carries the reset form (action=/testsetups/:id/reset-notebook,
-  // rendered when isOpen && hasNotebook), the edit link (notebookURL), and the
-  // upload link (submitURL) — grab the setupID from any /testsetups/:id/<verb>.
-  const setupIDFrom = (html) =>
-    (html.match(/\/testsetups\/([A-Za-z0-9_-]+)\/(?:reset-notebook|notebook|submit)/) || [])[1];
-  let setupID = setupIDFrom(dashHtml);
-  if (!setupID) {
-    // Fall back: follow the vanity assignment link (case-insensitive course code),
-    // whose notebook page carries the setupID (data-setup-id / its own links).
-    const slugLink = (dashHtml.match(new RegExp(`/${COURSE.code}/[A-Za-z0-9\\-]+`, "i")) || [])[0];
-    if (slugLink) {
-      const a = await stud.get(slugLink);
-      const aHtml = await a.text();
-      setupID = setupIDFrom(aHtml)
-        || (aHtml.match(/data-setup-id=['"]([A-Za-z0-9_-]+)['"]/) || [])[1]
-        || (a.url().match(/\/testsetups\/([A-Za-z0-9_-]+)/) || [])[1];
-    }
-  }
-  if (!setupID) {
-    throw new Error("could not locate the published assignment's setupID from the student dashboard:\n" + dashHtml.slice(0, 2500));
-  }
+  // Resolve course state once so the auto-enroll commits before the student
+  // hits the assignment gate.
+  await stud.get("/");
   const storageState = await stud.storageState();
   await stud.dispose();
   return { setupID, storageState };
