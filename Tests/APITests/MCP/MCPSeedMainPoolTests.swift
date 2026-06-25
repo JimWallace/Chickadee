@@ -66,8 +66,7 @@ import Vapor
                             variables: [],
                             expressions: [PersonalizationExpression(name: "x", expression: "seed % 2")]),
                         testSetupsDirectory: app.testSetupsDirectory,
-                        on: app.db,
-                        seedDB: seedlessApp.db)
+                        pools: .init(content: app.db, seed: seedlessApp.db))
                 }
 
                 let leaked = try await APIAssignmentPersonalizationSeed.query(on: app.db).count()

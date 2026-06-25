@@ -173,6 +173,14 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // existing Cache-Control.
     app.middleware.use(StaticAssetCacheMiddleware())
     app.middleware.use(RunnerWasmCacheMiddleware())
+    // Cache discipline for the editor bundle assets that ride the SLOW path
+    // (FileMiddleware) rather than EditorAssetFastPathMiddleware — notably
+    // /jupyterlite/jupyter-lite.json and the lab/notebooks/repl entry HTML, whose
+    // stable filenames hide mutable content. Stamps `no-cache` so a deploy
+    // propagates on the next load; immutable only for content-hashed chunks. The
+    // fast path stamps the build/extensions/pyodide trees itself (it
+    // short-circuits before this runs); this covers what falls through to it.
+    app.middleware.use(BundleAssetCacheMiddleware())
     // Cross-origin isolation for the notebook editor (unconditional). This
     // middleware runs BEFORE FileMiddleware so it can decorate the SLOW-PATH
     // /jupyterlite/* responses FileMiddleware serves (the editor HTML documents —

@@ -38,6 +38,21 @@ enum GlobalInputsService {
         let expressions: [PersonalizationExpression]
     }
 
+    /// The two database pools `apply` needs, bundled to keep the entry point
+    /// within the parameter-count budget (the same reason `Inputs` exists).
+    /// They are one pool for web callers; the MCP least-privilege path splits
+    /// them:
+    /// - `content`: the pool for content reads/writes (the manifest re-render).
+    ///   On the MCP path this is the least-privilege `.mcp` pool.
+    /// - `seed`: the pool for the acting-user seed bookkeeping
+    ///   (`assignment_personalization_seeds`). On the MCP path this MUST be the
+    ///   owner pool (`ToolContext.mainDB`), because the `chickadee_mcp` role is
+    ///   denied that table; web callers pass `req.db` for both.
+    struct Pools {
+        let content: any Database
+        let seed: any Database
+    }
+
     /// The currently-persisted global inputs for a setup (no validation).
     static func current(setup: APITestSetup) throws -> Result {
         let manifest = try decoded(setup)
@@ -55,20 +70,14 @@ enum GlobalInputsService {
     ///   still run.
     /// - `testSetupsDirectory`: the app's test-setups root, used to resolve the
     ///   per-setup `shared/<id>/` support-files directory for expression eval.
-    /// - `db`: the pool for content reads/writes (the manifest re-render). On
-    ///   the MCP path this is the least-privilege `.mcp` pool.
-    /// - `seedDB`: the pool for the acting-user seed bookkeeping
-    ///   (`assignment_personalization_seeds`). On the MCP path this MUST be the
-    ///   owner pool (`ToolContext.mainDB`), because the `chickadee_mcp` role is
-    ///   denied that table; web callers pass `req.db` (same as `db`).
+    /// - `pools`: the content + seed database pools (see `Pools`).
     static func apply(
         setup: APITestSetup,
         assignment: APIAssignment,
         actingUserID: UUID?,
         inputs: Inputs,
         testSetupsDirectory: String,
-        on db: any Database,
-        seedDB: any Database
+        pools: Pools
     ) async throws -> Result {
         let manifest = try decoded(setup)
 
@@ -80,15 +89,15 @@ enum GlobalInputsService {
         // 3. Starter-notebook `{{undeclared}}` scan.
         try validateStarterNotebookPlaceholders(seenNames: seenNames, manifest: manifest, setup: setup)
         // 4. Save-time eval check against the acting user's own seed. The seed
-        // lookup/insert runs on `seedDB` (the owner pool on the MCP path), not
-        // the content `db`, so it never needs a grant on the `.mcp` role.
+        // lookup/insert runs on `pools.seed` (the owner pool on the MCP path),
+        // not the content pool, so it never needs a grant on the `.mcp` role.
         try await evaluateForActingSeed(
             actingUserID: actingUserID,
             assignment: assignment,
             manifest: manifest,
             inputs: inputs,
             testSetupsDirectory: testSetupsDirectory,
-            seedDB: seedDB)
+            seedDB: pools.seed)
 
         // 5. Re-render through `applyPatternFamilies` so generated tests and raw
         // scripts pick up the new literal values.  Expressions flow through
@@ -101,7 +110,7 @@ enum GlobalInputsService {
             sections: manifest.sections,
             globalVariables: inputs.variables,
             globalExpressions: inputs.expressions,
-            on: db)
+            on: pools.content)
 
         // 6. Re-load the persisted manifest so the response reflects reconciled state.
         return try current(setup: setup)
