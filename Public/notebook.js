@@ -1486,6 +1486,17 @@
 
             const contents = app.serviceManager && app.serviceManager.contents;
 
+            // 0.8 @jupyterlite/contents.save() throws "Directory does not exist"
+            // unless the notebook's parent dir is a materialized *directory* entry
+            // in the IndexedDB Drive (0.7.x auto-created it; the server-side dir our
+            // contents route serves is NOT consulted by save()'s local
+            // this.get(dirname) check). Our working copies are nested under
+            // users/<uid>/<setup>/, which nothing creates client-side — so create
+            // each ancestor first, satisfying the guard for both the seed save below
+            // and the editor's own Ctrl-S. Frontend analog of the kernel-side
+            // os.chdir/makedirs fix (scripts/patch-pyodide-kernel.py).
+            await ensureDriveParentDirectories(contents, lockedNotebookPath);
+
             // Preservation logic: if the browser already has the notebook in
             // IndexedDB AND the server hasn't overwritten it since we last
             // saw it, keep the local version — that's the student's
@@ -1607,6 +1618,35 @@
             // directly, so there's nothing to revert.
             reloadOpenDoc: !!hasLocalContent && !!serverIsNewer,
         };
+    }
+
+    // Ensure every ancestor directory of `notebookPath` exists as a directory
+    // entry in JupyterLite's IndexedDB contents Drive. Idempotent (skips dirs
+    // that already exist) and fail-safe (any error swallowed; a genuine failure
+    // surfaces on the seed save). Walks root→leaf so each newUntitled's parent is
+    // already materialized; uses newUntitled+rename because BrowserDrive has no
+    // public "create named directory" call and save(dir,{type:'directory'}) would
+    // hit the same parent-exists guard. 0.8 added that guard; harmless on 0.7.x.
+    async function ensureDriveParentDirectories(contents, notebookPath) {
+        if (!contents || typeof contents.get !== 'function' || !notebookPath) return;
+        const parts = String(notebookPath).split('/').slice(0, -1).filter(Boolean);  // strip filename
+        let prefix = '';
+        for (const name of parts) {
+            const parent = prefix;                      // '' = Drive root
+            prefix = prefix ? `${prefix}/${name}` : name;
+            try {
+                const existing = await contents.get(prefix, { content: false }).catch(() => null);
+                if (existing && existing.type === 'directory') continue;  // already present
+            } catch (_) { /* fall through to create */ }
+            try {
+                const tmp = (typeof contents.newUntitled === 'function')
+                    ? await contents.newUntitled({ path: parent, type: 'directory' })
+                    : null;
+                if (tmp && tmp.path !== prefix && typeof contents.rename === 'function') {
+                    await contents.rename(tmp.path, prefix);
+                }
+            } catch (_) { /* best-effort; the seed save reports a genuine failure */ }
+        }
     }
 
     async function waitForJupyterApp(timeoutMs) {
@@ -2229,6 +2269,7 @@
             shouldForceReseed,
             reseedPlan,
             handleKernelDiagMessage,
+            ensureDriveParentDirectories,
         };
     }
 })();

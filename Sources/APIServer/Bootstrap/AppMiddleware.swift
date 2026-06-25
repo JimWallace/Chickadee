@@ -188,6 +188,13 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // path above isolates the vendored asset trees it serves itself, and
     // COEPMiddleware (after FileMiddleware) covers the dynamic notebook page.
     app.middleware.use(NotebookAssetIsolationMiddleware(enabled: true))
+    // Inject the `exposeAppInBrowser` PageConfig flag into the served JupyterLite
+    // jupyter-lite.json configs (kept OUT of the verified bundle — see the
+    // middleware). Runs just before FileMiddleware so it intercepts the static
+    // config fetch; the cache + isolation middlewares above still decorate its
+    // response on the way back.
+    app.middleware.use(
+        JupyterLiteConfigFlagMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware(isolateNotebook: true))
 }
