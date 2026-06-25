@@ -77,8 +77,7 @@ import Vapor
                     ],
                     expressions: []),
                 testSetupsDirectory: app.testSetupsDirectory,
-                on: app.db,
-                seedDB: app.db)
+                pools: .init(content: app.db, seed: app.db))
 
             #expect(result.variables.contains { $0.name == "fortunes" })
 
