@@ -20,7 +20,11 @@
 //
 // History: isolation was gated behind `NOTEBOOK_CROSS_ORIGIN_ISOLATION` while
 // the editor was verified to boot under COEP, because COEP on the editor page
-// had broken the iframe before (#574). It is now unconditional: the editor's
+// had broken the iframe before (#574). It is now applied to every engine EXCEPT
+// WebKit (Safari/iOS), which is served NON-isolated so its kernel uses the
+// comlink transport — the SharedArrayBuffer/`coincident` path deadlocks on
+// WebKit (see EditorBrowserEngine). Do NOT make this unconditional again without
+// re-breaking Safari. For the isolated engines the editor's
 // SharedArrayBuffer path is verified end-to-end by the editor-smoke harness
 // (Tools/editor-smoke-test), and SAB removes the kernel's dependence on the
 // service worker for synchronous stdin/Drive — see
@@ -43,6 +47,15 @@ struct COEPMiddleware: AsyncMiddleware {
     ) async throws -> Response {
         let response = try await next.respond(to: request)
         guard needsCOEP(path: request.url.path) else { return response }
+        // The editor's cross-origin isolation now varies by engine — WebKit gets
+        // the non-isolated comlink + service-worker path (see EditorBrowserEngine)
+        // — so any shared cache must key these responses on the User-Agent.
+        response.headers.add(name: "Vary", value: "User-Agent")
+        // WebKit deadlocks on the SharedArrayBuffer/`coincident` kernel transport,
+        // so it must NOT be cross-origin isolated. Leaving COEP off makes
+        // `crossOriginIsolated` false in the iframe and the kernel falls back to
+        // `comlink`; Chrome/Edge/Firefox keep the isolated SharedArrayBuffer path.
+        guard !EditorBrowserEngine.isWebKit(request) else { return response }
         response.headers.replaceOrAdd(
             name: "Cross-Origin-Opener-Policy",
             value: "same-origin"

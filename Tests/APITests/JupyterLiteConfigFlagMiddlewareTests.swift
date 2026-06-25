@@ -38,6 +38,10 @@ import VaporTesting
             ),
             ("jupyterlite/weird/jupyter-lite.json", #"{"no-config-here":true}"#),
             ("jupyterlite/other.json", #"{"jupyter-config-data":{"x":1}}"#),
+            (
+                "jupyterlite/sw/jupyter-lite.json",
+                #"{"jupyter-config-data":{"disabledExtensions":["@jupyterlite/application-extension:service-worker-manager"]}}"#
+            ),
         ]
         for (relativePath, contents) in fixtures {
             let absolute = publicDir + relativePath
@@ -109,6 +113,46 @@ import VaporTesting
             try await app.testing().test(.GET, "/jupyterlite/other.json") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string.contains("exposeAppInBrowser") == false)
+            }
+        }
+    }
+
+    // MARK: - WebKit re-enables the service worker (its comlink kernel needs it)
+
+    private static let safariUA =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+        + "(KHTML, like Gecko) Version/18.2 Safari/605.1.15"
+    private static let chromeUA =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        + "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+
+    @Test func webKitRequestEnablesTheServiceWorker() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testing().test(
+                .GET, "/jupyterlite/sw/jupyter-lite.json",
+                headers: ["User-Agent": Self.safariUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                let disabled = self.configData(res)["disabledExtensions"] as? [String] ?? []
+                #expect(
+                    !disabled.contains(JupyterLiteConfigFlagMiddleware.serviceWorkerManagerExtension),
+                    "WebKit must re-enable the SW by removing its manager from disabledExtensions")
+                #expect(res.headers["Vary"].contains { $0.contains("User-Agent") })
+            }
+        }
+    }
+
+    @Test func nonWebKitKeepsTheServiceWorkerDisabled() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testing().test(
+                .GET, "/jupyterlite/sw/jupyter-lite.json",
+                headers: ["User-Agent": Self.chromeUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                let disabled = self.configData(res)["disabledExtensions"] as? [String] ?? []
+                #expect(
+                    disabled.contains(JupyterLiteConfigFlagMiddleware.serviceWorkerManagerExtension),
+                    "Chrome keeps the SAB-only path — the SW manager stays disabled")
             }
         }
     }

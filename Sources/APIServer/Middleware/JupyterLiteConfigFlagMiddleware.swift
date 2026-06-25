@@ -28,6 +28,12 @@ import Foundation
 import Vapor
 
 struct JupyterLiteConfigFlagMiddleware: AsyncMiddleware {
+    /// The JupyterLite extension that registers the service worker. Kept disabled
+    /// in the checked-in bundle (SharedArrayBuffer-only); re-enabled per-request
+    /// for WebKit, whose comlink kernel needs the SW for synchronous stdin/Drive.
+    static let serviceWorkerManagerExtension =
+        "@jupyterlite/application-extension:service-worker-manager"
+
     private let publicDirectory: String
 
     init(publicDirectory: String) {
@@ -53,17 +59,49 @@ struct JupyterLiteConfigFlagMiddleware: AsyncMiddleware {
             return try await next.respond(to: request)
         }
 
-        guard configData["exposeAppInBrowser"] == nil else {
-            return try await next.respond(to: request)  // already set; nothing to do
-        }
-        configData["exposeAppInBrowser"] = "true"
-        json["jupyter-config-data"] = configData
+        var changed = false
 
+        // (1) exposeAppInBrowser — makes `window.jupyterapp` reachable in the
+        //     editor iframe so the notebook page can create the per-student Drive
+        //     directory before save (JupyterLite 0.8 throws otherwise).
+        if configData["exposeAppInBrowser"] == nil {
+            configData["exposeAppInBrowser"] = "true"
+            changed = true
+        }
+
+        // (2) WebKit transport — re-enable the JupyterLite service worker (remove
+        //     its manager from `disabledExtensions`) so the non-isolated comlink
+        //     kernel has a synchronous stdin/Drive path. Chrome/Edge/Firefox keep
+        //     it disabled (SharedArrayBuffer carries sync). See EditorBrowserEngine.
+        if EditorBrowserEngine.isWebKit(request),
+            var disabled = configData["disabledExtensions"] as? [String],
+            let idx = disabled.firstIndex(of: Self.serviceWorkerManagerExtension)
+        {
+            disabled.remove(at: idx)
+            configData["disabledExtensions"] = disabled
+            changed = true
+        }
+
+        // The served config now varies by engine (SW enablement), so every
+        // response for this path must mark itself as varying on the User-Agent —
+        // even when nothing changed for this request — or a shared cache could
+        // hand a WebKit body to Chrome (or vice versa).
+        guard changed else {
+            let response = try await next.respond(to: request)
+            response.headers.add(name: "Vary", value: "User-Agent")
+            return response
+        }
+
+        json["jupyter-config-data"] = configData
         guard let body = try? JSONSerialization.data(withJSONObject: json) else {
-            return try await next.respond(to: request)
+            let response = try await next.respond(to: request)
+            response.headers.add(name: "Vary", value: "User-Agent")
+            return response
         }
         let response = Response(status: .ok, body: .init(data: body))
         response.headers.contentType = .json
+        response.headers.replaceOrAdd(name: "Cache-Control", value: "no-cache")
+        response.headers.add(name: "Vary", value: "User-Agent")
         return response
     }
 }
