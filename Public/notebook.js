@@ -1102,19 +1102,82 @@
         return looksLikeNotebook(notebook) ? notebook : null;
     }
 
+    // ── Editor command bridge (jupyter-iframe-commands) ──────────────
+    // Preferred channel for driving JupyterLab commands in the editor iframe.
+    // The `jupyter-iframe-commands` labextension (federated into the bundle)
+    // exposes the command registry over postMessage/comlink, and the vendored
+    // host (Public/vendor/iframe-commands-host.js) wraps it from this frame.
+    // This works even where `frame.contentWindow.jupyterapp` is not reachable:
+    // cross-origin-isolated WebKit can put the same-origin iframe in another
+    // process, making that JS-global poke flaky/absent (the reason the bridge
+    // exists). The poke is kept as a fallback.
+    //
+    // Created + readiness-awaited once, then cached; any build failure
+    // (missing/old extension, import error, never-ready) resolves to null so
+    // callers transparently fall back.
+    let _commandBridgePromise = null;
+    function getCommandBridge() {
+        if (_commandBridgePromise) return _commandBridgePromise;
+        _commandBridgePromise = (async () => {
+            try {
+                const mod = await import('/vendor/iframe-commands-host.js');
+                if (!mod || typeof mod.createBridge !== 'function') return null;
+                const bridge = mod.createBridge({ iframeId: 'jl-frame' });
+                // Bound the readiness wait so a never-ready extension can't pin
+                // the cached promise pending forever.
+                const ready = await Promise.race([
+                    Promise.resolve(bridge.ready).then(() => true).catch(() => false),
+                    new Promise((resolve) => setTimeout(() => resolve(false), 10000)),
+                ]);
+                if (!ready) { _commandBridgePromise = null; return null; }
+                return bridge;
+            } catch (_) {
+                _commandBridgePromise = null;
+                return null;
+            }
+        })();
+        return _commandBridgePromise;
+    }
+
+    // Execute a JupyterLab command in the editor, bridge-first with a
+    // same-origin `jupyterapp` fallback. Best-effort; never throws; returns
+    // true if either channel ran the command. A not-yet-ready bridge is raced
+    // against a short budget so a cold bridge never stalls a save — it keeps
+    // warming in the background for the next call.
+    async function executeEditorCommand(command, args) {
+        try {
+            const bridge = await Promise.race([
+                getCommandBridge(),
+                new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
+            ]);
+            if (bridge) {
+                await bridge.execute(command, args);
+                return true;
+            }
+        } catch (_) {
+            // Bridge failed for this call; fall back to the direct poke.
+        }
+        try {
+            const app = frame.contentWindow && frame.contentWindow.jupyterapp;
+            if (app && app.commands && typeof app.commands.execute === 'function') {
+                await app.commands.execute(command, args);
+                return true;
+            }
+        } catch (_) {
+            // Best-effort only.
+        }
+        return false;
+    }
+
     // Exposed for idle-logout.js: flush the open notebook to JupyterLite's
     // storage before the inactivity watchdog signs the user out, so unsaved
     // cells survive. Best-effort and read-only-aware; never throws.
     window.chickadeeSaveNotebook = async function () {
         if (readOnly) return;
         try {
-            const childWindow = frame.contentWindow;
-            const app = childWindow && childWindow.jupyterapp;
-            if (app && app.commands && typeof app.commands.execute === 'function') {
-                try { await app.commands.execute('docmanager:save'); } catch (_) {}
-                try { await app.commands.execute('docmanager:save-all'); } catch (_) {}
-                await delay(150);
-            }
+            await executeEditorCommand('docmanager:save');
+            await executeEditorCommand('docmanager:save-all');
+            await delay(150);
         } catch (_) {
             // Saving is best-effort; swallow everything.
         }
@@ -1122,17 +1185,18 @@
 
     async function readNotebookFromJupyterFrame() {
         try {
+            // Best effort: flush edits to the notebook model/context before
+            // reading. Bridge-first (reliable under WebKit isolation), falling
+            // back to the jupyterapp poke. The deep model read below still needs
+            // direct `app` access, which comlink can't proxy.
+            await executeEditorCommand('docmanager:save');
+            await executeEditorCommand('docmanager:save-all');
+            // Allow save handlers to settle before reading back from contents.
+            await delay(125);
+
             const childWindow = frame.contentWindow;
             const app = childWindow && childWindow.jupyterapp;
             if (!app || !app.shell) return null;
-
-            // Best effort: flush edits to the notebook model/context before reading.
-            if (app.commands && typeof app.commands.execute === 'function') {
-                try { await app.commands.execute('docmanager:save'); } catch (_) {}
-                try { await app.commands.execute('docmanager:save-all'); } catch (_) {}
-            }
-            // Allow save handlers to settle before reading back from contents.
-            await delay(125);
 
             const widget = notebookWidgetFromShell(app.shell, lockedNotebookPath);
             const modelNotebook = notebookFromWidget(widget);
