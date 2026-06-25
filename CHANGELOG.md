@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.536] - 2026-06-25
+
+### Added
+
+- **Device-memory resilience for the in-browser notebook editor.** Two
+  complementary safeguards for low-memory / Safari devices, where the Pyodide
+  kernel can exhaust WebAssembly memory:
+  - **Proactive warning** — on a low-RAM device (`navigator.deviceMemory` ≤ 2 GB,
+    where the browser exposes it; Chromium does, Safari/Firefox omit it for
+    privacy), a non-blocking, dismissible banner suggests switching to a
+    laptop/desktop. The editor still loads normally.
+  - **Reactive recovery** — a fatal kernel crash (the upstream WebKit "Out of
+    bounds memory access", or a genuine WASM out-of-memory abort) is now caught
+    mid-session by the in-iframe collector and degrades gracefully to the
+    existing `.ipynb`-upload fallback with a memory-specific message, instead of
+    leaving a silently-wedged cell.
+  Both paths emit a diagnostic (`device_warning` / `wasm_crash`) so the
+  instructor dashboard surfaces the real low-memory-device and kernel-crash
+  rates. No always-on editor behaviour changes on healthy devices.
+
+
+## [0.4.535] - 2026-06-25
+
+### Changed
+
+- **Editor exec-probe now classifies the upstream WebKit WASM crash separately
+  from a real deadlock.** The `editor-exec-probe` diagnostic (WebKit leg) was
+  intermittently red on a fatal Safari WASM crash — `RuntimeError: Out of bounds
+  memory access (evaluating '__pyproxy_apply')` — which is an upstream WebKit
+  engine bug ([WebKit #286266](https://bugs.webkit.org/show_bug.cgi?id=286266)),
+  not a Chickadee regression and not fixable in our JS. The probe now (1)
+  relaunches a **fresh browser per iteration** so a single WebKit process can't
+  accumulate WASM/TextDecoder state across back-to-back kernel boots and inflate
+  the crash rate above a real one-kernel-per-session student, and (2) tags a hang
+  caused by the WebKit crash as `webkitWasmCrash` and reports it without failing
+  the leg — only a genuine our-code post-idle `exec_hang` deadlock fails the
+  probe. Production telemetry corroborates that real Safari students rarely hit
+  the crash (the editor kernel-boot funnel is ~92% healthy on Safari/macOS).
+
+
 ## [0.4.534] - 2026-06-25
 
 ### Fixed

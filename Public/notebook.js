@@ -236,6 +236,15 @@
             if (d.kind === 'kernel_error' && d.source === 'exec_hang') {
                 recoverHungKernelOnce();
             }
+            // A fatal WASM/OOM crash (the kernel DIED — e.g. the upstream WebKit
+            // "Out of bounds memory access", or a genuine out-of-memory abort).
+            // The editor is now useless, so degrade gracefully: show the
+            // upload-fallback panel with a memory-specific message instead of
+            // leaving a silently-wedged cell. Independent of the telemetry cap so
+            // a breadcrumb flood can't gate it; showFailure() is idempotent.
+            if (d.kind === 'kernel_error' && d.source === 'wasm_crash' && failures.showFailure) {
+                failures.showFailure({ kind: 'wasm_crash', variant: 'memory', message: d.message });
+            }
             if (kernelDiagForwarded >= KERNEL_DIAG_MAX) return false;
             kernelDiagForwarded += 1;
             failures.reportEvent({
@@ -272,6 +281,12 @@
             }
             setStatus('error', 'In-browser editor unavailable — upload your notebook below.');
             return;
+        }
+        // Non-blocking proactive hint on low-RAM devices (Chromium-only signal).
+        // The editor still mounts — this just sets expectations before the kernel
+        // possibly runs out of memory mid-session.
+        if (result.lowMemory && failures && failures.showDeviceWarning) {
+            failures.showDeviceWarning({ deviceMemory: result.deviceMemory });
         }
         mountEditor();
     });
