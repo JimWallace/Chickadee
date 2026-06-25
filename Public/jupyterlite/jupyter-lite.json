@@ -15,6 +15,11 @@
         "extension": "./extension",
         "load": "static/remoteEntry.c6732262d69c5d22.js",
         "name": "@jupyterlite/pyodide-kernel-extension"
+      },
+      {
+        "extension": "./extension",
+        "load": "static/remoteEntry.a4977091f52be18e7851.js",
+        "name": "jupyter-iframe-commands"
       }
     ],
     "fileTypes": {

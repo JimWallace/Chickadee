@@ -1,0 +1,89 @@
+name: Notebook command-bridge probe
+
+# DIAGNOSTIC harness — NOT a required gate. Prototype probe for the
+# jupyter-iframe-commands command bridge (the supported replacement for
+# notebook.js's `frame.contentWindow.jupyterapp.commands` cross-frame poking).
+# On the real student notebook page it boots the editor, types an unsaved marker
+# into a cell, then — from the PARENT frame — builds the bridge against
+# iframe#jl-frame using the vendored jupyter-iframe-commands-host bundle, asserts
+# listCommands() RPCs back "docmanager:save", drives execute("docmanager:save"),
+# reloads, and asserts the bridge-driven save persisted. Proves both halves of
+# the bridge (the federated labextension inside the iframe + the host bundle in
+# the parent) work end-to-end on the JupyterLite 0.8 / Pyodide 314 stack BEFORE
+# we rewire notebook.js's production save path.
+#
+# Runs both engines (Chromium + WebKit). Not wired into branch protection — a
+# flaky bridge run must not block unrelated merges; it's a confidence signal for
+# the bridge prototype and an on-demand check.
+
+on:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: "Engine to drive (chromium | webkit | both)"
+        default: "both"
+  pull_request:
+    paths:
+      - "Tools/editor-smoke-test/**"
+      - ".github/workflows/notebook-bridge-probe.yml"
+      - "Public/vendor/iframe-commands-host.js"
+      - "Public/notebook*.js"
+      - "Public/jupyterlite/**"
+      - "Public/pyodide/**"
+      - "scripts/patch-pyodide-kernel.py"
+
+concurrency:
+  group: notebook-bridge-probe-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: ./.github/actions/restore-git-mtimes
+
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore build artifacts
+        uses: actions/cache/restore@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+
+      - name: Build chickadee-server
+        run: swift build --product chickadee-server
+
+      - name: Install Node, Playwright and the ${{ matrix.browser }} engine
+        working-directory: Tools/editor-smoke-test
+        run: |
+          set -eux
+          apt-get update -qq
+          apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
+          npm ci
+          npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Drive command-bridge probe (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-bridge-check.mjs
+        run: Tools/editor-smoke-test/run-smoke.sh

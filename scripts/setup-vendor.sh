@@ -113,6 +113,18 @@ npx esbuild codemirror-entry.js \
     --minify \
     --outfile="$public_vendor/codemirror.js"
 
+# ── jupyter-iframe-commands host bridge ───────────────────────────────
+# The parent-frame half of the iframe command bridge (comlink folded in).
+# Pairs with the `jupyter-iframe-commands` labextension federated into the
+# JupyterLite bundle (Tools/jupyterlite/requirements.txt).
+echo "==> Bundling jupyter-iframe-commands host bridge via esbuild"
+npx esbuild iframe-commands-host-entry.js \
+    --bundle \
+    --format=esm \
+    --target=es2020 \
+    --minify \
+    --outfile="$public_vendor/iframe-commands-host.js"
+
 # Inject Chickadee's extra pure-Python wheels (nb_mypy + deps) that aren't in
 # the upstream Pyodide distribution, so a re-vendor never silently drops them.
 # Pinned + sha-verified; see Tools/vendor/pyodide-extra-packages.json.
