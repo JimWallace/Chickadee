@@ -256,6 +256,38 @@ async function editCellAndSave(page, jlFrame, marker) {
   return "ok";
 }
 
+// Diagnostic: from a page OR frame context, list IndexedDB databases and the
+// "JupyterLite Storage" files-store keys. Reveals whether the parent can see
+// the iframe's Drive DB and the exact key format the eviction must match.
+async function dumpDrive(ctx) {
+  return await ctx.evaluate(async () => {
+    const out = { dbs: [], filesKeys: null, err: null };
+    try {
+      const dbs = await indexedDB.databases();
+      out.dbs = dbs.map((d) => d.name).filter(Boolean);
+    } catch (e) { out.err = "databases(): " + (e && e.message || e); }
+    if (out.dbs.includes("JupyterLite Storage")) {
+      out.filesKeys = await new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => { if (!done) { done = true; resolve(v); } };
+        setTimeout(() => finish("(timeout)"), 4000);
+        try {
+          const req = indexedDB.open("JupyterLite Storage");
+          req.onerror = () => finish("(open error)");
+          req.onsuccess = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains("files")) { db.close(); return finish("(no files store)"); }
+            const kr = db.transaction("files", "readonly").objectStore("files").getAllKeys();
+            kr.onsuccess = () => { db.close(); finish((kr.result || []).map((k) => (typeof k === "object" ? JSON.stringify(k) : String(k)))); };
+            kr.onerror = () => { db.close(); finish("(getAllKeys error)"); };
+          };
+        } catch (e) { finish("(exception " + (e && e.message || e) + ")"); }
+      });
+    }
+    return out;
+  }).catch((e) => ({ err: "evaluate failed: " + (e && e.message || e) }));
+}
+
 async function main() {
   console.log(`Browser engine: ${browserName}`);
   console.log(`Seeding published assignment via ${baseURL} …`);
@@ -332,9 +364,15 @@ async function main() {
       .evaluate((m) => ((document.body && document.body.innerText) || "").includes(m), EDIT_MARKER)
       .catch(() => false);
     if (stillEdited) {
+      // Diagnose WHY the eviction didn't take: dump IndexedDB from both frames
+      // (does the parent see "JupyterLite Storage"? what are the files keys?).
+      const parentDrive = await dumpDrive(page);
+      const frameDrive = await dumpDrive(jlFrame);
       return fail(
         "the student's edit marker SURVIVED the reset — reset did not take effect " +
-          "(the 0.8 reseed regression: stale IndexedDB copy not replaced by the server starter)",
+          "(the 0.8 reseed regression: stale IndexedDB copy not replaced by the server starter)\n" +
+          "PARENT IndexedDB: " + JSON.stringify(parentDrive) + "\n" +
+          "IFRAME IndexedDB: " + JSON.stringify(frameDrive),
         (await bodyText(jlFrame)).slice(0, 300)
       );
     }
