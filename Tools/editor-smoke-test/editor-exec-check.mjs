@@ -18,6 +18,20 @@
 // data-status, and console errors, so a hung run is diagnostic rather than a
 // black box.
 //
+// TWO failure classes, classified and counted separately:
+//   - deadlock      — our-code post-idle exec_hang (the bug this probe hunts);
+//                     FAILS the leg (exit 1).
+//   - webkitWasmCrash — the upstream WebKit/Safari WASM engine crash
+//                     ("Out of bounds memory access" in __pyproxy_apply, WebKit
+//                     bug #286266). NOT a Chickadee regression and not fixable in
+//                     our JS; reported but does NOT fail the leg, so WebKit's own
+//                     bug can't flake this diagnostic.
+// Each iteration uses a FRESH browser: one WebKit process accumulates WASM /
+// TextDecoder state across back-to-back kernel boots, inflating the WebKit crash
+// rate well above a real student (one kernel per session). Fresh-per-run makes the
+// measured rate a true single-session figure — production telemetry corroborates
+// that real Safari students rarely hit it.
+//
 // DIAGNOSTIC harness — run via the `editor-exec-probe` workflow, deliberately NOT
 // wired into the required editor-smoke gate while we hunt the root cause, so an
 // intermittent hang can't flake the merge gate. Seeds through the real HTTP API
@@ -53,6 +67,15 @@ const IDLE_WAIT_MS = 90_000;
 // so polling for the latter detects execution, never the source.
 const EXEC_TOKEN = "CKEXEC=42";
 const NB_CELL_SOURCE = 'print("CKEXEC=%d" % (6 * 7))\n';
+
+// The fatal upstream WebKit/Safari WASM crash (WebKit bug #286266): Pyodide's
+// kernel dies mid-execute with "RuntimeError: Out of bounds memory access
+// (evaluating '__pyproxy_apply(...)')" (and the sibling "RangeError: Bad value").
+// It's a Safari WASM-engine defect, NOT a Chickadee regression and NOT fixable in
+// our JS — zero non-WebKit occurrences are reported upstream. We classify a hang
+// caused by it separately from a real (our-code) post-idle deadlock so the probe
+// stays honest: a pure-WebKit-crash run is reported but does NOT fail the leg.
+const WASM_CRASH_RE = /out of bounds memory access|Pyodide has suffered a fatal error|__pyproxy_apply|RangeError: Bad value/i;
 
 const STAMP = Date.now().toString(36);
 const INSTRUCTOR = { username: `xq_instr_${STAMP}`, password: "instructor-pw-123" };
@@ -181,7 +204,7 @@ async function probeOnce(browser, storageState, notebookURL) {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 200)); });
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
 
-  const result = { hung: true, ms: 0, status: null, note: "", diag: [], errors };
+  const result = { hung: true, wasmCrash: false, ms: 0, status: null, note: "", diag: [], errors };
   const readDiag = () => page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
   try {
     await page.goto(notebookURL, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS });
@@ -225,10 +248,14 @@ async function probeOnce(browser, storageState, notebookURL) {
     while (Date.now() - start < EXEC_BUDGET_MS) {
       const body = await jlFrame.evaluate(() => (document.body && document.body.innerText) || "").catch(() => "");
       if (body.includes(EXEC_TOKEN)) { ran = true; break; }
+      // Bail early on the upstream WebKit WASM crash rather than waiting out the
+      // full budget — the kernel is dead, the token will never appear.
+      if ((result.errors || []).some((e) => WASM_CRASH_RE.test(e))) { result.wasmCrash = true; break; }
       await page.waitForTimeout(500);
     }
     result.ms = Date.now() - start;
     result.hung = !ran;
+    if (!result.wasmCrash) result.wasmCrash = (result.errors || []).some((e) => WASM_CRASH_RE.test(e));
     result.status = await jlFrame.evaluate(() => {
       const ind = document.querySelector(".jp-Notebook-ExecutionIndicator[data-status]");
       return ind ? ind.getAttribute("data-status") : null;
@@ -254,17 +281,28 @@ async function main() {
     browserName === "chromium"
       ? { headless: true, args: ["--no-sandbox"], chromiumSandbox: false }
       : { headless: true };
-  const browser = await browserType.launch(launchOptions);
 
   let hangs = 0;
+  let wasmCrashes = 0;
+  let deadlocks = 0;
   const latencies = [];
   for (let i = 0; i < ITER; i++) {
-    const r = await probeOnce(browser, seeded.storageState, notebookURL);
+    // Fresh browser per iteration. A single WebKit process accumulates WASM /
+    // TextDecoder state across back-to-back Pyodide boots, which inflates the
+    // upstream WebKit crash rate far above a real student's one-kernel-per-
+    // session experience. Relaunching isolates each run so the measured rate
+    // reflects a single session (chromium is unaffected either way).
+    const browser = await browserType.launch(launchOptions);
+    let r;
+    try { r = await probeOnce(browser, seeded.storageState, notebookURL); }
+    finally { await browser.close().catch(() => {}); }
     if (r.hung) {
       hangs++;
+      if (r.wasmCrash) wasmCrashes++; else deadlocks++;
       const exec = (r.diag || []).find((d) => d.source === "exec_hang");
+      const tag = r.wasmCrash ? "WEBKIT-WASM-CRASH (upstream #286266)" : "HANG";
       console.log(
-        `  iter ${i + 1}/${ITER}: HANG${r.note ? " (" + r.note + ")" : ""} — ` +
+        `  iter ${i + 1}/${ITER}: ${tag}${r.note ? " (" + r.note + ")" : ""} — ` +
           `indicator=${r.status} waited=${r.ms}ms exec_hang=${exec ? exec.message : "none"}`
       );
       if (r.errors && r.errors.length) console.log(`    console: ${r.errors.slice(0, 4).join(" | ")}`);
@@ -273,11 +311,22 @@ async function main() {
       console.log(`  iter ${i + 1}/${ITER}: ok — ran in ${r.ms}ms (indicator=${r.status})`);
     }
   }
-  await browser.close();
 
   const avg = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
-  console.log(`EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ok=${ITER - hangs} avgRunMs=${avg}`);
-  process.exit(hangs > 0 ? 1 : 0);
+  console.log(
+    `EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ` +
+      `(deadlock=${deadlocks}, webkitWasmCrash=${wasmCrashes}) ok=${ITER - hangs} avgRunMs=${avg}`
+  );
+  if (wasmCrashes > 0) {
+    console.log(
+      `NOTE: ${wasmCrashes}/${ITER} run(s) hit the upstream WebKit/Safari WASM crash ` +
+        `(WebKit bug #286266: "Out of bounds memory access" in __pyproxy_apply) — not a Chickadee ` +
+        `regression, not fixable in our JS. Fresh-browser-per-run, so this is the true single-session rate.`
+    );
+  }
+  // Fail the leg ONLY for a real (our-code) post-idle deadlock; an upstream
+  // WebKit WASM crash is reported but must not flake this diagnostic.
+  process.exit(deadlocks > 0 ? 1 : 0);
 }
 
 main();
