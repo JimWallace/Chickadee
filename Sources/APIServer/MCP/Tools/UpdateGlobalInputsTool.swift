@@ -42,7 +42,10 @@ struct UpdateGlobalInputsTool: ContentTool {
         + "evaluated per-student against `seed`); both lists are replaced wholesale, not merged. "
         + "Names must be valid Python identifiers, unique across both lists and any section variable, "
         + "and `seed` is reserved. Every starter-notebook `{{placeholder}}` must match a declared name. "
-        + "Each expression is eval-checked against your own seed before saving, so typos are caught here."
+        + "Each expression is eval-checked against your own seed before saving, so typos are caught here. "
+        + "Prefer calling the auto-imported `solution.*` / support-module functions over re-implementing "
+        + "logic inline (e.g. `solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)`) — an inline copy "
+        + "can diverge from what the suite grades and mis-grade some seeds."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
