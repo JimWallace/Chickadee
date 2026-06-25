@@ -151,20 +151,26 @@ async function seed() {
   // auto-enrollment as a side effect of resolving course state).
   const dash = await stud.get("/");
   const dashHtml = await dash.text();
-  // Links look like /:courseCode/:slug or /testsetups/:id/... — grab a setupID.
-  let setupID = (dashHtml.match(/\/testsetups\/([0-9a-zA-Z]+)\/(?:notebook|submit)/) || [])[1];
+  // The dashboard row carries the reset form (action=/testsetups/:id/reset-notebook,
+  // rendered when isOpen && hasNotebook), the edit link (notebookURL), and the
+  // upload link (submitURL) — grab the setupID from any /testsetups/:id/<verb>.
+  const setupIDFrom = (html) =>
+    (html.match(/\/testsetups\/([A-Za-z0-9_-]+)\/(?:reset-notebook|notebook|submit)/) || [])[1];
+  let setupID = setupIDFrom(dashHtml);
   if (!setupID) {
-    // Fall back: follow the vanity assignment link, which redirects/links to the setup.
-    const slugLink = (dashHtml.match(new RegExp(`/${COURSE.code}/[A-Za-z0-9\\-]+`)) || [])[0];
+    // Fall back: follow the vanity assignment link (case-insensitive course code),
+    // whose notebook page carries the setupID (data-setup-id / its own links).
+    const slugLink = (dashHtml.match(new RegExp(`/${COURSE.code}/[A-Za-z0-9\\-]+`, "i")) || [])[0];
     if (slugLink) {
       const a = await stud.get(slugLink);
       const aHtml = await a.text();
-      setupID = (aHtml.match(/\/testsetups\/([0-9a-zA-Z]+)\/(?:notebook|submit)/) || [])[1]
-        || (a.url().match(/\/testsetups\/([0-9a-zA-Z]+)/) || [])[1];
+      setupID = setupIDFrom(aHtml)
+        || (aHtml.match(/data-setup-id=['"]([A-Za-z0-9_-]+)['"]/) || [])[1]
+        || (a.url().match(/\/testsetups\/([A-Za-z0-9_-]+)/) || [])[1];
     }
   }
   if (!setupID) {
-    throw new Error("could not locate the published assignment's setupID from the student dashboard:\n" + dashHtml.slice(0, 600));
+    throw new Error("could not locate the published assignment's setupID from the student dashboard:\n" + dashHtml.slice(0, 2500));
   }
   const storageState = await stud.storageState();
   await stud.dispose();
