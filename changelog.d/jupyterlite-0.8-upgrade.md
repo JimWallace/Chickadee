@@ -8,8 +8,9 @@
   `contentsAllJsonFile: "all.json"` (0.8 gates server-backed contents discovery
   on this PageConfig option) and switching the kernel's `pyodideUrl` to the ESM
   `pyodide.mjs` (0.8's kernel worker loads Pyodide via ESM `import()`, not the
-  UMD build). The editor boots, loads notebooks, and grades on 0.8; remaining
-  lifecycle hardening is tracked in
-  `docs/jupyterlite-0.8-integration-followups.md`. **This upgrade does not fix
-  the editor `exec_hang`** — that pre-existing bug survives the version jump and
-  is under separate investigation (`docs/exec-hang-investigation.md`).
+  UMD build). The kernel-startup `os.chdir` `exec_hang` fix (v0.4.526) applies
+  unchanged on 0.8 and is carried into the 0.8 kernel wheel here. The editor
+  boots, loads notebooks, and grades on 0.8; the remaining 0.8 blocker — an
+  intermittent browser-grading hang on Pyodide 314 — plus the rest of the
+  lifecycle hardening are tracked in
+  `docs/jupyterlite-0.8-integration-followups.md`.

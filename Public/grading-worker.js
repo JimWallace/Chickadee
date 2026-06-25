@@ -16,9 +16,16 @@
 // real setTimeout and, on timeout, calls `Worker.terminate()` to kill the
 // worker mid-execution, then spins up a fresh one for the next script.
 //
-// Why not SharedArrayBuffer interrupt:  that needs cross-origin isolation
-// (COOP/COEP), which the submit/validate pages don't carry (require-corp would
-// block CodeMirror / JupyterLite content).  Worker isolation needs no headers.
+// Why not SharedArrayBuffer interrupt:  worker isolation + Worker.terminate()
+// kills run-away code on ANY page regardless of headers, whereas a SAB interrupt
+// needs cross-origin isolation (COOP/COEP).  NOTE (corrected — the old comment
+// claimed "the submit/validate pages don't carry COOP/COEP", which is stale
+// since #574): the notebook editor page that hosts this grader
+// (/testsetups/:id/notebook) now IS cross-origin isolated, unconditionally
+// (Sources/APIServer/Middleware/COEPMiddleware.swift), so SharedArrayBuffer IS
+// available here — and the JupyterLite editor kernel runs a SECOND Pyodide
+// beside this one.  We keep worker-terminate anyway: it's the portable kill path
+// and avoids SAB-interrupt complexity.
 //
 // Protocol (postMessage from main thread → worker; every reply carries the
 // originating `id`):
@@ -83,7 +90,15 @@ self.onmessage = async function (e) {
     var id = msg.id;
     try {
         if (msg.type === 'init') {
+            var _initT0 = Date.now();
             var py = await getPyodide();
+            // Diagnostic breadcrumb (no `id`): tells the main thread the heavy
+            // loadPyodide() step finished, so a 314 init hang is localizable —
+            // if this never arrives the wedge is in Pyodide load; if it arrives
+            // but `env_configured` never does, the wedge is in env setup.
+            // browser-runner.js's GradingWorkerExecutor forwards these `phase`
+            // messages to the keepalive submit-phase telemetry.
+            self.postMessage({ type: 'phase', phase: 'pyodide_loaded', ms: Date.now() - _initT0 });
             _workDir = '/chickadee_work_' + Date.now();
             try { py.FS.mkdir(_workDir); } catch (err) { /* fresh worker; ignore */ }
             writeFilesToPyFS(py, _workDir, msg.files || {});
@@ -93,6 +108,7 @@ self.onmessage = async function (e) {
             // Add working directory to the path and wire builtins — the SAME
             // block browser-runner.js runs (drift-guarded).
             await py.runPythonAsync(envConfigPython(_workDir));
+            self.postMessage({ type: 'phase', phase: 'env_configured', ms: Date.now() - _initT0 });
             self.postMessage({ id: id, ok: true });
             return;
         }
