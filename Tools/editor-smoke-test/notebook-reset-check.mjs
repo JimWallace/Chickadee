@@ -151,27 +151,24 @@ async function seed() {
   // with visibility=.closed, so the student can't see it until it's opened. A
   // no-suite assignment has validationStatus=nil, which setOpenState permits to
   // open without a runner.
+  // Grab the assignment's publicID from the INSTRUCTOR dashboard and OPEN it:
+  // createNewAssignmentRow publishes with visibility=.closed, so the student
+  // can't see it until it's opened. A no-suite assignment has
+  // validationStatus=nil, which setOpenState permits to open without a runner.
+  // (setupID is NOT reliably on /instructor for a fresh closed row — the hidden
+  // testSetupID input only renders in submission/retest forms — so we read it
+  // from the student dashboard once the assignment is open.)
   const instrDash = await instr.get("/instructor");
   const instrHtml = await instrDash.text();
   const publicID = (instrHtml.match(/\/instructor\/([A-Za-z0-9]+)\/edit/) || [])[1];
-  // A published row exposes its setupID via a hidden `testSetupID` input; the
-  // /instructor/setup/:id/delete link only renders for UNPUBLISHED setups, so
-  // don't rely on it.
-  const setupID =
-    (instrHtml.match(/name=['"]testSetupID['"]\s+value=['"]([^'"]+)['"]/) || [])[1]
-    || (instrHtml.match(/value=['"]([^'"]+)['"]\s+name=['"]testSetupID['"]/) || [])[1]
-    || (instrHtml.match(/\/testsetups\/([A-Za-z0-9_-]+)\//) || [])[1];
-  if (!publicID || !setupID) {
+  if (!publicID) {
     const markers = {
       finalURL: instrDash.url(),
       hasNoAssignments: instrHtml.includes("No assignments"),
       hasEditLink: instrHtml.includes("/edit"),
-      hasTestSetupInput: instrHtml.includes("testSetupID"),
       len: instrHtml.length,
     };
-    throw new Error(
-      `could not find the published assignment on /instructor (publicID=${publicID}, setupID=${setupID}) ` +
-        `markers=${JSON.stringify(markers)}:\n` + instrHtml.slice(0, 3500));
+    throw new Error(`could not find publicID on /instructor markers=${JSON.stringify(markers)}:\n` + instrHtml.slice(0, 3500));
   }
   csrf = await csrfFrom(instr, "/instructor");
   await expectOK("open assignment",
@@ -191,9 +188,17 @@ async function seed() {
   await expectOK("login student",
     stud.post("/login", { form: { username: STUDENT.username, password: STUDENT.password, _csrf: csrf }, maxRedirects: 0 }),
     [200, 302, 303]);
-  // Resolve course state once so the auto-enroll commits before the student
-  // hits the assignment gate.
-  await stud.get("/");
+  // The assignment is now OPEN, so it appears on the student dashboard with the
+  // reset form (action=/testsetups/:id/reset-notebook, gated on isOpen &&
+  // hasNotebook) — read the setupID from there. The GET also commits the
+  // auto-enroll into the .auto course.
+  const dashHtml = await (await stud.get("/")).text();
+  const setupID = (dashHtml.match(/\/testsetups\/([A-Za-z0-9_-]+)\/(?:reset-notebook|notebook|submit)/) || [])[1];
+  if (!setupID) {
+    throw new Error(
+      "could not find setupID on the student dashboard after opening the assignment " +
+        `(hasNoAssignments=${dashHtml.includes("No assignments")}):\n` + dashHtml.slice(0, 3000));
+  }
   const storageState = await stud.storageState();
   await stud.dispose();
   return { setupID, storageState };
