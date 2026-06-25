@@ -223,6 +223,28 @@ async function main() {
     if (/ERR_BLOCKED|BlockedByResponse/i.test(why)) blocked.push(`${req.url()} — ${why}`);
   });
 
+  // Capture the grading submit-phase breadcrumbs the page POSTs to
+  // /api/v1/client-diagnostics (sent with keepalive, so they reach us even when
+  // the grading worker is wedged). On a grading hang these localize WHERE it
+  // stalled — the only window into an otherwise invisible worker-thread hang:
+  //   grading_init_start without grading_init_done  → stuck in worker init
+  //   pyodide_loaded without env_configured          → stuck after Pyodide load
+  //   grading_init_done without suite_done           → stuck in a test run
+  // See Public/browser-runner.js GradingWorkerExecutor + Public/grading-worker.js.
+  const gradingPhases = [];
+  page.on("request", (req) => {
+    try {
+      if (req.method() !== "POST" || !/\/api\/v1\/client-diagnostics/.test(req.url())) return;
+      const body = req.postData();
+      if (!body) return;
+      const j = JSON.parse(body);
+      if (j && (j.kind === "submit_phase" || j.kind === "submit_error")) {
+        gradingPhases.push(`${j.source}${j.message ? " [" + j.message + "]" : ""}`);
+      }
+    } catch (_) { /* best-effort telemetry */ }
+  });
+  const phaseTrail = () => `grading breadcrumbs: ${gradingPhases.join(" -> ") || "(none captured)"}`;
+
   const finish = async (code) => { await browser.close(); process.exit(code); };
 
   try {
@@ -352,7 +374,7 @@ async function main() {
       null, { timeout: SUBMIT_RESULT_MS }
     ).then(() => true).catch(() => false);
     if (blocked.length) return fail("blocked resources during submit/grading (a worker was COEP-blocked)", blocked.join("\n"));
-    if (!gotResults) return fail(`no grading result rendered within ${SUBMIT_RESULT_MS}ms`);
+    if (!gotResults) return fail(`no grading result rendered within ${SUBMIT_RESULT_MS}ms`, phaseTrail());
     const resultText = (await results.innerText()).replace(/\s+/g, " ").trim().slice(0, 200);
     console.log(`grading result rendered: "${resultText}"`);
     // The fixture's one public test (`print(...)`, exit 0) must PASS — a
@@ -363,6 +385,7 @@ async function main() {
     }
 
     console.log(`E2E PASS — real notebook page isolated, workers spawned, kernel booted, submit graded 1/1 (engine=${browserName})`);
+    console.log(phaseTrail());
     await finish(0);
   } catch (err) {
     return fail(`exception: ${(err && err.stack) || err}`, blocked.length ? blocked.join("\n") : undefined);
