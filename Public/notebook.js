@@ -1802,7 +1802,12 @@
             const style = doc.createElement('style');
             style.id = 'chickadee-notebook-lock-style';
             style.textContent = rules.join('\n');
-            doc.head.appendChild(style);
+            // doc.head can be null when the iframe document exists but <head>
+            // hasn't parsed yet — fall back to documentElement, else skip (this
+            // runs again on the next lifecycle tick). Guards CASE 4:
+            // "TypeError: Cannot read properties of null (reading 'appendChild')".
+            const styleParent = doc.head || doc.documentElement;
+            if (styleParent) styleParent.appendChild(style);
         }
 
         if (readOnly) {

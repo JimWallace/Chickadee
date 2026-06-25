@@ -12,3 +12,9 @@
   `SharedArrayBuffer` path. Gated by a single User-Agent classifier
   (`EditorBrowserEngine`) on both the server (isolation headers + service-worker
   config) and the client (`notebook.js` keeps the now-required service worker).
+- **Notebook editor no longer throws a `TypeError` applying the locked-UI style.**
+  `applyLockedNotebookUI` appended a `<style>` to the iframe's `document.head`
+  without guarding against a null `head` (which happens when the document exists
+  but `<head>` hasn't parsed yet), throwing "Cannot read properties of null
+  (reading 'appendChild')". It now falls back to `documentElement` and skips
+  cleanly if neither is ready.
