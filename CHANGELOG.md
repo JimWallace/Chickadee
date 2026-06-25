@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.530] - 2026-06-25
+
+### Changed
+
+- **Disabled nb_mypy in-editor type-checking.** The bundled nb_mypy type checker
+  registered an IPython `pre_run_cell` hook that ran a full, synchronous,
+  compiled-WASM `mypy.api.run(...)` before *every* cell on the kernel's single
+  thread — a real per-cell cost. It is now **disabled**
+  (`scripts/patch-pyodide-kernel.py` injects no activation; the nb_mypy / mypy /
+  astor wheels stay vended so re-enabling is a one-line change). In-editor mypy
+  type warnings are gone until type-checking is reworked as a non-blocking
+  background / language-server check that never runs on the cell-execute path.
+  On Python 3.14, nb_mypy's compiled `mypy` dependency is also an ABI risk, so it
+  stays off until both issues are addressed. The kernel-startup `os.chdir`
+  `exec_hang` fix (v0.4.526) is retained in the same activation block.
+  **Note:** nb_mypy was initially suspected as the cause of the editor
+  `exec_hang`, but a controlled test (stripped wheel, still hung) disproved that;
+  the hang was later root-caused to a kernel `os.chdir` into an unmounted Drive
+  folder and fixed in v0.4.526 (see `docs/exec-hang-investigation.md`).
+
+### Changed
+
+- **Upgraded the in-browser editor to JupyterLite 0.8 / Pyodide 314 / Python
+  3.14.** Bumped `jupyterlite`, `jupyterlite-core`, and
+  `jupyterlite-pyodide-kernel` to `0.8.0` and re-vendored Pyodide `314.0.0`
+  (Pyodide's new Python-aligned versioning; ~510 MB, down from ~1.4 GB on 0.28).
+  Two 0.8 integration changes were required and are in place:
+  `contentsAllJsonFile: "all.json"` (0.8 gates server-backed contents discovery
+  on this PageConfig option) and switching the kernel's `pyodideUrl` to the ESM
+  `pyodide.mjs` (0.8's kernel worker loads Pyodide via ESM `import()`, not the
+  UMD build). The kernel-startup `os.chdir` `exec_hang` fix (v0.4.526) applies
+  unchanged on 0.8 and is carried into the 0.8 kernel wheel here. The editor
+  boots, loads notebooks, and grades on 0.8; the remaining 0.8 blocker — an
+  intermittent browser-grading hang on Pyodide 314 — plus the rest of the
+  lifecycle hardening are tracked in
+  `docs/jupyterlite-0.8-integration-followups.md`.
+
+
 ## [0.4.529] - 2026-06-25
 
 ### Fixed
