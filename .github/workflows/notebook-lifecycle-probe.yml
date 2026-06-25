@@ -1,0 +1,85 @@
+name: Notebook lifecycle probe
+
+# DIAGNOSTIC harness — NOT a required gate. Drives the editor working-copy
+# lifecycle the required editor-smoke gate doesn't cover (it proves boot + a
+# Submit grade only): on the real student notebook page it edits a cell, saves
+# it to the Drive (Ctrl+S), reloads, and asserts the edit persisted — the
+# keep-local reseed path. Added to confirm the JupyterLite 0.8 / Pyodide 314
+# upgrade keeps the ContentsManager save / persist / reseed flow healthy (0.8
+# reworked the Drive wiring). (Student self-reset coverage is a follow-up: it
+# needs a full published-assignment seed, not the bare test setup used here.)
+#
+# Runs both engines (Chromium + WebKit). Not wired into branch protection — a
+# flaky editor-lifecycle run must not block unrelated merges; it's a confidence
+# signal for editor / bundle changes and an on-demand check.
+
+on:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: "Engine to drive (chromium | webkit | both)"
+        default: "both"
+  pull_request:
+    paths:
+      - "Tools/editor-smoke-test/**"
+      - ".github/workflows/notebook-lifecycle-probe.yml"
+      - "Public/notebook*.js"
+      - "Public/jupyterlite/**"
+      - "Public/pyodide/**"
+      - "scripts/patch-pyodide-kernel.py"
+
+concurrency:
+  group: notebook-lifecycle-probe-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: ./.github/actions/restore-git-mtimes
+
+      - name: Resolve toolchain cache key
+        id: toolchain
+        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore build artifacts
+        uses: actions/cache/restore@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+
+      - name: Build chickadee-server
+        run: swift build --product chickadee-server
+
+      - name: Install Node, Playwright and the ${{ matrix.browser }} engine
+        working-directory: Tools/editor-smoke-test
+        run: |
+          set -eux
+          apt-get update -qq
+          apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
+          npm ci
+          npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Drive notebook lifecycle (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-lifecycle-check.mjs
+        run: Tools/editor-smoke-test/run-smoke.sh
