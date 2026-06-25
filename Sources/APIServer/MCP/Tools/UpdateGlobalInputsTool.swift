@@ -45,7 +45,9 @@ struct UpdateGlobalInputsTool: ContentTool {
         + "Each expression is eval-checked against your own seed before saving, so typos are caught here. "
         + "Prefer calling the auto-imported `solution.*` / support-module functions over re-implementing "
         + "logic inline (e.g. `solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)`) — an inline copy "
-        + "can diverge from what the suite grades and mis-grade some seeds."
+        + "can diverge from what the suite grades and mis-grade some seeds. The auto-imported `solution` "
+        + "module is best-effort (skipped when the solution uses `{{ }}` placeholders); for those, share "
+        + "reusable logic via an uploaded `.py` support module that both the solution and the expression import."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([

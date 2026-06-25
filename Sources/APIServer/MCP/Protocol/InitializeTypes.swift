@@ -153,7 +153,10 @@ enum MCPServerInstructions {
         e.g. encoding a value the student will later invert — CALL it \
         (`solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)`) rather than re-implementing it \
         inline. An inline re-implementation can drift from the graded code on edge cases and silently \
-        mis-grade some seeds; the solution is the single source of truth, so keep it spec-correct and reuse it.
+        mis-grade some seeds; keep one source of truth and reuse it. The `solution` auto-import is \
+        best-effort — skipped when the solution uses `{{ }}` placeholders (which break its import); for \
+        those, share the function via an uploaded `.py` support module that both the solution and the \
+        expression import.
         - Achievements — instructor-authored awards shown to students, separate from grading. Each is a \
         scope (an `individual` per-student badge, a `classWide` collaborative goal, or a single-holder \
         competitive `record`), a list of conditions over a submission's signals (grade, attempts, \
