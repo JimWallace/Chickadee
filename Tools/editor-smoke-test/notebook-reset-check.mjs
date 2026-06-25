@@ -116,25 +116,34 @@ async function seed() {
   // skips the validation run, so no runner is needed. The instructor's single
   // enrolled course is auto-selected as active.
   csrf = await csrfFrom(instr, "/instructor/new");
-  // Require a redirect: a failed publish re-renders the form with 200, which we
-  // must NOT mistake for success.
-  await expectOK("publish assignment",
-    instr.post("/instructor/new/save", {
-      multipart: {
-        _csrf: csrf,
-        draftID: "",
-        assignmentName: ASSIGNMENT_NAME,
-        dueAt: "",
-        startsAt: "",
-        sectionID: "",
-        requiredLanguagesCSV: "",
-        requiredCapabilitiesCSV: "",
-        assignmentNotebookFile: { name: "assignment.ipynb", mimeType: "application/json", buffer: starterNotebookBuffer() },
-      },
-      headers: { "x-csrf-token": csrf },
-      maxRedirects: 0,
-    }),
-    [302, 303]);
+  // A successful publish redirects to exactly /instructor; a FAILED one
+  // redirects (also 302) back to /instructor/new?...&error=... — so inspect the
+  // redirect target, not just the status, and surface the error reason.
+  const pubRes = await instr.post("/instructor/new/save", {
+    multipart: {
+      _csrf: csrf,
+      draftID: "",
+      assignmentName: ASSIGNMENT_NAME,
+      dueAt: "",
+      startsAt: "",
+      sectionID: "",
+      requiredLanguagesCSV: "",
+      requiredCapabilitiesCSV: "",
+      assignmentNotebookFile: { name: "assignment.ipynb", mimeType: "application/json", buffer: starterNotebookBuffer() },
+    },
+    headers: { "x-csrf-token": csrf },
+    maxRedirects: 0,
+  });
+  if (![302, 303].includes(pubRes.status())) {
+    let body = ""; try { body = (await pubRes.text()).slice(0, 800); } catch { /* ignore */ }
+    throw new Error(`publish assignment: status ${pubRes.status()} (wanted a redirect)\n${body}`);
+  }
+  const pubLoc = pubRes.headers()["location"] || "";
+  if (pubLoc.startsWith("/instructor/new")) {
+    let errPage = "";
+    try { errPage = (await (await instr.get(pubLoc)).text()).slice(0, 1500); } catch { /* ignore */ }
+    throw new Error(`publish failed — redirected to ${decodeURIComponent(pubLoc)}\n${errPage}`);
+  }
   // Find the published assignment from the INSTRUCTOR dashboard (reliable — no
   // student visibility gating) and OPEN it: createNewAssignmentRow publishes
   // with visibility=.closed, so the student can't see it until it's opened. A
@@ -151,7 +160,16 @@ async function seed() {
     || (instrHtml.match(/value=['"]([^'"]+)['"]\s+name=['"]testSetupID['"]/) || [])[1]
     || (instrHtml.match(/\/testsetups\/([A-Za-z0-9_-]+)\//) || [])[1];
   if (!publicID || !setupID) {
-    throw new Error(`could not find the published assignment on /instructor (publicID=${publicID}, setupID=${setupID}):\n` + instrHtml.slice(0, 2500));
+    const markers = {
+      finalURL: instrDash.url(),
+      hasNoAssignments: instrHtml.includes("No assignments"),
+      hasEditLink: instrHtml.includes("/edit"),
+      hasTestSetupInput: instrHtml.includes("testSetupID"),
+      len: instrHtml.length,
+    };
+    throw new Error(
+      `could not find the published assignment on /instructor (publicID=${publicID}, setupID=${setupID}) ` +
+        `markers=${JSON.stringify(markers)}:\n` + instrHtml.slice(0, 3500));
   }
   csrf = await csrfFrom(instr, "/instructor");
   await expectOK("open assignment",
