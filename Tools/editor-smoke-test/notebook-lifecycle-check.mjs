@@ -6,23 +6,27 @@
 // the JupyterLite 0.8 / Pyodide 314 upgrade keeps the in-editor working-copy
 // flows healthy, since 0.8 changed the ContentsManager / Drive wiring.
 //
-// Flow (one student, one fresh browser context so IndexedDB persists across the
-// reloads):
+// Flow (one student, one fresh browser context so the IndexedDB Drive persists
+// across the reload):
 //
 //   1. Boot the editor; the seeded starter cell (marker CKSTARTER) renders from
 //      the Drive and the kernel reaches idle.
-//   2. SAVE round-trip: append a unique marker (CKSAVE_<stamp>) to cell 0 via the
-//      notebook model and run `docmanager:save`, then RELOAD the same context and
-//      assert the marker survived — i.e. the editor persisted the edit to the
-//      IndexedDB Drive and the reseed logic kept the local copy (the v0.4.154
-//      "don't wipe in-progress work" contract) on 0.8.
-//   3. RESET: POST the student self-reset (`/testsetups/:id/reset-notebook`,
-//      which overwrites the server working copy with the starter), RELOAD, and
-//      assert the editor reseeded — the save marker is gone and CKSTARTER is back
-//      (the server-newer reseed branch on 0.8).
+//   2. SAVE round-trip: focus cell 0, append a unique marker (CKSAVE_<stamp>),
+//      Ctrl+S to save to the Drive, then RELOAD the same context and assert the
+//      marker survived — i.e. the editor persisted the edit to the IndexedDB
+//      Drive and the reseed logic kept the local copy (the v0.4.154 "don't wipe
+//      in-progress work" contract) on 0.8. This is the in-editor working-copy
+//      surface the required gate (boot + a Submit grade) never touches.
 //
 // Seeds through the real HTTP API exactly like editor-exec-check.mjs / the
 // notebook-page check (instructor -> course -> browser test setup -> student).
+//
+// NOTE: the student self-reset (POST /testsetups/:id/reset-notebook) is NOT
+// exercised here — it requires an open *assignment* row
+// (requireOpenStudentAssignment), whereas this seed uploads a bare test setup
+// (submit/grade work on a bare setup; reset 404s). Covering reset means seeding
+// a full published assignment through the instructor draft flow — left as a
+// follow-up.
 //
 // Usage:  node notebook-lifecycle-check.mjs <baseURL>
 // Env:    SMOKE_BROWSER (chromium|webkit|firefox), SMOKE_KERNEL_MS.
@@ -291,49 +295,7 @@ async function main() {
     }
     console.log("step 2 ok: saved edit persisted across reload");
 
-    // ---- Step 3: reset, then reload and assert it reverted ---------------
-    let csrf;
-    try {
-      const html = await (await page.request.get(`${baseURL}/`)).text();
-      csrf = extractCsrf(html);
-    } catch (_) { /* fall through */ }
-    if (!csrf) return fail("could not obtain a CSRF token to POST the reset");
-    const resetRes = await page.request.post(`${baseURL}/testsetups/${seeded.setupID}/reset-notebook`, {
-      form: { _csrf: csrf },
-      headers: { "x-csrf-token": csrf },
-      maxRedirects: 0,
-    });
-    if (![200, 302, 303].includes(resetRes.status())) {
-      return fail(`reset-notebook POST failed: status ${resetRes.status()}`, (await resetRes.text()).slice(0, 300));
-    }
-    console.log("step 3: posted reset-notebook; reloading…");
-
-    await page.reload({ waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS });
-    jlFrame = await findEditorFrame(page);
-    if (!jlFrame) return fail("editor iframe never re-attached after reset+reload");
-    if (!(await waitForEditorWithSource(jlFrame, STARTER_MARKER))) {
-      return fail("editor did not re-render the starter after reset+reload", (await bodyText(jlFrame)).slice(0, 300));
-    }
-    // After reset the working copy is the starter again, so the editor must
-    // reseed and the save marker must be GONE. Poll briefly to let the
-    // server-newer reseed settle.
-    let reverted = false;
-    const deadline = Date.now() + 30_000;
-    while (Date.now() < deadline) {
-      const text = await bodyText(jlFrame);
-      if (text.includes(STARTER_MARKER) && !text.includes(SAVE_MARKER)) { reverted = true; break; }
-      await page.waitForTimeout(1000);
-    }
-    if (!reverted) {
-      return fail(
-        "reset did NOT revert the working copy — the save marker is still present after reset+reload " +
-          "(0.8 reset / server-newer reseed regressed)",
-        (await bodyText(jlFrame)).slice(0, 300)
-      );
-    }
-    console.log("step 3 ok: reset reverted the notebook to the starter");
-
-    console.log(`LIFECYCLE PASS — save round-trip + reset verified on the real notebook editor (engine=${browserName})`);
+    console.log(`LIFECYCLE PASS — editor save round-trip verified on the real 0.8 notebook editor (engine=${browserName})`);
     await finish(0);
   } catch (err) {
     return fail(`exception: ${(err && err.stack) || err}`);
