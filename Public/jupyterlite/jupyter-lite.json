@@ -6,9 +6,7 @@
     "baseUrl": "./",
     "contentsAllJsonFile": "all.json",
     "defaultKernelName": "python",
-    "disabledExtensions": [
-      "@jupyterlite/application-extension:service-worker-manager"
-    ],
+    "disabledExtensions": [],
     "faviconUrl": "./lab/favicon.ico",
     "federated_extensions": [
       {

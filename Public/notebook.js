@@ -378,9 +378,12 @@
     // JupyterLite in the editor-smoke harness first.
 
     function mountEditor() {
-        // Drop any stale, now-redundant JupyterLite service worker before booting
-        // (the SAB-only editor doesn't use it; a leftover one can break the boot).
-        cleanupRedundantServiceWorker();
+        // EXPERIMENT(comlink-sw): the JupyterLite service worker is intentionally
+        // re-enabled on this branch to carry synchronous stdin/Drive in the no-SAB
+        // (comlink) path, so DO NOT unregister it here — that would kill the very
+        // SW the kernel now depends on, in a guarded reload loop. DEV-ONLY.
+        // cleanupRedundantServiceWorker();
+        void cleanupRedundantServiceWorker;
 
         // The template renders the same URL into the iframe's src, so the
         // editor is already loading by the time the preflight resolves.

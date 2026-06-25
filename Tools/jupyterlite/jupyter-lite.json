@@ -3,9 +3,7 @@
     "appVersion": "0.8.0-chickadee.1",
     "defaultKernelName": "python",
     "fullLabextensionsUrl": "./extensions",
-    "disabledExtensions": [
-      "@jupyterlite/application-extension:service-worker-manager"
-    ],
+    "disabledExtensions": [],
     "federated_extensions": [
       {
         "name": "@jupyterlite/pyodide-kernel-extension",

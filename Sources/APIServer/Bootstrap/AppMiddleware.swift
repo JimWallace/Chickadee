@@ -99,10 +99,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // sees them.  It must therefore carry the cross-origin-isolation headers itself,
     // or the isolated editor page spawns a worker whose script lacks COEP and
     // Chrome blocks it (ERR_BLOCKED_BY_RESPONSE).
+    // EXPERIMENT(comlink-sw): isolation OFF so the editor iframe is NOT
+    // cross-origin isolated → the pyodide-kernel selects the `comlink` (async
+    // postMessage) worker instead of `coincident` (SAB + Atomics.wait), which
+    // deadlocks on WebKit. Paired with the re-enabled service worker (see
+    // jupyter-lite.json) that carries synchronous stdin/Drive in the no-SAB path.
+    // DEV-ONLY — do not merge; production fix is a per-WebKit gate.
     app.middleware.use(
         EditorAssetFastPathMiddleware(
             publicDirectory: app.directory.publicDirectory,
-            crossOriginIsolation: true))
+            crossOriginIsolation: false))
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
@@ -187,7 +193,9 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // repl/lab/notebooks index.html — which are NOT on the fast path); the fast
     // path above isolates the vendored asset trees it serves itself, and
     // COEPMiddleware (after FileMiddleware) covers the dynamic notebook page.
-    app.middleware.use(NotebookAssetIsolationMiddleware(enabled: true))
+    // EXPERIMENT(comlink-sw): isolation OFF (see EditorAssetFastPathMiddleware
+    // above). DEV-ONLY — do not merge.
+    app.middleware.use(NotebookAssetIsolationMiddleware(enabled: false))
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.middleware.use(COEPMiddleware(isolateNotebook: true))
+    app.middleware.use(COEPMiddleware(isolateNotebook: false))
 }

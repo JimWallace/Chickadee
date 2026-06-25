@@ -62,7 +62,12 @@ struct COEPMiddleware: AsyncMiddleware {
         // Instructor validate page — loads assignment-validate.js (Pyodide).
         // Matched by last path component to avoid affecting /instructor/:id/edit
         // and other instructor pages that load CDN resources.
-        if last == "validate" { return true }
+        // EXPERIMENT(comlink-sw): gated on isolateNotebook so the whole editor
+        // family de-isolates together when isolation is off — otherwise the
+        // validate document stays isolated while its worker chunks lose COEP,
+        // and Chrome blocks the worker (ERR_BLOCKED_BY_RESPONSE). Restore to an
+        // unconditional `return true` for production.
+        if isolateNotebook, last == "validate" { return true }
 
         // Student notebook editor page (/testsetups/:id/notebook), gated.
         if isolateNotebook, parts.count == 3, parts[0] == "testsetups", last == "notebook" {
