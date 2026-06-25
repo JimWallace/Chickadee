@@ -1,6 +1,13 @@
 jupyterlite==0.8.0
 jupyterlite-core==0.8.0
 jupyterlite-pyodide-kernel==0.8.0
+# jupyter-iframe-commands — labextension running INSIDE the editor iframe that
+# exposes the JupyterLab command registry to the parent frame over postMessage.
+# Paired with the vendored jupyter-iframe-commands-host bridge (Public/vendor/),
+# this replaces notebook.js's fragile `frame.contentWindow.jupyterapp.commands`
+# cross-frame poking with a supported API.  Federated into the bundle by
+# `jupyter lite build`; do not add to litePluginSettings (auto-discovered).
+jupyter-iframe-commands==0.3.0
 # R kernel (WebR) — BLOCKED: jupyterlite-webr 0.6.0 (latest) requires
 # jupyterlite-core<0.7, which conflicts with our 0.7.1 pin.  Additionally,
 # WebR requires COOP/COEP HTTP headers (Cross-Origin-Opener-Policy: same-origin
