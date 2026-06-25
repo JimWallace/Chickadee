@@ -84,4 +84,15 @@ if [ "$ready" -ne 1 ]; then
   exit 2
 fi
 
+# Run the check; on failure dump the server log tail BEFORE the EXIT trap wipes
+# the work dir, so a server-side 500 (e.g. a SQLite "database is locked") is
+# visible in CI instead of hiding behind the browser's generic "500" message.
+set +e
 node "${SMOKE_CHECK:-editor-check.mjs}" "http://127.0.0.1:$PORT"
+check_rc=$?
+set -e
+if [ "$check_rc" -ne 0 ]; then
+  echo "run-smoke: check failed (rc=$check_rc) — server log tail:" >&2
+  tail -40 "$LOG" >&2 || true
+fi
+exit "$check_rc"

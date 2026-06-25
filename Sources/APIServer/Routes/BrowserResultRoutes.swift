@@ -117,7 +117,12 @@ struct BrowserResultRoutes: RouteCollection {
             collectionJSON: collectionJSON,
             source: "browser"
         )
-        try await browserResult.save(on: req.db)
+        // Same transient-SQLite-lock guard as the submission insert above: this
+        // second write can also lose a race with a concurrent commit (session
+        // write / background monitor) and surface as a 500 otherwise.
+        try await withTransientDatabaseLockRetry(on: req.db) {
+            try await browserResult.save(on: req.db)
+        }
 
         req.logger.info("Browser result stored for \(subID)")
 
