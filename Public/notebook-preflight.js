@@ -160,6 +160,16 @@
         });
     }
 
+    // The page build's ChickadeeVersion, from the `app-version` meta the base
+    // layout renders. Lets each diagnostic be attributed to a build — an old
+    // value flags a stale browser tab still on the pre-deploy bundle. '' absent.
+    function readAppVersion() {
+        try {
+            const meta = document.querySelector('meta[name="app-version"]');
+            return (meta && meta.content) ? String(meta.content).slice(0, 32) : '';
+        } catch (_) { return ''; }
+    }
+
     async function postDiagnostic(info) {
         const frame     = document.getElementById('jl-frame');
         const setupID   = frame && frame.dataset ? frame.dataset.setupId : null;
@@ -173,6 +183,10 @@
         if (info.message) body.message = String(info.message).slice(0, 2000);
         if (info.stack)   body.stack   = String(info.stack).slice(0, 8000);
         if (info.source)  body.source  = String(info.source).slice(0, 64);
+        // Page-build version, so a diagnostic is attributable to a build and a
+        // stale tab (old appVersion) is distinguishable. Best-effort.
+        const appVersion = readAppVersion();
+        if (appVersion) body.appVersion = appVersion;
 
         await fetch(PREFLIGHT_DIAGNOSTICS_URL, {
             method:  'POST',

@@ -40,6 +40,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let message: String?
         let stack: String?
         let userAgent: String?
+        let appVersion: String?
         let testSetupID: String?
         let createdAt: Date
     }
@@ -55,6 +56,12 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         /// breakdown needed to localize editor problems (e.g. "Kernel Unknown" on
         /// a specific platform). Derived from the User-Agent; no student identity.
         let byBrowser: [CountEntry]
+        /// Events grouped by the page build's ChickadeeVersion (the `app_version`
+        /// the client sent; "unknown" when absent). An `exec_hang` / `recover_failed`
+        /// concentrated on an OLD appVersion is a stale-tab / cached-bundle symptom
+        /// (that browser never re-fetched the fixed bundle/wheel), distinct from one
+        /// on the CURRENT build, which would mean the deployed fix is incomplete.
+        let byAppVersion: [CountEntry]
         /// Submit-flow funnel: `submit_phase` breadcrumb counts in phase order
         /// (grading_start → … → result_posted). The drop-off between consecutive
         /// phases shows where in-browser submissions are lost to a freeze — the
@@ -90,8 +97,11 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error / page_unresponsive for "
         + "editor-load failures, editor_ready as the success denominator and sw_state for service-worker "
         + "registration, and submit_phase / submit_error for the grading/submission flow), by source, by "
-        + "failed capability check, and by browser/OS (byBrowser, e.g. Safari/iOS) so failures can be "
-        + "localized per device class, over a window, plus recent samples with the error message and stack. Also "
+        + "failed capability check, by browser/OS (byBrowser, e.g. Safari/iOS) so failures can be "
+        + "localized per device class, and by page-build version (byAppVersion: the ChickadeeVersion the "
+        + "client was running; an exec_hang/recover_failed concentrated on an OLD version is a stale-tab / "
+        + "cached-bundle symptom, vs. one on the current build meaning the deployed fix is incomplete), over "
+        + "a window, plus recent samples with the error message and stack. Also "
         + "returns submitFunnel: the submit_phase breadcrumb counts in phase order "
         + "(grading_start → runtime_loaded → setup_unpacked → suite_started → suite_done → "
         + "result_posting → result_posted) — the drop-off between consecutive phases shows where "
@@ -147,9 +157,11 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         var bySource: [String: Int] = [:]
         var byCheck: [String: Int] = [:]
         var byBrowser: [String: Int] = [:]
+        var byAppVersion: [String: Int] = [:]
         for row in rows {
             byKind[row.kind, default: 0] += 1
             byBrowser[Self.browserLabel(forUserAgent: row.userAgent), default: 0] += 1
+            byAppVersion[row.appVersion ?? "unknown", default: 0] += 1
             if let source = row.source { bySource[source, default: 0] += 1 }
             if let checks = row.failedChecks {
                 for check in checks.split(separator: ",") {
@@ -189,6 +201,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
                 message: row.message,
                 stack: row.stack,
                 userAgent: row.userAgent,
+                appVersion: row.appVersion,
                 testSetupID: row.testSetupID,
                 createdAt: row.createdAt ?? Date())
         }
@@ -200,6 +213,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             bySource: Self.sortedCounts(bySource),
             byFailedCheck: Self.sortedCounts(byCheck),
             byBrowser: Self.sortedCounts(byBrowser),
+            byAppVersion: Self.sortedCounts(byAppVersion),
             submitFunnel: submitFunnel,
             kernelBootFunnel: kernelBootFunnel,
             recentSamples: Array(samples))

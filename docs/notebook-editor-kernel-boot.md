@@ -288,15 +288,19 @@ editor-cell execute the required smoke never exercised (it checks boot + browser
 grading, never an editor cell). While the root cause is open a reproduced hang is
 the signal; a fix must turn it consistently green before it becomes a guard.
 
-**Observability.** The `editorKernelHang` health-alert rule fires when
-≥`ALERT_EDITOR_HANG_THRESHOLD` exec_hangs land within
-`ALERT_EDITOR_HANG_WINDOW_MINUTES`, so a recurrence pages the operator instead of
-waiting for a lab report.
+**Observability.** The `editorKernelUnrecoverable` health-alert rule fires when
+≥`ALERT_EDITOR_UNRECOVERABLE_THRESHOLD` `recover_failed` reports land within
+`ALERT_EDITOR_UNRECOVERABLE_WINDOW_MINUTES` — students whose kernel hung, was
+auto-rebooted, and hung AGAIN, so they genuinely cannot proceed. Plain
+`exec_hang`s that auto-recover stay in the `client_diagnostics` telemetry (and
+`get_browser_diagnostics`) for analysis but no longer page the operator; the
+alert is reserved for the students who are actually stuck. (The env names fall
+back to the former `ALERT_EDITOR_HANG_*` for back-compat.)
 
 **Root cause is still open.** The recovery + alert are a mitigation. The
 underlying SAB/Atomics execution deadlock is not yet reproduced or fixed; a
-falling `exec_hang` / `editorKernelHang` count is the success signal for that
-follow-up.
+falling `exec_hang` (and especially `recover_failed`) count is the success
+signal for that follow-up.
 
 ### Lessons (so the 4-week arc doesn't repeat)
 
@@ -311,7 +315,7 @@ follow-up.
    exec_hang appeared in exactly the lifecycle phase CI never exercised.
 3. **Lead with telemetry, don't trail it.** Each round of this arc added
    observability *after* the incident. The post-idle watcher and the
-   `editorKernelHang` alert now make this class of regression visible up front.
+   `editorKernelUnrecoverable` alert now make this class of regression visible up front.
 
 ## Quick reference
 

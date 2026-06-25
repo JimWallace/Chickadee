@@ -100,6 +100,7 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         let trimmedSource = body.source.map { String($0.prefix(64)) }
         let trimmedMessage = body.message.map { String($0.prefix(1024)) }
         let trimmedStack = body.stack.map { String($0.prefix(4096)) }
+        let trimmedAppVersion = body.appVersion.map { String($0.prefix(32)) }
 
         // De-duplicate within an hour so reloads don't multiply rows.  The
         // source is part of the key so distinct error origins (onerror vs.
@@ -135,7 +136,8 @@ struct ClientDiagnosticsRoutes: RouteCollection {
             userAgent: trimmedAgent,
             message: trimmedMessage,
             stack: trimmedStack,
-            source: trimmedSource
+            source: trimmedSource,
+            appVersion: trimmedAppVersion
         )
         try await record.save(on: req.db)
         return .accepted
@@ -157,6 +159,10 @@ struct ClientDiagnosticBody: Content {
     var stack: String?
     /// Origin of the error: "onerror" | "unhandledrejection" | "kernel".
     var source: String?
+    /// ChickadeeVersion of the page build that emitted this report (from the
+    /// `app-version` meta tag). Lets a diagnostic be attributed to a build —
+    /// an old value flags a stale browser tab still on pre-deploy code.
+    var appVersion: String?
 }
 
 // MARK: - Rate limiter
