@@ -131,4 +131,85 @@ import VaporTesting
             }
         }
     }
+
+    // MARK: - WebKit gets the NON-isolated comlink + service-worker transport
+    //
+    // The kernel deadlocks on the SharedArrayBuffer/`coincident` path on WebKit,
+    // so a WebKit User-Agent must NOT be cross-origin isolated even when the
+    // editor is enabled. Chrome/Edge/Firefox keep the isolated path. The
+    // responses also carry `Vary: User-Agent` so a shared cache can't hand one
+    // engine's body to the other. See EditorBrowserEngine.
+
+    private static let safariUA =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+        + "(KHTML, like Gecko) Version/18.2 Safari/605.1.15"
+    private static let chromeUA =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        + "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+
+    private func variesOnUserAgent(_ res: TestingHTTPResponse) -> Bool {
+        res.headers["Vary"].contains { $0.contains("User-Agent") }
+    }
+
+    @Test func notebookPageIsNotIsolatedForWebKit() async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testing().test(
+                .GET, "/testsetups/setup_123/notebook",
+                headers: ["User-Agent": Self.safariUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+                #expect(self.variesOnUserAgent(res))
+            }
+        }
+    }
+
+    @Test func notebookPageStaysIsolatedForChrome() async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testing().test(
+                .GET, "/testsetups/setup_123/notebook",
+                headers: ["User-Agent": Self.chromeUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
+                #expect(self.variesOnUserAgent(res))
+            }
+        }
+    }
+
+    @Test func iframeAssetsAreNotIsolatedForWebKit() async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testing().test(
+                .GET, "/jupyterlite/notebooks/index.html",
+                headers: ["User-Agent": Self.safariUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+            }
+        }
+    }
+
+    @Test func iframeAssetsStayIsolatedForChrome() async throws {
+        try await withApp(try await makeApp(isolateNotebook: true)) { app in
+            try await app.testing().test(
+                .GET, "/jupyterlite/notebooks/index.html",
+                headers: ["User-Agent": Self.chromeUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp")
+            }
+        }
+    }
+
+    @Test func validatePageIsNotIsolatedForWebKit() async throws {
+        try await withApp(try await makeApp()) { app in
+            try await app.testing().test(
+                .GET, "/instructor/assignment_123/validate",
+                headers: ["User-Agent": Self.safariUA]
+            ) { res async in
+                #expect(res.status == .ok)
+                #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+            }
+        }
+    }
 }

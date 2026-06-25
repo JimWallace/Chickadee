@@ -308,12 +308,38 @@
     // CSP worker-src and COEP both allow — so older Safari / iPadOS boot isolated
     // with no fallback needed (guarded by SMOKE_SIMULATE_NO_WAITASYNC).
 
+    // Engine detection mirrors the server's EditorBrowserEngine: WebKit (Safari
+    // and every iOS browser — all WKWebView) runs the editor on the comlink +
+    // service-worker transport, so the JupyterLite service worker is REQUIRED and
+    // must NOT be unregistered. Blink/Gecko use the SharedArrayBuffer path (no SW).
+    function isWebKitEngine() {
+        try {
+            var ua = (navigator && navigator.userAgent) || '';
+            if (ua.indexOf('iPhone') !== -1 || ua.indexOf('iPad') !== -1
+                || ua.indexOf('iPod') !== -1) {
+                return true;
+            }
+            if (ua.indexOf('Chrome/') !== -1 || ua.indexOf('Chromium/') !== -1
+                || ua.indexOf('Edg/') !== -1 || ua.indexOf('Edge/') !== -1
+                || ua.indexOf('Firefox/') !== -1 || ua.indexOf('OPR/') !== -1
+                || ua.indexOf('Android') !== -1) {
+                return false;
+            }
+            return ua.indexOf('AppleWebKit/') !== -1 && ua.indexOf('Safari/') !== -1;
+        } catch (_) {
+            return false;
+        }
+    }
+
     // #1 — Remove a stale, now-redundant JupyterLite service worker. The
     // SAB-only architecture disabled the SW manager, but a SW registered by a
     // pre-SAB build stays registered and keeps controlling /jupyterlite/* — it
     // can serve stale/uncontrolled responses that break the kernel boot, and a
     // plain refresh never clears it. Drop any we find and reload once if one was
     // actually controlling this load.
+    //
+    // WebKit is exempt: there the SW is the kernel's sync transport, not stale
+    // cruft — see isWebKitEngine() and the mountEditor() call site.
     function cleanupRedundantServiceWorker() {
         if (typeof navigator === 'undefined' || !navigator.serviceWorker ||
             !navigator.serviceWorker.getRegistrations) return;
@@ -348,9 +374,13 @@
     }
 
     // Isolation/engine context appended to kernel beacons so the admin
-    // diagnostics can tell WHY a kernel struggled: coi=false → isolation not
-    // delivered (e.g. a stale SW); waitasync=false under coi=true → an engine on
-    // the blob: waitAsync-polyfill path (older Safari / iPadOS).
+    // diagnostics can tell WHY a kernel struggled. NOTE: coi=false is now the
+    // EXPECTED, healthy state on WebKit — Safari/iOS run the editor non-isolated
+    // on the comlink + service-worker transport (see isWebKitEngine), so any
+    // coi-based health alert must exclude byBrowser=webkit. On Chrome/Edge/Firefox
+    // coi=false still means isolation was not delivered (e.g. a stale SW);
+    // waitasync=false under coi=true → an engine on the blob: waitAsync-polyfill
+    // path (older Safari / iPadOS).
     function isolationBeaconSuffix() {
         var coi = (typeof crossOriginIsolated !== 'undefined') ? !!crossOriginIsolated : false;
         var wa  = (typeof Atomics !== 'undefined' && typeof Atomics.waitAsync === 'function');
@@ -380,7 +410,11 @@
     function mountEditor() {
         // Drop any stale, now-redundant JupyterLite service worker before booting
         // (the SAB-only editor doesn't use it; a leftover one can break the boot).
-        cleanupRedundantServiceWorker();
+        // WebKit is the exception: there the editor runs on comlink + the service
+        // worker, so the SW is required and clearing it would break the kernel.
+        if (!isWebKitEngine()) {
+            cleanupRedundantServiceWorker();
+        }
 
         // The template renders the same URL into the iframe's src, so the
         // editor is already loading by the time the preflight resolves.
@@ -1768,7 +1802,12 @@
             const style = doc.createElement('style');
             style.id = 'chickadee-notebook-lock-style';
             style.textContent = rules.join('\n');
-            doc.head.appendChild(style);
+            // doc.head can be null when the iframe document exists but <head>
+            // hasn't parsed yet — fall back to documentElement, else skip (this
+            // runs again on the next lifecycle tick). Guards CASE 4:
+            // "TypeError: Cannot read properties of null (reading 'appendChild')".
+            const styleParent = doc.head || doc.documentElement;
+            if (styleParent) styleParent.appendChild(style);
         }
 
         if (readOnly) {
