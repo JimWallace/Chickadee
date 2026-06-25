@@ -96,6 +96,10 @@ jobs:
       # Skip the non-selected engine on a single-engine workflow_dispatch; always
       # run both on a pull_request (inputs are empty there).
       - name: Probe browser grading rate (${{ matrix.browser }})
+        # Force bash: the container's default `run` shell is `sh` (dash), which
+        # lacks `set -o pipefail` (the loop below otherwise dies with "Illegal
+        # option -o pipefail" before running a single iteration).
+        shell: bash
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
         env:
           SMOKE_BROWSER: ${{ matrix.browser }}
