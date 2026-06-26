@@ -292,14 +292,64 @@
     }
 
     // ----------------------------------------------------------------
+    // Slow / unsupported-engine editor notice (non-blocking)
+    // ----------------------------------------------------------------
+    //
+    // Driven by notebook.js's WebKit slow-boot watchdog: if the editor hasn't
+    // reported a healthy kernel within the window, reveal the .ipynb-upload
+    // fallback panel with a polite, plain-English message WITHOUT hiding the
+    // editor. Some older engines (notably Safari 18.x and low-memory iPads)
+    // never finish booting the comlink + service-worker editor; rather than
+    // strand the student on a spinner, we surface the upload path and suggest a
+    // different device — while leaving the editor visible so a merely-slow-but-
+    // healthy boot still works (so this can never hide a working editor). Gated
+    // by `_failureShown` so a real failure (which DOES hide the editor) wins.
+
+    let _slowNoticeShown = false;
+    function showSlowEditorNotice() {
+        if (_slowNoticeShown || _failureShown) return;
+        _slowNoticeShown = true;
+
+        const fallback = document.getElementById('nb-fallback');
+        if (fallback) {
+            const titleEl = fallback.querySelector('.nb-fallback-title');
+            const textEl  = fallback.querySelector('.nb-fallback-text');
+            if (titleEl) titleEl.textContent = 'The editor is taking a while to load';
+            if (textEl) {
+                textEl.textContent =
+                    'In-browser Python may not work on older browsers, or on devices with limited ' +
+                    'memory such as some iPads. If the editor doesn’t finish loading, a laptop or ' +
+                    'desktop — or a more recent browser — may work better. You can still submit ' +
+                    'by uploading your notebook (.ipynb) file below.';
+            }
+            const resetLink = document.getElementById('nb-reset-editor-link');
+            if (resetLink) {
+                try {
+                    resetLink.href = '/reset-editor?next=' +
+                        encodeURIComponent(location.pathname + location.search);
+                } catch (_) { /* keep the static href */ }
+            }
+            // Reveal the upload path; do NOT hide the editor — it may still boot.
+            fallback.hidden = false;
+        }
+
+        reportEvent({
+            kind:    'editor_error',
+            source:  'slow_boot_notice',
+            message: 'ua=' + (navigator.userAgent || '').slice(0, 200)
+        });
+    }
+
+    // ----------------------------------------------------------------
     // Public surface
     // ----------------------------------------------------------------
 
     window.ChickadeeNotebookFailures = {
-        runPreflight:      runPreflight,
-        showFailure:       showFailure,
-        showDeviceWarning: showDeviceWarning,
-        reportEditorError: reportEditorError,
-        reportEvent:       reportEvent
+        runPreflight:         runPreflight,
+        showFailure:          showFailure,
+        showDeviceWarning:    showDeviceWarning,
+        showSlowEditorNotice: showSlowEditorNotice,
+        reportEditorError:    reportEditorError,
+        reportEvent:          reportEvent
     };
 })();
