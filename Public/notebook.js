@@ -235,6 +235,11 @@
             const d = e.data;
             if (!d || d.ck !== 'kernel-diag') return false;
             if (d.kind !== 'kernel_phase' && d.kind !== 'kernel_error') return false;
+            // The kernel reached idle — the editor is usable. Cancel the WebKit
+            // slow-boot notice if it is still pending.
+            if (d.kind === 'kernel_phase' && d.source === 'kernel_idle') {
+                markKernelEverReady();
+            }
             // Self-heal: a post-idle exec_hang means the kernel booted then wedged
             // on execute (the boot-failure watchdog doesn't cover it). Trigger the
             // one-shot work-preserving editor reload — independent of the telemetry
@@ -387,9 +392,46 @@
         return 'coi=' + coi + ';waitasync=' + wa;
     }
 
+    // --- WebKit slow-boot notice -------------------------------------
+    //
+    // On WebKit (the comlink + service-worker path) some old engines — notably
+    // Safari 18.x and low-memory iPads — never finish booting the editor: the
+    // service worker won't take control and/or the JupyterLite 0.8 frontend
+    // can't initialise. After SLOW_BOOT_NOTICE_MS with no positive kernel-ready
+    // signal, reveal a polite, NON-blocking upload notice (showSlowEditorNotice)
+    // — the editor stays visible, so a merely-slow-but-healthy boot still works
+    // and this can never false-hide a working editor (the reason armEditorWatchdog
+    // is deliberately conservative). WebKit-only: never touches the
+    // Chrome/Edge/Firefox SharedArrayBuffer path.
+    var SLOW_BOOT_NOTICE_MS = 25000;
+    var kernelEverReady = false;
+    var slowBootNoticeTimer = null;
+    var slowBootNoticeArmed = false;
+
+    function markKernelEverReady() {
+        kernelEverReady = true;
+        if (slowBootNoticeTimer) {
+            clearTimeout(slowBootNoticeTimer);
+            slowBootNoticeTimer = null;
+        }
+    }
+
+    function armSlowBootNotice() {
+        if (slowBootNoticeArmed || !isWebKitEngine()) return;
+        slowBootNoticeArmed = true;
+        slowBootNoticeTimer = setTimeout(function () {
+            slowBootNoticeTimer = null;
+            if (kernelEverReady) return;   // booted in time — nothing to do
+            if (failures && failures.showSlowEditorNotice) {
+                failures.showSlowEditorNotice();
+            }
+        }, SLOW_BOOT_NOTICE_MS);
+    }
+
     // The kernel reached idle/busy — the success NUMERATOR (paired with
     // editor_ready, the shell denominator).
     function reportKernelReady(elapsedMs) {
+        markKernelEverReady();
         if (failures && failures.reportEvent) {
             failures.reportEvent({
                 kind: 'kernel_ready',
@@ -415,6 +457,11 @@
         if (!isWebKitEngine()) {
             cleanupRedundantServiceWorker();
         }
+
+        // WebKit-only: if the comlink + service-worker editor never reaches a
+        // healthy kernel (old Safari / low-RAM iPad), surface the upload path
+        // after SLOW_BOOT_NOTICE_MS without hiding the still-loading editor.
+        armSlowBootNotice();
 
         // The template renders the same URL into the iframe's src, so the
         // editor is already loading by the time the preflight resolves.
