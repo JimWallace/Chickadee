@@ -86,6 +86,11 @@ struct ClientDiagnosticsRoutes: RouteCollection {
             "submit_phase", "submit_error", "page_unresponsive",
             "editor_ready", "kernel_ready", "sw_state",
             "kernel_phase", "kernel_error",
+            // Non-blocking support warnings (notebook-preflight.js): the
+            // supported-browser-matrix banner and the low-memory device hint.
+            // Recorded so the admin browser-diagnostics surface gets a real
+            // below-matrix / low-memory rate (attributed by browser from the UA).
+            "browser_support", "device_warning",
         ]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")

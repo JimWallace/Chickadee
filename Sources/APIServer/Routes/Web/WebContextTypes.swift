@@ -111,6 +111,11 @@ struct NotebookContext: Encodable {
     let jupyterLiteEditorURL: String
     let downloadURL: String?
     let gradingMode: String  // "browser" | "worker"
+    /// True when the request's User-Agent is below Chickadee's supported-browser
+    /// matrix (`SupportedBrowserMatrix`) — drives a non-blocking "your browser may
+    /// not be fully supported" banner.  Conservative: only a confidently-old
+    /// browser sets this; an unknown/unparseable UA does not.
+    let browserUnsupported: Bool
     let showSubmit: Bool
     /// True when the assignment is closed (deadline passed without an active
     /// override, or explicitly closed by the instructor).  The Leaf template

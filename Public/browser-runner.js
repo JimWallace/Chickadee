@@ -332,6 +332,28 @@
             // stdout/stderr), which RunnerCore interprets byte-for-byte the way
             // the worker does. No grading logic or interpretation remains in JS.
             if (options.reportPhase) options.reportPhase('suite_started', 'tests=' + suites.length);
+
+            // Probe the grading runtime BEFORE the shared executeSuites loop. If
+            // Pyodide can't initialize at all — e.g. the Pyodide-3.14 WebKit
+            // `call_indirect to a null table entry` trap that bricks grading on
+            // some Safari/iOS builds — abort the whole grade by THROWING here, so
+            // submitBrowserNotebook's catch (notebook.js) fails the submission
+            // over to server-side grading (/submissions/browser-failover → the
+            // native worker backstop). Without this probe the failure is invisible
+            // to the caller: the shared RunnerCore wasm catches each rejected
+            // run() and returns an exit-2 `error` ScriptOutput
+            // (wasm/Sources/RunnerWasm/main.swift, "browser executor: script run
+            // rejected"), so executeSuites COMPLETES with an all-`error`
+            // collection that runAndSubmit then posts as a real 0% result — the
+            // failover never fires and the student is recorded a 0. A per-script
+            // error after a HEALTHY init still flows through as a normal error
+            // outcome, unchanged — only a substrate that can't start fails over.
+            try {
+                await executor.ensureReady();
+            } catch (e) {
+                throw new Error('Browser grading runtime failed to initialize: ' + toMessage(e));
+            }
+
             const outcomes = await globalThis.runnerExecuteSuites(
                 suites, timeLimitSeconds, 1, scriptExists, runScript);
             if (options.reportPhase) options.reportPhase('suite_done', 'n=' + outcomes.length);
@@ -444,6 +466,13 @@
         async run(name, limitSeconds) {
             await this._ensureReady();
             return runRawScript(this.py, this.runnerCore, this.workDir, name, limitSeconds);
+        }
+
+        // Eagerly initialize the runtime so a hard init failure (Pyodide can't
+        // load / env-config throws) surfaces as a thrown error the caller can
+        // fail over on, rather than only surfacing lazily inside the first run().
+        ensureReady() {
+            return this._ensureReady();
         }
 
         async dispose() {
@@ -688,6 +717,14 @@
                 executionTimeMs: Date.now() - startMs,
                 timedOut: false,
             };
+        }
+
+        // Eagerly spawn + init the grading worker so a wedged or trapping Pyodide
+        // init rejects HERE (for the caller to fail over) instead of being
+        // swallowed into per-script `error` outcomes by the wasm run() catch.
+        // Idempotent: shares the cached _ensureWorker() init the run() path uses.
+        ensureReady() {
+            return this._ensureWorker();
         }
 
         async dispose() {

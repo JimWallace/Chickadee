@@ -53,6 +53,7 @@ Notebook
     #jl-frame,
     #nb-fallback,
     #nb-device-warning,
+    #nb-browser-support-warning,
     #nb-results,
     #browser-runner-status { display: none; }
     .nb-smallscreen-notice {
@@ -83,6 +84,16 @@ Notebook
         </div>
     </div>
 </div>
+<div id="nb-browser-support-warning" class="nb-device-warning" role="note" hidden>
+    <span class="nb-device-warning-text">
+        Your browser may not be fully supported. Chickadee works best on the same
+        browsers as LEARN &mdash; Safari&nbsp;26+, Chrome&nbsp;140+, Edge&nbsp;140+,
+        or Firefox&nbsp;143+. You can keep working: if in-browser testing
+        doesn&rsquo;t run, your submission is still graded on our servers, and you
+        can always submit by uploading your <code>.ipynb</code> file.
+    </span>
+    <button type="button" id="nb-browser-support-dismiss" class="nb-device-warning-dismiss" aria-label="Dismiss this notice">&times;</button>
+</div>
 <div id="nb-device-warning" class="nb-device-warning" role="note" hidden>
     <span class="nb-device-warning-text">
         This device may be low on memory for the in-browser editor. If the
@@ -111,6 +122,7 @@ Notebook
     title="Notebook editor"
     data-setup-id="#(testSetupID)"
     data-grading-mode="#(gradingMode)"
+    data-browser-unsupported="#(browserUnsupported)"
     data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
     data-working-copy-mtime="#(workingCopyMtime)"

@@ -208,6 +208,7 @@ extension WebRoutes {
                 jupyterLiteEditorURL: editorURL,
                 downloadURL: nil,  // download link lives on the submission page
                 gradingMode: decodeManifestGradingMode(setup),
+                browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
                 showSubmit: false,  // read-only view
                 isClosed: args.isClosed,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: submissionViewAbsPath),
@@ -276,6 +277,7 @@ extension WebRoutes {
                 jupyterLiteEditorURL: editorURL,
                 downloadURL: downloadURL,
                 gradingMode: decodeManifestGradingMode(setup),
+                browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
                 showSubmit: fileKind == .assignment && !args.isClosed,
                 isClosed: args.isClosed,
                 workingCopyMtime: workingCopyMtimeEpoch(absolutePath: workingCopyAbsPath),
