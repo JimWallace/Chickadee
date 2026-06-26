@@ -458,15 +458,17 @@ struct TestSetupRoutes: RouteCollection {
         let allEntries = listZipEntries(zipPath: setup.zipPath)
         guard allEntries.contains(filename) else { throw Abort(.notFound) }
 
-        let testScripts: Set<String> = {
-            guard let props = setup.decodedManifest()
-
-            else { return [] }
-            return Set(props.testSuites.map(\.script))
-        }()
+        let props = setup.decodedManifest()
+        let testScripts = Set(props?.testSuites.map(\.script) ?? [])
+        // Grader-only files (answer keys, reserved holdout sets) are bundled for
+        // the worker but never served to students — block them here alongside
+        // test scripts and the canonical notebooks. See docs/datasets.md.
+        let graderOnly = props?.graderOnlyFileSet ?? []
         let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
-        guard !testScripts.contains(filename), !reservedNames.contains(filename) else {
-            throw AppError.forbidden(action: "download '\(filename)' (not a support file)")
+        guard !testScripts.contains(filename), !reservedNames.contains(filename),
+            !graderOnly.contains(filename)
+        else {
+            throw AppError.forbidden(action: "download '\(filename)' (not a student-visible support file)")
         }
 
         guard let bytes = extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {

@@ -59,7 +59,29 @@ struct BrowserRunnerRoutes: RouteCollection {
         if try await requireOpenStudentAssignment(for: setupID, user: caller, on: req) == nil {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
-        return try await req.fileio.asyncStreamFile(at: setup.zipPath)
+
+        // Grader-only files (answer keys, reserved holdout sets) must never reach
+        // a browser-graded student — the whole stored zip is streamed into the
+        // Pyodide FS, which a determined student can inspect. Stream a filtered
+        // copy with those entries removed. The common case declares none (a
+        // grader-only file forces worker grading, see docs/datasets.md), so the
+        // empty case takes the no-copy streaming fast path.
+        let graderOnly = setup.decodedManifest()?.graderOnlyFiles ?? []
+        guard !graderOnly.isEmpty else {
+            return try await req.fileio.asyncStreamFile(at: setup.zipPath)
+        }
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory.appendingPathComponent("ck-browser-zip-\(UUID().uuidString)")
+        try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: tempDir) }
+        let tempZip = tempDir.appendingPathComponent("setup.zip").path
+        try fm.copyItem(atPath: setup.zipPath, toPath: tempZip)
+        // writes:[:] — pure deletion of the grader-only entries from the copy.
+        try applyScriptChangesToZip(zipPath: tempZip, writes: [:], deletions: graderOnly)
+        let filtered = try Data(contentsOf: URL(fileURLWithPath: tempZip))
+        var headers = HTTPHeaders()
+        headers.contentType = HTTPMediaType(type: "application", subType: "zip")
+        return Response(status: .ok, headers: headers, body: .init(data: filtered))
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/manifest

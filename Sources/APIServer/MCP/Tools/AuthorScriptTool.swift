@@ -49,6 +49,15 @@ struct AuthorScriptTool: ContentTool {
         /// assignment default); absent/null leaves an existing script's
         /// override unchanged and a new script on the assignment default.
         let timeLimitSeconds: Int?
+        /// Support files only: mark the file **grader-only** (true) or clear the
+        /// mark (false). A grader-only support file still reaches the native
+        /// worker (via the zip) but is withheld from every student-facing path —
+        /// editor symlinks, the browser-runner download, and the student
+        /// support-file download. Use it for answer keys / reserved holdout
+        /// data. Requires worker grading (a browser-graded assignment can't keep
+        /// a file from the student). Absent/null leaves the current mark
+        /// unchanged. Ignored for test tiers.
+        let graderOnly: Bool?
     }
 
     struct Output: Encodable, Sendable {
@@ -90,7 +99,10 @@ struct AuthorScriptTool: ContentTool {
         + "script names or family:<id> tokens), sectionID (an existing section), and timeLimitSeconds "
         + "(a per-test execution time-limit override in seconds, 1–600; 0 clears it so the script uses "
         + "the assignment default). Cannot edit "
-        + "pattern-family or notebook-check generated scripts — edit the family/check instead. Saving "
+        + "pattern-family or notebook-check generated scripts — edit the family/check instead. "
+        + "For a support file, set graderOnly:true to withhold it from every student-facing path "
+        + "(editor, browser-runner download, support download) while still bundling it for the worker — "
+        + "use it for answer keys / reserved holdout data on worker-graded assignments. Saving "
         + "re-runs the assignment's validation and closes the assignment if it was open (re-open with "
         + "update_assignment once validation passes)."
 
@@ -159,6 +171,15 @@ struct AuthorScriptTool: ContentTool {
                         + "(\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound)); 0 clears the "
                         + "override (revert to the assignment default set by set_time_limit). Ignored for "
                         + "support files."),
+            ]),
+            "graderOnly": .object([
+                "type": .string("boolean"),
+                "description": .string(
+                    "Support files only: true marks the file grader-only (reaches the worker via the "
+                        + "zip but is withheld from every student-facing path — editor symlinks, "
+                        + "browser-runner download, student support-file download); false clears the mark. "
+                        + "Use for answer keys / reserved holdout data. Requires worker grading. "
+                        + "Absent leaves the current mark unchanged; ignored for test tiers."),
             ]),
         ]),
         // content/sourceUrl are a one-of (validated in execute), so neither is
@@ -277,8 +298,22 @@ struct AuthorScriptTool: ContentTool {
                     detail: "\"\(cleaned)\" is currently a graded test; change its tier with update_suite "
                         + "or delete it before re-authoring it as a support file.")
             }
+            // A grader-only file is only safe under worker grading — the browser
+            // path ships the workspace to the student. Refuse before writing.
+            if input.graderOnly == true,
+                (setup.decodedManifest()?.gradingMode ?? .worker) != .worker
+            {
+                throw MCPToolError.invalidArguments(
+                    tool: Self.name,
+                    detail: "graderOnly requires worker grading, but this assignment is browser-graded. "
+                        + "Switch it with set_grading_mode(\"worker\") first.")
+            }
             try authorSupportFile(
                 filename: cleaned, content: content, setup: setup, assignment: assignment, context: context)
+            if let graderOnly = input.graderOnly {
+                try await setManifestGraderOnly(
+                    setup: setup, filename: cleaned, graderOnly: graderOnly, on: context.db)
+            }
         case .test(let tier):
             try await authorTestScript(
                 filename: cleaned, content: content, tier: tier, input: input,
