@@ -77,13 +77,13 @@ import Vapor
         sourceUrl: String? = nil,
         tier: String? = nil, points: Int? = nil, displayName: String? = nil,
         dependsOn: [String]? = nil, sectionID: String? = nil,
-        timeLimitSeconds: Int? = nil
+        timeLimitSeconds: Int? = nil, graderOnly: Bool? = nil
     ) -> AuthorScriptTool.Input {
         AuthorScriptTool.Input(
             assignmentPublicID: assignment.publicID, filename: filename, content: content,
             sourceUrl: sourceUrl,
             tier: tier, points: points, displayName: displayName, dependsOn: dependsOn,
-            sectionID: sectionID, timeLimitSeconds: timeLimitSeconds)
+            sectionID: sectionID, timeLimitSeconds: timeLimitSeconds, graderOnly: graderOnly)
     }
 
     @Test func createsNewTestScriptWithMetadata() async throws {
