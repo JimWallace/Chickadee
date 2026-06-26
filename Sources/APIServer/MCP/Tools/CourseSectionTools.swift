@@ -618,6 +618,34 @@ func setManifestGradingMode(
     return mode
 }
 
+/// Adds or removes `filename` in the manifest's `graderOnlyFiles` list, mutating
+/// only that JSON field on `setup.manifest` (so unrelated keys are untouched) and
+/// saving only when it actually changes. A grader-only file is bundled for the
+/// worker but withheld from every student-facing path — see docs/datasets.md.
+func setManifestGraderOnly(
+    setup: APITestSetup, filename: String, graderOnly: Bool, on db: any Database
+) async throws {
+    guard
+        var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
+    else { return }
+    var files = (dict["graderOnlyFiles"] as? [String]) ?? []
+    let present = files.contains(filename)
+    if graderOnly && !present {
+        files.append(filename)
+    } else if !graderOnly && present {
+        files.removeAll { $0 == filename }
+    } else {
+        return  // already in the desired state
+    }
+    dict["graderOnlyFiles"] = files
+    if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
+        let json = String(data: data, encoding: .utf8)
+    {
+        setup.manifest = json
+        try await setup.save(on: db)
+    }
+}
+
 /// Resolves a course code to its id, enforcing that the acting account may act
 /// on it.  Shared by the course-section tools.
 func resolveCourseID(code: String, tool: String, context: ToolContext) async throws -> UUID {

@@ -578,6 +578,38 @@ final class AssignmentHelpersManifestTests {
         #expect(FileManager.default.fileExists(atPath: sharedDir + "tests.py") == false)
     }
 
+    @Test func applyScriptChanges_filtersGraderOnlyEntryFromZipCopy() throws {
+        // The browser-runner download withholds grader-only files by streaming a
+        // COPY of the stored zip with those entries deleted (via
+        // applyScriptChangesToZip(deletions:)). Pin that primitive: it removes
+        // exactly the named entries, keeps the rest, and leaves the original
+        // (which the trusted worker download streams) untouched.
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("graderonly-filter-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try ahMakeZip(
+            at: zipPath,
+            entries: [
+                ("tests.py", "print('t')"),
+                ("dbgen.py", "ANSWER = 42\n"),
+                ("data.csv", "a,b\n1,2\n"),
+            ])
+
+        let copyPath = tempRoot.appendingPathComponent("filtered.zip").path
+        try FileManager.default.copyItem(atPath: zipPath, toPath: copyPath)
+        try applyScriptChangesToZip(zipPath: copyPath, writes: [:], deletions: ["dbgen.py"])
+
+        let remaining = Set(listZipEntries(zipPath: copyPath))
+        #expect(remaining.contains("dbgen.py") == false)  // grader-only entry removed
+        #expect(remaining.contains("tests.py"))  // others kept
+        #expect(remaining.contains("data.csv"))
+        // The stored zip (what the trusted worker download streams) is untouched.
+        #expect(Set(listZipEntries(zipPath: zipPath)).contains("dbgen.py"))
+    }
+
     @Test func removeMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("materialized-files-\(UUID().uuidString)")
