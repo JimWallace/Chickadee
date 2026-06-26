@@ -187,6 +187,42 @@ test('collector trackExecHang flags a sustained-busy cell but not a quick one', 
   }
 });
 
+test('collector idleMessage tags a recovered boot, plain otherwise', () => {
+  const { exports } = loadCollector();
+  // A clean boot (never reported unhealthy) → just the elapsed clock.
+  assert.equal(exports.idleMessage(1500, false, 0), 'elapsed_ms=1500');
+  // A boot that emitted a sustained kernel_unknown then reached idle → tagged
+  // recovered so it can be subtracted from the terminal CASE-2 failures.
+  assert.equal(exports.idleMessage(1500, true, 12000),
+    'elapsed_ms=1500;recovered=1;unhealthy_ms=12000');
+});
+
+test('collector bootContext returns a PII-safe env snapshot without throwing', () => {
+  const { exports } = loadCollector();
+  const ctx = exports.bootContext();
+  assert.equal(typeof ctx, 'string');
+  // Capability + device-class + error-trail keys only — never code/output/identity.
+  for (const key of ['coi=', 'sab=', 'mem=', 'cpu=', 'swctl=', 'shell=', 'errs=', 'lasterr=', 'phase=']) {
+    assert.ok(ctx.includes(key), `expected ${key} in "${ctx}"`);
+  }
+  // The bare harness has no navigator / SharedArrayBuffer / crossOriginIsolated:
+  // each must degrade to a safe fallback token, never a throw.
+  assert.ok(ctx.includes('coi=false'));
+  assert.ok(ctx.includes('sab=false'));
+  assert.ok(ctx.includes('mem=na'));
+  assert.ok(ctx.includes('lasterr=none'));
+  assert.ok(ctx.includes('phase=boot_start'));
+});
+
+test('collector bootContext surfaces the boot error trail (count + last source)', () => {
+  const { exports } = loadCollector();
+  assert.ok(exports.bootContext().includes('errs=0'));
+  exports.reportError('resource_error', 'failed to load /jupyterlite/kernel.js');
+  const ctx = exports.bootContext();
+  assert.ok(ctx.includes('errs=1'), ctx);
+  assert.ok(ctx.includes('lasterr=resource_error'), ctx);
+});
+
 // ----------------------------------------------------------------
 // Parent bridge (notebook.js handleKernelDiagMessage)
 // ----------------------------------------------------------------
