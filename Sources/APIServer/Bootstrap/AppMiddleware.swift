@@ -195,6 +195,14 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // response on the way back.
     app.middleware.use(
         JupyterLiteConfigFlagMiddleware(publicDirectory: app.directory.publicDirectory))
+    // JupyterLite (Notebook 7) opens documents at canonical URLs like
+    // `/jupyterlite/notebooks?path=…` with no `/index.html` — it assumes the host
+    // rewrites an app directory to its index (a real Jupyter server / nginx
+    // try_files). Our static FileMiddleware doesn't, so those URLs 404 (e.g. a
+    // notebook opened in a new tab). Redirect the app dirs to their index.html,
+    // preserving the query, so the app loads. Runs just before FileMiddleware,
+    // which would otherwise 404 the bare directory.
+    app.middleware.use(JupyterLiteAppIndexMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware(isolateNotebook: true))
 }
