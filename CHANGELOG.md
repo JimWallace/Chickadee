@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.548] - 2026-06-26
+
+### Security
+
+- **Grader-only support files are now withheld from students (enforcement +
+  authoring).** The `TestProperties.graderOnlyFiles` marker (option B in
+  `docs/datasets.md`) was a foundation-only field — nothing consulted it, so a
+  support file bundled for the grader (e.g. an answer-key helper like a
+  `dbgen.py`, or a reserved holdout test set) was still downloadable by any
+  enrolled student via the support-file endpoint, symlinked into the in-browser
+  editor, and streamed in full to a browser-graded student. Enforcement now
+  unions `graderOnlyFiles` into the student-facing filters at all three points:
+  the student support-file download (`TestSetupRoutes.downloadSupportFile`
+  blocks it), the editor symlink pass (`NotebookWorkingCopyStore` skips it), and
+  the browser-runner zip download (`BrowserRunnerRoutes.downloadTestSetup`
+  streams a copy with the entries removed). The trusted native-worker download
+  is unchanged (it needs the file), and the file still extracts into the
+  server-side `shared/` dir so personalization expressions can import it.
+  `author_script` gains a `graderOnly` flag for support files to set/clear the
+  mark; it requires worker grading (a browser-graded assignment can't keep a
+  file from the student).
+
+### Added
+
+- **Reference solution is now importable in personalization expressions
+  (`shared/solution.py` kept in sync).** Saving an assignment's reference
+  solution now (re)writes a server-side `shared/{setupID}/solution.py` from the
+  solution notebook's code cells, so a Global Input expression can compute an
+  expected value as `solution.<fn>(...)` — a single source of truth — instead of
+  a hand-maintained answer key that can silently drift from the solution. The
+  file lives **only** in the shared directory: it is never written into the
+  test-setup zip, so it never reaches the worker, the browser runner, or a
+  student support-file download (the same treatment `solution.ipynb` already
+  gets). The shared-directory rebuild that runs on every suite edit now
+  preserves this file across its wipe when the zip does not itself carry the
+  solution, so `import solution` keeps working after an edit. Previously this
+  worked only for setups whose uploaded zip happened to contain `solution.ipynb`
+  (draft-/MCP-created assignments never do), leaving the feature dormant for
+  them.
+
+
 ## [0.4.547] - 2026-06-26
 
 ### Fixed
