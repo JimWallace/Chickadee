@@ -217,6 +217,19 @@ async function main() {
   });
   const page = await context.newPage();
 
+  // Stray-tab guard. Notebook 7 opens each document in its own browser tab via
+  // window.open; embedded in our iframe that surfaces as a redundant second
+  // editor tab (a third Pyodide). With the fix — parent-side window.open
+  // suppression (notebook.js) + the server self-close page
+  // (JupyterLiteAppIndexMiddleware) — no such tab should ever open, so ANY new
+  // page in this context after the main one is a regression. Record + close it
+  // (so a stray second editor can't keep running and skew timings).
+  const strayTabs = [];
+  context.on("page", (p) => {
+    strayTabs.push(p.url());
+    p.close().catch(() => {});
+  });
+
   const blocked = [];
   page.on("requestfailed", (req) => {
     const why = req.failure()?.errorText || "";
@@ -393,6 +406,12 @@ async function main() {
     // loaded Pyodide, ran the test, and posted a correct outcome end-to-end.
     if (!/1\s*\/\s*1\s*passed/i.test(resultText)) {
       return fail(`grading did not pass cleanly (expected "1 / 1 passed"): ${resultText}`);
+    }
+
+    if (strayTabs.length) {
+      return fail(
+        `${strayTabs.length} stray editor tab(s) opened — Notebook 7's window.open was not suppressed: ${strayTabs.join(", ")}`
+      );
     }
 
     console.log(`E2E PASS — real notebook page isolated, workers spawned, kernel booted, submit graded 1/1 (engine=${browserName})`);

@@ -1,0 +1,3 @@
+### Fixed
+
+- **Opening a notebook no longer spawns a stray extra editor tab.** Notebook 7 opens each document in its own browser tab via `window.open`; embedded in Chickadee's iframe that surfaced as a redundant second editor — a third Pyodide, and on WebKit contention with the kernel already running in the iframe. v0.4.543 stopped that tab from 404ing but left it booting a full second editor. Now `notebook.js` suppresses the stray same-site `window.open` at the source (the iframe is same-origin), and `JupyterLiteAppIndexMiddleware` returns a tiny self-closing page — instead of a second editor — as the server-side backstop. An editor-smoke popup guard asserts no stray tab opens in Chromium + WebKit.

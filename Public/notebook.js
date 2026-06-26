@@ -538,6 +538,36 @@
             });
         }
 
+        // Notebook 7 opens each document in its OWN browser tab via window.open
+        // (its documented default). Embedded in our iframe that's a redundant
+        // stray tab — the iframe already shows the notebook, and on WebKit the
+        // second editor boots a third Pyodide that contends with the kernel. The
+        // iframe is same-origin, so neutralize its window.open for same-site
+        // JupyterLite document URLs; re-applied on every (re)load + tick since each
+        // navigation gets a fresh window. The server self-close page
+        // (JupyterLiteAppIndexMiddleware) is the backstop for an open() that races
+        // the patch.
+        function suppressStrayEditorTabs() {
+            let win;
+            try { win = frame.contentWindow; } catch (_) { return; }
+            if (!win || win._chickadeeOpenPatched) return;
+            let nativeOpen;
+            try { nativeOpen = win.open; } catch (_) { return; }
+            if (typeof nativeOpen !== 'function') return;
+            try {
+                win._chickadeeOpenPatched = true;
+                win.open = function (url) {
+                    try {
+                        const resolved = new win.URL(String(url == null ? '' : url), win.location.href);
+                        if (resolved.pathname.indexOf('/jupyterlite/') === 0) {
+                            return null;  // swallow Notebook 7's stray same-site document tab
+                        }
+                    } catch (_) { /* unparseable / relative-resolve failed — fall through */ }
+                    return nativeOpen.apply(win, arguments);
+                };
+            } catch (_) { /* frozen/cross-origin — rely on the server self-close backstop */ }
+        }
+
         frame.addEventListener('load', () => {
             // A document committed; any forced reset we were waiting on has
             // landed, so the locked-path enforcement may act again.
@@ -548,11 +578,13 @@
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
             attachNotebookActivityBridge();
+            suppressStrayEditorTabs();
         });
         setInterval(() => {
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
             attachNotebookActivityBridge();
+            suppressStrayEditorTabs();
         }, 1500);
 
         armEditorWatchdog();
