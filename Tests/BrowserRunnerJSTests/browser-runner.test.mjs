@@ -1024,6 +1024,56 @@ test('GradingWorkerExecutor bounds a wedged worker init: times out, retries once
   assert.ok(workers.every(w => w.terminated), 'every wedged init worker must be terminated');
 });
 
+test('a grading-runtime init failure fails over (throws, posts nothing) even when the wasm loop swallows run errors', async () => {
+  // Regression guard for the Pyodide-3.14 WebKit grading break (the
+  // `call_indirect to a null table entry` trap during env-config). The REAL
+  // RunnerCore wasm catches a rejected run() and returns an exit-2 `error`
+  // ScriptOutput (wasm/Sources/RunnerWasm/main.swift), so a grading-worker that
+  // can't initialize would otherwise make executeSuites COMPLETE with an
+  // all-`error` collection — which runAndSubmit posts as a real 0% result,
+  // never reaching submitBrowserNotebook's server-failover catch. The init
+  // probe in runScripts must THROW before the loop so the failover fires.
+  //
+  // The default executeSuitesStub re-throws a rejected run() (so the existing
+  // "bounds a wedged worker init" test passes via the stub) — which HIDES this
+  // production gap. Here we model the wasm's swallowing faithfully: an
+  // executeSuites that resolves with error outcomes and NEVER rejects. The
+  // probe must still reject, and crucially must post NO browser result.
+  const swallowingExecuteSuites = (suites) => Promise.resolve(
+    suites.map((s) => ({
+      testName: s.script, testClass: null, tier: s.tier, status: 'error',
+      shortResult: 'browser executor: script run rejected', longResult: null,
+      points: 1, executionTimeMs: 0, memoryUsageBytes: null,
+      attemptNumber: 1, isFirstPassSuccess: false,
+    })),
+  );
+
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    initPending: true,          // worker init never replies → init fails
+    gradingInitTimeoutMs: 25,   // tiny budget so the test is fast
+    runnerExecuteSuites: swallowingExecuteSuites,
+    zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'tests/test_pass.py', tier: 'public' }],
+    },
+  });
+
+  await assert.rejects(
+    harness.window.BrowserRunner.runAndSubmit(
+      new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+      'setup_init_trap',
+    ),
+    /initialize|init/i,
+  );
+
+  // The whole point: a failed grading runtime must NOT post a 0% browser result.
+  // The submission belongs to the server-side failover backstop instead.
+  assert.equal(harness.postBodies.length, 0, 'a failed init must not post a browser result');
+});
+
 test('GradingWorkerExecutor grades pass/fail through one worker and classifies non-python on the main thread', async () => {
   // Happy path of the worker executor: one worker is spawned and re-used for
   // every python script (no terminate), pass/fail are graded from the worker's
