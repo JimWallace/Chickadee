@@ -273,6 +273,13 @@
         window.addEventListener('message', handleKernelDiagMessage);
     }
 
+    // Server-driven supported-browser-matrix banner (SupportedBrowserMatrix),
+    // independent of the capability preflight: it self-guards on the #jl-frame
+    // data-browser-unsupported attribute, so it is a no-op on a supported browser.
+    if (failures && failures.showBrowserSupportWarning) {
+        failures.showBrowserSupportWarning();
+    }
+
     const preflightPromise = failures
         ? failures.runPreflight()
         : Promise.resolve({ ok: true, failed: [] });

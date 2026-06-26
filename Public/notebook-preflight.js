@@ -341,15 +341,62 @@
     }
 
     // ----------------------------------------------------------------
+    // Supported-browser-matrix warning (non-blocking)
+    // ----------------------------------------------------------------
+    //
+    // Server-driven (SupportedBrowserMatrix): when the request's User-Agent is
+    // below Chickadee's supported line, the notebook template stamps
+    // data-browser-unsupported="true" on #jl-frame. We reveal a dismissible
+    // banner WITHOUT hiding the editor — the student can keep working, and an
+    // unsupported browser still submits and grades server-side (the browser-runner
+    // failover) and via the .ipynb upload. Self-guards on the data attribute, so
+    // it is a no-op on a supported browser. Dismissal persists per-device; the
+    // telemetry beacon fires regardless of dismissal so we get the real
+    // below-matrix rate (the server attributes it by browser from the UA).
+
+    let _browserWarningShown = false;
+    function showBrowserSupportWarning() {
+        if (_browserWarningShown) return;
+        const frame = document.getElementById('jl-frame');
+        const unsupported = !!(frame && frame.dataset && frame.dataset.browserUnsupported === 'true');
+        if (!unsupported) return;
+        _browserWarningShown = true;
+
+        let dismissed = false;
+        try { dismissed = localStorage.getItem('ck_browser_warn_dismissed') === '1'; } catch (_) { /* ignore */ }
+
+        const banner = document.getElementById('nb-browser-support-warning');
+        if (banner && !dismissed) {
+            banner.hidden = false;
+            const closeBtn = document.getElementById('nb-browser-support-dismiss');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () {
+                    banner.hidden = true;
+                    try { localStorage.setItem('ck_browser_warn_dismissed', '1'); } catch (_) { /* ignore */ }
+                });
+            }
+        }
+
+        // Telemetry fires even if previously dismissed, which gives us the real
+        // below-matrix population (the server attributes it by browser from the UA).
+        reportEvent({
+            kind:    'browser_support',
+            source:  'below_matrix',
+            message: 'ua=' + (navigator.userAgent || '').slice(0, 200)
+        });
+    }
+
+    // ----------------------------------------------------------------
     // Public surface
     // ----------------------------------------------------------------
 
     window.ChickadeeNotebookFailures = {
-        runPreflight:         runPreflight,
-        showFailure:          showFailure,
-        showDeviceWarning:    showDeviceWarning,
-        showSlowEditorNotice: showSlowEditorNotice,
-        reportEditorError:    reportEditorError,
-        reportEvent:          reportEvent
+        runPreflight:             runPreflight,
+        showFailure:              showFailure,
+        showDeviceWarning:        showDeviceWarning,
+        showBrowserSupportWarning: showBrowserSupportWarning,
+        showSlowEditorNotice:     showSlowEditorNotice,
+        reportEditorError:        reportEditorError,
+        reportEvent:              reportEvent
     };
 })();
