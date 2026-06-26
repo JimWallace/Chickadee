@@ -12,12 +12,16 @@
 // (`target="_blank"`), which lands on `/jupyterlite/notebooks?path=…` and 404s
 // while the original (iframe) editor keeps working. Reproduces on every engine.
 //
-// This middleware redirects the JupyterLite app directories to their
-// `index.html`, preserving the query string, so the app loads — matching the
-// SPA-style hosting JupyterLite documents for static hosts. Registered just
-// before `FileMiddleware` (which would otherwise 404 the bare directory).
-// `/jupyterlite/<app>/index.html` and deeper paths (`…/api/contents/…`) are
-// untouched — they already resolve.
+// That bare-directory URL is therefore ONLY ever requested by the stray tab —
+// the in-iframe editor always loads `…/index.html`. Rather than redirect it to a
+// SECOND full editor (which boots a second Pyodide and, on WebKit, contends with
+// the kernel already running in the iframe), this middleware returns a tiny
+// self-closing page: the stray tab was opened by `window.open`, so `window.close()`
+// closes it, and it never boots a kernel. (`notebook.js` also suppresses the
+// stray `window.open` at the source; this is the server-side backstop.) Registered
+// just before `FileMiddleware`; `/jupyterlite/<app>/index.html` and deeper paths
+// (`…/api/contents/…`) are untouched — they already resolve, so the iframe editor
+// is unaffected.
 
 import Vapor
 
@@ -48,10 +52,26 @@ struct JupyterLiteAppIndexMiddleware: AsyncMiddleware {
             return try await next.respond(to: request)
         }
 
-        var target = "/jupyterlite/" + parts[1] + "/index.html"
-        if let query = request.url.query, !query.isEmpty {
-            target += "?" + query
-        }
-        return request.redirect(to: target, redirectType: .temporary)
+        // Close the stray tab instead of booting a second editor in it. The tab
+        // was script-opened by Notebook 7 (`window.open`), so `window.close()` is
+        // permitted; the message is the fallback if a browser refuses it.
+        let html = """
+            <!doctype html>
+            <html lang="en">
+            <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Return to your assignment</title>
+            </head>
+            <body>
+            <script>try { window.close() } catch (e) { /* self-close may be blocked; the message below covers it */ }</script>
+            <p>This notebook opened in an extra browser tab. You can close this tab and return to your assignment.</p>
+            </body>
+            </html>
+            """
+        var headers = HTTPHeaders()
+        headers.contentType = .html
+        headers.replaceOrAdd(name: .cacheControl, value: "no-store")
+        return Response(status: .ok, headers: headers, body: .init(string: html))
     }
 }

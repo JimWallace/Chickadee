@@ -3,11 +3,12 @@ import VaporTesting
 
 @testable import APIServer
 
-/// JupyterLiteAppIndexMiddleware redirects a bare JupyterLite app-directory URL
+/// JupyterLiteAppIndexMiddleware intercepts a bare JupyterLite app-directory URL
 /// (`/jupyterlite/notebooks?path=…`, which Notebook 7 builds when it opens a
-/// document — e.g. in a new tab) to its `index.html`, preserving the query, so
-/// the static host serves the app instead of 404ing. Deeper paths and the
-/// `index.html` itself are left untouched.
+/// document in a stray new tab) and returns a tiny self-closing page — instead of
+/// booting a SECOND editor there — so the stray tab closes itself and never boots
+/// a kernel. Deeper paths and the `index.html` itself are left untouched, so the
+/// in-iframe editor is unaffected.
 @Suite struct JupyterLiteAppIndexMiddlewareTests {
 
     private func makeApp() async throws -> Application {
@@ -19,24 +20,25 @@ import VaporTesting
         return app
     }
 
-    @Test func bareNotebooksDirRedirectsToIndexPreservingQuery() async throws {
+    @Test func bareNotebooksDirReturnsSelfClosingPage() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testing().test(
                 .GET, "/jupyterlite/notebooks?path=users%2Fx%2Fassignment.ipynb"
             ) { res async in
-                #expect(res.status == .temporaryRedirect)
-                #expect(
-                    res.headers.first(name: "Location")
-                        == "/jupyterlite/notebooks/index.html?path=users%2Fx%2Fassignment.ipynb")
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("window.close()"))
+                // Must NOT boot a second editor — no redirect to index.html.
+                #expect(res.headers.first(name: "Location") == nil)
             }
         }
     }
 
-    @Test func trailingSlashAlsoRedirects() async throws {
+    @Test func trailingSlashAlsoSelfCloses() async throws {
         try await withApp(try await makeApp()) { app in
             try await app.testing().test(.GET, "/jupyterlite/lab/") { res async in
-                #expect(res.status == .temporaryRedirect)
-                #expect(res.headers.first(name: "Location") == "/jupyterlite/lab/index.html")
+                #expect(res.status == .ok)
+                #expect(res.body.string.contains("window.close()"))
+                #expect(res.headers.first(name: "Location") == nil)
             }
         }
     }
