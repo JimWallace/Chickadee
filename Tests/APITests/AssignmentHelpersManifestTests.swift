@@ -539,6 +539,45 @@ final class AssignmentHelpersManifestTests {
         #expect(extracted.contains("stale.txt") == false)
     }
 
+    @Test func extractSupportFiles_preservesServerSideSolutionPyAcrossRebuild() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("preserve-solpy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        // A zip WITHOUT solution.ipynb / solution.py — like a draft/MCP-created
+        // setup whose reference solution lives only as a validation submission.
+        let zipPath = tempRoot.appendingPathComponent("setup.zip").path
+        try ahMakeZip(
+            at: zipPath,
+            entries: [
+                ("tests.py", "print('t')"),
+                ("dbgen.py", "def gen():\n    return 1\n"),
+            ])
+
+        let testSetupsDirectory = tempRoot.appendingPathComponent("testsetups").path + "/"
+        let sharedDir = testSetupsDirectory + "shared/setup_sol/"
+        try FileManager.default.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
+        // The solution-save path wrote this server-side-only file.
+        try "def answer():\n    return 42\n".write(
+            toFile: sharedDir + "solution.py", atomically: true, encoding: .utf8)
+
+        // An edit triggers a shared-dir rebuild (wipe + re-extract). solution.py
+        // is not in the zip, so without preservation the wipe would drop it.
+        extractSupportFilesToSharedDirectory(
+            zipPath: zipPath,
+            setupID: "setup_sol",
+            testSuiteScripts: ["tests.py"],
+            testSetupsDirectory: testSetupsDirectory
+        )
+
+        let onDisk = try? String(contentsOfFile: sharedDir + "solution.py", encoding: .utf8)
+        #expect(onDisk?.contains("def answer():") == true)
+        // Ordinary support files still extract; the test script does not.
+        #expect(FileManager.default.fileExists(atPath: sharedDir + "dbgen.py"))
+        #expect(FileManager.default.fileExists(atPath: sharedDir + "tests.py") == false)
+    }
+
     @Test func removeMaterializedNotebookFilesDeletesLegacyNotebookArtifactsForSetup() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("materialized-files-\(UUID().uuidString)")

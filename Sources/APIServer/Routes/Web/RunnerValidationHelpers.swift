@@ -77,6 +77,22 @@ func enqueueRunnerValidationSubmission(
         on: req.db)
 
     try await materialized.saveClaimable(on: req.db)
+
+    // Keep the server-side `shared/{setupID}/solution.py` in lockstep with the
+    // reference solution, so a Global Input expression can compute an expected
+    // value as `solution.<fn>(...)` — one source of truth — instead of a
+    // hand-maintained answer key that can silently drift from the solution.
+    // This file lives ONLY in the shared directory (never the test-setup zip),
+    // so it never reaches the worker, the browser, or a student support-file
+    // download — mirroring how `solution.ipynb` is kept out of every
+    // student-facing path. Best-effort: failure just leaves `import solution`
+    // unavailable (the prior behaviour) and never blocks the save.
+    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+    SolutionNotebookExtractor.writeSolutionPy(
+        notebookData: solutionNotebookData,
+        sharedDirectory: sharedDir,
+        overwrite: true)
+
     return subID
 }
 

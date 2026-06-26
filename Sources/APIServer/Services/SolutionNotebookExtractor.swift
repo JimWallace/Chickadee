@@ -58,11 +58,33 @@ enum SolutionNotebookExtractor {
         notebookData: Data,
         sharedDirectory: String
     ) -> Bool {
+        writeSolutionPy(notebookData: notebookData, sharedDirectory: sharedDirectory, overwrite: false)
+    }
+
+    /// Like `writeSolutionPyIfNeeded`, but `overwrite: true` refreshes an
+    /// existing `solution.py`.  Used by the solution-save path so the
+    /// server-side `shared/{setupID}/solution.py` the personalization
+    /// evaluator imports stays in lockstep with the instructor's reference
+    /// solution — the keystone that lets a Global Input expression compute an
+    /// expected value as `solution.<fn>(...)` instead of a parallel answer key
+    /// that can drift.  `solution.py` lives ONLY in the shared directory; it is
+    /// never written into the test-setup zip, so it never reaches the worker,
+    /// the browser, or a student support-file download (mirroring the reserved
+    /// treatment of `solution.ipynb`).
+    ///
+    /// With `overwrite: false` an existing `solution.py` is left alone so an
+    /// instructor-uploaded support file still wins.
+    @discardableResult
+    static func writeSolutionPy(
+        notebookData: Data,
+        sharedDirectory: String,
+        overwrite: Bool
+    ) -> Bool {
         let fm = FileManager.default
         let target = (sharedDirectory as NSString).appendingPathComponent("solution.py")
 
-        // Don't overwrite an instructor-uploaded solution.py.
-        if fm.fileExists(atPath: target) { return false }
+        // Don't clobber an instructor-uploaded solution.py unless asked to.
+        if fm.fileExists(atPath: target) && !overwrite { return false }
 
         guard let py = extractCodeToPython(notebookData: notebookData) else { return false }
         // Skip when the notebook had no executable cells — writing an

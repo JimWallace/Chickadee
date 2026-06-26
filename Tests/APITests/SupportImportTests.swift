@@ -75,6 +75,60 @@ import Testing
         #expect(onDisk == instructorOwn)
     }
 
+    @Test func extractor_overwriteRefreshesExistingSolutionPy() throws {
+        // The solution-save path uses `overwrite: true` to keep
+        // `shared/solution.py` in lockstep with the reference solution, so a
+        // Global Input expression's `solution.<fn>(...)` never drifts.
+        let nb: [String: Any] = [
+            "cells": [["cell_type": "code", "source": "def f(x):\n    return x + 1\n"]],
+            "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: nb)
+        let shared = tempDir.path + "/"
+        let pyPath = shared + "solution.py"
+
+        // A stale solution.py is present.
+        try "STALE = 1\n".write(toFile: pyPath, atomically: true, encoding: .utf8)
+
+        // overwrite:false leaves it (instructor-uploaded support file wins).
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: shared, overwrite: false) == false)
+        #expect(try String(contentsOfFile: pyPath, encoding: .utf8) == "STALE = 1\n")
+
+        // overwrite:true refreshes it from the current solution notebook.
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: shared, overwrite: true))
+        let refreshed = try String(contentsOfFile: pyPath, encoding: .utf8)
+        #expect(refreshed.contains("def f(x):"))
+        #expect(refreshed.contains("STALE") == false)
+    }
+
+    @Test func evaluator_importsSolutionAfterOverwriteWrite() async throws {
+        // End-to-end keystone: once `shared/solution.py` exists, an expression
+        // can source an expected value straight from the reference solution.
+        let nb: [String: Any] = [
+            "cells": [
+                ["cell_type": "code", "source": "def double(x):\n    return x * 2\n"]
+            ],
+            "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: nb)
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: tempDir.path + "/", overwrite: true))
+
+        let result = try await PersonalizationEvaluator.evaluate(
+            seedHex: "0005",
+            staticVariables: [],
+            expressions: [PersonalizationExpression(name: "x", expression: "solution.double(seed)")],
+            supportFilesDirectory: tempDir.path
+        )
+        // seed = 5; solution.double(5) = 10.
+        #expect(result["x"] == "10")
+    }
+
     @Test func extractor_skipsEmptyNotebook() throws {
         let nb: [String: Any] = [
             "cells": [["cell_type": "markdown", "source": "Just text"]],
