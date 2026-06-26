@@ -233,7 +233,31 @@ only same-origin `ck:'kernel-diag'` messages of an allowed kind):
   funnel at `boot_start` and leave the collector polling the full boot deadline.
 - **`kernel_error`** — the *why*: a CSP worker block (the historical
   `data:`-worker case), a blocked/404 asset, a dead/unknown kernel, or a
-  boot-stall watchdog.
+  boot-stall watchdog. For the two watchdog beacons — `kernel_unknown`
+  (sustained dead/unknown status) and `boot_stalled` (passed the boot deadline)
+  — the message additionally carries a **`bootContext()`** snapshot so a single
+  stalled-kernel row is self-diagnostic rather than a bare "kernel status
+  unknown": `coi`/`sab` (which kernel transport — COI threads vs. the
+  comlink/service-worker fallback, i.e. the WebKit split), `mem`/`cpu`
+  (`navigator.deviceMemory`/`hardwareConcurrency` — the low-RAM / old-iPad
+  terminal-stall hypothesis), `swctl` (is a service worker controlling the
+  document), `shell` (did the JupyterLite shell render — app vs. kernel stall),
+  `errs`/`lasterr` (how many boot errors preceded the stall, and the last
+  source — did a `csp_violation`/`resource_error`/`wasm_crash` come first), and
+  `phase` (furthest boot phase). Capability and device-class signals only — the
+  same class of data the server already derives from the User-Agent — never
+  code, output, grades, or identity.
+
+**Transient vs. terminal (CASE 2).** A healthy boot routinely flashes an
+unknown/dead status for a beat before idling, so a one-off blip is suppressed
+(`trackUnhealthy` requires the streak to hold `SUSTAINED_UNHEALTHY_MS`). Even so,
+a *slow* boot can emit a sustained `kernel_unknown` and then still reach idle —
+indistinguishable, by count alone, from one that never recovers. So a
+`kernel_idle` that follows a reported unhealthy streak is tagged
+**`recovered=1;unhealthy_ms=…`**; the terminal failures are then
+`(kernel_unknown count) − (recovered=1 idles)`. The `kernel_unknown` beacon is
+once-guarded per boot so the varying `bootContext` can't slip past the
+`seenErrors` dedup and emit one per poll.
 
 Capture is scoped to the **boot window** (it stops once the kernel idles), so it
 never records student-code execution — same PII contract as the rest of
