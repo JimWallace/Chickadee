@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.545] - 2026-06-26
+
+### Fixed
+
+- **Browser grading now fails over to the server when the in-browser runtime can't start, instead of recording a 0%.** When the grading-worker Pyodide can't initialize at all — e.g. the Pyodide 3.14 WebKit `call_indirect to a null table entry` trap that bricks grading on some Safari/iOS builds — the shared RunnerCore wasm was catching each rejected run and returning an exit-2 `error` outcome, so `executeSuites` completed with an all-`error` collection that got posted as a real **0%** submission and the existing `/submissions/browser-failover` server backstop never fired. `runScripts` now probes the grading runtime (`executor.ensureReady()`) before the suite loop and throws on a hard init failure, so the submit path fails the grade over to native server-side grading on the validated suite rather than stamping the student a 0. A per-script error after a healthy init is unchanged.
+
+### Added
+
+- **Supported-browser warning (LEARN-aligned).** A simplified take on D2L Brightspace's browser-support matrix: Chickadee now warns students whose browser is below the supported line — **Safari 26+, Chrome 140+, Edge 140+, Firefox 143+** — with a dismissible, non-blocking banner on the notebook page, instead of letting an old browser fail silently. The warning never blocks: an unsupported browser still submits and grades server-side (the browser-grading failover) and via `.ipynb` upload. Detection is conservative — only a confidently-below-floor browser is flagged; an unknown/unparseable User-Agent is left alone. The version floors live in one place (`SupportedBrowserMatrix`) and are bumped as the supported line moves. A `browser_support` telemetry beacon records the real below-matrix rate (attributed by browser from the User-Agent) so the line can be tuned with data. (Also fixes a latent drop: the existing low-memory `device_warning` beacon was missing from the client-diagnostics allowlist and was being 400'd.)
+
+
 ## [0.4.544] - 2026-06-26
 
 ### Added
