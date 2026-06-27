@@ -234,7 +234,8 @@ extension InstructorDashboardRoutes {
                     urlToken: token
                 ),
                 unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
-                isPending: false
+                isPending: false,
+                registerURL: ""
             )
         }
     }
@@ -254,7 +255,9 @@ extension InstructorDashboardRoutes {
                 lastSeenAtISO: nil,
                 submissionsURL: "#",
                 unenrollURL: "/courses/\(activeCourseUUID.uuidString)/pre-unenroll/\(preID.uuidString)",
-                isPending: true
+                isPending: true,
+                registerURL:
+                    "/courses/\(activeCourseUUID.uuidString)/pre-enroll/\(preID.uuidString)/register"
             )
         }
     }

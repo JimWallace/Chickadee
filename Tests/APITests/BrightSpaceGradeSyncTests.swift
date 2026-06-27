@@ -159,6 +159,44 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         return result
     }
 
+    /// A manifest whose suite items sum to `total` points, so
+    /// `suiteTotalPoints` (the override → points denominator) is non-zero.
+    private func pointsManifest(total: Int) -> String {
+        #"""
+        {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"t1.sh","points":\#(total)}],"timeLimitSeconds":10,"makefile":null}
+        """#
+    }
+
+    /// Builds a configured course/setup/assignment/user graph with NO
+    /// submission — the "pending student manually registered for grade-sync
+    /// testing" case. The setup's manifest sums to `suiteTotal` points so an
+    /// override percent converts to points.
+    private func makeOverrideOnlyScenario(
+        suiteTotal: Int = 10,
+        orgUnitID: String = "ou-ovr",
+        gradeObjectID: String = "go-ovr",
+        studentID: String? = "stu-ovr"
+    ) async throws -> (setupID: String, userID: UUID) {
+        let course = try await makeTestCourse(on: app, code: "BSOVR")
+        course.brightspaceOrgUnitID = orgUnitID
+        try await course.save(on: app.db)
+        let courseID = try course.requireID()
+
+        let setupID = "ts_\(UUID().uuidString.lowercased().prefix(8))"
+        _ = try await makeTestSetup(
+            on: app, id: setupID, courseID: courseID, manifest: pointsManifest(total: suiteTotal))
+
+        let assignment = try await makeTestAssignment(
+            on: app, testSetupID: setupID, courseID: courseID, title: "Override-only Lab")
+        assignment.brightspaceGradeObjectID = gradeObjectID
+        try await assignment.save(on: app.db)
+
+        let user = try await makeTestUser(on: app, username: "ovr_\(UUID().uuidString.lowercased().prefix(6))")
+        user.studentID = studentID
+        try await user.save(on: app.db)
+        return (setupID, try user.requireID())
+    }
+
     /// Drives the sweep with a constant per-course identity (the fake), so the
     /// existing tests exercise grade selection / debounce / caching unchanged.
     private func sweep(client: any BrightSpaceGrading, debounceSecs: TimeInterval = 90) async throws -> Int {
@@ -390,6 +428,90 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             let result = try #require(try await APIResult.query(on: app.db).first())
             #expect(result.brightspaceSyncPending == true)
             #expect(result.brightspaceSyncError == nil)
+        }
+    }
+
+    @Test func overrideOnStudentWithNoSubmissionsPushesGrade() async throws {
+        // A manually-registered pending student (no submissions) graded only by
+        // an instructor override must still push: the override row carries the
+        // pending flag, and the push converts percent → points against the
+        // suite total.
+        try await withApp(app) { _ in
+            let scenario = try await makeOverrideOnlyScenario(suiteTotal: 10, studentID: "stu-ovr")
+            try await applyGradeOverride(
+                testSetupID: scenario.setupID,
+                studentUserID: scenario.userID,
+                percent: 50,
+                note: "manual",
+                grantedByUserID: nil,
+                on: app.db
+            )
+            // applyGradeOverride flags the override row pending from "now";
+            // backdate past the debounce window so the sweep picks it up.
+            let override = try #require(try await APIGradeOverride.query(on: app.db).first())
+            #expect(override.brightspaceSyncPending == true)
+            override.brightspacePendingSince = Date().addingTimeInterval(-3600)
+            try await override.save(on: app.db)
+
+            let fake = FakeBrightSpaceGrading(userIDsByOrgDefinedId: ["stu-ovr": "d2l-ovr"])
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)
+            let pushes = await fake.pushes
+            #expect(pushes.count == 1)
+            #expect(pushes.first?.bsUserID == "d2l-ovr")
+            #expect(pushes.first?.earnedPoints == 5)  // 50% of 10
+            // Override row marked synced, flag cleared.
+            let reloaded = try #require(try await APIGradeOverride.query(on: app.db).first())
+            #expect(reloaded.brightspaceSyncPending == false)
+            #expect(reloaded.brightspaceSyncedAt != nil)
+            #expect(reloaded.brightspaceSyncError == nil)
+        }
+    }
+
+    @Test func clearingOverrideOnNoSubmissionStudentDoesNotPush() async throws {
+        // Clearing an override on a student with no submissions reverts to the
+        // (nonexistent) runner grade — nothing to push, and whatever was already
+        // in BrightSpace is left as-is.
+        try await withApp(app) { _ in
+            let scenario = try await makeOverrideOnlyScenario(studentID: "stu-ovr")
+            try await applyGradeOverride(
+                testSetupID: scenario.setupID, studentUserID: scenario.userID,
+                percent: 75, note: nil, grantedByUserID: nil, on: app.db)
+            _ = try await clearGradeOverride(
+                testSetupID: scenario.setupID, studentUserID: scenario.userID, on: app.db)
+
+            // The override row is gone, so there is nothing pending to sweep.
+            let remaining = try await APIGradeOverride.query(on: app.db).count()
+            #expect(remaining == 0)
+
+            let fake = FakeBrightSpaceGrading(userIDsByOrgDefinedId: ["stu-ovr": "d2l-ovr"])
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 0)
+            let pushes = await fake.pushes
+            #expect(pushes.isEmpty)
+        }
+    }
+
+    @Test func overrideOnlyPushDefersWhenNoIdentityConnected() async throws {
+        // With no connected sync identity the override-only push must defer, not
+        // clear — the grade pushes once an instructor connects.
+        try await withApp(app) { _ in
+            let scenario = try await makeOverrideOnlyScenario(studentID: "stu-ovr")
+            try await applyGradeOverride(
+                testSetupID: scenario.setupID, studentUserID: scenario.userID,
+                percent: 40, note: nil, grantedByUserID: nil, on: app.db)
+            let override = try #require(try await APIGradeOverride.query(on: app.db).first())
+            override.brightspacePendingSince = Date().addingTimeInterval(-3600)
+            try await override.save(on: app.db)
+
+            let processed = try await sweepWithNoIdentity()
+
+            #expect(processed == 0)
+            let reloaded = try #require(try await APIGradeOverride.query(on: app.db).first())
+            #expect(reloaded.brightspaceSyncPending == true)
+            #expect(reloaded.brightspaceSyncError == nil)
         }
     }
 

@@ -341,4 +341,9 @@ func registerMigrations(on app: Application) {
     // CreateCourseEnrollments (the table) and CreateUsers (the backfill reads
     // users).
     app.migrations.add(AddCourseEnrollmentRole())
+
+    // BrightSpace grade-sync bookkeeping on grade_overrides, mirroring the
+    // columns on results. Lets an override on a student with no submissions
+    // (e.g. a manually-registered pre-enrolled student) enqueue a grade push.
+    app.migrations.add(AddGradeOverrideBrightSpaceSync())
 }

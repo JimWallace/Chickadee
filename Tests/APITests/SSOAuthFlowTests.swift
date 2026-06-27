@@ -568,6 +568,83 @@ import VaporTesting
         }
     }
 
+    @Test func sSOCallbackAdoptsManuallyRegisteredStubByUsername() async throws {
+        // A pending student manually registered via the instructor escape valve
+        // exists as a `duo-oidc` user with the right username but NO
+        // externalSubject. Their real first login must adopt that exact row
+        // (claiming it with the subject), not create a duplicate — so any grade
+        // override already attached to the stub stays bound to the same user.
+        let idToken = try await signedToken(
+            issuer: "http://127.0.0.1/issuer",
+            audience: ["test-client-id"],
+            subject: "subject-stub-adopt",
+            username: nil,
+            name: "Stub Student",
+            email: "stub@example.com",
+            extraClaims: [
+                "winaccountname": "stubuser",
+                "student_id": "99887766",
+            ]
+        )
+        let provider = try await makeMockOIDCProvider(mode: .succeedImmediately(idToken: idToken))
+
+        let config = OIDCConfiguration(
+            clientID: "test-client-id",
+            clientSecret: "test-client-secret",
+            redirectURI: "http://localhost:8080/auth/sso/callback",
+            discovery: OIDCDiscovery(
+                issuer: "http://127.0.0.1/issuer",
+                authorizationEndpoint: "http://127.0.0.1:\(provider.port)/authorize",
+                tokenEndpoint: "http://127.0.0.1:\(provider.port)/token",
+                jwksURI: "http://127.0.0.1:\(provider.port)/keys",
+                revocationEndpoint: nil,
+                endSessionEndpoint: nil
+            ),
+            claimConfig: OIDCClaimConfig(usernameClaim: "winaccountname")
+        )
+
+        try await withApp(provider.app) { _ in
+            try await withApp(try await makeApp(oidcConfig: config)) { app in
+                await app.jwt.keys.add(hmac: "test-secret", digestAlgorithm: .sha256)
+
+                // Manually-registered stub: duo-oidc, matching username, no subject.
+                let stub = APIUser(
+                    username: "stubuser",
+                    passwordHash: "",
+                    role: "student",
+                    authProvider: "duo-oidc",
+                    externalSubject: nil
+                )
+                try await stub.save(on: app.db)
+                let stubID = try stub.requireID()
+
+                let start = try await startSSOSession(on: app)
+
+                try await app.asyncTest(
+                    .GET,
+                    "/auth/sso/callback?code=code123&state=\(start.state)",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: start.cookie)
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .seeOther)
+                    }
+                )
+
+                // Exactly one duo-oidc user for this username — the stub, adopted.
+                let users = try await APIUser.query(on: app.db)
+                    .filter(\.$username == "stubuser")
+                    .all()
+                #expect(users.count == 1)
+                let user = try #require(users.first)
+                #expect(user.id == stubID)
+                #expect(user.externalSubject == "subject-stub-adopt")
+                #expect(user.studentID == "99887766")
+                #expect(user.email == "stub@example.com")
+            }
+        }
+    }
+
     @Test func sSOCallbackPreservesExplicitUserIDClaimWhenRepairingUsername() async throws {
         let idToken = try await signedToken(
             issuer: "http://127.0.0.1/issuer",

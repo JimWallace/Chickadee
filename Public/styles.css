@@ -1060,6 +1060,24 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 .ext-details[open] > .ext-summary { background: var(--gray-100); }
 .ext-details form { min-width: 14rem; }
 @media (max-width: 640px) { .ext-details form { min-width: 0; } }
+/* Inline set/clear panel shared by the grade-override control
+   (assignment-submissions.leaf) and the register-pending-student control
+   (instructor-students.leaf) — hoisted from a page block so both pages render
+   identically. */
+.form-flush { margin: 0; }
+.ext-panel {
+    margin-top: .4rem;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    padding: .5rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-300);
+    border-radius: .25rem;
+}
+.ext-field-label { font-size: .78rem; color: var(--gray-700); }
+.ext-field-input { width: 100%; margin-top: .2rem; }
+.ext-panel-actions { display: flex; gap: .3rem; }
 
 /* ── Submission view (submission.leaf) ───────────────── */
 /* Migrated out of submission.leaf's embedded <style> block (v0.4.x UI audit)

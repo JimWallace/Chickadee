@@ -77,27 +77,127 @@ func sweepBrightSpaceGradeSync(
         groups[key, default: []].append(result)
     }
 
-    for key in groupOrder {
-        guard let results = groups[key] else { continue }
+    var targets: [GradePushTarget] = groupOrder.compactMap { key in
+        guard let results = groups[key] else { return nil }
         let assignment = context.assignmentsBySetupID[key.testSetupID]
-        let target = GradePushTarget(
+        return GradePushTarget(
             userID: key.userID,
             testSetupID: key.testSetupID,
             results: results,
+            pendingOverride: nil,
             assignment: assignment,
             course: assignment.flatMap { context.coursesByID[$0.courseID] },
             user: context.usersByID[key.userID]
         )
+    }
+
+    // Override-only targets: instructor overrides on students with no
+    // submissions, whose pending flag the override row carries directly (there
+    // is no result row).  De-duped against the result-driven groups so a
+    // student who also has submissions is pushed once via their results.
+    let coveredKeys = Set(groupOrder)
+    targets += try await pendingOverrideTargets(
+        coveredKeys: coveredKeys, cutoff: cutoff, db: db)
+
+    for target in targets {
+        let syncRows = target.syncRows
         do {
             let pushed = try await pushGrade(
                 for: target, db: db, resolveClient: resolveClient,
                 classlistCache: classlistCache, logger: logger, application: application)
-            if pushed { processed += results.count }
+            if pushed { processed += syncRows.count }
         } catch {
-            await recordSweepFailure(results, error: error, db: db, logger: logger)
+            await recordSweepFailure(syncRows, error: error, db: db, logger: logger)
         }
     }
     return processed
+}
+
+/// Builds override-only push targets from `grade_overrides` rows flagged
+/// pending past the debounce cutoff.  A row whose (student, test setup) is
+/// already covered by a result-driven group has its pending flag cleared in
+/// place (the results path will push it) and yields no target.
+private func pendingOverrideTargets(
+    coveredKeys: Set<GradePushKey>,
+    cutoff: Date,
+    db: Database
+) async throws -> [GradePushTarget] {
+    let pendingOverrides = try await APIGradeOverride.query(on: db)
+        .filter(\.$brightspaceSyncPending == true)
+        .filter(\.$brightspacePendingSince <= cutoff)
+        .all()
+    guard !pendingOverrides.isEmpty else { return [] }
+
+    var overrideOnly: [APIGradeOverride] = []
+    for override in pendingOverrides {
+        let key = GradePushKey(userID: override.userID, testSetupID: override.testSetupID)
+        if coveredKeys.contains(key) {
+            // The result-driven group will push this (student, setup); the
+            // override row's own flag is redundant — clear it.
+            override.brightspaceSyncPending = false
+            try await override.save(on: db)
+        } else {
+            overrideOnly.append(override)
+        }
+    }
+    guard !overrideOnly.isEmpty else { return [] }
+
+    let context = try await loadOverrideSyncContext(for: overrideOnly, db: db)
+    return overrideOnly.map { override in
+        let assignment = context.assignmentsBySetupID[override.testSetupID]
+        return GradePushTarget(
+            userID: override.userID,
+            testSetupID: override.testSetupID,
+            results: [],
+            pendingOverride: override,
+            assignment: assignment,
+            course: assignment.flatMap { context.coursesByID[$0.courseID] },
+            user: context.usersByID[override.userID]
+        )
+    }
+}
+
+/// Loads the assignments / courses / users an override-only push set
+/// references, keyed for `GradePushTarget` assembly.  Mirrors the result-driven
+/// `loadGradeSyncBatchContext` but starts from override rows (which already
+/// carry the test setup + user), so no submission lookup is needed.
+private func loadOverrideSyncContext(
+    for overrides: [APIGradeOverride],
+    db: Database
+) async throws -> GradeSyncBatchContext {
+    let setupIDs = Array(Set(overrides.map(\.testSetupID)))
+    var assignmentsBySetupID: [String: APIAssignment] = [:]
+    for chunk in chunkedForInFilter(setupIDs) {
+        for assignment in try await APIAssignment.query(on: db).filter(\.$testSetupID ~~ chunk).all()
+        where assignmentsBySetupID[assignment.testSetupID] == nil {
+            assignmentsBySetupID[assignment.testSetupID] = assignment
+        }
+    }
+
+    let courseIDs = Array(Set(assignmentsBySetupID.values.map(\.courseID)))
+    var coursesByID: [UUID: APICourse] = [:]
+    for chunk in chunkedForInFilter(courseIDs) {
+        for course in try await APICourse.query(on: db).filter(\.$id ~~ chunk).all() {
+            guard let id = course.id else { continue }
+            coursesByID[id] = course
+        }
+    }
+
+    let userIDs = Array(Set(overrides.map(\.userID)))
+    var usersByID: [UUID: APIUser] = [:]
+    for chunk in chunkedForInFilter(userIDs) {
+        for user in try await APIUser.query(on: db).filter(\.$id ~~ chunk).all() {
+            guard let id = user.id else { continue }
+            usersByID[id] = user
+        }
+    }
+
+    return GradeSyncBatchContext(
+        submissionsByID: [:],
+        assignmentsBySetupID: assignmentsBySetupID,
+        coursesByID: coursesByID,
+        usersByID: usersByID
+    )
 }
 
 // MARK: - Batch loading
@@ -112,13 +212,48 @@ private struct GradePushKey: Hashable {
 /// Everything `pushGrade` needs for one group, pre-resolved from the
 /// sweep-wide batch context.  `assignment` / `course` / `user` stay optional:
 /// a missing row takes the same no-op / skip path the per-result lookups did.
+///
+/// `pendingOverride` is set only for an override-only target — a student with
+/// no submissions whose grade comes entirely from an instructor override, so
+/// there is no result row and the override row itself carries the pending flag.
 private struct GradePushTarget {
     let userID: UUID
     let testSetupID: String
     let results: [APIResult]
+    let pendingOverride: APIGradeOverride?
     let assignment: APIAssignment?
     let course: APICourse?
     let user: APIUser?
+
+    /// Every row whose BrightSpace sync flags this push must update — the
+    /// flagged result rows plus, for an override-only target, the override row.
+    var syncRows: [any BrightSpaceSyncFlaggable] {
+        var rows: [any BrightSpaceSyncFlaggable] = results
+        if let pendingOverride { rows.append(pendingOverride) }
+        return rows
+    }
+}
+
+/// A row carrying the four BrightSpace grade-sync bookkeeping columns. Both
+/// `APIResult` and `APIGradeOverride` conform, so the sweep's success / clear /
+/// failure paths mark them identically regardless of which kind enqueued the
+/// push.
+protocol BrightSpaceSyncFlaggable: AnyObject {
+    var brightspaceSyncPending: Bool? { get set }
+    var brightspacePendingSince: Date? { get set }
+    var brightspaceSyncedAt: Date? { get set }
+    var brightspaceSyncError: String? { get set }
+    /// Stable identifier for log lines (a result's string id / an override's UUID).
+    var brightspaceSyncRowID: String { get }
+    func save(on database: Database) async throws
+}
+
+extension APIResult: BrightSpaceSyncFlaggable {
+    var brightspaceSyncRowID: String { id ?? "?" }
+}
+
+extension APIGradeOverride: BrightSpaceSyncFlaggable {
+    var brightspaceSyncRowID: String { id?.uuidString ?? "?" }
 }
 
 /// Sweep-wide lookup tables, loaded once per sweep.
@@ -197,30 +332,30 @@ private func chunkedForInFilter<T>(_ items: [T]) -> [[T]] {
 
 // MARK: - Per-group push
 
-/// Marks every result in a failed group the way the single-result error path
+/// Marks every row in a failed group the way the single-result error path
 /// did: flag cleared, error recorded, push retried on the next pending cycle.
 private func recordSweepFailure(
-    _ results: [APIResult],
+    _ rows: [any BrightSpaceSyncFlaggable],
     error: Error,
     db: Database,
     logger: Logger
 ) async {
-    for result in results {
-        result.brightspaceSyncPending = false
-        result.brightspaceSyncedAt = nil
-        result.brightspaceSyncError = error.localizedDescription
-        try? await result.save(on: db)
+    for row in rows {
+        row.brightspaceSyncPending = false
+        row.brightspaceSyncedAt = nil
+        row.brightspaceSyncError = error.localizedDescription
+        try? await row.save(on: db)
     }
-    let ids = results.map { $0.id ?? "?" }.joined(separator: ", ")
-    logger.warning("BrightSpace grade sync failed for result(s) \(ids): \(error)")
+    let ids = rows.map(\.brightspaceSyncRowID).joined(separator: ", ")
+    logger.warning("BrightSpace grade sync failed for row(s) \(ids): \(error)")
 }
 
-/// Clears the pending flag on every result in the group (the "nothing to
+/// Clears the pending flag on every row in the group (the "nothing to
 /// push" no-op outcome).
-private func clearPendingFlag(_ results: [APIResult], on db: Database) async throws {
-    for result in results {
-        result.brightspaceSyncPending = false
-        try await result.save(on: db)
+private func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: Database) async throws {
+    for row in rows {
+        row.brightspaceSyncPending = false
+        try await row.save(on: db)
     }
 }
 
@@ -239,6 +374,7 @@ private func pushGrade(
 ) async throws -> Bool {
     let userID = target.userID
     let testSetupID = target.testSetupID
+    let syncRows = target.syncRows
 
     // The assignment for this test setup must have a grade item configured.
     guard let assignment = target.assignment,
@@ -246,7 +382,7 @@ private func pushGrade(
         !gradeObjectID.isEmpty
     else {
         // No BrightSpace grade item configured — no-op.
-        try await clearPendingFlag(target.results, on: db)
+        try await clearPendingFlag(syncRows, on: db)
         return true
     }
 
@@ -255,7 +391,7 @@ private func pushGrade(
         let orgUnitID = course.brightspaceOrgUnitID,
         !orgUnitID.isEmpty
     else {
-        try await clearPendingFlag(target.results, on: db)
+        try await clearPendingFlag(syncRows, on: db)
         return true
     }
 
@@ -271,7 +407,7 @@ private func pushGrade(
     // yet (nothing to push); throws if submissions exist but yield no points.
     guard let points = try await bestPointsForStudent(userID: userID, testSetupID: testSetupID, db: db)
     else {
-        try await clearPendingFlag(target.results, on: db)
+        try await clearPendingFlag(syncRows, on: db)
         return true
     }
 
@@ -317,10 +453,10 @@ private func pushGrade(
     )
     guard let bsUserID else {
         // No BrightSpace account for this student — record + skip.
-        for result in target.results {
-            result.brightspaceSyncPending = false
-            result.brightspaceSyncError = "Student has no BrightSpace account (orgDefinedId not found)"
-            try await result.save(on: db)
+        for row in syncRows {
+            row.brightspaceSyncPending = false
+            row.brightspaceSyncError = "Student has no BrightSpace account (orgDefinedId not found)"
+            try await row.save(on: db)
         }
         await appendSyncLog(.skipped, detail: "No BrightSpace account (orgDefinedId not found)")
         return true
@@ -343,12 +479,12 @@ private func pushGrade(
     }
 
     let syncedAt = Date()
-    for result in target.results {
-        result.brightspaceSyncPending = false
-        result.brightspacePendingSince = nil
-        result.brightspaceSyncedAt = syncedAt
-        result.brightspaceSyncError = nil
-        try await result.save(on: db)
+    for row in syncRows {
+        row.brightspaceSyncPending = false
+        row.brightspacePendingSince = nil
+        row.brightspaceSyncedAt = syncedAt
+        row.brightspaceSyncError = nil
+        try await row.save(on: db)
     }
 
     await appendSyncLog(.success, detail: nil)

@@ -118,31 +118,6 @@
     flex-wrap: wrap;
     align-items: center;
 }
-.form-flush {
-    margin: 0;
-}
-.ext-panel {
-    margin-top: .4rem;
-    display: flex;
-    flex-direction: column;
-    gap: .3rem;
-    padding: .5rem;
-    background: var(--gray-50);
-    border: 1px solid var(--gray-300);
-    border-radius: .25rem;
-}
-.ext-field-label {
-    font-size: .78rem;
-    color: var(--gray-700);
-}
-.ext-field-input {
-    width: 100%;
-    margin-top: .2rem;
-}
-.ext-panel-actions {
-    display: flex;
-    gap: .3rem;
-}
 #assignment-submissions-table th[data-sort-key] {
     cursor: pointer;
     user-select: none;

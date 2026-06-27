@@ -372,6 +372,21 @@ extension InstructorDashboardRoutes {
                 result.brightspaceSyncError = nil
                 try await result.save(on: req.db)
             }
+            // Errored override-only pushes (no-submission students) live on the
+            // override row, not a result row — re-queue those too.
+            let setupIDList = try await courseSetupIDs(req: req, courseUUID: courseUUID)
+            let overrides =
+                setupIDList.isEmpty
+                ? []
+                : try await APIGradeOverride.query(on: req.db)
+                    .filter(\.$testSetupID ~~ setupIDList)
+                    .all()
+            for override in overrides where (override.brightspaceSyncError ?? "").isEmpty == false {
+                override.brightspaceSyncPending = true
+                override.brightspacePendingSince = Date.distantPast
+                override.brightspaceSyncError = nil
+                try await override.save(on: req.db)
+            }
         }
         await runImmediateBrightspaceSweep(req: req)
         return req.redirect(to: "/instructor/brightspace")
@@ -401,6 +416,17 @@ extension InstructorDashboardRoutes {
             result.brightspaceSyncError = nil
             try await result.save(on: req.db)
         }
+        // Override-only grades (no-submission students) carry their pending
+        // flag on the override row; re-queue those for this assignment too.
+        let overrides = try await APIGradeOverride.query(on: req.db)
+            .filter(\.$testSetupID == assignment.testSetupID)
+            .all()
+        for override in overrides {
+            override.brightspaceSyncPending = true
+            override.brightspacePendingSince = Date.distantPast
+            override.brightspaceSyncError = nil
+            try await override.save(on: req.db)
+        }
         await runImmediateBrightspaceSweep(req: req)
         return req.redirect(to: "/instructor/brightspace")
     }
@@ -410,16 +436,23 @@ extension InstructorDashboardRoutes {
     /// Submission IDs (used as result-query keys) for all student submissions
     /// in the active course's test setups.
     private func courseStudentResultIDs(req: Request, courseUUID: UUID) async throws -> [String] {
+        let setupIDs = try await courseSetupIDs(req: req, courseUUID: courseUUID)
+        guard !setupIDs.isEmpty else { return [] }
+        return try await APISubmission.query(on: req.db)
+            .filter(\.$testSetupID ~~ setupIDs)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .all()
+            .compactMap(\.id)
+    }
+
+    /// Distinct test setup IDs for the active course's assignments.  Used to
+    /// scope override-row queries (override-only grade pushes) by course.
+    private func courseSetupIDs(req: Request, courseUUID: UUID) async throws -> [String] {
         let setupIDs = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == courseUUID)
             .all()
             .map(\.testSetupID)
-        guard !setupIDs.isEmpty else { return [] }
-        return try await APISubmission.query(on: req.db)
-            .filter(\.$testSetupID ~~ Array(Set(setupIDs)))
-            .filter(\.$kind == APISubmission.Kind.student)
-            .all()
-            .compactMap(\.id)
+        return Array(Set(setupIDs))
     }
 
     /// Runs a grade-sync sweep immediately, bypassing the debounce window so

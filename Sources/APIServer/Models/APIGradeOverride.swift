@@ -41,6 +41,22 @@ final class APIGradeOverride: Model, Content, @unchecked Sendable {
     @Timestamp(key: "updated_at", on: .update)
     var updatedAt: Date?
 
+    // BrightSpace grade-sync bookkeeping, mirroring the columns on APIResult.
+    // Only set when the override is the *only* thing to push — i.e. the student
+    // has no submissions, so there's no result row to carry the pending flag
+    // (see `applyGradeOverride` / `sweepBrightSpaceGradeSync`).
+    @OptionalField(key: "brightspace_sync_pending")
+    var brightspaceSyncPending: Bool?
+
+    @OptionalField(key: "brightspace_pending_since")
+    var brightspacePendingSince: Date?
+
+    @OptionalField(key: "brightspace_synced_at")
+    var brightspaceSyncedAt: Date?
+
+    @OptionalField(key: "brightspace_sync_error")
+    var brightspaceSyncError: String?
+
     init() {}
 
     init(
