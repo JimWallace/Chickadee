@@ -51,7 +51,7 @@ Submission #(submissionID)
     #endif
 </div>
 
-#if(!classGoals.isEmpty):
+#if(hasClassGoals):
 <section class="class-goals-block">
     <h2 class="class-goals-heading">Class goals</h2>
     #for(goal in classGoals):
