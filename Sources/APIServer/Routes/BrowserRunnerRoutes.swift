@@ -110,11 +110,16 @@ struct BrowserRunnerRoutes: RouteCollection {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
         }
 
+        // Withhold the *names* of grader-only support files (option B —
+        // docs/datasets.md) from the student-facing manifest. Their contents are
+        // already withheld at every download path (#1055); this closes the
+        // residual leak where `graderOnlyFiles` still named the holdout /
+        // answer-key files in the JSON served to the student's browser.
         var headers = HTTPHeaders()
         headers.add(name: .contentType, value: "application/json; charset=utf-8")
         return Response(
             status: .ok, headers: headers,
-            body: .init(string: setup.manifest))
+            body: .init(string: manifestWithGraderOnlyFilesStripped(setup.manifest)))
     }
 
     // MARK: - GET /api/v1/browser-runner/testsetups/:id/seed
@@ -187,4 +192,32 @@ struct BrowserRunnerSeedResponse: Content {
     /// writes these to `_ck_inputs.py` so generated pattern-family scripts can
     /// load per-student args / expected. Nil when there are none (issue #461).
     let personalizedInputs: [String: String]?
+}
+
+/// Returns the manifest JSON with the `graderOnlyFiles` array blanked to `[]`,
+/// so the student-facing browser manifest endpoint doesn't leak the *names* of
+/// reserved holdout / answer-key support files (option B — `docs/datasets.md`).
+/// Their contents are already withheld at every download path (#1055); this
+/// closes the residual name leak in the manifest the browser fetches.
+///
+/// Strict no-op — the input is returned byte-for-byte — when there is nothing
+/// to strip: the key is absent, already empty, or the body isn't a JSON object.
+/// Only when grader-only names are actually present is the JSON rewritten, and
+/// then only the `graderOnlyFiles` key changes; every other field is preserved.
+func manifestWithGraderOnlyFilesStripped(_ manifest: String) -> String {
+    guard
+        let data = manifest.data(using: .utf8),
+        var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+        let existing = object["graderOnlyFiles"] as? [Any], !existing.isEmpty
+    else {
+        return manifest
+    }
+    object["graderOnlyFiles"] = [String]()
+    guard
+        let reencoded = try? JSONSerialization.data(withJSONObject: object),
+        let stripped = String(data: reencoded, encoding: .utf8)
+    else {
+        return manifest
+    }
+    return stripped
 }
