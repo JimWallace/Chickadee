@@ -43,7 +43,7 @@
     'use strict';
 
     var KERNEL_BOOT_DEADLINE_MS = 75000;  // generous; a healthy kernel idles in seconds
-    var SUSTAINED_UNHEALTHY_MS = 10000;   // ignore transient mid-boot dead/unknown blips
+    var SUSTAINED_UNHEALTHY_MS = 30000;   // only a genuinely-stuck kernel sits unhealthy this long — slow-but-fine boots recover well under it (production bootContext showed recoveries at unhealthy_ms 12-37s on 32GB Chrome and modern Safari, so 10s was flagging healthy slow boots)
     var MAX_ERRORS = 8;
     var EXEC_HANG_MS = 45000;     // a cell BUSY this long post-idle is a hang, not a slow cell
     var POST_IDLE_MAX_MS = 900000;  // watch the post-idle exec window this long, then stop (hygiene)

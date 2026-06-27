@@ -149,14 +149,18 @@ test('collector trackUnhealthy ignores a transient unknown but flags a sustained
   const held = t('unknown', 1000, 5000);
   assert.equal(held.unhealthySince, 1000);
   assert.equal(held.report, false);
-  // Held continuously past SUSTAINED_UNHEALTHY_MS (10s): now report. 'dead'
+  // Held continuously past SUSTAINED_UNHEALTHY_MS (30s): now report. 'dead'
   // behaves identically.
-  assert.equal(t('unknown', 1000, 11000).report, true);
-  assert.equal(t('dead', 1000, 11000).report, true);
+  assert.equal(t('unknown', 1000, 31000).report, true);
+  assert.equal(t('dead', 1000, 31000).report, true);
+  // A 10s unhealthy streak no longer reports — the threshold was raised from
+  // 10s to 30s so slow-but-recovering Chromium/Safari boots aren't flagged as
+  // CASE-2 failures (they reach idle on their own, just past the old 10s mark).
+  assert.equal(t('unknown', 1000, 11000).report, false);
   // Any healthy/indeterminate poll resets the clock — no report, streak cleared —
   // so a momentary unknown that flips back to idle/null never reports.
   for (const status of ['idle', 'busy', 'starting', null]) {
-    assert.deepEqual({ ...t(status, 1000, 11000) }, { unhealthySince: 0, report: false });
+    assert.deepEqual({ ...t(status, 1000, 31000) }, { unhealthySince: 0, report: false });
   }
 });
 
