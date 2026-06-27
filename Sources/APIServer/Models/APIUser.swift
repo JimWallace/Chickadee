@@ -357,6 +357,24 @@ struct CurrentUserContext: Encodable {
     /// every enrollment's role mirrors the global role, so this equals the
     /// previous `isInstructor && activeCourse != nil`.
     let isInstructorInActiveCourse: Bool
+    /// Every enrolled course the user can act on as an instructor: those whose
+    /// per-course role is `.instructor`, plus *all* enrolled courses for an
+    /// admin (who instructs the whole deployment). Drives the nav's Instructor
+    /// surface so an instructor always has a direct link into each course they
+    /// teach, regardless of which course is currently active. Inherits the
+    /// code-sorted order of `enrolledCourses`.
+    let instructorCourses: [CourseContext]
+    /// True when `instructorCourses` is non-empty — the user instructs at least
+    /// one enrolled course. The nav's Instructor entry shows whenever this is
+    /// true, not only when the *active* course happens to be one they teach.
+    let isInstructorAnywhere: Bool
+    /// True when the user instructs more than one course, so the nav should
+    /// render the per-course Instructor strip (mirrors `showCourseTabs`).
+    let showInstructorTabs: Bool
+    /// The single course this user instructs, when there is exactly one — the
+    /// nav renders one direct "Instructor" link for it instead of a strip. nil
+    /// when they instruct zero or many courses.
+    let primaryInstructorCourse: CourseContext?
 
     init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
@@ -381,5 +399,14 @@ struct CurrentUserContext: Encodable {
         self.showCourseTabs = enrolledCourses.count > 1
         self.isInstructorInActiveCourse =
             activeCourse != nil && (activeCourse?.role == .instructor || user.isAdmin)
+        // An admin instructs the whole deployment, so every enrollment counts;
+        // everyone else, only their `.instructor` enrollments. Order follows
+        // `enrolledCourses` (code-sorted).
+        let instructorCourses =
+            user.isAdmin ? enrolledCourses : enrolledCourses.filter { $0.role == .instructor }
+        self.instructorCourses = instructorCourses
+        self.isInstructorAnywhere = !instructorCourses.isEmpty
+        self.showInstructorTabs = instructorCourses.count > 1
+        self.primaryInstructorCourse = instructorCourses.count == 1 ? instructorCourses[0] : nil
     }
 }

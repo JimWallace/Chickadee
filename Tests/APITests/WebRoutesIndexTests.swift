@@ -549,8 +549,8 @@ import VaporTesting
                         html.contains("not enrolled in any courses"),
                         "The dashboard should show the empty not-enrolled state")
                     #expect(
-                        !html.contains(#"href="/instructor""#),
-                        "The course-scoped Instructor tab must not render for an unenrolled admin")
+                        !html.contains(#"value="/instructor""#),
+                        "The Instructor nav entry must not render for an unenrolled admin")
                     #expect(
                         html.contains(#"href="/admin""#),
                         "The admin keeps their deployment-wide Admin tab")
@@ -559,8 +559,8 @@ import VaporTesting
     }
 
     /// The other side of the unenrolled-admin fix: an instructor enrolled in a
-    /// course still gets the course-scoped tab, labelled with the active course
-    /// code.
+    /// single course gets a direct Instructor link (the one-course case renders
+    /// a single "Instructor" entry rather than the multi-course strip).
     @Test func enrolledInstructorSeesCourseScopedInstructorTab() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
@@ -575,11 +575,11 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(
-                        html.contains(#"href="/instructor""#),
-                        "An enrolled instructor must still see the Instructor tab")
+                        html.contains(#"value="/instructor""#),
+                        "An enrolled instructor must still see the Instructor entry")
                     #expect(
-                        html.contains(">CS101</a>"),
-                        "The Instructor tab is labelled with the active course code")
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link, not a per-course strip")
                 })
         }
     }
@@ -608,11 +608,11 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(
-                        html.contains(#"href="/instructor""#),
-                        "A per-course instructor (global student) must see the Instructor tab")
+                        html.contains(#"value="/instructor""#),
+                        "A per-course instructor (global student) must see the Instructor entry")
                     #expect(
-                        html.contains(">CS301</a>"),
-                        "The Instructor tab is labelled with the active course code")
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link")
                 })
         }
     }
