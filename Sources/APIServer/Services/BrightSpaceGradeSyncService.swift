@@ -36,13 +36,15 @@ func sweepBrightSpaceGradeSync(
 ) async throws -> Int {
     let cutoff = now.addingTimeInterval(-debounceSecs)
 
-    // All results that are past the debounce window.
+    // All results that are past the debounce window. May be empty — an
+    // override on a student with no submissions has no result row, so the sweep
+    // must still run the override scan below even when nothing here is pending.
+    // (With an empty `pending`, loadGradeSyncBatchContext issues no queries and
+    // the result loops don't execute, so there's no early-return short-circuit.)
     let pending = try await APIResult.query(on: db)
         .filter(\.$brightspaceSyncPending == true)
         .filter(\.$brightspacePendingSince <= cutoff)
         .all()
-
-    guard !pending.isEmpty else { return 0 }
 
     let context = try await loadGradeSyncBatchContext(for: pending, db: db)
 
