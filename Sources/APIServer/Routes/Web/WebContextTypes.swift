@@ -352,6 +352,11 @@ struct SubmissionContext: Encodable {
     /// as an "Achievements" section.  Empty when the assignment has no class
     /// goals (or the sweep hasn't produced a snapshot yet).
     let classGoals: [ClassGoalView]
+    /// True iff `classGoals` is non-empty.  The template gates the "Class goals"
+    /// heading on this explicit Swift-computed flag rather than
+    /// `!classGoals.isEmpty` in Leaf, so an empty goal list never leaks a bare
+    /// heading regardless of how the Leaf encoder represents an empty array.
+    let hasClassGoals: Bool
 }
 
 /// One class-goal achievement's display state for the submission page.

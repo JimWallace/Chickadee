@@ -373,7 +373,8 @@ extension WebRoutes {
             deltaHeaderText: delta.headerText,
             badges: badges,
             currentUser: currentUser,
-            classGoals: decorations.classGoals
+            classGoals: decorations.classGoals,
+            hasClassGoals: !decorations.classGoals.isEmpty
         )
     }
 }
