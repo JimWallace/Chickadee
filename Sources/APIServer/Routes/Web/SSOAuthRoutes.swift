@@ -289,41 +289,14 @@ struct SSOAuthRoutes: RouteCollection {
             return existing
         }
 
-        // Adopt a manually-registered stub: a `duo-oidc` user with this exact
-        // username but no externalSubject yet (created via the instructor
-        // "Register pending student" escape valve without an SSO subject on
-        // hand). Claiming it on first real login — instead of creating a second
-        // account — keeps any grade override already attached to the stub bound
-        // to the same user. Only ever matches a subject-less stub, so a normal
-        // SSO account (which always carries its subject) can't be hijacked.
-        if let stub = try await APIUser.query(on: req.db)
-            .filter(\.$authProvider == "duo-oidc")
-            .filter(\.$externalSubject == nil)
-            .filter(\.$username == username)
-            .first()
+        // Adopt a manually-registered stub (duo-oidc, matching username, no
+        // externalSubject) on first real login, claiming it rather than creating
+        // a duplicate — so any grade override already attached stays bound.
+        if let stub = try await adoptManuallyRegisteredStub(
+            username: username, subject: subject, preferredName: preferredName,
+            userIdentifier: userIdentifier, studentID: studentID, email: email,
+            displayName: displayName, mappedRole: mappedRole, on: req)
         {
-            stub.externalSubject = subject
-            stub.preferredName = preferredName ?? stub.preferredName
-            stub.userIdentifier = userIdentifier
-            stub.studentID = studentID ?? stub.studentID
-            stub.email = email ?? stub.email
-            stub.displayName = displayName ?? stub.displayName
-            if let mappedRole { stub.role = mappedRole }
-            let now = Date()
-            stub.lastLoginAt = now
-            stub.lastSeenAt = now
-            try await stub.save(on: req.db)
-            await AuditLogger.record(
-                action: .userProvisioned,
-                targetType: .user,
-                targetID: stub.id?.uuidString,
-                metadata: [
-                    "username": stub.username,
-                    "source": "sso_stub_adoption",
-                ],
-                actorUsernameOverride: "sso",
-                on: req
-            )
             return stub
         }
 
@@ -356,6 +329,59 @@ struct SSOAuthRoutes: RouteCollection {
             on: req
         )
         return newUser
+    }
+
+    /// Adopts a manually-registered stub on first real SSO login: a `duo-oidc`
+    /// user with this exact username but no externalSubject yet, created via the
+    /// instructor "Register pending student" escape valve without an SSO subject
+    /// on hand. Claiming it (instead of creating a second account) keeps any
+    /// grade override already attached to the stub bound to the same user. Only
+    /// ever matches a subject-less stub, so a normal SSO account — which always
+    /// carries its subject — can't be hijacked. Returns nil when no such stub
+    /// exists, leaving the caller to create a fresh user.
+    private func adoptManuallyRegisteredStub(
+        username: String,
+        subject: String,
+        preferredName: String?,
+        userIdentifier: String,
+        studentID: String?,
+        email: String?,
+        displayName: String?,
+        mappedRole: String?,
+        on req: Request
+    ) async throws -> APIUser? {
+        guard
+            let stub = try await APIUser.query(on: req.db)
+                .filter(\.$authProvider == "duo-oidc")
+                .filter(\.$externalSubject == nil)
+                .filter(\.$username == username)
+                .first()
+        else {
+            return nil
+        }
+        stub.externalSubject = subject
+        stub.preferredName = preferredName ?? stub.preferredName
+        stub.userIdentifier = userIdentifier
+        stub.studentID = studentID ?? stub.studentID
+        stub.email = email ?? stub.email
+        stub.displayName = displayName ?? stub.displayName
+        if let mappedRole { stub.role = mappedRole }
+        let now = Date()
+        stub.lastLoginAt = now
+        stub.lastSeenAt = now
+        try await stub.save(on: req.db)
+        await AuditLogger.record(
+            action: .userProvisioned,
+            targetType: .user,
+            targetID: stub.id?.uuidString,
+            metadata: [
+                "username": stub.username,
+                "source": "sso_stub_adoption",
+            ],
+            actorUsernameOverride: "sso",
+            on: req
+        )
+        return stub
     }
 
     /// Tries a small set of OAuth token request shapes for provider compatibility.
