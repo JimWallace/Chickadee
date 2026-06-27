@@ -19,20 +19,25 @@ import Fluent
 
 struct AddGradeOverrideBrightSpaceSync: ChickadeeMigration {
     func prepare(on database: Database) async throws {
+        // One ADD COLUMN per statement — SQLite rejects a multi-column ALTER.
         try await database.schema("grade_overrides")
-            .field("brightspace_sync_pending", .bool)
-            .field("brightspace_pending_since", .datetime)
-            .field("brightspace_synced_at", .datetime)
-            .field("brightspace_sync_error", .string)
-            .update()
+            .field("brightspace_sync_pending", .bool).update()
+        try await database.schema("grade_overrides")
+            .field("brightspace_pending_since", .datetime).update()
+        try await database.schema("grade_overrides")
+            .field("brightspace_synced_at", .datetime).update()
+        try await database.schema("grade_overrides")
+            .field("brightspace_sync_error", .string).update()
     }
 
     func revert(on database: Database) async throws {
         try await database.schema("grade_overrides")
-            .deleteField("brightspace_sync_pending")
-            .deleteField("brightspace_pending_since")
-            .deleteField("brightspace_synced_at")
-            .deleteField("brightspace_sync_error")
-            .update()
+            .deleteField("brightspace_sync_error").update()
+        try await database.schema("grade_overrides")
+            .deleteField("brightspace_synced_at").update()
+        try await database.schema("grade_overrides")
+            .deleteField("brightspace_pending_since").update()
+        try await database.schema("grade_overrides")
+            .deleteField("brightspace_sync_pending").update()
     }
 }
