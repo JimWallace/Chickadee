@@ -90,8 +90,13 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let body = res.body.string
+                    // The "Class goals" heading text appears only inside the
+                    // rendered <h2>; the section's opening tag only when the
+                    // block renders. (The `.class-goals-block` CSS selector
+                    // lives in an always-present <style> block, so we must not
+                    // assert on the bare class name.)
                     #expect(!body.contains("Class goals"))
-                    #expect(!body.contains("class-goals-block"))
+                    #expect(!body.contains(#"<section class="class-goals-block">"#))
                 })
         }
     }
