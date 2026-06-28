@@ -416,6 +416,54 @@ extension AdminRoutes {
         return req.redirect(to: "/admin/courses/\(courseIDString)")
     }
 
+    // MARK: - POST /admin/courses/:courseID/role/:userID
+    //
+    // Sets a roster member's per-course role from the admin course page —
+    // the admin-side counterpart of the instructor roster dropdown (#417
+    // Slice B), so an admin can assign a course's instructors/TAs without
+    // first making the course their active one. Admin-only (admin route
+    // group); admins are exempt from the last-instructor guard since they
+    // can always re-grant.
+    @Sendable
+    func adminSetEnrollmentRole(req: Request) async throws -> Response {
+        guard
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: courseIDString),
+            let userIDString = req.parameters.get("userID"),
+            let userID = UUID(uuidString: userIDString)
+        else {
+            throw Abort(.badRequest)
+        }
+
+        struct Body: Content { var role: String? }
+        let body = try? req.content.decode(Body.self)
+        guard let newRole = CourseRole(rawValue: body?.role ?? "") else {
+            throw Abort(.badRequest, reason: "Unknown per-course role.")
+        }
+
+        guard
+            let enrollment = try await APICourseEnrollment.query(on: req.db)
+                .filter(\.$course.$id == courseID)
+                .filter(\.$userID == userID)
+                .first()
+        else {
+            throw Abort(.notFound)
+        }
+        enrollment.role = newRole
+        try await enrollment.save(on: req.db)
+
+        await AuditLogger.record(
+            action: .enrollmentRoleChanged,
+            targetType: .enrollment,
+            targetID: userIDString,
+            metadata: [
+                "course_id": courseIDString, "subject_user_id": userIDString, "role": newRole.rawValue,
+            ],
+            on: req
+        )
+        return req.redirect(to: "/admin/courses/\(courseIDString)")
+    }
+
     // MARK: - GET /admin/courses/:courseID
 
     @Sendable
@@ -455,6 +503,10 @@ extension AdminRoutes {
             .all()
 
         let enrolledUserIDs = enrollments.map { $0.userID }
+        // Per-course role (from the enrollment row), not the global user role —
+        // this is what the staff selector reads/writes (#417 Slice B).
+        let roleByUserID = Dictionary(
+            enrollments.map { ($0.userID, $0.role) }, uniquingKeysWith: { first, _ in first })
         let enrolledUsers: [AdminCourseEnrolledUserRow]
         if enrolledUserIDs.isEmpty {
             enrolledUsers = []
@@ -472,7 +524,7 @@ extension AdminRoutes {
                     id: uid.uuidString,
                     username: u.username,
                     displayName: u.displayName,
-                    role: u.role
+                    role: (roleByUserID[uid] ?? .student).rawValue
                 )
             }
         }
