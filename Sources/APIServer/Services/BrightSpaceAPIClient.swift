@@ -336,15 +336,33 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let rawURL =
             "\(config.baseURL)/d2l/api/le/\(leVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
 
+        // D2L's IncomingGradeValueNumeric requires `Comments` and
+        // `PrivateComments` RichText blocks — omitting them 400s with
+        // "Comments and PrivateComments are mandatory". We send empty Text.
+        struct RichTextInput: Content {
+            let content: String
+            let type: String
+            enum CodingKeys: String, CodingKey {
+                case content = "Content"
+                case type = "Type"
+            }
+        }
         struct NumericGradeValue: Content {
             let gradeObjectType: Int
             let pointsNumerator: Double
+            let comments: RichTextInput
+            let privateComments: RichTextInput
             enum CodingKeys: String, CodingKey {
                 case gradeObjectType = "GradeObjectType"
                 case pointsNumerator = "PointsNumerator"
+                case comments = "Comments"
+                case privateComments = "PrivateComments"
             }
         }
-        let body = NumericGradeValue(gradeObjectType: 1, pointsNumerator: earnedPoints)
+        let emptyRichText = RichTextInput(content: "", type: "Text")
+        let body = NumericGradeValue(
+            gradeObjectType: 1, pointsNumerator: earnedPoints,
+            comments: emptyRichText, privateComments: emptyRichText)
 
         let response = try await sendSigned(method: "PUT", rawURL: rawURL, on: application) { req in
             req.headers.contentType = .json
