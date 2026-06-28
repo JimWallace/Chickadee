@@ -231,6 +231,11 @@ LEARN
             if (!Array.isArray(items)) return;
             datalist.innerHTML = items.map(function (it) {
                 var label = it.name + (it.maxPoints != null ? ' (' + it.maxPoints + ' pts)' : '');
+                // Surface the grade-item type so a non-Numeric item (which
+                // Chickadee can't sync points to) is obvious before mapping.
+                if (it.gradeType && it.gradeType !== 'Numeric') {
+                    label += ' — ' + it.gradeType + ' (not supported)';
+                }
                 var opt = document.createElement('option');
                 opt.value = String(it.id);
                 opt.textContent = label;

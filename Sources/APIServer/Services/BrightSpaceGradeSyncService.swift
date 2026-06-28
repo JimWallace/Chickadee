@@ -50,8 +50,10 @@ func sweepBrightSpaceGradeSync(
 
     var processed = 0
 
-    // One classlist read per course is shared across all of this sweep's pushes.
+    // One classlist read per course, and one grade-object fetch per item, are
+    // shared across all of this sweep's pushes.
     let classlistCache = ClasslistUserIDCache()
+    let gradeObjectCache = GradeObjectInfoCache()
 
     // Group pushable results by (student, test setup).  Results whose
     // submission is missing or isn't a student submission are no-ops handled
@@ -106,7 +108,8 @@ func sweepBrightSpaceGradeSync(
         do {
             let pushed = try await pushGrade(
                 for: target, db: db, resolveClient: resolveClient,
-                classlistCache: classlistCache, logger: logger, application: application)
+                classlistCache: classlistCache, gradeObjectCache: gradeObjectCache,
+                application: application)
             if pushed { processed += syncRows.count }
         } catch {
             await recordSweepFailure(syncRows, error: error, db: db, logger: logger)
@@ -371,7 +374,7 @@ private func pushGrade(
     db: Database,
     resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
     classlistCache: ClasslistUserIDCache,
-    logger: Logger,
+    gradeObjectCache: GradeObjectInfoCache,
     application: Application
 ) async throws -> Bool {
     let userID = target.userID
@@ -407,7 +410,7 @@ private func pushGrade(
 
     // Best grade for this student across the test setup. nil → no submissions
     // yet (nothing to push); throws if submissions exist but yield no points.
-    guard let points = try await bestPointsForStudent(userID: userID, testSetupID: testSetupID, db: db)
+    guard let grade = try await bestGradeForStudent(userID: userID, testSetupID: testSetupID, db: db)
     else {
         try await clearPendingFlag(syncRows, on: db)
         return true
@@ -418,8 +421,8 @@ private func pushGrade(
 
     // Appends one row to the sync log. Best-effort: a logging failure must
     // never abort or retry a grade push, so errors are swallowed. Captures
-    // the surrounding push context so callers pass only status + detail.
-    func appendSyncLog(_ status: APIBrightSpaceSyncLog.Status, detail: String?) async {
+    // the surrounding push context so callers pass only status + points + detail.
+    func appendSyncLog(_ status: APIBrightSpaceSyncLog.Status, points: Double, detail: String?) async {
         let entry = APIBrightSpaceSyncLog(
             courseID: course.id,
             testSetupID: assignment.testSetupID,
@@ -435,32 +438,34 @@ private func pushGrade(
         try? await entry.save(on: db)
     }
 
-    // Resolve D2L user ID (cached on APIUser, looked up on first sync).
-    // The course's classlist identity map (username/student-number → D2L UserId),
-    // fetched once per org unit per sweep. A read failure degrades to the
-    // org-level OrgDefinedId fallback rather than aborting the push.
-    var identityMap: [String: String] = [:]
-    do {
-        identityMap = try await classlistCache.identityMap(
-            orgUnitID: orgUnitID, client: client, application: application)
-    } catch {
-        logger.warning("BrightSpace classlist resolve failed for org unit \(orgUnitID): \(error)")
-    }
-    let bsUserID = try await resolvedBrightSpaceUserID(
-        for: target.user,
-        identityMap: identityMap,
-        db: db,
-        client: client,
-        application: application
-    )
-    guard let bsUserID else {
-        // No BrightSpace account for this student — record + skip.
+    // Flags every sync row terminally (cleared + error recorded) and logs a
+    // skip — the shared shape for "we won't push this, and here's why".
+    func recordTerminalSkip(_ message: String, points: Double) async throws {
         for row in syncRows {
             row.brightspaceSyncPending = false
-            row.brightspaceSyncError = "Student has no BrightSpace account (orgDefinedId not found)"
+            row.brightspaceSyncError = message
             try await row.save(on: db)
         }
-        await appendSyncLog(.skipped, detail: "No BrightSpace account (orgDefinedId not found)")
+        await appendSyncLog(.skipped, points: points, detail: message)
+    }
+
+    // Fetch the grade item, refuse non-numeric items, and scale onto its max.
+    let scaled = await scaledGradePush(
+        grade: grade, orgUnitID: orgUnitID, gradeObjectID: gradeObjectID,
+        client: client, gradeObjectCache: gradeObjectCache, application: application)
+    if let refusal = scaled.refusal {
+        try await recordTerminalSkip(refusal, points: grade.points)
+        return true
+    }
+    let pushPoints = scaled.pushPoints
+    let gradeObject = scaled.gradeObject
+
+    let bsUserID = try await resolveBSUserID(
+        for: target.user, orgUnitID: orgUnitID, client: client,
+        classlistCache: classlistCache, db: db, application: application)
+    guard let bsUserID else {
+        try await recordTerminalSkip(
+            "Student has no BrightSpace account (orgDefinedId not found)", points: pushPoints)
         return true
     }
 
@@ -470,13 +475,17 @@ private func pushGrade(
             orgUnitID: orgUnitID,
             gradeObjectID: gradeObjectID,
             bsUserID: bsUserID,
-            earnedPoints: points,
+            earnedPoints: pushPoints,
             on: application
         )
     } catch {
-        // Log with full context here (the sweep's catch lacks it), then
+        // Enrich with item context here (the sweep's catch lacks it), then
         // rethrow so the existing per-group error handling still runs.
-        await appendSyncLog(.error, detail: error.localizedDescription)
+        let maxDesc = gradeObject?.maxPoints.map { "\($0)" } ?? "unset"
+        await appendSyncLog(
+            .error, points: pushPoints,
+            detail: "Pushed \(pushPoints) pts to '\(gradeObject?.name ?? gradeObjectID)' "
+                + "(max \(maxDesc)); D2L rejected it: \(error.localizedDescription)")
         throw error
     }
 
@@ -489,24 +498,98 @@ private func pushGrade(
         try await row.save(on: db)
     }
 
-    await appendSyncLog(.success, detail: nil)
+    await appendSyncLog(.success, points: pushPoints, detail: nil)
 
-    logger.info("BrightSpace grade synced: user \(userID) assignment '\(assignment.title)' → \(points) pts")
+    application.logger.info(
+        "BrightSpace grade synced: user \(userID) assignment '\(assignment.title)' → \(pushPoints) pts")
     return true
 }
 
-/// Best (max) points for this student across all results for the test setup,
+/// The points to push and the grade item they target, or a `refusal` message
+/// when the item can't be synced to (non-numeric). Fetches the grade item once
+/// (cached) and scales the grade onto its max; a fetch failure degrades to "no
+/// scaling, no type check" so a push that would otherwise work isn't blocked.
+private func scaledGradePush(
+    grade: StudentGrade,
+    orgUnitID: String,
+    gradeObjectID: String,
+    client: any BrightSpaceGrading,
+    gradeObjectCache: GradeObjectInfoCache,
+    application: Application
+) async -> (pushPoints: Double, gradeObject: BrightSpaceGradeObject?, refusal: String?) {
+    var gradeObject: BrightSpaceGradeObject?
+    do {
+        gradeObject = try await gradeObjectCache.info(
+            orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, client: client, application: application)
+    } catch {
+        application.logger.warning("BrightSpace grade-object fetch failed for \(gradeObjectID): \(error)")
+    }
+
+    // Refuse a non-numeric / category item with a clear message rather than a
+    // bare D2L 400 — Chickadee only writes point values to Numeric items.
+    if let type = gradeObject?.gradeType, !type.isEmpty,
+        type.caseInsensitiveCompare("Numeric") != .orderedSame
+    {
+        let message =
+            "Grade item '\(gradeObject?.name ?? gradeObjectID)' is type \(type); "
+            + "Chickadee can only sync to Numeric grade items."
+        return (grade.points, gradeObject, message)
+    }
+
+    // Scale Chickadee's grade onto the D2L item's own max when both totals are
+    // known (e.g. a /14 suite into a /10 LEARN item). When the item's max is
+    // unknown or already equals the suite total, this is the identity, so the
+    // pushed value is unchanged.
+    if let total = grade.total, total > 0, let maxPoints = gradeObject?.maxPoints, maxPoints > 0 {
+        return (grade.points / total * maxPoints, gradeObject, nil)
+    }
+    return (grade.points, gradeObject, nil)
+}
+
+/// Resolves the student's D2L user ID via the course classlist (cached per
+/// sweep), falling back to the org-level OrgDefinedId lookup. A classlist read
+/// failure degrades to the fallback rather than aborting the push.
+private func resolveBSUserID(
+    for user: APIUser?,
+    orgUnitID: String,
+    client: any BrightSpaceGrading,
+    classlistCache: ClasslistUserIDCache,
+    db: Database,
+    application: Application
+) async throws -> String? {
+    var identityMap: [String: String] = [:]
+    do {
+        identityMap = try await classlistCache.identityMap(
+            orgUnitID: orgUnitID, client: client, application: application)
+    } catch {
+        application.logger.warning("BrightSpace classlist resolve failed for org unit \(orgUnitID): \(error)")
+    }
+    return try await resolvedBrightSpaceUserID(
+        for: user, identityMap: identityMap, db: db, client: client, application: application)
+}
+
+/// One student's best grade for a test setup: the raw points Chickadee would
+/// push (in suite-point units) plus the denominator (suite total) used to
+/// derive them, so the caller can rescale to the BrightSpace grade item's own
+/// max. `total` is nil only when neither the manifest nor any result records a
+/// total.
+private struct StudentGrade {
+    let points: Double
+    let total: Double?
+}
+
+/// Best (max) grade for this student across all results for the test setup,
 /// preferring worker results over browser ones.  Returns nil when the student
 /// has no submissions yet (nothing to push); throws `.missingPoints` when
 /// submissions exist but none yielded a parseable grade.
-private func bestPointsForStudent(
+private func bestGradeForStudent(
     userID: UUID,
     testSetupID: String,
     db: Database
-) async throws -> Double? {
+) async throws -> StudentGrade? {
     // An instructor override replaces the runner-derived grade. It stores a
     // percent, so it needs a points denominator: the suite's total possible
-    // points (the BrightSpace grade item's max).
+    // points.
     let override = try await APIGradeOverride.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$userID == userID)
@@ -519,13 +602,13 @@ private func bestPointsForStudent(
         .all()
         .compactMap(\.id)
 
+    let manifestTotal = try await suiteTotalPoints(testSetupID: testSetupID, db: db)
+
     guard !submissionIDs.isEmpty else {
         // No submissions yet. Only an override gives us anything to push.
         guard let override else { return nil }
-        guard let total = try await suiteTotalPoints(testSetupID: testSetupID, db: db) else {
-            return nil
-        }
-        return Double(override.overridePercent) / 100.0 * total
+        guard let total = manifestTotal else { return nil }
+        return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)
     }
 
     let allResults = try await APIResult.query(on: db)
@@ -538,32 +621,31 @@ private func bestPointsForStudent(
     if let override {
         // Prefer the suite manifest's total; fall back to the best result's
         // recorded totalPoints for setups whose manifest is unavailable.
-        let total =
-            try await suiteTotalPoints(testSetupID: testSetupID, db: db)
-            ?? resultsForGrade.compactMap { $0.gradeTotalPointsValue }.max()
+        let total = manifestTotal ?? resultsForGrade.compactMap { $0.gradeTotalPointsValue }.max()
         guard let total, total > 0 else { throw BrightSpaceSyncError.missingPoints }
-        return Double(override.overridePercent) / 100.0 * total
+        return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)
     }
 
     guard
-        let points =
+        let basePoints =
             resultsForGrade
             .compactMap({ $0.gradePointsValue })
             .max()
     else {
         throw BrightSpaceSyncError.missingPoints
     }
+    let total = manifestTotal ?? resultsForGrade.compactMap { $0.gradeTotalPointsValue }.max()
     // Class-goal bonus: extra credit, capped at the suite total (100%).
     let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, on: db)
-    if bonus > 0, let total = try await suiteTotalPoints(testSetupID: testSetupID, db: db) {
-        return min(total, points + bonus)
-    }
-    return points
+    var points = basePoints
+    if bonus > 0, let manifestTotal { points = min(manifestTotal, basePoints + bonus) }
+    return StudentGrade(points: points, total: total)
 }
 
 /// Total possible points for a test setup — the sum of its suite items'
-/// weights, which is the BrightSpace grade item's max.  Nil when the manifest
-/// is missing/malformed or sums to zero.
+/// weights.  Used as the denominator to rescale a grade onto the BrightSpace
+/// grade item's own max.  Nil when the manifest is missing/malformed or sums to
+/// zero.
 private func suiteTotalPoints(testSetupID: String, db: Database) async throws -> Double? {
     guard let setup = try await APITestSetup.find(testSetupID, on: db),
         let props = setup.decodedManifest()
@@ -601,6 +683,26 @@ private actor ClasslistUserIDCache {
         }
         mapsByOrgUnit[orgUnitID] = map
         return map
+    }
+}
+
+/// Per-sweep cache of grade-item metadata, keyed by (org unit, grade object).
+/// Fetched once per item per sweep so a backlog of pushes to the same
+/// assignment shares one lookup. A cached `nil` (item not found) is preserved
+/// distinctly from "not yet fetched".
+private actor GradeObjectInfoCache {
+    private var cache: [String: BrightSpaceGradeObject?] = [:]
+
+    func info(
+        orgUnitID: String, gradeObjectID: String,
+        client: any BrightSpaceGrading, application: Application
+    ) async throws -> BrightSpaceGradeObject? {
+        let key = "\(orgUnitID)\u{1f}\(gradeObjectID)"
+        if let cached = cache[key] { return cached }
+        let info = try await client.fetchGradeObject(
+            orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, on: application)
+        cache[key] = info
+        return info
     }
 }
 
