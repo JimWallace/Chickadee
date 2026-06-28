@@ -115,6 +115,11 @@ COPY Resources  ./Resources
 # Authoring guides served as MCP resources (see MCPResourceProvider).
 COPY docs       ./docs
 
+# Version stamp — lets the host blue-green deployer read a candidate image's
+# version (for the SemVer auto-deploy gate) cheaply, without booting the server:
+#   docker run --rm --entrypoint cat <image> /app/VERSION
+COPY VERSION    ./VERSION
+
 # Startup script (server only; runner uses its binary directly).
 COPY deploy/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh

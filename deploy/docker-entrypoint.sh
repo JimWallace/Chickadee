@@ -32,13 +32,31 @@ mkdir -p "${DATA_DIR}"
 # for zero-downtime blue-green deploys.  docs/ feeds the MCP authoring-guide
 # resources (MCPResourceProvider).
 for asset in Public Resources docs; do
+    want="/app/${asset}"
     link="${DATA_DIR}/${asset}"
-    # Drop any leftover real copy from pre-symlink deploys (reclaims volume
-    # space on first boot of this image), or a stale symlink, then point at
-    # this image's copy.  `rm` on a symlink removes only the link itself,
-    # never the /app target it points to.
-    rm -rf "${link}"
-    ln -s "/app/${asset}" "${link}"
+
+    # Already pointing at this image's copy?  Do nothing — important for
+    # blue-green deploys, where a second container booting against the shared
+    # ${DATA_DIR} must NOT disturb the symlink the live container is serving
+    # through.  Both colors resolve the identical target string ("/app/...")
+    # to their OWN image, so a correct link never needs touching.
+    if [ "$(readlink "${link}" 2>/dev/null || true)" = "${want}" ]; then
+        continue
+    fi
+
+    # One-time: a leftover real copy from a pre-symlink deploy.  Reclaim it.
+    # (`rm` on a symlink removes only the link, never its /app target.)
+    if [ -d "${link}" ] && [ ! -L "${link}" ]; then
+        rm -rf "${link}"
+    fi
+
+    # Replace whatever is there with the symlink atomically: build the link at a
+    # temp path, then rename(2) it into place.  An atomic swap means a concurrent
+    # static-file read from another color never observes a missing ${link}.
+    tmp="${link}.tmp.$$"
+    rm -rf "${tmp}"
+    ln -s "${want}" "${tmp}"
+    mv -T "${tmp}" "${link}"
 done
 
 echo "[entrypoint] Starting chickadee-server ..."
