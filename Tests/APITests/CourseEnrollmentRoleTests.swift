@@ -331,6 +331,49 @@ import Vapor
         }
     }
 
+    // MARK: - Last-instructor guard (Slice B of #417)
+
+    /// `ensureNotLastInstructor` stops a non-admin from removing or demoting a
+    /// course's only instructor (which would orphan it), while admins — who can
+    /// always re-grant — are exempt. Once a second instructor exists, either can
+    /// be removed.
+    @Test func ensureNotLastInstructorGuardsCourseFromOrphaning() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            let course = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+
+            let inst1 = makeUser(role: .student)  // per-course instructor below
+            let inst2 = makeUser(role: .student)
+            let admin = makeUser(role: .admin)
+            for user in [inst1, inst2, admin] { try await user.save(on: app.db) }
+            try await APICourseEnrollment(
+                userID: try inst1.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
+
+            // Only one instructor: a non-admin cannot remove them…
+            await #expect(throws: Abort.self) {
+                try await ensureNotLastInstructor(
+                    caller: inst1, courseID: courseID, removing: try inst1.requireID(), db: app.db)
+            }
+            // …but an admin can (they can re-grant).
+            try await ensureNotLastInstructor(
+                caller: admin, courseID: courseID, removing: try inst1.requireID(), db: app.db)
+
+            // With a second instructor, a non-admin may remove either one.
+            try await APICourseEnrollment(
+                userID: try inst2.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
+            try await ensureNotLastInstructor(
+                caller: inst1, courseID: courseID, removing: try inst1.requireID(), db: app.db)
+            try await ensureNotLastInstructor(
+                caller: inst1, courseID: courseID, removing: try inst2.requireID(), db: app.db)
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeUser(role: UserRole) -> APIUser {
