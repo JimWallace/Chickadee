@@ -13,7 +13,7 @@
 <div class="form-error course-alert-gap">Course code and name are required.</div>
 #endif
 
-<!-- ── Create course ───────────────────────────────────── -->
+<!-- ── Create course ───────────────────────────────── -->
 <section class="admin-section">
     <h2>Course details</h2>
     <form method="post" action="/admin/courses"
@@ -60,7 +60,7 @@
     </div>
 </div>
 
-<!-- ── Edit course ─────────────────────────────────────── -->
+<!-- ── Edit course ─────────────────────────────────── -->
 <section class="admin-section">
     <h2>Edit course</h2>
     <form method="post" action="/admin/courses/#(course.id)/edit"
@@ -109,7 +109,7 @@
 </section>
 #endif
 
-<!-- ── Assignments ─────────────────────────────────────── -->
+<!-- ── Assignments ─────────────────────────────────── -->
 <section class="admin-section">
     <h2>Assignments (#(assignmentCount))</h2>
     #if(assignments.isEmpty):
@@ -151,7 +151,7 @@
     #endif
 </section>
 
-<!-- ── Enrolled students ───────────────────────────────── -->
+<!-- ── Enrolled students ────────────────────────────── -->
 <section class="admin-section">
     <div class="course-enroll-head">
         <h2 class="course-page-title">Enrolled students (#(course.enrollmentCount))</h2>
@@ -204,7 +204,21 @@
                     #endif
                 </td>
                 <td><code>#(user.username)</code></td>
-                <td>#(user.role)</td>
+                <td>
+                    #if(course.isArchived):
+                    #(user.role)
+                    #else:
+                    <form method="post" action="/admin/courses/#(course.id)/role/#(user.id)"
+                          class="inline-form">
+                        #csrfFormField()
+                        <select name="role" class="form-input course-role-select"
+                                aria-label="Per-course role" onchange="this.form.submit()">
+                            <option value="student"#if(user.role == "student"): selected#endif>Student</option>
+                            <option value="instructor"#if(user.role == "instructor"): selected#endif>Instructor</option>
+                        </select>
+                    </form>
+                    #endif
+                </td>
                 <td class="course-action-cell">
                     <a href="/admin/users/#(user.id)"
                        class="btn action-btn action-btn-icon" title="Manage user" aria-label="Manage user">
@@ -314,6 +328,10 @@
     gap: .4rem;
     flex-wrap: wrap;
     align-items: center;
+}
+.course-role-select {
+    display: block;
+    font-size: .875rem;
 }
 </style>
 #endexport
