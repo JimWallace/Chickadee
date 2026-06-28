@@ -12,6 +12,20 @@ needed, but the architecture has been redesigned from scratch.
 
 ---
 
+## Shell Snippets (maintainer environment)
+
+The maintainer runs **zsh with `interactive_comments` off**. When giving shell
+commands meant to be pasted into a terminal — in chat or in `docs/` runbooks:
+
+- **No inline `#` comments on a command line** — zsh parses `#` as a normal
+  argument, so `cmd value  # note` fails with "too many arguments".
+- **No apostrophes in explanatory text inside a code block** — an unmatched `'`
+  drops zsh into a `quote>` continuation prompt and nothing runs.
+- **One plain command per line.** Keep all explanation in prose *outside* the
+  code block; never rely on `#` to annotate inside it.
+
+---
+
 ## Architecture Overview
 
 Swift targets share a clean dependency boundary:
