@@ -120,6 +120,46 @@ struct BrightSpaceGradeObject: Content, Sendable {
     let id: String
     let name: String
     let maxPoints: Double?
+    /// D2L grade item type: "Numeric", "PassFail", "SelectBox", "Text",
+    /// "Calculated", "Formula", … nil when not captured. Chickadee only syncs
+    /// points to "Numeric" items; the dropdown surfaces the type so an
+    /// instructor doesn't map a category or a non-numeric item by mistake.
+    let gradeType: String?
+    /// Whether a numeric item accepts a value above its MaxPoints. nil = unknown.
+    let canExceed: Bool?
+
+    init(
+        id: String, name: String, maxPoints: Double?,
+        gradeType: String? = nil, canExceed: Bool? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.maxPoints = maxPoints
+        self.gradeType = gradeType
+        self.canExceed = canExceed
+    }
+}
+
+/// D2L grade-object JSON, shared by the list (`grades/`) and single-item
+/// (`grades/{id}`) endpoints, which return the same shape.
+private struct GradeObjectJSON: Decodable {
+    let id: Int
+    let name: String
+    let maxPoints: Double?
+    let gradeType: String?
+    let canExceed: Bool?
+    enum CodingKeys: String, CodingKey {
+        case id = "Id"
+        case name = "Name"
+        case maxPoints = "MaxPoints"
+        case gradeType = "GradeType"
+        case canExceed = "CanExceed"
+    }
+    var asGradeObject: BrightSpaceGradeObject {
+        BrightSpaceGradeObject(
+            id: String(id), name: name, maxPoints: maxPoints,
+            gradeType: gradeType, canExceed: canExceed)
+    }
 }
 
 /// One member of a course's LEARN classlist, reduced to the identity fields
@@ -180,6 +220,12 @@ protocol BrightSpaceGrading: Sendable {
         earnedPoints: Double,
         on application: Application
     ) async throws
+    /// Fetches a single grade item's metadata (type + max points) so the sweep
+    /// can scale the grade to the item's max and refuse non-numeric items.
+    /// Returns nil when the item doesn't exist (404).
+    func fetchGradeObject(
+        orgUnitID: String, gradeObjectID: String, on application: Application
+    ) async throws -> BrightSpaceGradeObject?
 }
 
 // MARK: - Client
@@ -500,20 +546,29 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             throw BrightSpaceSyncError.gradeObjectsFetchFailed(
                 orgUnitID: orgUnitID, status: Int(response.status.code))
         }
-        struct GradeObjectResponse: Decodable {
-            let id: Int
-            let name: String
-            let maxPoints: Double?
-            enum CodingKeys: String, CodingKey {
-                case id = "Id"
-                case name = "Name"
-                case maxPoints = "MaxPoints"
-            }
+        let decoded = try response.content.decode([GradeObjectJSON].self)
+        return decoded.map { $0.asGradeObject }
+    }
+
+    /// Fetches one grade item's metadata. Returns nil on 404 (item not found in
+    /// this org unit), throws on other non-2xx so the sweep can record it.
+    func fetchGradeObject(
+        orgUnitID: String, gradeObjectID: String, on application: Application
+    ) async throws -> BrightSpaceGradeObject? {
+        guard !orgUnitID.isEmpty, !gradeObjectID.isEmpty else { return nil }
+        let leVersion = await apiVersion(
+            "le", fallback: BrightSpaceSyncConfig.leAPIVersion, on: application)
+        let encodedOrg = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
+        let encodedObj =
+            gradeObjectID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? gradeObjectID
+        let rawURL = "\(config.baseURL)/d2l/api/le/\(leVersion)/\(encodedOrg)/grades/\(encodedObj)"
+        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
+        if response.status == .notFound { return nil }
+        guard response.status == .ok else {
+            throw BrightSpaceSyncError.gradeObjectsFetchFailed(
+                orgUnitID: orgUnitID, status: Int(response.status.code))
         }
-        let decoded = try response.content.decode([GradeObjectResponse].self)
-        return decoded.map {
-            BrightSpaceGradeObject(id: String($0.id), name: $0.name, maxPoints: $0.maxPoints)
-        }
+        return try response.content.decode(GradeObjectJSON.self).asGradeObject
     }
 
     // MARK: - Classlist (roster reconciliation)

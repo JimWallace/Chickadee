@@ -3,9 +3,10 @@
 // Per-student grade override on a test setup.  An override replaces the
 // runner-assigned best grade for one student on one assignment, both in the
 // instructor's per-student submissions view and in the BrightSpace grade
-// sync (see `bestPointsForStudent` in BrightSpaceGradeSyncService).  The
+// sync (see `bestGradeForStudent` in BrightSpaceGradeSyncService).  The
 // stored value is a whole-number percent (0–100); BrightSpace works in
-// points, so the sync converts it against the suite's total possible points.
+// points, so the sync converts it against the suite's total possible points
+// and rescales onto the grade item's own max.
 //
 // One row per (test_setup, user) — enforced by the composite UNIQUE index in
 // CreateGradeOverrides.

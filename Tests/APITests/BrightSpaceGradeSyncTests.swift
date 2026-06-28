@@ -30,6 +30,11 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
     private let classlist: [BrightSpaceClasslistEntry]
     private let lookupError: (any Error)?
     private let pushError: (any Error)?
+    /// Grade-item metadata returned by `fetchGradeObject`. Default `nil` mimics
+    /// "item not found", which the sweep treats as "no scaling, no type check"
+    /// — so the pushed value equals Chickadee's raw points unless a test opts
+    /// into a specific grade object (to exercise scaling / type refusal).
+    private let gradeObject: BrightSpaceGradeObject?
     private(set) var pushes: [RecordedPush] = []
     private(set) var lookupCount = 0
 
@@ -37,12 +42,14 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         userIDsByOrgDefinedId: [String: String] = [:],
         classlist: [BrightSpaceClasslistEntry] = [],
         lookupError: (any Error)? = nil,
-        pushError: (any Error)? = nil
+        pushError: (any Error)? = nil,
+        gradeObject: BrightSpaceGradeObject? = nil
     ) {
         self.userIDsByOrgDefinedId = userIDsByOrgDefinedId
         self.classlist = classlist
         self.lookupError = lookupError
         self.pushError = pushError
+        self.gradeObject = gradeObject
     }
 
     func lookupUserID(orgDefinedId: String, on application: Application) async throws -> String? {
@@ -55,6 +62,12 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         orgUnitID: String, on application: Application
     ) async throws -> [BrightSpaceClasslistEntry] {
         classlist
+    }
+
+    func fetchGradeObject(
+        orgUnitID: String, gradeObjectID: String, on application: Application
+    ) async throws -> BrightSpaceGradeObject? {
+        gradeObject
     }
 
     func pushGrade(
@@ -512,6 +525,61 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             let reloaded = try #require(try await APIGradeOverride.query(on: app.db).first())
             #expect(reloaded.brightspaceSyncPending == true)
             #expect(reloaded.brightspaceSyncError == nil)
+        }
+    }
+
+    @Test func gradeIsScaledToD2LGradeItemMaxPoints() async throws {
+        // Chickadee grades the lab out of 20; the LEARN item is out of 10.
+        // A 100% override must land as 10/10, not 20 (which would exceed the
+        // item's max and 400 on a "can't exceed" item).
+        try await withApp(app) { _ in
+            let scenario = try await makeOverrideOnlyScenario(suiteTotal: 20, studentID: "stu-ovr")
+            try await applyGradeOverride(
+                testSetupID: scenario.setupID, studentUserID: scenario.userID,
+                percent: 100, note: nil, grantedByUserID: nil, on: app.db)
+            let override = try #require(try await APIGradeOverride.query(on: app.db).first())
+            override.brightspacePendingSince = Date().addingTimeInterval(-3600)
+            try await override.save(on: app.db)
+
+            let fake = FakeBrightSpaceGrading(
+                userIDsByOrgDefinedId: ["stu-ovr": "d2l-ovr"],
+                gradeObject: BrightSpaceGradeObject(
+                    id: "go-ovr", name: "Lab", maxPoints: 10, gradeType: "Numeric", canExceed: false))
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)
+            let pushes = await fake.pushes
+            #expect(pushes.count == 1)
+            #expect(pushes.first?.earnedPoints == 10)  // 100% of /20, scaled onto the /10 item
+        }
+    }
+
+    @Test func nonNumericGradeItemIsSkippedWithClearMessage() async throws {
+        // Mapping a non-Numeric item (e.g. a SelectBox) must be refused with an
+        // explanatory message instead of a bare D2L 400.
+        try await withApp(app) { _ in
+            let scenario = try await makeOverrideOnlyScenario(studentID: "stu-ovr")
+            try await applyGradeOverride(
+                testSetupID: scenario.setupID, studentUserID: scenario.userID,
+                percent: 80, note: nil, grantedByUserID: nil, on: app.db)
+            let override = try #require(try await APIGradeOverride.query(on: app.db).first())
+            override.brightspacePendingSince = Date().addingTimeInterval(-3600)
+            try await override.save(on: app.db)
+
+            let fake = FakeBrightSpaceGrading(
+                userIDsByOrgDefinedId: ["stu-ovr": "d2l-ovr"],
+                gradeObject: BrightSpaceGradeObject(
+                    id: "go-ovr", name: "Participation", maxPoints: nil, gradeType: "SelectBox"))
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)  // a terminal skip is "processed", not a failure
+            let pushes = await fake.pushes
+            #expect(pushes.isEmpty)
+            let reloaded = try #require(try await APIGradeOverride.query(on: app.db).first())
+            #expect(reloaded.brightspaceSyncPending == false)
+            #expect(reloaded.brightspaceSyncError?.contains("Numeric") == true)
         }
     }
 
