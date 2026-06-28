@@ -218,20 +218,50 @@ struct UserSessionAuthenticator: AsyncSessionAuthenticator {
 
 // MARK: - Request helper
 
+/// Per-request cache of the course-aware nav context.  `NavCourseContextMiddleware`
+/// populates it once for every authenticated web request so the shared nav
+/// (Instructor link + course tabs) renders on *every* page — including the
+/// course-free ones (admin, account, …) whose handlers only ever build a
+/// `req.currentUserContext`.
+private struct CourseAwareUserContextStorageKey: StorageKey {
+    typealias Value = CurrentUserContext
+}
+
+/// Per-request cache of the resolved active-course state, so the several
+/// callers in one request (the nav middleware, `ActiveCourseInstructorMiddleware`,
+/// and the page handler) share a single DB resolution rather than each
+/// re-querying — and so the auto-enroll/session side effects run once.
+private struct ResolvedCourseStateStorageKey: StorageKey {
+    typealias Value = ResolvedCourseState
+}
+
 extension Request {
     /// Returns a Leaf-encodable snapshot of the current user for view contexts.
-    /// Does not include course information; use `courseAwareUserContext()` for pages with tabs.
+    ///
+    /// Prefers the course-aware context resolved once per request by
+    /// `NavCourseContextMiddleware`, so the nav's Instructor link and course
+    /// tabs appear on every rendered page — not just the course-scoped ones.
+    /// Falls back to a course-free snapshot when no middleware has populated the
+    /// cache (e.g. the MCP OAuth consent flow or any non-web request), which
+    /// keeps the historical behaviour for those callers.
     var currentUserContext: CurrentUserContext? {
+        if let cached = storage[CourseAwareUserContextStorageKey.self] { return cached }
         guard let user = auth.get(APIUser.self) else { return nil }
         return CurrentUserContext(user: user)
     }
 
     /// Builds a `CurrentUserContext` populated with course information from the DB.
     /// Call this from any route that needs course tabs or active-course filtering.
+    /// The result is cached on the request so `currentUserContext` and any later
+    /// caller reuse it without re-querying.
     func courseAwareUserContext() async throws -> CurrentUserContext? {
+        if let cached = storage[CourseAwareUserContextStorageKey.self] { return cached }
         guard let user = auth.get(APIUser.self) else { return nil }
         let state = try await resolveActiveCourse(for: user)
-        return CurrentUserContext(user: user, activeCourse: state.active, enrolledCourses: state.all)
+        let context = CurrentUserContext(
+            user: user, activeCourse: state.active, enrolledCourses: state.all)
+        storage[CourseAwareUserContextStorageKey.self] = context
+        return context
     }
 
     private static let activeCourseSessionKey = "activeCourseID"
@@ -239,7 +269,16 @@ extension Request {
     /// Resolves the active course for `user`, consulting the session and DB.
     /// Auto-enrolls the user in every course with enrollmentMode == .auto.
     /// Returns `activeCourseUUID == nil` when the user is not enrolled anywhere.
+    /// Cached per request (the underlying work, including its side effects, runs
+    /// once); see `computeActiveCourse` for the resolution itself.
     func resolveActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
+        if let cached = storage[ResolvedCourseStateStorageKey.self] { return cached }
+        let state = try await computeActiveCourse(for: user)
+        storage[ResolvedCourseStateStorageKey.self] = state
+        return state
+    }
+
+    private func computeActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
         guard let userID = user.id else {
             return ResolvedCourseState(active: nil, all: [], activeCourseUUID: nil)
         }

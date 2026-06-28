@@ -584,6 +584,29 @@ import VaporTesting
         }
     }
 
+    /// The nav (Instructor link + course tabs) must persist on pages whose
+    /// handler only builds a course-free `req.currentUserContext` — the bug the
+    /// `NavCourseContextMiddleware` fixes.  `/account` is such a page; an
+    /// enrolled instructor must still see the Instructor link there.
+    @Test func instructorNavPersistsOnCourseFreePage() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains(#"value="/instructor""#),
+                        "The Instructor nav link must persist on a course-free page like /account")
+                })
+        }
+    }
+
     /// Phase 2 wiring, end-to-end: the nav's Instructor tab keys off the
     /// *per-course* role. A global `student` whose enrollment in the active
     /// course carries `.instructor` sees the Instructor tab there — the
