@@ -68,6 +68,9 @@ DRAIN_SECS="${CHICKADEE_DRAIN_SECS:-10}"
 STATE_DIR="${CHICKADEE_STATE_DIR:-/var/lib/chickadee-deploy}"
 
 DRY_RUN=0
+# Path to the resolved env-file. Global (not local to cmd_deploy) so the EXIT
+# trap can still see it for cleanup under `set -u`.
+envfile=""
 
 # ----------------------------------------------------------------------------
 # Helpers
@@ -197,8 +200,10 @@ cmd_deploy() {
 
   run "docker pull '$IMAGE'"
 
-  local envfile=""
-  if (( ! DRY_RUN )); then envfile="$(resolve_env_file)"; trap '[[ -n "$envfile" ]] && rm -f "$envfile"' EXIT; fi
+  if (( ! DRY_RUN )); then
+    envfile="$(resolve_env_file)"
+    trap '[[ -n "${envfile:-}" ]] && rm -f "${envfile:-}"' EXIT
+  fi
 
   # (Re)create the idle color. If anything below fails, the active color is
   # untouched and still serving — that is the whole safety guarantee.
