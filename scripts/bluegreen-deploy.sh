@@ -136,6 +136,25 @@ wait_healthy() {  # $1 = port
 
 ensure_dirs() { run "mkdir -p '$STATE_DIR'"; }
 
+# Blue-green overlap is only safe once the data volume's Public/ is a SYMLINK
+# (the symlink-entrypoint image). While it is still a real directory — left by a
+# pre-symlink image — a booting color would `rm -rf` it out from under the live
+# server. Refuse a real swap in that state (override with CHICKADEE_FORCE_SWAP=1).
+guard_symlink_world() {
+  local mp; mp="$(docker volume inspect -f '{{.Mountpoint}}' "$DATA_VOLUME" 2>/dev/null || true)"
+  [[ -n "$mp" && -e "$mp/Public" && ! -L "$mp/Public" ]] || return 0  # already symlinked / unknown -> ok
+  if [[ "${CHICKADEE_FORCE_SWAP:-0}" == "1" ]]; then
+    warn "$DATA_VOLUME still has a REAL Public/ dir, but CHICKADEE_FORCE_SWAP=1 — proceeding."
+    return 0
+  fi
+  local msg="data volume '$DATA_VOLUME' still has a REAL Public/ directory (pre-symlink image).
+       A blue-green swap would delete it out from under the live server. Roll out the
+       symlink-entrypoint image ONCE via your normal deploy first (it stops-old-then-
+       starts-new, so the conversion is safe), then swaps are clean.
+       Override with CHICKADEE_FORCE_SWAP=1 only if you understand the risk."
+  if (( DRY_RUN )); then warn "[would refuse real swap] $msg"; else die "$msg"; fi
+}
+
 # ----------------------------------------------------------------------------
 # Commands
 # ----------------------------------------------------------------------------
@@ -146,7 +165,8 @@ cmd_status() {
   log "active port         : $active"
   for slot in "$BLUE_NAME:$BLUE_PORT" "$GREEN_NAME:$GREEN_PORT"; do
     local name="${slot%%:*}" port="${slot##*:}" state health
-    state="$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null || echo absent)"
+    state="$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null | tr -d '[:space:]')"
+    [[ -n "$state" ]] || state="absent"
     health="$(curl -sf "http://127.0.0.1:${port}${HEALTH_PATH}" >/dev/null 2>&1 && echo ok || echo down)"
     log "color $name (port $port): container=$state  http=$health"
   done
@@ -172,6 +192,8 @@ cmd_deploy() {
   fi
   log "Active=:$active_port  ->  deploying new image to idle color $idle_name (:$idle_port)"
   log "Image: $IMAGE"
+
+  guard_symlink_world
 
   run "docker pull '$IMAGE'"
 
