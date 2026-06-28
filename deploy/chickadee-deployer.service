@@ -1,0 +1,35 @@
+# Chickadee zero-downtime auto-deploy daemon (Phase 2).
+#
+# Install on the production host:
+#   sudo cp /home/jrwallac/Chickadee/deploy/chickadee-deployer.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now chickadee-deployer
+#   journalctl -u chickadee-deployer -f
+#
+# Configuration (optional) lives in /etc/chickadee-deployer.env, e.g.:
+#   CHICKADEE_POLL_INTERVAL_SECS=300
+#   CHICKADEE_DEPLOY_GATE_LEVEL=major
+#   CHICKADEE_PUBLIC_HEALTH_URL=https://chickadee.uwaterloo.ca/health
+#
+# Adjust WorkingDirectory/ExecStart if the repo is checked out elsewhere.
+
+[Unit]
+Description=Chickadee zero-downtime auto-deploy daemon
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+# Runs as root: it drives docker and reloads nginx via bluegreen-deploy.sh.
+User=root
+WorkingDirectory=/home/jrwallac/Chickadee
+ExecStart=/home/jrwallac/Chickadee/deploy/chickadee-deployer.sh
+EnvironmentFile=-/etc/chickadee-deployer.env
+Restart=always
+RestartSec=30
+# Give an in-flight deploy time to finish on stop/restart.
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

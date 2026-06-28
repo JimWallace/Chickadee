@@ -223,11 +223,17 @@ cmd_deploy() {
   # (Re)create the idle color. If anything below fails, the active color is
   # untouched and still serving — that is the whole safety guarantee.
   run "docker rm -f '$idle_name' >/dev/null 2>&1 || true"
+  # The deploy state dir is mounted READ-ONLY so the admin-MCP deploy tools can
+  # read status.json / history.jsonl. Read-only is deliberate: the app can see
+  # deploy state but cannot write command.json, so it can never move traffic.
+  local state_mount=""
+  [[ -d "$STATE_DIR" ]] && state_mount="-v '${STATE_DIR}:/deploy-state:ro'"
   run "docker run -d --name '$idle_name' \
         --restart unless-stopped \
         --network '$DOCKER_NETWORK' --network-alias server \
         -p '127.0.0.1:${idle_port}:8080' \
         -v '${DATA_VOLUME}:/data' \
+        ${state_mount} \
         ${envfile:+--env-file '$envfile'} \
         '$IMAGE'"
 

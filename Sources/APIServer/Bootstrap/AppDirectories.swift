@@ -30,6 +30,10 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     app.storage[ResultsDirectoryKey.self] = resultsDir
     app.storage[TestSetupsDirectoryKey.self] = setupsDir
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
+    // Read-only mount of the auto-deploy daemon's IPC dir (status.json /
+    // history.jsonl); absolute host path, not under the data volume.
+    app.storage[DeployStateDirectoryKey.self] =
+        Environment.get("CHICKADEE_DEPLOY_STATE_DIR") ?? "/deploy-state"
     app.storage[WorkerSecretFilePathKey.self] = workerSecretFile
     app.storage[LocalRunnerAutoStartFilePathKey.self] = localRunnerAutoStartFile
     app.storage[ServerHealthAlertWebhookURLFilePathKey.self] = alertWebhookURLFile
