@@ -185,16 +185,21 @@ do_deploy() {  # $1 = version tag
     fi
   fi
 
-  # The release git tag is vX.Y.Z, but the published image tag is X.Y.Z — the
-  # build's `type=semver,pattern={{version}}` strips the leading v. So strip it
-  # here when constructing the image reference.
-  if CHICKADEE_IMAGE="$IMAGE_REPO:$(strip_v "$ver")" "$DEPLOY_SCRIPT" deploy --yes; then
+  # We deploy :latest, not :vX.Y.Z. The build only publishes per-release image
+  # tags on a git-tag workflow run, but auto-release pushes the tag with the
+  # default GITHUB_TOKEN, which (by GitHub's design) does not trigger the build —
+  # so :X.Y.Z is never published. :latest IS rebuilt on every release and is the
+  # version we just gated on via the Releases API. After the swap we record the
+  # ACTUAL running version so the deployed-version bookkeeping stays accurate even
+  # if :latest moved between the release check and the pull.
+  if CHICKADEE_IMAGE="$IMAGE_REPO:latest" "$DEPLOY_SCRIPT" deploy --yes; then
     if verify_post_deploy; then
-      printf '%s\n' "$ver" > "$DEPLOYED_VERSION_FILE"
-      DEPLOYED_VERSION="$ver"
-      append_history "$ver" deploy success ""
-      write_status idle "deployed $ver"
-      log "deployed $ver successfully"
+      local running; running="$(read_running_version)"
+      DEPLOYED_VERSION="${running:-$(strip_v "$ver")}"
+      printf '%s\n' "$DEPLOYED_VERSION" > "$DEPLOYED_VERSION_FILE"
+      append_history "$ver" deploy success "running=$DEPLOYED_VERSION"
+      write_status idle "deployed $DEPLOYED_VERSION (release $ver)"
+      log "deploy complete; running version now $DEPLOYED_VERSION (target release $ver)"
       return 0
     fi
     log "post-deploy health degraded — rolling back $ver"
