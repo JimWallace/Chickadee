@@ -225,17 +225,35 @@ chickadee-deployer`.
 
 ---
 
-## Phase 3 — MCP oversight surface (admin)
+## Phase 3 — MCP oversight surface (admin) — IMPLEMENTED (read-only)
 
-Admin-scoped, read-mostly tools on the diagnostics surface (never content-auth):
+Two read tools on the admin diagnostic MCP surface let an operator/agent see
+deploy state remotely, without SSH:
 
-- `get_deploy_status` / `get_deploy_history` — read `status.json` / `history.jsonl`.
-- `pause_auto_deploy` / `resume_auto_deploy` — write `command.json`.
-- `approve_major` — approve a held major release.
-- `rollback` — request a rollback to the previous release.
+- `get_deploy_status` — the daemon's current `status.json` (live version, latest
+  release seen, paused flag, pending-major-approval, last update).
+- `get_deploy_history` — the most recent `history.jsonl` entries (deploy / gate /
+  rollback events), newest first.
 
-These only read/write the IPC files; the daemon remains the sole holder of Docker
-and nginx privileges.
+**Control stays host-side, on purpose.** The admin MCP surface is read-only *by
+construction* — `DiagnosticScope` has no write case, the bearer middleware
+enforces it, and a contract test asserts every tool is read-only. So
+pause/approve/rollback are **not** MCP tools; they are host actions (write
+`command.json`, or `systemctl`). To support that division safely the deploy
+state dir is mounted into the container **read-only**
+(`-v $STATE_DIR:/deploy-state:ro` in `bluegreen-deploy.sh`), so the app can *read*
+deploy state but physically cannot write `command.json` — a compromised app can
+never move traffic. The path is `Application.deployStateDirectory`
+(`CHICKADEE_DEPLOY_STATE_DIR`, default `/deploy-state`).
+
+Host-side control reference:
+
+```
+echo '{"command":"pause"}'    | sudo tee /var/lib/chickadee-deploy/command.json
+echo '{"command":"resume"}'   | sudo tee /var/lib/chickadee-deploy/command.json
+echo '{"command":"approve","version":"vX.Y.Z"}' | sudo tee /var/lib/chickadee-deploy/command.json
+echo '{"command":"rollback"}' | sudo tee /var/lib/chickadee-deploy/command.json
+```
 
 ---
 

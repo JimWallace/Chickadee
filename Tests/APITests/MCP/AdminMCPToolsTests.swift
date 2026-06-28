@@ -4,6 +4,7 @@
 
 import Core
 import Fluent
+import Foundation
 import Logging
 import Testing
 import Vapor
@@ -43,6 +44,87 @@ import VaporTesting
             _ = try await makeTestUser(on: app, username: "ms-prof", role: "instructor")
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetMetricsSnapshotTool().execute(.init(), context(subject: "ms-prof"))
+            }
+        }
+    }
+
+    @Test func getDeployStatusReturnsDaemonStateForAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "dep-admin", role: "admin")
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("deploy-state-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let status = """
+                {"state":"idle","deployedVersion":"0.4.558","latestSeen":"v0.4.558",\
+                "detail":"up to date","paused":false,"updatedAt":"2026-06-28T17:40:00Z"}
+                """
+            try status.write(
+                to: dir.appendingPathComponent("status.json"), atomically: true, encoding: .utf8)
+            app.deployStateDirectory = dir.path
+
+            let output = try await GetDeployStatusTool().execute(
+                .init(), context(subject: "dep-admin"))
+            #expect(output.available)
+            #expect(output.deployedVersion == "0.4.558")
+            #expect(output.state == "idle")
+            #expect(output.paused == false)
+        }
+    }
+
+    @Test func getDeployStatusReportsUnavailableWhenNoFile() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "dep-admin2", role: "admin")
+            app.deployStateDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("missing-\(UUID().uuidString)").path
+            let output = try await GetDeployStatusTool().execute(
+                .init(), context(subject: "dep-admin2"))
+            #expect(!output.available)
+            #expect(output.note != nil)
+        }
+    }
+
+    @Test func getDeployStatusRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "dep-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetDeployStatusTool().execute(
+                    .init(), context(subject: "dep-prof"))
+            }
+        }
+    }
+
+    @Test func getDeployHistoryReturnsRecentEntriesNewestFirst() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "hist-admin", role: "admin")
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("deploy-hist-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let lines = """
+                {"ts":"2026-06-28T17:00:00Z","version":"v0.4.557","action":"deploy","result":"success","detail":""}
+                {"ts":"2026-06-28T17:30:00Z","version":"v0.4.558","action":"deploy","result":"success","detail":"running=0.4.558"}
+                """
+            try lines.write(
+                to: dir.appendingPathComponent("history.jsonl"), atomically: true, encoding: .utf8)
+            app.deployStateDirectory = dir.path
+
+            let output = try await GetDeployHistoryTool().execute(
+                .init(limit: 10), context(subject: "hist-admin"))
+            #expect(output.available)
+            #expect(output.entries.count == 2)
+            // Newest first.
+            #expect(output.entries.first?.version == "v0.4.558")
+            #expect(output.entries.last?.version == "v0.4.557")
+        }
+    }
+
+    @Test func getDeployHistoryRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "hist-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetDeployHistoryTool().execute(
+                    .init(limit: nil), context(subject: "hist-prof"))
             }
         }
     }
