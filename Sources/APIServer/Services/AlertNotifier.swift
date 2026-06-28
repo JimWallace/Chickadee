@@ -7,6 +7,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     case errorRateSpike
     case editorKernelUnrecoverable
     case databaseUnreachable
+    case brightspaceSyncFailing
 
     var humanReadable: String {
         switch self {
@@ -15,6 +16,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .errorRateSpike: return "System-level failure rate spike"
         case .editorKernelUnrecoverable: return "Editor kernel unrecoverable"
         case .databaseUnreachable: return "Database unreachable"
+        case .brightspaceSyncFailing: return "BrightSpace grade sync failing"
         }
     }
 
@@ -25,6 +27,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
         case .editorKernelUnrecoverable: return "warning"
+        case .brightspaceSyncFailing: return "warning"
         }
     }
 }

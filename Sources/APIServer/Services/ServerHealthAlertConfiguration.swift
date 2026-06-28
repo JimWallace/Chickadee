@@ -24,6 +24,12 @@ struct ServerHealthAlertConfiguration: Sendable {
     /// students who are actually stuck.
     let editorUnrecoverableThreshold: Int
     let editorUnrecoverableWindowMinutes: Int
+    /// BrightSpace-sync-failing rule: fire when at least
+    /// `brightspaceSyncFailureThreshold` grade-push errors land in the
+    /// `brightspace_sync_log` within the last `brightspaceSyncFailureWindowMinutes`
+    /// — grades have stopped flowing to LEARN and need a human to look.
+    let brightspaceSyncFailureThreshold: Int
+    let brightspaceSyncFailureWindowMinutes: Int
     let webhookURLFromEnvironment: String?
 
     static let `default` = ServerHealthAlertConfiguration(
@@ -38,6 +44,8 @@ struct ServerHealthAlertConfiguration: Sendable {
         errorRateMinimumSamples: 10,
         editorUnrecoverableThreshold: 2,
         editorUnrecoverableWindowMinutes: 60,
+        brightspaceSyncFailureThreshold: 3,
+        brightspaceSyncFailureWindowMinutes: 60,
         webhookURLFromEnvironment: nil
     )
 
@@ -56,6 +64,9 @@ struct ServerHealthAlertConfiguration: Sendable {
                 ?? environmentInt("ALERT_EDITOR_HANG_THRESHOLD") ?? 2,
             editorUnrecoverableWindowMinutes: environmentInt("ALERT_EDITOR_UNRECOVERABLE_WINDOW_MINUTES")
                 ?? environmentInt("ALERT_EDITOR_HANG_WINDOW_MINUTES") ?? 60,
+            brightspaceSyncFailureThreshold: environmentInt("ALERT_BRIGHTSPACE_SYNC_FAILURE_THRESHOLD") ?? 3,
+            brightspaceSyncFailureWindowMinutes: environmentInt(
+                "ALERT_BRIGHTSPACE_SYNC_FAILURE_WINDOW_MINUTES") ?? 60,
             webhookURLFromEnvironment: trimmedEnv("ALERT_WEBHOOK_URL")
         )
     }

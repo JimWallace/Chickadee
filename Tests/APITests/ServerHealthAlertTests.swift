@@ -270,6 +270,29 @@ import Testing
         #expect(evaluation.isFiring == false)
     }
 
+    // MARK: - decideBrightspaceSyncFailing
+
+    @Test func brightspaceSyncFailing_firesAtThreshold() {
+        let evaluation = decideBrightspaceSyncFailing(
+            errorCount: 3, threshold: 3, windowMinutes: 60, lastDetail: "HTTP 503")
+        #expect(evaluation.isFiring)
+        #expect(evaluation.details["error_count"] == "3")
+        #expect(evaluation.details["last_error"] == "HTTP 503")
+        #expect(evaluation.summary.contains("503"))
+    }
+
+    @Test func brightspaceSyncFailing_okBelowThreshold() {
+        let evaluation = decideBrightspaceSyncFailing(
+            errorCount: 2, threshold: 3, windowMinutes: 60, lastDetail: nil)
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func brightspaceSyncFailing_okWhenThresholdDisabled() {
+        let evaluation = decideBrightspaceSyncFailing(
+            errorCount: 99, threshold: 0, windowMinutes: 60, lastDetail: nil)
+        #expect(evaluation.isFiring == false)
+    }
+
     // MARK: - JobFailureClassification
 
     @Test func jobFailureClassification_studentTestErrorIsNotSystemFailure() {
