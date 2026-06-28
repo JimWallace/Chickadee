@@ -684,13 +684,21 @@ extension InstructorDashboardRoutes {
                 .map(\.username))
         var unmapped: [BrightspaceUnmappedStudentRow] = []
         for student in students {
-            let sid = student.studentID ?? ""
-            if sid.isEmpty {
+            // Grade sync resolves a student by username (against the LEARN
+            // classlist) OR student number, caching the resolved D2L id on first
+            // success. A student is only truly unmapped with neither a student
+            // number nor an already-resolved id — checking studentID alone
+            // wrongly flags students who match LEARN by username.
+            let hasStudentID = !(student.studentID ?? "").isEmpty
+            let hasResolvedID = !(student.brightspaceUserID ?? "").isEmpty
+            if !hasStudentID && !hasResolvedID {
                 unmapped.append(
                     BrightspaceUnmappedStudentRow(
                         username: student.username,
                         displayName: student.displayName ?? student.username,
-                        reason: "No student/org-defined ID on file"))
+                        reason:
+                            "No LEARN match — add a student/org-defined ID, or check the username matches LEARN"
+                    ))
             } else if noAccountUsernames.contains(student.username) {
                 unmapped.append(
                     BrightspaceUnmappedStudentRow(
