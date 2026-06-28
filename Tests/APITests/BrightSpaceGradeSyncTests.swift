@@ -35,7 +35,9 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
     /// — so the pushed value equals Chickadee's raw points unless a test opts
     /// into a specific grade object (to exercise scaling / type refusal).
     private let gradeObject: BrightSpaceGradeObject?
+    private let clearError: (any Error)?
     private(set) var pushes: [RecordedPush] = []
+    private(set) var clears: [String] = []  // bsUserIDs whose grade was cleared
     private(set) var lookupCount = 0
 
     init(
@@ -43,13 +45,15 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         classlist: [BrightSpaceClasslistEntry] = [],
         lookupError: (any Error)? = nil,
         pushError: (any Error)? = nil,
-        gradeObject: BrightSpaceGradeObject? = nil
+        gradeObject: BrightSpaceGradeObject? = nil,
+        clearError: (any Error)? = nil
     ) {
         self.userIDsByOrgDefinedId = userIDsByOrgDefinedId
         self.classlist = classlist
         self.lookupError = lookupError
         self.pushError = pushError
         self.gradeObject = gradeObject
+        self.clearError = clearError
     }
 
     func lookupUserID(orgDefinedId: String, on application: Application) async throws -> String? {
@@ -68,6 +72,13 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         orgUnitID: String, gradeObjectID: String, on application: Application
     ) async throws -> BrightSpaceGradeObject? {
         gradeObject
+    }
+
+    func clearGrade(
+        orgUnitID: String, gradeObjectID: String, bsUserID: String, on application: Application
+    ) async throws {
+        if let clearError { throw clearError }
+        clears.append(bsUserID)
     }
 
     func pushGrade(
@@ -482,10 +493,10 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
-    @Test func clearingOverrideOnNoSubmissionStudentDoesNotPush() async throws {
-        // Clearing an override on a student with no submissions reverts to the
-        // (nonexistent) runner grade — nothing to push, and whatever was already
-        // in BrightSpace is left as-is.
+    @Test func clearingOverrideNeverSyncedQueuesNoRemoval() async throws {
+        // Clearing an override on a no-submission student that Chickadee never
+        // pushed (no success in the sync log) queues no removal — Chickadee only
+        // ever touches grades it pushed.
         try await withApp(app) { _ in
             let scenario = try await makeOverrideOnlyScenario(studentID: "stu-ovr")
             try await applyGradeOverride(
@@ -494,16 +505,48 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             _ = try await clearGradeOverride(
                 testSetupID: scenario.setupID, studentUserID: scenario.userID, on: app.db)
 
-            // The override row is gone, so there is nothing pending to sweep.
-            let remaining = try await APIGradeOverride.query(on: app.db).count()
-            #expect(remaining == 0)
+            #expect(try await APIGradeOverride.query(on: app.db).count() == 0)
+            #expect(try await APIBrightSpaceGradeClear.query(on: app.db).count() == 0)
 
             let fake = FakeBrightSpaceGrading(userIDsByOrgDefinedId: ["stu-ovr": "d2l-ovr"])
             let processed = try await sweep(client: fake)
 
             #expect(processed == 0)
-            let pushes = await fake.pushes
-            #expect(pushes.isEmpty)
+            #expect(await fake.pushes.isEmpty)
+            #expect(await fake.clears.isEmpty)
+        }
+    }
+
+    @Test func clearingOverrideAfterSyncRemovesGradeInLearn() async throws {
+        // Full bidirectional path: push a grade for a no-submission student, then
+        // clear the override — the next sweep removes the grade in LEARN.
+        try await withApp(app) { _ in
+            let scenario = try await makeOverrideOnlyScenario(studentID: "stu-ovr")
+            try await applyGradeOverride(
+                testSetupID: scenario.setupID, studentUserID: scenario.userID,
+                percent: 80, note: nil, grantedByUserID: nil, on: app.db)
+            let override = try #require(try await APIGradeOverride.query(on: app.db).first())
+            override.brightspacePendingSince = Date().addingTimeInterval(-3600)
+            try await override.save(on: app.db)
+
+            let fake = FakeBrightSpaceGrading(userIDsByOrgDefinedId: ["stu-ovr": "d2l-ovr"])
+            _ = try await sweep(client: fake)  // pushes the grade + writes a success log
+            #expect(await fake.pushes.count == 1)
+
+            // Instructor clears the override → a removal is queued.
+            _ = try await clearGradeOverride(
+                testSetupID: scenario.setupID, studentUserID: scenario.userID, on: app.db)
+            let clearRow = try #require(try await APIBrightSpaceGradeClear.query(on: app.db).first())
+            #expect(clearRow.brightspaceSyncPending == true)
+            clearRow.brightspacePendingSince = Date().addingTimeInterval(-3600)
+            try await clearRow.save(on: app.db)
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)
+            #expect(await fake.clears == ["d2l-ovr"])
+            // Queue row consumed.
+            #expect(try await APIBrightSpaceGradeClear.query(on: app.db).count() == 0)
         }
     }
 

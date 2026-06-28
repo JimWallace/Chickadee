@@ -94,6 +94,12 @@ func applyGradeOverride(
     row.note = note
     row.grantedByUserID = grantedByUserID
     try await row.save(on: db)
+    // Setting an override (re)establishes a grade — drop any queued removal for
+    // this (student, setup) so the sweep doesn't clear a grade we're pushing.
+    try await APIBrightSpaceGradeClear.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == studentUserID)
+        .delete()
     try await flagOverrideOrResultsPendingSync(
         override: row, testSetupID: testSetupID, studentUserID: studentUserID, on: db)
 }
@@ -119,11 +125,57 @@ func clearGradeOverride(
     try await existing.delete(on: db)
     // Clearing reverts to the runner-computed grade. For a student with
     // submissions that re-flags their results; for a no-submission student
-    // there's nothing to push (override is nil → no-op), so the previously
-    // pushed grade is left as-is in BrightSpace.
+    // there is no runner grade — so if Chickadee previously pushed a grade for
+    // them, queue a removal so the LEARN grade doesn't stay stale.
     try await flagOverrideOrResultsPendingSync(
         override: nil, testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+    try await enqueueGradeClearIfOrphaned(
+        testSetupID: testSetupID, studentUserID: studentUserID, on: db)
     return true
+}
+
+/// Queues a BrightSpace grade removal for a (student, setup) that has lost its
+/// only Chickadee grade source — no student submissions remain — but ONLY when
+/// Chickadee has actually pushed a grade for it (a `success` row in the sync
+/// log). That gate is what keeps Chickadee from ever clearing a grade an
+/// instructor entered by hand in LEARN. A no-op when the student still has
+/// submissions (their runner grade is re-pushed instead) or nothing was synced.
+func enqueueGradeClearIfOrphaned(
+    testSetupID: String,
+    studentUserID: UUID,
+    on db: Database
+) async throws {
+    let hasSubmissions =
+        try await APISubmission.query(on: db)
+        .filter(\.$userID == studentUserID)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .first() != nil
+    guard !hasSubmissions else { return }
+
+    let chickadeePushed =
+        try await APIBrightSpaceSyncLog.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == studentUserID)
+        .filter(\.$status == APIBrightSpaceSyncLog.Status.success.rawValue)
+        .first() != nil
+    guard chickadeePushed else { return }
+
+    let now = Date()
+    if let existing = try await APIBrightSpaceGradeClear.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == studentUserID)
+        .first()
+    {
+        existing.brightspaceSyncPending = true
+        if existing.brightspacePendingSince == nil { existing.brightspacePendingSince = now }
+        existing.brightspaceSyncError = nil
+        try await existing.save(on: db)
+    } else {
+        let row = APIBrightSpaceGradeClear(testSetupID: testSetupID, userID: studentUserID)
+        row.brightspacePendingSince = now
+        try await row.save(on: db)
+    }
 }
 
 /// Marks every result on one student's submissions for a test setup as pending
