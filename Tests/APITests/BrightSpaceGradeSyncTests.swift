@@ -583,7 +583,9 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
-    @Test func pushFailureRecordsErrorOnResult() async throws {
+    @Test func transientPushFailureKeepsRowPendingForAutoRetry() async throws {
+        // A 503 is transient — the row stays pending so the next sweep retries
+        // automatically, without a manual "Retry failed".
         try await withApp(app) { _ in
             let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
             try await makePendingResult(
@@ -599,8 +601,71 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
 
             #expect(processed == 0)
             let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncPending == true)  // stays queued for retry
             #expect(result.brightspaceSyncError != nil)
             #expect(result.brightspaceSyncedAt == nil)
+        }
+    }
+
+    @Test func terminalPushFailureClearsPendingFlag() async throws {
+        // A 400 is terminal — retrying won't help, so the flag clears and the
+        // row waits for a manual "Retry failed" after the cause is fixed.
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 7, total: 10),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading(
+                pushError: BrightSpaceSyncError.gradePushFailed(status: 400, body: "bad request")
+            )
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 0)
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncPending == false)  // not retried automatically
+            #expect(result.brightspaceSyncError != nil)
+        }
+    }
+
+    @Test func isRetryableSyncErrorClassification() async throws {
+        // This class suite builds an Application per instance; wrap in withApp
+        // so it shuts down deterministically (an un-shutdown app traps in
+        // ServeCommand.deinit), even though the assertions are pure.
+        try await withApp(app) { _ in
+            #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 503, body: "")))
+            #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 429, body: "")))
+            #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 500, body: "")))
+            #expect(!isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 400, body: "")))
+            #expect(!isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 403, body: "")))
+            #expect(!isRetryableSyncError(BrightSpaceSyncError.missingPoints))
+            // A non-BrightSpace error (transport/timeout) is treated as transient.
+            struct TransportError: Error {}
+            #expect(isRetryableSyncError(TransportError()))
+        }
+    }
+
+    @Test func scaledGradeIsRoundedToTwoDecimals() async throws {
+        // 6/7 of a /7 suite onto a /10 item = 8.571428…, which must land as 8.57.
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 6, total: 7),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading(
+                gradeObject: BrightSpaceGradeObject(
+                    id: "go-456", name: "Lab", maxPoints: 10, gradeType: "Numeric", canExceed: false))
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)
+            let pushes = await fake.pushes
+            let pushed = try #require(pushes.first?.earnedPoints)
+            #expect(abs(pushed - 8.57) < 0.0001)
         }
     }
 }

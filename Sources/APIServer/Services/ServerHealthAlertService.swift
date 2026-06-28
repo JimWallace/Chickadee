@@ -51,6 +51,12 @@ func evaluateHealthRules(
             configuration: configuration,
             now: now
         )) ?? .ok
+    results[.brightspaceSyncFailing] =
+        (try? await evaluateBrightspaceSyncFailing(
+            on: application,
+            configuration: configuration,
+            now: now
+        )) ?? .ok
 
     return results
 }
@@ -285,6 +291,53 @@ enum JobFailureClassification {
             return false
         }
     }
+}
+
+/// Decides the BrightSpace-sync-failing rule purely from a recent error count,
+/// so the firing threshold is table-testable without a database. Fire when at
+/// least `threshold` grade-push errors landed inside the window — grades have
+/// stopped reaching LEARN. `lastDetail` (the most recent D2L error) is surfaced
+/// as context when present.
+func decideBrightspaceSyncFailing(
+    errorCount: Int,
+    threshold: Int,
+    windowMinutes: Int,
+    lastDetail: String?
+) -> RuleEvaluation {
+    guard threshold > 0, errorCount >= threshold else { return .ok }
+    var details: [String: String] = [
+        "error_count": String(errorCount),
+        "window_minutes": String(windowMinutes),
+        "threshold": String(threshold),
+    ]
+    if let lastDetail, !lastDetail.isEmpty { details["last_error"] = lastDetail }
+    let suffix = (lastDetail?.isEmpty == false) ? " (latest: \(lastDetail ?? ""))" : ""
+    return RuleEvaluation(
+        isFiring: true,
+        summary:
+            "\(errorCount) BrightSpace grade push(es) failed in the last \(windowMinutes)m "
+            + "(threshold \(threshold))\(suffix)",
+        details: details
+    )
+}
+
+private func evaluateBrightspaceSyncFailing(
+    on application: Application,
+    configuration: ServerHealthAlertConfiguration,
+    now: Date
+) async throws -> RuleEvaluation {
+    let windowStart = now.addingTimeInterval(-Double(configuration.brightspaceSyncFailureWindowMinutes) * 60)
+    let errored = try await APIBrightSpaceSyncLog.query(on: application.db)
+        .filter(\.$status == APIBrightSpaceSyncLog.Status.error.rawValue)
+        .filter(\.$attemptedAt >= windowStart)
+        .sort(\.$attemptedAt, .descending)
+        .all()
+    return decideBrightspaceSyncFailing(
+        errorCount: errored.count,
+        threshold: configuration.brightspaceSyncFailureThreshold,
+        windowMinutes: configuration.brightspaceSyncFailureWindowMinutes,
+        lastDetail: errored.first?.detail
+    )
 }
 
 private func evaluateDatabaseUnreachable(on application: Application) async -> RuleEvaluation {

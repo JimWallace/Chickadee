@@ -337,22 +337,49 @@ private func chunkedForInFilter<T>(_ items: [T]) -> [[T]] {
 
 // MARK: - Per-group push
 
-/// Marks every row in a failed group the way the single-result error path
-/// did: flag cleared, error recorded, push retried on the next pending cycle.
+/// True when a push failure is worth retrying automatically — a transient D2L
+/// or transport hiccup — versus a terminal failure that will keep failing until
+/// a human intervenes (a bad request, a missing account, no parseable grade).
+///
+/// HTTP 408/425/429 and 5xx are transient; other 4xx are terminal. A
+/// `missingPoints`/lookup `BrightSpaceSyncError` is terminal (the grade or item
+/// won't fix itself on retry). Anything else — a raw transport/NIO error from
+/// the signed request — is treated as transient.
+func isRetryableSyncError(_ error: Error) -> Bool {
+    if let syncError = error as? BrightSpaceSyncError {
+        switch syncError {
+        case .gradePushFailed(let status, _):
+            return [408, 425, 429, 500, 502, 503, 504].contains(status)
+        default:
+            // missingPoints / userLookupFailed / orgUnitLookupFailed /
+            // gradeObjectsFetchFailed — none retry into success on their own.
+            return false
+        }
+    }
+    // Non-BrightSpaceSyncError: a transport/timeout error from the HTTP call.
+    return true
+}
+
+/// Records a failed group. A transient (retryable) failure keeps the pending
+/// flag set so the next sweep re-attempts it automatically; a terminal failure
+/// clears the flag and waits for a manual "Retry failed". Either way the error
+/// detail is recorded and the synced timestamp cleared.
 private func recordSweepFailure(
     _ rows: [any BrightSpaceSyncFlaggable],
     error: Error,
     db: Database,
     logger: Logger
 ) async {
+    let retryable = isRetryableSyncError(error)
     for row in rows {
-        row.brightspaceSyncPending = false
+        row.brightspaceSyncPending = retryable
         row.brightspaceSyncedAt = nil
         row.brightspaceSyncError = error.localizedDescription
         try? await row.save(on: db)
     }
     let ids = rows.map(\.brightspaceSyncRowID).joined(separator: ", ")
-    logger.warning("BrightSpace grade sync failed for row(s) \(ids): \(error)")
+    logger.warning(
+        "BrightSpace grade sync \(retryable ? "transient" : "terminal") failure for row(s) \(ids): \(error)")
 }
 
 /// Clears the pending flag on every row in the group (the "nothing to
@@ -539,11 +566,17 @@ private func scaledGradePush(
     // Scale Chickadee's grade onto the D2L item's own max when both totals are
     // known (e.g. a /14 suite into a /10 LEARN item). When the item's max is
     // unknown or already equals the suite total, this is the identity, so the
-    // pushed value is unchanged.
+    // pushed value is unchanged. The result is rounded to 2 decimals so the
+    // gradebook shows a clean value (8.57) rather than 8.571428571…
     if let total = grade.total, total > 0, let maxPoints = gradeObject?.maxPoints, maxPoints > 0 {
-        return (grade.points / total * maxPoints, gradeObject, nil)
+        return (roundedGradePoints(grade.points / total * maxPoints), gradeObject, nil)
     }
-    return (grade.points, gradeObject, nil)
+    return (roundedGradePoints(grade.points), gradeObject, nil)
+}
+
+/// Rounds a grade value to 2 decimal places for the LEARN gradebook.
+private func roundedGradePoints(_ value: Double) -> Double {
+    (value * 100).rounded() / 100
 }
 
 /// Resolves the student's D2L user ID via the course classlist (cached per
