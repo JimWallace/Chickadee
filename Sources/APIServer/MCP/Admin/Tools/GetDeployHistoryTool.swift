@@ -80,7 +80,8 @@ struct GetDeployHistoryTool: DiagnosticTool {
         let decoder = JSONDecoder()
         // One JSON object per line; newest entries are appended last, so take the
         // tail and reverse to return newest-first.
-        let parsed: [Entry] = text
+        let parsed: [Entry] =
+            text
             .split(whereSeparator: \.isNewline)
             .compactMap { line -> Entry? in
                 guard let e = try? decoder.decode(EntryFile.self, from: Data(line.utf8))

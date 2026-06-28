@@ -75,7 +75,8 @@ import VaporTesting
     @Test func getDeployStatusReportsUnavailableWhenNoFile() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "dep-admin2", role: "admin")
-            app.deployStateDirectory = FileManager.default.temporaryDirectory
+            app.deployStateDirectory =
+                FileManager.default.temporaryDirectory
                 .appendingPathComponent("missing-\(UUID().uuidString)").path
             let output = try await GetDeployStatusTool().execute(
                 .init(), context(subject: "dep-admin2"))
