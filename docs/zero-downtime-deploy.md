@@ -158,29 +158,70 @@ mechanism without moving any student traffic:
 
 ---
 
-## Phase 2 — the deployer daemon (automatic CD)
+## Phase 2 — the deployer daemon (automatic CD) — IMPLEMENTED
 
-`chickadee-deployer` (shell + systemd). A loop that:
+`deploy/chickadee-deployer.sh` (shell) + `deploy/chickadee-deployer.service`
+(systemd). The loop, every `POLL_INTERVAL_SECS` (default 300):
 
-1. Polls the **GitHub Releases API** for the latest release tag `vX.Y.Z`.
-2. Compares its **major** to the currently-deployed release (tracked in the
-   deployer's state). `major` equal → proceed automatically; `major` greater →
-   write a "pending approval" status, alert, and stop (await `approve_major`).
-3. Runs `scripts/snapshot.sh` (Postgres dump + artifacts) as a safety net.
-4. Calls `bluegreen-deploy.sh deploy` with `CHICKADEE_IMAGE=...:vX.Y.Z`.
-5. If the swap aborts (new color never healthy), the script already left the old
-   color serving; the daemon records the failure and alerts.
-6. Writes status/history to the shared IPC dir for the MCP surface to read.
+1. Reads `command.json` (operator/MCP commands — see IPC below).
+2. Polls the **GitHub Releases API** (`/repos/<repo>/releases/latest`,
+   unauthenticated — the repo is public) for the latest tag `vX.Y.Z`.
+3. If it's not newer than the deployed version (`sort -V` compare), records
+   "up to date" and sleeps.
+4. Applies the **SemVer gate**: if the bump crosses `DEPLOY_GATE_LEVEL`
+   (default `major` → only major bumps held; set `minor` to also hold minor
+   bumps during the 0-series), it writes `pending_approval` and waits for an
+   `approve` command. Otherwise it proceeds automatically.
+5. Runs `scripts/snapshot.sh --label predeploy-<ver>` (Postgres dump +
+   artifacts) as a safety net. `SNAPSHOT_REQUIRED=1` makes a failed snapshot
+   abort the deploy; the default warns and continues.
+6. Calls `bluegreen-deploy.sh deploy --yes` with `CHICKADEE_IMAGE=...:vX.Y.Z`.
+   It **never** forces — if `/data/Public` isn't a symlink the guard refuses and
+   the daemon records an error (fail-safe).
+7. **Post-deploy verification:** watches the public `/health` for
+   `POST_DEPLOY_VERIFY_SECS` (default 30); 3 consecutive failures →
+   `bluegreen-deploy.sh rollback --yes`. (A swap that never goes healthy is
+   already aborted by the script *before* the nginx flip, so traffic never moved
+   — this covers the rarer "healthy at cutover, degrades after" case.)
+8. Writes `status.json` / appends `history.jsonl` for the Phase 3 MCP surface.
 
-A `DEPLOY_GATE_LEVEL=major|minor` knob can tighten the gate to also hold `0.x`
-minor bumps during the 0-series (default `major`, per the agreed policy).
+### Configuration (env / `/etc/chickadee-deployer.env`)
 
-### App ⇄ daemon IPC (shared bind-mount dir)
+`CHICKADEE_REPO`, `CHICKADEE_IMAGE_REPO`, `CHICKADEE_POLL_INTERVAL_SECS`,
+`CHICKADEE_DEPLOY_GATE_LEVEL` (major|minor), `CHICKADEE_SNAPSHOT_BEFORE_DEPLOY`,
+`CHICKADEE_SNAPSHOT_REQUIRED`, `CHICKADEE_POST_DEPLOY_VERIFY_SECS`,
+`CHICKADEE_PUBLIC_HEALTH_URL`, `CHICKADEE_STATE_DIR`.
 
-- `command.json` — written by MCP: `{pause|resume|approve <tag>|rollback|deploy <tag>}`.
-- `status.json` — written by the daemon: current release, last result, pending
-  approval, paused flag, last error.
+### Install
+
+```
+sudo cp deploy/chickadee-deployer.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chickadee-deployer
+journalctl -u chickadee-deployer -f
+```
+
+### Safe first run (recommended before enabling the service)
+
+Run it in the foreground with a short interval. Since the deployed version equals
+the latest release, it will just log "up to date" — no swap — so you can watch it
+behave with zero risk:
+
+```
+sudo CHICKADEE_POLL_INTERVAL_SECS=30 deploy/chickadee-deployer.sh
+```
+
+Ctrl-C, then enable the service. Its first *real* auto-deploy then happens
+naturally on the next merge to `main` (the next release). Pause anytime by
+writing `{"command":"pause"}` to `command.json`, or `sudo systemctl stop
+chickadee-deployer`.
+
+### App ⇄ daemon IPC (files in `STATE_DIR`)
+
+- `command.json` — operator/MCP → daemon: `{"command":"pause|resume|approve|rollback|deploy","version":"vX.Y.Z"}` (consumed each cycle).
+- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `updatedAt`.
 - `history.jsonl` — append-only deploy log.
+- `deployed_version` — the daemon's source of truth for what is live.
 
 ---
 
