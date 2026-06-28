@@ -136,6 +136,30 @@ func requireCourseWriteAccess(
     }
 }
 
+/// Guards against orphaning a course (#417 Slice B). Throws `.conflict` if
+/// removing or downgrading the instructor enrollment held by `userID` would
+/// leave `courseID` with zero instructors. Admins are exempt — they can always
+/// re-grant — so an admin may still force the change; the guard only stops a
+/// non-admin instructor from self-demoting or unenrolling the course's last
+/// instructor without transferring the role first.
+func ensureNotLastInstructor(
+    caller: APIUser, courseID: UUID, removing userID: UUID, db: Database
+) async throws {
+    guard !caller.isAdmin else { return }
+    let otherInstructors = try await APICourseEnrollment.query(on: db)
+        .filter(\.$course.$id == courseID)
+        .filter(\.$roleRaw == CourseRole.instructor.rawValue)
+        .filter(\.$userID != userID)
+        .count()
+    guard otherInstructors > 0 else {
+        throw Abort(
+            .conflict,
+            reason:
+                "A course must keep at least one instructor. Assign another instructor before removing or demoting this one."
+        )
+    }
+}
+
 // MARK: - Enrollment creation (role seeding)
 
 /// Creates and saves a new enrollment for `user` in `courseID`, seeding the

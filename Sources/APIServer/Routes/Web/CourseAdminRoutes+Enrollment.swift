@@ -145,10 +145,18 @@ extension CourseAdminRoutes {
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
 
-        try await APICourseEnrollment.query(on: req.db)
+        if let enrollment = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseID)
             .filter(\.$userID == userID)
-            .delete()
+            .first()
+        {
+            // Don't let a non-admin unenroll the course's last instructor (#417 Slice B).
+            if enrollment.role == .instructor {
+                try await ensureNotLastInstructor(
+                    caller: caller, courseID: courseID, removing: userID, db: req.db)
+            }
+            try await enrollment.delete(on: req.db)
+        }
 
         await AuditLogger.record(
             action: .enrollmentRemoved,
@@ -320,6 +328,11 @@ extension CourseAdminRoutes {
                 .first()
         else {
             throw WebAssignmentError.notFound(resource: "Enrollment")
+        }
+        // Don't let a non-admin demote the course's last instructor (#417 Slice B).
+        if enrollment.role == .instructor, newRole != .instructor {
+            try await ensureNotLastInstructor(
+                caller: caller, courseID: courseID, removing: userID, db: req.db)
         }
         enrollment.role = newRole
         try await enrollment.save(on: req.db)
