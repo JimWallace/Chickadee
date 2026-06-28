@@ -244,7 +244,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let assignment = try await context.authorizedAssignment(
+        let assignment = try await context.authorizedAssignmentForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         // Resolve + validate the target section against this assignment's course.

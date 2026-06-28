@@ -73,6 +73,20 @@ func loadAssignmentAndSetupForWrite(_ req: Request) async throws -> (APIAssignme
     return (assignment, setup)
 }
 
+/// Write-authorizing sibling of `loadAssignment(_:)`, for handlers that mutate
+/// per-course state but never touch the test setup (retest, grade override,
+/// notebook reset). Same `requireCourseWriteAccess` gate as
+/// `loadAssignmentAndSetupForWrite` — scoping the write to the assignment's
+/// **own** course closes the archived-course and cross-course write paths the
+/// `ActiveCourseInstructorMiddleware` group gate (which only inspects the
+/// caller's *active* course) can't see (#417, follow-up to Slice A).
+func loadAssignmentForWrite(_ req: Request) async throws -> APIAssignment {
+    let assignment = try await loadAssignment(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseWriteAccess(caller: caller, courseID: assignment.courseID, db: req.db)
+    return assignment
+}
+
 /// Loads a draft test setup from the `?draftID=<id>` query parameter.
 /// The draft model is just an `APITestSetup` row that hasn't been
 /// linked to an `APIAssignment` yet — same row shape, no parent.

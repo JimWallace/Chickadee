@@ -81,7 +81,7 @@ extension InstructorDashboardRoutes {
         }
 
         let user = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         let assignmentIDRaw = assignment.publicID
         guard
             let submissionID = req.parameters.get("submissionID"),
@@ -129,7 +129,7 @@ extension InstructorDashboardRoutes {
     @Sendable
     func retestAllSubmissions(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
         let assignmentIDRaw = assignment.publicID
 
         let count = try await retestAllSubmissionsForSetup(
@@ -191,7 +191,7 @@ extension InstructorDashboardRoutes {
         }
 
         let user = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         let assignmentIDRaw = assignment.publicID
         guard let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw)
@@ -262,7 +262,7 @@ extension InstructorDashboardRoutes {
         }
 
         let actor = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         let assignmentIDRaw = assignment.publicID
         let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
         guard let studentUUID = student.id else {
@@ -313,7 +313,7 @@ extension InstructorDashboardRoutes {
         struct DeleteBody: Content { var returnTo: String? }
 
         _ = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         let assignmentIDRaw = assignment.publicID
         let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
         guard let studentUUID = student.id else {

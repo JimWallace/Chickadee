@@ -277,7 +277,12 @@ struct InstructorDashboardRoutes: RouteCollection {
     /// re-validate before opening.
     @Sendable
     func cloneAssignment(req: Request) async throws -> Response {
-        let (source, sourceSetup) = try await loadAssignmentAndSetup(req)
+        // Write-scoped to the source's own course: cloning creates a new
+        // assignment in that course, so a clone of an archived course's
+        // assignment is a write to an archived course and is blocked for
+        // non-admins (#417, follow-up to Slice A — "clone reads from a
+        // possibly-archived source").
+        let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(req)
         let cloned = try await AssignmentAuthoringService.cloneAssignment(
             source: source,
             sourceSetup: sourceSetup,
