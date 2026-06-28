@@ -226,6 +226,12 @@ protocol BrightSpaceGrading: Sendable {
     func fetchGradeObject(
         orgUnitID: String, gradeObjectID: String, on application: Application
     ) async throws -> BrightSpaceGradeObject?
+    /// Removes a student's grade value for a grade item (DELETE), used when
+    /// Chickadee's grade source for a (student, assignment) is removed. A 404
+    /// (no value present) is treated as success — the end state is the same.
+    func clearGrade(
+        orgUnitID: String, gradeObjectID: String, bsUserID: String, on application: Application
+    ) async throws
 }
 
 // MARK: - Client
@@ -420,6 +426,26 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             let bodyLen = bodyBuf?.readableBytes ?? 0
             let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
             throw BrightSpaceSyncError.gradePushFailed(status: Int(response.status.code), body: bodyText)
+        }
+    }
+
+    /// Removes a student's grade value (DELETE). A 404 means there was no value
+    /// to clear, which is the same end state as a successful delete, so it's
+    /// treated as success.
+    func clearGrade(
+        orgUnitID: String, gradeObjectID: String, bsUserID: String, on application: Application
+    ) async throws {
+        let leVersion = await apiVersion(
+            "le", fallback: BrightSpaceSyncConfig.leAPIVersion, on: application)
+        let rawURL =
+            "\(config.baseURL)/d2l/api/le/\(leVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
+        let response = try await sendSigned(method: "DELETE", rawURL: rawURL, on: application)
+        let code = Int(response.status.code)
+        guard (200...299).contains(code) || code == 404 else {
+            var bodyBuf = response.body
+            let bodyLen = bodyBuf?.readableBytes ?? 0
+            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
+            throw BrightSpaceSyncError.gradePushFailed(status: code, body: bodyText)
         }
     }
 

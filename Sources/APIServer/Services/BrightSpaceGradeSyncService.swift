@@ -115,7 +115,150 @@ func sweepBrightSpaceGradeSync(
             await recordSweepFailure(syncRows, error: error, db: db, logger: logger)
         }
     }
+
+    // Pending grade REMOVALS (override cleared on a previously-synced
+    // no-submission student). A push queued for the same (student, setup) this
+    // sweep supersedes the clear, so pass the keys we're about to push.
+    let pushedKeys = Set(targets.map { GradePushKey(userID: $0.userID, testSetupID: $0.testSetupID) })
+    processed += try await processPendingGradeClears(
+        pushedKeys: pushedKeys, cutoff: cutoff, db: db,
+        resolveClient: resolveClient, classlistCache: classlistCache, application: application)
     return processed
+}
+
+/// A queued grade removal plus the rows it needs, pre-resolved from the
+/// sweep-wide batch context.
+private struct GradeClearTarget {
+    let clearRow: APIBrightSpaceGradeClear
+    let assignment: APIAssignment?
+    let course: APICourse?
+    let user: APIUser?
+}
+
+/// Processes pending `brightspace_grade_clears`: DELETEs each student's grade in
+/// D2L and removes the queue row on success. A clear whose (student, setup) is
+/// also being pushed this sweep is dropped (the push wins). Returns the number
+/// of clears completed.
+private func processPendingGradeClears(
+    pushedKeys: Set<GradePushKey>,
+    cutoff: Date,
+    db: Database,
+    resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
+    classlistCache: ClasslistUserIDCache,
+    application: Application
+) async throws -> Int {
+    let pending = try await APIBrightSpaceGradeClear.query(on: db)
+        .filter(\.$brightspaceSyncPending == true)
+        .filter(\.$brightspacePendingSince <= cutoff)
+        .all()
+    guard !pending.isEmpty else { return 0 }
+
+    let context = try await loadSyncContextForKeys(
+        setupIDs: pending.map(\.testSetupID), userIDs: pending.map(\.userID), db: db)
+    var processed = 0
+    for clearRow in pending {
+        let key = GradePushKey(userID: clearRow.userID, testSetupID: clearRow.testSetupID)
+        if pushedKeys.contains(key) {
+            // A grade is being (re)pushed for this (student, setup) — drop the clear.
+            try await clearRow.delete(on: db)
+            continue
+        }
+        let assignment = context.assignmentsBySetupID[clearRow.testSetupID]
+        let target = GradeClearTarget(
+            clearRow: clearRow,
+            assignment: assignment,
+            course: assignment.flatMap { context.coursesByID[$0.courseID] },
+            user: context.usersByID[clearRow.userID]
+        )
+        do {
+            let cleared = try await runGradeClear(
+                target: target, resolveClient: resolveClient,
+                classlistCache: classlistCache, db: db, application: application)
+            if cleared { processed += 1 }
+        } catch {
+            await recordSweepFailure([clearRow], error: error, db: db, logger: application.logger)
+        }
+    }
+    return processed
+}
+
+/// Removes one student's grade in D2L. Returns false when deferred (no identity
+/// connected yet) so the row stays pending; true on every terminal outcome
+/// (cleared, or a no-op delete because there was nothing in D2L to clear).
+private func runGradeClear(
+    target: GradeClearTarget,
+    resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
+    classlistCache: ClasslistUserIDCache,
+    db: Database,
+    application: Application
+) async throws -> Bool {
+    let clearRow = target.clearRow
+    // Without a configured grade item + org unit there is nothing in D2L to
+    // clear — drop the queue row.
+    guard let assignment = target.assignment,
+        let gradeObjectID = assignment.brightspaceGradeObjectID, !gradeObjectID.isEmpty,
+        let course = target.course,
+        let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty
+    else {
+        try await clearRow.delete(on: db)
+        return true
+    }
+    // A grade source may have reappeared since the clear was queued — the
+    // student submitted, or a new override was set. If so, drop the clear; the
+    // normal push path will (re)set their grade instead of us removing it.
+    if try await studentHasGradeSource(
+        testSetupID: clearRow.testSetupID, userID: clearRow.userID, db: db)
+    {
+        try await clearRow.delete(on: db)
+        return true
+    }
+
+    // Defer until the course has a connected sync identity.
+    guard let client = try await resolveClient(course) else { return false }
+
+    let bsUserID = try await resolveBSUserID(
+        for: target.user, orgUnitID: orgUnitID, client: client,
+        classlistCache: classlistCache, db: db, application: application)
+    guard let bsUserID else {
+        // No D2L account resolves — nothing to clear.
+        try await clearRow.delete(on: db)
+        return true
+    }
+
+    try await client.clearGrade(
+        orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, bsUserID: bsUserID, on: application)
+
+    let entry = APIBrightSpaceSyncLog(
+        courseID: course.id, testSetupID: assignment.testSetupID,
+        assignmentTitle: assignment.title, userID: clearRow.userID,
+        username: target.user?.username ?? clearRow.userID.uuidString,
+        orgUnitID: orgUnitID, gradeObjectID: gradeObjectID, points: nil,
+        status: .success, detail: "Grade cleared in BrightSpace")
+    try? await entry.save(on: db)
+    try await clearRow.delete(on: db)
+    application.logger.info(
+        "BrightSpace grade cleared: user \(clearRow.userID) assignment '\(assignment.title)'")
+    return true
+}
+
+/// True when the student still has a Chickadee grade source for the setup — a
+/// student submission or an instructor override — so a queued grade removal
+/// must NOT run.
+private func studentHasGradeSource(
+    testSetupID: String, userID: UUID, db: Database
+) async throws -> Bool {
+    let hasSubmission =
+        try await APISubmission.query(on: db)
+        .filter(\.$userID == userID)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .first() != nil
+    if hasSubmission { return true }
+    return
+        try await APIGradeOverride.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == userID)
+        .first() != nil
 }
 
 /// Builds override-only push targets from `grade_overrides` rows flagged
@@ -147,7 +290,8 @@ private func pendingOverrideTargets(
     }
     guard !overrideOnly.isEmpty else { return [] }
 
-    let context = try await loadOverrideSyncContext(for: overrideOnly, db: db)
+    let context = try await loadSyncContextForKeys(
+        setupIDs: overrideOnly.map(\.testSetupID), userIDs: overrideOnly.map(\.userID), db: db)
     return overrideOnly.map { override in
         let assignment = context.assignmentsBySetupID[override.testSetupID]
         return GradePushTarget(
@@ -166,11 +310,12 @@ private func pendingOverrideTargets(
 /// references, keyed for `GradePushTarget` assembly.  Mirrors the result-driven
 /// `loadGradeSyncBatchContext` but starts from override rows (which already
 /// carry the test setup + user), so no submission lookup is needed.
-private func loadOverrideSyncContext(
-    for overrides: [APIGradeOverride],
+private func loadSyncContextForKeys(
+    setupIDs rawSetupIDs: [String],
+    userIDs rawUserIDs: [UUID],
     db: Database
 ) async throws -> GradeSyncBatchContext {
-    let setupIDs = Array(Set(overrides.map(\.testSetupID)))
+    let setupIDs = Array(Set(rawSetupIDs))
     var assignmentsBySetupID: [String: APIAssignment] = [:]
     for chunk in chunkedForInFilter(setupIDs) {
         for assignment in try await APIAssignment.query(on: db).filter(\.$testSetupID ~~ chunk).all()
@@ -188,7 +333,7 @@ private func loadOverrideSyncContext(
         }
     }
 
-    let userIDs = Array(Set(overrides.map(\.userID)))
+    let userIDs = Array(Set(rawUserIDs))
     var usersByID: [UUID: APIUser] = [:]
     for chunk in chunkedForInFilter(userIDs) {
         for user in try await APIUser.query(on: db).filter(\.$id ~~ chunk).all() {
@@ -258,6 +403,10 @@ extension APIResult: BrightSpaceSyncFlaggable {
 }
 
 extension APIGradeOverride: BrightSpaceSyncFlaggable {
+    var brightspaceSyncRowID: String { id?.uuidString ?? "?" }
+}
+
+extension APIBrightSpaceGradeClear: BrightSpaceSyncFlaggable {
     var brightspaceSyncRowID: String { id?.uuidString ?? "?" }
 }
 

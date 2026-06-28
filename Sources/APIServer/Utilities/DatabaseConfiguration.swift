@@ -346,4 +346,9 @@ func registerMigrations(on app: Application) {
     // columns on results. Lets an override on a student with no submissions
     // (e.g. a manually-registered pre-enrolled student) enqueue a grade push.
     app.migrations.add(AddGradeOverrideBrightSpaceSync())
+
+    // Queue of pending BrightSpace grade removals (override cleared on a
+    // no-submission student Chickadee had pushed a grade for). FK to
+    // test_setups + users.
+    app.migrations.add(CreateBrightSpaceGradeClears())
 }
