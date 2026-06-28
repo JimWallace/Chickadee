@@ -9,6 +9,13 @@ import Core
 import Fluent
 import Vapor
 
+/// Trims whitespace and collapses an empty string to nil, so blank form
+/// fields are stored as NULL rather than "".
+private func trimmedOrNil(_ value: String?) -> String? {
+    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return (trimmed?.isEmpty == false) ? trimmed : nil
+}
+
 extension CourseAdminRoutes {
     // MARK: - GET /instructor/enroll-csv
 
@@ -182,6 +189,101 @@ extension CourseAdminRoutes {
             .delete()
 
         return req.redirect(to: "/instructor")
+    }
+
+    // MARK: - POST /courses/:courseID/pre-enroll/:preEnrollmentID/register
+    //
+    // Manually materializes a pending pre-enrollment into a real APIUser +
+    // enrollment, without waiting for the student to log in.  This is the
+    // debug / grade-sync-testing escape valve: an instructor can register a
+    // CSV-uploaded student now (supplying their SSO identity), then the
+    // student appears on the assignment roster and can be assigned a grade
+    // override that pushes to BrightSpace.
+    //
+    // SSO-safe: the user is created with authProvider "duo-oidc" and the
+    // supplied externalSubject (if any).  When the real student later logs in,
+    // the SSO upsert adopts the same row — by externalSubject when provided, or
+    // by username (empty-subject adoption) otherwise — so no duplicate account
+    // is created.
+
+    @Sendable
+    func instructorRegisterPreEnrollment(req: Request) async throws -> Response {
+        struct Body: Content {
+            var externalSubject: String?
+            var displayName: String?
+            var email: String?
+            var studentID: String?
+        }
+
+        guard
+            let courseIDString = req.parameters.get("courseID"),
+            let courseID = UUID(uuidString: courseIDString),
+            let preIDString = req.parameters.get("preEnrollmentID"),
+            let preID = UUID(uuidString: preIDString)
+        else {
+            throw WebAssignmentError.invalidParameter(
+                name: "courseID/preEnrollmentID", reason: "Invalid courseID or preEnrollmentID parameter")
+        }
+
+        let caller = try req.auth.require(APIUser.self)
+        try await requireCourseInstructor(caller: caller, courseID: courseID, db: req.db)
+
+        guard
+            let preEnrollment = try await APIPreEnrollment.query(on: req.db)
+                .filter(\.$id == preID)
+                .filter(\.$course.$id == courseID)
+                .first()
+        else {
+            throw WebAssignmentError.notFound(resource: "Pre-enrollment")
+        }
+
+        let body = try? req.content.decode(Body.self)
+        let username = preEnrollment.username
+
+        // Reuse an existing account with this username (e.g. the student
+        // already logged into another course) instead of creating a duplicate.
+        let user =
+            try await APIUser.query(on: req.db)
+            .filter(\.$username == username)
+            .first()
+            ?? APIUser(
+                username: username,
+                passwordHash: "",  // SSO users have no local password
+                role: UserRole.student.rawValue,
+                authProvider: "duo-oidc",
+                externalSubject: trimmedOrNil(body?.externalSubject),
+                email: trimmedOrNil(body?.email),
+                studentID: trimmedOrNil(body?.studentID),
+                displayName: trimmedOrNil(body?.displayName)
+            )
+        if user.id == nil {
+            try await user.save(on: req.db)
+        }
+        let userID = try user.requireID()
+
+        // Enrol (skip if already enrolled), then drop the pre-enrollment.
+        let alreadyEnrolled =
+            try await APICourseEnrollment.query(on: req.db)
+            .filter(\.$course.$id == courseID)
+            .filter(\.$userID == userID)
+            .first() != nil
+        if !alreadyEnrolled {
+            try await saveSeededEnrollment(for: user, courseID: courseID, on: req.db)
+        }
+        try await preEnrollment.delete(on: req.db)
+
+        await AuditLogger.record(
+            action: .userProvisioned,
+            targetType: .user,
+            targetID: userID.uuidString,
+            metadata: [
+                "username": username,
+                "course_id": courseIDString,
+                "source": "manual_register",
+            ],
+            on: req
+        )
+        return req.redirect(to: "/instructor/students")
     }
 
     // MARK: - POST /courses/:courseID/role/:userID

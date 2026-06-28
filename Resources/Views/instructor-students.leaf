@@ -95,15 +95,46 @@ Students
             </td>
             <td>
                 #if(!courseIsArchived):
-                <form method="post" action="#(student.unenrollURL)"
-                      class="inline-form">
-                    #csrfFormField()
-                    <button class="btn action-btn action-danger students-unenroll-btn" type="submit"
-                            title="Remove from course" aria-label="Remove from course"
-                            onclick="return confirm('Remove @#(student.username) from this course?')">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                    </button>
-                </form>
+                <div class="students-row-actions">
+                    #if(student.isPending):
+                    <details class="ext-details form-flush">
+                        <summary class="btn action-btn action-btn-tight" title="Register this student now"
+                                 aria-label="Register pending student">Register</summary>
+                        <form method="post" action="#(student.registerURL)" class="ext-panel">
+                            #csrfFormField()
+                            <p class="students-register-hint">Materialize <code>#(student.username)</code> into a real account now (for grade-sync testing). They appear on assignment rosters immediately; their real login adopts this account.</p>
+                            <label class="ext-field-label">
+                                Display name
+                                <input type="text" name="displayName" placeholder="#(student.username)" class="ext-field-input">
+                            </label>
+                            <label class="ext-field-label">
+                                Student number (optional)
+                                <input type="text" name="studentID" class="ext-field-input">
+                            </label>
+                            <label class="ext-field-label">
+                                Email (optional)
+                                <input type="email" name="email" class="ext-field-input">
+                            </label>
+                            <label class="ext-field-label">
+                                SSO subject (optional)
+                                <input type="text" name="externalSubject" placeholder="leave blank to adopt by username" class="ext-field-input">
+                            </label>
+                            <div class="ext-panel-actions">
+                                <button class="btn action-btn" type="submit">Register</button>
+                            </div>
+                        </form>
+                    </details>
+                    #endif
+                    <form method="post" action="#(student.unenrollURL)"
+                          class="inline-form">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger students-unenroll-btn" type="submit"
+                                title="Remove from course" aria-label="Remove from course"
+                                onclick="return confirm('Remove @#(student.username) from this course?')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        </button>
+                    </form>
+                </div>
                 #endif
             </td>
         </tr>
@@ -133,6 +164,8 @@ Students
 .students-role-form { margin: 0; }
 .students-role-select { display: inline-block; font-size: .8rem; padding: .1rem .3rem; }
 .students-pending-role { color: var(--gray-500); }
+.students-row-actions { display: flex; align-items: center; gap: .3rem; }
+.students-register-hint { font-size: .72rem; color: var(--gray-600); margin: 0 0 .2rem; }
 #enrolled-students-table th.sortable {
     cursor: pointer;
     user-select: none;
@@ -229,12 +262,29 @@ Students
             : '<a href="' + subURL + '"><code>' + username + '</code></a>';
         var actionCell = '';
         if (!archived) {
-            actionCell = '<form method="post" action="' + unenrollURL + '" class="inline-form">'
+            var registerCell = '';
+            if (student.isPending && student.registerURL) {
+                registerCell = '<details class="ext-details form-flush">'
+                    + '<summary class="btn action-btn action-btn-tight" title="Register this student now"'
+                    + ' aria-label="Register pending student">Register</summary>'
+                    + '<form method="post" action="' + escapeHtml(student.registerURL) + '" class="ext-panel">'
+                    + csrfField
+                    + '<p class="students-register-hint">Materialize <code>' + username
+                    + '</code> into a real account now (for grade-sync testing). They appear on assignment rosters immediately; their real login adopts this account.</p>'
+                    + '<label class="ext-field-label">Display name<input type="text" name="displayName" placeholder="' + username + '" class="ext-field-input"></label>'
+                    + '<label class="ext-field-label">Student number (optional)<input type="text" name="studentID" class="ext-field-input"></label>'
+                    + '<label class="ext-field-label">Email (optional)<input type="email" name="email" class="ext-field-input"></label>'
+                    + '<label class="ext-field-label">SSO subject (optional)<input type="text" name="externalSubject" placeholder="leave blank to adopt by username" class="ext-field-input"></label>'
+                    + '<div class="ext-panel-actions"><button class="btn action-btn" type="submit">Register</button></div>'
+                    + '</form></details>';
+            }
+            actionCell = '<div class="students-row-actions">' + registerCell
+                + '<form method="post" action="' + unenrollURL + '" class="inline-form">'
                 + csrfField
                 + '<button class="btn action-btn action-danger students-unenroll-btn" type="submit" title="Remove from course"'
                 + ' aria-label="Remove from course"'
                 + ' onclick="return confirm(\'Remove @' + username + ' from this course?\')">'
-                + deleteIcon + '</button></form>';
+                + deleteIcon + '</button></form></div>';
         }
 
         return '<tr class="student-row-link' + (student.isPending ? ' student-row-pending' : '') + '"'

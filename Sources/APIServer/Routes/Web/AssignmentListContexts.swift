@@ -205,6 +205,10 @@ struct EnrolledStudentRow: Content {
     /// in yet).  Template renders these visually muted; pending students
     /// have no submissions or last-seen data.
     let isPending: Bool
+    /// For pending rows: URL to POST to to manually materialize this
+    /// pre-enrollment into a real user (the grade-sync-testing escape valve).
+    /// Empty for active enrollments.
+    let registerURL: String
 }
 
 struct AssignmentSubmissionsContext: Encodable {

@@ -15,6 +15,39 @@ import Foundation
 import JWT
 import Vapor
 
+/// SSO-derived user attributes for one login, resolved from the ID token claims
+/// once and applied to whichever user row the upsert lands on (existing match,
+/// adopted stub, or freshly created). Grouping them keeps the upsert helpers
+/// within SwiftLint's parameter-count limit and the field-application logic in
+/// one place.
+private struct SSOUserAttributes {
+    let username: String
+    let subject: String
+    let preferredName: String?
+    let userIdentifier: String
+    let studentID: String?
+    let email: String?
+    let displayName: String?
+    let mappedRole: String?
+
+    /// Applies the login's profile fields to a user row — non-destructive for
+    /// fields the IdP didn't send (`?? user.x`) — and stamps the login times.
+    /// Does not touch `externalSubject`; callers set that explicitly when they
+    /// claim a subject-less stub.
+    func apply(to user: APIUser) {
+        user.username = username
+        user.preferredName = preferredName ?? user.preferredName
+        user.userIdentifier = userIdentifier
+        user.studentID = studentID ?? user.studentID
+        user.email = email ?? user.email
+        user.displayName = displayName ?? user.displayName
+        if let mappedRole { user.role = mappedRole }
+        let now = Date()
+        user.lastLoginAt = now
+        user.lastSeenAt = now
+    }
+}
+
 struct SSOAuthRoutes: RouteCollection {
     /// Override callback path read from `AppConfig.oidc.callbackPath`. When
     /// non-empty and not equal to `/auth/sso/callback`, the same handler is
@@ -250,24 +283,18 @@ struct SSOAuthRoutes: RouteCollection {
             )
         )
 
+        let attrs = SSOUserAttributes(
+            username: username, subject: subject, preferredName: preferredName,
+            userIdentifier: userIdentifier, studentID: studentID, email: email,
+            displayName: displayName, mappedRole: mappedRole)
+
         if let existing = try await APIUser.query(on: req.db)
             .filter(\.$authProvider == "duo-oidc")
             .filter(\.$externalSubject == subject)
             .first()
         {
-            existing.username = username
-            existing.preferredName = preferredName ?? existing.preferredName
-            existing.userIdentifier = userIdentifier
-            existing.studentID = studentID ?? existing.studentID
-            existing.email = email ?? existing.email
-            existing.displayName = displayName ?? existing.displayName
             let previousRole = existing.role
-            if let mappedRole {
-                existing.role = mappedRole
-            }
-            let now = Date()
-            existing.lastLoginAt = now
-            existing.lastSeenAt = now
+            attrs.apply(to: existing)
             try await existing.save(on: req.db)
             // An allowlist-driven privilege change on login is security-relevant
             // — record it (only when the role actually moved).
@@ -287,6 +314,13 @@ struct SSOAuthRoutes: RouteCollection {
                 )
             }
             return existing
+        }
+
+        // Adopt a manually-registered stub (duo-oidc, matching username, no
+        // externalSubject) on first real login, claiming it rather than creating
+        // a duplicate — so any grade override already attached stays bound.
+        if let stub = try await adoptManuallyRegisteredStub(attrs: attrs, on: req) {
+            return stub
         }
 
         let now = Date()
@@ -318,6 +352,43 @@ struct SSOAuthRoutes: RouteCollection {
             on: req
         )
         return newUser
+    }
+
+    /// Adopts a manually-registered stub on first real SSO login: a `duo-oidc`
+    /// user with this exact username but no externalSubject yet, created via the
+    /// instructor "Register pending student" escape valve without an SSO subject
+    /// on hand. Claiming it (instead of creating a second account) keeps any
+    /// grade override already attached to the stub bound to the same user. Only
+    /// ever matches a subject-less stub, so a normal SSO account — which always
+    /// carries its subject — can't be hijacked. Returns nil when no such stub
+    /// exists, leaving the caller to create a fresh user.
+    private func adoptManuallyRegisteredStub(
+        attrs: SSOUserAttributes, on req: Request
+    ) async throws -> APIUser? {
+        guard
+            let stub = try await APIUser.query(on: req.db)
+                .filter(\.$authProvider == "duo-oidc")
+                .filter(\.$externalSubject == nil)
+                .filter(\.$username == attrs.username)
+                .first()
+        else {
+            return nil
+        }
+        attrs.apply(to: stub)
+        stub.externalSubject = attrs.subject
+        try await stub.save(on: req.db)
+        await AuditLogger.record(
+            action: .userProvisioned,
+            targetType: .user,
+            targetID: stub.id?.uuidString,
+            metadata: [
+                "username": stub.username,
+                "source": "sso_stub_adoption",
+            ],
+            actorUsernameOverride: "sso",
+            on: req
+        )
+        return stub
     }
 
     /// Tries a small set of OAuth token request shapes for provider compatibility.
