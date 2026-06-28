@@ -41,7 +41,7 @@ extension PublishedAssignmentRoutes {
     /// view without a second round-trip.
     @Sendable
     func putSuite(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
 
         let body: SuitePayload
         do { body = try req.content.decode(SuitePayload.self) } catch {

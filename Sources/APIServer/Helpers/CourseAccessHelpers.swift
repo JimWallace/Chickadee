@@ -109,6 +109,33 @@ func requireCourseInstructor(caller: APIUser, courseID: UUID, db: Database) asyn
     try await requireCourseRole(caller: caller, courseID: courseID, atLeast: .instructor, db: db)
 }
 
+/// Authorizes a *write* to a per-course resource. The caller must satisfy
+/// `requireCourseRole(atLeast:)` for `courseID` (admin bypass) **and** the
+/// course must not be archived. Archived courses are read-only for
+/// instructors and TAs — editing assignments/tests, mutating enrollment, and
+/// retesting are blocked once a course is archived, while grade audits and
+/// lookups stay readable (the read helpers carry no archived block). Admins
+/// remain write-exempt: they administer the whole deployment, and unarchiving
+/// is an admin-only action.
+///
+/// Mutating per-course handlers call this in place of `requireCourseInstructor`,
+/// scoping the check to the *resource's own* course so an instructor of one
+/// course can't drive a write against another by URL — the per-course
+/// authorization the `/instructor` group middleware (which only sees the
+/// caller's active course) can't enforce. See docs/multi-course-roles.md.
+func requireCourseWriteAccess(
+    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole = .instructor, db: Database
+) async throws {
+    try await requireCourseRole(caller: caller, courseID: courseID, atLeast: minimum, db: db)
+    guard !caller.isAdmin else { return }
+    guard let course = try await APICourse.find(courseID, on: db) else {
+        throw Abort(.notFound, reason: "Course not found.")
+    }
+    guard !course.isArchived else {
+        throw Abort(.forbidden, reason: "This course is archived and is read-only.")
+    }
+}
+
 // MARK: - Enrollment creation (role seeding)
 
 /// Creates and saves a new enrollment for `user` in `courseID`, seeding the

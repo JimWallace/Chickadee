@@ -59,6 +59,20 @@ func loadAssignment(_ req: Request) async throws -> APIAssignment {
     return assignment
 }
 
+/// Write-authorizing sibling of `loadAssignmentAndSetup(_:)`. After loading,
+/// authorizes the caller for a *write* to the assignment's **own** course via
+/// `requireCourseWriteAccess` (per-course instructor, admin bypass,
+/// archived-course block). Mutating editor handlers use this so a write is
+/// scoped to the resource's course rather than the caller's active course —
+/// closing both the archived-course and cross-course write paths the
+/// `/instructor` group middleware can't see (see docs/multi-course-roles.md).
+func loadAssignmentAndSetupForWrite(_ req: Request) async throws -> (APIAssignment, APITestSetup) {
+    let (assignment, setup) = try await loadAssignmentAndSetup(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseWriteAccess(caller: caller, courseID: assignment.courseID, db: req.db)
+    return (assignment, setup)
+}
+
 /// Loads a draft test setup from the `?draftID=<id>` query parameter.
 /// The draft model is just an `APITestSetup` row that hasn't been
 /// linked to an `APIAssignment` yet — same row shape, no parent.

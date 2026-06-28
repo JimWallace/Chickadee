@@ -16,7 +16,7 @@ extension PublishedAssignmentRoutes {
     func saveEditedAssignment(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
 
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
         let idStr = assignment.publicID
 
         let form = try parseSaveEditedAssignmentForm(req: req)

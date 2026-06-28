@@ -42,7 +42,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func updateScript(req: Request) async throws -> HTTPStatus {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req)
         let filename = try safeScriptFilename(from: req)
 
         struct UpdateBody: Content { var content: String }
@@ -91,7 +91,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func createScript(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
         let idStr = assignment.publicID
         let body = try req.content.decode(CreateScriptBody.self)
 
@@ -140,7 +140,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func deleteScript(req: Request) async throws -> HTTPStatus {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
         let filename = try safeScriptFilename(from: req)
 
         try await deleteScriptFromSetup(setup: setup, filename: filename, on: req.db)
