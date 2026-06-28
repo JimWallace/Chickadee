@@ -247,9 +247,18 @@ private func resolveAndCacheValidationMaterialization(
 ///
 /// Errors are swallowed: this is a nice-to-have trigger from live-edit
 /// endpoints and must not block the edit save.
+///
+/// `submitterUserID` attributes the re-validation submission to the acting
+/// account. Web callers leave it nil — `enqueueRunnerValidationSubmission`
+/// resolves the session `APIUser` from `req.auth`. MCP callers MUST pass the
+/// resolved subject: their bearer context has no session `APIUser`, so without
+/// it the enqueue throws `401 Unauthorized`, which the `catch` below swallows —
+/// silently skipping the post-edit re-validation AND the `shared/solution.py`
+/// refresh the enqueue performs.
 func scheduleValidationAfterSuiteEdit(
     req: Request,
-    assignment: APIAssignment
+    assignment: APIAssignment,
+    submitterUserID: UUID? = nil
 ) async {
     do {
         let existingPending = try await APISubmission.query(on: req.db)
@@ -280,7 +289,8 @@ func scheduleValidationAfterSuiteEdit(
             req: req,
             setupID: assignment.testSetupID,
             solutionNotebookData: solution.data,
-            filename: solution.filename
+            filename: solution.filename,
+            submitterUserID: submitterUserID
         )
         assignment.validationSubmissionID = subID
         assignment.validationStatus = "pending"

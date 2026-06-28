@@ -95,6 +95,15 @@ func finalizeContentEdit(
     if retest {
         await retestSubmissionsAfterContentEdit(setup: setup, context: context)
     }
-    await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+    // Thread the acting subject: the MCP bearer context has no session
+    // `APIUser`, so without it `scheduleValidationAfterSuiteEdit`'s enqueue
+    // falls back to `req.auth.require(APIUser.self)`, throws 401, and the helper
+    // swallows it — silently skipping the post-edit re-validation and the
+    // `shared/solution.py` refresh. Best-effort (`try?`): the edit already
+    // persisted; a resolution failure just degrades to the prior no-revalidate
+    // behaviour rather than failing the edit.
+    let submitterUserID = try? await context.requireEligibleSubject(tool: "finalize_content_edit").id
+    await scheduleValidationAfterSuiteEdit(
+        req: context.request, assignment: assignment, submitterUserID: submitterUserID)
     return closed
 }

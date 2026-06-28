@@ -222,6 +222,64 @@ import Vapor
         }
     }
 
+    /// Regression: an MCP content edit must re-run validation. The bearer
+    /// context has no session `APIUser`, so `finalizeContentEdit` must thread
+    /// the acting subject into the validation enqueue — otherwise the enqueue
+    /// falls back to `req.auth.require(APIUser.self)`, throws 401, and
+    /// `scheduleValidationAfterSuiteEdit` swallows it: the post-edit
+    /// re-validation (and the `shared/solution.py` refresh it performs) is
+    /// silently skipped. We prove the enqueue is reached by asserting a fresh
+    /// validation submission is created.
+    @Test func mcpEditEnqueuesRevalidationWithActingSubject() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let setupID = assignment.testSetupID
+            let tester = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "tester").first())
+
+            // An active runner so the availability pre-check passes (empty
+            // capabilities match a default assignment, as the publish tests rely on).
+            let runner = RunnerProfile()
+            runner.runnerID = "runner-revalidate"
+            runner.displayName = "Revalidate Runner"
+            runner.platform = "linux"
+            runner.architecture = "x86_64"
+            runner.languageVersionsJSON = "[]"
+            runner.capabilitiesJSON = "[]"
+            runner.profileHash = nil
+            runner.lastRegisteredAt = Date()
+            runner.lastSeenAt = Date().addingTimeInterval(3600)
+            runner.isActive = true
+            try await runner.save(on: app.db)
+
+            // A prior COMPLETED validation submission supplies the solution
+            // notebook `loadExistingSolution` reads; being complete (not
+            // pending) it does not debounce the new enqueue.
+            let existing = try await makeTestSubmission(
+                on: app, id: "sub_val_seed", setupID: setupID, userID: try tester.requireID(),
+                kind: APISubmission.Kind.validation, status: "complete", filename: "solution.ipynb")
+            assignment.validationSubmissionID = try existing.requireID()
+            try await assignment.save(on: app.db)
+
+            func validationCount() async throws -> Int {
+                try await APISubmission.query(on: app.db)
+                    .filter(\.$testSetupID == setupID)
+                    .filter(\.$kind == APISubmission.Kind.validation)
+                    .count()
+            }
+            #expect(try await validationCount() == 1)
+
+            _ = try await AuthorScriptTool().execute(
+                input(assignment, filename: "test_a.sh", content: "exit 0\n", tier: "public"),
+                context(app))
+
+            // The edit reached the (previously 401-blocked) revalidation path
+            // and enqueued a fresh validation submission.
+            #expect(try await validationCount() == 2)
+        }
+    }
+
     @Test func deniesWhenSubjectNotEnrolled() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
