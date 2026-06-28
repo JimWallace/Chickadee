@@ -590,23 +590,9 @@ extension InstructorDashboardRoutes {
         let (summary, unmapped, perSetupCounts) = try await brightspaceSummaryAndUnmapped(
             req: req, courseUUID: courseUUID, setupIDs: setupIDs, logModels: logModels)
 
-        let assignmentRows = assignments.map { a -> BrightspaceAssignmentRow in
-            let last = latestBySetup[a.testSetupID]
-            let counts = perSetupCounts[a.testSetupID]
-            return BrightspaceAssignmentRow(
-                assignmentID: a.publicID,
-                title: a.title,
-                gradeObjectID: a.brightspaceGradeObjectID ?? "",
-                lastSyncText: last?.attemptedAt.map { fmt.string(from: $0) } ?? "—",
-                lastSyncStatus: last?.status ?? "none",
-                lastSyncDetail: last?.detail,
-                syncedCount: counts?.synced ?? 0,
-                pendingCount: counts?.pending ?? 0,
-                erroredCount: counts?.errored ?? 0,
-                hasSyncActivity: (counts?.synced ?? 0) + (counts?.pending ?? 0) + (counts?.errored ?? 0) > 0,
-                hasPending: (counts?.pending ?? 0) > 0,
-                hasErrored: (counts?.errored ?? 0) > 0)
-        }
+        let assignmentRows = brightspaceAssignmentRows(
+            assignments: assignments, latestBySetup: latestBySetup,
+            perSetupCounts: perSetupCounts, fmt: fmt)
 
         let logRows = logModels.map { log -> BrightspaceLogRow in
             BrightspaceLogRow(
@@ -632,6 +618,33 @@ extension InstructorDashboardRoutes {
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
             logRows: logRows, hasLog: !logRows.isEmpty,
             summary: summary, unmappedStudents: unmapped, hasUnmapped: !unmapped.isEmpty)
+    }
+
+    /// Builds the per-assignment mapping rows: grade-item ID, latest-sync badge,
+    /// and the per-assignment synced/pending/errored rollup (from `perSetupCounts`).
+    private func brightspaceAssignmentRows(
+        assignments: [APIAssignment],
+        latestBySetup: [String: APIBrightSpaceSyncLog],
+        perSetupCounts: [String: SetupSyncCounts],
+        fmt: DateFormatter
+    ) -> [BrightspaceAssignmentRow] {
+        assignments.map { a in
+            let last = latestBySetup[a.testSetupID]
+            let counts = perSetupCounts[a.testSetupID] ?? SetupSyncCounts()
+            return BrightspaceAssignmentRow(
+                assignmentID: a.publicID,
+                title: a.title,
+                gradeObjectID: a.brightspaceGradeObjectID ?? "",
+                lastSyncText: last?.attemptedAt.map { fmt.string(from: $0) } ?? "—",
+                lastSyncStatus: last?.status ?? "none",
+                lastSyncDetail: last?.detail,
+                syncedCount: counts.synced,
+                pendingCount: counts.pending,
+                erroredCount: counts.errored,
+                hasSyncActivity: counts.synced + counts.pending + counts.errored > 0,
+                hasPending: counts.pending > 0,
+                hasErrored: counts.errored > 0)
+        }
     }
 
     /// Per-test-setup grade-sync rollup, accumulated from both result rows and
