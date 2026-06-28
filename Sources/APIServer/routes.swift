@@ -31,7 +31,11 @@ func routes(_ app: Application) throws {
 
     // MARK: - Any authenticated user
 
-    let auth = app.grouped(sessionAuth, RoleMiddleware(required: .authenticated), csrf)
+    // `NavCourseContextMiddleware` resolves the course-aware nav context once
+    // per request so the Instructor link + course tabs render on every page,
+    // including the course-free ones (admin, account, …).
+    let auth = app.grouped(
+        sessionAuth, RoleMiddleware(required: .authenticated), NavCourseContextMiddleware(), csrf)
     try auth.register(collection: SessionRoutes())
     try auth.register(collection: WebRoutes())
     try auth.register(collection: EnrollmentRoutes())
@@ -52,7 +56,8 @@ func routes(_ app: Application) throws {
 
     // Per-course instructor authority (Phase 4b): admits admins, or a user who
     // is an instructor in their active course — not the bare global role.
-    let instructor = app.grouped(sessionAuth, ActiveCourseInstructorMiddleware(), csrf)
+    let instructor = app.grouped(
+        sessionAuth, ActiveCourseInstructorMiddleware(), NavCourseContextMiddleware(), csrf)
     try instructor.register(collection: InstructorDashboardRoutes())
     try instructor.register(collection: DraftAssignmentRoutes())
     try instructor.register(collection: PublishedAssignmentRoutes())
@@ -66,7 +71,8 @@ func routes(_ app: Application) throws {
 
     // MARK: - Admin only
 
-    let admin = app.grouped(sessionAuth, RoleMiddleware(required: .admin), csrf)
+    let admin = app.grouped(
+        sessionAuth, RoleMiddleware(required: .admin), NavCourseContextMiddleware(), csrf)
     try admin.register(collection: AdminRoutes())
     try admin.register(collection: InternalMetricsRoutes())
     try admin.register(collection: CourseBundleRoutes())
