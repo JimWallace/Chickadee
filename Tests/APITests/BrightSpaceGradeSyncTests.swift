@@ -630,16 +630,21 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
-    @Test func isRetryableSyncErrorClassification() {
-        #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 503, body: "")))
-        #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 429, body: "")))
-        #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 500, body: "")))
-        #expect(!isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 400, body: "")))
-        #expect(!isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 403, body: "")))
-        #expect(!isRetryableSyncError(BrightSpaceSyncError.missingPoints))
-        // A non-BrightSpace error (transport/timeout) is treated as transient.
-        struct TransportError: Error {}
-        #expect(isRetryableSyncError(TransportError()))
+    @Test func isRetryableSyncErrorClassification() async throws {
+        // This class suite builds an Application per instance; wrap in withApp
+        // so it shuts down deterministically (an un-shutdown app traps in
+        // ServeCommand.deinit), even though the assertions are pure.
+        try await withApp(app) { _ in
+            #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 503, body: "")))
+            #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 429, body: "")))
+            #expect(isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 500, body: "")))
+            #expect(!isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 400, body: "")))
+            #expect(!isRetryableSyncError(BrightSpaceSyncError.gradePushFailed(status: 403, body: "")))
+            #expect(!isRetryableSyncError(BrightSpaceSyncError.missingPoints))
+            // A non-BrightSpace error (transport/timeout) is treated as transient.
+            struct TransportError: Error {}
+            #expect(isRetryableSyncError(TransportError()))
+        }
     }
 
     @Test func scaledGradeIsRoundedToTwoDecimals() async throws {
