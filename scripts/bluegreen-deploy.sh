@@ -68,6 +68,7 @@ DRAIN_SECS="${CHICKADEE_DRAIN_SECS:-10}"
 STATE_DIR="${CHICKADEE_STATE_DIR:-/var/lib/chickadee-deploy}"
 
 DRY_RUN=0
+ASSUME_YES=0
 # Path to the resolved env-file. Global (not local to cmd_deploy) so the EXIT
 # trap can still see it for cleanup under `set -u`.
 envfile=""
@@ -79,6 +80,18 @@ log()  { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 run()  { if (( DRY_RUN )); then printf '  [dry-run] %s\n' "$*"; else eval "$@"; fi; }
+
+# Interactive guard against a fat-fingered prod swap: when run from a terminal,
+# require an explicit yes before moving traffic. Skipped by --yes (for the future
+# unattended daemon) and by --dry-run, and auto-skipped when there is no TTY.
+confirm() {
+  (( DRY_RUN )) && return 0
+  (( ASSUME_YES )) && return 0
+  [[ -t 0 ]] || return 0
+  printf '\033[1m?\033[0m %s [y/N] ' "$*"
+  local ans; read -r ans
+  [[ "$ans" =~ ^[Yy]$ ]] || die "aborted by operator."
+}
 
 require() { command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"; }
 
@@ -198,6 +211,8 @@ cmd_deploy() {
 
   guard_symlink_world
 
+  confirm "Deploy $IMAGE to $idle_name (:$idle_port) and cut traffic from :$active_port?"
+
   run "docker pull '$IMAGE'"
 
   if (( ! DRY_RUN )); then
@@ -265,6 +280,8 @@ cmd_rollback() {
   local prev_name; prev_name="$(color_name_for_port "$prev")"
   log "Rolling back to :$prev ${prev_name:+($prev_name)}"
 
+  confirm "Roll traffic back to :$prev ${prev_name:+($prev_name)}?"
+
   # Make sure the rollback target is actually up.
   if [[ -n "$prev_name" ]]; then
     if [[ "$(docker inspect -f '{{.State.Status}}' "$prev_name" 2>/dev/null || echo absent)" != "running" ]]; then
@@ -289,7 +306,8 @@ cmd_rollback() {
 SUBCOMMAND="${1:-}"; shift || true
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) DRY_RUN=1 ;;
+    --dry-run)  DRY_RUN=1 ;;
+    --yes|-y)   ASSUME_YES=1 ;;
     *) die "unknown argument: $arg" ;;
   esac
 done
@@ -298,5 +316,5 @@ case "$SUBCOMMAND" in
   deploy)   cmd_deploy ;;
   rollback) cmd_rollback ;;
   status)   cmd_status ;;
-  *) die "usage: $0 {deploy|rollback|status} [--dry-run]" ;;
+  *) die "usage: $0 {deploy|rollback|status} [--dry-run] [--yes]" ;;
 esac
