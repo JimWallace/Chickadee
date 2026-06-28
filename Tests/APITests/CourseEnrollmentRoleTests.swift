@@ -273,6 +273,64 @@ import Vapor
         }
     }
 
+    // MARK: - Write access / archived-course block (Slice A of #417)
+
+    /// `requireCourseWriteAccess` layers the archived-course read-only rule on
+    /// top of `requireCourseRole`: a per-course instructor may write to an
+    /// active course but not an archived one; a per-course student is forbidden
+    /// regardless; and an admin bypasses both the role check and the archived
+    /// block (admins administer the deployment and own unarchiving). The
+    /// instructor and student are enrolled with the same role in *both* courses,
+    /// so archival is the only variable across the two.
+    @Test func requireCourseWriteAccessBlocksArchivedAndEnforcesRole() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            let active = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
+            let archived = APICourse(code: "CS999", name: "Retired", enrollmentMode: .closed)
+            archived.isArchived = true
+            for course in [active, archived] { try await course.save(on: app.db) }
+            let activeID = try active.requireID()
+            let archivedID = try archived.requireID()
+
+            // All non-admins are global students — authority is per-course.
+            let instructor = makeUser(role: .student)
+            let student = makeUser(role: .student)
+            let admin = makeUser(role: .admin)  // not enrolled anywhere
+            for user in [instructor, student, admin] { try await user.save(on: app.db) }
+
+            for courseID in [activeID, archivedID] {
+                try await APICourseEnrollment(
+                    userID: try instructor.requireID(), courseID: courseID, role: .instructor
+                ).save(on: app.db)
+                try await APICourseEnrollment(
+                    userID: try student.requireID(), courseID: courseID, role: .student
+                ).save(on: app.db)
+            }
+
+            // Per-course instructor: may write to the active course…
+            try await requireCourseWriteAccess(caller: instructor, courseID: activeID, db: app.db)
+            // …but not the archived one (read-only for instructors/TAs).
+            await #expect(throws: Abort.self) {
+                try await requireCourseWriteAccess(caller: instructor, courseID: archivedID, db: app.db)
+            }
+
+            // Per-course student: forbidden on the active course (role too low),
+            // and on the archived one.
+            await #expect(throws: Abort.self) {
+                try await requireCourseWriteAccess(caller: student, courseID: activeID, db: app.db)
+            }
+            await #expect(throws: Abort.self) {
+                try await requireCourseWriteAccess(caller: student, courseID: archivedID, db: app.db)
+            }
+
+            // Admin bypasses both the role check and the archived block.
+            try await requireCourseWriteAccess(caller: admin, courseID: activeID, db: app.db)
+            try await requireCourseWriteAccess(caller: admin, courseID: archivedID, db: app.db)
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeUser(role: UserRole) -> APIUser {
