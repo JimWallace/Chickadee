@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.557] - 2026-06-28
+
+### Added
+
+- **Blue-green deploy script (`scripts/bluegreen-deploy.sh`).** Phase 1 of
+  zero-downtime deploys: brings a new image up as an idle "color" container
+  beside the live one, health-checks it on its own port, flips the host nginx
+  upstream to it, drains, then stops the old color — the live service is never
+  stopped before the new one is proven healthy. Runs alongside the existing
+  compose stack (no `docker-compose.yml` changes); resolves the server
+  environment from compose so there is no config duplication. Ships with
+  `deploy/nginx-chickadee-upstream.conf` (the rewritable upstream include) and a
+  full design + runbook in `docs/zero-downtime-deploy.md`, which also lays out the
+  planned host deployer daemon (automatic CD gated on GitHub-release SemVer) and
+  the admin MCP oversight surface.
+
+### Changed
+
+- **Docker deploys symlink static assets instead of copying them on every boot.**
+  The container entrypoint previously `rm -rf`'d and re-copied `Public/`,
+  `Resources/`, and `docs/` (~586 MB, most of it the vendored Pyodide) from the
+  image into the data volume on every start — the single biggest contributor to
+  the visible service gap on redeploy. It now symlinks those read-only asset
+  trees at the image copies, so the link refresh is effectively free and a
+  redeploy still picks up fresh templates/assets instantly. Because each symlink
+  resolves inside its own container, two image versions can share the data volume
+  safely — a prerequisite for the planned zero-downtime blue-green deploys. The
+  stale real copies are reclaimed automatically on first boot of the new image.
+
+
 ## [0.4.556] - 2026-06-28
 
 ### Added
