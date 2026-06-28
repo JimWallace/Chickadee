@@ -288,6 +288,83 @@ import VaporTesting
         }
     }
 
+    // MARK: - Per-assignment sync counts (instructor LEARN tab)
+
+    @Test func assignmentSyncCountsRenderOnInstructorTab() async throws {
+        try await withAssignmentRoutesApp { app in
+            // Configured + active course so the dashboard (with the assignment
+            // mapping table) renders.
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            try await arInsertSetup(id: "setup_bs_counts", on: app)
+            _ = try await arInsertAssignment(
+                testSetupID: "setup_bs_counts", title: "Counts Lab", isOpen: true, on: app)
+            let student = try await arInsertStudent(username: "bs_counts_student", on: app)
+            _ = try await arInsertSubmission(
+                id: "sub_bs_counts", testSetupID: "setup_bs_counts",
+                userID: try student.requireID(), on: app)
+
+            // Three result rows on the assignment's setup: one synced, one
+            // pending, one errored → 1 ✓ / 1 ⏳ / 1 ✗.
+            let synced = APIResult(
+                id: "res_synced", submissionID: "sub_bs_counts", collectionJSON: "{}", source: "worker")
+            synced.brightspaceSyncPending = false
+            synced.brightspaceSyncedAt = Date()
+            try await synced.save(on: app.db)
+
+            let pending = APIResult(
+                id: "res_pending", submissionID: "sub_bs_counts", collectionJSON: "{}", source: "worker")
+            pending.brightspaceSyncPending = true
+            try await pending.save(on: app.db)
+
+            let errored = APIResult(
+                id: "res_errored", submissionID: "sub_bs_counts", collectionJSON: "{}", source: "worker")
+            errored.brightspaceSyncPending = false
+            errored.brightspaceSyncError = "D2L rejected it"
+            try await errored.save(on: app.db)
+
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("1 ✓"))
+                    #expect(html.contains("1 ⏳"))
+                    #expect(html.contains("1 ✗"))
+                })
+        }
+    }
+
+    @Test func overrideOnlyRowCountsTowardAssignmentRollup() async throws {
+        try await withAssignmentRoutesApp { app in
+            // A no-submission student's grade rides on an override row; its
+            // pending state must count toward the per-assignment rollup even
+            // though there is no result row.
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            try await arInsertSetup(id: "setup_bs_ovr", on: app)
+            _ = try await arInsertAssignment(
+                testSetupID: "setup_bs_ovr", title: "Override Lab", isOpen: true, on: app)
+            let student = try await arInsertStudent(username: "bs_ovr_student", on: app)
+
+            let override = APIGradeOverride(
+                testSetupID: "setup_bs_ovr", userID: try student.requireID(), overridePercent: 80)
+            override.brightspaceSyncPending = true
+            try await override.save(on: app.db)
+
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("1 ⏳"))
+                })
+        }
+    }
+
     // MARK: - Sync-log model + migration round-trip
 
     @Test func syncLogModelRoundTrips() async throws {

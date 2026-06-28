@@ -587,15 +587,25 @@ extension InstructorDashboardRoutes {
             latestBySetup[log.testSetupID] = log
         }
 
+        let (summary, unmapped, perSetupCounts) = try await brightspaceSummaryAndUnmapped(
+            req: req, courseUUID: courseUUID, setupIDs: setupIDs, logModels: logModels)
+
         let assignmentRows = assignments.map { a -> BrightspaceAssignmentRow in
             let last = latestBySetup[a.testSetupID]
+            let counts = perSetupCounts[a.testSetupID]
             return BrightspaceAssignmentRow(
                 assignmentID: a.publicID,
                 title: a.title,
                 gradeObjectID: a.brightspaceGradeObjectID ?? "",
                 lastSyncText: last?.attemptedAt.map { fmt.string(from: $0) } ?? "—",
                 lastSyncStatus: last?.status ?? "none",
-                lastSyncDetail: last?.detail)
+                lastSyncDetail: last?.detail,
+                syncedCount: counts?.synced ?? 0,
+                pendingCount: counts?.pending ?? 0,
+                erroredCount: counts?.errored ?? 0,
+                hasSyncActivity: (counts?.synced ?? 0) + (counts?.pending ?? 0) + (counts?.errored ?? 0) > 0,
+                hasPending: (counts?.pending ?? 0) > 0,
+                hasErrored: (counts?.errored ?? 0) > 0)
         }
 
         let logRows = logModels.map { log -> BrightspaceLogRow in
@@ -607,9 +617,6 @@ extension InstructorDashboardRoutes {
                 status: log.status,
                 detail: log.detail)
         }
-
-        let (summary, unmapped) = try await brightspaceSummaryAndUnmapped(
-            req: req, courseUUID: courseUUID, setupIDs: setupIDs, logModels: logModels)
 
         return InstructorBrightspaceContext(
             currentUser: userContext, activeInstructorTab: "brightspace",
@@ -627,39 +634,88 @@ extension InstructorDashboardRoutes {
             summary: summary, unmappedStudents: unmapped, hasUnmapped: !unmapped.isEmpty)
     }
 
-    /// Computes the summary counts (synced / pending / errored) from result
-    /// rows and the unmapped-student list (no D2L account resolvable).
+    /// Per-test-setup grade-sync rollup, accumulated from both result rows and
+    /// override-only rows so the count reflects every gradeable student.
+    private struct SetupSyncCounts {
+        var synced = 0
+        var pending = 0
+        var errored = 0
+
+        /// Buckets one row by its sync bookkeeping columns. A recorded error
+        /// wins over a stale `syncedAt` so a row that synced and later failed
+        /// reads as errored, matching the headline cards.
+        mutating func add(pending isPending: Bool, error: String?, syncedAt: Date?) {
+            if isPending { pending += 1 }
+            if (error ?? "").isEmpty == false {
+                errored += 1
+            } else if syncedAt != nil {
+                synced += 1
+            }
+        }
+    }
+
+    /// Computes the summary counts (synced / pending / errored), the same counts
+    /// bucketed per test setup (for the per-assignment rollup), and the
+    /// unmapped-student list (no D2L account resolvable). Counts span both
+    /// result rows and override-only rows (no-submission students whose grade
+    /// rides on the override row), so override-only grades show up in the totals.
     private func brightspaceSummaryAndUnmapped(
         req: Request,
         courseUUID: UUID,
         setupIDs: [String],
         logModels: [APIBrightSpaceSyncLog]
-    ) async throws -> (BrightspaceSyncSummary, [BrightspaceUnmappedStudentRow]) {
-        // Result-level sync state across the course's student submissions.
-        let submissionIDs =
+    ) async throws -> (BrightspaceSyncSummary, [BrightspaceUnmappedStudentRow], [String: SetupSyncCounts]) {
+        var perSetup: [String: SetupSyncCounts] = [:]
+
+        // Result-level sync state across the course's student submissions. Keep
+        // the submission → test-setup map so each result buckets to its setup.
+        let submissions =
             setupIDs.isEmpty
             ? []
             : try await APISubmission.query(on: req.db)
                 .filter(\.$testSetupID ~~ setupIDs)
                 .filter(\.$kind == APISubmission.Kind.student)
                 .all()
-                .compactMap(\.id)
+        var setupBySubmissionID: [String: String] = [:]
+        for submission in submissions {
+            if let id = submission.id { setupBySubmissionID[id] = submission.testSetupID }
+        }
+        let submissionIDs = Array(setupBySubmissionID.keys)
         let results =
             submissionIDs.isEmpty
             ? []
             : try await APIResult.query(on: req.db)
                 .filter(\.$submissionID ~~ submissionIDs)
                 .all()
+        for result in results {
+            guard let setupID = setupBySubmissionID[result.submissionID] else { continue }
+            perSetup[setupID, default: SetupSyncCounts()].add(
+                pending: result.brightspaceSyncPending == true,
+                error: result.brightspaceSyncError,
+                syncedAt: result.brightspaceSyncedAt)
+        }
+
+        // Override-only rows (no-submission students) carry their own sync state.
+        let overrides =
+            setupIDs.isEmpty
+            ? []
+            : try await APIGradeOverride.query(on: req.db)
+                .filter(\.$testSetupID ~~ setupIDs)
+                .all()
+        for override in overrides {
+            perSetup[override.testSetupID, default: SetupSyncCounts()].add(
+                pending: override.brightspaceSyncPending == true,
+                error: override.brightspaceSyncError,
+                syncedAt: override.brightspaceSyncedAt)
+        }
+
         var synced = 0
         var pending = 0
         var errored = 0
-        for result in results {
-            if result.brightspaceSyncPending == true { pending += 1 }
-            if (result.brightspaceSyncError ?? "").isEmpty == false {
-                errored += 1
-            } else if result.brightspaceSyncedAt != nil {
-                synced += 1
-            }
+        for counts in perSetup.values {
+            synced += counts.synced
+            pending += counts.pending
+            errored += counts.errored
         }
 
         // Unmapped students: enrolled students with no usable D2L identity.
@@ -710,7 +766,7 @@ extension InstructorDashboardRoutes {
 
         let summary = BrightspaceSyncSummary(
             synced: synced, pending: pending, errored: errored, unmapped: unmapped.count)
-        return (summary, unmapped)
+        return (summary, unmapped, perSetup)
     }
 }
 
