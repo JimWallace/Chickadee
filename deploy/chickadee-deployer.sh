@@ -185,7 +185,10 @@ do_deploy() {  # $1 = version tag
     fi
   fi
 
-  if CHICKADEE_IMAGE="$IMAGE_REPO:$ver" "$DEPLOY_SCRIPT" deploy --yes; then
+  # The release git tag is vX.Y.Z, but the published image tag is X.Y.Z — the
+  # build's `type=semver,pattern={{version}}` strips the leading v. So strip it
+  # here when constructing the image reference.
+  if CHICKADEE_IMAGE="$IMAGE_REPO:$(strip_v "$ver")" "$DEPLOY_SCRIPT" deploy --yes; then
     if verify_post_deploy; then
       printf '%s\n' "$ver" > "$DEPLOYED_VERSION_FILE"
       DEPLOYED_VERSION="$ver"
