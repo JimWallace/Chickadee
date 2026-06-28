@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.559] - 2026-06-28
+
+### Added
+
+- **Auto-deploy daemon (`deploy/chickadee-deployer.sh` + systemd unit).** Phase 2
+  of zero-downtime deploys: a small host-side shell daemon polls GitHub Releases
+  and blue-green-deploys each new version automatically via
+  `scripts/bluegreen-deploy.sh`. Non-major bumps ship on their own; **major bumps
+  are held for human approval** (configurable `DEPLOY_GATE_LEVEL=major|minor`).
+  Each deploy is preceded by a `snapshot.sh` safety net and followed by a short
+  public-health verification that auto-rolls-back if the new release degrades
+  after the cutover. It never forces a swap (relies on the symlink guard, so a
+  not-yet-converted volume fails safe), and writes `status.json` / `history.jsonl`
+  to the shared state dir — and reads pause/resume/approve/rollback commands from
+  `command.json` — for the planned admin-MCP oversight surface (Phase 3). The app
+  container never touches Docker; the daemon is the sole holder of docker/nginx
+  privileges. See `docs/zero-downtime-deploy.md`.
+
+### Added
+
+- **Deploy oversight on the admin MCP surface (Phase 3).** Two read-only admin
+  diagnostic tools — `get_deploy_status` (the auto-deploy daemon's current state:
+  live version, latest release seen, paused flag, pending-major-approval) and
+  `get_deploy_history` (recent deploy / gate / rollback events) — let an
+  operator or agent see deploy state remotely. They read the daemon's
+  `status.json` / `history.jsonl` from `Application.deployStateDirectory`
+  (`CHICKADEE_DEPLOY_STATE_DIR`, default `/deploy-state`), which the blue-green
+  script now mounts into the container **read-only** — so the app can see deploy
+  state but physically cannot write `command.json`, and can never move traffic.
+  Deploy *control* (pause/approve/rollback) stays a host-side action, preserving
+  the admin surface's read-only-by-construction guarantee. See
+  `docs/zero-downtime-deploy.md`.
+
+
 ## [0.4.558] - 2026-06-28
 
 ### Fixed
