@@ -843,6 +843,23 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     overflow-x: auto;
 }
 
+/* Instructor course strip: a second .course-tabs row, set on the muted
+   surface and led by a label so it reads as distinct from the (white) student
+   course strip when both are shown. */
+.course-tabs-instructor {
+    background: var(--gray-50);
+}
+
+.course-tabs-label {
+    display: inline-flex;
+    align-items: center;
+    padding: .5rem .85rem .5rem 0;
+    font-size: .8125rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    white-space: nowrap;
+}
+
 .course-tab {
     padding: .5rem 1.1rem;
     font-size: .875rem;
