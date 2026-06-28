@@ -120,6 +120,29 @@ struct ToolContext {
         return assignment
     }
 
+    /// Like `authorizedAssignment`, but additionally blocks the write when the
+    /// assignment's course is archived (admin subjects exempt). Mirrors the web
+    /// side's `requireCourseWriteAccess`: archived courses are read-only for
+    /// instructors and TAs, so a content-mutating tool can't drive a write into
+    /// one. Archived courses are already hidden from the MCP listing/resource
+    /// surface (`enrolledCourses`), so this closes the by-public-ID write path
+    /// an agent could still reach with a remembered id (#417, follow-up to
+    /// Slice A — `set_assignment_course_section`).
+    func authorizedAssignmentForWrite(publicID: String, tool: String) async throws -> APIAssignment {
+        let assignment = try await authorizedAssignment(publicID: publicID, tool: tool)
+        let user = try await requireEligibleSubject(tool: tool)
+        guard !user.isAdmin else { return assignment }
+        guard let course = try await APICourse.find(assignment.courseID, on: db) else {
+            throw MCPToolError.invalidArguments(
+                tool: tool, detail: "The assignment's course could not be found.")
+        }
+        guard !course.isArchived else {
+            throw MCPToolError.notAuthorized(
+                tool: tool, detail: "This course is archived and is read-only.")
+        }
+        return assignment
+    }
+
     /// Resolves and authorizes the assignment, then loads its test setup,
     /// throwing the standard `invalidArguments` error if the setup is missing.
     func authorizedAssignmentAndSetup(

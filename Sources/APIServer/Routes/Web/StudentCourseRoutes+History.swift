@@ -345,7 +345,7 @@ extension StudentCourseRoutes {
     @Sendable
     func retestStudentAssignment(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "retest student submissions")
+            req: req, action: "retest student submissions", requireWrite: true)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
 
@@ -386,7 +386,7 @@ extension StudentCourseRoutes {
     @Sendable
     func resetStudentAssignmentNotebook(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "reset student notebooks")
+            req: req, action: "reset student notebooks", requireWrite: true)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
@@ -428,7 +428,7 @@ extension StudentCourseRoutes {
         }
 
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "grant deadline extensions")
+            req: req, action: "grant deadline extensions", requireWrite: true)
         let (actor, student) = (action.actor, action.student)
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -490,7 +490,7 @@ extension StudentCourseRoutes {
     @Sendable
     func deleteStudentAssignmentExtension(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "revoke deadline extensions")
+            req: req, action: "revoke deadline extensions", requireWrite: true)
         let student = action.student
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -529,7 +529,7 @@ extension StudentCourseRoutes {
         }
 
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "override grades")
+            req: req, action: "override grades", requireWrite: true)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -574,7 +574,7 @@ extension StudentCourseRoutes {
     @Sendable
     func deleteStudentAssignmentGradeOverride(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "clear grade overrides")
+            req: req, action: "clear grade overrides", requireWrite: true)
         let (student, assignment) = (action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -656,18 +656,28 @@ extension StudentCourseRoutes {
     /// (history page, retest, notebook reset, extension save/delete, grade
     /// override save/delete).
     ///
-    /// Note on the role check: these routes are registered under
-    /// `RoleMiddleware(required: .instructor)` (routes.swift), so the
-    /// `isInstructor` guard here is redundant — it is kept once, in this
-    /// helper, as defense-in-depth in case the route grouping ever changes.
-    /// `action` carries each handler's original forbidden-message wording.
+    /// Note on the role check: these routes are registered under the
+    /// `/instructor` group's `ActiveCourseInstructorMiddleware` (routes.swift),
+    /// which gates on instructor authority in the caller's *active* course. The
+    /// `isInstructor` guard here is defense-in-depth in case the route grouping
+    /// ever changes. `action` carries each handler's original forbidden-message
+    /// wording.
+    ///
+    /// `requireWrite` adds a per-course write authorization on the assignment's
+    /// **own** course (`requireCourseWriteAccess`: per-course instructor, admin
+    /// bypass, archived-course block). The mutating handlers pass `true` so a
+    /// retest / reset / extension / grade-override can't be driven against an
+    /// archived course — or a course the caller only instructs *elsewhere* — by
+    /// URL, which the active-course group gate can't see (#417, follow-up to
+    /// Slice A). The read-only history page leaves it `false` so archived
+    /// courses stay auditable.
     ///
     /// Error semantics match the guard chain each handler previously
     /// inlined: `notFound("Assignment '<id>'")` when the assignment is
     /// missing, belongs to a different course, or (unreachable for a
     /// DB-loaded model) the student row has no id.
     fileprivate func resolveStudentAssignmentAction(
-        req: Request, action: String
+        req: Request, action: String, requireWrite: Bool = false
     ) async throws -> StudentAssignmentActionContext {
         let actor = try req.auth.require(APIUser.self)
         guard actor.isInstructor else {
@@ -677,6 +687,10 @@ extension StudentCourseRoutes {
         let assignment = try await loadAssignment(req)
         guard assignment.courseID == course.id, let studentID = student.id else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
+        }
+        if requireWrite {
+            try await requireCourseWriteAccess(
+                caller: actor, courseID: assignment.courseID, db: req.db)
         }
         return StudentAssignmentActionContext(
             actor: actor, course: course, student: student,
