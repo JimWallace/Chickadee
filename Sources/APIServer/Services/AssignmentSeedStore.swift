@@ -19,7 +19,15 @@ enum AssignmentSeedStore {
     static let seedByteCount = 32
 
     /// Look up an existing seed for `(userID, assignmentID)`; create one if absent.
-    /// Idempotent under concurrent calls thanks to the UNIQUE constraint.
+    /// Idempotent under concurrent calls thanks to the UNIQUE constraint: the
+    /// loser's INSERT fails and we re-fetch the winner.
+    ///
+    /// - Important: Do NOT call this inside an enclosing `db.transaction { … }`.
+    ///   On Postgres a failed INSERT aborts the entire transaction, so the
+    ///   recover-by-re-fetch in the `catch` below would itself throw ("current
+    ///   transaction is aborted"). Every current caller passes a plain pooled
+    ///   `Database`, which is why the duplicate-key race is benign; keep it that
+    ///   way — resolve the seed *before* opening a transaction, never inside one.
     static func ensureSeed(
         userID: UUID,
         assignmentID: UUID,
