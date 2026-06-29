@@ -96,6 +96,10 @@ extension PublishedAssignmentRoutes {
             dueAt: due,
             existingOverride: assignment.deadlineOverrideActive ?? false
         )
+        if let rawID = form.gradeObjectID {
+            let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
+            assignment.brightspaceGradeObjectID = trimmed.isEmpty ? nil : trimmed
+        }
         // Editing returns the assignment to closed (re-validation gates the
         // re-open / re-preview), matching the close-on-save contract.
         assignment.visibility = .closed
@@ -118,6 +122,7 @@ extension PublishedAssignmentRoutes {
         let startsAtRaw: String?
         let assignmentNotebookFile: File?
         let solutionNotebookFile: File?
+        let gradeObjectID: String?
     }
 
     fileprivate struct ResolvedSolution {
@@ -135,6 +140,7 @@ extension PublishedAssignmentRoutes {
             var solutionNotebookFile: File?
             var suiteFiles: [File]?
             var suiteConfig: String?
+            var gradeObjectID: String?
         }
         struct SaveBodySingle: Content {
             var assignmentName: String?
@@ -144,6 +150,7 @@ extension PublishedAssignmentRoutes {
             var solutionNotebookFile: File?
             var suiteFiles: File?
             var suiteConfig: String?
+            var gradeObjectID: String?
         }
 
         let bodyMany = try? req.content.decode(SaveBodyMany.self)
@@ -166,13 +173,18 @@ extension PublishedAssignmentRoutes {
             ?? bodySingle?.startsAt
         let assignmentNotebookFile = bodyMany?.assignmentNotebookFile ?? bodySingle?.assignmentNotebookFile
         let solutionNotebookFile = bodyMany?.solutionNotebookFile ?? bodySingle?.solutionNotebookFile
+        let gradeObjectID =
+            try multipartTextField(named: ["gradeObjectID"], from: req)
+            ?? bodyMany?.gradeObjectID
+            ?? bodySingle?.gradeObjectID
 
         return SaveEditedAssignmentForm(
             assignmentName: assignmentName,
             dueAtRaw: dueAtRaw,
             startsAtRaw: startsAtRaw,
             assignmentNotebookFile: assignmentNotebookFile,
-            solutionNotebookFile: solutionNotebookFile
+            solutionNotebookFile: solutionNotebookFile,
+            gradeObjectID: gradeObjectID
         )
     }
 
