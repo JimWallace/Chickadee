@@ -1,10 +1,10 @@
 // APIServer/Helpers/PreferredResultsBySubmissionID.swift
 //
-// Shared result-preference fold used by the instructor submissions/roster
-// pages, the grades CSV export, the per-student history pages, and the
-// achievement sweep.  Moved here from
-// InstructorDashboardRoutes+Submissions.swift (audit 2026-06) so its home
-// matches its module-wide callers — no behaviour changes.
+// Shared result-preference fold used by the per-student history pages and
+// the achievement sweep.  The instructor submissions/roster page and the
+// grades CSV export now use `bestGradePercentBySubmissionID` instead, which
+// takes the highest percentage across ALL sources rather than preferring
+// the worker result.
 
 import Fluent
 

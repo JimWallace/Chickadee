@@ -793,34 +793,32 @@ private func bestGradeForStudent(
         return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)
     }
 
-    let allResults = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ submissionIDs)
-        .all()
-    // Prefer worker results; fall back to browser results for best-grade computation.
-    let workerResults = allResults.filter { $0.source != "browser" }
-    let resultsForGrade = workerResults.isEmpty ? allResults : workerResults
-
     if let override {
-        // Prefer the suite manifest's total; fall back to the best result's
-        // recorded totalPoints for setups whose manifest is unavailable.
-        let total = manifestTotal ?? resultsForGrade.compactMap { $0.gradeTotalPointsValue }.max()
+        let total =
+            manifestTotal
+            ?? (try await APIResult.query(on: db)
+                .filter(\.$submissionID ~~ submissionIDs)
+                .all()
+                .compactMap { $0.gradeTotalPointsValue }.max())
         guard let total, total > 0 else { throw BrightSpaceSyncError.missingPoints }
         return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)
     }
 
-    guard
-        let basePoints =
-            resultsForGrade
-            .compactMap({ $0.gradePointsValue })
-            .max()
+    // Highest grade percentage across ALL results (browser and worker alike) —
+    // "highest grade wins": a 100 % browser result is never displaced by a later
+    // lower worker re-grade.  Convert via manifest total so the denominator is
+    // stable and consistent with the grades CSV export.
+    let bestPercentBySubmission = try await bestGradePercentBySubmissionID(
+        for: submissionIDs, on: db)
+    guard let bestPct = bestPercentBySubmission.values.max()
     else {
         throw BrightSpaceSyncError.missingPoints
     }
-    let total = manifestTotal ?? resultsForGrade.compactMap { $0.gradeTotalPointsValue }.max()
+    guard let total = manifestTotal, total > 0 else { throw BrightSpaceSyncError.missingPoints }
+    let basePoints = Double(bestPct) / 100.0 * total
     // Class-goal bonus: extra credit, capped at the suite total (100%).
     let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, on: db)
-    var points = basePoints
-    if bonus > 0, let manifestTotal { points = min(manifestTotal, basePoints + bonus) }
+    let points = bonus > 0 ? min(total, basePoints + bonus) : basePoints
     return StudentGrade(points: points, total: total)
 }
 

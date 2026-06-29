@@ -35,7 +35,9 @@ extension InstructorDashboardRoutes {
             req: req, assignment: assignment, studentIDs: studentIDs)
         let submissionsByStudentID = submissionsGroupedByStudentID(submissions)
         let submissionIDs = submissions.compactMap(\.id)
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // Best grade percentage per submission across ALL result sources
+        // (browser and worker alike) — "highest grade wins".
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissionIDs, on: req.db)
 
         // Instructor grade overrides for this assignment, indexed by student.
@@ -51,7 +53,7 @@ extension InstructorDashboardRoutes {
             buildAssignmentStudentRow(
                 student: student,
                 submissionsByStudentID: submissionsByStudentID,
-                preferredResultBySubmissionID: preferredResultBySubmissionID,
+                bestPercentBySubmissionID: bestPercentBySubmissionID,
                 overrideByStudentID: overrideByStudentID,
                 assignmentIDRaw: assignmentIDRaw,
                 fmt: fmt
@@ -120,7 +122,7 @@ extension InstructorDashboardRoutes {
     private func buildAssignmentStudentRow(
         student: APIUser,
         submissionsByStudentID: [UUID: [APISubmission]],
-        preferredResultBySubmissionID: [String: APIResult],
+        bestPercentBySubmissionID: [String: Int],
         overrideByStudentID: [UUID: Int],
         assignmentIDRaw: String,
         fmt: DateFormatter
@@ -132,8 +134,7 @@ extension InstructorDashboardRoutes {
             var best = -1
             for submission in history {
                 guard let subID = submission.id,
-                    let result = preferredResultBySubmissionID[subID],
-                    let pct = result.gradePercentValue
+                    let pct = bestPercentBySubmissionID[subID]
                 else {
                     continue
                 }
