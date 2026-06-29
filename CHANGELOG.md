@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.568] - 2026-06-29
+
+### Features
+
+- **LEARN section sync (backend).** Chickadee can now import D2L group memberships and store which lab section each student belongs to. `APICourse.brightspaceSectionCategoryID` designates which D2L group category acts as the sections source; a new periodic sweep (`LearnSectionSyncService`) fetches group memberships every 10 minutes and writes `APICourseEnrollment.brightspaceSection` (e.g. "Lab 3") for each matched student. Two new `BrightSpaceAPIClient` methods — `fetchGroupCategories` and `fetchGroups` — implement the D2L Valence `lp/groupcategories/` endpoints with full bookmark-paged enumeration and clock-skew retry. UI wiring is deferred to a follow-up.
+
+
 ## [0.4.567] - 2026-06-29
 
 ### Bug fixes
