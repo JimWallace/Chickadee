@@ -794,12 +794,15 @@ private func bestGradeForStudent(
     }
 
     if let override {
-        let total =
-            manifestTotal
-            ?? (try await APIResult.query(on: db)
+        let total: Double?
+        if let mt = manifestTotal {
+            total = mt
+        } else {
+            total = try await APIResult.query(on: db)
                 .filter(\.$submissionID ~~ submissionIDs)
                 .all()
-                .compactMap { $0.gradeTotalPointsValue }.max())
+                .compactMap { $0.gradeTotalPointsValue }.max()
+        }
         guard let total, total > 0 else { throw BrightSpaceSyncError.missingPoints }
         return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)
     }
