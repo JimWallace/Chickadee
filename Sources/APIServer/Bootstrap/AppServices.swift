@@ -70,6 +70,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
                 "BrightSpace configured but not authorized — authorize at /admin/brightspace")
         }
         app.lifecycle.use(BrightSpaceGradeSyncLifecycleHandler())
+        app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnRosterReadinessMonitor })
     }
 
     if appConfig.auth.mode != .local {

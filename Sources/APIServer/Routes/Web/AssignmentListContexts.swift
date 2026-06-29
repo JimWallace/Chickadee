@@ -105,8 +105,18 @@ struct InstructorBrightspaceContext: Encodable {
     let logRows: [BrightspaceLogRow]
     let hasLog: Bool
     let summary: BrightspaceSyncSummary
-    let unmappedStudents: [BrightspaceUnmappedStudentRow]
-    let hasUnmapped: Bool
+    /// True when the course is linked to a LEARN org unit and not archived —
+    /// gates the "Reconcile now" button. Precomputed so the template branches on
+    /// a flat bool (LeafKit 1.14.2 mis-parses `&&` / nested `#if`).
+    let canReconcile: Bool
+    /// LEARN roster-readiness rollup (confirmed / unconfirmed / unreachable),
+    /// maintained by the periodic reconcile sweep.
+    let readiness: BrightspaceReadinessSummary
+    /// Students we can't currently deliver a grade to (not on the LEARN
+    /// classlist, or no key to match) — the authoritative replacement for the
+    /// old log-heuristic "unmapped students" list.
+    let unreachableStudents: [BrightspaceReadinessRow]
+    let hasUnreachable: Bool
 }
 
 /// One assignment's BrightSpace grade-item mapping + its latest sync state.
@@ -146,14 +156,24 @@ struct BrightspaceSyncSummary: Encodable {
     let synced: Int
     let pending: Int
     let errored: Int
-    let unmapped: Int
 }
 
-/// A student whose grade can't sync because they have no resolvable D2L account.
-struct BrightspaceUnmappedStudentRow: Encodable {
+/// LEARN roster-readiness rollup for the active course, from the persisted
+/// per-enrollment status the reconcile sweep maintains.
+struct BrightspaceReadinessSummary: Encodable {
+    let confirmed: Int
+    let unconfirmed: Int
+    let unreachable: Int
+    let lastCheckedText: String  // formatted time, or "Never"
+    let hasBeenChecked: Bool
+}
+
+/// One student Chickadee can't currently deliver a grade to in LEARN, with the
+/// reason (not on the classlist, or no key to match).
+struct BrightspaceReadinessRow: Encodable {
     let username: String
     let displayName: String
-    let reason: String
+    let detail: String
 }
 
 /// One bar of a server-rendered sparkline.  `heightPercent` is already
