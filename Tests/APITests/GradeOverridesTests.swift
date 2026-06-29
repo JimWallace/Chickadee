@@ -286,6 +286,67 @@ import VaporTesting
 
     // MARK: - Grades CSV export
 
+    @Test func gradesCSVUsesBestGradeAcrossAllSources() async throws {
+        // Regression: when a browser result (100 %) and a worker result (lower %)
+        // both exist for the same submission, the CSV must export the higher grade.
+        // "Highest grade wins" — a worker regrading must never lower the student's
+        // exported mark.
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":\
+                [{"tier":"public","script":"t.sh","points":10}],"timeLimitSeconds":10}
+                """
+            let setup = APITestSetup(
+                id: "multi_src_setup",
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "multi_src_setup.zip",
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            _ = try await arInsertAssignment(
+                testSetupID: "multi_src_setup", title: "Multi-Source Lab", isOpen: true, on: app
+            )
+            let student = try await arInsertStudent(username: "multi_src_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            _ = try await arInsertSubmission(
+                id: "sub_multi_src", testSetupID: "multi_src_setup",
+                userID: try student.requireID(), on: app
+            )
+            // Browser result: 10/10 public tests → 100 %.
+            try await APIResult(
+                id: "res_multi_src_browser",
+                submissionID: "sub_multi_src",
+                collectionJSON: #"{"earnedPoints":10,"totalPoints":10,"passCount":10,"totalTests":10}"#,
+                source: "browser"
+            ).save(on: app.db)
+            // Worker result: 9/10 (one secret test fails) → 90 %.
+            try await APIResult(
+                id: "res_multi_src_worker",
+                submissionID: "sub_multi_src",
+                collectionJSON: #"{"earnedPoints":9,"totalPoints":10,"passCount":9,"totalTests":10}"#,
+                source: "worker"
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/instructor/grades.csv",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(
+                        body.contains("10.0"),
+                        "Highest grade (browser 100 % → 10.0 pts) must win over the lower worker result"
+                    )
+                    #expect(
+                        !body.contains("9.0"),
+                        "Worker 90 % (9.0 pts) must not replace the higher browser grade"
+                    )
+                })
+        }
+    }
+
     @Test func overrideWithoutSubmissionAppearsInGradesCSV() async throws {
         // A student who never submitted but has a manual grade override must still
         // appear in the CSV with the override points, not a blank cell.

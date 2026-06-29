@@ -41,11 +41,17 @@ extension InstructorDashboardRoutes {
         let submissionIDs = submissions.map(\.id)
 
         // Serial follow-on: needs submission IDs from phase 2.
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
-            for: submissionIDs, on: req.db)
-        var bestPointsByUserAndSetup = bestPointsByUserAndSetup(
+        // Load every result for every submission (not just the worker-preferred one)
+        // so that "highest grade wins" — a 100 % browser run is never displaced by
+        // a later worker regrading at a lower percentage.  The best percentage is
+        // then converted to points using the manifest total so the CSV column is
+        // anchored to a stable scale regardless of which tier mix each result used.
+        let allResultsBySubmission = try await loadAllResultsBySubmissionID(
+            submissionIDs: submissionIDs, on: req.db)
+        var bestPointsByUserAndSetup = bestGradePointsByUserAndSetup(
             submissions: submissions,
-            preferredResultBySubmissionID: preferredResultBySubmissionID
+            allResultsBySubmission: allResultsBySubmission,
+            setupByID: setupByID
         )
 
         // Instructor grade overrides replace the runner-computed points. They
@@ -183,24 +189,62 @@ extension InstructorDashboardRoutes {
         }
     }
 
-    private func bestPointsByUserAndSetup(
+    /// Loads every `APIResult` row for the given submission IDs, grouped by
+    /// submission ID.  Unlike `preferredResultsBySubmissionID` this keeps all
+    /// sources (browser + worker) so callers can pick the best grade across them.
+    private func loadAllResultsBySubmissionID(
+        submissionIDs: [String], on db: Database
+    ) async throws -> [String: [APIResult]] {
+        guard !submissionIDs.isEmpty else { return [:] }
+        let chunkSize = 5_000
+        var all: [APIResult] = []
+        var idx = submissionIDs.startIndex
+        while idx < submissionIDs.endIndex {
+            let end =
+                submissionIDs.index(idx, offsetBy: chunkSize, limitedBy: submissionIDs.endIndex)
+                ?? submissionIDs.endIndex
+            all += try await APIResult.query(on: db)
+                .filter(\.$submissionID ~~ Array(submissionIDs[idx..<end]))
+                .all()
+            idx = end
+        }
+        var map: [String: [APIResult]] = [:]
+        for result in all { map[result.submissionID, default: []].append(result) }
+        return map
+    }
+
+    /// Returns the best earned points per (user, setup), where "best" is the
+    /// highest grade percentage achieved across ALL results for ALL submissions
+    /// (browser and worker alike), converted to points via the manifest total.
+    ///
+    /// Using percentage × manifest-total rather than raw earnedPoints means the
+    /// CSV column is on a stable scale: the instructor knows exactly what LEARN
+    /// max to enter (the manifest total), and a 100 % browser result is never
+    /// overwritten by a lower-percentage worker result from a later regrading.
+    private func bestGradePointsByUserAndSetup(
         submissions: [(id: String, userID: UUID, setupID: String)],
-        preferredResultBySubmissionID: [String: APIResult]
+        allResultsBySubmission: [String: [APIResult]],
+        setupByID: [String: APITestSetup]
     ) -> [String: Double] {
-        var bestPointsByUserAndSetup: [String: Double] = [:]
+        // Step 1: highest grade percentage across ALL results for ALL submissions.
+        var bestPctByKey: [String: Int] = [:]
         for submission in submissions {
-            guard let result = preferredResultBySubmissionID[submission.id],
-                let points = result.gradePointsValue
-            else {
-                continue
-            }
             let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
-            let prior = bestPointsByUserAndSetup[key] ?? -1
-            if points > prior {
-                bestPointsByUserAndSetup[key] = points
+            for result in allResultsBySubmission[submission.id] ?? [] {
+                guard let pct = result.gradePercentValue else { continue }
+                if pct > (bestPctByKey[key] ?? -1) { bestPctByKey[key] = pct }
             }
         }
-        return bestPointsByUserAndSetup
+        // Step 2: convert best percentage → points anchored to the manifest total.
+        var best: [String: Double] = [:]
+        for (key, pct) in bestPctByKey {
+            guard let setupID = key.components(separatedBy: "::").last,
+                let setup = setupByID[setupID],
+                let total = suiteTotalPoints(setup: setup)
+            else { continue }
+            best[key] = Double(pct) / 100.0 * total
+        }
+        return best
     }
 
     private func renderGradesCSV(
