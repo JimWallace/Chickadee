@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.570] - 2026-06-29
+
+### Fixed
+
+- **Blue-green deploys now reclaim disk from superseded images.** Every cutover
+  pulls a fresh multi-GB image, but `scripts/bluegreen-deploy.sh` never pruned
+  the ones it replaced, so the data disk eventually filled and Postgres PANICked
+  on its next write (`could not write lock file "postmaster.pid": No space left
+  on device`), taking the whole site down with a 500/502. The deploy now runs
+  `docker image prune -f` before each pull. Only dangling images are removed, so
+  the active color and the kept-for-rollback previous color are never touched.
+
+### Fixed
+
+- **BrightSpace grade sync no longer fails every result-driven push.** The
+  v0.4.567 "highest grade wins" refactor (#1085) left `bestGradeForStudent`
+  requiring a manifest suite-total with no fallback and reconstructing points
+  from an integer percent, so every worker/browser-result push threw
+  `missingPoints` (and lost precision, e.g. 6/7 → 8.6 instead of 8.57) — turning
+  the whole `BrightSpaceGradeSyncTests` suite red. The sweep now selects the best
+  result across all sources (browser or worker — a higher browser grade is never
+  displaced by a lower worker re-grade) and pushes its exact points, falling back
+  to the result's own recorded total when the manifest carries no per-suite
+  points.
+
+
 ## [0.4.569] - 2026-06-29
 
 ### Fixed
