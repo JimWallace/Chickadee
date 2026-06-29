@@ -335,6 +335,14 @@ func registerMigrations(on app: Application) {
     // stale browser tab / cached bundle, not a live regression).
     app.migrations.add(AddClientDiagnosticAppVersion())
 
+    // Per-(student, course) LEARN sync readiness on course_enrollments:
+    // unconfirmed (default) → confirmed / unreachable, maintained by the
+    // roster-readiness sweep. MUST run before AddCourseEnrollmentRole: that
+    // migration's backfill does a full-model `APICourseEnrollment.query().all()`,
+    // which on a fresh DB selects every column the model declares — including
+    // these — so the columns have to exist by the time it runs.
+    app.migrations.add(AddEnrollmentBrightSpaceSyncStatus())
+
     // Per-course role on each enrollment (Phase 1 of
     // docs/multi-course-roles.md). Behaviour-preserving: backfills role from
     // each user's current global role; nothing reads it yet. Runs after
@@ -351,9 +359,4 @@ func registerMigrations(on app: Application) {
     // no-submission student Chickadee had pushed a grade for). FK to
     // test_setups + users.
     app.migrations.add(CreateBrightSpaceGradeClears())
-
-    // Per-(student, course) LEARN sync readiness on course_enrollments:
-    // unconfirmed (default) → confirmed / unreachable, maintained by the
-    // roster-readiness sweep. Runs after CreateCourseEnrollments (the table).
-    app.migrations.add(AddEnrollmentBrightSpaceSyncStatus())
 }
