@@ -213,6 +213,17 @@ cmd_deploy() {
 
   confirm "Deploy $IMAGE to $idle_name (:$idle_port) and cut traffic from :$active_port?"
 
+  # Reclaim disk BEFORE pulling the new image. Every swap pulls a fresh
+  # multi-GB image; without this, the images superseded by past swaps pile up
+  # until the data disk fills and Postgres PANICs on its next write ("No space
+  # left on device"), taking the whole site down — which is exactly what
+  # happened once. Only DANGLING images are removed (the old `:latest` digests
+  # that newer pulls left untagged); the active and previous colors' containers
+  # still reference their own images, so the rollback target is never pruned.
+  log "Reclaiming disk from images orphaned by past swaps (before pull)..."
+  run "docker image prune -f || true"
+  log "Free space on $(df -P / | awk 'NR==2{print $4\" KiB on \"$6}')"
+
   run "docker pull '$IMAGE'"
 
   if (( ! DRY_RUN )); then
