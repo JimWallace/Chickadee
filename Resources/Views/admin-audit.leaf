@@ -46,7 +46,7 @@ Audit Log
         #endif
     </form>
 
-    #if(!rows.count):
+    #if(rows.isEmpty):
     <p class="audit-muted">#if(filtered):No audit entries match this filter.#else:No audit entries recorded yet.#endif</p>
     #else:
     <p class="audit-count">

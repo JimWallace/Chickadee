@@ -994,6 +994,36 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
+    // MARK: - Audit log tab
+
+    @Test func auditPageShowsEntriesWhenPresent() async throws {
+        try await withApp(app) { _ in
+            let entry = APIAuditLogEntry(
+                actorUsername: "testuser",
+                action: AuditAction.loginSuccess.rawValue,
+                remoteAddr: "127.0.0.1"
+            )
+            try await entry.save(on: app.db)
+
+            let cookie = try await loginAsAdmin()
+            try await app.asyncTest(
+                .GET, "/admin/audit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = String(buffer: res.body)
+                    #expect(body.contains("testuser"), "audit table should list the actor")
+                    #expect(body.contains("auth.login_success"), "audit table should show the action code")
+                    #expect(
+                        !body.contains("No audit entries recorded yet."),
+                        "empty-state should not appear when rows exist"
+                    )
+                })
+        }
+    }
+
     // MARK: - Storage tab per-assignment breakdown
 
     @Test func storageTabListsPerAssignmentFootprint() async throws {
