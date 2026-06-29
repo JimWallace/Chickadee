@@ -349,7 +349,9 @@ extension InstructorDashboardRoutes {
 
     @Sendable
     func brightspaceSyncNow(req: Request) async throws -> Response {
-        await runImmediateBrightspaceSweep(req: req)
+        launchBackgroundBrightspaceSweep(req.application)
+        req.session.data["bs_flash_success"] =
+            "Grade sync started — pending grades are pushing to LEARN in the background."
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -431,7 +433,9 @@ extension InstructorDashboardRoutes {
                 try await override.save(on: req.db)
             }
         }
-        await runImmediateBrightspaceSweep(req: req)
+        launchBackgroundBrightspaceSweep(req.application)
+        req.session.data["bs_flash_success"] =
+            "Re-queued failed grades — they're re-pushing to LEARN in the background."
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -470,7 +474,9 @@ extension InstructorDashboardRoutes {
             override.brightspaceSyncError = nil
             try await override.save(on: req.db)
         }
-        await runImmediateBrightspaceSweep(req: req)
+        launchBackgroundBrightspaceSweep(req.application)
+        req.session.data["bs_flash_success"] =
+            "Queued every grade for “\(assignment.title)” — they're pushing to LEARN in the background."
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -498,23 +504,39 @@ extension InstructorDashboardRoutes {
         return Array(Set(setupIDs))
     }
 
-    /// Runs a grade-sync sweep immediately, bypassing the debounce window so
-    /// a manual "Sync now" click pushes everything currently pending.  No-op
-    /// when BrightSpace isn't configured.
-    private func runImmediateBrightspaceSweep(req: Request) async {
-        guard let app = req.application.brightSpaceAppCredentials else { return }
-        let debounce = req.application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
-        // Pass a future `now` so the debounce cutoff lands ahead of every
-        // pending row, forcing an immediate push instead of waiting out the
-        // window. Each course resolves its designated identity (or the fallback).
-        _ = try? await sweepBrightSpaceGradeSync(
-            on: req.db,
-            debounceSecs: debounce,
-            resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
-            logger: req.logger,
-            application: req.application,
-            now: Date().addingTimeInterval(debounce + 1)
-        )
+    /// Kicks off a grade-sync sweep in the background and returns immediately, so
+    /// a manual "Sync now" / "Push all" / "Retry failed" click never holds the
+    /// HTTP request open for the duration of every D2L push — a large class is
+    /// dozens of sequential round-trips, which would otherwise risk a
+    /// reverse-proxy timeout and leave the instructor staring at a spinner. The
+    /// rows are already flagged pending by the caller (a fast local write); this
+    /// just triggers a sweep now instead of waiting up to 60 s for the periodic
+    /// monitor. The detached task uses `application.db` (NOT `req.db`, which is
+    /// scoped to the request) since it outlives the request. No-op when
+    /// BrightSpace isn't configured.
+    private func launchBackgroundBrightspaceSweep(_ application: Application) {
+        guard let app = application.brightSpaceAppCredentials else { return }
+        let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
+        Task {
+            // Future `now` so the debounce cutoff lands ahead of every pending
+            // row, forcing an immediate push instead of waiting out the window.
+            // Each course resolves its designated identity (or the fallback).
+            do {
+                _ = try await sweepBrightSpaceGradeSync(
+                    on: application.db,
+                    debounceSecs: debounce,
+                    resolveClient: { course in
+                        try await application.brightSpaceClient(forCourse: course)
+                    },
+                    logger: application.logger,
+                    application: application,
+                    now: Date().addingTimeInterval(debounce + 1)
+                )
+            } catch {
+                application.logger.error(
+                    "BrightSpace background sweep failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Resolves how the active course's grade-sync identity is shown: the display
