@@ -250,6 +250,14 @@
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;
             }
+            // Per-student dataset slices (Phase 1 datasets): overwrite the full-source
+            // support file from the zip with the student's personal slice so test
+            // scripts see only their rows. No-op when the response has no personalizedFiles.
+            if (parsed && parsed.personalizedFiles && typeof parsed.personalizedFiles === 'object') {
+                for (const [filename, content] of Object.entries(parsed.personalizedFiles)) {
+                    files[filename] = content;
+                }
+            }
         } catch (_) {
             assignmentSeed = null;  // grade without a seed rather than failing the run
             personalizedInputs = null;
