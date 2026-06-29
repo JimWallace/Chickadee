@@ -116,10 +116,6 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         #"{"earnedPoints":\#(earned),"totalPoints":\#(total)}"#
     }
 
-    private func passCountJSON(_ count: Int) -> String {
-        #"{"passCount":\#(count)}"#
-    }
-
     /// Builds a fully-wired course/setup/assignment/user/submission graph that
     /// the sweep will treat as eligible for grade sync.
     private func makeConfiguredScenario(
@@ -331,29 +327,24 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
         }
     }
 
-    @Test func bestGradePrefersWorkerResultsOverBrowser() async throws {
+    @Test func bestGradeWinsAcrossAllSourcesBrowserOrWorker() async throws {
+        // "Highest grade wins" across every source (v0.4.567): a higher browser
+        // result is NOT displaced by a lower worker re-grade, keeping the LEARN
+        // push consistent with the grades CSV / dashboard / roster surfaces.
         try await withApp(app) { _ in
             let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-cached")
-            // One pending worker result triggers the sweep; the best grade is
-            // computed across every result for this student's submissions.
+            // A pending worker re-grade at 70 % triggers the sweep...
             try await makePendingResult(
                 submissionID: scenario.submissionID,
-                json: passCountJSON(3),
+                json: pointsJSON(earned: 7, total: 10),
                 source: "worker",
                 pendingSince: Date().addingTimeInterval(-3600)
             )
+            // ...but an earlier browser result at 90 % is the best and must win.
             try await makeTestResult(
                 on: app,
                 submissionID: scenario.submissionID,
-                collectionJSON: passCountJSON(7),
-                source: "worker"
-            )
-            // Browser result with a higher score must be ignored when worker
-            // results exist.
-            try await makeTestResult(
-                on: app,
-                submissionID: scenario.submissionID,
-                collectionJSON: passCountJSON(100),
+                collectionJSON: pointsJSON(earned: 9, total: 10),
                 source: "browser"
             )
             let fake = FakeBrightSpaceGrading()
@@ -363,7 +354,7 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             #expect(processed == 1)
             let pushes = await fake.pushes
             #expect(pushes.count == 1)
-            #expect(pushes.first?.earnedPoints == 7)
+            #expect(pushes.first?.earnedPoints == 9)  // browser 90% beats worker 70%
             #expect(pushes.first?.bsUserID == "d2l-cached")
             // Cached D2L ID means no lookup call.
             let lookupCount = await fake.lookupCount

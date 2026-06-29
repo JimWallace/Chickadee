@@ -807,18 +807,44 @@ private func bestGradeForStudent(
         return StudentGrade(points: Double(override.overridePercent) / 100.0 * total, total: total)
     }
 
-    // Highest grade percentage across ALL results (browser and worker alike) —
-    // "highest grade wins": a 100 % browser result is never displaced by a later
-    // lower worker re-grade.  Convert via manifest total so the denominator is
-    // stable and consistent with the grades CSV export.
-    let bestPercentBySubmission = try await bestGradePercentBySubmissionID(
-        for: submissionIDs, on: db)
-    guard let bestPct = bestPercentBySubmission.values.max()
+    // Highest grade wins across ALL result sources (browser + worker alike): a
+    // 100 % browser result is never displaced by a later lower worker re-grade,
+    // matching the grades CSV / dashboard / roster surfaces.  Pick the result
+    // with the highest percent, then push its EXACT points so the LEARN value
+    // isn't degraded by integer-percent rounding (the shared
+    // `bestGradePercentBySubmissionID` helper returns an Int percent, which is
+    // fine for the display surfaces but lossy for a points push, e.g. 6/7 → 86 %
+    // → 8.6 instead of 8.57).
+    let allResults = try await APIResult.query(on: db)
+        .filter(\.$submissionID ~~ submissionIDs)
+        .all()
+    guard
+        let best =
+            allResults
+            .filter({ $0.gradePercentValue != nil })
+            .max(by: { ($0.gradePercentValue ?? 0) < ($1.gradePercentValue ?? 0) }),
+        let earned = best.gradePointsValue
     else {
         throw BrightSpaceSyncError.missingPoints
     }
-    guard let total = manifestTotal, total > 0 else { throw BrightSpaceSyncError.missingPoints }
-    let basePoints = Double(bestPct) / 100.0 * total
+    // Denominator: prefer the manifest's suite total (stable, matches the grades
+    // CSV); fall back to the winning result's own recorded total when the
+    // manifest carries no per-suite points (mirrors the override branch above and
+    // the pre-#1085 behaviour).
+    let resultTotal = best.gradeTotalPointsValue
+    guard let total = manifestTotal ?? resultTotal, total > 0 else {
+        throw BrightSpaceSyncError.missingPoints
+    }
+    // Express the winning result's grade on the chosen denominator.  When the
+    // result carries its own total, scale exactly (earned / resultTotal * total)
+    // so integer-percent rounding never enters the pushed value; otherwise the
+    // earned value is already in suite-point units (the pass-count fallback).
+    let basePoints: Double
+    if let resultTotal, resultTotal > 0 {
+        basePoints = earned / resultTotal * total
+    } else {
+        basePoints = earned
+    }
     // Class-goal bonus: extra credit, capped at the suite total (100%).
     let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, on: db)
     let points = bonus > 0 ? min(total, basePoints + bonus) : basePoints
