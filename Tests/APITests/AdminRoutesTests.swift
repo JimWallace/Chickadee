@@ -1016,7 +1016,10 @@ private struct PassthroughResponder: AsyncResponder {
                     let body = String(buffer: res.body)
                     #expect(body.contains("testuser"), "audit table should list the actor")
                     #expect(body.contains("auth.login_success"), "audit table should show the action code")
-                    #expect(!body.contains("No audit entries recorded yet."), "empty-state should not appear when rows exist")
+                    #expect(
+                        !body.contains("No audit entries recorded yet."),
+                        "empty-state should not appear when rows exist"
+                    )
                 })
         }
     }
