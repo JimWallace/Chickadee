@@ -138,6 +138,7 @@ func ensureUserNotebookWorkingCopy(
         try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
         try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
         await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
+        await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
         return overwriteWith
     }
 
@@ -148,6 +149,7 @@ func ensureUserNotebookWorkingCopy(
         // Symlinks are idempotent — run on every visit so existing working copies
         // also pick up support files when the feature is first deployed.
         await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
+        await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
         return existingData
     }
 
@@ -181,6 +183,7 @@ func ensureUserNotebookWorkingCopy(
     try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
     try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
     await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
+    await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
 
     return processedData
 }
@@ -459,13 +462,17 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
     // student-facing path — here, the editor must not symlink them into the
     // student's working copy. See docs/datasets.md (option B).
     let graderOnly = props.graderOnlyFileSet
+    // Dataset files are written as real per-student files by writeDatasetFiles;
+    // skip symlinking them here so the symlink doesn't shadow the real file.
+    let datasetFilenames = Set(props.datasets.map { $0.file })
     // Cached: this pass runs on every notebook visit (the symlinks are
     // idempotent), so listing the zip fresh each time would spawn a serialized
     // `unzip` subprocess per load. The cache busts when the zip's mtime/size
     // changes — i.e. whenever the instructor edits support files.
     let allEntries = await req.application.zipEntryListCache.entries(zipPath: setup.zipPath)
     let supportNames = allEntries.filter {
-        !testScriptNames.contains($0) && !reservedNames.contains($0) && !graderOnly.contains($0)
+        !testScriptNames.contains($0) && !reservedNames.contains($0)
+            && !graderOnly.contains($0) && !datasetFilenames.contains($0)
     }
     guard !supportNames.isEmpty else { return }
 
@@ -478,5 +485,46 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
         guard !fm.fileExists(atPath: dest) else { continue }  // idempotent
         guard fm.fileExists(atPath: src) else { continue }  // skip if not yet extracted
         try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
+    }
+}
+
+/// Materializes per-student dataset slices into the student's JupyterLite working
+/// directory. Dataset files are written as real files (not symlinks) so each student
+/// sees only their own rows. Idempotent — safe to call on every visit; always
+/// overwrites with the current slice so a spec change is picked up automatically.
+/// A strict no-op when the assignment declares no datasets.
+func writeDatasetFiles(
+    req: Request,
+    setup: APITestSetup,
+    userID: UUID,
+    studentDir: String
+) async {
+    guard let manifestData = setup.manifest.data(using: .utf8),
+        let props = decodeManifest(from: manifestData),
+        !props.datasets.isEmpty,
+        let setupID = setup.id
+    else { return }
+
+    guard
+        let assignment = try? await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == setupID)
+            .first(),
+        let assignmentID = assignment.id
+    else { return }
+
+    guard
+        let seedHex = try? await AssignmentSeedStore.ensureSeed(
+            userID: userID, assignmentID: assignmentID, on: req.db)
+    else { return }
+
+    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+    guard
+        let files = DatasetResolver.resolve(
+            manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)
+    else { return }
+
+    for (filename, content) in files {
+        let dest = studentDir + "/" + filename
+        try? content.write(toFile: dest, atomically: true, encoding: .utf8)
     }
 }

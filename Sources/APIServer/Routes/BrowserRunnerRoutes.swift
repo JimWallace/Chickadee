@@ -174,12 +174,20 @@ struct BrowserRunnerRoutes: RouteCollection {
         // the worker does — via the shared `gradingInputs` helper — so a
         // browser-graded submission binds the same values a worker would.
         var personalizedInputs: [String: String]?
+        var personalizedFiles: [String: String]?
         if let manifest = setup.decodedManifest() {
+            let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
                 manifest: manifest, seedHex: seed,
-                supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/")
+                supportFilesDirectory: sharedDir)
+            // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
+            // the manifest declares no datasets, which is the common case.
+            personalizedFiles = DatasetResolver.resolve(
+                manifest: manifest, seedHex: seed, sourceDirectory: sharedDir)
         }
-        return BrowserRunnerSeedResponse(seed: seed, personalizedInputs: personalizedInputs)
+        return BrowserRunnerSeedResponse(
+            seed: seed, personalizedInputs: personalizedInputs,
+            personalizedFiles: personalizedFiles)
     }
 
 }
@@ -192,6 +200,12 @@ struct BrowserRunnerSeedResponse: Content {
     /// writes these to `_ck_inputs.py` so generated pattern-family scripts can
     /// load per-student args / expected. Nil when there are none (issue #461).
     let personalizedInputs: [String: String]?
+    /// Per-student dataset file contents (CSV slices), keyed by filename.
+    /// The browser writes these into the Pyodide FS before tests run,
+    /// overwriting the full-source version from the test-setup zip so each
+    /// student's code sees only their own slice. Nil when no datasets are
+    /// declared (the common case — existing assignments are unaffected).
+    let personalizedFiles: [String: String]?
 }
 
 /// Returns the manifest JSON with the `graderOnlyFiles` array blanked to `[]`,

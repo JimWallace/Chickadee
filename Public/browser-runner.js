@@ -257,6 +257,14 @@
         if (personalizedInputs && Object.keys(personalizedInputs).length > 0) {
             files['_ck_inputs.py'] = personalizationInputsSource(personalizedInputs);
         }
+        // Per-student dataset slices (Phase 1 datasets): overwrite the full-source
+        // support file from the zip with the student's personal slice so test
+        // scripts see only their rows. No-op when the response has no personalizedFiles.
+        if (parsed && parsed.personalizedFiles && typeof parsed.personalizedFiles === 'object') {
+            for (const [filename, content] of Object.entries(parsed.personalizedFiles)) {
+                files[filename] = content;
+            }
+        }
 
         // 4. Fetch manifest from server (test.properties.json is not in the zip;
         //    the server serves it directly from the database via the manifest endpoint).
