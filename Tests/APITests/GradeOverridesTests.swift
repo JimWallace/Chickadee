@@ -286,6 +286,49 @@ import VaporTesting
 
     // MARK: - Grades CSV export
 
+    @Test func overrideWithoutSubmissionAppearsInGradesCSV() async throws {
+        // A student who never submitted but has a manual grade override must still
+        // appear in the CSV with the override points, not a blank cell.
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":\
+                [{"tier":"public","script":"t.sh","points":10}],"timeLimitSeconds":10}
+                """
+            let setup = APITestSetup(
+                id: "ovr_nosub_setup",
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "ovr_nosub_setup.zip",
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            _ = try await arInsertAssignment(
+                testSetupID: "ovr_nosub_setup", title: "No-Sub Lab", isOpen: true, on: app
+            )
+            let student = try await arInsertStudent(username: "ovr_nosub_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            // Deliberately no submission — instructor sets an 80% manual override.
+            try await APIGradeOverride(
+                testSetupID: "ovr_nosub_setup",
+                userID: try student.requireID(),
+                overridePercent: 80
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/instructor/grades.csv",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(
+                        body.contains("8.0"),
+                        "80% of 10 pts must export as 8.0 even when the student has no submission"
+                    )
+                })
+        }
+    }
+
     @Test func overrideAppliedToGradesCSVAsPoints() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
