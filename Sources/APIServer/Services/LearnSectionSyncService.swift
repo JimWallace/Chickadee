@@ -17,6 +17,26 @@ import Fluent
 import Foundation
 import Vapor
 
+// MARK: - Helpers
+
+/// Builds two lookup maps from a classlist: orgDefinedID→D2LUserID and username→D2LUserID.
+private func classlistIdentityMaps(
+    _ classlist: [BrightSpaceClasslistEntry]
+) -> (byOrgDefinedId: [String: String], byUsername: [String: String]) {
+    var byOrgDefinedId: [String: String] = [:]
+    var byUsername: [String: String] = [:]
+    for entry in classlist {
+        guard let uid = entry.userID, !uid.isEmpty else { continue }
+        if let oid = entry.orgDefinedID, !oid.isEmpty {
+            byOrgDefinedId[oid.lowercased()] = uid
+        }
+        if let uname = entry.username, !uname.isEmpty {
+            byUsername[uname.lowercased()] = uid
+        }
+    }
+    return (byOrgDefinedId, byUsername)
+}
+
 // MARK: - Core reconciler
 
 /// Outcome counts for one course's section-sync pass.
@@ -79,17 +99,7 @@ func syncCourseSections(
 
     // Build identity lookup: (orgDefinedId or username) → D2L user ID,
     // using the classlist as the bridge.
-    var d2lUserIDByOrgDefinedId: [String: String] = [:]
-    var d2lUserIDByUsername: [String: String] = [:]
-    for entry in classlist {
-        guard let uid = entry.userID, !uid.isEmpty else { continue }
-        if let oid = entry.orgDefinedID, !oid.isEmpty {
-            d2lUserIDByOrgDefinedId[oid.lowercased()] = uid
-        }
-        if let uname = entry.username, !uname.isEmpty {
-            d2lUserIDByUsername[uname.lowercased()] = uid
-        }
-    }
+    let (d2lUserIDByOrgDefinedId, d2lUserIDByUsername) = classlistIdentityMaps(classlist)
 
     var userByID: [UUID: APIUser] = [:]
     for user in users {
@@ -103,7 +113,7 @@ func syncCourseSections(
 
         // Resolve D2L user ID for this student via classlist identity match.
         let d2lUserID =
-            (student.studentID.map { d2lUserIDByOrgDefinedId[$0.lowercased()] } ?? nil)
+            student.studentID.flatMap { d2lUserIDByOrgDefinedId[$0.lowercased()] }
             ?? d2lUserIDByUsername[student.username.lowercased()]
 
         let section = d2lUserID.flatMap { sectionByD2LUserID[$0] }
