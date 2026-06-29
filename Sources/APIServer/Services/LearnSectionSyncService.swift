@@ -165,9 +165,8 @@ func sweepLearnSections(
             totalUpdated += outcome.updated
             if outcome.updated > 0 {
                 logger.info(
-                    "Section sync for \(course.code): "
-                        + "\(outcome.assigned) assigned, \(outcome.cleared) cleared "
-                        + "(\(outcome.updated) changed)")
+                    "Section sync for \(course.code): \(outcome.assigned) assigned, \(outcome.cleared) cleared (\(outcome.updated) changed)"
+                )
             }
         } catch {
             logger.warning("Section sync failed for course \(course.code): \(error)")
