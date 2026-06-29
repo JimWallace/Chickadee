@@ -359,4 +359,9 @@ func registerMigrations(on app: Application) {
     // no-submission student Chickadee had pushed a grade for). FK to
     // test_setups + users.
     app.migrations.add(CreateBrightSpaceGradeClears())
+
+    // LEARN section sync: which D2L group category maps to "sections" for a
+    // course, and the resulting per-student section name on each enrollment.
+    app.migrations.add(AddCourseBrightSpaceSectionCategoryID())
+    app.migrations.add(AddEnrollmentBrightSpaceSection())
 }
