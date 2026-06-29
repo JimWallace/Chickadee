@@ -174,6 +174,8 @@ struct BrightspaceReadinessRow: Encodable {
     let username: String
     let displayName: String
     let detail: String
+    let userID: String
+    let unenrollURL: String
 }
 
 /// One bar of a server-rendered sparkline.  `heightPercent` is already
