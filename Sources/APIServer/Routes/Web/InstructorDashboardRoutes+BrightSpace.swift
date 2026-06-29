@@ -849,11 +849,14 @@ extension InstructorDashboardRoutes {
             case .confirmed: confirmed += 1
             case .unconfirmed: unconfirmed += 1
             case .unreachable:
+                let uid = enrollment.userID.uuidString
                 unreachable.append(
                     BrightspaceReadinessRow(
                         username: student.username,
                         displayName: student.displayName ?? student.username,
-                        detail: enrollment.brightspaceSyncDetail ?? "Not on the LEARN classlist."))
+                        detail: enrollment.brightspaceSyncDetail ?? "Not on the LEARN classlist.",
+                        userID: uid,
+                        unenrollURL: "/courses/\(courseUUID.uuidString)/unenroll/\(uid)"))
             }
         }
         unreachable.sort { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }

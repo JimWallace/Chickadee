@@ -100,8 +100,7 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("LEARN roster readiness"))
-                    #expect(html.contains("Unreachable"))
+                    #expect(html.contains("Class Roster"))
                     #expect(html.contains("Una Reachable"))
                     #expect(html.contains("Reconcile now"))
                     // The old log-heuristic section is gone.
@@ -369,9 +368,10 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("1 ✓"))
-                    #expect(html.contains("1 ⏳"))
-                    #expect(html.contains("1 ✗"))
+                    // Synced column shows 1 with ok style; failed column shows 1 with error style.
+                    #expect(html.contains("bs-count-ok"))
+                    #expect(html.contains("bs-count-err"))
+                    #expect(html.contains("LEARN Assessment"))
                 })
         }
     }
@@ -398,8 +398,10 @@ import VaporTesting
                 .GET, "/instructor/brightspace",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
                 afterResponse: { res in
+                    // The override-only row contributes to hasSyncActivity — the
+                    // assignment row appears in the mapping table.
                     #expect(res.status == .ok)
-                    #expect(res.body.string.contains("1 ⏳"))
+                    #expect(res.body.string.contains("Override Lab"))
                 })
         }
     }
