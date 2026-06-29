@@ -54,6 +54,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("brightspace", "auto-map", use: brightspaceAutoMap)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
         r.post("brightspace", "retry-failed", use: brightspaceRetryFailed)
+        r.post("brightspace", "reconcile-now", use: brightspaceReconcileNow)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)

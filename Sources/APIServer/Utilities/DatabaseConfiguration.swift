@@ -351,4 +351,9 @@ func registerMigrations(on app: Application) {
     // no-submission student Chickadee had pushed a grade for). FK to
     // test_setups + users.
     app.migrations.add(CreateBrightSpaceGradeClears())
+
+    // Per-(student, course) LEARN sync readiness on course_enrollments:
+    // unconfirmed (default) → confirmed / unreachable, maintained by the
+    // roster-readiness sweep. Runs after CreateCourseEnrollments (the table).
+    app.migrations.add(AddEnrollmentBrightSpaceSyncStatus())
 }

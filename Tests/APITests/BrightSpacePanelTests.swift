@@ -71,6 +71,45 @@ import VaporTesting
         }
     }
 
+    @Test func readinessPanelRendersUnreachableStudents() async throws {
+        try await withAssignmentRoutesApp { app in
+            // Configured + linked course with one student persisted as unreachable
+            // → the LEARN roster-readiness panel lists them with the reason.
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let course = try #require(try await APICourse.find(courseID, on: app.db))
+            course.brightspaceOrgUnitID = "999"
+            try await course.save(on: app.db)
+
+            let student = try await arInsertStudent(
+                username: "unreach_user", displayName: "Una Reachable", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            let enroll = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == student.requireID()).first())
+            enroll.learnSyncReadiness = .unreachable
+            enroll.brightspaceSyncDetail = "Not on the LEARN classlist."
+            enroll.brightspaceCheckedAt = Date()
+            try await enroll.save(on: app.db)
+
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("LEARN roster readiness"))
+                    #expect(html.contains("Unreachable"))
+                    #expect(html.contains("Una Reachable"))
+                    #expect(html.contains("Reconcile now"))
+                    // The old log-heuristic section is gone.
+                    #expect(!html.contains("Unmapped students"))
+                })
+        }
+    }
+
     @Test func autoMapRedirectsWhenNotConfigured() async throws {
         try await withAssignmentRoutesApp { app in
             // No live D2L in tests → brightSpaceClient is nil, so auto-map can't

@@ -1,8 +1,8 @@
 // APIServer/Routes/Web/InstructorDashboardRoutes+BrightSpace.swift
 //
 // The instructor BrightSpace tab: connection status, the assignment→grade-
-// item mapping, the sync-activity log, manual sync actions, and unmapped-
-// student diagnostics.  Everything here is scoped to the active course.
+// item mapping, the sync-activity log, manual sync actions, and the LEARN
+// roster-readiness panel.  Everything here is scoped to the active course.
 //
 // Connection credentials are server-level (env, ops-managed) and never
 // exposed here; the course→org-unit binding is admin-set on the course page.
@@ -11,8 +11,9 @@
 //   GET  /instructor/brightspace                       → instructor-brightspace.leaf
 //   POST /instructor/brightspace/test                  → whoami connection test (JSON)
 //   GET  /instructor/brightspace/grade-objects         → [BrightSpaceGradeObject] (dropdown)
-//   POST /instructor/brightspace/sync-now              → run a sweep immediately
+//   POST /instructor/brightspace/sync-now              → run a grade-sync sweep immediately
 //   POST /instructor/brightspace/retry-failed          → re-queue errored pushes
+//   POST /instructor/brightspace/reconcile-now         → re-check roster readiness vs LEARN
 //   POST /instructor/:assignmentID/brightspace/push-all → re-push every grade for one assignment
 
 import Core
@@ -352,6 +353,48 @@ extension InstructorDashboardRoutes {
         return req.redirect(to: "/instructor/brightspace")
     }
 
+    // MARK: - POST /instructor/brightspace/reconcile-now
+
+    /// Runs the roster-readiness reconcile for the active course immediately
+    /// (the manual counterpart to the 10-minute sweep): fetches the LEARN
+    /// classlist and re-classifies every enrolled student, persisting their
+    /// readiness. Flashes a one-line summary. A no-op when BrightSpace isn't
+    /// connected or the course isn't linked to an org unit.
+    @Sendable
+    func brightspaceReconcileNow(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        guard let courseUUID = courseState.activeCourseUUID,
+            let course = try await APICourse.find(courseUUID, on: req.db)
+        else {
+            req.session.data["bs_flash_error"] = "No active course."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        guard let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty else {
+            req.session.data["bs_flash_error"] =
+                "Link this course to its LEARN org unit first."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        guard let client = try await req.application.brightSpaceClient(forCourse: course) else {
+            req.session.data["bs_flash_error"] =
+                "BrightSpace isn't connected for this course yet."
+            return req.redirect(to: "/instructor/brightspace")
+        }
+        do {
+            let outcome = try await reconcileCourseReadiness(
+                course: course, orgUnitID: orgUnitID, client: client,
+                on: req.db, application: req.application)
+            req.session.data["bs_flash_success"] =
+                "Reconciled \(outcome.checked) student\(outcome.checked == 1 ? "" : "s") against LEARN: "
+                + "\(outcome.confirmed) confirmed, \(outcome.unreachable) unreachable."
+        } catch {
+            req.logger.warning("Roster reconcile-now failed: \(error)")
+            req.session.data["bs_flash_error"] =
+                "Couldn't reconcile against LEARN: \(error.localizedDescription)"
+        }
+        return req.redirect(to: "/instructor/brightspace")
+    }
+
     // MARK: - POST /instructor/brightspace/retry-failed
 
     @Sendable
@@ -498,6 +541,39 @@ extension InstructorDashboardRoutes {
     }
 
     /// Assembles the full BrightSpace-tab context for the active course.
+    /// The BrightSpace-tab context for the "no active course selected" state —
+    /// the per-instructor account + flashes still render, but everything
+    /// course-scoped is empty. Extracted so `buildBrightspaceContext` stays
+    /// under the body-length limit. `account` groups the requesting
+    /// instructor's connection (connected, identity, "since" suffix).
+    private func noCourseBrightspaceContext(
+        userContext: CurrentUserContext,
+        hasActiveCourse: Bool,
+        syncEnabled: Bool,
+        account: (connected: Bool, identity: String?, since: String?),
+        flashSuccess: String?,
+        flashError: String?
+    ) -> InstructorBrightspaceContext {
+        InstructorBrightspaceContext(
+            currentUser: userContext, activeInstructorTab: "brightspace",
+            hasActiveCourse: hasActiveCourse, courseIsArchived: false,
+            brightspaceSyncEnabled: syncEnabled, courseLinked: false,
+            orgUnitID: nil, orgUnitName: nil,
+            accountConnected: account.connected, accountIdentity: account.identity,
+            accountConnectedSince: account.since,
+            syncIdentityName: nil, syncIdentityIsMe: false,
+            syncIdentityConnected: false, syncIdentityNeedsReconnect: false,
+            flashSuccess: flashSuccess, flashError: flashError,
+            assignmentRows: [], hasAssignments: false,
+            logRows: [], hasLog: false,
+            summary: BrightspaceSyncSummary(synced: 0, pending: 0, errored: 0),
+            canReconcile: false,
+            readiness: BrightspaceReadinessSummary(
+                confirmed: 0, unconfirmed: 0, unreachable: 0,
+                lastCheckedText: "Never", hasBeenChecked: false),
+            unreachableStudents: [], hasUnreachable: false)
+    }
+
     private func buildBrightspaceContext(
         req: Request, user: APIUser
     ) async throws
@@ -535,20 +611,11 @@ extension InstructorDashboardRoutes {
         guard let courseUUID = courseState.activeCourseUUID,
             let course = try await APICourse.find(courseUUID, on: req.db)
         else {
-            return InstructorBrightspaceContext(
-                currentUser: userContext, activeInstructorTab: "brightspace",
-                hasActiveCourse: courseState.active != nil, courseIsArchived: false,
-                brightspaceSyncEnabled: syncEnabled, courseLinked: false,
-                orgUnitID: nil, orgUnitName: nil,
-                accountConnected: accountConnected, accountIdentity: accountIdentity,
-                accountConnectedSince: accountConnectedSince,
-                syncIdentityName: nil, syncIdentityIsMe: false,
-                syncIdentityConnected: false, syncIdentityNeedsReconnect: false,
-                flashSuccess: flashSuccess, flashError: flashError,
-                assignmentRows: [], hasAssignments: false,
-                logRows: [], hasLog: false,
-                summary: BrightspaceSyncSummary(synced: 0, pending: 0, errored: 0, unmapped: 0),
-                unmappedStudents: [], hasUnmapped: false)
+            return noCourseBrightspaceContext(
+                userContext: userContext, hasActiveCourse: courseState.active != nil,
+                syncEnabled: syncEnabled,
+                account: (accountConnected, accountIdentity, accountConnectedSince),
+                flashSuccess: flashSuccess, flashError: flashError)
         }
 
         let orgUnitID = course.brightspaceOrgUnitID
@@ -587,8 +654,10 @@ extension InstructorDashboardRoutes {
             latestBySetup[log.testSetupID] = log
         }
 
-        let (summary, unmapped, perSetupCounts) = try await brightspaceSummaryAndUnmapped(
-            req: req, courseUUID: courseUUID, setupIDs: setupIDs, logModels: logModels)
+        let (summary, perSetupCounts) = try await brightspaceSyncSummary(
+            req: req, courseUUID: courseUUID, setupIDs: setupIDs)
+        let (readiness, unreachableStudents) = try await brightspaceReadiness(
+            req: req, courseUUID: courseUUID, fmt: fmt)
 
         let assignmentRows = brightspaceAssignmentRows(
             assignments: assignments, latestBySetup: latestBySetup,
@@ -617,7 +686,9 @@ extension InstructorDashboardRoutes {
             flashSuccess: flashSuccess, flashError: flashError,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
             logRows: logRows, hasLog: !logRows.isEmpty,
-            summary: summary, unmappedStudents: unmapped, hasUnmapped: !unmapped.isEmpty)
+            summary: summary, canReconcile: courseLinked && !course.isArchived,
+            readiness: readiness,
+            unreachableStudents: unreachableStudents, hasUnreachable: !unreachableStudents.isEmpty)
     }
 
     /// Builds the per-assignment mapping rows: grade-item ID, latest-sync badge,
@@ -667,17 +738,16 @@ extension InstructorDashboardRoutes {
         }
     }
 
-    /// Computes the summary counts (synced / pending / errored), the same counts
-    /// bucketed per test setup (for the per-assignment rollup), and the
-    /// unmapped-student list (no D2L account resolvable). Counts span both
-    /// result rows and override-only rows (no-submission students whose grade
-    /// rides on the override row), so override-only grades show up in the totals.
-    private func brightspaceSummaryAndUnmapped(
+    /// Computes the headline summary counts (synced / pending / errored) and the
+    /// same counts bucketed per test setup (for the per-assignment rollup).
+    /// Counts span both result rows and override-only rows (no-submission
+    /// students whose grade rides on the override row), so override-only grades
+    /// show up in the totals.
+    private func brightspaceSyncSummary(
         req: Request,
         courseUUID: UUID,
-        setupIDs: [String],
-        logModels: [APIBrightSpaceSyncLog]
-    ) async throws -> (BrightspaceSyncSummary, [BrightspaceUnmappedStudentRow], [String: SetupSyncCounts]) {
+        setupIDs: [String]
+    ) async throws -> (BrightspaceSyncSummary, [String: SetupSyncCounts]) {
         var perSetup: [String: SetupSyncCounts] = [:]
 
         // Result-level sync state across the course's student submissions. Keep
@@ -731,55 +801,68 @@ extension InstructorDashboardRoutes {
             errored += counts.errored
         }
 
-        // Unmapped students: enrolled students with no usable D2L identity.
-        let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
+        let summary = BrightspaceSyncSummary(synced: synced, pending: pending, errored: errored)
+        return (summary, perSetup)
+    }
+
+    /// Builds the LEARN roster-readiness panel for the active course from the
+    /// persisted per-enrollment status (maintained by the readiness sweep):
+    /// confirmed / unconfirmed / unreachable counts, the last-checked time, and
+    /// the list of unreachable students with the reason. Replaces the old
+    /// log-heuristic "unmapped students" view with the authoritative classlist
+    /// reconcile.
+    private func brightspaceReadiness(
+        req: Request, courseUUID: UUID, fmt: DateFormatter
+    ) async throws -> (BrightspaceReadinessSummary, [BrightspaceReadinessRow]) {
+        let enrollments = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseUUID)
             .all()
-            .map(\.userID)
-        let students =
-            enrolledUserIDs.isEmpty
-            ? []
-            : try await APIUser.query(on: req.db)
-                .filter(\.$id ~~ enrolledUserIDs)
-                .filter(\.$role == UserRole.student.rawValue)
-                .sort(\.$username)
-                .all()
-        let noAccountUsernames = Set(
-            logModels
-                .filter {
-                    $0.status == APIBrightSpaceSyncLog.Status.skipped.rawValue
-                        && ($0.detail?.contains("No BrightSpace account") ?? false)
-                }
-                .map(\.username))
-        var unmapped: [BrightspaceUnmappedStudentRow] = []
-        for student in students {
-            // Grade sync resolves a student by username (against the LEARN
-            // classlist) OR student number, caching the resolved D2L id on first
-            // success. A student is only truly unmapped with neither a student
-            // number nor an already-resolved id — checking studentID alone
-            // wrongly flags students who match LEARN by username.
-            let hasStudentID = !(student.studentID ?? "").isEmpty
-            let hasResolvedID = !(student.brightspaceUserID ?? "").isEmpty
-            if !hasStudentID && !hasResolvedID {
-                unmapped.append(
-                    BrightspaceUnmappedStudentRow(
-                        username: student.username,
-                        displayName: student.displayName ?? student.username,
-                        reason:
-                            "No LEARN match — add a student/org-defined ID, or check the username matches LEARN"
-                    ))
-            } else if noAccountUsernames.contains(student.username) {
-                unmapped.append(
-                    BrightspaceUnmappedStudentRow(
-                        username: student.username,
-                        displayName: student.displayName ?? student.username,
-                        reason: "Not found in BrightSpace"))
-            }
+            .filter { $0.role == .student }
+        guard !enrollments.isEmpty else {
+            return (
+                BrightspaceReadinessSummary(
+                    confirmed: 0, unconfirmed: 0, unreachable: 0,
+                    lastCheckedText: "Never", hasBeenChecked: false), []
+            )
         }
 
-        let summary = BrightspaceSyncSummary(
-            synced: synced, pending: pending, errored: errored, unmapped: unmapped.count)
-        return (summary, unmapped, perSetup)
+        let userIDs = enrollments.map(\.userID)
+        let users = try await APIUser.query(on: req.db)
+            .filter(\.$id ~~ userIDs)
+            .filter(\.$role == UserRole.student.rawValue)
+            .all()
+        var userByID: [UUID: APIUser] = [:]
+        for user in users {
+            if let id = user.id { userByID[id] = user }
+        }
+
+        var confirmed = 0
+        var unconfirmed = 0
+        var unreachable: [BrightspaceReadinessRow] = []
+        var lastChecked: Date?
+        for enrollment in enrollments {
+            guard let student = userByID[enrollment.userID] else { continue }
+            if let checked = enrollment.brightspaceCheckedAt {
+                lastChecked = max(lastChecked ?? checked, checked)
+            }
+            switch enrollment.learnSyncReadiness {
+            case .confirmed: confirmed += 1
+            case .unconfirmed: unconfirmed += 1
+            case .unreachable:
+                unreachable.append(
+                    BrightspaceReadinessRow(
+                        username: student.username,
+                        displayName: student.displayName ?? student.username,
+                        detail: enrollment.brightspaceSyncDetail ?? "Not on the LEARN classlist."))
+            }
+        }
+        unreachable.sort { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
+
+        let summary = BrightspaceReadinessSummary(
+            confirmed: confirmed, unconfirmed: unconfirmed, unreachable: unreachable.count,
+            lastCheckedText: lastChecked.map { fmt.string(from: $0) } ?? "Never",
+            hasBeenChecked: lastChecked != nil)
+        return (summary, unreachable)
     }
 }
 

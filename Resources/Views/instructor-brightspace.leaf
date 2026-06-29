@@ -35,7 +35,6 @@ LEARN
         <div class="bs-card"><div class="bs-card-label">Synced</div><div class="bs-card-value">#(summary.synced)</div></div>
         <div class="bs-card"><div class="bs-card-label">Pending</div><div class="bs-card-value">#(summary.pending)</div></div>
         <div class="bs-card"><div class="bs-card-label">Errored</div><div class="bs-card-value">#(summary.errored)</div></div>
-        <div class="bs-card"><div class="bs-card-label">Unmapped students</div><div class="bs-card-value">#(summary.unmapped)</div></div>
     </div>
     #if(!courseIsArchived):
     <div class="bs-summary-actions">
@@ -137,28 +136,51 @@ LEARN
     #endif
 </section>
 
-<!-- ── Unmapped students ──────────────────────────────────── -->
-#if(hasUnmapped):
+<!-- ── LEARN roster readiness ─────────────────────────────── -->
 <section class="bs-section">
-    <h2 class="bs-h2">Unmapped students (#(summary.unmapped))</h2>
+    <div class="bs-mapping-head">
+        <h2 class="bs-h2">LEARN roster readiness</h2>
+        #if(canReconcile):
+        <form method="post" action="/instructor/brightspace/reconcile-now" class="inline-form">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit"
+                    title="Re-check the roster against the LEARN classlist now">Reconcile now</button>
+        </form>
+        #endif
+    </div>
+    #if(!courseLinked):
     <p class="card-meta bs-section-note">
-        These students' grades can't sync because Chickadee can't resolve a LEARN account
-        for them. Fix the student number on file, or confirm they're enrolled in the D2L course.
+        Link this course to its LEARN org unit (on the course page) to check whether each
+        student's grade can be delivered to the LEARN gradebook.
     </p>
+    #endif
+    #if(courseLinked):
+    <p class="card-meta bs-section-note">
+        Whether each enrolled student can receive grades in LEARN, checked automatically every
+        few minutes (last checked: #(readiness.lastCheckedText)). An <strong>unreachable</strong>
+        student still keeps their Chickadee grades — we just can't deliver them to LEARN yet.
+    </p>
+    <div class="bs-cards">
+        <div class="bs-card"><div class="bs-card-label">Confirmed</div><div class="bs-card-value">#(readiness.confirmed)</div></div>
+        <div class="bs-card"><div class="bs-card-label">Unconfirmed</div><div class="bs-card-value">#(readiness.unconfirmed)</div></div>
+        <div class="bs-card"><div class="bs-card-label">Unreachable</div><div class="bs-card-value">#(readiness.unreachable)</div></div>
+    </div>
+    #if(hasUnreachable):
     <div class="table-scroll"><table class="results-table">
-        <thead><tr><th>Name</th><th>Username</th><th>Reason</th></tr></thead>
+        <thead><tr><th>Name</th><th>Username</th><th>Why we can't deliver</th></tr></thead>
         <tbody>
-        #for(student in unmappedStudents):
+        #for(student in unreachableStudents):
             <tr>
                 <td>#(student.displayName)</td>
                 <td><code>#(student.username)</code></td>
-                <td>#(student.reason)</td>
+                <td>#(student.detail)</td>
             </tr>
         #endfor
         </tbody>
     </table></div>
+    #endif
+    #endif
 </section>
-#endif
 
 <!-- ── Sync log ───────────────────────────────────────────── -->
 <section class="bs-section">
