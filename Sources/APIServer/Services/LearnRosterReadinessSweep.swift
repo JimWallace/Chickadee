@@ -145,9 +145,10 @@ func sweepLearnRosterReadiness(
                 on: db, application: application)
             totalUpdated += outcome.updated
             if outcome.updated > 0 {
-                logger.info(
+                let line =
                     "Roster readiness for \(course.code): \(outcome.confirmed) confirmed, "
-                        + "\(outcome.unreachable) unreachable (\(outcome.updated) changed)")
+                    + "\(outcome.unreachable) unreachable (\(outcome.updated) changed)"
+                logger.info("\(line)")
             }
         } catch {
             logger.warning("Roster readiness sweep failed for course \(course.code): \(error)")
