@@ -161,10 +161,10 @@ struct BrowserRunnerRoutes: RouteCollection {
         guard let assignment = try await requireOpenStudentAssignment(for: setupID, user: caller, on: req)
         else {
             try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
-            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil)
+            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil, personalizedFiles: nil)
         }
         guard let userID = caller.id, let assignmentID = assignment.id else {
-            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil)
+            return BrowserRunnerSeedResponse(seed: nil, personalizedInputs: nil, personalizedFiles: nil)
         }
 
         let seed = try await AssignmentSeedStore.ensureSeed(
