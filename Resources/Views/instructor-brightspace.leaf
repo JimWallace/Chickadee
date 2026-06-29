@@ -77,6 +77,7 @@ LEARN
             <tr>
                 <th>Assignment</th>
                 <th>Grade item ID</th>
+                <th>Students</th>
                 <th>Last sync</th>
                 <th>Actions</th>
             </tr>
@@ -96,6 +97,15 @@ LEARN
                                value="#(row.gradeObjectID)" placeholder="e.g. 78901">
                         <button class="btn action-btn" type="submit">Save</button>
                     </form>
+                </td>
+                <td>
+                    #if(row.hasSyncActivity):
+                    <span class="bs-count bs-count-ok" title="Synced to LEARN">#(row.syncedCount) ✓</span>
+                    #if(row.hasPending):<span class="bs-count bs-count-pending" title="Pending push">#(row.pendingCount) ⏳</span>#endif
+                    #if(row.hasErrored):<span class="bs-count bs-count-err" title="Failed to push">#(row.erroredCount) ✗</span>#endif
+                    #else:
+                    <span class="card-meta">—</span>
+                    #endif
                 </td>
                 <td>
                     #if(row.lastSyncStatus == "success"):
@@ -212,6 +222,13 @@ LEARN
 }
 .bs-sync-detail { font-size: .72rem; }
 .bs-log-when { white-space: nowrap; }
+.bs-count {
+    display: inline-block; font-size: .78rem; font-weight: 600;
+    white-space: nowrap; margin-right: .35rem;
+}
+.bs-count-ok { color: var(--green); }
+.bs-count-pending { color: var(--amber); }
+.bs-count-err { color: var(--red); }
 </style>
 <script>
 (function () {

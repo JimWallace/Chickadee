@@ -117,6 +117,18 @@ struct BrightspaceAssignmentRow: Encodable {
     let lastSyncText: String  // formatted time, or "—"
     let lastSyncStatus: String  // "success" | "error" | "skipped" | "none"
     let lastSyncDetail: String?
+    /// Per-assignment student grade-sync rollup across the assignment's result
+    /// and override-only rows: how many are synced, still pending a push, or
+    /// errored.  Lets the instructor see "Lab 1: 28 synced / 2 pending / 1
+    /// errored" at a glance instead of only the single latest log line.
+    let syncedCount: Int
+    let pendingCount: Int
+    let erroredCount: Int
+    /// Precomputed visibility flags — Leaf can't reliably coerce an Int to a
+    /// bool for `#if`, so the rollup chips gate on these instead of `> 0`.
+    let hasSyncActivity: Bool
+    let hasPending: Bool
+    let hasErrored: Bool
 }
 
 /// One row of the sync-activity log.
