@@ -260,6 +260,9 @@ func registerMigrations(on app: Application) {
     // Same ordering constraint as AddBrightSpaceOrgUnitName: a courses column
     // that must exist before AddCourseArchivedAt queries the APICourse model.
     app.migrations.add(AddCourseBrightSpaceSyncUserID())
+    // Same ordering constraint: brightspace_section_category_id must exist
+    // before AddCourseArchivedAt (or any migration) queries the APICourse model.
+    app.migrations.add(AddCourseBrightSpaceSectionCategoryID())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
@@ -342,6 +345,9 @@ func registerMigrations(on app: Application) {
     // which on a fresh DB selects every column the model declares — including
     // these — so the columns have to exist by the time it runs.
     app.migrations.add(AddEnrollmentBrightSpaceSyncStatus())
+    // Same ordering constraint: brightspace_section must exist before
+    // AddCourseEnrollmentRole queries the full APICourseEnrollment model.
+    app.migrations.add(AddEnrollmentBrightSpaceSection())
 
     // Per-course role on each enrollment (Phase 1 of
     // docs/multi-course-roles.md). Behaviour-preserving: backfills role from
@@ -360,8 +366,4 @@ func registerMigrations(on app: Application) {
     // test_setups + users.
     app.migrations.add(CreateBrightSpaceGradeClears())
 
-    // LEARN section sync: which D2L group category maps to "sections" for a
-    // course, and the resulting per-student section name on each enrollment.
-    app.migrations.add(AddCourseBrightSpaceSectionCategoryID())
-    app.migrations.add(AddEnrollmentBrightSpaceSection())
 }
