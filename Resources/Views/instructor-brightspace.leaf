@@ -177,7 +177,7 @@ LEARN
                     <form method="post" action="#(student.unenrollURL)" class="inline-form"
                           onsubmit="return confirm('Remove #(student.displayName) from this course?')">
                         #csrfFormField()
-                        <button class="btn btn-danger" type="submit" title="Remove from course">Delete</button>
+                        <button class="btn action-btn action-danger" type="submit" title="Remove from course">Delete</button>
                     </form>
                 </td>
             </tr>
@@ -219,10 +219,6 @@ LEARN
 }
 .bs-roster-actions { white-space: nowrap; }
 .bs-roster-actions .inline-form { display: inline; }
-.btn-danger {
-    background: var(--red); color: #fff; border-color: var(--red);
-}
-.btn-danger:hover { opacity: .85; }
 </style>
 <script>
 (function () {
