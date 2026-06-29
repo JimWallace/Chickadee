@@ -56,6 +56,13 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_sync_user_id")
     var brightspaceSyncUserID: UUID?
 
+    /// D2L group category ID whose groups represent the "sections" for this
+    /// course (e.g. the numeric ID of the "Lab Sections" category). When set,
+    /// the section-sync sweep maps each student's group membership to
+    /// `APICourseEnrollment.brightspaceSection`. Nil = sync skipped.
+    @OptionalField(key: "brightspace_section_category_id")
+    var brightspaceSectionCategoryID: String?
+
     /// When this course was archived. Set by `toggleCourseArchive` when a
     /// course is archived (and cleared when un-archived). Archiving is
     /// Chickadee's "end of term" signal, so this is the anchor for the

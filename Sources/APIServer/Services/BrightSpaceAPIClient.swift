@@ -69,6 +69,8 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
     case orgUnitLookupFailed(orgUnitID: String, status: Int)
     case gradeObjectsFetchFailed(orgUnitID: String, status: Int)
     case classlistFetchFailed(orgUnitID: String, status: Int)
+    case groupCategoriesFetchFailed(orgUnitID: String, status: Int)
+    case groupsFetchFailed(orgUnitID: String, categoryID: String, status: Int)
 
     var description: String {
         switch self {
@@ -90,6 +92,10 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
             return "BrightSpace grade-objects fetch for org unit '\(id)' failed (HTTP \(s))"
         case .classlistFetchFailed(let id, let s):
             return "BrightSpace classlist fetch for org unit '\(id)' failed (HTTP \(s))"
+        case .groupCategoriesFetchFailed(let id, let s):
+            return "BrightSpace group-categories fetch for org unit '\(id)' failed (HTTP \(s))"
+        case .groupsFetchFailed(let id, let cat, let s):
+            return "BrightSpace groups fetch for org unit '\(id)' category '\(cat)' failed (HTTP \(s))"
         }
     }
 
@@ -162,6 +168,23 @@ private struct GradeObjectJSON: Decodable {
     }
 }
 
+/// A D2L group category (e.g. "Lab Sections"), which contains a set of groups
+/// (e.g. "Lab 1", "Lab 2", …). One category per course is designated as the
+/// section source via `APICourse.brightspaceSectionCategoryID`.
+struct BrightSpaceGroupCategory: Content, Sendable {
+    let categoryID: String
+    let name: String
+}
+
+/// One group within a D2L group category, together with the D2L internal user
+/// IDs of its current members.
+struct BrightSpaceGroup: Content, Sendable {
+    let groupID: String
+    let name: String
+    /// D2L internal user IDs (`Identifier`) of enrolled members.
+    let enrollments: [String]
+}
+
 /// One member of a course's LEARN classlist, reduced to the identity fields
 /// Chickadee can match a roster entry against.  `orgDefinedID` is the student
 /// number (matches `APIUser.studentID`); `username` is the D2L login name.
@@ -232,6 +255,32 @@ protocol BrightSpaceGrading: Sendable {
     func clearGrade(
         orgUnitID: String, gradeObjectID: String, bsUserID: String, on application: Application
     ) async throws
+
+    /// Lists the group categories defined for the org unit (e.g. "Lab Sections",
+    /// "Tutorial Groups"). Used to let the operator configure which category
+    /// maps to Chickadee sections via `APICourse.brightspaceSectionCategoryID`.
+    func fetchGroupCategories(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceGroupCategory]
+
+    /// Lists the groups within a category, including each group's member
+    /// D2L user IDs. Used by the section-sync sweep to populate
+    /// `APICourseEnrollment.brightspaceSection`.
+    func fetchGroups(
+        orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup]
+}
+
+// Default no-op implementations so existing conformers (test fakes) don't
+// need to implement these methods.
+extension BrightSpaceGrading {
+    func fetchGroupCategories(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceGroupCategory] { [] }
+
+    func fetchGroups(
+        orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup] { [] }
 }
 
 // MARK: - Client
@@ -635,6 +684,72 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         return rows.map {
             BrightSpaceClasslistEntry(
                 orgDefinedID: $0.orgDefinedId, username: $0.username, userID: $0.identifier)
+        }
+    }
+
+    // MARK: - Group categories and groups (section sync)
+
+    /// Lists the D2L group categories for the org unit. The instructor selects
+    /// one category to act as the "sections" source for the course.
+    func fetchGroupCategories(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceGroupCategory] {
+        guard !orgUnitID.isEmpty else { return [] }
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
+        let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
+        let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/\(encoded)/groupcategories/"
+        struct CategoryResponse: Decodable {
+            let groupCategoryId: Int
+            let name: String
+            enum CodingKeys: String, CodingKey {
+                case groupCategoryId = "GroupCategoryId"
+                case name = "Name"
+            }
+        }
+        let items: [CategoryResponse] = try await fetchAllPages(
+            firstRawURL: rawURL, on: application
+        ) { status in
+            .groupCategoriesFetchFailed(orgUnitID: orgUnitID, status: status)
+        }
+        return items.map {
+            BrightSpaceGroupCategory(categoryID: String($0.groupCategoryId), name: $0.name)
+        }
+    }
+
+    /// Lists the groups within a category and the D2L user IDs of their members.
+    func fetchGroups(
+        orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup] {
+        guard !orgUnitID.isEmpty, !categoryID.isEmpty else { return [] }
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
+        let encodedOrg =
+            orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
+        let encodedCat =
+            categoryID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? categoryID
+        let rawURL =
+            "\(config.baseURL)/d2l/api/lp/\(lpVersion)/\(encodedOrg)/groupcategories/\(encodedCat)/groups/"
+        struct GroupResponse: Decodable {
+            let groupId: Int
+            let name: String
+            let enrollments: [Int]
+            enum CodingKeys: String, CodingKey {
+                case groupId = "GroupId"
+                case name = "Name"
+                case enrollments = "Enrollments"
+            }
+        }
+        let items: [GroupResponse] = try await fetchAllPages(
+            firstRawURL: rawURL, on: application
+        ) { status in
+            .groupsFetchFailed(orgUnitID: orgUnitID, categoryID: categoryID, status: status)
+        }
+        return items.map {
+            BrightSpaceGroup(
+                groupID: String($0.groupId),
+                name: $0.name,
+                enrollments: $0.enrollments.map(String.init))
         }
     }
 }
