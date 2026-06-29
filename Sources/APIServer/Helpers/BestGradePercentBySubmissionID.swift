@@ -22,7 +22,7 @@ func bestGradePercentBySubmissionID(
     guard !submissionIDs.isEmpty else { return [:] }
     // Chunk to stay under bind-parameter limits (SQLite 32k, Postgres 65,535).
     let chunkSize = 5_000
-    var ids = Array(submissionIDs)
+    let ids = Array(submissionIDs)
     var all: [APIResult] = []
     var index = ids.startIndex
     while index < ids.endIndex {
