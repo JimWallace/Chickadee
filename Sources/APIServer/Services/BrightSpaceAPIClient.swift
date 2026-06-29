@@ -686,7 +686,6 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 orgDefinedID: $0.orgDefinedId, username: $0.username, userID: $0.identifier)
         }
     }
-}
 
     // MARK: - Group categories and groups (section sync)
 
