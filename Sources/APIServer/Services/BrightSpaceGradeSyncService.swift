@@ -106,6 +106,15 @@ func sweepBrightSpaceGradeSync(
     for target in targets {
         let syncRows = target.syncRows
         do {
+            // Explicitly excluded from LEARN sync (instructor chose "Do not
+            // sync") — a deliberate no-op, distinct from "no grade item
+            // configured": clear the pending flag and record nothing, so the row
+            // reads as neither synced nor errored.
+            if target.assignment?.brightspaceSyncExcluded == true {
+                try await clearPendingFlag(syncRows, on: db)
+                processed += syncRows.count
+                continue
+            }
             let pushed = try await pushGrade(
                 for: target, db: db, resolveClient: resolveClient,
                 classlistCache: classlistCache, gradeObjectCache: gradeObjectCache,
@@ -511,8 +520,9 @@ func isRetryableSyncError(_ error: Error) -> Bool {
 
 /// Records a failed group. A transient (retryable) failure keeps the pending
 /// flag set so the next sweep re-attempts it automatically; a terminal failure
-/// clears the flag and waits for a manual "Retry failed". Either way the error
-/// detail is recorded and the synced timestamp cleared.
+/// clears the flag and waits for a manual "Sync now" (which re-queues errored
+/// rows before sweeping). Either way the error detail is recorded and the synced
+/// timestamp cleared.
 private func recordSweepFailure(
     _ rows: [any BrightSpaceSyncFlaggable],
     error: Error,

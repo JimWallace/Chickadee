@@ -619,7 +619,7 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
 
     @Test func transientPushFailureKeepsRowPendingForAutoRetry() async throws {
         // A 503 is transient — the row stays pending so the next sweep retries
-        // automatically, without a manual "Retry failed".
+        // automatically, without a manual "Sync now".
         try await withApp(app) { _ in
             let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
             try await makePendingResult(
@@ -643,7 +643,7 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
 
     @Test func terminalPushFailureClearsPendingFlag() async throws {
         // A 400 is terminal — retrying won't help, so the flag clears and the
-        // row waits for a manual "Retry failed" after the cause is fixed.
+        // row waits for a manual "Sync now" (the hard reset) after the cause is fixed.
         try await withApp(app) { _ in
             let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
             try await makePendingResult(
@@ -661,6 +661,37 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             let result = try #require(try await APIResult.query(on: app.db).first())
             #expect(result.brightspaceSyncPending == false)  // not retried automatically
             #expect(result.brightspaceSyncError != nil)
+        }
+    }
+
+    @Test func excludedAssignmentIsSkippedBySweep() async throws {
+        // "Do not sync": an explicitly-excluded assignment is a deliberate no-op.
+        // The sweep consumes the pending row (clears its flag) but pushes nothing
+        // and records no error — it simply drops out of the queue.
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-1")
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db)
+                    .filter(\.$testSetupID == scenario.setupID).first())
+            assignment.brightspaceSyncExcluded = true
+            try await assignment.save(on: app.db)
+
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 7, total: 10),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading()
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)
+            let pushes = await fake.pushes
+            #expect(pushes.isEmpty)
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncPending == false)
+            #expect((result.brightspaceSyncError ?? "").isEmpty)
+            #expect(result.brightspaceSyncedAt == nil)
         }
     }
 

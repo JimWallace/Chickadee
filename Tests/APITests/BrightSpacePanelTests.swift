@@ -241,23 +241,6 @@ import VaporTesting
         }
     }
 
-    @Test func retryFailedRedirectsWhenUnconfigured() async throws {
-        try await withAssignmentRoutesApp { app in
-            let cookie = try await arLoginAsInstructor(on: app)
-            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
-            try await app.asyncTest(
-                .POST, "/instructor/brightspace/retry-failed",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: sessionCookie)
-                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/instructor/brightspace")
-                })
-        }
-    }
-
     // MARK: - Grade-item mapping save (returnTo routing)
 
     @Test func saveGradeItemReturnToBrightspaceRedirects() async throws {
@@ -285,6 +268,45 @@ import VaporTesting
             let updated = try await APIAssignment.query(on: app.db)
                 .filter(\.$publicID == assignmentID).first()
             #expect(updated?.brightspaceGradeObjectID == "78901")
+        }
+    }
+
+    @Test func doNotSyncExcludesAndEnableRestores() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await arInsertSetup(id: "setup_bs_excl", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_bs_excl", title: "BS Excl", isOpen: true, on: app)
+            let assignmentID = assignment.publicID
+
+            // "Do not sync" → excluded.
+            try await app.asyncTest(
+                .POST, "/instructor/\(assignmentID)/brightspace",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(
+                        ["action": "exclude", "returnTo": "brightspace", "_csrf": csrf],
+                        as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+            let excluded = try await APIAssignment.query(on: app.db)
+                .filter(\.$publicID == assignmentID).first()
+            #expect(excluded?.brightspaceSyncExcluded == true)
+
+            // "Enable sync" → no longer excluded.
+            try await app.asyncTest(
+                .POST, "/instructor/\(assignmentID)/brightspace",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(
+                        ["action": "enable", "returnTo": "brightspace", "_csrf": csrf],
+                        as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+            let enabled = try await APIAssignment.query(on: app.db)
+                .filter(\.$publicID == assignmentID).first()
+            #expect(enabled?.brightspaceSyncExcluded == false)
         }
     }
 
@@ -328,7 +350,7 @@ import VaporTesting
 
     // MARK: - Per-assignment sync counts (instructor LEARN tab)
 
-    @Test func assignmentSyncCountsRenderOnInstructorTab() async throws {
+    @Test func assignmentSyncCountsAreDedupedPerStudent() async throws {
         try await withAssignmentRoutesApp { app in
             // Configured + active course so the dashboard (with the assignment
             // mapping table) renders.
@@ -337,26 +359,29 @@ import VaporTesting
             try await arInsertSetup(id: "setup_bs_counts", on: app)
             _ = try await arInsertAssignment(
                 testSetupID: "setup_bs_counts", title: "Counts Lab", isOpen: true, on: app)
-            let student = try await arInsertStudent(username: "bs_counts_student", on: app)
+
+            // Student A submitted twice and both results synced. The columns count
+            // distinct STUDENTS by their most recent attempt, so A is one synced
+            // student — not two — even though there are two synced result rows.
+            let studentA = try await arInsertStudent(username: "bs_counts_a", on: app)
             _ = try await arInsertSubmission(
-                id: "sub_bs_counts", testSetupID: "setup_bs_counts",
-                userID: try student.requireID(), on: app)
+                id: "sub_bs_a", testSetupID: "setup_bs_counts",
+                userID: try studentA.requireID(), on: app)
+            for id in ["res_a1", "res_a2"] {
+                let synced = APIResult(
+                    id: id, submissionID: "sub_bs_a", collectionJSON: "{}", source: "worker")
+                synced.brightspaceSyncPending = false
+                synced.brightspaceSyncedAt = Date()
+                try await synced.save(on: app.db)
+            }
 
-            // Three result rows on the assignment's setup: one synced, one
-            // pending, one errored → 1 ✓ / 1 ⏳ / 1 ✗.
-            let synced = APIResult(
-                id: "res_synced", submissionID: "sub_bs_counts", collectionJSON: "{}", source: "worker")
-            synced.brightspaceSyncPending = false
-            synced.brightspaceSyncedAt = Date()
-            try await synced.save(on: app.db)
-
-            let pending = APIResult(
-                id: "res_pending", submissionID: "sub_bs_counts", collectionJSON: "{}", source: "worker")
-            pending.brightspaceSyncPending = true
-            try await pending.save(on: app.db)
-
+            // Student B's only result errored → one failed student.
+            let studentB = try await arInsertStudent(username: "bs_counts_b", on: app)
+            _ = try await arInsertSubmission(
+                id: "sub_bs_b", testSetupID: "setup_bs_counts",
+                userID: try studentB.requireID(), on: app)
             let errored = APIResult(
-                id: "res_errored", submissionID: "sub_bs_counts", collectionJSON: "{}", source: "worker")
+                id: "res_b1", submissionID: "sub_bs_b", collectionJSON: "{}", source: "worker")
             errored.brightspaceSyncPending = false
             errored.brightspaceSyncError = "D2L rejected it"
             try await errored.save(on: app.db)
@@ -368,10 +393,11 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    // Synced column shows 1 with ok style; failed column shows 1 with error style.
-                    #expect(html.contains("bs-count-ok"))
-                    #expect(html.contains("bs-count-err"))
                     #expect(html.contains("LEARN Assessment"))
+                    // Synced = 1 distinct student (A), not 2 result rows; Failed = 1 (B).
+                    #expect(html.contains("title=\"Synced to LEARN\">1<"))
+                    #expect(!html.contains("title=\"Synced to LEARN\">2<"))
+                    #expect(html.contains("bs-count-err"))
                 })
         }
     }

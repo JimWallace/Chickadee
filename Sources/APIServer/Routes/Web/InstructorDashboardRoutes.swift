@@ -53,7 +53,6 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.get("brightspace", "grade-objects", use: brightspaceGradeObjects)
         r.post("brightspace", "auto-map", use: brightspaceAutoMap)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
-        r.post("brightspace", "retry-failed", use: brightspaceRetryFailed)
         r.post("brightspace", "reconcile-now", use: brightspaceReconcileNow)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
@@ -302,13 +301,27 @@ struct InstructorDashboardRoutes: RouteCollection {
         let assignment = try await loadAssignment(req)
         struct BSBody: Content {
             var gradeObjectID: String?
+            /// "save" (default) maps the grade item; "exclude" marks the
+            /// assignment do-not-sync; "enable" clears that exclusion. Driven by
+            /// the clicked submit button on the mapping row.
+            var action: String?
             /// "brightspace" → return to the BrightSpace tab (mapping table);
             /// otherwise the assignment edit page (the legacy caller).
             var returnTo: String?
         }
         let body = try req.content.decode(BSBody.self)
-        let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
+        switch body.action ?? "save" {
+        case "exclude":
+            // Keep any existing grade-item mapping so re-enabling restores it;
+            // the sweep skips the assignment while excluded regardless.
+            assignment.brightspaceSyncExcluded = true
+        case "enable":
+            assignment.brightspaceSyncExcluded = false
+        default:  // "save"
+            assignment.brightspaceSyncExcluded = false
+            let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
+        }
         try await assignment.save(on: req.db)
         if body.returnTo == "brightspace" {
             return req.redirect(to: "/instructor/brightspace")

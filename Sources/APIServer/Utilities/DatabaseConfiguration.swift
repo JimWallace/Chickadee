@@ -366,4 +366,9 @@ func registerMigrations(on app: Application) {
     // test_setups + users.
     app.migrations.add(CreateBrightSpaceGradeClears())
 
+    // Explicit "do not sync this assignment to LEARN" flag on assignments,
+    // distinct from an unmapped grade item. Column-only; no migration
+    // full-queries APIAssignment, so ordering is unconstrained.
+    app.migrations.add(AddAssignmentBrightSpaceSyncExcluded())
+
 }
