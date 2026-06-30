@@ -94,7 +94,7 @@ struct ReorderAssignmentsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseID(code: input.courseCode, tool: Self.name, context: context)
+        let courseID = try await resolveCourseIDForWrite(code: input.courseCode, tool: Self.name, context: context)
 
         let ids = input.orderedAssignmentPublicIDs.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)

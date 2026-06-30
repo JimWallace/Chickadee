@@ -78,7 +78,7 @@ struct UpdateAchievementsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         let rows: [AchievementRow]

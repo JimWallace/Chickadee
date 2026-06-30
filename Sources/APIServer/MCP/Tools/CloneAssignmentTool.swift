@@ -113,11 +113,15 @@ struct CloneAssignmentTool: ContentTool {
                     tool: Self.name, detail: "No course found with code \"\(code)\".")
             }
             targetCourseID = try target.requireID()
-            // Must be authorized for the destination course too.
-            try await context.authorizeCourseAccess(targetCourseID, tool: Self.name)
         } else {
             targetCourseID = source.courseID
         }
+        // The clone WRITES a new assignment into the target course, so block an
+        // archived destination (covers both the explicit-target and
+        // default-to-source branches). The source stays read-authorized above —
+        // reviving an archived course's content into a live course is fine; only
+        // the destination is write-gated (#417 Slice D-MCP).
+        try await context.authorizeCourseWriteAccess(targetCourseID, tool: Self.name)
 
         let cloned: AuthoredAssignment
         do {

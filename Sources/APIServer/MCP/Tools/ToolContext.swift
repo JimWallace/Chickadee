@@ -120,37 +120,69 @@ struct ToolContext {
         return assignment
     }
 
-    /// Like `authorizedAssignment`, but additionally blocks the write when the
-    /// assignment's course is archived (admin subjects exempt). Mirrors the web
-    /// side's `requireCourseWriteAccess`: archived courses are read-only for
+    /// Authorizes a *write* to `courseID`: the acting subject must pass
+    /// `authorizeCourseAccess` (MCP-eligible + enrolled, admin included) AND the
+    /// course must not be archived (admins exempt). The MCP analogue of the web
+    /// `requireCourseWriteAccess` — archived courses are read-only for
     /// instructors and TAs, so a content-mutating tool can't drive a write into
-    /// one. Archived courses are already hidden from the MCP listing/resource
-    /// surface (`enrolledCourses`), so this closes the by-public-ID write path
-    /// an agent could still reach with a remembered id (#417, follow-up to
-    /// Slice A — `set_assignment_course_section`).
-    func authorizedAssignmentForWrite(publicID: String, tool: String) async throws -> APIAssignment {
-        let assignment = try await authorizedAssignment(publicID: publicID, tool: tool)
+    /// one. The single chokepoint every MCP write resolver funnels through; the
+    /// *read* resolvers stay on `authorizeCourseAccess` so archived courses
+    /// remain readable (#417 Slice D-MCP).
+    func authorizeCourseWriteAccess(_ courseID: UUID, tool: String) async throws {
+        try await authorizeCourseAccess(courseID, tool: tool)
         let user = try await requireEligibleSubject(tool: tool)
-        guard !user.isAdmin else { return assignment }
-        guard let course = try await APICourse.find(assignment.courseID, on: db) else {
+        guard !user.isAdmin else { return }
+        guard let course = try await APICourse.find(courseID, on: db) else {
             throw MCPToolError.invalidArguments(
-                tool: tool, detail: "The assignment's course could not be found.")
+                tool: tool, detail: "The target course could not be found.")
         }
         guard !course.isArchived else {
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "This course is archived and is read-only.")
         }
+    }
+
+    /// Like `authorizedAssignment`, but authorizes a *write* to the assignment's
+    /// own course (`authorizeCourseWriteAccess`: per-course access + archived
+    /// block, admin-exempt). Archived courses are already hidden from the MCP
+    /// listing/resource surface, so this closes the by-public-ID write path an
+    /// agent could still reach with a remembered id (#417 Slice C/D-MCP).
+    func authorizedAssignmentForWrite(publicID: String, tool: String) async throws -> APIAssignment {
+        let assignment = try await requireAssignment(publicID: publicID, tool: tool)
+        try await authorizeCourseWriteAccess(assignment.courseID, tool: tool)
         return assignment
     }
 
     /// Resolves and authorizes the assignment, then loads its test setup,
     /// throwing the standard `invalidArguments` error if the setup is missing.
+    /// READ entry point — the archived block is NOT applied, so the read tools
+    /// (`get_suite`, `get_notebook`, `get_achievements`, `get_global_inputs`,
+    /// `get_support_files`, `preview_personalization`) that route through it keep
+    /// working on archived courses. Mutating tools use
+    /// `authorizedAssignmentAndSetupForWrite`.
     func authorizedAssignmentAndSetup(
         publicID: String, tool: String
     ) async throws
         -> (assignment: APIAssignment, setup: APITestSetup)
     {
         let assignment = try await authorizedAssignment(publicID: publicID, tool: tool)
+        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
+            throw MCPToolError.invalidArguments(
+                tool: tool, detail: "The assignment's test setup could not be found.")
+        }
+        return (assignment, setup)
+    }
+
+    /// Write variant of `authorizedAssignmentAndSetup`: authorizes a write to the
+    /// assignment's own course (archived block) before loading the setup. Every
+    /// content-mutating suite/manifest/notebook tool resolves through this so an
+    /// agent can't edit an archived course's content by id (#417 Slice D-MCP).
+    func authorizedAssignmentAndSetupForWrite(
+        publicID: String, tool: String
+    ) async throws
+        -> (assignment: APIAssignment, setup: APITestSetup)
+    {
+        let assignment = try await authorizedAssignmentForWrite(publicID: publicID, tool: tool)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
             throw MCPToolError.invalidArguments(
                 tool: tool, detail: "The assignment's test setup could not be found.")

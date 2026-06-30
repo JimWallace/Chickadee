@@ -79,7 +79,7 @@ struct UpdateNotebookTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         try validateNotebookShape(input.notebook, tool: Self.name)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         let data: Data

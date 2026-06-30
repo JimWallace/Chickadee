@@ -81,7 +81,7 @@ struct CreateSuiteSectionTool: ContentTool {
         guard !name.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Section name must not be empty.")
         }
-        let resolved = try await context.authorizedAssignmentAndSetup(
+        let resolved = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
         let newID = UUID().uuidString
         do {
@@ -161,7 +161,7 @@ struct RenameSuiteSectionTool: ContentTool {
         guard !input.sectionID.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
         }
-        let resolved = try await context.authorizedAssignmentAndSetup(
+        let resolved = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
         do {
             try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
@@ -241,7 +241,7 @@ struct DeleteSuiteSectionTool: ContentTool {
         guard !input.sectionID.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
         }
-        let resolved = try await context.authorizedAssignmentAndSetup(
+        let resolved = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
         // Captured inside the mutation closure so the response reflects what
         // actually changed.

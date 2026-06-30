@@ -306,7 +306,7 @@ struct AuthorNotebookCheckTool: ContentTool {
         let tier = try Self.parseTier(input.tier)
         let columnMatch = try Self.parseColumnMatch(input.columnMatch)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
