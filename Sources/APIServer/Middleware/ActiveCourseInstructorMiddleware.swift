@@ -29,14 +29,18 @@ struct ActiveCourseInstructorMiddleware: AsyncMiddleware {
             return try await next.respond(to: request)
         }
 
-        // Everyone else must be an instructor in their active course. Instructor
-        // authority is per-course — the global instructor role no longer grants
-        // it (multi-course-roles Phase 5).
+        // Everyone else must be staff (TA or instructor) in their active course
+        // to enter the instructor area. Authority is per-course — the global
+        // instructor role no longer grants it (multi-course-roles Phase 5). This
+        // gate only opens the *area*; each mutating handler enforces its own
+        // finer floor (content edits/grading at `.ta`, enrollment/deadline/
+        // archive/delete at `.instructor`) via requireCourseWriteAccess (#417
+        // Slice E).
         let state = try await request.resolveActiveCourse(for: user)
         if let activeCourseUUID = state.activeCourseUUID,
             let userID = user.id,
             let role = try await courseRole(of: userID, inCourse: activeCourseUUID, db: request.db),
-            role >= .instructor
+            role >= .ta
         {
             return try await next.respond(to: request)
         }

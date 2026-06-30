@@ -84,6 +84,7 @@ Students
                     <select name="role" class="form-input students-role-select" aria-label="Per-course role"
                             onchange="this.form.submit()">
                         <option value="student"#if(student.role == "student"): selected#endif>Student</option>
+                        <option value="ta"#if(student.role == "ta"): selected#endif>TA</option>
                         <option value="instructor"#if(student.role == "instructor"): selected#endif>Instructor</option>
                     </select>
                 </form>
@@ -249,6 +250,7 @@ Students
                 + '" class="inline-form students-role-form">' + csrfField
                 + '<select name="role" class="form-input students-role-select" aria-label="Per-course role" onchange="this.form.submit()">'
                 + '<option value="student"' + (student.role === 'student' ? ' selected' : '') + '>Student</option>'
+                + '<option value="ta"' + (student.role === 'ta' ? ' selected' : '') + '>TA</option>'
                 + '<option value="instructor"' + (student.role === 'instructor' ? ' selected' : '') + '>Instructor</option>'
                 + '</select></form>';
         }

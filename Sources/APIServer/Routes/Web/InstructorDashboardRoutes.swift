@@ -292,7 +292,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         // assignment is a write to an archived course and is blocked for
         // non-admins (#417, follow-up to Slice A — "clone reads from a
         // possibly-archived source").
-        let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(req)
+        // Cloning creates a *new* assignment (course structure), so it's
+        // instructor-only — unlike the content edits this loader defaults to .ta.
+        let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
         let cloned = try await AssignmentAuthoringService.cloneAssignment(
             source: source,
             sourceSetup: sourceSetup,

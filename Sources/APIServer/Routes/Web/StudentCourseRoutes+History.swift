@@ -24,13 +24,14 @@ extension StudentCourseRoutes {
     @Sendable
     func courseStudentSubmissionsPage(req: Request) async throws -> View {
         let viewer = try req.auth.require(APIUser.self)
-        guard viewer.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "view student submissions")
-        }
         let (course, student) = try await resolveCourseAndStudent(req: req)
         guard let courseID = course.id else {
             throw WebAssignmentError.notFound(resource: "Course")
         }
+        // Per-course staff (TA+) may view a student's submissions — replaces the
+        // old global `isInstructor` guard, which would reject a per-course TA
+        // whose deployment role is student (#417 Slice E).
+        try await requireCourseRole(caller: viewer, courseID: courseID, atLeast: .ta, db: req.db)
 
         // Phase 1: assignments + sections in parallel.  The sections query
         // only needs `courseID`, so it doesn't have to wait for assignments
@@ -345,7 +346,7 @@ extension StudentCourseRoutes {
     @Sendable
     func retestStudentAssignment(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "retest student submissions", requireWrite: true)
+            req: req, action: "retest student submissions", writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
 
@@ -386,7 +387,7 @@ extension StudentCourseRoutes {
     @Sendable
     func resetStudentAssignmentNotebook(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "reset student notebooks", requireWrite: true)
+            req: req, action: "reset student notebooks", writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
@@ -428,7 +429,7 @@ extension StudentCourseRoutes {
         }
 
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "grant deadline extensions", requireWrite: true)
+            req: req, action: "grant deadline extensions", writeFloor: .instructor)
         let (actor, student) = (action.actor, action.student)
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -490,7 +491,7 @@ extension StudentCourseRoutes {
     @Sendable
     func deleteStudentAssignmentExtension(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "revoke deadline extensions", requireWrite: true)
+            req: req, action: "revoke deadline extensions", writeFloor: .instructor)
         let student = action.student
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -529,7 +530,7 @@ extension StudentCourseRoutes {
         }
 
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "override grades", requireWrite: true)
+            req: req, action: "override grades", writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -574,7 +575,7 @@ extension StudentCourseRoutes {
     @Sendable
     func deleteStudentAssignmentGradeOverride(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "clear grade overrides", requireWrite: true)
+            req: req, action: "clear grade overrides", writeFloor: .ta)
         let (student, assignment) = (action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -663,34 +664,37 @@ extension StudentCourseRoutes {
     /// ever changes. `action` carries each handler's original forbidden-message
     /// wording.
     ///
-    /// `requireWrite` adds a per-course write authorization on the assignment's
-    /// **own** course (`requireCourseWriteAccess`: per-course instructor, admin
-    /// bypass, archived-course block). The mutating handlers pass `true` so a
-    /// retest / reset / extension / grade-override can't be driven against an
-    /// archived course — or a course the caller only instructs *elsewhere* — by
-    /// URL, which the active-course group gate can't see (#417, follow-up to
-    /// Slice A). The read-only history page leaves it `false` so archived
-    /// courses stay auditable.
+    /// Authorization is per-course (#417 Slice E): every caller must be staff
+    /// (TA or instructor) in the assignment's **own** course — `requireCourseRole
+    /// (atLeast: .ta)`, which replaces the old global `isInstructor` guard that
+    /// would wrongly reject a per-course TA whose deployment role is student.
+    /// This covers the read-only history page.
+    ///
+    /// `writeFloor`, when non-nil, additionally authorizes a *write* on that
+    /// course via `requireCourseWriteAccess` (archived-course block + the
+    /// action's minimum role): grading actions (retest / reset / grade-override)
+    /// pass `.ta`; deadline grants (extensions) pass `.instructor`. The read-only
+    /// history page leaves it nil so archived courses stay auditable.
     ///
     /// Error semantics match the guard chain each handler previously
     /// inlined: `notFound("Assignment '<id>'")` when the assignment is
     /// missing, belongs to a different course, or (unreachable for a
     /// DB-loaded model) the student row has no id.
     fileprivate func resolveStudentAssignmentAction(
-        req: Request, action: String, requireWrite: Bool = false
+        req: Request, action: String, writeFloor: CourseRole? = nil
     ) async throws -> StudentAssignmentActionContext {
         let actor = try req.auth.require(APIUser.self)
-        guard actor.isInstructor else {
-            throw WebAssignmentError.forbidden(action: action)
-        }
         let (course, student) = try await resolveCourseAndStudent(req: req)
         let assignment = try await loadAssignment(req)
         guard assignment.courseID == course.id, let studentID = student.id else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
         }
-        if requireWrite {
+        // Per-course staff gate (TA+ in THIS course; admin bypass).
+        try await requireCourseRole(
+            caller: actor, courseID: assignment.courseID, atLeast: .ta, db: req.db)
+        if let writeFloor {
             try await requireCourseWriteAccess(
-                caller: actor, courseID: assignment.courseID, db: req.db)
+                caller: actor, courseID: assignment.courseID, atLeast: writeFloor, db: req.db)
         }
         return StudentAssignmentActionContext(
             actor: actor, course: course, student: student,
