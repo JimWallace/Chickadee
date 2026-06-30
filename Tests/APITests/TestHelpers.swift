@@ -50,7 +50,18 @@ func configureTestDatabase(_ app: Application) async throws {
 
     registerMigrations(on: app)
 
+    // FluentKit logs two info lines per migration ("Starting/Finished prepare").
+    // Across the API suite's ~1,100 per-test Applications × 50+ migrations that
+    // is >120k log lines that bury real test failures in CI output. Quiet just
+    // the migration burst — the test body keeps its normal level (restored
+    // below), so nothing that inspects warnings/errors (the query_logs / ring
+    // buffer tests) is affected. Override the floor with TEST_LOG_LEVEL (e.g.
+    // =info) when debugging migrations.
+    let priorLogLevel = app.logger.logLevel
+    app.logger.logLevel =
+        Environment.get("TEST_LOG_LEVEL").flatMap(Logger.Level.init(rawValue:)) ?? .warning
     try await app.autoMigrate()
+    app.logger.logLevel = priorLogLevel
 }
 
 struct TestPostgresSchemaKey: StorageKey {

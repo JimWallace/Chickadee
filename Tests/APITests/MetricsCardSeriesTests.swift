@@ -99,12 +99,23 @@ import VaporTesting
     @Test func runnerLoadPointsSumConcurrentRunners() async throws {
         try await withApp(app) { _ in
             let now = Date()
-            // Two runners reporting in the same 5-minute bucket (~10 min ago):
-            // r1 busy 2/4, r2 busy 1/4 → summed 3/8 in that bucket.
-            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-600), active: 2, max: 4)
-            try await saveSnapshot(runner: "r2", at: now.addingTimeInterval(-590), active: 1, max: 4)
-            // A later, quieter bucket (~3 min ago): only r1, busy 0/4.
-            try await saveSnapshot(runner: "r1", at: now.addingTimeInterval(-180), active: 0, max: 4)
+            // Buckets are epoch-aligned (floor(epochSeconds / 300)), so two raw
+            // `now`-relative offsets 10 s apart share a bucket only when `now`
+            // doesn't place a 300 s boundary between them — a ~3 % wall-clock
+            // flake. Anchor to the start of the bucket containing `now` and place
+            // each snapshot safely inside its target bucket instead.
+            let bucket = 300.0
+            let anchor = Date(
+                timeIntervalSince1970: (now.timeIntervalSince1970 / bucket).rounded(.down) * bucket)
+            // Two runners in the SAME bucket: r1 busy 2/4, r2 busy 1/4 → summed
+            // 3/8. Both sit well inside [anchor − 2·bucket, anchor − bucket).
+            try await saveSnapshot(
+                runner: "r1", at: anchor.addingTimeInterval(-2 * bucket + 60), active: 2, max: 4)
+            try await saveSnapshot(
+                runner: "r2", at: anchor.addingTimeInterval(-2 * bucket + 120), active: 1, max: 4)
+            // A later, quieter bucket: only r1, busy 0/4, inside [anchor − bucket, anchor).
+            try await saveSnapshot(
+                runner: "r1", at: anchor.addingTimeInterval(-bucket + 60), active: 0, max: 4)
 
             let points = try await app.diagnostics.runnerLoadPoints(
                 since: now.addingTimeInterval(-3600), on: app.db)
