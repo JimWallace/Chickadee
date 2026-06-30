@@ -262,9 +262,14 @@ struct TestSetupRoutes: RouteCollection {
     @Sendable
     func uploadTestSetup(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
-
         let upload = try req.content.decode(TestSetupUpload.self)
+
+        // Scope the create to the target course: only an instructor of that
+        // course (and not an archived one) may upload a setup into it. Replaces
+        // the old global `isInstructor` check, which trusted the client-supplied
+        // `courseID` and let any global instructor create a setup — carrying
+        // secret tests + solutions — in ANY course (#417 Slice D).
+        try await requireCourseWriteAccess(caller: caller, courseID: upload.courseID, db: req.db)
 
         // Validate manifest JSON and schema version.
         let manifestData = Data(upload.manifest.utf8)
@@ -353,13 +358,22 @@ struct TestSetupRoutes: RouteCollection {
     @Sendable
     func downloadTestSetup(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
 
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
+
+        // This streams the FULL setup zip — secret-tier test scripts and the
+        // reference solution — so scope it to the setup's own course rather than
+        // the old global `isInstructor` check, which let any instructor pull
+        // another course's secret tests + solution by id. Instructor-level read
+        // (admin bypass); the enrollment-gated student path is the separate
+        // /browser-runner download (#417 Slice D). Sibling reads getAssignment /
+        // downloadAssignment already scope via requireCourseEnrollment.
+        try await requireCourseInstructor(caller: caller, courseID: setup.courseID, db: req.db)
+
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 
@@ -491,13 +505,18 @@ struct TestSetupRoutes: RouteCollection {
     @Sendable
     func saveAssignment(req: Request) async throws -> HTTPStatus {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
 
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
+
+        // Overwriting the setup's notebook on disk is a per-course write: scope
+        // it to the setup's own course (and block archived). Replaces the old
+        // global `isInstructor` check, which let any global instructor overwrite
+        // any course's notebook by :testSetupID (#417 Slice D).
+        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, db: req.db)
 
         // Collect the raw request body as Data.
         guard let bodyBuffer = req.body.data,

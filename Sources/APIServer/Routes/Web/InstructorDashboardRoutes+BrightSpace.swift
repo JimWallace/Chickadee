@@ -447,7 +447,11 @@ extension InstructorDashboardRoutes {
     /// end-of-term / first-time backfill button.
     @Sendable
     func brightspacePushAllForAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        // Unlike its active-course-scoped BrightSpace siblings, this takes
+        // :assignmentID, so it's drivable cross-course / against an archived
+        // course by URL — scope the grade-push backfill to the assignment's own
+        // course (#417 Slice D).
+        let assignment = try await loadAssignmentForWrite(req)
         let submissionIDs = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)

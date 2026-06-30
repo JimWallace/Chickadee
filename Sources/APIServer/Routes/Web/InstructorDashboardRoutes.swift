@@ -184,7 +184,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         do {
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
@@ -202,6 +202,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         struct ReorderBody: Content {
             var assignmentIDs: [String]
         }
+        let caller = try req.auth.require(APIUser.self)
         let body = try req.content.decode(ReorderBody.self)
         let orderedIDs = Array(NSOrderedSet(array: body.assignmentIDs).compactMap { $0 as? String })
         guard !orderedIDs.isEmpty else { return .ok }
@@ -223,6 +224,15 @@ struct InstructorDashboardRoutes: RouteCollection {
             )
         }
 
+        // Reordering writes sortOrder, so it's a per-course write: authorize the
+        // caller for every distinct course the payload touches. Without this an
+        // instructor could reorder another course's (or an archived course's)
+        // assignments by submitting their IDs — the active-course group gate
+        // never sees the target courses here (#417 Slice D).
+        for courseID in Set(assignments.map(\.courseID)) {
+            try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+        }
+
         for (index, rawID) in orderedIDs.enumerated() {
             guard let assignment = byID[rawID] else { continue }
             assignment.sortOrder = index + 1
@@ -239,7 +249,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             var status: String
         }
 
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
 
         let body = try req.content.decode(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
@@ -262,7 +272,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -298,7 +308,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func saveBrightSpaceGradeObjectID(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         struct BSBody: Content {
             var gradeObjectID: String?
             /// "save" (default) maps the grade item; "exclude" marks the
@@ -333,7 +343,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req)
         let setupID = assignment.testSetupID
 
         // Delete related submissions and their result rows for this setup.
@@ -368,10 +378,15 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func deleteUnpublishedSetup(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
         let setupID = req.parameters.get("setupID") ?? ""
         guard let setup = try await APITestSetup.find(setupID, on: req.db) else {
             throw WebAssignmentError.notFound(resource: "Test setup '\(setupID)'")
         }
+        // Scope the delete to the setup's own course (the :setupID param-taking
+        // route is otherwise drivable cross-course / against an archived course;
+        // the active-course group gate can't see the setup's course) (#417 Slice D).
+        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, db: req.db)
         // Only allow deleting setups that have no associated assignment.
         let hasAssignment =
             try await APIAssignment.query(on: req.db)

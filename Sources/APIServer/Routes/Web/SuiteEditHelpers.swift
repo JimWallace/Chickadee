@@ -92,7 +92,14 @@ func loadAssignmentForWrite(_ req: Request) async throws -> APIAssignment {
 /// linked to an `APIAssignment` yet — same row shape, no parent.
 /// Throws `.badRequest` if the parameter is missing/empty,
 /// `.notFound` if no row matches.
-func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
+///
+/// `requireWrite` authorizes the caller for a per-course write on the draft's
+/// own course (`requireCourseWriteAccess`). The draft suite/script/section edit
+/// handlers pass `true` so an instructor can't mutate another course's draft —
+/// or one in an archived course — by guessing its `draftID`; the draft-read
+/// handlers (`getDraftSuite`, `downloadDraftSetupItem`) leave it `false`
+/// (#417 Slice D).
+func loadDraftSetup(_ req: Request, requireWrite: Bool = false) async throws -> APITestSetup {
     guard let draftID = try? req.query.get(String.self, at: "draftID"),
         !draftID.isEmpty
     else {
@@ -100,6 +107,10 @@ func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
     }
     guard let setup = try await APITestSetup.find(draftID, on: req.db) else {
         throw WebAssignmentError.notFound(resource: "Draft '\(draftID)'")
+    }
+    if requireWrite {
+        let caller = try req.auth.require(APIUser.self)
+        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, db: req.db)
     }
     return setup
 }

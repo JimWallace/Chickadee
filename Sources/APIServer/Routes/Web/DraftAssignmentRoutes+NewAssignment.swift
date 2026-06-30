@@ -654,6 +654,16 @@ extension DraftAssignmentRoutes {
             !draftID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             let existing = try await APITestSetup.find(draftID, on: req.db)
         {
+            // Authorize against the draft's OWN course before handing it to the
+            // mutating service: a supplied `draftID` may point at another
+            // course's draft (or an archived course's), which the active-course
+            // group gate can't see. This closes the same cross-course/archived
+            // draft-write hole the narrower draft suite/script/section handlers
+            // gate via `loadDraftSetup(requireWrite:)` (#417 Slice D). The
+            // create-new branch below stays in the caller's active course, which
+            // `resolveActiveCourse` already proves non-archived + instructor-held.
+            let caller = try req.auth.require(APIUser.self)
+            try await requireCourseWriteAccess(caller: caller, courseID: existing.courseID, db: req.db)
             return existing
         }
 

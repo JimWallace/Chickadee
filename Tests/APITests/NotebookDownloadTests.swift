@@ -220,12 +220,29 @@ import VaporTesting
             // Obtain a valid CSRF token so the middleware passes and the role check fires.
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
 
-            // POST to /api/v1/testsetups as a student should return 403 (instructor-only).
+            // POST to /api/v1/testsetups as a student should return 403. Per-course
+            // authorization (#417 Slice D) checks the *target* course, so the body
+            // must now carry a decodable `courseID` (the student holds no instructor
+            // enrolment there, so `requireCourseWriteAccess` rejects it). The
+            // manifest/files content is irrelevant — the 403 fires before validation.
             let boundary = "RoleCheck"
-            var body = ByteBufferAllocator().buffer(capacity: 256)
+            let manifest =
+                #"{"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}"#
+            var body = ByteBufferAllocator().buffer(capacity: 512)
             body.writeString("--\(boundary)\r\n")
             body.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
             body.writeString(csrf)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"manifest\"\r\n\r\n")
+            body.writeString(manifest)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString("Content-Disposition: form-data; name=\"courseID\"\r\n\r\n")
+            body.writeString(UUID().uuidString)
+            body.writeString("\r\n--\(boundary)\r\n")
+            body.writeString(
+                "Content-Disposition: form-data; name=\"files\"; filename=\"setup.zip\"\r\n"
+                    + "Content-Type: application/zip\r\n\r\n")
+            body.writeString("PK")
             body.writeString("\r\n--\(boundary)--\r\n")
 
             try await app.asyncTest(
