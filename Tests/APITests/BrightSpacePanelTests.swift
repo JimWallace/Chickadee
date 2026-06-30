@@ -271,7 +271,7 @@ import VaporTesting
         }
     }
 
-    @Test func doNotSyncExcludesAndEnableRestores() async throws {
+    @Test func doNotSyncDropdownTokenExcludesAndMappingRestores() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
@@ -280,33 +280,39 @@ import VaporTesting
                 testSetupID: "setup_bs_excl", title: "BS Excl", isOpen: true, on: app)
             let assignmentID = assignment.publicID
 
-            // "Do not sync" → excluded.
+            // Selecting "Do not sync" in the dropdown submits the reserved token →
+            // the assignment is excluded and any grade-item mapping is cleared.
             try await app.asyncTest(
                 .POST, "/instructor/\(assignmentID)/brightspace",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     try req.content.encode(
-                        ["action": "exclude", "returnTo": "brightspace", "_csrf": csrf],
+                        [
+                            "gradeObjectID": BrightspaceSync.doNotSyncToken,
+                            "returnTo": "brightspace", "_csrf": csrf,
+                        ],
                         as: .urlEncodedForm)
                 },
                 afterResponse: { res in #expect(res.status == .seeOther) })
             let excluded = try await APIAssignment.query(on: app.db)
                 .filter(\.$publicID == assignmentID).first()
             #expect(excluded?.brightspaceSyncExcluded == true)
+            #expect(excluded?.brightspaceGradeObjectID == nil)
 
-            // "Enable sync" → no longer excluded.
+            // Picking a real grade item again clears the exclusion.
             try await app.asyncTest(
                 .POST, "/instructor/\(assignmentID)/brightspace",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     try req.content.encode(
-                        ["action": "enable", "returnTo": "brightspace", "_csrf": csrf],
+                        ["gradeObjectID": "78901", "returnTo": "brightspace", "_csrf": csrf],
                         as: .urlEncodedForm)
                 },
                 afterResponse: { res in #expect(res.status == .seeOther) })
             let enabled = try await APIAssignment.query(on: app.db)
                 .filter(\.$publicID == assignmentID).first()
             #expect(enabled?.brightspaceSyncExcluded == false)
+            #expect(enabled?.brightspaceGradeObjectID == "78901")
         }
     }
 

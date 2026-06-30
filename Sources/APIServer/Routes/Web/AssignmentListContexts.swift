@@ -104,6 +104,10 @@ struct InstructorBrightspaceContext: Encodable {
     /// gates the top-bar "Sync now" button. Precomputed so the template branches
     /// on a flat bool (LeafKit 1.14.2 mis-parses `&&` / nested `#if`).
     let canSyncNow: Bool
+    /// The reserved value the grade-item dropdown submits for the "Do not sync"
+    /// option (`BrightspaceSync.doNotSyncToken`), surfaced so the page JS uses
+    /// the one server-side source of truth instead of a duplicated literal.
+    let doNotSyncToken: String
     let assignmentRows: [BrightspaceAssignmentRow]
     let hasAssignments: Bool
     let logRows: [BrightspaceLogRow]
@@ -123,15 +127,25 @@ struct InstructorBrightspaceContext: Encodable {
     let hasUnreachable: Bool
 }
 
+/// Constants shared between the BrightSpace grade-sync server code and the
+/// instructor LEARN tab's page JS.
+enum BrightspaceSync {
+    /// Reserved value the grade-item dropdown submits when the instructor picks
+    /// the "Do not sync" option. The save handler maps it to
+    /// `brightspaceSyncExcluded` and never stores it; the page JS uses it (via
+    /// `doNotSyncToken` in the context) to recognise the option. Not a valid D2L
+    /// grade-object ID, so it can't collide with a real mapping.
+    static let doNotSyncToken = "__do_not_sync__"
+}
+
 /// One assignment's BrightSpace grade-item mapping + its latest sync state.
 struct BrightspaceAssignmentRow: Encodable {
     let assignmentID: String  // publicID
     let title: String
-    let gradeObjectID: String  // "" when unmapped
-    /// True when the instructor has explicitly chosen "Do not sync" for this
-    /// assignment — the mapping cell shows a pill + "Enable sync" instead of the
-    /// grade-item combobox, and the sweep skips it.
-    let syncExcluded: Bool
+    /// The value to prefill the grade-item combobox with: a D2L grade-object ID,
+    /// the `BrightspaceSync.doNotSyncToken` (when the assignment is excluded), or
+    /// "" when unmapped. The page JS resolves an ID to its display name on load.
+    let gradeFieldValue: String
     let lastSyncText: String  // formatted time, or "—"
     let lastSyncStatus: String  // "success" | "error" | "skipped" | "none"
     let lastSyncDetail: String?
