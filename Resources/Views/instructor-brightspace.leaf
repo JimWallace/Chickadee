@@ -11,6 +11,13 @@ LEARN
 
 #if(hasActiveCourse):
 <div class="bs-tabbar">
+    #if(canSyncNow):
+    <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
+        #csrfFormField()
+        <button class="btn btn-primary" type="submit"
+                title="Re-queue any failed grades and push every pending grade to LEARN now">Sync now</button>
+    </form>
+    #endif
     <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
 </div>
 #endif
@@ -28,22 +35,6 @@ LEARN
 #if(flashError):
 <div class="form-error">#(flashError)</div>
 #endif
-
-<!-- ── Summary (dashboard) ────────────────────────────────── -->
-<section class="bs-section">
-    #if(!courseIsArchived):
-    <div class="bs-summary-actions">
-        <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
-            #csrfFormField()
-            <button class="btn btn-primary" type="submit">Sync now</button>
-        </form>
-        <form method="post" action="/instructor/brightspace/retry-failed" class="inline-form">
-            #csrfFormField()
-            <button class="btn action-btn" type="submit">Retry failed</button>
-        </form>
-    </div>
-    #endif
-</section>
 
 <!-- ── Assignment → grade-item mapping ────────────────────── -->
 <section class="bs-section">
@@ -66,8 +57,8 @@ LEARN
             <tr>
                 <th>Assignment</th>
                 <th>LEARN Assessment</th>
-                <th class="bs-col-synced">Synced</th>
-                <th class="bs-col-failed">Failed</th>
+                <th class="bs-col-synced" title="Students whose most recent grade sync reached LEARN">Synced</th>
+                <th class="bs-col-failed" title="Students whose most recent grade sync failed — these need a fix">Failed</th>
                 <th>Last sync</th>
                 <th>Actions</th>
             </tr>
@@ -77,6 +68,20 @@ LEARN
             <tr>
                 <td><strong>#(row.title)</strong></td>
                 <td>
+                    #if(row.syncExcluded):
+                    <div class="bs-excluded-cell">
+                        <span class="tier bs-donotsync-pill" title="This assignment's grades are not sent to LEARN">Do not sync</span>
+                        #if(!courseIsArchived):
+                        <form method="post" action="/instructor/#(row.assignmentID)/brightspace" class="inline-form">
+                            #csrfFormField()
+                            <input type="hidden" name="returnTo" value="brightspace">
+                            <input type="hidden" name="action" value="enable">
+                            <button class="btn action-btn" type="submit"
+                                    title="Resume sending this assignment's grades to LEARN">Enable sync</button>
+                        </form>
+                        #endif
+                    </div>
+                    #else:
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace"
                           class="bs-grade-form" data-assignment-id="#(row.assignmentID)">
                         #csrfFormField()
@@ -87,8 +92,14 @@ LEARN
                                id="bs-go-#(row.assignmentID)" list="bs-grade-objects"
                                value="#(row.gradeObjectID)" placeholder="Search assessments…"
                                data-raw-id="#(row.gradeObjectID)" autocomplete="off">
-                        <button class="btn action-btn" type="submit">Save</button>
+                        <button class="btn action-btn" type="submit" name="action" value="save">Save</button>
+                        #if(!courseIsArchived):
+                        <button class="btn action-btn bs-donotsync-btn" type="submit"
+                                name="action" value="exclude" formnovalidate
+                                title="Exclude this assignment from LEARN grade sync">Do not sync</button>
+                        #endif
                     </form>
+                    #endif
                 </td>
                 <td class="bs-col-synced">
                     #if(row.hasSyncActivity):
@@ -170,14 +181,19 @@ LEARN
             <tr>
                 <td>#(student.displayName)</td>
                 <td><code>#(student.username)</code></td>
-                <td class="bs-issue-cell" title="#(student.detail)">#(student.detail)</td>
+                <td class="bs-issue-cell" title="#(student.detail)">Couldn't match to LEARN</td>
                 <td class="bs-roster-actions">
-                    <a class="btn action-btn" href="/instructor/students?highlight=#(student.userID)"
-                       title="Go to Students tab to fix this student's LEARN ID">Match</a>
+                    <a class="btn action-btn action-btn-icon" href="/instructor/students?highlight=#(student.userID)"
+                       title="Match this student's LEARN ID" aria-label="Match this student's LEARN ID">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    </a>
                     <form method="post" action="#(student.unenrollURL)" class="inline-form"
                           onsubmit="return confirm('Remove #(student.displayName) from this course?')">
                         #csrfFormField()
-                        <button class="btn action-btn action-danger" type="submit" title="Remove from course">Delete</button>
+                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
+                                title="Remove from course" aria-label="Remove from course">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        </button>
                     </form>
                 </td>
             </tr>
@@ -197,13 +213,12 @@ LEARN
 .bs-h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .6rem; }
 .bs-mapping-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 .bs-mapping-head .bs-h2 { margin: 0; }
-.bs-summary-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
-.bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
+.bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; flex-wrap: wrap; }
 .bs-grade-input { width: 14rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
-@media (max-width: 640px) {
-    .bs-grade-form { flex-wrap: wrap; }
-}
+.bs-donotsync-btn { color: var(--gray-600); }
+.bs-excluded-cell { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.bs-donotsync-pill { color: var(--gray-600); }
 .bs-sync-detail { font-size: .72rem; }
 .bs-count {
     display: inline-block; font-size: .88rem; font-weight: 600;

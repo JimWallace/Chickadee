@@ -11,8 +11,7 @@
 //   GET  /instructor/brightspace                       → instructor-brightspace.leaf
 //   POST /instructor/brightspace/test                  → whoami connection test (JSON)
 //   GET  /instructor/brightspace/grade-objects         → [BrightSpaceGradeObject] (dropdown)
-//   POST /instructor/brightspace/sync-now              → run a grade-sync sweep immediately
-//   POST /instructor/brightspace/retry-failed          → re-queue errored pushes
+//   POST /instructor/brightspace/sync-now              → hard reset: re-queue errored pushes, then sweep immediately
 //   POST /instructor/brightspace/reconcile-now         → re-check roster readiness vs LEARN
 //   POST /instructor/:assignmentID/brightspace/push-all → re-push every grade for one assignment
 
@@ -347,10 +346,57 @@ extension InstructorDashboardRoutes {
 
     // MARK: - POST /instructor/brightspace/sync-now
 
+    /// "Sync now" is a hard reset, not just an early trigger of the 60-second
+    /// reaper: it first re-queues every push that previously failed *terminally*
+    /// (a D2L 4xx, a since-fixed grade item, a student newly added to the
+    /// classlist) — which the auto-sweep deliberately leaves alone — and then
+    /// runs an immediate sweep so both the retried failures and anything pending
+    /// push right away. (Transient failures already retry on their own, so they
+    /// need no special handling here.)
     @Sendable
     func brightspaceSyncNow(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let courseState = try await req.resolveActiveCourse(for: user)
+        if let courseUUID = courseState.activeCourseUUID {
+            try await requeueErroredGradePushes(req: req, courseUUID: courseUUID)
+        }
         await runImmediateBrightspaceSweep(req: req)
         return req.redirect(to: "/instructor/brightspace")
+    }
+
+    /// Clears the recorded error and re-flags as pending every grade-sync row in
+    /// the course (result rows and override-only rows) that previously errored,
+    /// back-dating `pendingSince` so the next sweep retries it immediately. The
+    /// "hard reset" half of "Sync now".
+    private func requeueErroredGradePushes(req: Request, courseUUID: UUID) async throws {
+        let resultKeys = try await courseStudentResultIDs(req: req, courseUUID: courseUUID)
+        let results =
+            resultKeys.isEmpty
+            ? []
+            : try await APIResult.query(on: req.db)
+                .filter(\.$submissionID ~~ resultKeys)
+                .all()
+        for result in results where (result.brightspaceSyncError ?? "").isEmpty == false {
+            result.brightspaceSyncPending = true
+            result.brightspacePendingSince = Date.distantPast
+            result.brightspaceSyncError = nil
+            try await result.save(on: req.db)
+        }
+        // Errored override-only pushes (no-submission students) live on the
+        // override row, not a result row — re-queue those too.
+        let setupIDs = try await courseSetupIDs(req: req, courseUUID: courseUUID)
+        let overrides =
+            setupIDs.isEmpty
+            ? []
+            : try await APIGradeOverride.query(on: req.db)
+                .filter(\.$testSetupID ~~ setupIDs)
+                .all()
+        for override in overrides where (override.brightspaceSyncError ?? "").isEmpty == false {
+            override.brightspaceSyncPending = true
+            override.brightspacePendingSince = Date.distantPast
+            override.brightspaceSyncError = nil
+            try await override.save(on: req.db)
+        }
     }
 
     // MARK: - POST /instructor/brightspace/reconcile-now
@@ -392,46 +438,6 @@ extension InstructorDashboardRoutes {
             req.session.data["bs_flash_error"] =
                 "Couldn't reconcile against LEARN: \(error.localizedDescription)"
         }
-        return req.redirect(to: "/instructor/brightspace")
-    }
-
-    // MARK: - POST /instructor/brightspace/retry-failed
-
-    @Sendable
-    func brightspaceRetryFailed(req: Request) async throws -> Response {
-        let user = try req.auth.require(APIUser.self)
-        let courseState = try await req.resolveActiveCourse(for: user)
-        if let courseUUID = courseState.activeCourseUUID {
-            let setupIDs = try await courseStudentResultIDs(req: req, courseUUID: courseUUID)
-            let results =
-                setupIDs.isEmpty
-                ? []
-                : try await APIResult.query(on: req.db)
-                    .filter(\.$submissionID ~~ setupIDs)
-                    .all()
-            for result in results where (result.brightspaceSyncError ?? "").isEmpty == false {
-                result.brightspaceSyncPending = true
-                result.brightspacePendingSince = Date.distantPast
-                result.brightspaceSyncError = nil
-                try await result.save(on: req.db)
-            }
-            // Errored override-only pushes (no-submission students) live on the
-            // override row, not a result row — re-queue those too.
-            let setupIDList = try await courseSetupIDs(req: req, courseUUID: courseUUID)
-            let overrides =
-                setupIDList.isEmpty
-                ? []
-                : try await APIGradeOverride.query(on: req.db)
-                    .filter(\.$testSetupID ~~ setupIDList)
-                    .all()
-            for override in overrides where (override.brightspaceSyncError ?? "").isEmpty == false {
-                override.brightspaceSyncPending = true
-                override.brightspacePendingSince = Date.distantPast
-                override.brightspaceSyncError = nil
-                try await override.save(on: req.db)
-            }
-        }
-        await runImmediateBrightspaceSweep(req: req)
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -564,6 +570,7 @@ extension InstructorDashboardRoutes {
             syncIdentityName: nil, syncIdentityIsMe: false,
             syncIdentityConnected: false, syncIdentityNeedsReconnect: false,
             flashSuccess: flashSuccess, flashError: flashError,
+            canSyncNow: false,
             assignmentRows: [], hasAssignments: false,
             logRows: [], hasLog: false,
             summary: BrightspaceSyncSummary(synced: 0, pending: 0, errored: 0),
@@ -684,6 +691,7 @@ extension InstructorDashboardRoutes {
             syncIdentityConnected: syncIdentityConnected,
             syncIdentityNeedsReconnect: syncIdentityName != nil && !syncIdentityConnected,
             flashSuccess: flashSuccess, flashError: flashError,
+            canSyncNow: syncEnabled && !course.isArchived,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
             logRows: logRows, hasLog: !logRows.isEmpty,
             summary: summary, canReconcile: courseLinked && !course.isArchived,
@@ -706,6 +714,7 @@ extension InstructorDashboardRoutes {
                 assignmentID: a.publicID,
                 title: a.title,
                 gradeObjectID: a.brightspaceGradeObjectID ?? "",
+                syncExcluded: a.brightspaceSyncExcluded == true,
                 lastSyncText: last?.attemptedAt.map { fmt.string(from: $0) } ?? "—",
                 lastSyncStatus: last?.status ?? "none",
                 lastSyncDetail: last?.detail,
@@ -718,40 +727,60 @@ extension InstructorDashboardRoutes {
         }
     }
 
-    /// Per-test-setup grade-sync rollup, accumulated from both result rows and
-    /// override-only rows so the count reflects every gradeable student.
+    /// Per-test-setup grade-sync rollup, counting **distinct students** (not
+    /// rows), each bucketed once by the state of their most recent grade-sync
+    /// attempt.  The buckets are mutually exclusive so a student shows up in
+    /// exactly one — the instructor reads "Synced" as "students currently
+    /// delivered to LEARN" and "Failed" as "students who need a fix", not a
+    /// running tally of every historical push.
     private struct SetupSyncCounts {
         var synced = 0
         var pending = 0
         var errored = 0
 
-        /// Buckets one row by its sync bookkeeping columns. A recorded error
-        /// wins over a stale `syncedAt` so a row that synced and later failed
-        /// reads as errored, matching the headline cards.
-        mutating func add(pending isPending: Bool, error: String?, syncedAt: Date?) {
-            if isPending { pending += 1 }
+        /// Buckets one student by their latest attempt's state. A recorded error
+        /// means the most recent push failed (needs attention); else a synced
+        /// timestamp means it's delivered; else it's still queued.
+        mutating func add(error: String?, syncedAt: Date?, pending isPending: Bool) {
             if (error ?? "").isEmpty == false {
                 errored += 1
             } else if syncedAt != nil {
                 synced += 1
+            } else if isPending {
+                pending += 1
             }
         }
     }
 
-    /// Computes the headline summary counts (synced / pending / errored) and the
-    /// same counts bucketed per test setup (for the per-assignment rollup).
-    /// Counts span both result rows and override-only rows (no-submission
-    /// students whose grade rides on the override row), so override-only grades
-    /// show up in the totals.
+    /// One student's most-recent grade-sync attempt for a test setup, used to
+    /// dedupe the per-assignment counts down to distinct students.
+    private struct LatestSyncState {
+        var attemptedAt: Date
+        var error: String?
+        var syncedAt: Date?
+        var pending: Bool
+    }
+
+    /// Computes the per-assignment Synced/Failed rollup and the headline summary,
+    /// counting **distinct students by their most recent attempt** rather than
+    /// summing every historical result row.  For a student with submissions, the
+    /// latest result row (by `receivedAt`) reflects the outcome of their last
+    /// grade push; a no-submission student's grade rides on the override row, so
+    /// that row's state is used when no result covers them.
     private func brightspaceSyncSummary(
         req: Request,
         courseUUID: UUID,
         setupIDs: [String]
     ) async throws -> (BrightspaceSyncSummary, [String: SetupSyncCounts]) {
-        var perSetup: [String: SetupSyncCounts] = [:]
+        // (setupID, userID) → that student's most-recent sync state.
+        struct StudentKey: Hashable {
+            let setupID: String
+            let userID: UUID
+        }
+        var latestByStudent: [StudentKey: LatestSyncState] = [:]
 
-        // Result-level sync state across the course's student submissions. Keep
-        // the submission → test-setup map so each result buckets to its setup.
+        // Map each student submission to its (setup, student) so a result row
+        // resolves to the student whose grade it carries.
         let submissions =
             setupIDs.isEmpty
             ? []
@@ -759,11 +788,15 @@ extension InstructorDashboardRoutes {
                 .filter(\.$testSetupID ~~ setupIDs)
                 .filter(\.$kind == APISubmission.Kind.student)
                 .all()
-        var setupBySubmissionID: [String: String] = [:]
+        var keyBySubmissionID: [String: StudentKey] = [:]
         for submission in submissions {
-            if let id = submission.id { setupBySubmissionID[id] = submission.testSetupID }
+            if let id = submission.id, let userID = submission.userID {
+                keyBySubmissionID[id] = StudentKey(setupID: submission.testSetupID, userID: userID)
+            }
         }
-        let submissionIDs = Array(setupBySubmissionID.keys)
+
+        // Keep each student's latest result row (highest `receivedAt`).
+        let submissionIDs = Array(keyBySubmissionID.keys)
         let results =
             submissionIDs.isEmpty
             ? []
@@ -771,14 +804,19 @@ extension InstructorDashboardRoutes {
                 .filter(\.$submissionID ~~ submissionIDs)
                 .all()
         for result in results {
-            guard let setupID = setupBySubmissionID[result.submissionID] else { continue }
-            perSetup[setupID, default: SetupSyncCounts()].add(
-                pending: result.brightspaceSyncPending == true,
+            guard let key = keyBySubmissionID[result.submissionID] else { continue }
+            let received = result.receivedAt ?? Date.distantPast
+            if let existing = latestByStudent[key], existing.attemptedAt >= received { continue }
+            latestByStudent[key] = LatestSyncState(
+                attemptedAt: received,
                 error: result.brightspaceSyncError,
-                syncedAt: result.brightspaceSyncedAt)
+                syncedAt: result.brightspaceSyncedAt,
+                pending: result.brightspaceSyncPending == true)
         }
 
-        // Override-only rows (no-submission students) carry their own sync state.
+        // Override-only students (no submissions) — their grade rides on the
+        // override row. Skip any already covered by a result row: the latest
+        // result reflects the pushed grade (override included).
         let overrides =
             setupIDs.isEmpty
             ? []
@@ -786,10 +824,19 @@ extension InstructorDashboardRoutes {
                 .filter(\.$testSetupID ~~ setupIDs)
                 .all()
         for override in overrides {
-            perSetup[override.testSetupID, default: SetupSyncCounts()].add(
-                pending: override.brightspaceSyncPending == true,
+            let key = StudentKey(setupID: override.testSetupID, userID: override.userID)
+            if latestByStudent[key] != nil { continue }
+            latestByStudent[key] = LatestSyncState(
+                attemptedAt: override.brightspacePendingSince ?? Date.distantPast,
                 error: override.brightspaceSyncError,
-                syncedAt: override.brightspaceSyncedAt)
+                syncedAt: override.brightspaceSyncedAt,
+                pending: override.brightspaceSyncPending == true)
+        }
+
+        var perSetup: [String: SetupSyncCounts] = [:]
+        for (key, state) in latestByStudent {
+            perSetup[key.setupID, default: SetupSyncCounts()].add(
+                error: state.error, syncedAt: state.syncedAt, pending: state.pending)
         }
 
         var synced = 0

@@ -93,6 +93,14 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_grade_object_id")
     var brightspaceGradeObjectID: String?
 
+    /// When true, this assignment is *explicitly* excluded from BrightSpace grade
+    /// sync — distinct from "not yet mapped" (`brightspaceGradeObjectID == nil`),
+    /// which only means the instructor hasn't wired a grade item yet. The sweep
+    /// skips an excluded assignment without recording an error, and the mapping
+    /// (if any) is preserved so re-enabling restores it. nil/false = not excluded.
+    @OptionalField(key: "brightspace_sync_excluded")
+    var brightspaceSyncExcluded: Bool?
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

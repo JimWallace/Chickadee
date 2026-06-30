@@ -100,6 +100,10 @@ struct InstructorBrightspaceContext: Encodable {
     let syncIdentityNeedsReconnect: Bool
     let flashSuccess: String?
     let flashError: String?
+    /// True when BrightSpace is configured and the active course isn't archived —
+    /// gates the top-bar "Sync now" button. Precomputed so the template branches
+    /// on a flat bool (LeafKit 1.14.2 mis-parses `&&` / nested `#if`).
+    let canSyncNow: Bool
     let assignmentRows: [BrightspaceAssignmentRow]
     let hasAssignments: Bool
     let logRows: [BrightspaceLogRow]
@@ -124,6 +128,10 @@ struct BrightspaceAssignmentRow: Encodable {
     let assignmentID: String  // publicID
     let title: String
     let gradeObjectID: String  // "" when unmapped
+    /// True when the instructor has explicitly chosen "Do not sync" for this
+    /// assignment — the mapping cell shows a pill + "Enable sync" instead of the
+    /// grade-item combobox, and the sweep skips it.
+    let syncExcluded: Bool
     let lastSyncText: String  // formatted time, or "—"
     let lastSyncStatus: String  // "success" | "error" | "skipped" | "none"
     let lastSyncDetail: String?
