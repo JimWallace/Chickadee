@@ -23,15 +23,20 @@ import VaporTesting
         self.app = try await makeTestApp(prefix: "chickadee-ta-role")
     }
 
+    /// The handful of values each route test threads through its request.
+    private struct Fixture {
+        let courseID: UUID
+        let assignmentID: String
+        let taUserID: UUID
+        let csrf: String
+        let sessionCookie: String
+    }
+
     /// A non-archived `.closed` course + setup + published assignment, with
     /// `ta_user` (a *global student*) enrolled at the given per-course role.
     /// `.closed` so the user isn't auto-enrolled at some other role; the manual
     /// enrollment makes this their only — hence active — course.
-    private func fixture(
-        role: CourseRole
-    ) async throws -> (
-        courseID: UUID, assignmentID: String, taUserID: UUID, csrf: String, sessionCookie: String
-    ) {
+    private func fixture(role: CourseRole) async throws -> Fixture {
         let course = try await makeTestCourse(on: app, code: "TAROLE", name: "TA Role", mode: .closed)
         let courseID = try course.requireID()
         try await makeTestSetup(on: app, id: "ta_setup", courseID: courseID)
@@ -47,7 +52,9 @@ import VaporTesting
         ).save(on: app.db)
 
         let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
-        return (courseID, assignment.publicID, try taUser.requireID(), csrf, sessionCookie)
+        return Fixture(
+            courseID: courseID, assignmentID: assignment.publicID,
+            taUserID: try taUser.requireID(), csrf: csrf, sessionCookie: sessionCookie)
     }
 
     // MARK: - TA CAN edit assignment content (floor .ta)
