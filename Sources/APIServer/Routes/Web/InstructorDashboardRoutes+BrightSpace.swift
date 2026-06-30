@@ -570,7 +570,7 @@ extension InstructorDashboardRoutes {
             syncIdentityName: nil, syncIdentityIsMe: false,
             syncIdentityConnected: false, syncIdentityNeedsReconnect: false,
             flashSuccess: flashSuccess, flashError: flashError,
-            canSyncNow: false,
+            canSyncNow: false, doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: [], hasAssignments: false,
             logRows: [], hasLog: false,
             summary: BrightspaceSyncSummary(synced: 0, pending: 0, errored: 0),
@@ -692,6 +692,7 @@ extension InstructorDashboardRoutes {
             syncIdentityNeedsReconnect: syncIdentityName != nil && !syncIdentityConnected,
             flashSuccess: flashSuccess, flashError: flashError,
             canSyncNow: syncEnabled && !course.isArchived,
+            doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
             logRows: logRows, hasLog: !logRows.isEmpty,
             summary: summary, canReconcile: courseLinked && !course.isArchived,
@@ -710,11 +711,14 @@ extension InstructorDashboardRoutes {
         assignments.map { a in
             let last = latestBySetup[a.testSetupID]
             let counts = perSetupCounts[a.testSetupID] ?? SetupSyncCounts()
+            let gradeFieldValue =
+                a.brightspaceSyncExcluded == true
+                ? BrightspaceSync.doNotSyncToken
+                : (a.brightspaceGradeObjectID ?? "")
             return BrightspaceAssignmentRow(
                 assignmentID: a.publicID,
                 title: a.title,
-                gradeObjectID: a.brightspaceGradeObjectID ?? "",
-                syncExcluded: a.brightspaceSyncExcluded == true,
+                gradeFieldValue: gradeFieldValue,
                 lastSyncText: last?.attemptedAt.map { fmt.string(from: $0) } ?? "—",
                 lastSyncStatus: last?.status ?? "none",
                 lastSyncDetail: last?.detail,

@@ -68,20 +68,6 @@ LEARN
             <tr>
                 <td><strong>#(row.title)</strong></td>
                 <td>
-                    #if(row.syncExcluded):
-                    <div class="bs-excluded-cell">
-                        <span class="tier bs-donotsync-pill" title="This assignment's grades are not sent to LEARN">Do not sync</span>
-                        #if(!courseIsArchived):
-                        <form method="post" action="/instructor/#(row.assignmentID)/brightspace" class="inline-form">
-                            #csrfFormField()
-                            <input type="hidden" name="returnTo" value="brightspace">
-                            <input type="hidden" name="action" value="enable">
-                            <button class="btn action-btn" type="submit"
-                                    title="Resume sending this assignment's grades to LEARN">Enable sync</button>
-                        </form>
-                        #endif
-                    </div>
-                    #else:
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace"
                           class="bs-grade-form" data-assignment-id="#(row.assignmentID)">
                         #csrfFormField()
@@ -90,16 +76,10 @@ LEARN
                         <label class="visually-hidden" for="bs-go-#(row.assignmentID)">LEARN Assessment for #(row.title)</label>
                         <input class="form-input bs-grade-input" type="text"
                                id="bs-go-#(row.assignmentID)" list="bs-grade-objects"
-                               value="#(row.gradeObjectID)" placeholder="Search assessments…"
-                               data-raw-id="#(row.gradeObjectID)" autocomplete="off">
-                        <button class="btn action-btn" type="submit" name="action" value="save">Save</button>
-                        #if(!courseIsArchived):
-                        <button class="btn action-btn bs-donotsync-btn" type="submit"
-                                name="action" value="exclude" formnovalidate
-                                title="Exclude this assignment from LEARN grade sync">Do not sync</button>
-                        #endif
+                               value="#(row.gradeFieldValue)" placeholder="Search assessments…"
+                               data-raw-id="#(row.gradeFieldValue)" autocomplete="off">
+                        <button class="btn action-btn" type="submit">Save</button>
                     </form>
-                    #endif
                 </td>
                 <td class="bs-col-synced">
                     #if(row.hasSyncActivity):
@@ -216,9 +196,6 @@ LEARN
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; flex-wrap: wrap; }
 .bs-grade-input { width: 14rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
-.bs-donotsync-btn { color: var(--gray-600); }
-.bs-excluded-cell { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-.bs-donotsync-pill { color: var(--gray-600); }
 .bs-sync-detail { font-size: .72rem; }
 .bs-count {
     display: inline-block; font-size: .88rem; font-weight: 600;
@@ -245,16 +222,54 @@ LEARN
     var datalist = document.getElementById('bs-grade-objects');
     if (!datalist) return;
 
+    // "Do not sync" is an option in this same dropdown: picking it excludes the
+    // assignment from LEARN. It resolves to a reserved token (kept in sync with
+    // BrightspaceSync.doNotSyncToken on the server) the save handler maps to the
+    // do-not-sync flag — never a real grade item.
+    var DO_NOT_SYNC_ID = "#(doNotSyncToken)";
+    var DO_NOT_SYNC_LABEL = 'Do not sync (exclude from LEARN)';
+
+    function optionHTML(value, id) {
+        var opt = document.createElement('option');
+        opt.value = value;
+        opt.dataset.id = id;
+        return opt.outerHTML;
+    }
+
+    // Wire each row: resolve its stored value to a display name on load, and
+    // resolve the chosen name back to an ID (or the do-not-sync token) on submit.
+    function wireForms(byId, byName) {
+        document.querySelectorAll('.bs-grade-form').forEach(function (form) {
+            var visibleInput = form.querySelector('.bs-grade-input');
+            var hiddenInput = form.querySelector('.bs-grade-id-hidden');
+            if (!visibleInput || !hiddenInput) return;
+            var rawId = visibleInput.dataset.rawId || '';
+            if (rawId && byId[rawId]) {
+                visibleInput.value = byId[rawId];
+            }
+            // Pre-fill hidden with the raw value so save works even without a match.
+            hiddenInput.value = rawId;
+            form.addEventListener('submit', function () {
+                var val = visibleInput.value.trim();
+                // Resolve a display name to its ID / the do-not-sync token; else
+                // submit the typed value as-is.
+                hiddenInput.value = byName[val] || val;
+            });
+        });
+    }
+
     fetch('/instructor/brightspace/grade-objects', {
         headers: { 'Accept': 'application/json' }, cache: 'no-store'
     }).then(function (res) {
         return res.ok ? res.json() : [];
     }).then(function (items) {
-        if (!Array.isArray(items)) return;
+        if (!Array.isArray(items)) items = [];
 
-        // Build id→name and name→id maps.
+        // Build id→name and name→id maps, seeded with the do-not-sync option.
         var byId = {};
         var byName = {};
+        byId[DO_NOT_SYNC_ID] = DO_NOT_SYNC_LABEL;
+        byName[DO_NOT_SYNC_LABEL] = DO_NOT_SYNC_ID;
         items.forEach(function (it) {
             var label = it.name;
             if (it.gradeType && it.gradeType !== 'Numeric') {
@@ -264,56 +279,27 @@ LEARN
             byName[label] = String(it.id);
         });
 
-        // Populate datalist with names (value = display name).
-        datalist.innerHTML = items.map(function (it) {
-            var label = it.name;
-            if (it.gradeType && it.gradeType !== 'Numeric') {
-                label += ' — ' + it.gradeType + ' (not supported)';
-            }
-            var opt = document.createElement('option');
-            opt.value = label;
-            opt.dataset.id = String(it.id);
-            return opt.outerHTML;
-        }).join('');
+        // Populate datalist: do-not-sync first, then the grade items by name.
+        datalist.innerHTML = optionHTML(DO_NOT_SYNC_LABEL, DO_NOT_SYNC_ID)
+            + items.map(function (it) {
+                var label = it.name;
+                if (it.gradeType && it.gradeType !== 'Numeric') {
+                    label += ' — ' + it.gradeType + ' (not supported)';
+                }
+                return optionHTML(label, String(it.id));
+            }).join('');
 
-        // For each grade form, resolve the stored numeric ID to a display name.
-        document.querySelectorAll('.bs-grade-form').forEach(function (form) {
-            var visibleInput = form.querySelector('.bs-grade-input');
-            var hiddenInput = form.querySelector('.bs-grade-id-hidden');
-            if (!visibleInput || !hiddenInput) return;
-            var rawId = visibleInput.dataset.rawId || '';
-            if (rawId && byId[rawId]) {
-                visibleInput.value = byId[rawId];
-                hiddenInput.value = rawId;
-            } else {
-                // Pre-fill hidden with the raw ID so save works even if no match.
-                hiddenInput.value = rawId;
-            }
-        });
+        wireForms(byId, byName);
 
-        // On form submit, resolve display name → ID.
-        document.querySelectorAll('.bs-grade-form').forEach(function (form) {
-            form.addEventListener('submit', function () {
-                var visibleInput = form.querySelector('.bs-grade-input');
-                var hiddenInput = form.querySelector('.bs-grade-id-hidden');
-                if (!visibleInput || !hiddenInput) return;
-                var val = visibleInput.value.trim();
-                // If it's a name in the map, resolve to ID; else submit as-is.
-                hiddenInput.value = byName[val] || val;
-            });
-        });
-
-    }).catch(function () { /* leave free-text inputs — sync still works */
-        // Fallback: copy visible input value into hidden on submit.
-        document.querySelectorAll('.bs-grade-form').forEach(function (form) {
-            var visibleInput = form.querySelector('.bs-grade-input');
-            var hiddenInput = form.querySelector('.bs-grade-id-hidden');
-            if (!visibleInput || !hiddenInput) return;
-            hiddenInput.value = visibleInput.dataset.rawId || '';
-            form.addEventListener('submit', function () {
-                hiddenInput.value = visibleInput.value.trim();
-            });
-        });
+    }).catch(function () {
+        // D2L unreachable: only the do-not-sync option is offered; grade-item
+        // names can't be resolved, so any typed ID passes through unchanged.
+        var byId = {};
+        var byName = {};
+        byId[DO_NOT_SYNC_ID] = DO_NOT_SYNC_LABEL;
+        byName[DO_NOT_SYNC_LABEL] = DO_NOT_SYNC_ID;
+        datalist.innerHTML = optionHTML(DO_NOT_SYNC_LABEL, DO_NOT_SYNC_ID);
+        wireForms(byId, byName);
     });
 })();
 </script>

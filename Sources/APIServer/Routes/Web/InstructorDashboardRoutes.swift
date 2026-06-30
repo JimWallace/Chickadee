@@ -301,25 +301,20 @@ struct InstructorDashboardRoutes: RouteCollection {
         let assignment = try await loadAssignment(req)
         struct BSBody: Content {
             var gradeObjectID: String?
-            /// "save" (default) maps the grade item; "exclude" marks the
-            /// assignment do-not-sync; "enable" clears that exclusion. Driven by
-            /// the clicked submit button on the mapping row.
-            var action: String?
             /// "brightspace" → return to the BrightSpace tab (mapping table);
             /// otherwise the assignment edit page (the legacy caller).
             var returnTo: String?
         }
         let body = try req.content.decode(BSBody.self)
-        switch body.action ?? "save" {
-        case "exclude":
-            // Keep any existing grade-item mapping so re-enabling restores it;
-            // the sweep skips the assignment while excluded regardless.
+        let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw == BrightspaceSync.doNotSyncToken {
+            // The instructor picked the "Do not sync" option in the grade-item
+            // dropdown — exclude this assignment from LEARN. The sweep then skips
+            // it; the dropdown shows "Do not sync" until a real item is chosen.
             assignment.brightspaceSyncExcluded = true
-        case "enable":
+            assignment.brightspaceGradeObjectID = nil
+        } else {
             assignment.brightspaceSyncExcluded = false
-        default:  // "save"
-            assignment.brightspaceSyncExcluded = false
-            let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
         }
         try await assignment.save(on: req.db)
