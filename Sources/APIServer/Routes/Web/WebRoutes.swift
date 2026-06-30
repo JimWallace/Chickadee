@@ -504,7 +504,6 @@ struct WebRoutes: RouteCollection {
     @Sendable
     func createSetup(req: Request) async throws -> Response {
         let setupUser = try req.auth.require(APIUser.self)
-        guard setupUser.isInstructor else { throw Abort(.forbidden) }
         let upload = try req.content.decode(TestSetupUpload.self)
 
         let manifestData = Data(upload.manifest.utf8)
@@ -518,6 +517,17 @@ struct WebRoutes: RouteCollection {
             throw AppError.unprocessable(reason: "Unsupported schemaVersion; expected 1")
         }
 
+        // Associate the setup with the instructor's active course, and require
+        // per-course instructor authority there before touching disk. Replaces
+        // the old global `isInstructor` check, which let a global instructor who
+        // is only a student in their active course create a setup (#417 Slice D).
+        let courseState = try await req.resolveActiveCourse(for: setupUser)
+        guard let courseID = courseState.activeCourseUUID else {
+            throw Abort(
+                .badRequest, reason: "No active course selected. Please select a course before uploading a test setup.")
+        }
+        try await requireCourseWriteAccess(caller: setupUser, courseID: courseID, db: req.db)
+
         let setupsDir = req.application.testSetupsDirectory
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
         let zipPath = setupsDir + "\(setupID).zip"
@@ -525,12 +535,6 @@ struct WebRoutes: RouteCollection {
 
         let stored = String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
 
-        // Associate the setup with the instructor's active course.
-        let courseState = try await req.resolveActiveCourse(for: setupUser)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(
-                .badRequest, reason: "No active course selected. Please select a course before uploading a test setup.")
-        }
         let setup = APITestSetup(
             id: setupID, manifest: stored, zipPath: zipPath,
             courseID: courseID)

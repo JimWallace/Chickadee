@@ -20,11 +20,16 @@ struct SubmissionRoutes: RouteCollection {
 
     @Sendable
     func createSubmission(req: Request) async throws -> SubmissionCreatedResponse {
+        let caller = try req.auth.require(APIUser.self)
         let body = try req.content.decode(CreateSubmissionBody.self)
 
-        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
+        // Scope intake to the setup's own course: the caller must be enrolled in
+        // the course that owns the setup, so a submission can't be enqueued
+        // against another course's setup by ID (#417 Slice D).
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let submissionsDir = req.application.submissionsDirectory
         let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
@@ -63,15 +68,18 @@ struct SubmissionRoutes: RouteCollection {
 
     @Sendable
     func createSubmissionFile(req: Request) async throws -> SubmissionCreatedResponse {
+        let caller = try req.auth.require(APIUser.self)
         let body = try req.content.decode(SubmitFileBody.self)
         let submittedFilename = submissionFilenameForStorage(
             uploadedName: body.filename,
             fallback: "submission.bin"
         )
 
-        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
+        // Scope intake to the setup's own course (see createSubmission) (#417 Slice D).
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let submissionsDir = req.application.submissionsDirectory
         let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
@@ -83,14 +91,12 @@ struct SubmissionRoutes: RouteCollection {
         // For .ipynb submissions, merge the instructor's hidden test cells back in
         // before saving, so the worker grades with the full authoritative test suite.
         let fileData: Data
-        if submittedFilename.hasSuffix(".ipynb"),
-            let setup2 = try await APITestSetup.find(body.testSetupID, on: req.db)
-        {
+        if submittedFilename.hasSuffix(".ipynb") {
             // The instructor-notebook disk read and the JSON merge are both
             // blocking work; run them on the NIO thread pool so a deadline-spike
             // of concurrent .ipynb submissions doesn't serialize on the
             // cooperative executor.
-            let source = NotebookSourceRef(setup2)
+            let source = NotebookSourceRef(setup)
             let studentBytes = body.file
             fileData = try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
                 guard let instructorData = try? notebookData(from: source) else {
