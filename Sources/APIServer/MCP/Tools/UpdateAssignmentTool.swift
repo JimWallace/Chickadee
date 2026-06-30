@@ -133,7 +133,7 @@ struct UpdateAssignmentTool: ContentTool {
                 tool: Self.name, detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility.")
         }
 
-        let assignment = try await context.authorizedAssignment(
+        let assignment = try await context.authorizedAssignmentForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
         do {
             // Title/date metadata first. The legacy `isOpen` is applied here only

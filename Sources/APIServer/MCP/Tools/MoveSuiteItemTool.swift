@@ -108,7 +108,7 @@ struct MoveSuiteItemTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let resolved = try await context.authorizedAssignmentAndSetup(
+        let resolved = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: resolved.setup.manifest, zipPath: resolved.setup.zipPath)

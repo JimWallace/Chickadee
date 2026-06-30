@@ -168,7 +168,7 @@ struct CreateCourseSectionTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "defaultGradingMode must be \"browser\" or \"worker\".")
         }
-        let courseID = try await resolveCourseID(code: input.courseCode, tool: Self.name, context: context)
+        let courseID = try await resolveCourseIDForWrite(code: input.courseCode, tool: Self.name, context: context)
 
         let maxOrder =
             try await APICourseSection.query(on: context.db)
@@ -450,7 +450,8 @@ struct DeleteCourseSectionTool: ContentTool {
         guard let section = try await APICourseSection.find(uuid, on: context.db) else {
             return Output(sectionID: raw, removed: false, ungroupedAssignmentCount: 0)
         }
-        try await context.authorizeCourseAccess(section.courseID, tool: Self.name)
+        // Deleting a section is a write — block it on an archived course (#417 Slice D-MCP).
+        try await context.authorizeCourseWriteAccess(section.courseID, tool: Self.name)
         let ungrouped = try await APIAssignment.query(on: context.db)
             .filter(\.$sectionID == uuid)
             .count()
@@ -530,7 +531,7 @@ struct ReorderCourseSectionsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let courseID = try await resolveCourseID(code: input.courseCode, tool: Self.name, context: context)
+        let courseID = try await resolveCourseIDForWrite(code: input.courseCode, tool: Self.name, context: context)
         let uuids = input.orderedSectionIDs.compactMap {
             UUID(uuidString: $0.trimmingCharacters(in: .whitespacesAndNewlines))
         }
@@ -571,8 +572,10 @@ struct ReorderCourseSectionsTool: ContentTool {
 
 // MARK: - Shared
 
-/// Resolves a course section by id and authorizes the acting account for its
-/// course.  Shared by rename_course_section / delete_course_section.
+/// Resolves a course section by id and authorizes the acting account for a
+/// *write* to its course (archived block).  Shared by rename_course_section /
+/// delete_course_section — both mutate the section, so the write gate is the
+/// correct floor (#417 Slice D-MCP).
 func resolveCourseSectionForEdit(
     sectionID raw: String, tool: String, context: ToolContext
 ) async throws -> APICourseSection {
@@ -583,7 +586,7 @@ func resolveCourseSectionForEdit(
     guard let section = try await APICourseSection.find(uuid, on: context.db) else {
         throw MCPToolError.invalidArguments(tool: tool, detail: "No course section with id \"\(trimmed)\".")
     }
-    try await context.authorizeCourseAccess(section.courseID, tool: tool)
+    try await context.authorizeCourseWriteAccess(section.courseID, tool: tool)
     return section
 }
 
@@ -647,7 +650,8 @@ func setManifestGraderOnly(
 }
 
 /// Resolves a course code to its id, enforcing that the acting account may act
-/// on it.  Shared by the course-section tools.
+/// on it (read access).  Shared by the course-section tools, including the READ
+/// `list_course_sections` — so this must NOT carry the archived-write block.
 func resolveCourseID(code: String, tool: String, context: ToolContext) async throws -> UUID {
     guard
         let course = try await APICourse.query(on: context.db)
@@ -658,5 +662,23 @@ func resolveCourseID(code: String, tool: String, context: ToolContext) async thr
     }
     let courseID = try course.requireID()
     try await context.authorizeCourseAccess(courseID, tool: tool)
+    return courseID
+}
+
+/// Write variant of `resolveCourseID`: resolves the course by code and
+/// authorizes a *write* to it (archived block).  Used by the course-section
+/// WRITE tools (create_course_section, reorder_course_sections, and
+/// reorder_assignments) so they can't mutate an archived course; the read
+/// `list_course_sections` stays on `resolveCourseID` (#417 Slice D-MCP).
+func resolveCourseIDForWrite(code: String, tool: String, context: ToolContext) async throws -> UUID {
+    guard
+        let course = try await APICourse.query(on: context.db)
+            .filter(\.$code == code)
+            .first()
+    else {
+        throw MCPToolError.invalidArguments(tool: tool, detail: "No course found with code \"\(code)\".")
+    }
+    let courseID = try course.requireID()
+    try await context.authorizeCourseWriteAccess(courseID, tool: tool)
     return courseID
 }

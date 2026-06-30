@@ -71,7 +71,7 @@ struct SetTimeLimitTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let seconds = try validateTimeLimitSeconds(input.seconds, tool: Self.name)
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
         let effective = try await setManifestTimeLimitSeconds(setup: setup, to: seconds, on: context.db)
         return Output(assignmentPublicID: assignment.publicID, timeLimitSeconds: effective)

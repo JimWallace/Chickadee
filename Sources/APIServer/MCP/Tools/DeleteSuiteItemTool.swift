@@ -100,7 +100,7 @@ struct DeleteSuiteItemTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let target = try Self.resolveTarget(input)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)

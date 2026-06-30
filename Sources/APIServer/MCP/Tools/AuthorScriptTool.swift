@@ -253,7 +253,7 @@ struct AuthorScriptTool: ContentTool {
         // outbound request for a call we are about to refuse.
         let source = try Self.resolveContentSource(input)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
             publicID: input.assignmentPublicID, tool: Self.name)
 
         // Never clobber a pattern-family / notebook-check generated script —
