@@ -54,6 +54,16 @@ import VaporTesting
         return (courseID, setupID, assignment.publicID)
     }
 
+    /// The active + archived course fixtures plus the authenticated session for
+    /// `lc_inst`. A struct rather than a tuple to stay within SwiftLint's
+    /// `large_tuple` limit.
+    private struct BothCoursesFixture {
+        let active: (courseID: UUID, setupID: String, assignmentID: String)
+        let archived: (courseID: UUID, setupID: String, assignmentID: String)
+        let csrf: String
+        let sessionCookie: String
+    }
+
     /// Logs in `lc_inst` as an instructor in an active (.auto, non-archived)
     /// course and additionally enrols them as a per-course instructor in the
     /// given archived course, returning the session cookie + CSRF token and both
@@ -61,11 +71,7 @@ import VaporTesting
     /// archived block, not a stray middleware denial.
     private func setupInstructorWithBothCourses(
         activeCode: String, archivedCode: String
-    ) async throws -> (
-        active: (courseID: UUID, setupID: String, assignmentID: String),
-        archived: (courseID: UUID, setupID: String, assignmentID: String),
-        csrf: String, sessionCookie: String
-    ) {
+    ) async throws -> BothCoursesFixture {
         let active = try await makeCourseAssignment(
             code: activeCode, archived: false, enrollmentMode: .auto)
         let archived = try await makeCourseAssignment(
@@ -80,7 +86,8 @@ import VaporTesting
         ).save(on: app.db)
 
         let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
-        return (active, archived, csrf, sessionCookie)
+        return BothCoursesFixture(
+            active: active, archived: archived, csrf: csrf, sessionCookie: sessionCookie)
     }
 
     private func postForm(_ path: String, csrf: String, sessionCookie: String) async throws -> HTTPStatus {
