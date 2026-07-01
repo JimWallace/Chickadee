@@ -327,7 +327,7 @@ struct SSOAuthRoutes: RouteCollection {
         let newUser = APIUser(
             username: username,
             passwordHash: "",  // SSO users have no local password
-            role: mappedRole ?? UserRole.student.rawValue,
+            role: mappedRole ?? UserRole.user.rawValue,
             authProvider: "duo-oidc",
             externalSubject: subject,
             email: email,

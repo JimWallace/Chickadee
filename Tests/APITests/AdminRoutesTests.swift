@@ -90,15 +90,16 @@ private struct PassthroughResponder: AsyncResponder {
     @Test func changeRoleUpdatesUserRole() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
-            let target = try await makeUser(username: "role_target", role: "student")
+            let target = try await makeUser(username: "role_target", role: "user")
             let userID = try target.requireID()
             let (boundCookie, token) = try await csrfCookieAndToken(cookie)
 
+            // The deployment role is user|admin now (#417 Slice G2).
             try await app.asyncTest(
                 .POST, "/admin/users/\(userID.uuidString)/role",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["role": "instructor", "_csrf": token], as: .urlEncodedForm)
+                    try req.content.encode(["role": "admin", "_csrf": token], as: .urlEncodedForm)
                 },
                 afterResponse: { res in
                     #expect(res.status == .seeOther)
@@ -106,7 +107,7 @@ private struct PassthroughResponder: AsyncResponder {
                 })
 
             let updated = try await APIUser.find(userID, on: app.db)
-            #expect(updated?.role == "instructor")
+            #expect(updated?.role == "admin")
 
         }
     }

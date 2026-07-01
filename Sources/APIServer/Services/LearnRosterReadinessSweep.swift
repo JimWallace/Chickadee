@@ -53,9 +53,10 @@ func reconcileCourseReadiness(
     guard !studentEnrollments.isEmpty else { return RosterReadinessOutcome() }
 
     let userIDs = studentEnrollments.map(\.userID)
+    // `userIDs` already come from `.student`-role enrollments (#417 Slice G2),
+    // so no global-role filter is needed — teaching staff are excluded upstream.
     let users = try await APIUser.query(on: db)
         .filter(\.$id ~~ userIDs)
-        .filter(\.$role == UserRole.student.rawValue)
         .all()
     var userByID: [UUID: APIUser] = [:]
     for user in users {

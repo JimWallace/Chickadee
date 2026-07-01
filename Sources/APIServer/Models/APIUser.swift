@@ -15,12 +15,25 @@ import Vapor
 /// The `role` DB column stays a plain string (no migration); this enum is
 /// the authoritative vocabulary for it.
 enum UserRole: String, Sendable {
-    case student
-    case instructor
+    /// The deployment-global role of an ordinary human account (#417 Slice G2).
+    /// Teaching authority is per-course now (`CourseRole` on the enrollment), so
+    /// the deployment role only distinguishes an ordinary `user` from an `admin`
+    /// operator (and the non-human `mcp` service account).
+    case user
     case admin
     /// MCP service accounts (admin-provisioned, non-loginable agents).
-    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    /// `mcp` is its own role — it does NOT imply admin.
     case mcp
+
+    /// DEPRECATED, decode-only (#417 Slice G2). The global `student` / `instructor`
+    /// roles were retired when teaching authority moved per-course: the
+    /// `CollapseUserRoles` migration rewrites every such row to `user`, no login
+    /// path or admin control assigns them, and they're dropped from
+    /// `autoAssignableRoles`. The cases remain so historical rows and the large
+    /// test corpus that still writes these strings keep decoding; a follow-up
+    /// removes them once those are migrated.
+    case student
+    case instructor
 }
 
 final class APIUser: Model, Content, @unchecked Sendable {
@@ -151,25 +164,31 @@ extension APIUser {
     }
 
     var isAdmin: Bool { roleValue == .admin }
+
+    /// Whether the account holds deployment-wide teaching authority. Since the
+    /// global `instructor` role was retired (#417 Slice G2 — teaching authority
+    /// is per-course), this is true only for admins; the legacy `.instructor`
+    /// case is still honoured so historical rows and the test corpus that writes
+    /// `role: "instructor"` keep resolving as staff until they're migrated.
     var isInstructor: Bool { roleValue == .instructor || roleValue == .admin }
 
     /// True for MCP service accounts (admin-provisioned, non-loginable agents).
-    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    /// `mcp` is its own role — it does NOT imply admin.
     var isMCPAgent: Bool { roleValue == .mcp }
 
     /// Roles that may be assigned automatically at first login (local
     /// registration or SSO mapping).  `mcp` is intentionally excluded: MCP
-    /// service accounts are created only by an admin, so no auto-provisioning
-    /// path can mint an agent identity.
+    /// service accounts are created only by an admin. The retired `student` /
+    /// `instructor` roles are excluded too (#417 Slice G2), so an SSO claim can
+    /// never re-mint them — a first login maps to `user` (or `admin`).
     static let autoAssignableRoles: Set<String> = [
-        UserRole.student.rawValue,
-        UserRole.instructor.rawValue,
+        UserRole.user.rawValue,
         UserRole.admin.rawValue,
     ]
 
     /// Drops a proposed auto-assigned role that isn't in `autoAssignableRoles`
-    /// (notably `mcp`), returning nil so the caller falls back to `student`.
-    /// Defence in depth for the first-login paths.
+    /// (notably `mcp` and the retired `student`/`instructor`), returning nil so
+    /// the caller falls back to `user`. Defence in depth for the first-login paths.
     static func sanitizedAutoAssignedRole(_ proposed: String?) -> String? {
         proposed.flatMap { autoAssignableRoles.contains($0) ? $0 : nil }
     }

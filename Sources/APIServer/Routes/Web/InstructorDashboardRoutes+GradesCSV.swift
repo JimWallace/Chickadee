@@ -4,6 +4,7 @@
 // load/sort/render helpers.  Split out of
 // InstructorDashboardRoutes+Submissions.swift — no behaviour changes.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -108,21 +109,22 @@ extension InstructorDashboardRoutes {
         req: Request, activeCourseUUID: UUID?
     ) async throws -> [APIUser] {
         if let activeCourseUUID {
-            let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == activeCourseUUID)
-                .all()
-                .map { $0.userID }
-            guard !enrolledUserIDs.isEmpty else { return [] }
-            // Filter to the enrolled IDs in SQL instead of fetching every
-            // student in the system and filtering in memory.
+            // Students are `.student`-role enrollments now (#417 Slice G2).
+            let studentUserIDs = try await studentUserIDsInCourse(activeCourseUUID, on: req.db)
+            guard !studentUserIDs.isEmpty else { return [] }
             return try await APIUser.query(on: req.db)
-                .filter(\.$role == UserRole.student.rawValue)
-                .filter(\.$id ~~ enrolledUserIDs)
+                .filter(\.$id ~~ Array(studentUserIDs))
                 .sort(\.$username, .ascending)
                 .all()
         }
+        // No active course: every student across the deployment — the union of
+        // all `.student`-role enrollments (#417 Slice G2; the global role no
+        // longer distinguishes students).
+        let allEnrollments = try await APICourseEnrollment.query(on: req.db).all()
+        let studentUserIDs = Set(allEnrollments.filter { $0.role == .student }.map(\.userID))
+        guard !studentUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
-            .filter(\.$role == UserRole.student.rawValue)
+            .filter(\.$id ~~ Array(studentUserIDs))
             .sort(\.$username, .ascending)
             .all()
     }
