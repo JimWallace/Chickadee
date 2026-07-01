@@ -819,20 +819,15 @@ private func bestGradeForStudent(
 
     // Highest grade wins across ALL result sources (browser + worker alike): a
     // 100 % browser result is never displaced by a later lower worker re-grade,
-    // matching the grades CSV / dashboard / roster surfaces.  Pick the result
-    // with the highest percent, then push its EXACT points so the LEARN value
-    // isn't degraded by integer-percent rounding (the shared
-    // `bestGradePercentBySubmissionID` helper returns an Int percent, which is
-    // fine for the display surfaces but lossy for a points push, e.g. 6/7 → 86 %
-    // → 8.6 instead of 8.57).
+    // matching the grades CSV / dashboard / roster surfaces.  The shared
+    // `bestGradeResult` fold (#1111) returns the winning ROW so the push uses
+    // its EXACT points — the Int percent the display surfaces use is lossy
+    // for a points push (e.g. 6/7 → 86 % → 8.6 instead of 8.57).
     let allResults = try await APIResult.query(on: db)
         .filter(\.$submissionID ~~ submissionIDs)
         .all()
     guard
-        let best =
-            allResults
-            .filter({ $0.gradePercentValue != nil })
-            .max(by: { ($0.gradePercentValue ?? 0) < ($1.gradePercentValue ?? 0) }),
+        let best = bestGradeResult(of: allResults),
         let earned = best.gradePointsValue
     else {
         throw BrightSpaceSyncError.missingPoints

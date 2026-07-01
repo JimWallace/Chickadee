@@ -91,6 +91,12 @@ extension StudentCourseRoutes {
             for: submissions.compactMap(\.id),
             on: req.db
         )
+        // Grade cells use the shared "highest grade wins" fold across ALL
+        // result sources (#1111); preferredResults stays for the badge path.
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
+            for: submissions.compactMap(\.id),
+            on: req.db
+        )
 
         let fmt = waterlooDateTimeFormatter()
         let sortedAssignments = sortedStudentCourseAssignments(assignments, setupsByID: setupsByID)
@@ -99,6 +105,7 @@ extension StudentCourseRoutes {
             courseCode: course.code,
             urlToken: try student.requireURLToken(),
             preferredResultBySubmissionID: preferredResultBySubmissionID,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
             student: student,
             fmt: fmt,
             disabledBySetup: disabledBySetup,
@@ -289,7 +296,10 @@ extension StudentCourseRoutes {
             .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
             .all()
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // "Highest grade wins" across ALL result sources — matches the
+        // roster/dashboard surfaces this page is reached from (#1111; it
+        // used to show the worker-preferred grade instead).
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissions.compactMap(\.id),
             on: req.db
         )
@@ -298,9 +308,7 @@ extension StudentCourseRoutes {
         let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
             let subID = submission.id ?? ""
             let gradeText: String
-            if let result = preferredResultBySubmissionID[subID],
-                let pct = result.gradePercentValue
-            {
+            if let pct = bestPercentBySubmissionID[subID] {
                 gradeText = "\(pct)%"
             } else {
                 gradeText = "—"
@@ -723,6 +731,9 @@ extension StudentCourseRoutes {
         let courseCode: String
         let urlToken: String
         let preferredResultBySubmissionID: [String: APIResult]
+        /// "Highest grade wins" percent per submission (#1111) — feeds the
+        /// grade cells; `preferredResultBySubmissionID` feeds the badges.
+        let bestPercentBySubmissionID: [String: Int]
         let student: APIUser
         let fmt: DateFormatter
         /// `[setupID: disabled built-in award ids]` — the same map for every row.
@@ -745,19 +756,14 @@ extension StudentCourseRoutes {
         let preferredResultBySubmissionID = context.preferredResultBySubmissionID
         let fmt = context.fmt
         let latest = history.first
-        let bestGradePercent: Int? = {
-            var best = -1
-            for submission in history {
-                guard let subID = submission.id,
-                    let result = preferredResultBySubmissionID[subID],
-                    let pct = result.gradePercentValue
-                else {
-                    continue
-                }
-                if pct > best { best = pct }
+        // Highest grade across the whole history, from the shared
+        // highest-grade-wins map — NOT the worker-preferred result (#1111).
+        let bestGradePercent: Int? =
+            history
+            .compactMap { submission in
+                submission.id.flatMap { context.bestPercentBySubmissionID[$0] }
             }
-            return best >= 0 ? best : nil
-        }()
+            .max()
 
         let disabledHere = context.disabledBySetup[assignment.testSetupID] ?? []
         var badges = submissionBadges(

@@ -219,19 +219,21 @@ struct WebRoutes: RouteCollection {
                         .all()
                     let resultRows = try await resultsFetch
 
-                    // Best grade percentage per submission across ALL result sources
-                    // ("highest grade wins") — shared helper, already has the rows.
-                    var bestPercentBySubmissionID: [String: Int] = [:]
+                    // Best grade percentage per submission across ALL result
+                    // sources — the shared "highest grade wins" fold applied
+                    // to the rows we already fetched (#1111).
+                    var resultsBySubmissionID: [String: [APIResult]] = [:]
+                    for row in resultRows {
+                        resultsBySubmissionID[row.submissionID, default: []].append(row)
+                    }
+                    let bestPercentBySubmissionID =
+                        resultsBySubmissionID
+                        .compactMapValues { bestGradePercent(of: $0) }
                     // One preferred result per submission (worker-first) is still
                     // needed for achievement-badge display below.
                     var preferredResultBySubmissionID: [String: APIResult] = [:]
                     for row in resultRows {
                         let key = row.submissionID
-                        if let pct = row.gradePercentValue,
-                            pct > (bestPercentBySubmissionID[key] ?? -1)
-                        {
-                            bestPercentBySubmissionID[key] = pct
-                        }
                         if let existing = preferredResultBySubmissionID[key] {
                             let existingSource = existing.source ?? "worker"
                             let currentSource = row.source ?? "worker"
