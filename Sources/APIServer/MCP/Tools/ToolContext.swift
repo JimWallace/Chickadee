@@ -70,11 +70,19 @@ struct ToolContext {
         else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Unknown token subject.")
         }
-        // MCP eligibility is coarse (per-course access is enforced separately by
-        // `authorizeCourseAccess`): staff (TA+ anywhere) or admin humans, plus
-        // `mcp` service accounts — never plain students (#417 Slice G, was the
-        // global `user.isInstructor`).
-        guard try await isStaffAnywhere(user, db: db) || user.isMCPAgent else {
+        // MCP eligibility is coarse: an instructor/admin human, or an `mcp`
+        // service account — never a plain student. Per-course access is enforced
+        // separately (and per-course) by `authorizeCourseAccess`, so this gate
+        // never widens what a caller can actually touch.
+        //
+        // NOTE (#417): like the OAuth consent `permits` gate, this coarse check
+        // still keys off the deployment-global role and is deliberately deferred
+        // to the Slice G2 enum collapse — which converts every global-role
+        // reference to a per-course `isStaffAnywhere` check at once. Converting
+        // it here in G1 only broke the MCP tool fixtures (which enrol the actor
+        // without a staff role) for no security gain, since the per-course
+        // `authorizeCourseAccess` already governs each tool call.
+        guard user.isInstructor || user.isMCPAgent else {
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "Students may not use the MCP interface.")
         }

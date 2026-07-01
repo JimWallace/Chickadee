@@ -125,6 +125,9 @@ import VaporTesting
         // `isStaffAnywhere`, not the old global `instructor` role).
         let staff = makeUser(role: "student")
         try await withApp(try await makeNamespaceApp(user: staff)) { app in
+            // Persist the staff user: the enrollment's FK to `users` is enforced
+            // on Postgres, and the injected auth user isn't otherwise saved.
+            try await staff.save(on: app.db)
             let course = try await makeTestCourse(on: app, code: "NSSTAFF", mode: .closed)
             try await APICourseEnrollment(
                 userID: try staff.requireID(), courseID: try course.requireID(), role: .instructor
