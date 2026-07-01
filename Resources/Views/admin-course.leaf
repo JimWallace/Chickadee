@@ -214,6 +214,7 @@
                         <select name="role" class="form-input course-role-select"
                                 aria-label="Per-course role" onchange="this.form.submit()">
                             <option value="student"#if(user.role == "student"): selected#endif>Student</option>
+                            <option value="ta"#if(user.role == "ta"): selected#endif>TA</option>
                             <option value="instructor"#if(user.role == "instructor"): selected#endif>Instructor</option>
                         </select>
                     </form>

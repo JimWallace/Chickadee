@@ -24,9 +24,11 @@ import Vapor
 
     @Test func courseRoleRawValuesRoundTrip() {
         #expect(CourseRole.student.rawValue == "student")
+        #expect(CourseRole.ta.rawValue == "ta")
         #expect(CourseRole.instructor.rawValue == "instructor")
         #expect(CourseRole(rawValue: "instructor") == .instructor)
-        #expect(CourseRole(rawValue: "ta") == nil)  // not a rung yet
+        #expect(CourseRole(rawValue: "ta") == .ta)  // the TA rung (#417 Slice E)
+        #expect(CourseRole(rawValue: "wizard") == nil)
     }
 
     @Test func roleAccessorDefaultsToStudentForMissingOrUnknownRaw() {
@@ -187,6 +189,13 @@ import Vapor
         #expect(CourseRole.instructor >= .instructor)
         #expect(CourseRole.student >= .student)
         #expect(!(CourseRole.instructor < CourseRole.student))
+        // TA sits strictly between student and instructor (#417 Slice E).
+        #expect(CourseRole.student < CourseRole.ta)
+        #expect(CourseRole.ta < CourseRole.instructor)
+        #expect(CourseRole.ta >= .ta)
+        #expect(CourseRole.instructor >= .ta)
+        #expect(!(CourseRole.ta >= .instructor))  // a TA is NOT an instructor
+        #expect(CourseRole.ta >= .student)  // ...but outranks a student
     }
 
     /// `requireCourseRole` authorizes by the *per-course* role: a global student

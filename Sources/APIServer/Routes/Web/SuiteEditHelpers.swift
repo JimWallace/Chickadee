@@ -61,29 +61,43 @@ func loadAssignment(_ req: Request) async throws -> APIAssignment {
 
 /// Write-authorizing sibling of `loadAssignmentAndSetup(_:)`. After loading,
 /// authorizes the caller for a *write* to the assignment's **own** course via
-/// `requireCourseWriteAccess` (per-course instructor, admin bypass,
-/// archived-course block). Mutating editor handlers use this so a write is
-/// scoped to the resource's course rather than the caller's active course —
-/// closing both the archived-course and cross-course write paths the
-/// `/instructor` group middleware can't see (see docs/multi-course-roles.md).
-func loadAssignmentAndSetupForWrite(_ req: Request) async throws -> (APIAssignment, APITestSetup) {
+/// `requireCourseWriteAccess` (per-course role + admin bypass + archived-course
+/// block). Mutating editor handlers use this so a write is scoped to the
+/// resource's course rather than the caller's active course — closing both the
+/// archived-course and cross-course write paths the `/instructor` group
+/// middleware can't see (see docs/multi-course-roles.md).
+///
+/// `atLeast` defaults to `.ta` because this is the assignment **content**
+/// editor loader (suite/scripts/sections/families/checks/global-inputs/
+/// datasets/achievements/notebook/solution/save-edit/retest-all) — all of which
+/// a TA may do. The one structural caller, `cloneAssignment` (it creates a new
+/// assignment), passes `.instructor` (#417 Slice E).
+func loadAssignmentAndSetupForWrite(
+    _ req: Request, atLeast: CourseRole = .ta
+) async throws -> (APIAssignment, APITestSetup) {
     let (assignment, setup) = try await loadAssignmentAndSetup(req)
     let caller = try req.auth.require(APIUser.self)
-    try await requireCourseWriteAccess(caller: caller, courseID: assignment.courseID, db: req.db)
+    try await requireCourseWriteAccess(
+        caller: caller, courseID: assignment.courseID, atLeast: atLeast, db: req.db)
     return (assignment, setup)
 }
 
 /// Write-authorizing sibling of `loadAssignment(_:)`, for handlers that mutate
-/// per-course state but never touch the test setup (retest, grade override,
-/// notebook reset). Same `requireCourseWriteAccess` gate as
-/// `loadAssignmentAndSetupForWrite` — scoping the write to the assignment's
-/// **own** course closes the archived-course and cross-course write paths the
-/// `ActiveCourseInstructorMiddleware` group gate (which only inspects the
-/// caller's *active* course) can't see (#417, follow-up to Slice A).
-func loadAssignmentForWrite(_ req: Request) async throws -> APIAssignment {
+/// per-course state but never touch the test setup. Same `requireCourseWriteAccess`
+/// gate as `loadAssignmentAndSetupForWrite`, scoping the write to the
+/// assignment's **own** course (#417, follow-up to Slice A).
+///
+/// `atLeast` defaults to `.instructor` because this loader is shared by both
+/// per-student grading actions (retest/reset/grade-override — TA-allowed, which
+/// pass `atLeast: .ta`) and assignment-lifecycle actions (open/close/status/
+/// delete/BrightSpace — instructor-only, which take the default) (#417 Slice E).
+func loadAssignmentForWrite(
+    _ req: Request, atLeast: CourseRole = .instructor
+) async throws -> APIAssignment {
     let assignment = try await loadAssignment(req)
     let caller = try req.auth.require(APIUser.self)
-    try await requireCourseWriteAccess(caller: caller, courseID: assignment.courseID, db: req.db)
+    try await requireCourseWriteAccess(
+        caller: caller, courseID: assignment.courseID, atLeast: atLeast, db: req.db)
     return assignment
 }
 

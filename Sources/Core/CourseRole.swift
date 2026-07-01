@@ -9,23 +9,28 @@
 // per-enrollment is what lets a single account be an instructor in one course
 // and a student in another. See docs/multi-course-roles.md.
 //
-// Two rungs ship initially. The type is `String`-backed and deliberately open
-// to a future `ta` rung between `student` and `instructor` without a schema
-// change — the column is a string; only the vocabulary grows.
+// Three rungs ship. The type is `String`-backed, so the vocabulary can grow
+// without a schema change — the column is a string; only the vocabulary grows.
 
 public enum CourseRole: String, Codable, Sendable, Comparable {
     /// Submits to the course's assignments and views their own results.
     case student
-    /// Authors and manages the course's assignments, suites, and content.
+    /// Teaching assistant: views all students' submissions, retests, and edits
+    /// assignments/tests/content — everything an instructor authors — but
+    /// cannot manage enrollment, deadlines, archival, or course staff.
+    case ta
+    /// Authors and manages the course's assignments, suites, and content, plus
+    /// enrollment, deadlines, archival, and staff (everything a TA can do, more).
     case instructor
 
     /// Privilege rank for `atLeast`-style comparisons (higher = more
-    /// privilege). The gap leaves room to slot a future `ta` rung between
-    /// `student` and `instructor` without renumbering, so an
-    /// `enrollment.role >= .instructor` check keeps reading naturally.
+    /// privilege). `ta` sits between `student` and `instructor`, so
+    /// `role >= .ta` admits TAs and instructors while `role >= .instructor`
+    /// admits instructors only.
     private var rank: Int {
         switch self {
         case .student: return 0
+        case .ta: return 10
         case .instructor: return 20
         }
     }

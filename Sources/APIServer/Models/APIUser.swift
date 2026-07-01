@@ -436,13 +436,16 @@ struct CurrentUserContext: Encodable {
         self.activeCourse = activeCourse
         self.enrolledCourses = enrolledCourses
         self.showCourseTabs = enrolledCourses.count > 1
+        // Staff (TA or instructor) in the active course see the Instructor
+        // surface; the finer per-action floor is enforced server-side (#417
+        // Slice E). The name is kept for back-compat but now means "staff".
         self.isInstructorInActiveCourse =
-            activeCourse != nil && (activeCourse?.role == .instructor || user.isAdmin)
+            activeCourse != nil && ((activeCourse?.role ?? .student) >= .ta || user.isAdmin)
         // An admin instructs the whole deployment, so every enrollment counts;
-        // everyone else, only their `.instructor` enrollments. Order follows
-        // `enrolledCourses` (code-sorted).
+        // everyone else, every course where they are staff (TA or instructor).
+        // Order follows `enrolledCourses` (code-sorted).
         let instructorCourses =
-            user.isAdmin ? enrolledCourses : enrolledCourses.filter { $0.role == .instructor }
+            user.isAdmin ? enrolledCourses : enrolledCourses.filter { $0.role >= .ta }
         self.instructorCourses = instructorCourses
         self.isInstructorAnywhere = !instructorCourses.isEmpty
         self.showInstructorTabs = instructorCourses.count > 1
