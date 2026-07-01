@@ -6,6 +6,152 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.585] - 2026-07-01
+
+### Security
+
+- **Instructor-editor read endpoints now authorize against the resource's own
+  course (#1103).** The suite/scripts/files/achievements/datasets/
+  global-variables/edit-page reads — and the draft suite/support-file reads —
+  used loaders that performed no per-course check, so an active TA of one
+  course could fetch another course's reference solution and secret tests by
+  guessing its 6-char assignment ID (the web-editor twin of the hole #417
+  Slice G closed on the API side). All read handlers now require at least a
+  `.ta` role in the owning course (admin bypass, archived courses stay
+  readable); the unauthorized loaders are private so unauthorized use is
+  impossible outside the helper file. The per-assignment submissions and
+  per-student history pages get the same gate.
+
+### Security
+
+- **Dataset file specs are validated as bare filenames (#1104).** A dataset
+  spec's `file` was only checked for non-emptiness, then joined onto directory
+  paths at read time (`DatasetResolver`) and at delivery time on both the
+  server and the worker — so a spec like `../../.worker-secret` could read any
+  server-readable file and deliver it through the browser seed endpoint, and a
+  path-carrying personalized-file key could write outside the grading
+  workspace. `PUT /datasets` now rejects any name with path components and
+  requires it to exist among the setup zip's bundled files; the resolver, the
+  JupyterLite working-copy writer, and the worker's personalized-file writer
+  all guard independently via the new shared `FilenameSafety.bareFilename`.
+
+### Fixed
+
+- **BrightSpace grade clears now transmit the DELETE they sign (#1105).** The
+  Valence transport dispatched only PUT/GET, so `clearGrade` signed a DELETE
+  but sent a GET — D2L verifies the verb inside the signature, so every real
+  grade removal 403'd terminally and silently. The transport now switches on
+  the method (PUT/POST/DELETE/GET), "Sync now" re-queues errored clear rows
+  (previously unrecoverable — no reaper touches `brightspace_grade_clears`),
+  and a transport-level test stubs `app.client` to pin wire-verb ↔ signature
+  agreement for PUT/GET/DELETE.
+
+### Fixed
+
+- **Worker no longer leaks the per-job test-setup scratch copy on prepare
+  failures (#1106).** The scratch directory returned by `TestSetupCache.acquire`
+  was only cleaned up by a `defer` registered after the whole prepare phase
+  returned, so any throw in submission download / staging / normalization (a
+  routine event for invalid uploads) / `make` / helper writes leaked a fully
+  prepared `chickadee_ts_*` directory in /tmp per failed job — a disk-fill
+  vector. The prepare phase now removes the scratch copy itself before
+  rethrowing; pinned by a daemon-level regression test.
+
+### Fixed
+
+- **Worker `make` step is now time-bounded (#1107).** The optional pre-test
+  `make` ran with a synchronous `waitUntilExit()` on the daemon actor and no
+  time limit — and since it runs after the student submission is merged into
+  the workspace, a submission with a hung `make` pinned a cooperative-pool
+  thread and a job slot forever. `make` now runs through the same bounded
+  process machinery as test scripts (timeout + kill + capped output capture +
+  allowlisted environment); a hung build maps to `buildStatus: failed` with
+  the captured output in `compilerOutput`. Limit is 120s by default,
+  configurable via `RUNNER_MAKE_TIMEOUT_SECONDS`.
+
+### Fixed
+
+- **"Highest grade wins" is now one shared fold, and the per-student
+  drilldown uses it (#1111).** The policy existed as one helper plus three
+  inline copies (student dashboard, grades CSV, BrightSpace sync), and the
+  per-student drilldown pages still showed the *worker-preferred* grade — so
+  a submission with a 100 % browser result later regraded 80 % by the worker
+  showed 100 % on the roster but 80 % on the page the instructor opened from
+  that roster row. Policy (pure `bestGradePercent` / `bestGradeResult` folds)
+  is now split from I/O (the chunked grouped loader) in one file; all four
+  surfaces and the three drilldown sites go through it. Badges still use the
+  worker-preferred result.
+
+### Added
+
+- **Route-walking authorization matrix test (#1112).** The web-side sibling of
+  `MCPAuthorizationCoverageTests`: walks the live route table, substitutes
+  fixture IDs into every parameterized `/instructor` and `/courses` route, and
+  asserts each denies (401/403/404) both a student of the owning course and
+  staff of a different course. Route enumeration makes it self-updating — a
+  new route with an unknown parameter fails with instructions to extend the
+  fixture map, and a new resource route that forgets its per-course gate fails
+  with the route named (the class of miss that produced #1103).
+
+### Changed
+
+- **One course write-access policy, explicit role floors (#1113).** The web
+  `requireCourseWriteAccess` and MCP `authorizeCourseWriteAccess` were
+  hand-maintained twins of the same policy (admin bypass → role floor →
+  archived block). The policy now lives once in the throwless
+  `evaluateCourseWrite(…) -> CourseWriteDenial?`; the two wrappers only map
+  the denial to their surface's error type. `authorizeCourseAccess` returns
+  the resolved acting user so MCP write authorization no longer re-resolves
+  the token subject per call. All `atLeast:` role-floor defaults are removed
+  — every call site states its floor explicitly (content/grading = `.ta`,
+  lifecycle/structure = `.instructor`); the convention is recorded in
+  `docs/multi-course-roles.md`. No behavioural change to any route or tool.
+
+### Fixed
+
+- **The per-instructor LEARN Connection panel is back (#1114).** The runbook's
+  documented flow — "Connect my LEARN account", "Use my account for this
+  course", "Disconnect", "Link course", and the connection test — lost its UI
+  in an earlier LEARN-tab rework, leaving five working handlers with no entry
+  point and half the view context computed but never rendered. The panel is
+  restored on the LEARN tab; the view context is grouped into nested
+  `account` / `syncIdentity` panels (killing the duplicated 26-field empty
+  variant), and the dead log/summary/readiness-rollup aggregation that no
+  template consumed is dropped from the page load.
+
+### Changed
+
+- **MCP close-on-edit contract is now a guarded chokepoint (#1115).**
+  `update_solution` no longer hand-rolls the "close if open" rule (it now
+  closes via the shared `closeOpenAssignmentForContentEdit`, remaining the one
+  documented exemption from `finalizeContentEdit` — it enqueues its own
+  validation carrying the new solution, and a solution-only edit never changes
+  the manifest, so the manifest-gated regrade is deliberately skipped,
+  matching the web save). New `MCPContentEditCoverageTests` classifies every
+  `content:write` tool (content-edit vs non-closing, each with a
+  justification) and fails the build for any new write tool that isn't
+  classified. The agent-facing instructions now state explicitly that
+  `update_global_inputs` / `update_section_variables` neither close nor
+  regrade (matching the web Global Inputs panel), closing the ambiguity where
+  those tools appeared in neither contract list.
+
+### Fixed
+
+- **One BrightSpace classlist identity index (#1117).** Grade push, section
+  sync, and the roster reconciler each reduced the LEARN classlist their own
+  way, and the normalization had already drifted: section sync lowercased but
+  didn't trim, so a classlist username with stray whitespace matched for
+  grade push but silently failed section sync. The new
+  `BrightSpaceIdentityIndex` is the single reduction (one trim+lowercase
+  normalization, one username-first/student-number-second precedence) consumed
+  by all three sweeps and the reconciler. Also folded in: the manual
+  "Sync now"/"Push all" re-queue triple-write is one `requeueForImmediateSync`
+  helper; the sweep takes `bypassDebounce:` instead of callers fabricating a
+  future timestamp; the manual sweep logs failures instead of swallowing them;
+  and the Valence client's four copy-pasted response-body reads are one
+  `ClientResponse.bodyString(max:)`.
+
+
 ## [0.4.584] - 2026-07-01
 
 ### Fixed
