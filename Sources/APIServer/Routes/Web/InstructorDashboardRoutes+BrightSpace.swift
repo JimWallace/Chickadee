@@ -365,9 +365,9 @@ extension InstructorDashboardRoutes {
     }
 
     /// Clears the recorded error and re-flags as pending every grade-sync row in
-    /// the course (result rows and override-only rows) that previously errored,
-    /// back-dating `pendingSince` so the next sweep retries it immediately. The
-    /// "hard reset" half of "Sync now".
+    /// the course (result rows, override-only rows, and queued grade clears)
+    /// that previously errored, back-dating `pendingSince` so the next sweep
+    /// retries it immediately. The "hard reset" half of "Sync now".
     private func requeueErroredGradePushes(req: Request, courseUUID: UUID) async throws {
         let resultKeys = try await courseStudentResultIDs(req: req, courseUUID: courseUUID)
         let results =
@@ -396,6 +396,22 @@ extension InstructorDashboardRoutes {
             override.brightspacePendingSince = Date.distantPast
             override.brightspaceSyncError = nil
             try await override.save(on: req.db)
+        }
+        // Errored grade CLEARS (queued removals) are re-queued too — nothing
+        // else touches `brightspace_grade_clears` after a terminal failure, so
+        // before this an errored clear lingered forever with an error nobody
+        // could see (#1105).
+        let clears =
+            setupIDs.isEmpty
+            ? []
+            : try await APIBrightSpaceGradeClear.query(on: req.db)
+                .filter(\.$testSetupID ~~ setupIDs)
+                .all()
+        for clear in clears where (clear.brightspaceSyncError ?? "").isEmpty == false {
+            clear.brightspaceSyncPending = true
+            clear.brightspacePendingSince = Date.distantPast
+            clear.brightspaceSyncError = nil
+            try await clear.save(on: req.db)
         }
     }
 

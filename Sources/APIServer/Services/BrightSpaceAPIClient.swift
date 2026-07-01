@@ -330,9 +330,10 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
 
     // MARK: - Request transport (signing + clock-skew retry)
 
-    /// Signs `rawURL` for `method` ("GET"/"PUT") and sends it. If D2L rejects the
-    /// request with a "Timestamp out of range" 403, learns the clock skew from
-    /// the response body and retries exactly once with a corrected timestamp.
+    /// Signs `rawURL` for `method` ("GET"/"PUT"/"DELETE") and sends it. If D2L
+    /// rejects the request with a "Timestamp out of range" 403, learns the clock
+    /// skew from the response body and retries exactly once with a corrected
+    /// timestamp.
     private func sendSigned(
         method: String,
         rawURL: String,
@@ -341,10 +342,20 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     ) async throws -> ClientResponse {
         func attempt() async throws -> ClientResponse {
             let uri = URI(string: signed(url: rawURL, method: method))
-            if method.uppercased() == "PUT" {
+            // The wire verb MUST match the verb inside the Valence signature —
+            // D2L verifies the method as part of the signature, so a mismatch
+            // is a guaranteed 403 (#1105: clearGrade signed a DELETE that was
+            // transmitted as a GET, so grade removal could never work).
+            switch method.uppercased() {
+            case "PUT":
                 return try await app.client.put(uri) { req in try beforeSend?(&req) }
+            case "POST":
+                return try await app.client.post(uri) { req in try beforeSend?(&req) }
+            case "DELETE":
+                return try await app.client.delete(uri) { req in try beforeSend?(&req) }
+            default:
+                return try await app.client.get(uri) { req in try beforeSend?(&req) }
             }
-            return try await app.client.get(uri) { req in try beforeSend?(&req) }
         }
         let response = try await attempt()
         guard response.status == .forbidden else { return response }
