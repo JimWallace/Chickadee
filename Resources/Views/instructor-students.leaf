@@ -9,10 +9,17 @@ Students
     <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
 </nav>
 
+#if(flashSuccess):
+<div class="notice-banner students-flash"><p>#(flashSuccess)</p></div>
+#endif
+#if(flashError):
+<div class="form-error students-flash">#(flashError)</div>
+#endif
+
 <div class="students-titlebar">
     <h1 class="students-title">Enrolled students (<span id="enrolled-count">#(enrolledStudentCount)</span>)</h1>
     #if(currentUser.activeCourse):
-    #if(!courseIsArchived):
+    #if(!rosterReadOnly):
     <form method="post" action="/courses/#(currentUser.activeCourse.id)/enrollment-mode" class="students-mode-form">
         #csrfFormField()
         <label class="form-label students-mode-label">
@@ -25,6 +32,27 @@ Students
         </label>
     </form>
     <a class="btn action-btn" href="/instructor/enroll-csv">Enrol from CSV</a>
+    <details class="ext-details students-add-staff">
+        <summary class="btn action-btn" title="Add a co-instructor or TA">Add staff</summary>
+        <form method="post" action="/courses/#(currentUser.activeCourse.id)/staff" class="ext-panel">
+            #csrfFormField()
+            <p class="students-register-hint">Add a co-instructor or TA by username or email. If they have no account yet, a placeholder is created and adopted on their first login.</p>
+            <label class="ext-field-label">
+                Username or email
+                <input type="text" name="identifier" required autocomplete="off" class="ext-field-input">
+            </label>
+            <label class="ext-field-label">
+                Role
+                <select name="role" class="ext-field-input">
+                    <option value="ta">TA</option>
+                    <option value="instructor">Instructor</option>
+                </select>
+            </label>
+            <div class="ext-panel-actions">
+                <button class="btn action-btn" type="submit">Add</button>
+            </div>
+        </form>
+    </details>
     #endif
     #if(brightspaceLinkAvailable):
     <button type="button" class="btn action-btn" id="learn-check-btn"
@@ -42,6 +70,7 @@ Students
 
 <table class="results-table" id="enrolled-students-table"
        data-archived="#if(courseIsArchived):true#else:false#endif"
+       data-can-manage="#if(canManageRoster):true#else:false#endif"
        data-course-id="#(currentUser.activeCourse.id)">
     <thead>
         <tr>
@@ -75,7 +104,7 @@ Students
             <td class="role-cell">
                 #if(student.isPending):
                 <span class="students-pending-role">(pending)</span>
-                #elseif(courseIsArchived):
+                #elseif(rosterReadOnly):
                 #(student.role)
                 #else:
                 <form method="post" action="/courses/#(currentUser.activeCourse.id)/role/#(student.id)"
@@ -95,7 +124,7 @@ Students
                 #(student.lastSeenAtText)
             </td>
             <td>
-                #if(!courseIsArchived):
+                #if(!rosterReadOnly):
                 <div class="students-row-actions">
                     #if(student.isPending):
                     <details class="ext-details form-flush">
@@ -152,6 +181,8 @@ Students
     flex-wrap: wrap;
     margin-bottom: .75rem;
 }
+.students-flash { margin-bottom: .75rem; }
+.students-add-staff { margin: 0; }
 .students-title { font-size: 1.05rem; font-weight: 600; margin: 0; }
 .students-mode-form { margin: 0; }
 .students-mode-label { font-size: .875rem; margin: 0; }
@@ -212,6 +243,7 @@ Students
     var emptyMsg = document.getElementById('no-students-msg');
     var countEl = document.getElementById('enrolled-count');
     var archived = table.getAttribute('data-archived') === 'true';
+    var canManage = table.getAttribute('data-can-manage') === 'true';
     var courseId = table.getAttribute('data-course-id') || '';
 
     var sortCol = 3;
@@ -243,7 +275,7 @@ Students
         var roleCell;
         if (student.isPending) {
             roleCell = '<span class="students-pending-role">(pending)</span>';
-        } else if (archived) {
+        } else if (archived || !canManage) {
             roleCell = role;
         } else {
             roleCell = '<form method="post" action="/courses/' + courseId + '/role/' + escapeHtml(student.id)
@@ -263,7 +295,7 @@ Students
             ? '<code class="students-pending-username">' + username + '</code>'
             : '<a href="' + subURL + '"><code>' + username + '</code></a>';
         var actionCell = '';
-        if (!archived) {
+        if (!archived && canManage) {
             var registerCell = '';
             if (student.isPending && student.registerURL) {
                 registerCell = '<details class="ext-details form-flush">'

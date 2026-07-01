@@ -64,6 +64,16 @@ struct InstructorStudentsContext: Encodable {
     /// True when BrightSpace is configured on the server AND the active course
     /// is linked to a LEARN org unit — gates the "Check against LEARN" button.
     let brightspaceLinkAvailable: Bool
+    /// True when the viewer may manage the roster (change roles, unenroll, invite
+    /// staff): a per-course instructor or an admin. TAs pass the `/instructor`
+    /// gate but see the roster read-only (#417 Slice F). Independent of archived.
+    let canManageRoster: Bool
+    /// `courseIsArchived || !canManageRoster` — folded so the Leaf template gates
+    /// every mutating control on one flag (LeafKit 1.14.2 mis-parses `||`).
+    let rosterReadOnly: Bool
+    /// Flash banners after a staff-invite POST redirect.
+    let flashSuccess: String?
+    let flashError: String?
 }
 
 /// BrightSpace tab (`GET /instructor/brightspace`): connection status, the
