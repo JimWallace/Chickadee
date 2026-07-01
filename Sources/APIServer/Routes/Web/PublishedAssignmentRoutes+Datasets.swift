@@ -46,11 +46,27 @@ extension PublishedAssignmentRoutes {
         let (_, setup) = try await loadAssignmentAndSetupForWrite(req)
         let body = try req.content.decode(DatasetsBody.self)
 
-        // Validate: each spec must name a non-empty file; sampleSize if
-        // present must be positive.
+        // Validate: each spec must name a bundled support file by bare
+        // filename — no separators or traversal components, because the value
+        // is joined onto directory paths at read time (`DatasetResolver`) and
+        // at delivery time on both the server and the worker (#1104). It must
+        // also actually exist in the setup zip: a dataset marks an existing
+        // support file as per-student, it never introduces a new file.
+        // sampleSize if present must be positive.
+        let zipEntries = Set(
+            listZipEntries(zipPath: setup.zipPath).map { entry in
+                entry.hasPrefix("./") ? String(entry.dropFirst(2)) : entry
+            })
         for spec in body.datasets {
-            guard !spec.file.trimmingCharacters(in: .whitespaces).isEmpty else {
-                throw Abort(.badRequest, reason: "Dataset spec has an empty file name.")
+            guard FilenameSafety.bareFilename(spec.file) != nil else {
+                throw Abort(
+                    .badRequest,
+                    reason: "Dataset file '\(spec.file)' must be a bare filename with no path components.")
+            }
+            guard zipEntries.contains(spec.file) else {
+                throw Abort(
+                    .badRequest,
+                    reason: "Dataset file '\(spec.file)' is not among this assignment's bundled files.")
             }
             if let n = spec.sampleSize, n <= 0 {
                 throw Abort(.badRequest, reason: "sampleSize for '\(spec.file)' must be positive.")

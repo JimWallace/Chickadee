@@ -30,6 +30,13 @@ public enum DatasetResolver {
         let directory = sourceDirectory.hasSuffix("/") ? sourceDirectory : sourceDirectory + "/"
         var files: [String: String] = [:]
         for spec in manifest.datasets {
+            // Defense-in-depth (#1104): a dataset source is by definition a
+            // bundled support file at the setup root, so only a bare filename
+            // is valid here. A path-carrying spec (e.g. "../../.worker-secret")
+            // must not read outside the setup directory; `putDatasets` rejects
+            // such specs at authoring time, this guard covers manifests that
+            // arrived by other routes (bundle import, hand-edited zip).
+            guard FilenameSafety.bareFilename(spec.file) != nil else { continue }
             let path = directory + spec.file
             guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
             files[spec.file] = DatasetMaterializer.materialize(

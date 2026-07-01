@@ -175,8 +175,7 @@ func safeScriptFilename(from req: Request) throws -> String {
     guard let raw = req.parameters.get("filename"), !raw.isEmpty else {
         throw WebAssignmentError.invalidParameter(name: "filename", reason: "Missing filename parameter")
     }
-    let cleaned = (raw as NSString).lastPathComponent
-    guard cleaned == raw, !cleaned.isEmpty, cleaned != ".", cleaned != ".." else {
+    guard let cleaned = FilenameSafety.bareFilename(raw) else {
         throw WebAssignmentError.invalidParameter(name: "filename", reason: "Invalid filename '\(raw)'")
     }
     return cleaned
