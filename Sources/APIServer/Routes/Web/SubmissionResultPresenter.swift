@@ -128,7 +128,7 @@ extension WebRoutes {
         // students; they are bucketed into per-section aggregate pass/fail
         // summaries by `buildSectionedOutcomes`.  Kept in collection order so
         // the section correlation lines up with the secret manifest entries.
-        if !viewer.user.isInstructor {
+        if !viewer.isStaff {
             processed.secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
         }
 
@@ -528,6 +528,10 @@ struct ManifestDisplayData {
 /// output is shown.  The grade spans every tier regardless of these.
 struct SubmissionViewer {
     let user: APIUser
+    /// Whether the viewer is course staff (TA+ or admin) for this submission's
+    /// course — gates secret-tier bucketing and instructor-level detail (#417
+    /// Slice G, per-course; was the global `user.isInstructor`).
+    let isStaff: Bool
     /// Tiers rendered as individual rows (public + release for students; all
     /// tiers for instructors).  Secret is never itemized for students.
     let itemizedTiers: Set<String>

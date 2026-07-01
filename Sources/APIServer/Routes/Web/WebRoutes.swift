@@ -88,6 +88,12 @@ struct WebRoutes: RouteCollection {
 
         let fmt = waterlooDateTimeFormatter()
 
+        // Whether the viewer is staff (TA+ or admin) in the *active* course —
+        // drives instructor vs student dashboard rendering. Per-course now, read
+        // from the resolved active-course role (#417 Slice G — was the global
+        // `user.isInstructor`).
+        let isActiveCourseStaff = user.isAdmin || (courseState.active?.role ?? .student) >= .ta
+
         // Load every assignment in the active course.
         let allAssignments = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == activeCourseUUID)
@@ -113,7 +119,7 @@ struct WebRoutes: RouteCollection {
         let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
 
         let setups: [APITestSetup]
-        if user.isInstructor {
+        if isActiveCourseStaff {
             // Instructors and admins see every test setup in the active course.
             setups = try await APITestSetup.query(on: req.db)
                 .filter(\.$courseID == activeCourseUUID)
@@ -354,8 +360,8 @@ struct WebRoutes: RouteCollection {
                     status = "closed"
                     staffOnly = false
                 case .preview:
-                    status = user.isInstructor ? "open" : "closed"
-                    staffOnly = user.isInstructor
+                    status = isActiveCourseStaff ? "open" : "closed"
+                    staffOnly = isActiveCourseStaff
                 }
             } else {
                 status = "unpublished"
@@ -384,7 +390,7 @@ struct WebRoutes: RouteCollection {
                 guard let assignment else { return false }
                 // Preview is open for staff, closed for students; staff testing a
                 // preview also bypass the future-open-date gate (see submissionGate).
-                let gate = assignment.visibility.submissionGate(isStaff: user.isInstructor)
+                let gate = assignment.visibility.submissionGate(isStaff: isActiveCourseStaff)
                 return isAssignmentOpenForUser(
                     isOpen: gate.treatAsOpen,
                     overrideActive: assignment.deadlineOverrideActive ?? false,
@@ -493,7 +499,9 @@ struct WebRoutes: RouteCollection {
     @Sendable
     func newSetupForm(req: Request) async throws -> View {
         let user = try req.auth.require(APIUser.self)
-        guard user.isInstructor else { throw Abort(.forbidden) }
+        // Authoring a new test setup: staff (TA+ anywhere) or admin (#417 Slice
+        // G — was the global `user.isInstructor`).
+        guard try await isStaffAnywhere(user, db: req.db) else { throw Abort(.forbidden) }
         return try await req.view.render(
             "setup-new",
             BaseContext(currentUser: req.currentUserContext))

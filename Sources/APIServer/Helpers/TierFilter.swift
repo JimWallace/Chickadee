@@ -94,8 +94,8 @@ extension TestOutcomeCollection {
 /// The student *web* view is more nuanced — it lists release tests by name
 /// before the deadline but redacts their output — so it uses `itemizedTiers`
 /// and `releaseOutputVisible` instead.
-func visibleTiers(for user: APIUser, effectiveDueAt: Date?, now: Date = Date()) -> Set<String> {
-    if user.isInstructor {
+func visibleTiers(isStaff: Bool, effectiveDueAt: Date?, now: Date = Date()) -> Set<String> {
+    if isStaff {
         return ["public", "release", "secret"]
     }
     // nil effectiveDueAt → no deadline → release is immediately visible.
@@ -110,8 +110,8 @@ func visibleTiers(for user: APIUser, effectiveDueAt: Date?, now: Date = Date()) 
 /// see every tier.  The grade is computed over *all* tiers regardless of this
 /// set, so the number is stable across the deadline; only release *output* is
 /// additionally gated (see `releaseOutputVisible`).
-func itemizedTiers(for user: APIUser) -> Set<String> {
-    user.isInstructor ? ["public", "release", "secret"] : ["public", "release"]
+func itemizedTiers(isStaff: Bool) -> Set<String> {
+    isStaff ? ["public", "release", "secret"] : ["public", "release"]
 }
 
 /// Whether release-tier *output* (the result message + stderr/traceback panel)
@@ -123,8 +123,8 @@ func itemizedTiers(for user: APIUser) -> Set<String> {
 /// later of the assignment due date and their own extension — so a student with
 /// an active extension keeps release output hidden until *their* deadline
 /// passes, not the (earlier) class-wide one.
-func releaseOutputVisible(for user: APIUser, effectiveDueAt: Date?, now: Date = Date()) -> Bool {
-    if user.isInstructor { return true }
+func releaseOutputVisible(isStaff: Bool, effectiveDueAt: Date?, now: Date = Date()) -> Bool {
+    if isStaff { return true }
     return effectiveDueAt.map { $0 <= now } ?? true
 }
 

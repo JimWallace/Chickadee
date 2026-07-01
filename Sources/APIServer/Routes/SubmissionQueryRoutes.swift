@@ -34,10 +34,18 @@ struct SubmissionQueryRoutes: RouteCollection {
             .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
 
+        // A non-admin sees others' submissions only for a test setup whose
+        // course they staff; otherwise (including with no setup filter) they see
+        // only their own (#417 Slice G — was the global `caller.isInstructor`).
+        var callerIsCourseStaff = false
         if let testSetupID = req.query[String.self, at: "testSetupID"] {
             query = query.filter(\.$testSetupID == testSetupID)
+            if let setup = try await APITestSetup.find(testSetupID, on: req.db) {
+                callerIsCourseStaff = try await isCourseStaff(
+                    caller, inCourse: setup.courseID, db: req.db)
+            }
         }
-        if !caller.isInstructor {
+        if !callerIsCourseStaff {
             query = query.filter(\.$userID == caller.id)
         }
 
@@ -58,7 +66,8 @@ struct SubmissionQueryRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        guard canViewSubmission(caller: caller, submission: submission) else {
+        guard try await submissionAccess(caller: caller, submission: submission, on: req.db).canView
+        else {
             throw Abort(.forbidden)
         }
         return SubmissionStatusResponse(submission: submission)
@@ -75,7 +84,8 @@ struct SubmissionQueryRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        guard canViewSubmission(caller: caller, submission: submission) else {
+        let access = try await submissionAccess(caller: caller, submission: submission, on: req.db)
+        guard access.canView else {
             throw Abort(.forbidden)
         }
 
@@ -112,7 +122,7 @@ struct SubmissionQueryRoutes: RouteCollection {
         let releaseDeadline = try await releaseVisibilityDeadline(
             for: assignment, user: caller, on: req.db)
         let visible = fullCollection.filtering(
-            tiers: visibleTiers(for: caller, effectiveDueAt: releaseDeadline))
+            tiers: visibleTiers(isStaff: access.isStaff, effectiveDueAt: releaseDeadline))
 
         let responseCollection: TestOutcomeCollection
         if let tiersParam = req.query[String.self, at: "tiers"] {
@@ -143,9 +153,20 @@ struct SubmissionQueryRoutes: RouteCollection {
     }
 }
 
-private func canViewSubmission(caller: APIUser, submission: APISubmission) -> Bool {
-    if caller.isInstructor { return true }
-    return submission.userID == caller.id
+/// Per-course view authorization for a single submission (#417 Slice G).
+/// Returns whether `caller` may view it and whether they view it as course
+/// staff — the owner always may (`isStaff == false`), and a staff member (TA+
+/// or admin) of the submission's course sees it with instructor-level tier
+/// visibility. Resolving the course once lets the caller reuse `isStaff` for
+/// tier filtering without a second lookup.
+private func submissionAccess(
+    caller: APIUser, submission: APISubmission, on db: Database
+) async throws -> (canView: Bool, isStaff: Bool) {
+    var isStaff = false
+    if let owningCourseID = try await courseID(ofSubmission: submission, on: db) {
+        isStaff = try await isCourseStaff(caller, inCourse: owningCourseID, db: db)
+    }
+    return (isStaff || submission.userID == caller.id, isStaff)
 }
 
 // MARK: - Response types

@@ -30,28 +30,33 @@ struct JupyterLiteContentsRoutes: RouteCollection {
 
     @Sendable
     func contentsRoot(req: Request) async throws -> Response {
-        try contentsResponse(req: req, relativePath: "")
+        try await contentsResponse(req: req, relativePath: "")
     }
 
     @Sendable
     func contentsPath(req: Request) async throws -> Response {
         let relPath = req.parameters.getCatchall().joined(separator: "/")
-        return try contentsResponse(req: req, relativePath: relPath)
+        return try await contentsResponse(req: req, relativePath: relPath)
     }
 
-    private func contentsResponse(req: Request, relativePath: String) throws -> Response {
+    private func contentsResponse(req: Request, relativePath: String) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
+        // The JupyterLite virtual filesystem is deployment-wide (not course-
+        // scoped): course staff (TA+ or admin anywhere) get the full authoring
+        // tree, everyone else is scoped to their own `users/<id>` folder (#417
+        // Slice G — was the global `caller.isInstructor`).
+        let isStaff = try await isStaffAnywhere(caller, db: req.db)
         let fm = FileManager.default
         let baseDir = req.application.directory.publicDirectory + "jupyterlite/files/"
         try fm.createDirectory(atPath: baseDir, withIntermediateDirectories: true)
         let baseURL = URL(fileURLWithPath: baseDir, isDirectory: true).standardizedFileURL
 
-        let cleanRel = try scopedRelativePath(for: caller, requested: relativePath)
+        let cleanRel = try scopedRelativePath(for: caller, requested: relativePath, isStaff: isStaff)
         let targetURL = baseURL.appendingPathComponent(cleanRel).standardizedFileURL
         guard targetURL.path.hasPrefix(baseURL.path) else {
             throw Abort(.forbidden)
         }
-        if let userRoot = try userRootPath(for: caller) {
+        if let userRoot = try userRootPath(for: caller, isStaff: isStaff) {
             let userRootURL = baseURL.appendingPathComponent(userRoot, isDirectory: true).standardizedFileURL
             let withinUserRoot =
                 targetURL.path == userRootURL.path
@@ -215,8 +220,8 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         ISO8601DateFormatter().string(from: date)
     }
 
-    private func userRootPath(for caller: APIUser) throws -> String? {
-        if caller.isInstructor {
+    private func userRootPath(for caller: APIUser, isStaff: Bool) throws -> String? {
+        if isStaff {
             return nil
         }
         guard let userID = caller.id else {
@@ -225,13 +230,17 @@ struct JupyterLiteContentsRoutes: RouteCollection {
         return "users/\(userID.uuidString.lowercased())"
     }
 
-    private func scopedRelativePath(for caller: APIUser, requested: String) throws -> String {
+    private func scopedRelativePath(
+        for caller: APIUser, requested: String, isStaff: Bool
+    ) throws
+        -> String
+    {
         let clean = requested.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        if caller.isInstructor {
+        if isStaff {
             return clean
         }
 
-        guard let userRoot = try userRootPath(for: caller) else {
+        guard let userRoot = try userRootPath(for: caller, isStaff: isStaff) else {
             return clean
         }
 

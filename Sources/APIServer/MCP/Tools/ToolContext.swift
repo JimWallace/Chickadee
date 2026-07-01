@@ -70,7 +70,11 @@ struct ToolContext {
         else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Unknown token subject.")
         }
-        guard user.isInstructor || user.isMCPAgent else {
+        // MCP eligibility is coarse (per-course access is enforced separately by
+        // `authorizeCourseAccess`): staff (TA+ anywhere) or admin humans, plus
+        // `mcp` service accounts — never plain students (#417 Slice G, was the
+        // global `user.isInstructor`).
+        guard try await isStaffAnywhere(user, db: db) || user.isMCPAgent else {
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "Students may not use the MCP interface.")
         }
