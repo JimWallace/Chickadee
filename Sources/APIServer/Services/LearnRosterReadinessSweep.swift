@@ -44,7 +44,7 @@ func reconcileCourseReadiness(
     guard let courseID = course.id else { return RosterReadinessOutcome() }
 
     let classlist = try await client.fetchClasslist(orgUnitID: orgUnitID, on: application)
-    let learnIdentities = LearnRosterReconciler.identitySet(from: classlist)
+    let learnIdentities = BrightSpaceIdentityIndex(classlist: classlist)
 
     let enrollments = try await APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
@@ -95,7 +95,7 @@ func reconcileCourseReadiness(
 /// Maps the pure reconciler's classification onto the persisted readiness +
 /// a human-readable reason for the instructor.
 private func readinessFor(
-    studentID: String, username: String, learnIdentities: Set<String>
+    studentID: String, username: String, learnIdentities: BrightSpaceIdentityIndex
 ) -> (LearnSyncReadiness, String?) {
     switch LearnRosterReconciler.classify(
         candidateKeys: [studentID, username],

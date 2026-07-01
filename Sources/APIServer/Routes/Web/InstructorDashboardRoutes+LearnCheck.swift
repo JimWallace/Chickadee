@@ -48,7 +48,7 @@ extension InstructorDashboardRoutes {
             return .unavailable("Couldn't fetch the LEARN classlist: \(error).")
         }
 
-        let learnIdentities = LearnRosterReconciler.identitySet(from: classlist)
+        let learnIdentities = BrightSpaceIdentityIndex(classlist: classlist)
 
         var notOnLearn: [String] = []
         var unverifiable: [String] = []

@@ -376,12 +376,8 @@ extension InstructorDashboardRoutes {
             : try await APIResult.query(on: req.db)
                 .filter(\.$submissionID ~~ resultKeys)
                 .all()
-        for result in results where (result.brightspaceSyncError ?? "").isEmpty == false {
-            result.brightspaceSyncPending = true
-            result.brightspacePendingSince = Date.distantPast
-            result.brightspaceSyncError = nil
-            try await result.save(on: req.db)
-        }
+        try await requeueForImmediateSync(
+            results.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
         // Errored override-only pushes (no-submission students) live on the
         // override row, not a result row — re-queue those too.
         let setupIDs = try await courseSetupIDs(req: req, courseUUID: courseUUID)
@@ -391,12 +387,8 @@ extension InstructorDashboardRoutes {
             : try await APIGradeOverride.query(on: req.db)
                 .filter(\.$testSetupID ~~ setupIDs)
                 .all()
-        for override in overrides where (override.brightspaceSyncError ?? "").isEmpty == false {
-            override.brightspaceSyncPending = true
-            override.brightspacePendingSince = Date.distantPast
-            override.brightspaceSyncError = nil
-            try await override.save(on: req.db)
-        }
+        try await requeueForImmediateSync(
+            overrides.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
         // Errored grade CLEARS (queued removals) are re-queued too — nothing
         // else touches `brightspace_grade_clears` after a terminal failure, so
         // before this an errored clear lingered forever with an error nobody
@@ -407,12 +399,8 @@ extension InstructorDashboardRoutes {
             : try await APIBrightSpaceGradeClear.query(on: req.db)
                 .filter(\.$testSetupID ~~ setupIDs)
                 .all()
-        for clear in clears where (clear.brightspaceSyncError ?? "").isEmpty == false {
-            clear.brightspaceSyncPending = true
-            clear.brightspacePendingSince = Date.distantPast
-            clear.brightspaceSyncError = nil
-            try await clear.save(on: req.db)
-        }
+        try await requeueForImmediateSync(
+            clears.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
     }
 
     // MARK: - POST /instructor/brightspace/reconcile-now
@@ -479,23 +467,13 @@ extension InstructorDashboardRoutes {
             : try await APIResult.query(on: req.db)
                 .filter(\.$submissionID ~~ submissionIDs)
                 .all()
-        for result in results {
-            result.brightspaceSyncPending = true
-            result.brightspacePendingSince = Date.distantPast
-            result.brightspaceSyncError = nil
-            try await result.save(on: req.db)
-        }
+        try await requeueForImmediateSync(results, on: req.db)
         // Override-only grades (no-submission students) carry their pending
         // flag on the override row; re-queue those for this assignment too.
         let overrides = try await APIGradeOverride.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .all()
-        for override in overrides {
-            override.brightspaceSyncPending = true
-            override.brightspacePendingSince = Date.distantPast
-            override.brightspaceSyncError = nil
-            try await override.save(on: req.db)
-        }
+        try await requeueForImmediateSync(overrides, on: req.db)
         await runImmediateBrightspaceSweep(req: req)
         return req.redirect(to: "/instructor/brightspace")
     }
@@ -530,17 +508,22 @@ extension InstructorDashboardRoutes {
     private func runImmediateBrightspaceSweep(req: Request) async {
         guard let app = req.application.brightSpaceAppCredentials else { return }
         let debounce = req.application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
-        // Pass a future `now` so the debounce cutoff lands ahead of every
-        // pending row, forcing an immediate push instead of waiting out the
-        // window. Each course resolves its designated identity (or the fallback).
-        _ = try? await sweepBrightSpaceGradeSync(
-            on: req.db,
-            debounceSecs: debounce,
-            resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
-            logger: req.logger,
-            application: req.application,
-            now: Date().addingTimeInterval(debounce + 1)
-        )
+        // Bypass the debounce so every pending row pushes immediately. Each
+        // course resolves its designated identity (or the fallback). Failures
+        // are recorded per-row by the sweep itself; a sweep-level throw is
+        // logged (it used to be silently swallowed, #1117).
+        do {
+            _ = try await sweepBrightSpaceGradeSync(
+                on: req.db,
+                debounceSecs: debounce,
+                resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
+                logger: req.logger,
+                application: req.application,
+                bypassDebounce: true
+            )
+        } catch {
+            req.logger.warning("Manual BrightSpace sweep failed: \(error)")
+        }
     }
 
     /// Resolves how the active course's grade-sync identity is shown: the display

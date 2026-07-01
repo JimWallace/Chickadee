@@ -18,35 +18,22 @@ enum LearnRosterStatus: Equatable {
 }
 
 enum LearnRosterReconciler {
-    /// Normalises a LEARN classlist into the set of identity keys a roster
-    /// entry can be matched against (student numbers + usernames, lowercased).
-    static func identitySet(from classlist: [BrightSpaceClasslistEntry]) -> Set<String> {
-        var ids = Set<String>()
-        for entry in classlist {
-            if let org = entry.orgDefinedID { ids.insert(normalise(org)) }
-            if let user = entry.username { ids.insert(normalise(user)) }
-        }
-        ids.remove("")
-        return ids
-    }
-
     /// Classifies one roster entry.  `candidateKeys` are the identifiers this
     /// entry could be known by on LEARN (student ID and/or username).
     /// `hasIdentityKey` is true when the entry carries a key we trust to be
     /// authoritative (a student ID, or a pre-enrollment username) — when
     /// false, an unmatched entry is `.unverifiable` rather than `.notOnLearn`,
     /// so an account we simply couldn't look up is never flagged for removal.
+    ///
+    /// Membership + normalization come from the shared
+    /// `BrightSpaceIdentityIndex` (#1117), so the reconciler can never drift
+    /// from the grade-push / section-sync classlist matching.
     static func classify(
         candidateKeys: [String?],
         hasIdentityKey: Bool,
-        learnIdentities: Set<String>
+        learnIdentities: BrightSpaceIdentityIndex
     ) -> LearnRosterStatus {
-        let keys = candidateKeys.compactMap { $0.map(normalise) }.filter { !$0.isEmpty }
-        if keys.contains(where: { learnIdentities.contains($0) }) { return .onLearn }
+        if candidateKeys.contains(where: { learnIdentities.contains($0) }) { return .onLearn }
         return hasIdentityKey ? .notOnLearn : .unverifiable
-    }
-
-    private static func normalise(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
