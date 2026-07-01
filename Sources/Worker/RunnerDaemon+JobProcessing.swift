@@ -343,56 +343,72 @@ extension WorkerDaemon {
         )
         stageTimings.testSetupCacheHit = acquireResult.didHit
 
-        try await submissionDownload
-        stageTimings.record(
-            "submission_download",
-            milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000)
-        )
+        // From here the scratch copy is caller-owned, but `process(_:)` only
+        // registers its cleanup `defer` after we return — so any throw in the
+        // remaining prepare stages (submission download, staging, the routine
+        // invalid-upload normalization failure, `make`, helper writes) must
+        // remove the directory itself before rethrowing, or every failed job
+        // leaks a fully-prepared test-setup dir in /tmp (#1106; disk-fill has
+        // taken prod down once already).
+        do {
+            try await submissionDownload
+            stageTimings.record(
+                "submission_download",
+                milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000)
+            )
 
-        let manifest = job.manifest
+            let manifest = job.manifest
 
-        try await stageSubmissionIntoWorkspace(
-            job: job,
-            paths: paths,
-            stageTimings: &stageTimings
-        )
+            try await stageSubmissionIntoWorkspace(
+                job: job,
+                paths: paths,
+                stageTimings: &stageTimings
+            )
 
-        try removeStarterNotebookIfPresent(
-            manifest: manifest,
-            testSetupDir: testSetupDir,
-            submissionFilename: job.submissionFilename,
-            stageTimings: &stageTimings
-        )
+            try removeStarterNotebookIfPresent(
+                manifest: manifest,
+                testSetupDir: testSetupDir,
+                submissionFilename: job.submissionFilename,
+                stageTimings: &stageTimings
+            )
 
-        let (normalizationWarnings, preferredStudentModule) = try normalizeSubmission(
-            job: job,
-            manifest: manifest,
-            paths: paths,
-            testSetupDir: testSetupDir,
-            stageTimings: &stageTimings
-        )
+            let (normalizationWarnings, preferredStudentModule) = try normalizeSubmission(
+                job: job,
+                manifest: manifest,
+                paths: paths,
+                testSetupDir: testSetupDir,
+                stageTimings: &stageTimings
+            )
 
-        // Optional make step.
-        try stageTimings.measureSync("make_step") {
+            // Optional make step (bounded — see runMake, #1107). Timed
+            // inline: `measure`'s closure can't hop to this actor's
+            // isolation, and the failure path doesn't record a timing
+            // (matching the old measureSync behaviour).
             if let makefile = manifest.makefile {
-                try runMake(in: testSetupDir, target: makefile.target)
+                let makeStartedAt = Date()
+                try await runMake(in: testSetupDir, target: makefile.target)
+                stageTimings.record(
+                    "make_step", milliseconds: Int(Date().timeIntervalSince(makeStartedAt) * 1000))
             }
-        }
 
-        // Install shared Python test runtime helpers for every run.
-        try stageTimings.measureSync("runtime_helper_setup") {
-            try writePythonRuntimeHelpers(in: testSetupDir)
-            try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
-            try writeRRuntimeHelper(in: testSetupDir)
-        }
+            // Install shared Python test runtime helpers for every run.
+            try stageTimings.measureSync("runtime_helper_setup") {
+                try writePythonRuntimeHelpers(in: testSetupDir)
+                try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
+                try writeRRuntimeHelper(in: testSetupDir)
+            }
 
-        return JobPreparedWorkspace(
-            testSetupDir: testSetupDir,
-            manifest: manifest,
-            normalizationWarnings: normalizationWarnings,
-            preferredStudentModule: preferredStudentModule,
-            testSetupCacheHit: acquireResult.didHit
-        )
+            return JobPreparedWorkspace(
+                testSetupDir: testSetupDir,
+                manifest: manifest,
+                normalizationWarnings: normalizationWarnings,
+                preferredStudentModule: preferredStudentModule,
+                testSetupCacheHit: acquireResult.didHit
+            )
+        } catch {
+            removeWorkspaceItem(at: testSetupDir, label: "test_setup_dir", job: job)
+            throw error
+        }
     }
 
     /// Stage the submission independently from the grading workspace so the
@@ -610,6 +626,13 @@ extension WorkerDaemon {
         if let files = job.personalizedFiles, !files.isEmpty {
             for name in files.keys.sorted() {
                 guard let content = files[name] else { continue }
+                // A personalized file replaces a bundled support file by bare
+                // name; a path-carrying key must never write outside the
+                // grading workspace (#1104). Throw rather than skip — same
+                // rationale as the write-failure case above.
+                guard FilenameSafety.bareFilename(name) != nil else {
+                    throw WorkerDaemonError.unsafePersonalizedFilename(name)
+                }
                 try content.write(
                     to: testSetupDir.appendingPathComponent(name),
                     atomically: true, encoding: .utf8)

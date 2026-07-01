@@ -20,6 +20,7 @@ import Testing
             "RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS": "12",
             "RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS": "3",
             "RUNNER_MIN_FREE_DISK_MB": "1024",
+            "RUNNER_MAKE_TIMEOUT_SECONDS": "300",
         ]
         let config = RunnerDaemonConfig.loadFromEnvironment(env)
         #expect(config.capabilityDiscoveryEnabled == false)
@@ -31,6 +32,7 @@ import Testing
         #expect(config.resultUploadRetryMaxAttempts == 12)
         #expect(config.downloadRetryMaxAttempts == 3)
         #expect(config.minFreeDiskMB == 1024)
+        #expect(config.makeTimeoutSeconds == 300)
     }
 
     @Test func minFreeDiskZeroDisablesPrecheck() {
@@ -92,7 +94,8 @@ import Testing
             heartbeatRetryMaxAttempts: 7,
             resultUploadRetryMaxAttempts: 11,
             downloadRetryMaxAttempts: 5,
-            minFreeDiskMB: 128
+            minFreeDiskMB: 128,
+            makeTimeoutSeconds: 120
         )
         let heartbeat = RunnerRetryPolicy.heartbeat(config: config)
         #expect(heartbeat.maxAttempts == 7)
