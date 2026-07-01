@@ -74,16 +74,8 @@ struct ToolContext {
         // MCP eligibility is coarse: course staff (TA+ in any course) or an
         // `mcp` service account — never a plain student. Per-course access is
         // enforced separately (and per-course) by `authorizeCourseAccess`, so
-        // this gate never widens what a caller can actually touch.
-        //
-        // Post-collapse (#417 Slice G2) staff is `isStaffAnywhere`. The
-        // `user.isInstructor` term is a transition-only shim: after the
-        // CollapseUserRoles migration no human holds the global instructor role,
-        // so in production this reduces to `isStaffAnywhere`; it stays only so the
-        // test corpus that still writes `role: "instructor"` (without a per-course
-        // staff enrollment) keeps resolving as staff. Removable once those tests
-        // are migrated.
-        var eligible = user.isMCPAgent || user.isInstructor
+        // this gate never widens what a caller can actually touch (#417).
+        var eligible = user.isMCPAgent
         if !eligible {
             eligible = try await isStaffAnywhere(user, db: db)
         }

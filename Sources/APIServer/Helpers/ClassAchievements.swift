@@ -14,7 +14,9 @@ import Foundation
 /// enrolled students.  Admin/instructor test submissions used to lock in
 /// the immutable Trailblazer badge before any real student got to attempt
 /// the assignment (v0.4.127 fix).  This guard runs at the helper entry so
-/// every call site is protected — including future ones.
+/// every call site is protected — including future ones.  Student-ness is
+/// per-course now (#417 Slice G2): the submitter must hold a `.student`
+/// enrollment in the setup's own course, not a retired global role.
 func awardClassBadgesFor100Percent(
     testSetupID: String,
     userID: UUID,
@@ -24,14 +26,13 @@ func awardClassBadgesFor100Percent(
     disabled: Set<String> = [],
     on db: Database
 ) async throws {
-    guard let user = try await APIUser.find(userID, on: db),
-        user.roleValue == .student
+    guard let setup = try await APITestSetup.find(testSetupID, on: db),
+        try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
     else { return }
 
     // The class records to award — the manifest's authored ones (or the registry
     // default), minus disabled.  Each is awarded by its dimension; firstToSubmit
     // (Pathfinder) is awarded at submission time, not on reaching 100%.
-    let setup = try await APITestSetup.find(testSetupID, on: db)
     for record in BuiltInAchievements.classRecordsForAward(in: setup, disabled: disabled) {
         switch record.recordDimension {
         case .firstToSolve:

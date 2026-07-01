@@ -35,10 +35,19 @@ func arLoginAsInstructor(on app: Application) async throws -> String {
         .filter(\.$username == "testinstructor").first()
     {
         let userID = try user.requireID()
-        let alreadyEnrolled =
-            try await APICourseEnrollment.query(on: app.db)
-            .filter(\.$userID == userID).filter(\.$course.$id == courseID).first() != nil
-        if !alreadyEnrolled {
+        // Upsert the `.instructor` role — don't just skip when a row exists. A
+        // `.auto` course auto-enrolls the user at login (AuthRoutes) and, since
+        // the deployment role collapsed (#417 Slice G2), that seeds a non-admin
+        // as a per-course `.student`. Skipping on "already enrolled" would leave
+        // the test instructor a student and 403 every per-course staff gate.
+        if let existing = try await APICourseEnrollment.query(on: app.db)
+            .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
+        {
+            if existing.role != .instructor {
+                existing.role = .instructor
+                try await existing.save(on: app.db)
+            }
+        } else {
             try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
                 .save(on: app.db)
         }
@@ -151,9 +160,16 @@ func arInsertSubmission(
 
 func arEnrollStudentInTestCourse(_ student: APIUser, on app: Application) async throws {
     let courseID = try await app.testCourseID(enrollmentMode: .auto)
+    // Seed the per-course role from the user's global role (mirroring production
+    // saveSeededEnrollment / makeTestEnrollment) so a helper-enrolled instructor
+    // or admin becomes course staff, not a per-course student. The per-course
+    // roster counts (#417 Slice G2) key off the enrollment role, so enrolling a
+    // staff account as `.student` here would wrongly inflate the student count.
+    let isStaff = (student.role == "instructor") || student.isAdmin
     let enrollment = APICourseEnrollment(
         userID: try student.requireID(),
-        courseID: courseID
+        courseID: courseID,
+        role: isStaff ? .instructor : .student
     )
     try await enrollment.save(on: app.db)
 }

@@ -96,6 +96,9 @@ import VaporTesting
 
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent renders the permitted screen only for per-course
+            // staff now (#417 Slice G2); enrol prof so the client name shows.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             var components = URLComponents()
             components.path = "/oauth/authorize"
             components.queryItems = [

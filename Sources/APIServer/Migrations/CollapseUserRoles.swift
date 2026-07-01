@@ -25,13 +25,16 @@ struct CollapseUserRoles: ChickadeeMigration {
             // Only the SQL drivers (SQLite / Postgres) are used in practice.
             return
         }
+        // The legacy `student` / `instructor` role strings are matched as
+        // literals: the enum cases were retired in the G2 cleanup, but old rows
+        // in production DBs still carry those exact strings and must be rewritten.
         try await sql.update("users")
             .set("role", to: UserRole.user.rawValue)
-            .where("role", .equal, UserRole.student.rawValue)
+            .where("role", .equal, "student")
             .run()
         try await sql.update("users")
             .set("role", to: UserRole.user.rawValue)
-            .where("role", .equal, UserRole.instructor.rawValue)
+            .where("role", .equal, "instructor")
             .run()
     }
 

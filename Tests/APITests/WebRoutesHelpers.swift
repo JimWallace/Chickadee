@@ -65,7 +65,10 @@ func wrEnrollUser(_ user: APIUser, on app: Application) async throws {
         // Seed the per-course role from the global role, mirroring production
         // (saveSeededEnrollment), so a global-instructor caller becomes a
         // per-course instructor — Phase 5 made instructor authority per-course.
-        let role: CourseRole = user.isInstructor ? .instructor : .student
+        // The global `instructor` UserRole case is gone (#417 Slice G2); a
+        // legacy `"instructor"` role string or an admin seeds to instructor.
+        let isStaff = (user.role == "instructor") || user.isAdmin
+        let role: CourseRole = isStaff ? .instructor : .student
         let enrollment = APICourseEnrollment(userID: userID, courseID: courseID, role: role)
         try await enrollment.save(on: app.db)
     }

@@ -183,12 +183,37 @@ func enrollAsTestInstructor(
     guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
     else { return }
     let userID = try user.requireID()
-    let exists =
-        try await APICourseEnrollment.query(on: app.db)
-        .filter(\.$userID == userID).filter(\.$course.$id == courseID).first() != nil
-    if !exists {
+    // Upsert to `.instructor` — a `.auto` course auto-enrolls the user at login
+    // and (post role-collapse, #417 Slice G2) seeds a non-admin as a per-course
+    // `.student`, so skipping on "already enrolled" could leave them a student
+    // and 403 the per-course staff gates.
+    if let existing = try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
+    {
+        if existing.role != .instructor {
+            existing.role = .instructor
+            try await existing.save(on: app.db)
+        }
+    } else {
         try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
             .save(on: app.db)
+    }
+}
+
+/// Demotes every one of `username`'s course enrollments to `.student` — the
+/// per-course equivalent of the retired "downgrade the global role" move (#417
+/// Slice G2 collapsed the deployment role to user/admin/mcp, so teaching
+/// authority lives on the enrollment). After this the user is staff nowhere, so
+/// MCP content consent / refresh re-authorization (`isStaffAnywhere`) must fail.
+func demoteToStudentEverywhere(username: String, on app: Application) async throws {
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+    else { return }
+    let userID = try user.requireID()
+    for enrollment in try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).all()
+    {
+        enrollment.role = .student
+        try await enrollment.save(on: app.db)
     }
 }
 
@@ -559,6 +584,26 @@ func loginUser(
             if let c = res.headers.first(name: .setCookie) { authCookie = c }
         })
     return authCookie
+}
+
+/// Explicit-roster promotion: an admin promotes an already-enrolled user to a
+/// per-course instructor. Teaching authority is per-course now (#417 Slice G2):
+/// login auto-enrolls a non-admin as a `.student` and there is NO auto-grant, so
+/// suites whose `.auto` fixtures used to rely on "auto-enroll the instructor on
+/// login" call this after `loginUser(role: "instructor")` to simulate the admin
+/// promotion. Upgrades every `.student` enrollment the user holds to
+/// `.instructor` (a fresh test instructor's only enrollments are the ones login
+/// just auto-created); anything enrolled explicitly at another role is untouched.
+func promoteToInstructor(_ username: String, on app: Application) async throws {
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first(),
+        let userID = user.id
+    else { return }
+    for enrollment in try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).all() where enrollment.role == .student
+    {
+        enrollment.role = .instructor
+        try await enrollment.save(on: app.db)
+    }
 }
 
 /// Wraps a runtime skip-or-fail condition as a throwable error.  Use

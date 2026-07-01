@@ -21,7 +21,9 @@ extension InstructorDashboardRoutes {
             let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw),
             let student = try await APIUser.find(studentID, on: req.db),
-            student.roleValue == .student
+            // Student-ness is per-course now (#417 Slice G2): the target must
+            // hold a `.student` enrollment in this assignment's course.
+            try await courseRole(of: studentID, inCourse: assignment.courseID, db: req.db) == .student
         else {
             throw WebAssignmentError.notFound(resource: "Assignment or student")
         }
@@ -352,17 +354,17 @@ extension InstructorDashboardRoutes {
     ) async throws -> APIUser {
         guard let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw),
-            let student = try await APIUser.find(studentID, on: req.db),
-            student.roleValue == .student
+            let student = try await APIUser.find(studentID, on: req.db)
         else {
             throw WebAssignmentError.notFound(resource: "Student")
         }
-        let isEnrolled =
-            try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == assignment.courseID)
-            .filter(\.$userID == studentID)
-            .count() > 0
-        guard isEnrolled else {
+        // Student-ness is per-course now (#417 Slice G2): require a `.student`
+        // enrollment in the assignment's course. This subsumes the old
+        // global-role check *and* the separate enrollment query — a non-enrolled
+        // user has no per-course role, so `courseRole` returns nil.
+        guard
+            try await courseRole(of: studentID, inCourse: assignment.courseID, db: req.db) == .student
+        else {
             throw WebAssignmentError.notFound(resource: "Enrolled student")
         }
         return student

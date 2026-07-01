@@ -15,25 +15,19 @@ import Vapor
 /// The `role` DB column stays a plain string (no migration); this enum is
 /// the authoritative vocabulary for it.
 enum UserRole: String, Sendable {
-    /// The deployment-global role of an ordinary human account (#417 Slice G2).
-    /// Teaching authority is per-course now (`CourseRole` on the enrollment), so
-    /// the deployment role only distinguishes an ordinary `user` from an `admin`
-    /// operator (and the non-human `mcp` service account).
+    /// The deployment-global role of an ordinary human account (#417). Teaching
+    /// authority is per-course now (`CourseRole` on the enrollment), so the
+    /// deployment role only distinguishes an ordinary `user` from an `admin`
+    /// operator (and the non-human `mcp` service account). The retired global
+    /// `student` / `instructor` roles were folded into `user` by the
+    /// `CollapseUserRoles` migration and are no longer part of the vocabulary; a
+    /// row that still carries one of those legacy strings simply decodes to
+    /// `nil` (`roleValue`), which reads as a non-admin, non-agent user.
     case user
     case admin
     /// MCP service accounts (admin-provisioned, non-loginable agents).
     /// `mcp` is its own role — it does NOT imply admin.
     case mcp
-
-    /// DEPRECATED, decode-only (#417 Slice G2). The global `student` / `instructor`
-    /// roles were retired when teaching authority moved per-course: the
-    /// `CollapseUserRoles` migration rewrites every such row to `user`, no login
-    /// path or admin control assigns them, and they're dropped from
-    /// `autoAssignableRoles`. The cases remain so historical rows and the large
-    /// test corpus that still writes these strings keep decoding; a follow-up
-    /// removes them once those are migrated.
-    case student
-    case instructor
 }
 
 final class APIUser: Model, Content, @unchecked Sendable {
@@ -164,13 +158,6 @@ extension APIUser {
     }
 
     var isAdmin: Bool { roleValue == .admin }
-
-    /// Whether the account holds deployment-wide teaching authority. Since the
-    /// global `instructor` role was retired (#417 Slice G2 — teaching authority
-    /// is per-course), this is true only for admins; the legacy `.instructor`
-    /// case is still honoured so historical rows and the test corpus that writes
-    /// `role: "instructor"` keep resolving as staff until they're migrated.
-    var isInstructor: Bool { roleValue == .instructor || roleValue == .admin }
 
     /// True for MCP service accounts (admin-provisioned, non-loginable agents).
     /// `mcp` is its own role — it does NOT imply admin.
@@ -398,7 +385,6 @@ struct CurrentUserContext: Encodable {
     let email: String?
     let role: String
     let isAdmin: Bool
-    let isInstructor: Bool
     /// The course the user is currently viewing (nil if no course info was resolved).
     let activeCourse: CourseContext?
     /// All courses the user is enrolled in (empty if no course info was resolved).
@@ -451,7 +437,6 @@ struct CurrentUserContext: Encodable {
         self.email = email
         self.role = user.role
         self.isAdmin = user.isAdmin
-        self.isInstructor = user.isInstructor
         self.activeCourse = activeCourse
         self.enrolledCourses = enrolledCourses
         self.showCourseTabs = enrolledCourses.count > 1

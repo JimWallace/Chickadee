@@ -698,23 +698,15 @@ extension MCPOAuthRoutes {
 
         var scopeCeiling: Set<String> { Set(advertisedScopes) }
 
-        /// The role gate: content authoring needs course staff; admin
-        /// diagnostics needs admin. This only decides who may grant a scope at
-        /// all — per-course authority is re-checked per tool call by
-        /// `authorizeCourseAccess`, which is already enrollment-scoped, so this
-        /// coarse gate never widens what an agent can actually touch.
-        ///
-        /// Post-collapse (#417 Slice G2) content staff is `isStaffAnywhere`. The
-        /// `user.isInstructor` term is a transition-only shim: after the
-        /// CollapseUserRoles migration no human holds the global instructor role,
-        /// so in production this reduces to `isStaffAnywhere`; it stays only so the
-        /// OAuth-consent test corpus (which logs in `role: "instructor"` without a
-        /// per-course staff enrollment) keeps passing. Removable once migrated.
+        /// The role gate: content authoring needs course staff (TA+ in any
+        /// course, or admin); admin diagnostics needs admin. This only decides
+        /// who may grant a scope at all — per-course authority is re-checked per
+        /// tool call by `authorizeCourseAccess`, which is already
+        /// enrollment-scoped, so this coarse gate never widens what an agent can
+        /// actually touch (#417).
         func permits(_ user: APIUser, db: Database) async throws -> Bool {
             switch surface {
-            case .content:
-                if user.isInstructor { return true }
-                return try await isStaffAnywhere(user, db: db)
+            case .content: return try await isStaffAnywhere(user, db: db)
             case .admin: return user.isAdmin
             }
         }

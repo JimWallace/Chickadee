@@ -124,7 +124,7 @@ import Vapor
     /// active course's per-course role, with a transitional fallback to the
     /// global role.
     @Test func instructorInActiveCourseReflectsPerCourseRole() {
-        func context(globalRole: UserRole, active: CourseContext?) -> CurrentUserContext {
+        func context(globalRole: LegacyGlobalRole, active: CourseContext?) -> CurrentUserContext {
             let user = APIUser(username: "u", passwordHash: "x", role: globalRole.rawValue)
             return CurrentUserContext(
                 user: user, activeCourse: active, enrolledCourses: active.map { [$0] } ?? [])
@@ -255,10 +255,12 @@ import Vapor
 
     // MARK: - Enrollment seeding (Phase 4a)
 
-    /// New enrollments seed their per-course role from the user's global role,
-    /// so moving authorization onto the per-course role doesn't drop anyone's
-    /// access. Exercises both the `for:` overload and the userID overload.
-    @Test func saveSeededEnrollmentSeedsRoleFromGlobalRole() async throws {
+    /// New enrollments seed their per-course role from the user's *deployment*
+    /// role: an admin becomes a per-course instructor, everyone else a student.
+    /// Teaching authority is per-course now (#417 Slice G2) — a plain user (or a
+    /// legacy global-`instructor` role string) auto-enrolls as a student, and
+    /// the roster grants staff explicitly. Exercises both overloads.
+    @Test func saveSeededEnrollmentSeedsRoleFromDeploymentRole() async throws {
         let app = try await Application.make(.testing)
         try await withApp(app) { app in
             try await configureTestDatabase(app)
@@ -267,17 +269,21 @@ import Vapor
             try await course.save(on: app.db)
             let courseID = try course.requireID()
 
-            let instructor = makeUser(role: .instructor)
+            // A user still carrying the retired `instructor` role string is NOT
+            // an admin, so it no longer auto-seeds staff.
+            let legacyInstructor = makeUser(role: .instructor)
             let admin = makeUser(role: .admin)
             let student = makeUser(role: .student)
-            for user in [instructor, admin, student] { try await user.save(on: app.db) }
+            for user in [legacyInstructor, admin, student] { try await user.save(on: app.db) }
 
-            try await saveSeededEnrollment(for: instructor, courseID: courseID, on: app.db)
+            try await saveSeededEnrollment(for: legacyInstructor, courseID: courseID, on: app.db)
             try await saveSeededEnrollment(userID: try admin.requireID(), courseID: courseID, on: app.db)
             try await saveSeededEnrollment(userID: try student.requireID(), courseID: courseID, on: app.db)
 
-            #expect(try await courseRole(of: instructor, on: app.db) == .instructor)
-            #expect(try await courseRole(of: admin, on: app.db) == .instructor, "admin implies instructor")
+            #expect(
+                try await courseRole(of: legacyInstructor, on: app.db) == .student,
+                "a legacy global-instructor string no longer auto-seeds staff — the roster grants it")
+            #expect(try await courseRole(of: admin, on: app.db) == .instructor, "admin seeds to instructor")
             #expect(try await courseRole(of: student, on: app.db) == .student)
         }
     }
@@ -385,7 +391,24 @@ import Vapor
 
     // MARK: - Helpers
 
-    private func makeUser(role: UserRole) -> APIUser {
+    /// Test-only stand-in for the retired global `student` / `instructor`
+    /// roles. The deployment role enum collapsed to `user` / `admin` / `mcp`
+    /// (#417 Slice G2), but these role-model tests still construct users
+    /// carrying the legacy role strings a pre-collapse production row would
+    /// have (the backfill reads them). `.rawValue` is faithful, so behaviour is
+    /// identical to the old `UserRole` cases.
+    private enum LegacyGlobalRole {
+        case student, instructor, admin
+        var rawValue: String {
+            switch self {
+            case .student: return "student"
+            case .instructor: return "instructor"
+            case .admin: return UserRole.admin.rawValue
+            }
+        }
+    }
+
+    private func makeUser(role: LegacyGlobalRole) -> APIUser {
         APIUser(
             username: "\(role.rawValue)_\(UUID().uuidString.prefix(8))",
             passwordHash: "x",

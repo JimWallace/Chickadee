@@ -192,6 +192,8 @@ import VaporTesting
             try await seedClient(app, clientID: clientID, name: clientName, redirectURI: redirectURI)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, clientID: clientID, redirectURI: redirectURI,
                 scope: "content:read", decision: "authorize")
@@ -218,14 +220,17 @@ import VaporTesting
             try await seedClient(app, clientID: "agent-b", name: "Agent Beta", redirectURI: redirectURI)
             let profA = try await loginUser(
                 username: "profA", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profA", on: app)
             try await createGrant(
                 app, cookie: profA, clientID: "agent-a", redirectURI: redirectURI, scope: "content:read")
             let profB = try await loginUser(
                 username: "profB", password: "testpassword", role: "instructor", on: app)
+            // Phase 5: /agents is under the per-course-gated /instructor group;
+            // MCP content consent also needs per-course staff (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profB", on: app)
             try await createGrant(
                 app, cookie: profB, clientID: "agent-b", redirectURI: redirectURI, scope: "content:read")
-            // Phase 5: /agents is under the per-course-gated /instructor group.
-            try await enrollAsTestInstructor(username: "profB", on: app)
 
             try await app.asyncTest(
                 .GET, "/agents",
@@ -244,6 +249,8 @@ import VaporTesting
             try await seedClient(app, clientID: clientID, name: clientName, redirectURI: redirectURI)
             let profA = try await loginUser(
                 username: "profA", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profA", on: app)
             try await createGrant(
                 app, cookie: profA, clientID: clientID, redirectURI: redirectURI, scope: "content:read")
             let grantID = try #require(try await MCPGrant.query(on: app.db).first()).requireID()
@@ -273,6 +280,8 @@ import VaporTesting
             try await seedClient(app, clientID: clientID, name: clientName, redirectURI: redirectURI)
             let profA = try await loginUser(
                 username: "profA", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profA", on: app)
             try await createGrant(
                 app, cookie: profA, clientID: clientID, redirectURI: redirectURI, scope: "content:read")
             let grantID = try #require(try await MCPGrant.query(on: app.db).first()).requireID()

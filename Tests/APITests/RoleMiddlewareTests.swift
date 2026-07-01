@@ -23,16 +23,13 @@ import VaporTesting
         app.grouped(sessionAuth, RoleMiddleware(required: .authenticated))
             .get("__test_auth") { _ in "auth-ok" }
 
-        app.grouped(sessionAuth, RoleMiddleware(required: .instructor))
-            .get("__test_instructor") { _ in "instructor-ok" }
-
+        // There is no `.instructor` tier any more — teaching authority is
+        // per-course (#417), enforced by the per-course chokepoints, not this
+        // deployment-global middleware. Only `.authenticated` and `.admin` remain.
         app.grouped(sessionAuth, RoleMiddleware(required: .admin))
             .get("__test_admin") { _ in "admin-ok" }
 
-        // API-prefixed equivalents to exercise the 401 (non-browser) path.
-        app.grouped(sessionAuth, RoleMiddleware(required: .instructor))
-            .get("api", "__test_instructor") { _ in "api-instructor-ok" }
-
+        // API-prefixed equivalent to exercise the 401 (non-browser) path.
         app.grouped(sessionAuth, RoleMiddleware(required: .admin))
             .get("api", "__test_admin") { _ in "api-admin-ok" }
 
@@ -46,14 +43,6 @@ import VaporTesting
             try await app.asyncTest(.GET, "/__test_auth") { res in
                 #expect(res.status == .seeOther)
                 #expect(res.headers.first(name: .location) == "/login")
-            }
-        }
-    }
-
-    @Test func unauthenticated_apiRoute_returns401() async throws {
-        try await withApp(try await makeApp()) { app in
-            try await app.asyncTest(.GET, "/api/__test_instructor") { res in
-                #expect(res.status == .unauthorized)
             }
         }
     }
@@ -81,23 +70,6 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     #expect(res.body.string == "auth-ok")
-                })
-
-        }
-    }
-
-    @Test func student_instructorRoute_returns403() async throws {
-        try await withApp(try await makeApp()) { app in
-            let cookie = try await loginUser(
-                username: "role_student2", password: "pw",
-                role: "student", on: app)
-            try await app.asyncTest(
-                .GET, "/__test_instructor",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .forbidden)
                 })
 
         }
@@ -139,24 +111,6 @@ import VaporTesting
         }
     }
 
-    @Test func instructor_instructorRoute_returns200() async throws {
-        try await withApp(try await makeApp()) { app in
-            let cookie = try await loginUser(
-                username: "role_instructor2", password: "pw",
-                role: "instructor", on: app)
-            try await app.asyncTest(
-                .GET, "/__test_instructor",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    #expect(res.body.string == "instructor-ok")
-                })
-
-        }
-    }
-
     @Test func instructor_adminRoute_returns403() async throws {
         try await withApp(try await makeApp()) { app in
             let cookie = try await loginUser(
@@ -188,25 +142,6 @@ import VaporTesting
                 },
                 afterResponse: { res in
                     #expect(res.status == .ok)
-                })
-
-        }
-    }
-
-    @Test func admin_instructorRoute_returns200() async throws {
-        try await withApp(try await makeApp()) { app in
-            // Admin implies instructor — should be granted access.
-            let cookie = try await loginUser(
-                username: "role_admin2", password: "pw",
-                role: "admin", on: app)
-            try await app.asyncTest(
-                .GET, "/__test_instructor",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    #expect(res.body.string == "instructor-ok")
                 })
 
         }
