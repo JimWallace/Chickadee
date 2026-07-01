@@ -1,3 +1,4 @@
+import Core
 import Fluent
 import Foundation
 import Testing
