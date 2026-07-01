@@ -97,8 +97,8 @@ struct CreateAssignmentTool: ContentTool {
                 tool: Self.name, detail: "No course found with code \"\(code)\".")
         }
         let courseID = try course.requireID()
-        // Creating an assignment writes into the course — block archived (#417 Slice D-MCP).
-        try await context.authorizeCourseWriteAccess(courseID, tool: Self.name)
+        // Creating an assignment is instructor-level (#417); archived is blocked too.
+        try await context.authorizeCourseWriteAccess(courseID, tool: Self.name, atLeast: .instructor)
 
         let data: Data
         do {

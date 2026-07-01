@@ -121,7 +121,9 @@ struct CloneAssignmentTool: ContentTool {
         // default-to-source branches). The source stays read-authorized above —
         // reviving an archived course's content into a live course is fine; only
         // the destination is write-gated (#417 Slice D-MCP).
-        try await context.authorizeCourseWriteAccess(targetCourseID, tool: Self.name)
+        // Creating an assignment (clone) into the destination is instructor-level (#417).
+        try await context.authorizeCourseWriteAccess(
+            targetCourseID, tool: Self.name, atLeast: .instructor)
 
         let cloned: AuthoredAssignment
         do {

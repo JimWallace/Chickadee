@@ -70,8 +70,9 @@ struct SetGradingModeTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "gradingMode must be \"browser\" or \"worker\".")
         }
+        // Grading mode (worker vs browser) is a lifecycle setting — instructor-level (#417).
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
         let effective = try await setManifestGradingMode(setup: setup, to: mode, on: context.db)
         return Output(assignmentPublicID: assignment.publicID, gradingMode: effective)
     }

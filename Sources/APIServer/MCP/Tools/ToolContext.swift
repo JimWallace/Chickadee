@@ -6,6 +6,7 @@
 // bearer middleware in PR B; ungated PR-A callers receive the full content
 // scope set).
 
+import Core
 import Fluent
 import Vapor
 
@@ -137,17 +138,37 @@ struct ToolContext {
     }
 
     /// Authorizes a *write* to `courseID`: the acting subject must pass
-    /// `authorizeCourseAccess` (MCP-eligible + enrolled, admin included) AND the
-    /// course must not be archived (admins exempt). The MCP analogue of the web
-    /// `requireCourseWriteAccess` — archived courses are read-only for
-    /// instructors and TAs, so a content-mutating tool can't drive a write into
-    /// one. The single chokepoint every MCP write resolver funnels through; the
-    /// *read* resolvers stay on `authorizeCourseAccess` so archived courses
-    /// remain readable (#417 Slice D-MCP).
-    func authorizeCourseWriteAccess(_ courseID: UUID, tool: String) async throws {
+    /// `authorizeCourseAccess` (MCP-eligible + enrolled, admin included), hold a
+    /// per-course role of at least `atLeast`, AND the course must not be archived
+    /// (admins exempt from both role and archive checks). The MCP analogue of the
+    /// web `requireCourseWriteAccess(atLeast:)` — content-editing tools default to
+    /// the `.ta` floor, while course-lifecycle/structure tools pass `.instructor`,
+    /// so an agent acting for a TA can author content but not run the course,
+    /// exactly matching the web (#417). The single chokepoint every MCP write
+    /// resolver funnels through; the *read* resolvers stay on
+    /// `authorizeCourseAccess` (enrollment only) so archived courses remain
+    /// readable (#417 Slice D-MCP).
+    func authorizeCourseWriteAccess(
+        _ courseID: UUID, tool: String, atLeast minimum: CourseRole = .ta
+    ) async throws {
         try await authorizeCourseAccess(courseID, tool: tool)
         let user = try await requireEligibleSubject(tool: tool)
         guard !user.isAdmin else { return }
+        // Per-course role floor. `authorizeCourseAccess` already proved the
+        // subject is enrolled, so a missing role here is defensive only.
+        guard let userID = user.id,
+            let role = try await courseRole(of: userID, inCourse: courseID, db: db)
+        else {
+            throw MCPToolError.notAuthorized(
+                tool: tool, detail: "The MCP account is not enrolled in the target course.")
+        }
+        guard role >= minimum else {
+            throw MCPToolError.notAuthorized(
+                tool: tool,
+                detail:
+                    "This action requires the \(minimum.rawValue) role in the course; the MCP account holds \(role.rawValue)."
+            )
+        }
         guard let course = try await APICourse.find(courseID, on: db) else {
             throw MCPToolError.invalidArguments(
                 tool: tool, detail: "The target course could not be found.")
@@ -163,9 +184,11 @@ struct ToolContext {
     /// block, admin-exempt). Archived courses are already hidden from the MCP
     /// listing/resource surface, so this closes the by-public-ID write path an
     /// agent could still reach with a remembered id (#417 Slice C/D-MCP).
-    func authorizedAssignmentForWrite(publicID: String, tool: String) async throws -> APIAssignment {
+    func authorizedAssignmentForWrite(
+        publicID: String, tool: String, atLeast minimum: CourseRole = .ta
+    ) async throws -> APIAssignment {
         let assignment = try await requireAssignment(publicID: publicID, tool: tool)
-        try await authorizeCourseWriteAccess(assignment.courseID, tool: tool)
+        try await authorizeCourseWriteAccess(assignment.courseID, tool: tool, atLeast: minimum)
         return assignment
     }
 
@@ -194,11 +217,12 @@ struct ToolContext {
     /// content-mutating suite/manifest/notebook tool resolves through this so an
     /// agent can't edit an archived course's content by id (#417 Slice D-MCP).
     func authorizedAssignmentAndSetupForWrite(
-        publicID: String, tool: String
+        publicID: String, tool: String, atLeast minimum: CourseRole = .ta
     ) async throws
         -> (assignment: APIAssignment, setup: APITestSetup)
     {
-        let assignment = try await authorizedAssignmentForWrite(publicID: publicID, tool: tool)
+        let assignment = try await authorizedAssignmentForWrite(
+            publicID: publicID, tool: tool, atLeast: minimum)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
             throw MCPToolError.invalidArguments(
                 tool: tool, detail: "The assignment's test setup could not be found.")
