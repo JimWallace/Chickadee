@@ -15,7 +15,7 @@ extension InstructorDashboardRoutes {
 
     @Sendable
     func studentSubmissionHistoryPage(req: Request) async throws -> View {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForStaffRead(req)
         let assignmentIDRaw = assignment.publicID
         guard
             let studentIDRaw = req.parameters.get("studentID"),

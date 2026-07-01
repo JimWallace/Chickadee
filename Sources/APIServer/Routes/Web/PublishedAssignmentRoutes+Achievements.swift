@@ -35,7 +35,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getAchievements(req: Request) async throws -> AchievementsResponse {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         return AchievementsResponse(
             achievements: AchievementsEditing.rows(fromManifest: setup.manifest))
     }

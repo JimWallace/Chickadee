@@ -30,7 +30,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getDatasets(req: Request) async throws -> DatasetsResponse {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         guard let manifestData = setup.manifest.data(using: .utf8),
             let props = try? ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
         else {

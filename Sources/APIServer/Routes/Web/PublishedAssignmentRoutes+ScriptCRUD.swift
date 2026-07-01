@@ -24,7 +24,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getScript(req: Request) async throws -> Response {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let filename = try safeScriptFilename(from: req)
 
         guard let content = readScriptFromZip(zipPath: setup.zipPath, filename: filename) else {

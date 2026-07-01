@@ -54,7 +54,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getGlobalVariables(req: Request) async throws -> GlobalVariablesResponse {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let result = try GlobalInputsService.current(setup: setup)
         return GlobalVariablesResponse(
             variables: result.variables,

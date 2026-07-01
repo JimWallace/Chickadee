@@ -28,7 +28,7 @@ extension PublishedAssignmentRoutes {
     /// runner-facing expanded form.
     @Sendable
     func getSuite(req: Request) async throws -> Response {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }

@@ -408,7 +408,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func editPage(req: Request) async throws -> View {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let idStr = assignment.publicID
 
         struct EditQuery: Content {
