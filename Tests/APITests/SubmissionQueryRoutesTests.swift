@@ -175,6 +175,47 @@ import VaporTesting
         }
     }
 
+    /// A non-staff student listing submissions sees ONLY their own — never
+    /// another student's — both with no filter and with a `testSetupID` filter
+    /// for a course they don't staff (#417; the list scopes non-staff callers to
+    /// `userID == caller.id`).
+    @Test func listSubmissionsScopesStudentToOwnSubmissions() async throws {
+        try await withApp(app) { _ in
+            let cookieA = try await loginAsStudent(username: "stu_scope_a")
+            let studentA = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "stu_scope_a").first())
+            let studentB = try await makeTestUser(on: app, username: "stu_scope_b", role: "student")
+
+            try await insertSubmission(
+                id: "sub_scope_a", testSetupID: "setup_scope", userID: try studentA.requireID())
+            try await insertSubmission(
+                id: "sub_scope_b", testSetupID: "setup_scope", userID: try studentB.requireID())
+
+            // No filter: student A sees only their own submission.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookieA) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 1)
+                    #expect(body.submissions.first?.submissionID == "sub_scope_a")
+                    #expect(body.submissions.contains { $0.submissionID == "sub_scope_b" } == false)
+                })
+
+            // Even filtering by a setup they don't staff, a student never sees
+            // another student's submission for it.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?testSetupID=setup_scope",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookieA) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.map(\.submissionID) == ["sub_scope_a"])
+                })
+        }
+    }
+
     @Test func listSubmissionsFilterByTestSetupID() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin()
