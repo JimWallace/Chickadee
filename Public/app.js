@@ -90,3 +90,47 @@ if (root) {
         }, 2000);
     }
 }
+
+// ── Nav dropdown menus ─────────────────────────────────────────────────────
+// Click-to-open menus for nav items that carry more than one option (the
+// Instructor course picker, the account/log-out menu).  Each is a
+// [data-nav-dropdown] wrapper holding a .nav-dropdown-toggle button and a
+// .nav-dropdown-menu panel.  Only one menu is open at a time; a click outside
+// or Escape closes it.
+(function navDropdowns() {
+    const dropdowns = Array.from(document.querySelectorAll('[data-nav-dropdown]'));
+    if (dropdowns.length === 0) return;
+
+    function closeAll(except) {
+        dropdowns.forEach((dd) => {
+            if (dd === except) return;
+            dd.classList.remove('open');
+            const t = dd.querySelector('.nav-dropdown-toggle');
+            if (t) t.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    dropdowns.forEach((dd) => {
+        const toggle = dd.querySelector('.nav-dropdown-toggle');
+        if (!toggle) return;
+        toggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const willOpen = !dd.classList.contains('open');
+            closeAll(dd);
+            dd.classList.toggle('open', willOpen);
+            toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        });
+    });
+
+    // Outside click closes any open menu.  Clicks inside a menu (e.g. the
+    // account link, or a submitting course-picker button) are left alone.
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('[data-nav-dropdown]')) return;
+        closeAll(null);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeAll(null);
+    });
+}());

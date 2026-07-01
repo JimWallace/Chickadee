@@ -824,12 +824,102 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
 
 /* ── Nav username + logout button ────────────────────── */
 
-/* Also applied alongside .nav-link on the account <a>; color intentionally
+/* Applied alongside .nav-link on the account-menu toggle; color intentionally
    overrides nav-link's white — username appears dimmed, less prominent than nav actions. */
 .nav-username {
     font-size: .875rem;
     color: rgba(255,255,255,.6);
+}
+
+/* ── Nav dropdown menus ──────────────────────────────── */
+
+/* A nav item with more than one option (the Instructor course picker, the
+   account/log-out menu) renders as a click-to-open dropdown.  Toggled by the
+   `open` class from app.js; the menu is display:none until then, so no inline
+   style is needed and check-styles stays green. */
+.nav-dropdown {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* The account menu sits at the far right of the nav, where the bare username
+   link used to. */
+.nav-user {
     margin-left: auto;
+}
+
+.nav-dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.nav-dropdown-caret {
+    font-size: .65em;
+    line-height: 1;
+    transition: transform .12s ease;
+}
+
+.nav-dropdown.open .nav-dropdown-caret {
+    transform: rotate(180deg);
+}
+
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + .55rem);
+    left: 0;
+    min-width: 11rem;
+    background: var(--surface);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.22);
+    padding: .3rem;
+    z-index: 50;
+}
+
+/* The account menu is flush to the right edge of the nav, so its panel opens
+   rightward-aligned to avoid spilling off-screen. */
+.nav-user .nav-dropdown-menu {
+    left: auto;
+    right: 0;
+}
+
+.nav-dropdown.open .nav-dropdown-menu {
+    display: block;
+}
+
+.nav-dropdown-item {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    padding: .5rem .7rem;
+    font-size: .875rem;
+    font-family: inherit;
+    color: var(--gray-700);
+    text-decoration: none;
+    background: none;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.nav-dropdown-item:hover {
+    background: var(--hover-bg);
+    color: var(--gray-900);
+}
+
+.nav-dropdown-item-active {
+    color: var(--blue);
+    font-weight: 600;
 }
 
 /* ── Course tabs ─────────────────────────────────────── */
@@ -841,23 +931,6 @@ code { font-family: ui-monospace, monospace; font-size: .9em; }
     background: var(--surface);
     border-bottom: 2px solid var(--gray-200);
     overflow-x: auto;
-}
-
-/* Instructor course strip: a second .course-tabs row, set on the muted
-   surface and led by a label so it reads as distinct from the (white) student
-   course strip when both are shown. */
-.course-tabs-instructor {
-    background: var(--gray-50);
-}
-
-.course-tabs-label {
-    display: inline-flex;
-    align-items: center;
-    padding: .5rem .85rem .5rem 0;
-    font-size: .8125rem;
-    font-weight: 600;
-    color: var(--gray-600);
-    white-space: nowrap;
 }
 
 .course-tab {
@@ -1868,7 +1941,7 @@ tr.drop-adopt  { outline: 2px solid var(--blue); outline-offset: -2px; }
        viewport; the account/username link sits inline rather than being
        pushed to the far right. */
     .nav { flex-wrap: wrap; row-gap: .35rem; column-gap: 1.1rem; }
-    .nav-username { margin-left: 0; }
+    .nav-user { margin-left: 0; }
 
     /* Allow long assignment titles to wrap inside their flex cell rather than
        forcing the table (and page) wider than the screen. */
