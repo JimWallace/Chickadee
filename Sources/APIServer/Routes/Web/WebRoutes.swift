@@ -2,12 +2,9 @@
 //
 // Browser-facing routes for the Chickadee web UI.
 // All routes in this collection require authentication (enforced by RoleMiddleware
-// in routes.swift). Instructor-only routes (testsetups/new) are in a separate
-// group in routes.swift.
+// in routes.swift).
 //
 //   GET  /                          → index.leaf      (assignments)
-//   GET  /testsetups/new            → setup-new.leaf  (instructor upload form)
-//   POST /testsetups/new            → save test setup, redirect to /
 //   GET  /testsetups/:id/submit     → submit.leaf     (student submission form)
 //   POST /testsetups/:id/submit     → save submission, redirect to /submissions/:id
 //   GET  /testsetups/:id/notebook   → notebook.leaf   (JupyterLite in-browser editor)
@@ -22,8 +19,6 @@ import Vapor
 struct WebRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         routes.get(use: index)
-        routes.get("testsetups", "new", use: newSetupForm)
-        routes.post("testsetups", "new", use: createSetup)
         routes.get("testsetups", ":testSetupID", "submit", use: submitForm)
         routes.post("testsetups", ":testSetupID", "submit", use: createSubmission)
         routes.get("testsetups", ":testSetupID", "history", use: submissionHistoryPage)
@@ -496,61 +491,9 @@ struct WebRoutes: RouteCollection {
         ).encodeResponse(for: req)
     }
 
-    // MARK: - GET /testsetups/new
-
-    @Sendable
-    func newSetupForm(req: Request) async throws -> View {
-        let user = try req.auth.require(APIUser.self)
-        // Authoring a new test setup: staff (TA+ anywhere) or admin (#417 Slice
-        // G — was the global `user.isInstructor`).
-        guard try await isStaffAnywhere(user, db: req.db) else { throw Abort(.forbidden) }
-        return try await req.view.render(
-            "setup-new",
-            BaseContext(currentUser: req.currentUserContext))
-    }
-
-    // MARK: - POST /testsetups/new
-
-    @Sendable
-    func createSetup(req: Request) async throws -> Response {
-        let setupUser = try req.auth.require(APIUser.self)
-        let upload = try req.content.decode(TestSetupUpload.self)
-
-        let manifestData = Data(upload.manifest.utf8)
-        let manifest: TestProperties
-        do {
-            manifest = try ManifestCodec.decoder.decode(TestProperties.self, from: manifestData)
-        } catch {
-            throw AppError.unprocessable(reason: "Invalid manifest JSON: \(error)")
-        }
-        guard manifest.schemaVersion == 1 else {
-            throw AppError.unprocessable(reason: "Unsupported schemaVersion; expected 1")
-        }
-
-        // Associate the setup with the instructor's active course, and require
-        // per-course instructor authority there before touching disk. Replaces
-        // the old global `isInstructor` check, which let a global instructor who
-        // is only a student in their active course create a setup (#417 Slice D).
-        let courseState = try await req.resolveActiveCourse(for: setupUser)
-        guard let courseID = courseState.activeCourseUUID else {
-            throw Abort(
-                .badRequest, reason: "No active course selected. Please select a course before uploading a test setup.")
-        }
-        try await requireCourseWriteAccess(caller: setupUser, courseID: courseID, atLeast: .instructor, db: req.db)
-
-        let setupsDir = req.application.testSetupsDirectory
-        let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"
-        let zipPath = setupsDir + "\(setupID).zip"
-        try upload.files.write(to: URL(fileURLWithPath: zipPath))
-
-        let stored = String(data: try ManifestCodec.encoder.encode(manifest), encoding: .utf8) ?? upload.manifest
-
-        let setup = APITestSetup(
-            id: setupID, manifest: stored, zipPath: zipPath,
-            courseID: courseID)
-        try await setup.save(on: req.db)
-
-        return req.redirect(to: "/")
-    }
-
+    // The legacy GET/POST /testsetups/new raw-zip upload pair was deleted in
+    // #1119: nothing had linked to it since the draft-based new-assignment
+    // flow shipped, and it had drifted behind its API twin's hardening
+    // (zip-bomb guard, dependency-graph validation, grading-mode checks).
+    // Programmatic uploads go through POST /api/v1/testsetups.
 }

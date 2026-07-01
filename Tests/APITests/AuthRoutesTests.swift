@@ -418,9 +418,10 @@ import VaporTesting
         }
     }
 
-    @Test func studentCannotAccessTestSetupNew() async throws {
+    @Test func studentCannotAccessInstructorArea() async throws {
+        // (Formerly probed /testsetups/new; that legacy upload pair was
+        // deleted in #1119, so the probe target is the instructor area gate.)
         try await withApp(try await makeApp()) { app in
-            // Create a student, get a session cookie, then try to access instructor-only page.
             let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
@@ -428,7 +429,7 @@ import VaporTesting
             let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
 
             try await app.asyncTest(
-                .GET, "/testsetups/new",
+                .GET, "/instructor",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                 },
