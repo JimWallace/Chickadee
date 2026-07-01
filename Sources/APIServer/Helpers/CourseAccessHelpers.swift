@@ -148,6 +148,20 @@ func courseID(ofSubmission submission: APISubmission, on db: Database) async thr
     try await APITestSetup.find(submission.testSetupID, on: db)?.courseID
 }
 
+/// Whether `user` is staff (TA+ or admin) for `submission`'s course — the
+/// per-course view gate for the submission view/download paths. False when the
+/// submission's setup (hence course) can't be resolved (#417 Slice G).
+func isSubmissionStaff(
+    _ user: APIUser, submission: APISubmission, on db: Database
+) async throws
+    -> Bool
+{
+    guard let owningCourseID = try await courseID(ofSubmission: submission, on: db) else {
+        return false
+    }
+    return try await isCourseStaff(user, inCourse: owningCourseID, db: db)
+}
+
 /// Authorizes a *write* to a per-course resource. The caller must satisfy
 /// `requireCourseRole(atLeast:)` for `courseID` (admin bypass) **and** the
 /// course must not be archived. Archived courses are read-only for

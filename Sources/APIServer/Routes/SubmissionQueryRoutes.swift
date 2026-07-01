@@ -162,10 +162,7 @@ struct SubmissionQueryRoutes: RouteCollection {
 private func submissionAccess(
     caller: APIUser, submission: APISubmission, on db: Database
 ) async throws -> (canView: Bool, isStaff: Bool) {
-    var isStaff = false
-    if let owningCourseID = try await courseID(ofSubmission: submission, on: db) {
-        isStaff = try await isCourseStaff(caller, inCourse: owningCourseID, db: db)
-    }
+    let isStaff = try await isSubmissionStaff(caller, submission: submission, on: db)
     return (isStaff || submission.userID == caller.id, isStaff)
 }
 

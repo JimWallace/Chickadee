@@ -323,10 +323,7 @@ func notebookDataForHistorySelection(
     guard submission.kind == APISubmission.Kind.student else {
         throw Abort(.forbidden)
     }
-    var isStaff = false
-    if let owningCourseID = try await courseID(ofSubmission: submission, on: req.db) {
-        isStaff = try await isCourseStaff(caller, inCourse: owningCourseID, db: req.db)
-    }
+    let isStaff = try await isSubmissionStaff(caller, submission: submission, on: req.db)
     if !isStaff && submission.userID != userID {
         throw Abort(.forbidden)
     }

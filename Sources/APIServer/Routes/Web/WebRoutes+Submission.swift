@@ -259,16 +259,9 @@ extension WebRoutes {
         // Per-course staff (TA+ or admin) see instructor-level detail for this
         // submission's course; everyone else may view only their own
         // submission (#417 Slice G — was the global `user.isInstructor`).
-        let isStaff: Bool
-        if let owningCourseID = try await courseID(ofSubmission: submission, on: req.db) {
-            isStaff = try await isCourseStaff(user, inCourse: owningCourseID, db: req.db)
-        } else {
-            isStaff = false
-        }
-        if !isStaff {
-            guard submission.userID == user.id else {
-                throw Abort(.forbidden)
-            }
+        let isStaff = try await isSubmissionStaff(user, submission: submission, on: req.db)
+        guard isStaff || submission.userID == user.id else {
+            throw Abort(.forbidden)
         }
 
         // Fetch the assignment for deadline-based output gating.
