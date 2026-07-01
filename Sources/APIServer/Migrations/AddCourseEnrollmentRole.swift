@@ -81,16 +81,20 @@ struct AddCourseEnrollmentRole: ChickadeeMigration {
             .all(decoding: PendingEnrollment.self)
         guard !pending.isEmpty else { return }
 
-        // Instructor-ness comes from each user's *global* role. The user lookup
-        // stays a Fluent model query: it reads the `users` table, which no later
-        // migration extends, so it isn't exposed to the column-drift hazard the
-        // enrollment query above hardens against.
+        // Instructor-ness comes from each user's *global* role at backfill time.
+        // This migration runs before `CollapseUserRoles`, so on the DBs where it
+        // does real work a user could still carry the legacy `instructor` (or
+        // `admin`) role — matched here by its raw string, since those enum cases
+        // were retired. The user lookup stays a Fluent model query: it reads the
+        // `users` table, which no later migration extends, so it isn't exposed to
+        // the column-drift hazard the enrollment query above hardens against.
         let userIDs = Set(pending.map(\.userID))
         let users = try await APIUser.query(on: database).filter(\.$id ~~ userIDs).all()
+        let staffRoleStrings: Set<String> = ["instructor", UserRole.admin.rawValue]
         var isInstructorByUserID: [UUID: Bool] = [:]
         for user in users {
             guard let id = user.id else { continue }
-            isInstructorByUserID[id] = user.isInstructor
+            isInstructorByUserID[id] = staffRoleStrings.contains(user.role)
         }
 
         for row in pending {

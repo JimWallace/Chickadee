@@ -78,8 +78,12 @@ func makeTestEnrollment(
     // Seed the per-course role from the user's global role (mirroring production
     // saveSeededEnrollment) so a global instructor/admin enrolled for testing
     // becomes course staff — otherwise the per-course roster counts and staff
-    // gates (#417 Slice G) would treat them as an ordinary student.
-    let isInstructor = try await APIUser.find(userID, on: app.db)?.isInstructor ?? false
+    // gates (#417 Slice G) would treat them as an ordinary student. The global
+    // `instructor` role no longer exists as a UserRole case (#417 Slice G2), so
+    // legacy `"instructor"` role strings (still used by test logins) and admins
+    // seed to a per-course instructor, matching the migration backfill.
+    let user = try await APIUser.find(userID, on: app.db)
+    let isInstructor = (user?.role == "instructor") || (user?.isAdmin ?? false)
     let enrollment = APICourseEnrollment(
         userID: userID, courseID: courseID, role: isInstructor ? .instructor : .student)
     try await enrollment.save(on: app.db)

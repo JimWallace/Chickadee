@@ -28,7 +28,9 @@ import Testing
     @Test func mcpRoleDoesNotImplyInstructorOrAdmin() {
         let agent = APIUser(username: "claude-agent", passwordHash: "x", role: "mcp")
         #expect(agent.isMCPAgent)
-        #expect(agent.isInstructor == false)
+        // The global instructor role is gone (#417 Slice G2) — teaching authority
+        // is per-course now — so an `mcp` account is neither admin nor `user`.
         #expect(agent.isAdmin == false)
+        #expect(agent.roleValue == .mcp)
     }
 }

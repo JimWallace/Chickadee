@@ -132,6 +132,8 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // Content consent requires per-course staff now (#417); enrol prof.
+            try await enrollAsTestInstructor(username: "prof", on: app)
 
             // Consent → authorization code.
             let consentRes = try await consent(
@@ -188,6 +190,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
 
             let consentRes = try await consent(
                 app, cookie: cookie, scope: "content:read content:write", decision: "authorize")
@@ -219,6 +222,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, scope: "content:read content:write", decision: "authorize")
             let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
@@ -232,10 +236,9 @@ import VaporTesting
             let refreshToken = try #require(jsonField("refresh_token", in: tokenRes))
 
             // The instructor is demoted to student (role downgrade / repurpose).
-            let prof = try #require(
-                await APIUser.query(on: app.db).filter(\.$username == "prof").first())
-            prof.role = "student"
-            try await prof.save(on: app.db)
+            // Authority is per-course now (#417 Slice G2), so strip the enrollment
+            // staff role — the global role no longer governs MCP eligibility.
+            try await demoteToStudentEverywhere(username: "prof", on: app)
 
             // Refresh now fails, and the grant is revoked so a retry also fails.
             let refreshRes = try await tokenPost(
@@ -253,6 +256,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, scope: "content:read", decision: "authorize")
             let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
@@ -275,6 +279,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let res = try await consent(
                 app, cookie: cookie, scope: "content:read", decision: "deny")
             #expect(res.status == .seeOther)
@@ -290,6 +295,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(
                 app, cookie: cookie, scope: "content:read content:write")
             let res = try await submitConsent(app, token: token, decision: "authorize", cookie: nil)
@@ -314,6 +320,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(app, cookie: cookie, scope: "content:read")
             #expect(try await submitConsent(app, token: token, decision: "authorize").status == .seeOther)
             // Single-use: replaying the same token is rejected.
@@ -352,12 +359,11 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(app, cookie: cookie, scope: "content:read")
             // Demote the consenting user after the screen rendered but before submit.
-            let prof = try #require(
-                await APIUser.query(on: app.db).filter(\.$username == "prof").first())
-            prof.role = "student"
-            try await prof.save(on: app.db)
+            // Authority is per-course now (#417 Slice G2) — strip the enrollment.
+            try await demoteToStudentEverywhere(username: "prof", on: app)
             let res = try await submitConsent(app, token: token, decision: "authorize")
             #expect(res.status == .forbidden)
         }
@@ -401,6 +407,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let refresh = try await obtainRefreshToken(app, cookie: cookie)
 
             let revokeRes = try await app.asyncSendRequest(
@@ -421,6 +428,7 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let firstRefresh = try await obtainRefreshToken(app, cookie: cookie)
 
             // Legitimate rotation.

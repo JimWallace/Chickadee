@@ -192,6 +192,23 @@ func enrollAsTestInstructor(
     }
 }
 
+/// Demotes every one of `username`'s course enrollments to `.student` — the
+/// per-course equivalent of the retired "downgrade the global role" move (#417
+/// Slice G2 collapsed the deployment role to user/admin/mcp, so teaching
+/// authority lives on the enrollment). After this the user is staff nowhere, so
+/// MCP content consent / refresh re-authorization (`isStaffAnywhere`) must fail.
+func demoteToStudentEverywhere(username: String, on app: Application) async throws {
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+    else { return }
+    let userID = try user.requireID()
+    for enrollment in try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).all()
+    {
+        enrollment.role = .student
+        try await enrollment.save(on: app.db)
+    }
+}
+
 // MARK: - Async app lifecycle
 
 /// Runs an async test body with a Vapor application and always shuts it down.

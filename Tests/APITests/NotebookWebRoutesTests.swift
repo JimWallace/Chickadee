@@ -95,10 +95,13 @@ import VaporTesting
         // Seed the per-course role from the global role (mirroring production
         // saveSeededEnrollment) so a global instructor becomes course staff —
         // the notebook solution view is per-course staff now (#417 Slice G).
+        // The global `instructor` UserRole case is gone (#417 Slice G2); a
+        // legacy `"instructor"` role string or an admin seeds to instructor.
+        let isStaff = (user.role == "instructor") || user.isAdmin
         let enrollment = APICourseEnrollment(
             userID: try user.requireID(),
             courseID: try course.requireID(),
-            role: user.isInstructor ? .instructor : .student
+            role: isStaff ? .instructor : .student
         )
         try await enrollment.save(on: app.db)
     }

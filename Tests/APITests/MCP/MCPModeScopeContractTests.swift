@@ -142,6 +142,8 @@ import VaporTesting
             // 3. Authorize: the agent requests the granted scope; consent yields a code.
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // Content consent requires per-course staff now (#417); enrol prof.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, clientID: clientID, scope: expectedScopes.joined(separator: " "))
             #expect(consentRes.status == .seeOther)
@@ -213,6 +215,8 @@ import VaporTesting
             let clientID = try #require(jsonField("client_id", in: try await register(app)))
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // In-mode consent renders the permitted screen; enrol prof as staff.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             try await app.asyncTest(
                 .GET, authorizePath(clientID: clientID, scope: "content:read"),
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
