@@ -133,8 +133,9 @@ struct UpdateAssignmentTool: ContentTool {
                 tool: Self.name, detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility.")
         }
 
+        // Title / due date / open state are lifecycle — instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
         do {
             // Title/date metadata first. The legacy `isOpen` is applied here only
             // when `visibility` was not given (visibility is the richer form and
