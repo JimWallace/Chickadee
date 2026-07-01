@@ -41,7 +41,7 @@ import VaporTesting
         }
     }
 
-    @Test func registerSecondUserBecomesStudent() async throws {
+    @Test func registerSecondUserBecomesUser() async throws {
         try await withApp(try await makeApp()) { app in
             // Seed an existing admin.
             let hash = try testPasswordHash("password1")
@@ -63,7 +63,9 @@ import VaporTesting
             let student = try await APIUser.query(on: app.db)
                 .filter(\.$username == "student1")
                 .first()
-            #expect(student?.role == "student")
+            // Roles collapsed to user|admin (#417 Slice G2): a non-first
+            // registrant is a plain `user`, not the retired `student` role.
+            #expect(student?.role == "user")
 
         }
     }
