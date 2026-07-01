@@ -139,4 +139,46 @@ import VaporTesting
                 })
         }
     }
+
+    // MARK: - A per-course STUDENT is shut out of the instructor area entirely
+
+    @Test func studentCannotEditAssignmentSuite() async throws {
+        try await withApp(app) { _ in
+            // Same fixture, acting user enrolled as a plain `.student` — the
+            // `/instructor` gate (role >= .ta) rejects them before any handler.
+            let fx = try await fixture(role: .student)
+            try await app.asyncTest(
+                .PUT, "/instructor/\(fx.assignmentID)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"items":[]}"#)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .forbidden,
+                        "a student must not edit assignment content, got \(res.status)")
+                })
+        }
+    }
+
+    @Test func studentCannotRetestSubmissions() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture(role: .student)
+            try await app.asyncTest(
+                .POST, "/instructor/\(fx.assignmentID)/retest",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
+                    req.headers.contentType = .urlEncodedForm
+                    req.body = ByteBuffer(string: "")
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .forbidden,
+                        "a student must not retest submissions, got \(res.status)")
+                })
+        }
+    }
 }
