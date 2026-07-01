@@ -698,14 +698,23 @@ extension MCPOAuthRoutes {
 
         var scopeCeiling: Set<String> { Set(advertisedScopes) }
 
-        /// The role gate: content authoring needs staff (TA+ in any course) or
-        /// admin; admin diagnostics needs admin. This only decides who may grant
-        /// a scope at all — per-course authority is re-checked per tool call by
-        /// `authorizeCourseAccess` (#417 Slice G — content was the global
-        /// `user.isInstructor`).
+        /// The role gate: content authoring needs an instructor/admin; admin
+        /// diagnostics needs admin. This only decides who may grant a scope at
+        /// all — per-course authority is re-checked per tool call by
+        /// `authorizeCourseAccess`, which is already enrollment-scoped, so this
+        /// coarse gate never widens what an agent can actually touch.
+        ///
+        /// NOTE (#417): this consent gate still keys off the deployment-global
+        /// role. It is deliberately deferred to the Slice G2 enum collapse, which
+        /// revisits every global-role reference at once (there it becomes a
+        /// per-course `isStaffAnywhere` check). Converting it here in G1 — ahead
+        /// of the enum work — only churned the OAuth-consent tests for no net
+        /// security gain, since the tool-level per-course check already governs
+        /// what the minted token can do. The `db` parameter is kept so G2 can
+        /// swap in the async per-course lookup without touching call sites.
         func permits(_ user: APIUser, db: Database) async throws -> Bool {
             switch surface {
-            case .content: return try await isStaffAnywhere(user, db: db)
+            case .content: return user.isInstructor
             case .admin: return user.isAdmin
             }
         }

@@ -37,7 +37,9 @@ struct SubmissionQueryRoutes: RouteCollection {
         // A non-admin sees others' submissions only for a test setup whose
         // course they staff; otherwise (including with no setup filter) they see
         // only their own (#417 Slice G — was the global `caller.isInstructor`).
-        var callerIsCourseStaff = false
+        // Admins administer the whole deployment, so they list every submission
+        // even with no setup filter (there's no single course to staff-check).
+        var callerIsCourseStaff = caller.isAdmin
         if let testSetupID = req.query[String.self, at: "testSetupID"] {
             query = query.filter(\.$testSetupID == testSetupID)
             if let setup = try await APITestSetup.find(testSetupID, on: req.db) {

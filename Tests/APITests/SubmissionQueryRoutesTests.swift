@@ -795,6 +795,9 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_instr_all"
             let cookie = try await loginAsInstructor()
+            // All-tier visibility is per-course staff now (#417 Slice G); enrol
+            // the instructor in the setup's course (shared TEST101).
+            try await enrollAsTestInstructor(username: "instructor_tier", on: app)
             try await ensureAssignment(
                 setupID: setupID,
                 dueAt: Date().addingTimeInterval(3600))  // future deadline
