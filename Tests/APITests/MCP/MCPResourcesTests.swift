@@ -91,7 +91,12 @@ import Vapor
     @Test func listIncludesAuthoringGuides() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            // MCP eligibility is per-course staff now (#417 Slice G2); enrol prof
+            // so the subject is staff-anywhere even for the global-guide listing.
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
+            try await makeTestEnrollment(
+                on: app, userID: prof.requireID(), courseID: course.requireID())
             let result = try await MCPResourceProvider().list(context: context(app, subject: "prof"))
             let uris = Self.resourceURIs(result)
             #expect(uris.contains("chickadee://docs/personalization-solution-notebooks"))
@@ -101,7 +106,11 @@ import Vapor
     @Test func readReturnsGuideMarkdown() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            let prof = try await makeTestUser(on: app, username: "prof", role: "instructor")
+            // MCP eligibility is per-course staff now (#417 Slice G2); enrol prof.
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
+            try await makeTestEnrollment(
+                on: app, userID: prof.requireID(), courseID: course.requireID())
             let result = try await MCPResourceProvider().read(
                 uri: "chickadee://docs/personalization-solution-notebooks",
                 context: context(app, subject: "prof"))

@@ -79,6 +79,7 @@ import VaporTesting
 
         let cookie = try await loginUser(
             username: "lc_inst", password: "pw", role: "instructor", on: app)
+        try await promoteToInstructor("lc_inst", on: app)  // active .auto course: promote (#417)
         let user = try #require(
             try await APIUser.query(on: app.db).filter(\.$username == "lc_inst").first())
         try await APICourseEnrollment(

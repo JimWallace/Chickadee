@@ -35,7 +35,13 @@ import VaporTesting
     // MARK: - Auth helpers
 
     private func loginAsInstructor() async throws -> String {
-        return try await loginUser(username: "testinstructor", password: "testpassword", role: "instructor", on: app)
+        let cookie = try await loginUser(
+            username: "testinstructor", password: "testpassword", role: "instructor", on: app)
+        // Teaching authority is per-course now (#417 Slice G2): explicitly enrol
+        // the instructor as course staff in the shared TEST101 course (the
+        // setups here live in it) instead of relying on auto-enroll granting it.
+        try await enrollAsTestInstructor(username: "testinstructor", on: app)
+        return cookie
     }
 
     private func loginAsStudent() async throws -> String {

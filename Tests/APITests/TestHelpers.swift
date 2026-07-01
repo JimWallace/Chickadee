@@ -583,29 +583,27 @@ func loginUser(
             // Use the new cookie if the session was rotated, otherwise keep the old one.
             if let c = res.headers.first(name: .setCookie) { authCookie = c }
         })
-
-    // Bridge (#417 Slice G2): production auto-enroll at login now seeds a
-    // non-admin — including a legacy `"instructor"` role string — as a per-course
-    // `.student` (teaching authority is per-course; the roster grants staff
-    // explicitly). Many suites create `.auto` courses and rely on an instructor
-    // login being staff in them (the pre-collapse behaviour, e.g. "Creates an
-    // .auto course (auto-enrolls the instructor on login)"). Restore that here
-    // for the legacy `"instructor"` string by upgrading the enrollments the
-    // login just auto-created, so those suites keep passing without a per-test
-    // enrollment. Only touches `.student` rows (the auto-seeded ones); anything
-    // a test enrolls explicitly afterward is untouched.
-    if role == "instructor",
-        let user = try await APIUser.query(on: app.db).filter(\.$username == username).first(),
-        let userID = user.id
-    {
-        for enrollment in try await APICourseEnrollment.query(on: app.db)
-            .filter(\.$userID == userID).all() where enrollment.role == .student
-        {
-            enrollment.role = .instructor
-            try await enrollment.save(on: app.db)
-        }
-    }
     return authCookie
+}
+
+/// Explicit-roster promotion: an admin promotes an already-enrolled user to a
+/// per-course instructor. Teaching authority is per-course now (#417 Slice G2):
+/// login auto-enrolls a non-admin as a `.student` and there is NO auto-grant, so
+/// suites whose `.auto` fixtures used to rely on "auto-enroll the instructor on
+/// login" call this after `loginUser(role: "instructor")` to simulate the admin
+/// promotion. Upgrades every `.student` enrollment the user holds to
+/// `.instructor` (a fresh test instructor's only enrollments are the ones login
+/// just auto-created); anything enrolled explicitly at another role is untouched.
+func promoteToInstructor(_ username: String, on app: Application) async throws {
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first(),
+        let userID = user.id
+    else { return }
+    for enrollment in try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).all() where enrollment.role == .student
+    {
+        enrollment.role = .instructor
+        try await enrollment.save(on: app.db)
+    }
 }
 
 /// Wraps a runtime skip-or-fail condition as a throwable error.  Use

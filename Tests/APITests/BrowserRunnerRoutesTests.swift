@@ -439,6 +439,7 @@ import VaporTesting
 
             let staffCookie = try await loginUser(
                 username: "prof1", password: "pass", role: "instructor", on: app)
+            try await promoteToInstructor("prof1", on: app)
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
@@ -473,6 +474,7 @@ import VaporTesting
 
             let staffCookie = try await loginUser(
                 username: "prof1", password: "pass", role: "instructor", on: app)
+            try await promoteToInstructor("prof1", on: app)
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
