@@ -53,6 +53,10 @@ import VaporTesting
                 zipPath: app.testSetupsDirectory + "ba_award_setup.zip", courseID: courseID)
             try await setup.save(on: app.db)
             let student = try await arInsertStudent(username: "ba_student", on: app)
+            // Class badges gate on a per-course `.student` enrollment now (#417
+            // Slice G2) — enrol so the award path is actually reached (the
+            // disabled set, not the role gate, is what leaves it empty).
+            try await arEnrollStudentInTestCourse(student, on: app)
             let uid = try student.requireID()
             _ = try await arInsertSubmission(
                 id: "ba_award_sub", testSetupID: "ba_award_setup", userID: uid, on: app)

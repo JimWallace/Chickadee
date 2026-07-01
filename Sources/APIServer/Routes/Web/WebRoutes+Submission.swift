@@ -149,7 +149,12 @@ extension WebRoutes {
         // checks the submitter's role and uses the existence of a
         // pathfinder row directly (the unique constraint on
         // (test_setup_id, achievement_id) makes this the natural query).
-        if user.roleValue == .student, let uid = user.id {
+        // Award only to a per-course STUDENT in this setup's course (#417 Slice
+        // G2 — the global student role was retired); an admin/TA/instructor
+        // testing the assignment must not lock in the immutable badge.
+        if let uid = user.id,
+            try await courseRole(of: uid, inCourse: setup.courseID, db: req.db) == .student
+        {
             // First-to-submit records (Pathfinder) — the manifest's authored
             // ones, or the registry default, minus any the instructor disabled.
             let records = BuiltInAchievements.classRecordsForAward(
