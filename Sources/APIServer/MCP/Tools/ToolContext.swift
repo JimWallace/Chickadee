@@ -82,9 +82,10 @@ struct ToolContext {
         // test corpus that still writes `role: "instructor"` (without a per-course
         // staff enrollment) keeps resolving as staff. Removable once those tests
         // are migrated.
-        let eligible =
-            user.isMCPAgent || user.isInstructor
-            || (try await isStaffAnywhere(user, db: db))
+        var eligible = user.isMCPAgent || user.isInstructor
+        if !eligible {
+            eligible = try await isStaffAnywhere(user, db: db)
+        }
         guard eligible else {
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "Students may not use the MCP interface.")

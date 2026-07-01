@@ -713,7 +713,8 @@ extension MCPOAuthRoutes {
         func permits(_ user: APIUser, db: Database) async throws -> Bool {
             switch surface {
             case .content:
-                return user.isInstructor || (try await isStaffAnywhere(user, db: db))
+                if user.isInstructor { return true }
+                return try await isStaffAnywhere(user, db: db)
             case .admin: return user.isAdmin
             }
         }
