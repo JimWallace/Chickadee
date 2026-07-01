@@ -183,10 +183,18 @@ func enrollAsTestInstructor(
     guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
     else { return }
     let userID = try user.requireID()
-    let exists =
-        try await APICourseEnrollment.query(on: app.db)
-        .filter(\.$userID == userID).filter(\.$course.$id == courseID).first() != nil
-    if !exists {
+    // Upsert to `.instructor` — a `.auto` course auto-enrolls the user at login
+    // and (post role-collapse, #417 Slice G2) seeds a non-admin as a per-course
+    // `.student`, so skipping on "already enrolled" could leave them a student
+    // and 403 the per-course staff gates.
+    if let existing = try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
+    {
+        if existing.role != .instructor {
+            existing.role = .instructor
+            try await existing.save(on: app.db)
+        }
+    } else {
         try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
             .save(on: app.db)
     }
@@ -575,6 +583,28 @@ func loginUser(
             // Use the new cookie if the session was rotated, otherwise keep the old one.
             if let c = res.headers.first(name: .setCookie) { authCookie = c }
         })
+
+    // Bridge (#417 Slice G2): production auto-enroll at login now seeds a
+    // non-admin — including a legacy `"instructor"` role string — as a per-course
+    // `.student` (teaching authority is per-course; the roster grants staff
+    // explicitly). Many suites create `.auto` courses and rely on an instructor
+    // login being staff in them (the pre-collapse behaviour, e.g. "Creates an
+    // .auto course (auto-enrolls the instructor on login)"). Restore that here
+    // for the legacy `"instructor"` string by upgrading the enrollments the
+    // login just auto-created, so those suites keep passing without a per-test
+    // enrollment. Only touches `.student` rows (the auto-seeded ones); anything
+    // a test enrolls explicitly afterward is untouched.
+    if role == "instructor",
+        let user = try await APIUser.query(on: app.db).filter(\.$username == username).first(),
+        let userID = user.id
+    {
+        for enrollment in try await APICourseEnrollment.query(on: app.db)
+            .filter(\.$userID == userID).all() where enrollment.role == .student
+        {
+            enrollment.role = .instructor
+            try await enrollment.save(on: app.db)
+        }
+    }
     return authCookie
 }
 
