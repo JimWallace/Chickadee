@@ -269,7 +269,7 @@ struct TestSetupRoutes: RouteCollection {
         // the old global `isInstructor` check, which trusted the client-supplied
         // `courseID` and let any global instructor create a setup — carrying
         // secret tests + solutions — in ANY course (#417 Slice D).
-        try await requireCourseWriteAccess(caller: caller, courseID: upload.courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: upload.courseID, atLeast: .instructor, db: req.db)
 
         // Validate manifest JSON and schema version.
         let manifestData = Data(upload.manifest.utf8)
@@ -520,7 +520,7 @@ struct TestSetupRoutes: RouteCollection {
         // it to the setup's own course (and block archived). Replaces the old
         // global `isInstructor` check, which let any global instructor overwrite
         // any course's notebook by :testSetupID (#417 Slice D).
-        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
 
         // Collect the raw request body as Data.
         guard let bodyBuffer = req.body.data,

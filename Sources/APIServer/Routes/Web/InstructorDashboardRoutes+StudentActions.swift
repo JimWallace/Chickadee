@@ -15,7 +15,7 @@ extension InstructorDashboardRoutes {
 
     @Sendable
     func studentSubmissionHistoryPage(req: Request) async throws -> View {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForStaffRead(req)
         let assignmentIDRaw = assignment.publicID
         guard
             let studentIDRaw = req.parameters.get("studentID"),
@@ -35,7 +35,11 @@ extension InstructorDashboardRoutes {
             .sort(\.$submittedAt, .descending)
             .all()
         let submissionIDs = submissions.compactMap(\.id)
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // "Highest grade wins" across ALL result sources — the same fold the
+        // roster the instructor clicked through from uses, so the two pages
+        // can't show different numbers for the same submission (#1111; this
+        // page used to show the worker-preferred grade instead).
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissionIDs,
             on: req.db
         )
@@ -45,9 +49,7 @@ extension InstructorDashboardRoutes {
         let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
             let subID = submission.id ?? ""
             let gradeText: String
-            if let result = preferredResultBySubmissionID[subID],
-                let pct = result.gradePercentValue
-            {
+            if let pct = bestPercentBySubmissionID[subID] {
                 gradeText = "\(pct)%"
             } else {
                 gradeText = "—"
@@ -131,7 +133,7 @@ extension InstructorDashboardRoutes {
     @Sendable
     func retestAllSubmissions(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
 
         let count = try await retestAllSubmissionsForSetup(

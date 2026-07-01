@@ -232,7 +232,11 @@ enum MCPServerInstructions {
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
         Metadata-only edits (update_assignment, set_grading_mode, set_time_limit, \
-        update_achievements, the section-organization tools) never trigger a regrade or a close.
+        update_achievements, the section-organization tools) never trigger a regrade or a close. \
+        update_global_inputs and update_section_variables re-inline the shared inputs into the \
+        affected scripts in place and likewise neither close nor regrade (matching the web Global \
+        Inputs panel); re-run validate_assignment yourself after changing inputs that graded \
+        scripts consume.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
         and pick up the new notebook when their copy is next reset. Call get_notebook first and edit \
         the returned JSON.

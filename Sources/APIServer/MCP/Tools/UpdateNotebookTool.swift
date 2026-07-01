@@ -80,7 +80,7 @@ struct UpdateNotebookTool: ContentTool {
         try validateNotebookShape(input.notebook, tool: Self.name)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         let data: Data
         do {

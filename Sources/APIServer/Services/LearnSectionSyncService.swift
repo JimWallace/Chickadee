@@ -17,26 +17,6 @@ import Fluent
 import Foundation
 import Vapor
 
-// MARK: - Helpers
-
-/// Builds two lookup maps from a classlist: orgDefinedID→D2LUserID and username→D2LUserID.
-private func classlistIdentityMaps(
-    _ classlist: [BrightSpaceClasslistEntry]
-) -> (byOrgDefinedId: [String: String], byUsername: [String: String]) {
-    var byOrgDefinedId: [String: String] = [:]
-    var byUsername: [String: String] = [:]
-    for entry in classlist {
-        guard let uid = entry.userID, !uid.isEmpty else { continue }
-        if let oid = entry.orgDefinedID, !oid.isEmpty {
-            byOrgDefinedId[oid.lowercased()] = uid
-        }
-        if let uname = entry.username, !uname.isEmpty {
-            byUsername[uname.lowercased()] = uid
-        }
-    }
-    return (byOrgDefinedId, byUsername)
-}
-
 // MARK: - Core reconciler
 
 /// Outcome counts for one course's section-sync pass.
@@ -99,7 +79,11 @@ func syncCourseSections(
 
     // Build identity lookup: (orgDefinedId or username) → D2L user ID,
     // using the classlist as the bridge.
-    let (d2lUserIDByOrgDefinedId, d2lUserIDByUsername) = classlistIdentityMaps(classlist)
+    // The shared classlist reduction (#1117) — one normalization (trim +
+    // lowercase) and one username-first precedence, matching grade push, so
+    // a whitespace-affected classlist entry can't match one sweep and
+    // silently miss the other.
+    let identityIndex = BrightSpaceIdentityIndex(classlist: classlist)
 
     var userByID: [UUID: APIUser] = [:]
     for user in users {
@@ -112,9 +96,8 @@ func syncCourseSections(
         outcome.checked += 1
 
         // Resolve D2L user ID for this student via classlist identity match.
-        let d2lUserID =
-            student.studentID.flatMap { d2lUserIDByOrgDefinedId[$0.lowercased()] }
-            ?? d2lUserIDByUsername[student.username.lowercased()]
+        let d2lUserID = identityIndex.d2lUserID(
+            username: student.username, studentID: student.studentID)
 
         let section = d2lUserID.flatMap { sectionByD2LUserID[$0] }
 

@@ -330,9 +330,10 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
 
     // MARK: - Request transport (signing + clock-skew retry)
 
-    /// Signs `rawURL` for `method` ("GET"/"PUT") and sends it. If D2L rejects the
-    /// request with a "Timestamp out of range" 403, learns the clock skew from
-    /// the response body and retries exactly once with a corrected timestamp.
+    /// Signs `rawURL` for `method` ("GET"/"PUT"/"DELETE") and sends it. If D2L
+    /// rejects the request with a "Timestamp out of range" 403, learns the clock
+    /// skew from the response body and retries exactly once with a corrected
+    /// timestamp.
     private func sendSigned(
         method: String,
         rawURL: String,
@@ -341,19 +342,24 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     ) async throws -> ClientResponse {
         func attempt() async throws -> ClientResponse {
             let uri = URI(string: signed(url: rawURL, method: method))
-            if method.uppercased() == "PUT" {
+            // The wire verb MUST match the verb inside the Valence signature —
+            // D2L verifies the method as part of the signature, so a mismatch
+            // is a guaranteed 403 (#1105: clearGrade signed a DELETE that was
+            // transmitted as a GET, so grade removal could never work).
+            switch method.uppercased() {
+            case "PUT":
                 return try await app.client.put(uri) { req in try beforeSend?(&req) }
+            case "POST":
+                return try await app.client.post(uri) { req in try beforeSend?(&req) }
+            case "DELETE":
+                return try await app.client.delete(uri) { req in try beforeSend?(&req) }
+            default:
+                return try await app.client.get(uri) { req in try beforeSend?(&req) }
             }
-            return try await app.client.get(uri) { req in try beforeSend?(&req) }
         }
         let response = try await attempt()
         guard response.status == .forbidden else { return response }
-        // Peek the body non-destructively (a copied ByteBuffer has its own reader
-        // index) so a genuine permission 403 is still returned intact to the caller.
-        var bodyBuf = response.body
-        let len = bodyBuf?.readableBytes ?? 0
-        let bodyText = (len > 0 ? bodyBuf?.readString(length: len) : nil) ?? ""
-        guard let serverTime = valenceServerTimeFromTimestampError(body: bodyText) else {
+        guard let serverTime = valenceServerTimeFromTimestampError(body: response.bodyString()) else {
             return response
         }
         serverSkewSeconds = serverTime - Int(Date().timeIntervalSince1970)
@@ -471,10 +477,8 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         }
 
         guard (200...299).contains(response.status.code) else {
-            var bodyBuf = response.body
-            let bodyLen = bodyBuf?.readableBytes ?? 0
-            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
-            throw BrightSpaceSyncError.gradePushFailed(status: Int(response.status.code), body: bodyText)
+            throw BrightSpaceSyncError.gradePushFailed(
+                status: Int(response.status.code), body: response.bodyString())
         }
     }
 
@@ -491,10 +495,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let response = try await sendSigned(method: "DELETE", rawURL: rawURL, on: application)
         let code = Int(response.status.code)
         guard (200...299).contains(code) || code == 404 else {
-            var bodyBuf = response.body
-            let bodyLen = bodyBuf?.readableBytes ?? 0
-            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
-            throw BrightSpaceSyncError.gradePushFailed(status: code, body: bodyText)
+            throw BrightSpaceSyncError.gradePushFailed(status: code, body: response.bodyString())
         }
     }
 
@@ -544,11 +545,8 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/users/whoami"
         let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
         guard response.status == .ok else {
-            var bodyBuf = response.body
-            let bodyLen = bodyBuf?.readableBytes ?? 0
-            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
             throw BrightSpaceSyncError.whoamiFailed(
-                status: Int(response.status.code), body: String(bodyText.prefix(500)))
+                status: Int(response.status.code), body: response.bodyString(max: 500))
         }
         struct WhoAmIResponse: Decodable {
             let identifier: String
@@ -764,5 +762,20 @@ extension Application {
     var brightSpaceClient: BrightSpaceAPIClient? {
         get { storage[BrightSpaceAPIClientKey.self] }
         set { storage[BrightSpaceAPIClientKey.self] = newValue }
+    }
+}
+
+// MARK: - Response-body helper
+
+extension ClientResponse {
+    /// Reads the response body as UTF-8 text without consuming it (a copied
+    /// ByteBuffer has its own reader index, so the caller can still hand the
+    /// response on intact). Capped at `max` characters; "" when bodyless.
+    /// The one body-read dance for the Valence client's error paths (#1117).
+    func bodyString(max: Int = 4096) -> String {
+        var buffer = body
+        let length = buffer?.readableBytes ?? 0
+        let text = (length > 0 ? buffer?.readString(length: length) : nil) ?? ""
+        return String(text.prefix(max))
     }
 }

@@ -79,7 +79,7 @@ struct UpdateAchievementsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         let rows: [AchievementRow]
         do {

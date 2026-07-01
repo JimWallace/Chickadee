@@ -82,11 +82,18 @@ func applySuiteEditMapped(
 /// not-yet-revalidated suite), optionally re-grade existing submissions, then
 /// re-kick (debounced) validation. Returns whether the assignment was closed.
 ///
-/// `retest: true` for edits that can change a grade (scripts, families, checks,
-/// solution); `retest: false` for placement/metadata-only edits (e.g.
+/// `retest: true` for edits that can change a grade (scripts, families,
+/// checks); `retest: false` for placement/metadata-only edits (e.g.
 /// `move_suite_item`) that only reorder or re-tag and never change an outcome.
-/// The close→retest→revalidate ordering is the invariant documented on
-/// `closeOpenAssignmentForContentEdit` / `retestSubmissionsAfterContentEdit`.
+/// `update_solution` is the one named exemption from this chokepoint: it
+/// enqueues its own validation carrying the new solution (this helper's
+/// re-kick would validate the old one) and closes via
+/// `closeOpenAssignmentForContentEdit` directly; a solution-only edit never
+/// changes the manifest, so the manifest-gated retest would be a no-op —
+/// matching the web save path (#1115). `MCPContentEditCoverageTests` pins the
+/// full classification. The close→retest→revalidate ordering is the invariant
+/// documented on `closeOpenAssignmentForContentEdit` /
+/// `retestSubmissionsAfterContentEdit`.
 @discardableResult
 func finalizeContentEdit(
     assignment: APIAssignment, setup: APITestSetup, context: ToolContext, retest: Bool

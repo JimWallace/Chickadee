@@ -19,7 +19,7 @@ extension InstructorDashboardRoutes {
 
     @Sendable
     func assignmentSubmissionsPage(req: Request) async throws -> View {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForStaffRead(req)
         let assignmentIDRaw = assignment.publicID
 
         // Canonical roster size: role=="student" enrolled users + pre-enrollments.

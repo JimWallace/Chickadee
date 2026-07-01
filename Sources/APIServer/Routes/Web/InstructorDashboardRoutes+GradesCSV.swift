@@ -47,8 +47,8 @@ extension InstructorDashboardRoutes {
         // a later worker regrading at a lower percentage.  The best percentage is
         // then converted to points using the manifest total so the CSV column is
         // anchored to a stable scale regardless of which tier mix each result used.
-        let allResultsBySubmission = try await loadAllResultsBySubmissionID(
-            submissionIDs: submissionIDs, on: req.db)
+        let allResultsBySubmission = try await allResultsBySubmissionID(
+            for: submissionIDs, on: req.db)
         var bestPointsByUserAndSetup = bestGradePointsByUserAndSetup(
             submissions: submissions,
             allResultsBySubmission: allResultsBySubmission,
@@ -191,29 +191,9 @@ extension InstructorDashboardRoutes {
         }
     }
 
-    /// Loads every `APIResult` row for the given submission IDs, grouped by
-    /// submission ID.  Unlike `preferredResultsBySubmissionID` this keeps all
-    /// sources (browser + worker) so callers can pick the best grade across them.
-    private func loadAllResultsBySubmissionID(
-        submissionIDs: [String], on db: Database
-    ) async throws -> [String: [APIResult]] {
-        guard !submissionIDs.isEmpty else { return [:] }
-        let chunkSize = 5_000
-        var all: [APIResult] = []
-        var idx = submissionIDs.startIndex
-        while idx < submissionIDs.endIndex {
-            let end =
-                submissionIDs.index(idx, offsetBy: chunkSize, limitedBy: submissionIDs.endIndex)
-                ?? submissionIDs.endIndex
-            all += try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ Array(submissionIDs[idx..<end]))
-                .all()
-            idx = end
-        }
-        var map: [String: [APIResult]] = [:]
-        for result in all { map[result.submissionID, default: []].append(result) }
-        return map
-    }
+    // The grouped result loader moved to the shared helper file
+    // (`allResultsBySubmissionID`, BestGradePercentBySubmissionID.swift) so
+    // this file and the highest-grade fold can't drift apart (#1111).
 
     /// Returns the best earned points per (user, setup), where "best" is the
     /// highest grade percentage achieved across ALL results for ALL submissions
@@ -228,14 +208,14 @@ extension InstructorDashboardRoutes {
         allResultsBySubmission: [String: [APIResult]],
         setupByID: [String: APITestSetup]
     ) -> [String: Double] {
-        // Step 1: highest grade percentage across ALL results for ALL submissions.
+        // Step 1: highest grade percentage across ALL results for ALL
+        // submissions — the shared "highest grade wins" fold (#1111).
         var bestPctByKey: [String: Int] = [:]
         for submission in submissions {
             let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
-            for result in allResultsBySubmission[submission.id] ?? [] {
-                guard let pct = result.gradePercentValue else { continue }
-                if pct > (bestPctByKey[key] ?? -1) { bestPctByKey[key] = pct }
-            }
+            guard let pct = bestGradePercent(of: allResultsBySubmission[submission.id] ?? [])
+            else { continue }
+            if pct > (bestPctByKey[key] ?? -1) { bestPctByKey[key] = pct }
         }
         // Step 2: convert best percentage → points anchored to the manifest total.
         var best: [String: Double] = [:]

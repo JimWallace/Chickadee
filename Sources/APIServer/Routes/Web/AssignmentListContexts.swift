@@ -76,38 +76,66 @@ struct InstructorStudentsContext: Encodable {
     let flashError: String?
 }
 
-/// BrightSpace tab (`GET /instructor/brightspace`): connection status, the
-/// assignment→grade-item mapping, the sync log, and grade export.
+/// BrightSpace tab (`GET /instructor/brightspace`): the per-instructor
+/// Connection panel, the assignment→grade-item mapping, roster readiness, and
+/// grade export.
 struct InstructorBrightspaceContext: Encodable {
+    /// The requesting instructor's own LEARN connection (course-independent).
+    struct AccountPanel: Encodable {
+        let connected: Bool
+        /// The connected LEARN identity (whoami display), when connected.
+        let identity: String?
+        /// Pre-rendered " (since …)" suffix (empty when nil) so the template
+        /// interpolates it directly — avoids an inline `#if` in the middle of
+        /// a sentence, which LeafKit 1.14.2 mis-parses.
+        let since: String?
+    }
+
+    /// The identity the active course pushes grades as (its designated
+    /// instructor, or the deployment-wide fallback), plus its health.
+    struct SyncIdentityPanel: Encodable {
+        /// Display name; nil = no identity connected anywhere.
+        let name: String?
+        /// Precomputed `name != nil` so the template branches on a flat bool.
+        let hasName: Bool
+        /// True when the designated sync identity is the requesting user.
+        let isMe: Bool
+        /// False when the course names a designated instructor who no longer
+        /// has a stored key (disconnected) — grades defer until reconnect.
+        let connected: Bool
+        /// True when there's a designated identity but it's disconnected (the
+        /// "needs reconnect" / grades-paused state). Pre-computed so the
+        /// template can branch with flat sibling conditionals (LeafKit 1.14.2
+        /// mis-parses `#if` nested inside an `#if/#else`).
+        let needsReconnect: Bool
+
+        static let empty = SyncIdentityPanel(
+            name: nil, hasName: false, isMe: false, connected: false, needsReconnect: false)
+    }
+
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
     let hasActiveCourse: Bool
     let courseIsArchived: Bool
-    /// True when the server has BrightSpace credentials configured at all.
+    /// True when the server has BrightSpace app credentials configured at all.
     let brightspaceSyncEnabled: Bool
-    /// True when this course is bound to a D2L org unit (admin-set).
+    /// True when this course is bound to a D2L org unit.
     let courseLinked: Bool
-    let orgUnitID: String?
-    let orgUnitName: String?
-    /// True when the requesting instructor has connected their own LEARN account.
-    let accountConnected: Bool
-    /// The requesting instructor's connected LEARN identity (whoami display).
-    let accountIdentity: String?
-    /// When the requesting instructor connected their account (formatted), if connected.
-    let accountConnectedSince: String?
-    /// Display name of the identity this course pushes grades as (its designated
-    /// instructor, or the deployment-wide fallback). Nil = no identity connected.
-    let syncIdentityName: String?
-    /// True when the course's designated sync identity is the requesting user.
-    let syncIdentityIsMe: Bool
-    /// False when the course names a designated instructor who no longer has a
-    /// stored key (disconnected) — grades are deferring until they reconnect.
-    let syncIdentityConnected: Bool
-    /// True when there's a designated identity but it's disconnected (the
-    /// "needs reconnect" / grades-paused state). Pre-computed so the template
-    /// can branch with flat sibling conditionals (LeafKit 1.14.2 mis-parses
-    /// `#if` nested inside an `#if/#else`).
-    let syncIdentityNeedsReconnect: Bool
+    /// "Name (id)" when the org-unit name is known, else the raw id — for the
+    /// "Linked to …" line. Nil when unlinked.
+    let orgUnitDisplay: String?
+    /// The raw org-unit id (or "") prefilled into the Link-course form.
+    let orgUnitFieldValue: String
+    let account: AccountPanel
+    let syncIdentity: SyncIdentityPanel
+    /// Gates for the Connection panel's forms, precomputed flat (LeafKit
+    /// 1.14.2 mis-parses `&&` / nested `#if`): connect form when configured
+    /// but not yet connected; identity actions (test / take-over / disconnect
+    /// / link) when connected with a non-archived active course; take-over
+    /// only when someone else is (or nobody is) the designated identity.
+    let showConnectForm: Bool
+    let showIdentityActions: Bool
+    let showUseMyIdentity: Bool
     let flashSuccess: String?
     let flashError: String?
     /// True when BrightSpace is configured and the active course isn't archived —
@@ -120,16 +148,10 @@ struct InstructorBrightspaceContext: Encodable {
     let doNotSyncToken: String
     let assignmentRows: [BrightspaceAssignmentRow]
     let hasAssignments: Bool
-    let logRows: [BrightspaceLogRow]
-    let hasLog: Bool
-    let summary: BrightspaceSyncSummary
     /// True when the course is linked to a LEARN org unit and not archived —
     /// gates the "Reconcile now" button. Precomputed so the template branches on
     /// a flat bool (LeafKit 1.14.2 mis-parses `&&` / nested `#if`).
     let canReconcile: Bool
-    /// LEARN roster-readiness rollup (confirmed / unconfirmed / unreachable),
-    /// maintained by the periodic reconcile sweep.
-    let readiness: BrightspaceReadinessSummary
     /// Students we can't currently deliver a grade to (not on the LEARN
     /// classlist, or no key to match) — the authoritative replacement for the
     /// old log-heuristic "unmapped students" list.
@@ -171,16 +193,6 @@ struct BrightspaceAssignmentRow: Encodable {
     let hasSyncActivity: Bool
     let hasPending: Bool
     let hasErrored: Bool
-}
-
-/// One row of the sync-activity log.
-struct BrightspaceLogRow: Encodable {
-    let attemptedAt: String
-    let username: String
-    let assignmentTitle: String
-    let points: String  // formatted, or "—"
-    let status: String  // "success" | "error" | "skipped"
-    let detail: String?
 }
 
 /// Headline counts shown as cards atop the panel.

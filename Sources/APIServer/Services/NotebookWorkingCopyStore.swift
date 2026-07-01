@@ -531,6 +531,9 @@ func writeDatasetFiles(
     else { return }
 
     for (filename, content) in files {
+        // Defense-in-depth (#1104): resolver keys are validated bare
+        // filenames, but never join an unvetted name onto the student dir.
+        guard FilenameSafety.bareFilename(filename) != nil else { continue }
         let dest = studentDir + "/" + filename
         try? content.write(toFile: dest, atomically: true, encoding: .utf8)
     }

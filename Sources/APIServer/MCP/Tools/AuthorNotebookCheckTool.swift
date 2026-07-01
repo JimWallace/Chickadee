@@ -307,7 +307,7 @@ struct AuthorNotebookCheckTool: ContentTool {
         let columnMatch = try Self.parseColumnMatch(input.columnMatch)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         let existingIndex = payload.items.firstIndex { $0.kind == "check" && $0.check?.id == checkID }

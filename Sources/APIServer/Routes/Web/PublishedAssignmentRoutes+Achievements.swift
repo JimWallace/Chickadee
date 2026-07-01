@@ -35,7 +35,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getAchievements(req: Request) async throws -> AchievementsResponse {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         return AchievementsResponse(
             achievements: AchievementsEditing.rows(fromManifest: setup.manifest))
     }
@@ -44,7 +44,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func putAchievements(req: Request) async throws -> AchievementsResponse {
-        let (_, setup) = try await loadAssignmentAndSetupForWrite(req)
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try req.content.decode(AchievementsBody.self)
         let rows = try await AchievementsEditing.apply(
             rows: body.achievements, setup: setup, on: req.db)

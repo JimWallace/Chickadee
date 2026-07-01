@@ -18,7 +18,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentNotebookFile(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
 
         let data = try notebookData(for: setup)
         let downloadName = currentSetupFiles(
@@ -33,7 +33,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentSetupItem(req: Request) async throws -> Response {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
 
         struct FileQuery: Content {
             let name: String
@@ -54,7 +54,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentSolutionFile(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
 
         // Look for a solution.* entry inside the test setup zip.
         let solutionZipEntry = listZipEntries(zipPath: setup.zipPath)

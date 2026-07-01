@@ -32,9 +32,13 @@ func sweepBrightSpaceGradeSync(
     resolveClient: (APICourse) async throws -> (any BrightSpaceGrading)?,
     logger: Logger,
     application: Application,
-    now: Date = Date()
+    now: Date = Date(),
+    bypassDebounce: Bool = false
 ) async throws -> Int {
-    let cutoff = now.addingTimeInterval(-debounceSecs)
+    // `bypassDebounce` is the manual "Sync now" path: push every pending row
+    // immediately instead of waiting out the debounce window (#1117 — callers
+    // used to fabricate a future `now` to the same effect).
+    let cutoff = bypassDebounce ? Date.distantFuture : now.addingTimeInterval(-debounceSecs)
 
     // All results that are past the debounce window. May be empty — an
     // override on a student with no submissions has no result row, so the sweep
@@ -543,6 +547,20 @@ private func recordSweepFailure(
 
 /// Clears the pending flag on every row in the group (the "nothing to
 /// push" no-op outcome).
+/// Re-queues rows for an immediate push: pending flag set, `pendingSince`
+/// back-dated past any debounce cutoff, recorded error cleared. The ONE place
+/// the `Date.distantPast` "retry immediately" sentinel is written (#1117) —
+/// the manual "Sync now" / "Push all" routes used to copy-paste this
+/// triple-write five times.
+func requeueForImmediateSync(_ rows: [any BrightSpaceSyncFlaggable], on db: Database) async throws {
+    for row in rows {
+        row.brightspaceSyncPending = true
+        row.brightspacePendingSince = Date.distantPast
+        row.brightspaceSyncError = nil
+        try await row.save(on: db)
+    }
+}
+
 private func clearPendingFlag(_ rows: [any BrightSpaceSyncFlaggable], on db: Database) async throws {
     for row in rows {
         row.brightspaceSyncPending = false
@@ -749,15 +767,15 @@ private func resolveBSUserID(
     db: Database,
     application: Application
 ) async throws -> String? {
-    var identityMap: [String: String] = [:]
+    var identityIndex = BrightSpaceIdentityIndex(classlist: [])
     do {
-        identityMap = try await classlistCache.identityMap(
+        identityIndex = try await classlistCache.identityIndex(
             orgUnitID: orgUnitID, client: client, application: application)
     } catch {
         application.logger.warning("BrightSpace classlist resolve failed for org unit \(orgUnitID): \(error)")
     }
     return try await resolvedBrightSpaceUserID(
-        for: user, identityMap: identityMap, db: db, client: client, application: application)
+        for: user, identityIndex: identityIndex, db: db, client: client, application: application)
 }
 
 /// One student's best grade for a test setup: the raw points Chickadee would
@@ -819,20 +837,15 @@ private func bestGradeForStudent(
 
     // Highest grade wins across ALL result sources (browser + worker alike): a
     // 100 % browser result is never displaced by a later lower worker re-grade,
-    // matching the grades CSV / dashboard / roster surfaces.  Pick the result
-    // with the highest percent, then push its EXACT points so the LEARN value
-    // isn't degraded by integer-percent rounding (the shared
-    // `bestGradePercentBySubmissionID` helper returns an Int percent, which is
-    // fine for the display surfaces but lossy for a points push, e.g. 6/7 → 86 %
-    // → 8.6 instead of 8.57).
+    // matching the grades CSV / dashboard / roster surfaces.  The shared
+    // `bestGradeResult` fold (#1111) returns the winning ROW so the push uses
+    // its EXACT points — the Int percent the display surfaces use is lossy
+    // for a points push (e.g. 6/7 → 86 % → 8.6 instead of 8.57).
     let allResults = try await APIResult.query(on: db)
         .filter(\.$submissionID ~~ submissionIDs)
         .all()
     guard
-        let best =
-            allResults
-            .filter({ $0.gradePercentValue != nil })
-            .max(by: { ($0.gradePercentValue ?? 0) < ($1.gradePercentValue ?? 0) }),
+        let best = bestGradeResult(of: allResults),
         let earned = best.gradePointsValue
     else {
         throw BrightSpaceSyncError.missingPoints
@@ -875,33 +888,23 @@ private func suiteTotalPoints(testSetupID: String, db: Database) async throws ->
     return total > 0 ? Double(total) : nil
 }
 
-/// Per-sweep cache of each course's LEARN classlist, reduced to an identity →
-/// D2L UserId map. The classlist carries both the student's login username and
-/// their student number (OrgDefinedId), so a Chickadee user is resolved by
-/// whichever identity is on file — username first (always present for SSO/local
-/// logins, == the LEARN username at UW), student number second. Fetched once
-/// per org unit per sweep.
+/// Per-sweep cache of each course's LEARN classlist, reduced to the shared
+/// `BrightSpaceIdentityIndex` (#1117 — one classlist reduction for grade
+/// push, section sync, and the roster reconciler). Fetched once per org unit
+/// per sweep.
 private actor ClasslistUserIDCache {
-    private var mapsByOrgUnit: [String: [String: String]] = [:]
+    private var indexByOrgUnit: [String: BrightSpaceIdentityIndex] = [:]
 
-    /// The org unit's classlist as an identity → D2L UserId map, keyed by both
-    /// lowercased username and lowercased OrgDefinedId. Fetched once per org
-    /// unit per sweep; subsequent calls return the cached map.
-    func identityMap(
+    /// The org unit's classlist as a `BrightSpaceIdentityIndex`. Fetched once
+    /// per org unit per sweep; subsequent calls return the cached index.
+    func identityIndex(
         orgUnitID: String, client: any BrightSpaceGrading, application: Application
-    ) async throws -> [String: String] {
-        if let cached = mapsByOrgUnit[orgUnitID] { return cached }
+    ) async throws -> BrightSpaceIdentityIndex {
+        if let cached = indexByOrgUnit[orgUnitID] { return cached }
         let classlist = try await client.fetchClasslist(orgUnitID: orgUnitID, on: application)
-        var map: [String: String] = [:]
-        for entry in classlist {
-            guard let userID = entry.userID, !userID.isEmpty else { continue }
-            for identity in [entry.username, entry.orgDefinedID] {
-                let key = identity?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if let key, !key.isEmpty { map[key] = userID }
-            }
-        }
-        mapsByOrgUnit[orgUnitID] = map
-        return map
+        let index = BrightSpaceIdentityIndex(classlist: classlist)
+        indexByOrgUnit[orgUnitID] = index
+        return index
     }
 }
 
@@ -936,7 +939,7 @@ private actor GradeObjectInfoCache {
 /// lookup only when the classlist match misses but a student number is on file.
 private func resolvedBrightSpaceUserID(
     for user: APIUser?,
-    identityMap: [String: String],
+    identityIndex: BrightSpaceIdentityIndex,
     db: Database,
     client: any BrightSpaceGrading,
     application: Application
@@ -947,14 +950,7 @@ private func resolvedBrightSpaceUserID(
         return cached
     }
 
-    var bsUserID: String?
-    for key in [user.username, user.studentID].compactMap({ $0 }) {
-        let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !normalized.isEmpty, let resolved = identityMap[normalized] {
-            bsUserID = resolved
-            break
-        }
-    }
+    var bsUserID = identityIndex.d2lUserID(username: user.username, studentID: user.studentID)
     // Fallback: the legacy org-level OrgDefinedId lookup (needs a student number).
     if bsUserID == nil, let orgDefinedId = user.studentID, !orgDefinedId.isEmpty {
         bsUserID = try await client.lookupUserID(orgDefinedId: orgDefinedId, on: application)

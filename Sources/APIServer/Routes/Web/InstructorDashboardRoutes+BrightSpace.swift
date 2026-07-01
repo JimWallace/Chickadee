@@ -365,9 +365,9 @@ extension InstructorDashboardRoutes {
     }
 
     /// Clears the recorded error and re-flags as pending every grade-sync row in
-    /// the course (result rows and override-only rows) that previously errored,
-    /// back-dating `pendingSince` so the next sweep retries it immediately. The
-    /// "hard reset" half of "Sync now".
+    /// the course (result rows, override-only rows, and queued grade clears)
+    /// that previously errored, back-dating `pendingSince` so the next sweep
+    /// retries it immediately. The "hard reset" half of "Sync now".
     private func requeueErroredGradePushes(req: Request, courseUUID: UUID) async throws {
         let resultKeys = try await courseStudentResultIDs(req: req, courseUUID: courseUUID)
         let results =
@@ -376,12 +376,8 @@ extension InstructorDashboardRoutes {
             : try await APIResult.query(on: req.db)
                 .filter(\.$submissionID ~~ resultKeys)
                 .all()
-        for result in results where (result.brightspaceSyncError ?? "").isEmpty == false {
-            result.brightspaceSyncPending = true
-            result.brightspacePendingSince = Date.distantPast
-            result.brightspaceSyncError = nil
-            try await result.save(on: req.db)
-        }
+        try await requeueForImmediateSync(
+            results.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
         // Errored override-only pushes (no-submission students) live on the
         // override row, not a result row — re-queue those too.
         let setupIDs = try await courseSetupIDs(req: req, courseUUID: courseUUID)
@@ -391,12 +387,20 @@ extension InstructorDashboardRoutes {
             : try await APIGradeOverride.query(on: req.db)
                 .filter(\.$testSetupID ~~ setupIDs)
                 .all()
-        for override in overrides where (override.brightspaceSyncError ?? "").isEmpty == false {
-            override.brightspaceSyncPending = true
-            override.brightspacePendingSince = Date.distantPast
-            override.brightspaceSyncError = nil
-            try await override.save(on: req.db)
-        }
+        try await requeueForImmediateSync(
+            overrides.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
+        // Errored grade CLEARS (queued removals) are re-queued too — nothing
+        // else touches `brightspace_grade_clears` after a terminal failure, so
+        // before this an errored clear lingered forever with an error nobody
+        // could see (#1105).
+        let clears =
+            setupIDs.isEmpty
+            ? []
+            : try await APIBrightSpaceGradeClear.query(on: req.db)
+                .filter(\.$testSetupID ~~ setupIDs)
+                .all()
+        try await requeueForImmediateSync(
+            clears.filter { ($0.brightspaceSyncError ?? "").isEmpty == false }, on: req.db)
     }
 
     // MARK: - POST /instructor/brightspace/reconcile-now
@@ -451,7 +455,7 @@ extension InstructorDashboardRoutes {
         // :assignmentID, so it's drivable cross-course / against an archived
         // course by URL — scope the grade-push backfill to the assignment's own
         // course (#417 Slice D).
-        let assignment = try await loadAssignmentForWrite(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         let submissionIDs = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)
@@ -463,23 +467,13 @@ extension InstructorDashboardRoutes {
             : try await APIResult.query(on: req.db)
                 .filter(\.$submissionID ~~ submissionIDs)
                 .all()
-        for result in results {
-            result.brightspaceSyncPending = true
-            result.brightspacePendingSince = Date.distantPast
-            result.brightspaceSyncError = nil
-            try await result.save(on: req.db)
-        }
+        try await requeueForImmediateSync(results, on: req.db)
         // Override-only grades (no-submission students) carry their pending
         // flag on the override row; re-queue those for this assignment too.
         let overrides = try await APIGradeOverride.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .all()
-        for override in overrides {
-            override.brightspaceSyncPending = true
-            override.brightspacePendingSince = Date.distantPast
-            override.brightspaceSyncError = nil
-            try await override.save(on: req.db)
-        }
+        try await requeueForImmediateSync(overrides, on: req.db)
         await runImmediateBrightspaceSweep(req: req)
         return req.redirect(to: "/instructor/brightspace")
     }
@@ -514,17 +508,22 @@ extension InstructorDashboardRoutes {
     private func runImmediateBrightspaceSweep(req: Request) async {
         guard let app = req.application.brightSpaceAppCredentials else { return }
         let debounce = req.application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
-        // Pass a future `now` so the debounce cutoff lands ahead of every
-        // pending row, forcing an immediate push instead of waiting out the
-        // window. Each course resolves its designated identity (or the fallback).
-        _ = try? await sweepBrightSpaceGradeSync(
-            on: req.db,
-            debounceSecs: debounce,
-            resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
-            logger: req.logger,
-            application: req.application,
-            now: Date().addingTimeInterval(debounce + 1)
-        )
+        // Bypass the debounce so every pending row pushes immediately. Each
+        // course resolves its designated identity (or the fallback). Failures
+        // are recorded per-row by the sweep itself; a sweep-level throw is
+        // logged (it used to be silently swallowed, #1117).
+        do {
+            _ = try await sweepBrightSpaceGradeSync(
+                on: req.db,
+                debounceSecs: debounce,
+                resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
+                logger: req.logger,
+                application: req.application,
+                bypassDebounce: true
+            )
+        } catch {
+            req.logger.warning("Manual BrightSpace sweep failed: \(error)")
+        }
     }
 
     /// Resolves how the active course's grade-sync identity is shown: the display
@@ -560,7 +559,7 @@ extension InstructorDashboardRoutes {
         userContext: CurrentUserContext,
         hasActiveCourse: Bool,
         syncEnabled: Bool,
-        account: (connected: Bool, identity: String?, since: String?),
+        account: InstructorBrightspaceContext.AccountPanel,
         flashSuccess: String?,
         flashError: String?
     ) -> InstructorBrightspaceContext {
@@ -568,20 +567,15 @@ extension InstructorDashboardRoutes {
             currentUser: userContext, activeInstructorTab: "brightspace",
             hasActiveCourse: hasActiveCourse, courseIsArchived: false,
             brightspaceSyncEnabled: syncEnabled, courseLinked: false,
-            orgUnitID: nil, orgUnitName: nil,
-            accountConnected: account.connected, accountIdentity: account.identity,
-            accountConnectedSince: account.since,
-            syncIdentityName: nil, syncIdentityIsMe: false,
-            syncIdentityConnected: false, syncIdentityNeedsReconnect: false,
+            orgUnitDisplay: nil, orgUnitFieldValue: "",
+            account: account,
+            syncIdentity: .empty,
+            showConnectForm: syncEnabled && !account.connected,
+            showIdentityActions: false, showUseMyIdentity: false,
             flashSuccess: flashSuccess, flashError: flashError,
             canSyncNow: false, doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: [], hasAssignments: false,
-            logRows: [], hasLog: false,
-            summary: BrightspaceSyncSummary(synced: 0, pending: 0, errored: 0),
             canReconcile: false,
-            readiness: BrightspaceReadinessSummary(
-                confirmed: 0, unconfirmed: 0, unreachable: 0,
-                lastCheckedText: "Never", hasBeenChecked: false),
             unreachableStudents: [], hasUnreachable: false)
     }
 
@@ -612,12 +606,10 @@ extension InstructorDashboardRoutes {
         } else {
             myCredential = nil
         }
-        let accountConnected = myCredential != nil
-        let accountIdentity = myCredential?.identityName
-        // Pre-rendered " (since …)" suffix (empty when nil) so the template
-        // interpolates it directly — avoids an inline `#if` in the middle of a
-        // sentence, which LeafKit 1.14.2 mis-parses.
-        let accountConnectedSince = myCredential?.capturedAt.map { " (since \(fmt.string(from: $0)))" }
+        let account = InstructorBrightspaceContext.AccountPanel(
+            connected: myCredential != nil,
+            identity: myCredential?.identityName,
+            since: myCredential?.capturedAt.map { " (since \(fmt.string(from: $0)))" })
 
         guard let courseUUID = courseState.activeCourseUUID,
             let course = try await APICourse.find(courseUUID, on: req.db)
@@ -625,7 +617,7 @@ extension InstructorDashboardRoutes {
             return noCourseBrightspaceContext(
                 userContext: userContext, hasActiveCourse: courseState.active != nil,
                 syncEnabled: syncEnabled,
-                account: (accountConnected, accountIdentity, accountConnectedSince),
+                account: account,
                 flashSuccess: flashSuccess, flashError: flashError)
         }
 
@@ -633,10 +625,13 @@ extension InstructorDashboardRoutes {
         let courseLinked = !(orgUnitID ?? "").isEmpty
 
         // How the course's grade-sync identity is shown + whether it's still connected.
-        let syncIdentity = try await resolveSyncIdentityDisplay(course: course, user: user, req: req)
-        let syncIdentityName = syncIdentity.name
-        let syncIdentityConnected = syncIdentity.connected
-        let syncIdentityIsMe = syncIdentity.isMe
+        let identity = try await resolveSyncIdentityDisplay(course: course, user: user, req: req)
+        let syncIdentity = InstructorBrightspaceContext.SyncIdentityPanel(
+            name: identity.name,
+            hasName: identity.name != nil,
+            isMe: identity.isMe,
+            connected: identity.connected,
+            needsReconnect: identity.name != nil && !identity.connected)
 
         // Assignments, sorted to match the dashboard ordering.
         let assignments = try await APIAssignment.query(on: req.db)
@@ -665,42 +660,44 @@ extension InstructorDashboardRoutes {
             latestBySetup[log.testSetupID] = log
         }
 
-        let (summary, perSetupCounts) = try await brightspaceSyncSummary(
+        // The rollups still power the per-assignment counts and the roster
+        // panel; the page-level summary/readiness cards were removed from the
+        // template in c747962, so those aggregates are discarded (#1114).
+        let (_, perSetupCounts) = try await brightspaceSyncSummary(
             req: req, courseUUID: courseUUID, setupIDs: setupIDs)
-        let (readiness, unreachableStudents) = try await brightspaceReadiness(
+        let (_, unreachableStudents) = try await brightspaceReadiness(
             req: req, courseUUID: courseUUID, fmt: fmt)
 
         let assignmentRows = brightspaceAssignmentRows(
             assignments: assignments, latestBySetup: latestBySetup,
             perSetupCounts: perSetupCounts, fmt: fmt)
 
-        let logRows = logModels.map { log -> BrightspaceLogRow in
-            BrightspaceLogRow(
-                attemptedAt: log.attemptedAt.map { fmt.string(from: $0) } ?? "—",
-                username: log.username,
-                assignmentTitle: log.assignmentTitle,
-                points: log.points.map { String(format: "%.1f", $0) } ?? "—",
-                status: log.status,
-                detail: log.detail)
-        }
+        let orgUnitDisplay: String? =
+            courseLinked
+            ? {
+                if let name = course.brightspaceOrgUnitName, !name.isEmpty {
+                    return "\(name) (\(orgUnitID ?? ""))"
+                }
+                return orgUnitID
+            }()
+            : nil
+        let showIdentityActions = account.connected && !course.isArchived
 
         return InstructorBrightspaceContext(
             currentUser: userContext, activeInstructorTab: "brightspace",
             hasActiveCourse: true, courseIsArchived: course.isArchived,
             brightspaceSyncEnabled: syncEnabled, courseLinked: courseLinked,
-            orgUnitID: orgUnitID, orgUnitName: course.brightspaceOrgUnitName,
-            accountConnected: accountConnected, accountIdentity: accountIdentity,
-            accountConnectedSince: accountConnectedSince,
-            syncIdentityName: syncIdentityName, syncIdentityIsMe: syncIdentityIsMe,
-            syncIdentityConnected: syncIdentityConnected,
-            syncIdentityNeedsReconnect: syncIdentityName != nil && !syncIdentityConnected,
+            orgUnitDisplay: orgUnitDisplay, orgUnitFieldValue: orgUnitID ?? "",
+            account: account,
+            syncIdentity: syncIdentity,
+            showConnectForm: syncEnabled && !account.connected && !course.isArchived,
+            showIdentityActions: showIdentityActions,
+            showUseMyIdentity: showIdentityActions && !syncIdentity.isMe,
             flashSuccess: flashSuccess, flashError: flashError,
             canSyncNow: syncEnabled && !course.isArchived,
             doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
-            logRows: logRows, hasLog: !logRows.isEmpty,
-            summary: summary, canReconcile: courseLinked && !course.isArchived,
-            readiness: readiness,
+            canReconcile: courseLinked && !course.isArchived,
             unreachableStudents: unreachableStudents, hasUnreachable: !unreachableStudents.isEmpty)
     }
 

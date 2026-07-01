@@ -644,6 +644,176 @@ import Testing
         )
     }
 
+    @Test func prepareFailureDoesNotLeakTestSetupScratchCopy() async throws {
+        // #1106 — the per-job scratch copy (`chickadee_ts_*` in the shared
+        // temp dir) is caller-owned from the moment TestSetupCache.acquire
+        // returns, but process(_:) only registers its cleanup defer AFTER
+        // prepareJobWorkspace returns. A throw in any later prepare stage
+        // (here: the submission download 404s while the setup zip is served
+        // fine) must remove the scratch dir before rethrowing, or every
+        // failed job leaks a fully-prepared setup directory.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worker-daemon-scratch-leak-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-scratch-leak-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
+        defer { server.stop() }
+
+        // Serve ONLY the setup zip; the submission URL will 404 after the
+        // scratch copy has been acquired.
+        let marker = "scratchleak\(UUID().uuidString.prefix(8))"
+        let setupZipPath = root.appendingPathComponent("\(marker)-setup.zip").path
+        try await makeZip(
+            at: setupZipPath,
+            files: [("test.sh", "#!/bin/sh\necho passed\n")])
+        let job = Job(
+            submissionID: "sub_\(marker)",
+            testSetupID: "setup-\(marker)",
+            attemptNumber: 1,
+            submissionURL: testURL("http://127.0.0.1:\(server.port)/no-such-submission.ipynb"),
+            testSetupURL: testURL("http://127.0.0.1:\(server.port)/\(marker)-setup.zip"),
+            manifest: try makeManifest(),
+            submissionFilename: "submission.ipynb"
+        )
+
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: testURL("http://localhost:8080"),
+            workerID: "worker-scratch-leak",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
+        )
+
+        let task = Task { try await daemon.run() }
+        let didReport = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
+        #expect(didReport, "Expected a synthetic failure report for the failed prepare")
+        task.cancel()
+        try? await task.value
+
+        // The scratch dir name embeds the cache key, which embeds the (unique)
+        // testSetupID — so any leftover entry matching the marker is a leak
+        // from THIS job, regardless of concurrent tests' scratch dirs.
+        let leaked =
+            (try? FileManager.default.contentsOfDirectory(
+                atPath: FileManager.default.temporaryDirectory.path))?
+            .filter { $0.hasPrefix("chickadee_ts_") && $0.contains(marker) } ?? []
+        #expect(leaked.isEmpty, "prepare-phase failure leaked scratch dirs: \(leaked)")
+    }
+
+    @Test func hungMakeStepIsKilledAtTheConfiguredTimeout() async throws {
+        // #1107 — the pre-test `make` step runs after the student submission
+        // is merged into the workspace, so a hung `make` used to pin a
+        // cooperative-pool thread and a job slot forever. It must now be
+        // killed at `config.makeTimeoutSeconds` and reported as a failed
+        // build, not a wedged runner.
+        //
+        // Requires a real `make` (the hang comes from its `sleep` recipe);
+        // environments without it — e.g. the CI test image — skip silently,
+        // matching the repo's "expected on this platform" convention.
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/make") else { return }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worker-daemon-make-timeout-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-make-timeout-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
+        defer { server.stop() }
+
+        let submissionID = "sub_make_timeout"
+        let submissionPath = root.appendingPathComponent("\(submissionID).ipynb")
+        try Data(notebookJSON(code: "print(1)\n").utf8).write(to: submissionPath)
+        let setupZipPath = root.appendingPathComponent("\(submissionID)-setup.zip").path
+        try await makeZip(
+            at: setupZipPath,
+            files: [
+                ("test.sh", "#!/bin/sh\necho passed\n"),
+                ("Makefile", "all:\n\tsleep 60\n"),
+            ])
+        let manifest = try JSONDecoder().decode(
+            TestProperties.self,
+            from: Data(
+                #"""
+                {
+                  "schemaVersion": 1,
+                  "gradingMode": "worker",
+                  "requiredFiles": [],
+                  "testSuites": [{"tier": "public", "script": "test.sh"}],
+                  "timeLimitSeconds": 1,
+                  "makefile": {"target": null}
+                }
+                """#.utf8))
+        let job = Job(
+            submissionID: submissionID,
+            testSetupID: "setup-\(submissionID)",
+            attemptNumber: 1,
+            submissionURL: testURL("http://127.0.0.1:\(server.port)/\(submissionID).ipynb"),
+            testSetupURL: testURL("http://127.0.0.1:\(server.port)/\(submissionID)-setup.zip"),
+            manifest: manifest,
+            submissionFilename: "submission.ipynb"
+        )
+
+        var boundedMakeConfig = RunnerDaemonConfig.defaults
+        boundedMakeConfig = RunnerDaemonConfig(
+            capabilityDiscoveryEnabled: boundedMakeConfig.capabilityDiscoveryEnabled,
+            testSetupCacheDir: nil,
+            networkRetryEnabled: true,
+            retryBaseDelayMs: 10,
+            retryMaxDelayMs: 20,
+            heartbeatRetryMaxAttempts: 2,
+            resultUploadRetryMaxAttempts: 2,
+            downloadRetryMaxAttempts: 2,
+            minFreeDiskMB: 0,
+            makeTimeoutSeconds: 1
+        )
+
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: testURL("http://localhost:8080"),
+            workerID: "worker-make-timeout",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot),
+            config: boundedMakeConfig
+        )
+
+        let task = Task { try await daemon.run() }
+        let didReport = await waitUntil(timeoutSeconds: 15) { await reporter.snapshot().count == 1 }
+        #expect(didReport, "Expected a failure report once the hung make is killed")
+        task.cancel()
+        try? await task.value
+
+        let report = try #require(await reporter.snapshot().first)
+        #expect(report.buildStatus == .failed, "hung make must map to a failed build")
+        let compilerOutput = report.compilerOutput ?? ""
+        #expect(
+            compilerOutput.contains("makeTimedOut") || compilerOutput.contains("time limit"),
+            "compilerOutput should say the make step timed out, got: \(compilerOutput)")
+        let runnerInvocations = await runner.observedInvocationCount()
+        #expect(runnerInvocations == 0, "tests must not run after a failed make")
+    }
+
     @Test func workerDaemonHeartbeatFailuresDoNotStopPolling() async throws {
         let poller = MockPoller(jobs: Array(repeating: nil, count: 50))
         let reporter = FlakyReporter(failuresRemaining: 0, heartbeatFailuresRemaining: 2)

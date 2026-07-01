@@ -659,11 +659,12 @@ extension DraftAssignmentRoutes {
             // course's draft (or an archived course's), which the active-course
             // group gate can't see. This closes the same cross-course/archived
             // draft-write hole the narrower draft suite/script/section handlers
-            // gate via `loadDraftSetup(requireWrite:)` (#417 Slice D). The
+            // gate via `loadDraftSetupForWrite` (#417 Slice D). The
             // create-new branch below stays in the caller's active course, which
             // `resolveActiveCourse` already proves non-archived + instructor-held.
             let caller = try req.auth.require(APIUser.self)
-            try await requireCourseWriteAccess(caller: caller, courseID: existing.courseID, db: req.db)
+            try await requireCourseWriteAccess(
+                caller: caller, courseID: existing.courseID, atLeast: .instructor, db: req.db)
             return existing
         }
 

@@ -184,7 +184,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         do {
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
@@ -230,7 +230,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         // assignments by submitting their IDs — the active-course group gate
         // never sees the target courses here (#417 Slice D).
         for courseID in Set(assignments.map(\.courseID)) {
-            try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+            try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
         }
 
         for (index, rawID) in orderedIDs.enumerated() {
@@ -249,7 +249,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             var status: String
         }
 
-        let assignment = try await loadAssignmentForWrite(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
 
         let body = try req.content.decode(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
@@ -272,7 +272,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -310,7 +310,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func saveBrightSpaceGradeObjectID(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         struct BSBody: Content {
             var gradeObjectID: String?
             /// "brightspace" → return to the BrightSpace tab (mapping table);
@@ -340,7 +340,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignmentForWrite(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         let setupID = assignment.testSetupID
 
         // Delete related submissions and their result rows for this setup.
@@ -383,7 +383,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         // Scope the delete to the setup's own course (the :setupID param-taking
         // route is otherwise drivable cross-course / against an archived course;
         // the active-course group gate can't see the setup's course) (#417 Slice D).
-        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
         // Only allow deleting setups that have no associated assignment.
         let hasAssignment =
             try await APIAssignment.query(on: req.db)
@@ -408,7 +408,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func editPage(req: Request) async throws -> View {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let idStr = assignment.publicID
 
         struct EditQuery: Content {

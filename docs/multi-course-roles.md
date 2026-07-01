@@ -153,6 +153,19 @@ representable and creatable.
   end-to-end. Until then `requireCourseRole(atLeast: .instructor)` is exercised
   only by unit tests.
 - Submit / view endpoints stay at "enrolled" (`atLeast: .student`).
+- **Write-policy core + role-floor convention (#1113).** The write policy
+  (admin bypass → per-course role floor → archived block) lives once, in
+  `evaluateCourseWrite(user:courseID:atLeast:db:) -> CourseWriteDenial?`
+  (`CourseAccessHelpers.swift`); the web (`requireCourseWriteAccess` → `Abort`)
+  and MCP (`ToolContext.authorizeCourseWriteAccess` → `MCPToolError`) wrappers
+  only map the denial, so the two surfaces cannot drift. There are **no
+  default `atLeast` values** — every call site states its floor explicitly:
+  - **`.ta`** — assignment *content* and grading: suite/scripts/families/
+    checks, notebook/solution edits, global inputs, datasets, achievements,
+    retest/reset/grade-override.
+  - **`.instructor`** — course *lifecycle* and structure: enrollment/roster/
+    staff management, assignment create/delete/open/close/deadlines, course
+    sections, archive, BrightSpace binding, test-setup upload.
 
 ### 3.5 UI touchpoints
 

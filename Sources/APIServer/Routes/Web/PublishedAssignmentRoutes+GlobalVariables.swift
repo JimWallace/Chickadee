@@ -54,7 +54,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getGlobalVariables(req: Request) async throws -> GlobalVariablesResponse {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let result = try GlobalInputsService.current(setup: setup)
         return GlobalVariablesResponse(
             variables: result.variables,
@@ -67,7 +67,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func putGlobalVariables(req: Request) async throws -> GlobalVariablesResponse {
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try req.content.decode(GlobalVariablesBody.self)
 
         // The save-time expression check evaluates against the acting

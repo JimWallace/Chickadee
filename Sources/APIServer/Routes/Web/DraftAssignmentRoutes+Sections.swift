@@ -35,7 +35,7 @@ extension DraftAssignmentRoutes {
     func createDraftSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        let setup = try await loadDraftSetup(req, requireWrite: true)
+        let setup = try await loadDraftSetupForWrite(req)
         let body = try req.content.decode(Body.self)
         try await createSuiteSectionCore(setup: setup, name: body.name, on: req.db)
         return redirectToDraft(req: req, setup: setup)
@@ -47,7 +47,7 @@ extension DraftAssignmentRoutes {
     func renameDraftSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        let setup = try await loadDraftSetup(req, requireWrite: true)
+        let setup = try await loadDraftSetupForWrite(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
@@ -60,7 +60,7 @@ extension DraftAssignmentRoutes {
 
     @Sendable
     func deleteDraftSuiteSection(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req, requireWrite: true)
+        let setup = try await loadDraftSetupForWrite(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
@@ -89,7 +89,7 @@ extension DraftAssignmentRoutes {
             var expressions: [PersonalizationExpression]?
         }
 
-        let setup = try await loadDraftSetup(req, requireWrite: true)
+        let setup = try await loadDraftSetupForWrite(req)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
@@ -120,7 +120,7 @@ extension DraftAssignmentRoutes {
     func reorderDraftSuiteSections(req: Request) async throws -> HTTPStatus {
         struct Body: Content { var sectionIDs: [String] }
 
-        let setup = try await loadDraftSetup(req, requireWrite: true)
+        let setup = try await loadDraftSetupForWrite(req)
         let body = try req.content.decode(Body.self)
         try await reorderSuiteSectionsCore(setup: setup, sectionIDs: body.sectionIDs, on: req.db)
         return .ok

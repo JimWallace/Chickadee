@@ -113,7 +113,7 @@ struct UpdateSectionVariablesTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         let actingUser = try await context.requireEligibleSubject(tool: Self.name)
 

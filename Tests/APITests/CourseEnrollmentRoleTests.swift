@@ -325,24 +325,27 @@ import Vapor
             }
 
             // Per-course instructor: may write to the active course…
-            try await requireCourseWriteAccess(caller: instructor, courseID: activeID, db: app.db)
+            try await requireCourseWriteAccess(caller: instructor, courseID: activeID, atLeast: .instructor, db: app.db)
             // …but not the archived one (read-only for instructors/TAs).
             await #expect(throws: Abort.self) {
-                try await requireCourseWriteAccess(caller: instructor, courseID: archivedID, db: app.db)
+                try await requireCourseWriteAccess(
+                    caller: instructor, courseID: archivedID, atLeast: .instructor, db: app.db)
             }
 
             // Per-course student: forbidden on the active course (role too low),
             // and on the archived one.
             await #expect(throws: Abort.self) {
-                try await requireCourseWriteAccess(caller: student, courseID: activeID, db: app.db)
+                try await requireCourseWriteAccess(
+                    caller: student, courseID: activeID, atLeast: .instructor, db: app.db)
             }
             await #expect(throws: Abort.self) {
-                try await requireCourseWriteAccess(caller: student, courseID: archivedID, db: app.db)
+                try await requireCourseWriteAccess(
+                    caller: student, courseID: archivedID, atLeast: .instructor, db: app.db)
             }
 
             // Admin bypasses both the role check and the archived block.
-            try await requireCourseWriteAccess(caller: admin, courseID: activeID, db: app.db)
-            try await requireCourseWriteAccess(caller: admin, courseID: archivedID, db: app.db)
+            try await requireCourseWriteAccess(caller: admin, courseID: activeID, atLeast: .instructor, db: app.db)
+            try await requireCourseWriteAccess(caller: admin, courseID: archivedID, atLeast: .instructor, db: app.db)
         }
     }
 
