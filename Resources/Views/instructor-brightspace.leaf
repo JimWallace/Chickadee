@@ -36,6 +36,74 @@ LEARN
 <div class="form-error">#(flashError)</div>
 #endif
 
+<!-- ── LEARN connection (per-instructor identity, #1114) ────── -->
+<section class="bs-section">
+    <h2 class="bs-h2">Connection</h2>
+    #if(account.connected):
+    <p class="bs-conn-line">Your LEARN account: <strong>#(account.identity)</strong>#(account.since)</p>
+    #else:
+    <p class="bs-conn-line">Your LEARN account is not connected.</p>
+    #endif
+    #if(syncIdentity.hasName):
+    <p class="bs-conn-line">This course pushes grades as <strong>#(syncIdentity.name)</strong>.</p>
+    #endif
+    #if(syncIdentity.needsReconnect):
+    <div class="form-error">
+        This course's designated LEARN identity is disconnected — grade pushes are
+        paused until they reconnect, or a connected co-instructor takes over below.
+    </div>
+    #endif
+    #if(courseLinked):
+    <p class="bs-conn-line">Linked to LEARN org unit <strong>#(orgUnitDisplay)</strong>.</p>
+    #endif
+
+    #if(showConnectForm):
+    <form method="post" action="/instructor/brightspace/connect" class="bs-connect-form">
+        #csrfFormField()
+        <label class="bs-conn-label" for="bs-valence-user-id">Valence User ID</label>
+        <input class="form-input bs-conn-input" type="text" id="bs-valence-user-id"
+               name="userID" autocomplete="off" required>
+        <label class="bs-conn-label" for="bs-valence-user-key">Valence User Key</label>
+        <input class="form-input bs-conn-input" type="password" id="bs-valence-user-key"
+               name="userKey" autocomplete="off" required>
+        <button class="btn btn-primary" type="submit">Connect my LEARN account</button>
+    </form>
+    <p class="card-meta bs-section-note">
+        Paste the Valence User ID + User Key minted for your own account (see the
+        LEARN setup guide). Chickadee verifies the pair against D2L before storing it.
+    </p>
+    #endif
+
+    #if(showIdentityActions):
+    <div class="bs-conn-actions">
+        <button class="btn action-btn" type="button" id="bs-test-connection"
+                title="Verify this course's grade-push credentials against D2L">Test connection</button>
+        #if(showUseMyIdentity):
+        <form method="post" action="/instructor/brightspace/use-my-identity" class="inline-form">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit"
+                    title="Push this course's grades as your LEARN account">Use my account for this course</button>
+        </form>
+        #endif
+        <form method="post" action="/instructor/brightspace/disconnect" class="inline-form"
+              onsubmit="return confirm('Disconnect your LEARN account? Courses that push grades as you will pause until someone reconnects.')">
+            #csrfFormField()
+            <button class="btn action-btn action-danger" type="submit">Disconnect my account</button>
+        </form>
+    </div>
+    <div class="bs-test-result" id="bs-test-result" hidden></div>
+    <form method="post" action="/instructor/brightspace/bind-org-unit" class="bs-link-form">
+        #csrfFormField()
+        <label class="bs-conn-label" for="bs-org-unit-input">LEARN org unit ID</label>
+        <input class="form-input bs-conn-input" type="text" id="bs-org-unit-input"
+               name="orgUnitID" value="#(orgUnitFieldValue)" autocomplete="off"
+               placeholder="e.g. 1106038">
+        <button class="btn action-btn" type="submit"
+                title="Bind this course to its LEARN org unit (blank to clear); verified with your key">Link course</button>
+    </form>
+    #endif
+</section>
+
 <!-- ── Assignment → grade-item mapping ────────────────────── -->
 <section class="bs-section">
     <div class="bs-mapping-head">
@@ -148,8 +216,8 @@ LEARN
     </div>
     #if(!courseLinked):
     <p class="card-meta bs-section-note">
-        Link this course to its LEARN org unit (on the course page) to check whether each
-        student's grade can be delivered to the LEARN gradebook.
+        Link this course to its LEARN org unit (in the Connection panel above) to check
+        whether each student's grade can be delivered to the LEARN gradebook.
     </p>
     #endif
     #if(courseLinked):
@@ -211,10 +279,47 @@ LEARN
 }
 .bs-roster-actions { white-space: nowrap; }
 .bs-roster-actions .inline-form { display: inline; }
+.bs-conn-line { margin: 0 0 .45rem; }
+.bs-connect-form, .bs-link-form {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    margin: .6rem 0 .3rem;
+}
+.bs-conn-label { font-size: .85rem; color: var(--gray-600); }
+.bs-conn-input { width: 16rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
+.bs-conn-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0 .3rem; }
+.bs-test-result { margin: .3rem 0; font-size: .88rem; }
+.bs-test-ok { color: var(--green); }
+.bs-test-err { color: var(--red); }
 </style>
 <script>
 (function () {
     'use strict';
+
+    // ── Connection panel: "Test connection" ────────────────────────────────
+    // POSTs to the whoami test endpoint and renders the JSON verdict inline,
+    // so credential problems surface here instead of at grade-push time.
+    var testBtn = document.getElementById('bs-test-connection');
+    if (testBtn) {
+        testBtn.addEventListener('click', function () {
+            var out = document.getElementById('bs-test-result');
+            if (!out) return;
+            out.hidden = false;
+            out.className = 'bs-test-result';
+            out.textContent = 'Testing…';
+            fetch('/instructor/brightspace/test', {
+                method: 'POST',
+                headers: { 'x-csrf-token': ChickadeeUI.getCsrfToken() }
+            }).then(function (res) {
+                return res.json();
+            }).then(function (result) {
+                out.textContent = result.message;
+                out.className = 'bs-test-result ' + (result.ok ? 'bs-test-ok' : 'bs-test-err');
+            }).catch(function () {
+                out.textContent = 'The connection test could not be run.';
+                out.className = 'bs-test-result bs-test-err';
+            });
+        });
+    }
 
     // ── Grade-item dropdown ────────────────────────────────────────────────
     // Fetch grade objects from D2L, populate the shared <datalist> with names

@@ -49,9 +49,9 @@ import VaporTesting
 
     @Test func brightspacePageRendersDashboardWhenConfigured() async throws {
         try await withAssignmentRoutesApp { app in
-            // Configured + active course → the cleaned-up dashboard renders:
-            // summary, grade-item mapping (+ auto-map), and the export button —
-            // and none of the removed per-instructor / org-unit UI.
+            // Configured + active course → the dashboard renders: the
+            // Connection panel (#1114 — not yet connected, so the connect form
+            // shows), grade-item mapping (+ auto-map), and the export button.
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
                 baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
             _ = try await app.testCourseID(enrollmentMode: .auto)
@@ -65,8 +65,42 @@ import VaporTesting
                     #expect(html.contains("Grade-item mapping"))
                     #expect(html.contains("Export Grades CSV"))
                     #expect(html.contains("Auto-map by name"))
-                    #expect(!html.contains("Your LEARN account"))
-                    #expect(!html.contains("Org-unit link"))
+                    #expect(html.contains("Your LEARN account is not connected"))
+                    #expect(html.contains("/instructor/brightspace/connect"))
+                    // Identity actions require a connected account.
+                    #expect(!html.contains("/instructor/brightspace/disconnect"))
+                })
+        }
+    }
+
+    @Test func connectionPanelShowsIdentityActionsWhenConnected() async throws {
+        try await withAssignmentRoutesApp { app in
+            // A connected instructor sees their identity plus the test /
+            // take-over / disconnect / link-course actions instead of the
+            // connect form (#1114 — the runbook's per-instructor flow).
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
+            try await BrightSpaceCredentialStore.save(
+                valenceUserID: "vu", valenceUserKey: "vk", identityName: "Test Instructor (ti)",
+                capturedByUserID: instructor.id, userID: instructor.id, on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/instructor/brightspace",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(html.contains("Test Instructor (ti)"))
+                    #expect(html.contains("Test connection"))
+                    #expect(html.contains("/instructor/brightspace/use-my-identity"))
+                    #expect(html.contains("/instructor/brightspace/disconnect"))
+                    #expect(html.contains("/instructor/brightspace/bind-org-unit"))
+                    // Connected → the connect form is gone.
+                    #expect(!html.contains("Connect my LEARN account"))
                 })
         }
     }

@@ -576,7 +576,7 @@ extension InstructorDashboardRoutes {
         userContext: CurrentUserContext,
         hasActiveCourse: Bool,
         syncEnabled: Bool,
-        account: (connected: Bool, identity: String?, since: String?),
+        account: InstructorBrightspaceContext.AccountPanel,
         flashSuccess: String?,
         flashError: String?
     ) -> InstructorBrightspaceContext {
@@ -584,20 +584,15 @@ extension InstructorDashboardRoutes {
             currentUser: userContext, activeInstructorTab: "brightspace",
             hasActiveCourse: hasActiveCourse, courseIsArchived: false,
             brightspaceSyncEnabled: syncEnabled, courseLinked: false,
-            orgUnitID: nil, orgUnitName: nil,
-            accountConnected: account.connected, accountIdentity: account.identity,
-            accountConnectedSince: account.since,
-            syncIdentityName: nil, syncIdentityIsMe: false,
-            syncIdentityConnected: false, syncIdentityNeedsReconnect: false,
+            orgUnitDisplay: nil, orgUnitFieldValue: "",
+            account: account,
+            syncIdentity: .empty,
+            showConnectForm: syncEnabled && !account.connected,
+            showIdentityActions: false, showUseMyIdentity: false,
             flashSuccess: flashSuccess, flashError: flashError,
             canSyncNow: false, doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: [], hasAssignments: false,
-            logRows: [], hasLog: false,
-            summary: BrightspaceSyncSummary(synced: 0, pending: 0, errored: 0),
             canReconcile: false,
-            readiness: BrightspaceReadinessSummary(
-                confirmed: 0, unconfirmed: 0, unreachable: 0,
-                lastCheckedText: "Never", hasBeenChecked: false),
             unreachableStudents: [], hasUnreachable: false)
     }
 
@@ -628,12 +623,10 @@ extension InstructorDashboardRoutes {
         } else {
             myCredential = nil
         }
-        let accountConnected = myCredential != nil
-        let accountIdentity = myCredential?.identityName
-        // Pre-rendered " (since …)" suffix (empty when nil) so the template
-        // interpolates it directly — avoids an inline `#if` in the middle of a
-        // sentence, which LeafKit 1.14.2 mis-parses.
-        let accountConnectedSince = myCredential?.capturedAt.map { " (since \(fmt.string(from: $0)))" }
+        let account = InstructorBrightspaceContext.AccountPanel(
+            connected: myCredential != nil,
+            identity: myCredential?.identityName,
+            since: myCredential?.capturedAt.map { " (since \(fmt.string(from: $0)))" })
 
         guard let courseUUID = courseState.activeCourseUUID,
             let course = try await APICourse.find(courseUUID, on: req.db)
@@ -641,7 +634,7 @@ extension InstructorDashboardRoutes {
             return noCourseBrightspaceContext(
                 userContext: userContext, hasActiveCourse: courseState.active != nil,
                 syncEnabled: syncEnabled,
-                account: (accountConnected, accountIdentity, accountConnectedSince),
+                account: account,
                 flashSuccess: flashSuccess, flashError: flashError)
         }
 
@@ -649,10 +642,13 @@ extension InstructorDashboardRoutes {
         let courseLinked = !(orgUnitID ?? "").isEmpty
 
         // How the course's grade-sync identity is shown + whether it's still connected.
-        let syncIdentity = try await resolveSyncIdentityDisplay(course: course, user: user, req: req)
-        let syncIdentityName = syncIdentity.name
-        let syncIdentityConnected = syncIdentity.connected
-        let syncIdentityIsMe = syncIdentity.isMe
+        let identity = try await resolveSyncIdentityDisplay(course: course, user: user, req: req)
+        let syncIdentity = InstructorBrightspaceContext.SyncIdentityPanel(
+            name: identity.name,
+            hasName: identity.name != nil,
+            isMe: identity.isMe,
+            connected: identity.connected,
+            needsReconnect: identity.name != nil && !identity.connected)
 
         // Assignments, sorted to match the dashboard ordering.
         let assignments = try await APIAssignment.query(on: req.db)
@@ -681,42 +677,44 @@ extension InstructorDashboardRoutes {
             latestBySetup[log.testSetupID] = log
         }
 
-        let (summary, perSetupCounts) = try await brightspaceSyncSummary(
+        // The rollups still power the per-assignment counts and the roster
+        // panel; the page-level summary/readiness cards were removed from the
+        // template in c747962, so those aggregates are discarded (#1114).
+        let (_, perSetupCounts) = try await brightspaceSyncSummary(
             req: req, courseUUID: courseUUID, setupIDs: setupIDs)
-        let (readiness, unreachableStudents) = try await brightspaceReadiness(
+        let (_, unreachableStudents) = try await brightspaceReadiness(
             req: req, courseUUID: courseUUID, fmt: fmt)
 
         let assignmentRows = brightspaceAssignmentRows(
             assignments: assignments, latestBySetup: latestBySetup,
             perSetupCounts: perSetupCounts, fmt: fmt)
 
-        let logRows = logModels.map { log -> BrightspaceLogRow in
-            BrightspaceLogRow(
-                attemptedAt: log.attemptedAt.map { fmt.string(from: $0) } ?? "—",
-                username: log.username,
-                assignmentTitle: log.assignmentTitle,
-                points: log.points.map { String(format: "%.1f", $0) } ?? "—",
-                status: log.status,
-                detail: log.detail)
-        }
+        let orgUnitDisplay: String? =
+            courseLinked
+            ? {
+                if let name = course.brightspaceOrgUnitName, !name.isEmpty {
+                    return "\(name) (\(orgUnitID ?? ""))"
+                }
+                return orgUnitID
+            }()
+            : nil
+        let showIdentityActions = account.connected && !course.isArchived
 
         return InstructorBrightspaceContext(
             currentUser: userContext, activeInstructorTab: "brightspace",
             hasActiveCourse: true, courseIsArchived: course.isArchived,
             brightspaceSyncEnabled: syncEnabled, courseLinked: courseLinked,
-            orgUnitID: orgUnitID, orgUnitName: course.brightspaceOrgUnitName,
-            accountConnected: accountConnected, accountIdentity: accountIdentity,
-            accountConnectedSince: accountConnectedSince,
-            syncIdentityName: syncIdentityName, syncIdentityIsMe: syncIdentityIsMe,
-            syncIdentityConnected: syncIdentityConnected,
-            syncIdentityNeedsReconnect: syncIdentityName != nil && !syncIdentityConnected,
+            orgUnitDisplay: orgUnitDisplay, orgUnitFieldValue: orgUnitID ?? "",
+            account: account,
+            syncIdentity: syncIdentity,
+            showConnectForm: syncEnabled && !account.connected && !course.isArchived,
+            showIdentityActions: showIdentityActions,
+            showUseMyIdentity: showIdentityActions && !syncIdentity.isMe,
             flashSuccess: flashSuccess, flashError: flashError,
             canSyncNow: syncEnabled && !course.isArchived,
             doNotSyncToken: BrightspaceSync.doNotSyncToken,
             assignmentRows: assignmentRows, hasAssignments: !assignmentRows.isEmpty,
-            logRows: logRows, hasLog: !logRows.isEmpty,
-            summary: summary, canReconcile: courseLinked && !course.isArchived,
-            readiness: readiness,
+            canReconcile: courseLinked && !course.isArchived,
             unreachableStudents: unreachableStudents, hasUnreachable: !unreachableStudents.isEmpty)
     }
 
