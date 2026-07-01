@@ -718,6 +718,11 @@ import Testing
         // cooperative-pool thread and a job slot forever. It must now be
         // killed at `config.makeTimeoutSeconds` and reported as a failed
         // build, not a wedged runner.
+        //
+        // Requires a real `make` (the hang comes from its `sleep` recipe);
+        // environments without it — e.g. the CI test image — skip silently,
+        // matching the repo's "expected on this platform" convention.
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/make") else { return }
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("worker-daemon-make-timeout-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
