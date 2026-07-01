@@ -61,9 +61,10 @@ struct VanityURLRoutes: RouteCollection {
         // Treat unenrolled access as 404 (matching the no-such-course /
         // no-such-assignment cases) so vanity URLs aren't a course /
         // assignment enumeration vector for students browsing the
-        // institutional catalogue.  Instructors and admins bypass via
-        // the usual `isInstructor` short-circuit.
-        if !user.isInstructor {
+        // institutional catalogue.  Staff (TA+ or admin) of this course bypass
+        // (#417 Slice G — was the global `isInstructor` short-circuit); a plain
+        // enrolled student still passes the enrollment check below.
+        if !(try await isCourseStaff(user, inCourse: courseID, db: req.db)) {
             let userID = try user.requireID()
             let enrolled =
                 try await APICourseEnrollment.query(on: req.db)

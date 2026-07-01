@@ -146,7 +146,10 @@ struct SubmissionDownloadRoute: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        if !caller.isInstructor && submission.userID != caller.id {
+        // Course staff (TA+ or admin) may download any submission in their
+        // course; everyone else only their own (#417 Slice G).
+        let isStaff = try await isSubmissionStaff(caller, submission: submission, on: req.db)
+        if !isStaff && submission.userID != caller.id {
             throw Abort(.forbidden)
         }
         let downloadName =

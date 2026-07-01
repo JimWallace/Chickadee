@@ -256,11 +256,12 @@ extension WebRoutes {
             throw Abort(.notFound)
         }
 
-        // Students may only view their own submissions.
-        if !user.isInstructor {
-            guard submission.userID == user.id else {
-                throw Abort(.forbidden)
-            }
+        // Per-course staff (TA+ or admin) see instructor-level detail for this
+        // submission's course; everyone else may view only their own
+        // submission (#417 Slice G — was the global `user.isInstructor`).
+        let isStaff = try await isSubmissionStaff(user, submission: submission, on: req.db)
+        guard isStaff || submission.userID == user.id else {
+            throw Abort(.forbidden)
         }
 
         // Fetch the assignment for deadline-based output gating.
@@ -278,10 +279,10 @@ extension WebRoutes {
         // redacted until their extended window closes.  A non-instructor may
         // only view their own submission (guarded above), so `user` is the
         // submission owner; instructors see release output regardless.
-        let itemized = itemizedTiers(for: user)
+        let itemized = itemizedTiers(isStaff: isStaff)
         let releaseDeadline = try await releaseVisibilityDeadline(
             for: submissionAssignment, user: user, on: req.db)
-        let releaseOutput = releaseOutputVisible(for: user, effectiveDueAt: releaseDeadline)
+        let releaseOutput = releaseOutputVisible(isStaff: isStaff, effectiveDueAt: releaseDeadline)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -297,7 +298,8 @@ extension WebRoutes {
             processed = processDisplayResult(
                 result: result,
                 viewer: SubmissionViewer(
-                    user: user, itemizedTiers: itemized, releaseOutputVisible: releaseOutput),
+                    user: user, isStaff: isStaff, itemizedTiers: itemized,
+                    releaseOutputVisible: releaseOutput),
                 submission: submission,
                 priorAttempt: priorAttempt,
                 manifestDisplay: manifestDisplay,

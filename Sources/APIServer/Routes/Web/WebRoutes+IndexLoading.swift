@@ -50,7 +50,11 @@ extension WebRoutes {
         allAssignments: [APIAssignment],
         db: any Database
     ) async throws -> Set<String> {
-        guard !user.isInstructor, let userID = user.id, !allAssignments.isEmpty else { return [] }
+        guard let userID = user.id, let courseID = allAssignments.first?.courseID else { return [] }
+        // Staff (TA+ or admin) of the course already see every setup, so they
+        // need no per-student engagement set (#417 Slice G — was the global
+        // `user.isInstructor`).
+        if try await isCourseStaff(user, inCourse: courseID, db: db) { return [] }
         let allSetupIDs = Set(allAssignments.map(\.testSetupID))
         let setupIDByAssignmentID = setupIDByAssignmentID(allAssignments)
 

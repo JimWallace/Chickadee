@@ -109,6 +109,59 @@ func requireCourseInstructor(caller: APIUser, courseID: UUID, db: Database) asyn
     try await requireCourseRole(caller: caller, courseID: courseID, atLeast: .instructor, db: db)
 }
 
+/// True when `user` may act with *staff* visibility for `courseID`: an admin,
+/// or a per-course enrollment role of at least `.ta`. This is the per-course
+/// replacement for the global `APIUser.isInstructor` view/access gate (#417
+/// Slice G) — a viewer sees instructor-level detail (all tiers, other students'
+/// submissions, solution files) only for the courses they actually staff, not
+/// deployment-wide. TAs count as staff (they grade), matching Slice E.
+func isCourseStaff(_ user: APIUser, inCourse courseID: UUID, db: Database) async throws -> Bool {
+    if user.isAdmin { return true }
+    guard let userID = user.id else { return false }
+    guard let role = try await courseRole(of: userID, inCourse: courseID, db: db) else { return false }
+    return role >= .ta
+}
+
+/// True when `user` is staff (role >= `.ta`) in *any* non-archived enrolled
+/// course, or an admin. The coarse analog of `isCourseStaff` for gates that
+/// have no single resource course in scope (the MCP content-tool gate, the
+/// OAuth content-scope consent gate, the user-file namespace). Downstream
+/// per-course checks still apply, so this only decides "may this account touch
+/// the staff surface at all", never which course it may act on.
+func isStaffAnywhere(_ user: APIUser, db: Database) async throws -> Bool {
+    if user.isAdmin { return true }
+    guard let userID = user.id else { return false }
+    return try await APICourseEnrollment.query(on: db)
+        .filter(\.$userID == userID)
+        .group(.or) { or in
+            or.filter(\.$roleRaw == CourseRole.ta.rawValue)
+            or.filter(\.$roleRaw == CourseRole.instructor.rawValue)
+        }
+        .count() > 0
+}
+
+/// The UUID of the course that owns `submission`, resolved through its test
+/// setup (`test_setups.course_id`). Nil only if the setup row is missing.
+/// Used to scope per-course staff checks on the submission view/download/query
+/// paths (#417 Slice G).
+func courseID(ofSubmission submission: APISubmission, on db: Database) async throws -> UUID? {
+    try await APITestSetup.find(submission.testSetupID, on: db)?.courseID
+}
+
+/// Whether `user` is staff (TA+ or admin) for `submission`'s course — the
+/// per-course view gate for the submission view/download paths. False when the
+/// submission's setup (hence course) can't be resolved (#417 Slice G).
+func isSubmissionStaff(
+    _ user: APIUser, submission: APISubmission, on db: Database
+) async throws
+    -> Bool
+{
+    guard let owningCourseID = try await courseID(ofSubmission: submission, on: db) else {
+        return false
+    }
+    return try await isCourseStaff(user, inCourse: owningCourseID, db: db)
+}
+
 /// Authorizes a *write* to a per-course resource. The caller must satisfy
 /// `requireCourseRole(atLeast:)` for `courseID` (admin bypass) **and** the
 /// course must not be archived. Archived courses are read-only for

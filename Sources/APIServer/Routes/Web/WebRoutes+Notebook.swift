@@ -43,8 +43,13 @@ extension WebRoutes {
         // reachable by any enrolled student (and now, read-only, for closed
         // assignments), so guard the solution view here rather than relying on
         // the absence of a UI link — never serve the answer key to a student.
-        if fileKind == .solution, !user.isInstructor {
-            throw Abort(.forbidden, reason: "The solution is only available to course staff.")
+        if fileKind == .solution {
+            // The reference solution is staff-only, scoped to this setup's
+            // course (#417 Slice G — was the global `user.isInstructor`).
+            let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
+            if !isStaff {
+                throw Abort(.forbidden, reason: "The solution is only available to course staff.")
+            }
         }
         let queryTitle = (query.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignment = try await APIAssignment.query(on: req.db)
@@ -332,7 +337,8 @@ extension WebRoutes {
         // starter notebook by hitting `/notebook/source` directly.  A
         // legitimately reachable closed assignment already has a participation
         // row (or a submission), so this never fires on normal page loads.
-        if !user.isInstructor,
+        let isStaff = try await isCourseStaff(user, inCourse: setup.courseID, db: req.db)
+        if !isStaff,
             let assignment = try await APIAssignment.query(on: req.db)
                 .filter(\.$testSetupID == setupID)
                 .first(),

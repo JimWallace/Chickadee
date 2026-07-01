@@ -1,3 +1,4 @@
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -91,9 +92,13 @@ import VaporTesting
 
     private func enroll(_ user: APIUser) async throws {
         let course = try await makeCourse()
+        // Seed the per-course role from the global role (mirroring production
+        // saveSeededEnrollment) so a global instructor becomes course staff —
+        // the notebook solution view is per-course staff now (#417 Slice G).
         let enrollment = APICourseEnrollment(
             userID: try user.requireID(),
-            courseID: try course.requireID()
+            courseID: try course.requireID(),
+            role: user.isInstructor ? .instructor : .student
         )
         try await enrollment.save(on: app.db)
     }

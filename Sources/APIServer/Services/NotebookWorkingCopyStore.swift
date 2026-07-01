@@ -78,7 +78,13 @@ func closedAssignmentGate(
     assignment: APIAssignment?,
     isClosed: Bool
 ) async throws -> Response? {
-    guard !user.isInstructor else { return nil }
+    // Course staff (TA+ or admin) bypass the closed-assignment gate for their
+    // own course (#417 Slice G — was the global `user.isInstructor`).
+    if let assignmentCourseID = assignment?.courseID,
+        try await isCourseStaff(user, inCourse: assignmentCourseID, db: req.db)
+    {
+        return nil
+    }
     if isClosed, let assignment {
         // A published-then-closed assignment is openable read-only — a student
         // may return to a recently-closed lab to review it. Only bounce a
@@ -317,7 +323,8 @@ func notebookDataForHistorySelection(
     guard submission.kind == APISubmission.Kind.student else {
         throw Abort(.forbidden)
     }
-    if !caller.isInstructor && submission.userID != userID {
+    let isStaff = try await isSubmissionStaff(caller, submission: submission, on: req.db)
+    if !isStaff && submission.userID != userID {
         throw Abort(.forbidden)
     }
     guard submission.testSetupID == setupID else {

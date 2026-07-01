@@ -89,6 +89,9 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = try await insertSetupWithNotebook(notebookJSON: mixedNotebookJSON)
             let cookie = try await loginAsInstructor()
+            // Full-tier notebook access is per-course staff now (#417 Slice G);
+            // enrol the instructor in the setup's course (shared TEST101).
+            try await enrollAsTestInstructor(username: "testinstructor", on: app)
 
             try await app.asyncTest(
                 .GET, "/api/v1/testsetups/\(setupID)/assignment",

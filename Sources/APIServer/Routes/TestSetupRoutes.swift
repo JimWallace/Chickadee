@@ -389,8 +389,11 @@ struct TestSetupRoutes: RouteCollection {
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let raw = try notebookData(for: setup)
+        // Staff (TA+ or admin) of this setup's course see unfiltered tiers;
+        // students get the hidden tiers stripped (#417 Slice G).
+        let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
         let data =
-            caller.isInstructor
+            isStaff
             ? raw
             : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
@@ -413,7 +416,8 @@ struct TestSetupRoutes: RouteCollection {
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let raw = try notebookData(for: setup)
-        let filtered = caller.isInstructor ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
+        let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
+        let filtered = isStaff ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
         // Determine a safe filename from the assignment title (if present).
         let assignment = try await APIAssignment.query(on: req.db)

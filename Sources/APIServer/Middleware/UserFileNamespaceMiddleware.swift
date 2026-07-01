@@ -18,7 +18,10 @@ struct UserFileNamespaceMiddleware: AsyncMiddleware {
         guard let caller = req.auth.get(APIUser.self) else {
             throw Abort(.unauthorized)
         }
-        if caller.isInstructor {
+        // The user-file namespace is deployment-wide: staff (TA+ anywhere) or
+        // admin may reach any user's folder; everyone else only their own (#417
+        // Slice G — was the global `caller.isInstructor`).
+        if try await isStaffAnywhere(caller, db: req.db) {
             return try await next.respond(to: req)
         }
         guard let callerID = caller.id?.uuidString.lowercased(), callerID == requestedUser else {

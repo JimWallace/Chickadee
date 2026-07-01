@@ -5,6 +5,9 @@
 // *effective* (per-student, extension-aware) deadline rather than the bare
 // assignment due date — the integration-level proof lives in
 // SubmissionQueryRoutesTests / WebRoutesSubmissionPageTests.
+//
+// The gates take an `isStaff` bool (true = course staff / admin, false =
+// student) since #417 Slice G moved staff resolution per-course to the caller.
 
 import Foundation
 import Testing
@@ -14,41 +17,33 @@ import Testing
 
 @Suite struct TierFilterTests {
 
-    private func student() -> APIUser {
-        APIUser(username: "s", passwordHash: "x", role: UserRole.student.rawValue)
-    }
-
-    private func instructor() -> APIUser {
-        APIUser(username: "i", passwordHash: "x", role: UserRole.instructor.rawValue)
-    }
-
     // MARK: - visibleTiers
 
     @Test func visibleTiersInstructorAlwaysSeesEveryTier() {
         let now = Date()
-        // Deadline far in the future — an instructor still sees all three tiers.
+        // Deadline far in the future — staff still see all three tiers.
         let tiers = visibleTiers(
-            for: instructor(), effectiveDueAt: now.addingTimeInterval(86_400), now: now)
+            isStaff: true, effectiveDueAt: now.addingTimeInterval(86_400), now: now)
         #expect(tiers == ["public", "release", "secret"])
     }
 
     @Test func visibleTiersStudentHidesReleaseBeforeEffectiveDeadline() {
         let now = Date()
         let tiers = visibleTiers(
-            for: student(), effectiveDueAt: now.addingTimeInterval(3600), now: now)
+            isStaff: false, effectiveDueAt: now.addingTimeInterval(3600), now: now)
         #expect(tiers == ["public"])
     }
 
     @Test func visibleTiersStudentShowsReleaseAfterEffectiveDeadline() {
         let now = Date()
         let tiers = visibleTiers(
-            for: student(), effectiveDueAt: now.addingTimeInterval(-3600), now: now)
+            isStaff: false, effectiveDueAt: now.addingTimeInterval(-3600), now: now)
         #expect(tiers == ["public", "release"])
     }
 
     @Test func visibleTiersStudentShowsReleaseWhenNoDeadline() {
         // nil effective deadline → no deadline → release immediately visible.
-        let tiers = visibleTiers(for: student(), effectiveDueAt: nil)
+        let tiers = visibleTiers(isStaff: false, effectiveDueAt: nil)
         #expect(tiers == ["public", "release"])
     }
 
@@ -61,7 +56,7 @@ import Testing
         // Effective deadline = the student's future extension, not the past
         // class-wide due date.
         let extended = now.addingTimeInterval(86_400)
-        let tiers = visibleTiers(for: student(), effectiveDueAt: extended, now: now)
+        let tiers = visibleTiers(isStaff: false, effectiveDueAt: extended, now: now)
         #expect(tiers == ["public"], "release stays hidden until the student's own deadline passes")
     }
 
@@ -71,32 +66,32 @@ import Testing
         let now = Date()
         #expect(
             releaseOutputVisible(
-                for: instructor(), effectiveDueAt: now.addingTimeInterval(86_400), now: now))
+                isStaff: true, effectiveDueAt: now.addingTimeInterval(86_400), now: now))
     }
 
     @Test func releaseOutputStudentHiddenBeforeEffectiveDeadline() {
         let now = Date()
         #expect(
             releaseOutputVisible(
-                for: student(), effectiveDueAt: now.addingTimeInterval(3600), now: now) == false)
+                isStaff: false, effectiveDueAt: now.addingTimeInterval(3600), now: now) == false)
     }
 
     @Test func releaseOutputStudentVisibleAfterEffectiveDeadline() {
         let now = Date()
         #expect(
             releaseOutputVisible(
-                for: student(), effectiveDueAt: now.addingTimeInterval(-3600), now: now))
+                isStaff: false, effectiveDueAt: now.addingTimeInterval(-3600), now: now))
     }
 
     @Test func releaseOutputStudentVisibleWhenNoDeadline() {
-        #expect(releaseOutputVisible(for: student(), effectiveDueAt: nil))
+        #expect(releaseOutputVisible(isStaff: false, effectiveDueAt: nil))
     }
 
     @Test func releaseOutputStudentHiddenWhileExtensionActive() {
         let now = Date()
         let extended = now.addingTimeInterval(86_400)
         #expect(
-            releaseOutputVisible(for: student(), effectiveDueAt: extended, now: now) == false,
+            releaseOutputVisible(isStaff: false, effectiveDueAt: extended, now: now) == false,
             "an active extension keeps release output redacted past the class deadline")
     }
 }

@@ -97,8 +97,9 @@ struct MCPOAuthRoutes: Sendable {
         // submit works even when Safari/ITP drops the session cookie on the
         // cross-site hop. Non-permitted users get the not-permitted view and no
         // actionable token.
+        let userPermitted = try await surface.permits(user, db: req.db)
         var requestToken: String?
-        if let userID = user.id, surface.permits(user) {
+        if let userID = user.id, userPermitted {
             let token = Self.randomToken()
             try await MCPConsentRequest(
                 tokenHash: sha256HexDigest(token),
@@ -121,7 +122,7 @@ struct MCPOAuthRoutes: Sendable {
             scopeLabels: ordered.map(Self.scopeLabel),
             redirectHost: URLComponents(string: query.redirectURI)?.host ?? query.redirectURI,
             firstTimeApproval: firstTimeApproval,
-            notPermitted: !surface.permits(user),
+            notPermitted: !userPermitted,
             permittedRoleLabel: surface.permittedRoleLabel,
             purposeLabel: surface.purposeLabel,
             requestToken: requestToken)
@@ -198,7 +199,8 @@ struct MCPOAuthRoutes: Sendable {
         // Re-check the role from the bound user at submit time: a downgrade
         // between rendering the consent screen and submitting it must stop here.
         guard
-            let user = try await APIUser.find(record.userID, on: req.db), surface.permits(user)
+            let user = try await APIUser.find(record.userID, on: req.db),
+            try await surface.permits(user, db: req.db)
         else {
             throw Abort(.forbidden, reason: "Only \(surface.permittedRoleLabel) may authorize agents.")
         }
@@ -379,7 +381,7 @@ struct MCPOAuthRoutes: Sendable {
         // the grant so it can't be refreshed again.  The web session loses
         // access immediately via RoleMiddleware; this closes the gap for
         // long-lived MCP grants.
-        guard surface.permits(user) else {
+        guard try await surface.permits(user, db: req.db) else {
             grant.revoked = true
             try await grant.save(on: req.db)
             await AuditLogger.record(
@@ -696,10 +698,21 @@ extension MCPOAuthRoutes {
 
         var scopeCeiling: Set<String> { Set(advertisedScopes) }
 
-        /// The role gate: content authoring needs instructor+, admin diagnostics
-        /// needs admin. (Admin implies instructor, so `isAdmin` is the stricter
-        /// gate, not a widening.)
-        func permits(_ user: APIUser) -> Bool {
+        /// The role gate: content authoring needs an instructor/admin; admin
+        /// diagnostics needs admin. This only decides who may grant a scope at
+        /// all — per-course authority is re-checked per tool call by
+        /// `authorizeCourseAccess`, which is already enrollment-scoped, so this
+        /// coarse gate never widens what an agent can actually touch.
+        ///
+        /// NOTE (#417): this consent gate still keys off the deployment-global
+        /// role. It is deliberately deferred to the Slice G2 enum collapse, which
+        /// revisits every global-role reference at once (there it becomes a
+        /// per-course `isStaffAnywhere` check). Converting it here in G1 — ahead
+        /// of the enum work — only churned the OAuth-consent tests for no net
+        /// security gain, since the tool-level per-course check already governs
+        /// what the minted token can do. The `db` parameter is kept so G2 can
+        /// swap in the async per-course lookup without touching call sites.
+        func permits(_ user: APIUser, db: Database) async throws -> Bool {
             switch surface {
             case .content: return user.isInstructor
             case .admin: return user.isAdmin

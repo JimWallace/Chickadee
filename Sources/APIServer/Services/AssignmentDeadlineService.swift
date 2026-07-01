@@ -177,7 +177,11 @@ func isAssignmentEffectivelyOpen(
     // open assignment, while students are held out as if it were closed. For
     // .open / .closed the stored visibility applies to everyone. Staff testing a
     // preview also bypass the future-open-date gate — see `submissionGate`.
-    let gate = assignment.visibility.submissionGate(isStaff: user.isInstructor)
+    // Staff-ness is per-course now: staff (TA+ or admin) of the assignment's
+    // own course get the preview/future-open bypass (#417 Slice G — was the
+    // global `user.isInstructor`).
+    let isStaff = try await isCourseStaff(user, inCourse: assignment.courseID, db: db)
+    let gate = assignment.visibility.submissionGate(isStaff: isStaff)
     let baseline = assignment.dueAt
     let extensionDueAt = try await studentExtensionDueAt(for: assignment, user: user, on: db)
     return isAssignmentOpenForUser(
