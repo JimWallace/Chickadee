@@ -84,14 +84,12 @@ extension InstructorDashboardRoutes {
     private func loadAssignmentSubmissionsStudents(
         req: Request, assignment: APIAssignment
     ) async throws -> [APIUser] {
-        let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == assignment.courseID)
-            .all()
-            .map(\.userID)
-        guard !enrolledUserIDs.isEmpty else { return [] }
+        // Roster = `.student`-role enrollments (#417 Slice G2); TA/instructor
+        // enrollments don't count toward the submitted-student denominators.
+        let studentUserIDs = try await studentUserIDsInCourse(assignment.courseID, on: req.db)
+        guard !studentUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
-            .filter(\.$role == UserRole.student.rawValue)
-            .filter(\.$id ~~ enrolledUserIDs)
+            .filter(\.$id ~~ Array(studentUserIDs))
             .sort(\.$username, .ascending)
             .all()
     }

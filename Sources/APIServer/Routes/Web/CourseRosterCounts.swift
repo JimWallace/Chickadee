@@ -12,26 +12,34 @@
 // the admin dashboard, the instructor dashboard, and the assignment
 // submissions page.
 
+import Core
 import Fluent
 import Foundation
+
+/// The user IDs of the real students in `courseID`: enrollments whose per-course
+/// role is `.student` (#417 Slice G2 — the discriminator moved off the retired
+/// global `APIUser.role == "student"` onto the per-course enrollment role).
+/// Naturally excludes TA/instructor enrollments (a staff member enrolled to see
+/// the course), which is the whole point. Empty when the course has no students.
+func studentUserIDsInCourse(_ courseID: UUID, on db: Database) async throws -> Set<UUID> {
+    let enrollments = try await APICourseEnrollment.query(on: db)
+        .filter(\.$course.$id == courseID)
+        .all()
+    return Set(enrollments.filter { $0.role == .student }.map(\.userID))
+}
 
 /// Map of `courseID → enrolled-student count` for every course that has
 /// at least one student or pre-enrollment.  Courses with no roster do not
 /// appear in the map; callers should fall back to 0.
 func enrolledStudentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    async let studentIDsFetch = APIUser.query(on: db)
-        .filter(\.$role == UserRole.student.rawValue)
-        .all()
-        .map { $0.id }
     async let enrollmentsFetch = APICourseEnrollment.query(on: db).all()
     async let preEnrollmentsFetch = APIPreEnrollment.query(on: db).all()
-
-    let (studentIDOpts, enrollments, preEnrollments) =
-        try await (studentIDsFetch, enrollmentsFetch, preEnrollmentsFetch)
-    let studentIDs = Set(studentIDOpts.compactMap { $0 })
+    let (enrollments, preEnrollments) = try await (enrollmentsFetch, preEnrollmentsFetch)
 
     var counts: [UUID: Int] = [:]
-    for e in enrollments where studentIDs.contains(e.userID) {
+    // A student in a course is a `.student`-role enrollment; TA/instructor
+    // enrollments (staff who joined to see the course) don't count (#417 G2).
+    for e in enrollments where e.role == .student {
         counts[e.$course.id, default: 0] += 1
     }
     for p in preEnrollments {
@@ -42,20 +50,13 @@ func enrolledStudentCountsByCourse(on db: Database) async throws -> [UUID: Int] 
 
 /// Single-course variant of `enrolledStudentCountsByCourse`.
 func enrolledStudentCount(forCourse courseID: UUID, on db: Database) async throws -> Int {
-    let enrollments = try await APICourseEnrollment.query(on: db)
+    async let enrollmentsFetch = APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .all()
-    let enrolledUserIDs = enrollments.map(\.userID)
-    async let studentCountFetch: Int =
-        enrolledUserIDs.isEmpty
-        ? 0
-        : APIUser.query(on: db)
-            .filter(\.$role == UserRole.student.rawValue)
-            .filter(\.$id ~~ enrolledUserIDs)
-            .count()
     async let preCountFetch = APIPreEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
         .count()
-    let (studentCount, preCount) = try await (studentCountFetch, preCountFetch)
+    let (enrollments, preCount) = try await (enrollmentsFetch, preCountFetch)
+    let studentCount = enrollments.filter { $0.role == .student }.count
     return studentCount + preCount
 }

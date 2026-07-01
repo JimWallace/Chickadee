@@ -75,7 +75,13 @@ func makeTestEnrollment(
     userID: UUID,
     courseID: UUID
 ) async throws -> APICourseEnrollment {
-    let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
+    // Seed the per-course role from the user's global role (mirroring production
+    // saveSeededEnrollment) so a global instructor/admin enrolled for testing
+    // becomes course staff — otherwise the per-course roster counts and staff
+    // gates (#417 Slice G) would treat them as an ordinary student.
+    let isInstructor = try await APIUser.find(userID, on: app.db)?.isInstructor ?? false
+    let enrollment = APICourseEnrollment(
+        userID: userID, courseID: courseID, role: isInstructor ? .instructor : .student)
     try await enrollment.save(on: app.db)
     return enrollment
 }

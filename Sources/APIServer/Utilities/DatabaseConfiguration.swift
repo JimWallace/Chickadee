@@ -371,4 +371,11 @@ func registerMigrations(on app: Application) {
     // full-queries APIAssignment, so ordering is unconstrained.
     app.migrations.add(AddAssignmentBrightSpaceSyncExcluded())
 
+    // Collapse the deployment-global role to user|admin (#417 Slice G2):
+    // rewrite every legacy student/instructor row to `user`. MUST run after
+    // AddCourseEnrollmentRole, which has already seeded each enrollment's
+    // per-course role from the user's then-current global role — so normalising
+    // the now-meaningless global label here loses no teaching authority.
+    app.migrations.add(CollapseUserRoles())
+
 }

@@ -257,7 +257,7 @@ extension CourseAdminRoutes {
             ?? APIUser(
                 username: username,
                 passwordHash: "",  // SSO users have no local password
-                role: UserRole.student.rawValue,
+                role: UserRole.user.rawValue,
                 authProvider: "duo-oidc",
                 externalSubject: trimmedOrNil(body?.externalSubject),
                 email: trimmedOrNil(body?.email),
@@ -351,7 +351,7 @@ extension CourseAdminRoutes {
             user = APIUser(
                 username: identifier,
                 passwordHash: "",  // SSO users have no local password
-                role: UserRole.student.rawValue,  // deployment role stays student; staff authority is per-course
+                role: UserRole.user.rawValue,  // deployment role is user; staff authority is per-course
                 authProvider: "duo-oidc",
                 email: looksLikeEmail ? identifier : nil
             )

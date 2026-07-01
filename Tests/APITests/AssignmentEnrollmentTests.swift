@@ -581,7 +581,7 @@ import VaporTesting
             let user = try #require(
                 try await APIUser.query(on: app.db)
                     .filter(\.$username == "csv_pre_register").first())
-            #expect(user.role == UserRole.student.rawValue)
+            #expect(user.role == UserRole.user.rawValue)
             #expect(user.authProvider == "duo-oidc")
             #expect(user.externalSubject == "duo-sub-123")
             #expect(user.displayName == "Reggie Test")

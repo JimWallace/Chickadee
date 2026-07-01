@@ -882,9 +882,10 @@ extension InstructorDashboardRoutes {
         }
 
         let userIDs = enrollments.map(\.userID)
+        // `enrollments` is already `.student`-role only (#417 Slice G2), so the
+        // global-role filter is redundant.
         let users = try await APIUser.query(on: req.db)
             .filter(\.$id ~~ userIDs)
-            .filter(\.$role == UserRole.student.rawValue)
             .all()
         var userByID: [UUID: APIUser] = [:]
         for user in users {

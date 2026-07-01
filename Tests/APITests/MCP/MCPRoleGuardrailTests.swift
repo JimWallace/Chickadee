@@ -8,7 +8,9 @@ import Testing
 
 @Suite struct MCPRoleGuardrailTests {
     @Test func mcpIsNotAutoAssignable() {
-        #expect(APIUser.autoAssignableRoles == ["student", "instructor", "admin"])
+        // Roles collapsed to user|admin (#417 Slice G2); the retired
+        // student/instructor roles are no longer auto-assignable.
+        #expect(APIUser.autoAssignableRoles == ["user", "admin"])
         #expect(APIUser.autoAssignableRoles.contains("mcp") == false)
     }
 
@@ -16,8 +18,10 @@ import Testing
         #expect(APIUser.sanitizedAutoAssignedRole("mcp") == nil)
         #expect(APIUser.sanitizedAutoAssignedRole("superuser") == nil)
         #expect(APIUser.sanitizedAutoAssignedRole(nil) == nil)
-        #expect(APIUser.sanitizedAutoAssignedRole("student") == "student")
-        #expect(APIUser.sanitizedAutoAssignedRole("instructor") == "instructor")
+        // The retired student/instructor roles are dropped (#417 Slice G2).
+        #expect(APIUser.sanitizedAutoAssignedRole("student") == nil)
+        #expect(APIUser.sanitizedAutoAssignedRole("instructor") == nil)
+        #expect(APIUser.sanitizedAutoAssignedRole("user") == "user")
         #expect(APIUser.sanitizedAutoAssignedRole("admin") == "admin")
     }
 

@@ -83,15 +83,7 @@ struct GetInstructorCardSeriesTool: DiagnosticTool {
     /// scoping (`InstructorDashboardRoutes+Cards`).  Empty when the course has
     /// no enrollments.
     private func enrolledStudentIDs(courseUUID: UUID, on db: any Database) async throws -> Set<UUID> {
-        let enrolledUserIDs = try await APICourseEnrollment.query(on: db)
-            .filter(\.$course.$id == courseUUID)
-            .all()
-            .map(\.userID)
-        guard !enrolledUserIDs.isEmpty else { return [] }
-        let students = try await APIUser.query(on: db)
-            .filter(\.$role == UserRole.student.rawValue)
-            .filter(\.$id ~~ enrolledUserIDs)
-            .all()
-        return Set(students.compactMap(\.id))
+        // Students are `.student`-role enrollments now (#417 Slice G2).
+        try await studentUserIDsInCourse(courseUUID, on: db)
     }
 }

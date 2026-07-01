@@ -70,19 +70,23 @@ struct ToolContext {
         else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Unknown token subject.")
         }
-        // MCP eligibility is coarse: an instructor/admin human, or an `mcp`
-        // service account — never a plain student. Per-course access is enforced
-        // separately (and per-course) by `authorizeCourseAccess`, so this gate
-        // never widens what a caller can actually touch.
+        // MCP eligibility is coarse: course staff (TA+ in any course) or an
+        // `mcp` service account — never a plain student. Per-course access is
+        // enforced separately (and per-course) by `authorizeCourseAccess`, so
+        // this gate never widens what a caller can actually touch.
         //
-        // NOTE (#417): like the OAuth consent `permits` gate, this coarse check
-        // still keys off the deployment-global role and is deliberately deferred
-        // to the Slice G2 enum collapse — which converts every global-role
-        // reference to a per-course `isStaffAnywhere` check at once. Converting
-        // it here in G1 only broke the MCP tool fixtures (which enrol the actor
-        // without a staff role) for no security gain, since the per-course
-        // `authorizeCourseAccess` already governs each tool call.
-        guard user.isInstructor || user.isMCPAgent else {
+        // Post-collapse (#417 Slice G2) staff is `isStaffAnywhere`. The
+        // `user.isInstructor` term is a transition-only shim: after the
+        // CollapseUserRoles migration no human holds the global instructor role,
+        // so in production this reduces to `isStaffAnywhere`; it stays only so the
+        // test corpus that still writes `role: "instructor"` (without a per-course
+        // staff enrollment) keeps resolving as staff. Removable once those tests
+        // are migrated.
+        var eligible = user.isMCPAgent || user.isInstructor
+        if !eligible {
+            eligible = try await isStaffAnywhere(user, db: db)
+        }
+        guard eligible else {
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "Students may not use the MCP interface.")
         }
