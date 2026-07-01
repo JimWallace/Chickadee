@@ -536,7 +536,7 @@ struct WebRoutes: RouteCollection {
             throw Abort(
                 .badRequest, reason: "No active course selected. Please select a course before uploading a test setup.")
         }
-        try await requireCourseWriteAccess(caller: setupUser, courseID: courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: setupUser, courseID: courseID, atLeast: .instructor, db: req.db)
 
         let setupsDir = req.application.testSetupsDirectory
         let setupID = "setup_\(UUID().uuidString.lowercased().prefix(8))"

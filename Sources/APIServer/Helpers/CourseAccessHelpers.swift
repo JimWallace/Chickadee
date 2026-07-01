@@ -162,14 +162,52 @@ func isSubmissionStaff(
     return try await isCourseStaff(user, inCourse: owningCourseID, db: db)
 }
 
-/// Authorizes a *write* to a per-course resource. The caller must satisfy
-/// `requireCourseRole(atLeast:)` for `courseID` (admin bypass) **and** the
-/// course must not be archived. Archived courses are read-only for
-/// instructors and TAs — editing assignments/tests, mutating enrollment, and
-/// retesting are blocked once a course is archived, while grade audits and
-/// lookups stay readable (the read helpers carry no archived block). Admins
-/// remain write-exempt: they administer the whole deployment, and unarchiving
-/// is an admin-only action.
+/// Why a course write was denied — the throwless core of the write policy,
+/// shared verbatim by the web (`requireCourseWriteAccess` → `Abort`) and MCP
+/// (`ToolContext.authorizeCourseWriteAccess` → `MCPToolError`) so the two
+/// surfaces can't drift (#1113; they used to be hand-maintained twins).
+enum CourseWriteDenial: Equatable {
+    case notEnrolled
+    case roleTooLow(held: CourseRole, required: CourseRole)
+    case courseMissing
+    case archived
+}
+
+/// Evaluates the course write policy — admin bypass, per-course role floor,
+/// archived-course block — and returns why the write is denied, or nil when
+/// it is allowed. The ONE place the policy lives; the web and MCP wrappers
+/// only map the denial to their surface's error type.
+///
+/// Role-floor convention (#417 Slice E / #1113 — every call site states its
+/// floor explicitly, there is no default):
+///   - `.ta` — assignment CONTENT and grading: suite/scripts/families/checks,
+///     notebook/solution edits, global inputs, datasets, achievements,
+///     retest/reset/grade-override.
+///   - `.instructor` — course LIFECYCLE and structure: enrollment/roster/staff,
+///     assignment create/delete/open/close/deadlines, sections, archive,
+///     BrightSpace binding.
+func evaluateCourseWrite(
+    user: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
+) async throws -> CourseWriteDenial? {
+    guard !user.isAdmin else { return nil }
+    guard let userID = user.id else { return .notEnrolled }
+    guard let role = try await courseRole(of: userID, inCourse: courseID, db: db) else {
+        return .notEnrolled
+    }
+    guard role >= minimum else { return .roleTooLow(held: role, required: minimum) }
+    guard let course = try await APICourse.find(courseID, on: db) else { return .courseMissing }
+    guard !course.isArchived else { return .archived }
+    return nil
+}
+
+/// Authorizes a *write* to a per-course resource (the web wrapper over
+/// `evaluateCourseWrite`). The caller must hold at least `minimum` in
+/// `courseID` (admin bypass) **and** the course must not be archived.
+/// Archived courses are read-only for instructors and TAs — editing
+/// assignments/tests, mutating enrollment, and retesting are blocked once a
+/// course is archived, while grade audits and lookups stay readable (the
+/// read helpers carry no archived block). Admins remain write-exempt: they
+/// administer the whole deployment, and unarchiving is an admin-only action.
 ///
 /// Mutating per-course handlers call this in place of `requireCourseInstructor`,
 /// scoping the check to the *resource's own* course so an instructor of one
@@ -177,14 +215,16 @@ func isSubmissionStaff(
 /// authorization the `/instructor` group middleware (which only sees the
 /// caller's active course) can't enforce. See docs/multi-course-roles.md.
 func requireCourseWriteAccess(
-    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole = .instructor, db: Database
+    caller: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
 ) async throws {
-    try await requireCourseRole(caller: caller, courseID: courseID, atLeast: minimum, db: db)
-    guard !caller.isAdmin else { return }
-    guard let course = try await APICourse.find(courseID, on: db) else {
+    switch try await evaluateCourseWrite(user: caller, courseID: courseID, atLeast: minimum, db: db) {
+    case nil:
+        return
+    case .notEnrolled, .roleTooLow:
+        throw Abort(.forbidden)
+    case .courseMissing:
         throw Abort(.notFound, reason: "Course not found.")
-    }
-    guard !course.isArchived else {
+    case .archived:
         throw Abort(.forbidden, reason: "This course is archived and is read-only.")
     }
 }

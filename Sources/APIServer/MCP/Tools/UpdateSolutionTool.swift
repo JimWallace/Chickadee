@@ -88,7 +88,7 @@ struct UpdateSolutionTool: ContentTool {
         try validateNotebookShape(input.notebook, tool: Self.name)
 
         let assignment = try await context.authorizedAssignmentForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
         // The bearer context has no `Request.auth` APIUser; resolve the subject
         // so the validation submission is attributed to the acting account.
         let subject = try await context.requireEligibleSubject(tool: Self.name)

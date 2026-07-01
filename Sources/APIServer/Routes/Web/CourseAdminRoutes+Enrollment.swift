@@ -55,7 +55,7 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.notFound(resource: "Course")
         }
         let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
         let body = try? req.content.decode(Body.self)
         course.enrollmentMode = CourseEnrollmentMode(rawValue: body?.enrollmentMode ?? "") ?? .open
         try await course.save(on: req.db)
@@ -84,7 +84,7 @@ extension CourseAdminRoutes {
         }
 
         let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         let form = try req.content.decode(BulkEnrollForm.self)
 
@@ -143,7 +143,7 @@ extension CourseAdminRoutes {
         }
 
         let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         if let enrollment = try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseID)
@@ -189,7 +189,7 @@ extension CourseAdminRoutes {
         }
 
         let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         try await APIPreEnrollment.query(on: req.db)
             .filter(\.$id == preID)
@@ -234,7 +234,7 @@ extension CourseAdminRoutes {
         }
 
         let caller = try req.auth.require(APIUser.self)
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         guard
             let preEnrollment = try await APIPreEnrollment.query(on: req.db)
@@ -406,7 +406,7 @@ extension CourseAdminRoutes {
             throw WebAssignmentError.invalidParameter(
                 name: "courseID/userID", reason: "Invalid courseID or userID parameter")
         }
-        try await requireCourseWriteAccess(caller: caller, courseID: courseID, db: req.db)
+        try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 
         struct Body: Content { var role: String? }
         let body = try? req.content.decode(Body.self)

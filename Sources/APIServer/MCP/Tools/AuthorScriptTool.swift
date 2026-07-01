@@ -254,7 +254,7 @@ struct AuthorScriptTool: ContentTool {
         let source = try Self.resolveContentSource(input)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         // Never clobber a pattern-family / notebook-check generated script —
         // those are owned by the family/check, mirroring the web 409.

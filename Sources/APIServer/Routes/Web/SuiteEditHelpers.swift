@@ -105,13 +105,13 @@ func loadAssignmentForStaffRead(_ req: Request) async throws -> APIAssignment {
 /// archived-course and cross-course write paths the `/instructor` group
 /// middleware can't see (see docs/multi-course-roles.md).
 ///
-/// `atLeast` defaults to `.ta` because this is the assignment **content**
-/// editor loader (suite/scripts/sections/families/checks/global-inputs/
-/// datasets/achievements/notebook/solution/save-edit/retest-all) — all of which
-/// a TA may do. The one structural caller, `cloneAssignment` (it creates a new
-/// assignment), passes `.instructor` (#417 Slice E).
+/// Callers state their floor explicitly (#1113): the assignment **content**
+/// editor handlers (suite/scripts/sections/families/checks/global-inputs/
+/// datasets/achievements/notebook/solution/save-edit/retest-all) pass `.ta` —
+/// all of which a TA may do. The one structural caller, `cloneAssignment`
+/// (it creates a new assignment), passes `.instructor` (#417 Slice E).
 func loadAssignmentAndSetupForWrite(
-    _ req: Request, atLeast: CourseRole = .ta
+    _ req: Request, atLeast: CourseRole
 ) async throws -> (APIAssignment, APITestSetup) {
     let (assignment, setup) = try await loadAssignmentAndSetup(req)
     let caller = try req.auth.require(APIUser.self)
@@ -125,12 +125,12 @@ func loadAssignmentAndSetupForWrite(
 /// gate as `loadAssignmentAndSetupForWrite`, scoping the write to the
 /// assignment's **own** course (#417, follow-up to Slice A).
 ///
-/// `atLeast` defaults to `.instructor` because this loader is shared by both
-/// per-student grading actions (retest/reset/grade-override — TA-allowed, which
-/// pass `atLeast: .ta`) and assignment-lifecycle actions (open/close/status/
-/// delete/BrightSpace — instructor-only, which take the default) (#417 Slice E).
+/// Callers state their floor explicitly (#1113): per-student grading actions
+/// (retest/reset/grade-override — TA-allowed) pass `.ta`; assignment-lifecycle
+/// actions (open/close/status/delete/BrightSpace — instructor-only) pass
+/// `.instructor` (#417 Slice E).
 func loadAssignmentForWrite(
-    _ req: Request, atLeast: CourseRole = .instructor
+    _ req: Request, atLeast: CourseRole
 ) async throws -> APIAssignment {
     let assignment = try await loadAssignment(req)
     let caller = try req.auth.require(APIUser.self)
@@ -180,7 +180,7 @@ func loadDraftSetupForRead(_ req: Request) async throws -> APITestSetup {
 func loadDraftSetupForWrite(_ req: Request) async throws -> APITestSetup {
     let setup = try await loadDraftSetup(req)
     let caller = try req.auth.require(APIUser.self)
-    try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, db: req.db)
+    try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
     return setup
 }
 

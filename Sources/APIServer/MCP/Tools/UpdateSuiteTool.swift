@@ -144,7 +144,7 @@ struct UpdateSuiteTool: ContentTool {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Provide at least one edit.")
         }
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         // Load the full authored suite with script bodies preserved from the zip.
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)

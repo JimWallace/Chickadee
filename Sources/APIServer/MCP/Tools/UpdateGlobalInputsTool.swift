@@ -111,7 +111,7 @@ struct UpdateGlobalInputsTool: ContentTool {
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         // The save-time expression eval runs against the acting account's own
         // seed — same as the instructor's seed on the web path.

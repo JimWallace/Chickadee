@@ -133,7 +133,7 @@ extension InstructorDashboardRoutes {
     @Sendable
     func retestAllSubmissions(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
 
         let count = try await retestAllSubmissionsForSetup(

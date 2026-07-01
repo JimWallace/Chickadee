@@ -374,7 +374,7 @@ struct UpdatePatternFamilyTool: ContentTool {
         try CreatePatternFamilyTool.assertUniqueCaseKeys(addCases, tool: Self.name)
 
         let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
-            publicID: input.assignmentPublicID, tool: Self.name)
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard

@@ -93,8 +93,11 @@ struct ToolContext {
     /// further than the courses its human is enrolled in (the dashboard tab
     /// strip): enrolling widens an agent's reach, and unenrolling revokes it on
     /// the next call, since the enrollment row is re-checked per request.
-    /// Throws `MCPToolError.notAuthorized` otherwise.
-    func authorizeCourseAccess(_ courseID: UUID, tool: String) async throws {
+    /// Throws `MCPToolError.notAuthorized` otherwise. Returns the resolved
+    /// acting user so downstream policy checks and attribution don't have to
+    /// re-resolve the subject (#1113).
+    @discardableResult
+    func authorizeCourseAccess(_ courseID: UUID, tool: String) async throws -> APIUser {
         let user = try await requireEligibleSubject(tool: tool)
         guard let userID = user.id else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Token subject is not a valid user.")
@@ -104,6 +107,7 @@ struct ToolContext {
                 tool: tool,
                 detail: "The MCP account is not enrolled in the target course.")
         }
+        return user
     }
 
     // MARK: - Assignment resolution
@@ -132,40 +136,35 @@ struct ToolContext {
     /// Authorizes a *write* to `courseID`: the acting subject must pass
     /// `authorizeCourseAccess` (MCP-eligible + enrolled, admin included), hold a
     /// per-course role of at least `atLeast`, AND the course must not be archived
-    /// (admins exempt from both role and archive checks). The MCP analogue of the
-    /// web `requireCourseWriteAccess(atLeast:)` — content-editing tools default to
-    /// the `.ta` floor, while course-lifecycle/structure tools pass `.instructor`,
-    /// so an agent acting for a TA can author content but not run the course,
-    /// exactly matching the web (#417). The single chokepoint every MCP write
-    /// resolver funnels through; the *read* resolvers stay on
-    /// `authorizeCourseAccess` (enrollment only) so archived courses remain
-    /// readable (#417 Slice D-MCP).
+    /// (admins exempt from both role and archive checks). Content-editing tools
+    /// pass the `.ta` floor, course-lifecycle/structure tools pass `.instructor`
+    /// (explicitly — no default, #1113), so an agent acting for a TA can author
+    /// content but not run the course, exactly matching the web (#417). The
+    /// policy itself is the shared `evaluateCourseWrite` core — one
+    /// implementation for the web and MCP surfaces — this wrapper only maps the
+    /// denial to `MCPToolError`. The single chokepoint every MCP write resolver
+    /// funnels through; the *read* resolvers stay on `authorizeCourseAccess`
+    /// (enrollment only) so archived courses remain readable (#417 Slice D-MCP).
     func authorizeCourseWriteAccess(
-        _ courseID: UUID, tool: String, atLeast minimum: CourseRole = .ta
+        _ courseID: UUID, tool: String, atLeast minimum: CourseRole
     ) async throws {
-        try await authorizeCourseAccess(courseID, tool: tool)
-        let user = try await requireEligibleSubject(tool: tool)
-        guard !user.isAdmin else { return }
-        // Per-course role floor. `authorizeCourseAccess` already proved the
-        // subject is enrolled, so a missing role here is defensive only.
-        guard let userID = user.id,
-            let role = try await courseRole(of: userID, inCourse: courseID, db: db)
-        else {
+        let user = try await authorizeCourseAccess(courseID, tool: tool)
+        switch try await evaluateCourseWrite(user: user, courseID: courseID, atLeast: minimum, db: db) {
+        case nil:
+            return
+        case .notEnrolled:
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "The MCP account is not enrolled in the target course.")
-        }
-        guard role >= minimum else {
+        case .roleTooLow(let held, let required):
             throw MCPToolError.notAuthorized(
                 tool: tool,
                 detail:
-                    "This action requires the \(minimum.rawValue) role in the course; the MCP account holds \(role.rawValue)."
+                    "This action requires the \(required.rawValue) role in the course; the MCP account holds \(held.rawValue)."
             )
-        }
-        guard let course = try await APICourse.find(courseID, on: db) else {
+        case .courseMissing:
             throw MCPToolError.invalidArguments(
                 tool: tool, detail: "The target course could not be found.")
-        }
-        guard !course.isArchived else {
+        case .archived:
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "This course is archived and is read-only.")
         }
@@ -177,7 +176,7 @@ struct ToolContext {
     /// listing/resource surface, so this closes the by-public-ID write path an
     /// agent could still reach with a remembered id (#417 Slice C/D-MCP).
     func authorizedAssignmentForWrite(
-        publicID: String, tool: String, atLeast minimum: CourseRole = .ta
+        publicID: String, tool: String, atLeast minimum: CourseRole
     ) async throws -> APIAssignment {
         let assignment = try await requireAssignment(publicID: publicID, tool: tool)
         try await authorizeCourseWriteAccess(assignment.courseID, tool: tool, atLeast: minimum)
@@ -209,7 +208,7 @@ struct ToolContext {
     /// content-mutating suite/manifest/notebook tool resolves through this so an
     /// agent can't edit an archived course's content by id (#417 Slice D-MCP).
     func authorizedAssignmentAndSetupForWrite(
-        publicID: String, tool: String, atLeast minimum: CourseRole = .ta
+        publicID: String, tool: String, atLeast minimum: CourseRole
     ) async throws
         -> (assignment: APIAssignment, setup: APITestSetup)
     {

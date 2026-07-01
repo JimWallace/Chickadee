@@ -663,7 +663,8 @@ extension DraftAssignmentRoutes {
             // create-new branch below stays in the caller's active course, which
             // `resolveActiveCourse` already proves non-archived + instructor-held.
             let caller = try req.auth.require(APIUser.self)
-            try await requireCourseWriteAccess(caller: caller, courseID: existing.courseID, db: req.db)
+            try await requireCourseWriteAccess(
+                caller: caller, courseID: existing.courseID, atLeast: .instructor, db: req.db)
             return existing
         }
 

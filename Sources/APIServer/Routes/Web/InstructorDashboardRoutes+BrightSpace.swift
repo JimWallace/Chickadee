@@ -467,7 +467,7 @@ extension InstructorDashboardRoutes {
         // :assignmentID, so it's drivable cross-course / against an archived
         // course by URL — scope the grade-push backfill to the assignment's own
         // course (#417 Slice D).
-        let assignment = try await loadAssignmentForWrite(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         let submissionIDs = try await APISubmission.query(on: req.db)
             .filter(\.$testSetupID == assignment.testSetupID)
             .filter(\.$kind == APISubmission.Kind.student)

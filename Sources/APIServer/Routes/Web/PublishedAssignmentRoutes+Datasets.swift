@@ -43,7 +43,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func putDatasets(req: Request) async throws -> DatasetsResponse {
-        let (_, setup) = try await loadAssignmentAndSetupForWrite(req)
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try req.content.decode(DatasetsBody.self)
 
         // Validate: each spec must name a bundled support file by bare
