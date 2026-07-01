@@ -91,14 +91,21 @@ working by hand, Phases 2–3 just call it.
 - The two "colors" run as plain `docker run` containers **alongside** the existing
   compose stack — `chickadee-server-blue` on `127.0.0.1:8081`,
   `chickadee-server-green` on `127.0.0.1:8082`. The compose `db` and `runner`
-  stay under compose, untouched.
+  stay under compose, untouched by the swap itself.
 - **Configuration source of truth stays in compose.** The script resolves the
   `server` service environment via `docker compose config` and passes it to the
   color with `--env-file` — no env duplication, no drift.
 - The colors join the existing `chickadee_chickadee` network (so they reach `db`)
-  and mount the existing `chickadee_chickadee-data` volume.
-- **The runner needs no changes**: it talks to the server over the public URL
-  (`https://chickadee.uwaterloo.ca`), so it follows the nginx flip automatically.
+  and mount the existing `chickadee_chickadee-data` volume. Each color also
+  registers the `server` **network alias**, so the compose runner's
+  `--api-base-url http://server:8080` keeps resolving to the active color across a
+  swap — runner→server *connectivity* follows the flip with no change.
+- **But the runner's image is NOT refreshed by the swap.** The swap only replaces
+  the server color; the compose `runner` keeps grading on whatever image it was
+  last `compose up`'d with, so its `runnerVersion` (visible on `/admin/runners`)
+  drifts behind the server. After a **manual** `bluegreen-deploy.sh deploy`, also
+  run `docker compose pull runner && docker compose up -d --no-deps runner` to put
+  the runner back in lockstep. The Phase 2 daemon does this automatically (below).
 - "Active" = the port the nginx upstream points at. It starts at `:8080` (the
   legacy compose `server`), moves onto a color on the first deploy, then colors
   alternate. The legacy server is left running as a fallback and is never
@@ -183,14 +190,26 @@ mechanism without moving any student traffic:
    `bluegreen-deploy.sh rollback --yes`. (A swap that never goes healthy is
    already aborted by the script *before* the nginx flip, so traffic never moved
    — this covers the rarer "healthy at cutover, degrades after" case.)
-8. Writes `status.json` / appends `history.jsonl` for the Phase 3 MCP surface.
+8. **Refreshes the Compose runner** onto the new image
+   (`docker compose pull <runner> && docker compose up -d --no-deps <runner>`) so
+   it grades in lockstep with the server instead of drifting on a stale build.
+   The runner polls and has no inbound traffic, so a rolling restart is the right
+   model — no blue-green needed — and any job interrupted by the brief restart is
+   re-queued by the server's `StuckSubmissionReaperMonitor`. Best-effort: this
+   runs only after the server swap is already verified healthy, so a runner hiccup
+   is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
+   Disable with `CHICKADEE_REFRESH_RUNNER=0`.
+9. Writes `status.json` / appends `history.jsonl` for the Phase 3 MCP surface.
 
 ### Configuration (env / `/etc/chickadee-deployer.env`)
 
 `CHICKADEE_REPO`, `CHICKADEE_IMAGE_REPO`, `CHICKADEE_POLL_INTERVAL_SECS`,
 `CHICKADEE_DEPLOY_GATE_LEVEL` (major|minor), `CHICKADEE_SNAPSHOT_BEFORE_DEPLOY`,
 `CHICKADEE_SNAPSHOT_REQUIRED`, `CHICKADEE_POST_DEPLOY_VERIFY_SECS`,
-`CHICKADEE_PUBLIC_HEALTH_URL`, `CHICKADEE_STATE_DIR`.
+`CHICKADEE_PUBLIC_HEALTH_URL`, `CHICKADEE_STATE_DIR`,
+`CHICKADEE_REFRESH_RUNNER` (1|0, default 1), `CHICKADEE_RUNNER_SERVICE`
+(compose service name, default `runner`), `CHICKADEE_COMPOSE_DIR`,
+`CHICKADEE_COMPOSE_FILE`.
 
 ### Install
 
