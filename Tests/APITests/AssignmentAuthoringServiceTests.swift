@@ -145,6 +145,11 @@ import Vapor
             try await AssignmentAuthoringService.setVisibility(assignment, .preview, on: app.db)
             let staff = try await makeTestUser(on: app, username: "prof", role: "instructor")
             let student = try await makeTestUser(on: app, username: "stu", role: "student")
+            // Preview visibility is per-course staff now (#417 Slice G); enrol the
+            // staff user as an instructor in the assignment's course.
+            try await APICourseEnrollment(
+                userID: try staff.requireID(), courseID: assignment.courseID, role: .instructor
+            ).save(on: app.db)
             #expect(try await isAssignmentEffectivelyOpen(assignment, for: staff, on: app.db))
             #expect(!(try await isAssignmentEffectivelyOpen(assignment, for: student, on: app.db)))
         }
