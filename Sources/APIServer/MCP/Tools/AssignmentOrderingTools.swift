@@ -52,13 +52,10 @@ struct ReorderAssignmentsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object([
-                "type": .string("string"),
-                "description": .string("The course code, e.g. \"CS136\"."),
-            ]),
+            "courseCode": MCPSchema.courseCode,
             "orderedAssignmentPublicIDs": .object([
                 "type": .string("array"),
-                "items": .object(["type": .string("string")]),
+                "items": MCPSchema.string,
                 "description": .string(
                     "The course's assignment public IDs in the new order (a permutation of all of them)."),
             ]),
@@ -69,16 +66,16 @@ struct ReorderAssignmentsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object(["type": .string("string")]),
+            "courseCode": MCPSchema.string,
             "assignments": .object([
                 "type": .string("array"),
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "publicID": .object(["type": .string("string")]),
-                        "title": .object(["type": .string("string")]),
-                        "sortOrder": .object(["type": .string("integer")]),
-                        "sectionID": .object(["type": .string("string")]),
+                        "publicID": MCPSchema.string,
+                        "title": MCPSchema.string,
+                        "sortOrder": MCPSchema.integer,
+                        "sectionID": MCPSchema.string,
                     ]),
                     "required": .array([
                         .string("publicID"), .string("title"), .string("sortOrder"),

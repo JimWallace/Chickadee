@@ -76,10 +76,7 @@ struct UpdateSuiteTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "edits": .object([
                 "type": .string("array"),
                 "description": .string("Per-script metadata edits; each targets an existing script by filename."),
@@ -90,16 +87,11 @@ struct UpdateSuiteTool: ContentTool {
                             "type": .string("string"),
                             "description": .string("Target script filename (must already exist)."),
                         ]),
-                        "tier": .object([
-                            "type": .string("string"),
-                            "enum": .array([
-                                .string("public"), .string("release"), .string("secret"), .string("student"),
-                            ]),
-                        ]),
-                        "points": .object(["type": .string("integer")]),
-                        "displayName": .object(["type": .string("string")]),
+                        "tier": MCPSchema.tierEnum(),
+                        "points": MCPSchema.integer,
+                        "displayName": MCPSchema.string,
                         "dependsOn": .object([
-                            "type": .string("array"), "items": .object(["type": .string("string")]),
+                            "type": .string("array"), "items": MCPSchema.string,
                         ]),
                         "sectionID": .object([
                             "type": .string("string"),
@@ -124,12 +116,12 @@ struct UpdateSuiteTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "updatedScripts": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("updatedScripts"), .string("assignmentClosed"),

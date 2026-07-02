@@ -48,10 +48,7 @@ struct UpdateAchievementsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "achievements": .object([
                 "type": .string("array"),
                 "description": .string(
@@ -65,7 +62,7 @@ struct UpdateAchievementsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "achievements": .object([
                 "type": .string("array"),
                 "items": achievementRowSchema,

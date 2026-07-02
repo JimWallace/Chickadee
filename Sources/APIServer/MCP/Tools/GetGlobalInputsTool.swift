@@ -33,10 +33,7 @@ struct GetGlobalInputsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ])
+            "assignmentPublicID": MCPSchema.assignmentPublicID
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -44,13 +41,13 @@ struct GetGlobalInputsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "variables": .object([
                 "type": .string("array"),
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "name": .object(["type": .string("string")]),
+                        "name": MCPSchema.string,
                         "value": .object([:]),
                     ]),
                     "required": .array([.string("name"), .string("value")]),
@@ -61,8 +58,8 @@ struct GetGlobalInputsTool: ContentTool {
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "name": .object(["type": .string("string")]),
-                        "expression": .object(["type": .string("string")]),
+                        "name": MCPSchema.string,
+                        "expression": MCPSchema.string,
                     ]),
                     "required": .array([.string("name"), .string("expression")]),
                 ]),

@@ -103,10 +103,7 @@ struct GetSuiteTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ])
+            "assignmentPublicID": MCPSchema.assignmentPublicID
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -114,7 +111,7 @@ struct GetSuiteTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "timeLimitSeconds": .object([
                 "type": .string("integer"),
                 "description": .string(
@@ -126,8 +123,8 @@ struct GetSuiteTool: ContentTool {
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "id": .object(["type": .string("string")]),
-                        "name": .object(["type": .string("string")]),
+                        "id": MCPSchema.string,
+                        "name": MCPSchema.string,
                         "variables": .object(["type": .string("array")]),
                         "expressions": .object(["type": .string("array")]),
                     ]),
@@ -139,8 +136,8 @@ struct GetSuiteTool: ContentTool {
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "kind": .object(["type": .string("string")]),
-                        "name": .object(["type": .string("string")]),
+                        "kind": MCPSchema.string,
+                        "name": MCPSchema.string,
                         "filename": .object([
                             "type": .string("string"),
                             "description": .string(
@@ -150,20 +147,20 @@ struct GetSuiteTool: ContentTool {
                         ]),
                         "generatedFilenames": .object([
                             "type": .string("array"),
-                            "items": .object(["type": .string("string")]),
+                            "items": MCPSchema.string,
                             "description": .string(
                                 "On-disk file(s) a generated row produces (kind == \"family\" or "
                                     + "\"check\"); read-only, edit the family/check instead. Null "
                                     + "for hand-written scripts."),
                         ]),
-                        "tier": .object(["type": .string("string")]),
-                        "points": .object(["type": .string("integer")]),
-                        "displayName": .object(["type": .string("string")]),
+                        "tier": MCPSchema.string,
+                        "points": MCPSchema.integer,
+                        "displayName": MCPSchema.string,
                         "dependsOn": .object([
-                            "type": .string("array"), "items": .object(["type": .string("string")]),
+                            "type": .string("array"), "items": MCPSchema.string,
                         ]),
-                        "sectionID": .object(["type": .string("string")]),
-                        "familyID": .object(["type": .string("string")]),
+                        "sectionID": MCPSchema.string,
+                        "familyID": MCPSchema.string,
                         "content": .object([
                             "type": .string("string"),
                             "description": .string(

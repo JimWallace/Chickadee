@@ -44,13 +44,13 @@ struct GetDeploymentInfoTool: DiagnosticTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "version": .object(["type": .string("string")]),
-            "environment": .object(["type": .string("string")]),
-            "adminMcpMode": .object(["type": .string("string")]),
+            "version": MCPSchema.string,
+            "environment": MCPSchema.string,
+            "adminMcpMode": MCPSchema.string,
             "advertisedScopes": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
-            "contentMcpMode": .object(["type": .string("string")]),
+            "contentMcpMode": MCPSchema.string,
         ]),
         "required": .array([
             .string("version"), .string("environment"), .string("adminMcpMode"),

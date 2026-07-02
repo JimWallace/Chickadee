@@ -60,47 +60,8 @@ struct AdminMCPDispatcher: Sendable {
             context.map { ctx in
                 tools.all.filter { ctx.grantedScopes.isSuperset(of: $0.requiredScopes) }
             } ?? tools.all
-        let entries = visible.map { tool -> JSONValue in
-            var fields: [String: JSONValue] = [
-                "name": .string(tool.name),
-                "title": .string(tool.title),
-                "description": .string(tool.description),
-                "inputSchema": tool.inputSchema,
-            ]
-            if let outputSchema = tool.outputSchema {
-                fields["outputSchema"] = outputSchema
-            }
-            if let annotations = tool.annotations, let encoded = try? JSONValue(encoding: annotations) {
-                fields["annotations"] = encoded
-            }
-            return .object(fields)
-        }
-        return paginatedListResponse(id: id, key: "tools", entries: entries, params: params)
-    }
-
-    // MARK: - List pagination
-
-    private struct ListParams: Decodable {
-        let cursor: String?
-    }
-
-    private func paginatedListResponse(
-        id: JSONRPCID, key: String, entries: [JSONValue], params: JSONValue?
-    ) -> JSONRPCResponse {
-        let cursor: String?
-        do {
-            cursor = try (params ?? .object([:])).decoded(as: ListParams.self).cursor
-        } catch {
-            return .failure(id: id, error: .invalidParams("\"cursor\" must be a string."))
-        }
-        guard let result = MCPListPagination.page(entries, cursor: cursor) else {
-            return .failure(id: id, error: .invalidParams("Invalid cursor."))
-        }
-        var fields: [String: JSONValue] = [key: .array(result.page)]
-        if let next = result.nextCursor {
-            fields["nextCursor"] = .string(next)
-        }
-        return .success(id: id, result: .object(fields))
+        return mcpPaginatedListResponse(
+            id: id, key: "tools", entries: mcpToolsListEntries(visible), params: params)
     }
 
     // MARK: - tools/call
@@ -140,7 +101,7 @@ struct AdminMCPDispatcher: Sendable {
             response = .success(id: id, result: mcpToolSuccessResult(output))
         } catch let error as MCPToolError {
             outcome = MCPToolOutcome(error).rawValue
-            response = .success(id: id, result: errorToolResult(error))
+            response = .success(id: id, result: mcpToolErrorResult(error))
         } catch {
             outcome = MCPToolOutcome.failed.rawValue
             response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
@@ -164,50 +125,15 @@ struct AdminMCPDispatcher: Sendable {
             on: context.request)
     }
 
-    private func errorToolResult(_ error: MCPToolError) -> JSONValue {
-        let message: String
-        switch error {
-        case .unknownTool(let name):
-            message = "Unknown tool: \(name)"
-        case .invalidArguments(let tool, let detail):
-            message = "Invalid arguments for \(tool): \(detail)"
-        case .notAuthorized(let tool, let detail):
-            message = "Not authorized for \(tool): \(detail)"
-        case .executionFailed(let tool, let detail):
-            message = "\(tool) failed: \(detail)"
-        }
-        return .object([
-            "content": .array([.object(["type": .string("text"), "text": .string(message)])]),
-            "isError": .bool(true),
-        ])
-    }
-
     private func initializeResponse(
         id: JSONRPCID, params: JSONValue?, context: AdminToolContext?
     ) -> JSONRPCResponse {
-        let client = try? (params ?? .object([:])).decoded(as: MCPInitializeParams.self)
-        let negotiated =
-            client?.protocolVersion.flatMap { requested in
-                MCPProtocol.supportedVersions.contains(requested) ? requested : nil
-            } ?? MCPProtocol.version
-        if let context {
-            let name = client?.clientInfo?.name ?? "unknown"
-            let clientVersion = client?.clientInfo?.version ?? "unknown"
-            let requested = client?.protocolVersion ?? "none"
-            context.logger.info(
-                "Admin MCP initialize: client=\(name)/\(clientVersion) requestedProtocolVersion=\(requested) negotiated=\(negotiated)"
-            )
-        }
-        let result = MCPInitializeResult(
-            protocolVersion: negotiated,
+        mcpInitializeResponse(
+            id: id, params: params,
             capabilities: .toolsOnly,
             serverInfo: serverInfo,
-            instructions: AdminMCPServerInstructions.text
-        )
-        do {
-            return .success(id: id, result: try JSONValue(encoding: result))
-        } catch {
-            return .failure(id: id, error: .internalError("Failed to encode initialize result."))
-        }
+            instructions: AdminMCPServerInstructions.text,
+            logger: context?.logger,
+            logLabel: "Admin MCP")
     }
 }

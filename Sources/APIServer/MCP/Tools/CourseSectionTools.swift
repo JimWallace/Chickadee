@@ -45,10 +45,7 @@ struct ListCourseSectionsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object([
-                "type": .string("string"),
-                "description": .string("The course code, e.g. \"CS136\"."),
-            ])
+            "courseCode": MCPSchema.courseCode
         ]),
         "required": .array([.string("courseCode")]),
         "additionalProperties": .bool(false),
@@ -56,16 +53,16 @@ struct ListCourseSectionsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object(["type": .string("string")]),
+            "courseCode": MCPSchema.string,
             "sections": .object([
                 "type": .string("array"),
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "sectionID": .object(["type": .string("string")]),
-                        "name": .object(["type": .string("string")]),
-                        "defaultGradingMode": .object(["type": .string("string")]),
-                        "sortOrder": .object(["type": .string("integer")]),
+                        "sectionID": MCPSchema.string,
+                        "name": MCPSchema.string,
+                        "defaultGradingMode": MCPSchema.string,
+                        "sortOrder": MCPSchema.integer,
                     ]),
                     "required": .array([
                         .string("sectionID"), .string("name"), .string("defaultGradingMode"),
@@ -123,10 +120,7 @@ struct CreateCourseSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object([
-                "type": .string("string"),
-                "description": .string("The course code, e.g. \"CS136\"."),
-            ]),
+            "courseCode": MCPSchema.courseCode,
             "name": .object([
                 "type": .string("string"),
                 "description": .string("Display name for the new section (non-empty), e.g. \"Labs\"."),
@@ -143,11 +137,11 @@ struct CreateCourseSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "name": .object(["type": .string("string")]),
-            "defaultGradingMode": .object(["type": .string("string")]),
-            "sortOrder": .object(["type": .string("integer")]),
+            "courseCode": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "name": MCPSchema.string,
+            "defaultGradingMode": MCPSchema.string,
+            "sortOrder": MCPSchema.integer,
         ]),
         "required": .array([
             .string("courseCode"), .string("sectionID"), .string("name"),
@@ -216,10 +210,7 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "courseSectionID": .object([
                 "type": .string("string"),
                 "description": .string(
@@ -232,10 +223,10 @@ struct SetAssignmentCourseSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "sectionName": .object(["type": .string("string")]),
-            "gradingMode": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "sectionName": MCPSchema.string,
+            "gradingMode": MCPSchema.string,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("sectionID")]),
     ])
@@ -347,10 +338,10 @@ struct RenameCourseSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "sectionID": .object(["type": .string("string")]),
-            "name": .object(["type": .string("string")]),
-            "defaultGradingMode": .object(["type": .string("string")]),
-            "sortOrder": .object(["type": .string("integer")]),
+            "sectionID": MCPSchema.string,
+            "name": MCPSchema.string,
+            "defaultGradingMode": MCPSchema.string,
+            "sortOrder": MCPSchema.integer,
         ]),
         "required": .array([
             .string("sectionID"), .string("name"), .string("defaultGradingMode"), .string("sortOrder"),
@@ -428,9 +419,9 @@ struct DeleteCourseSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "sectionID": .object(["type": .string("string")]),
-            "removed": .object(["type": .string("boolean")]),
-            "ungroupedAssignmentCount": .object(["type": .string("integer")]),
+            "sectionID": MCPSchema.string,
+            "removed": MCPSchema.boolean,
+            "ungroupedAssignmentCount": MCPSchema.integer,
         ]),
         "required": .array([
             .string("sectionID"), .string("removed"), .string("ungroupedAssignmentCount"),
@@ -493,13 +484,10 @@ struct ReorderCourseSectionsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object([
-                "type": .string("string"),
-                "description": .string("The course code, e.g. \"CS136\"."),
-            ]),
+            "courseCode": MCPSchema.courseCode,
             "orderedSectionIDs": .object([
                 "type": .string("array"),
-                "items": .object(["type": .string("string")]),
+                "items": MCPSchema.string,
                 "description": .string(
                     "The course's section ids in the new order (a permutation of all of them)."),
             ]),
@@ -510,15 +498,15 @@ struct ReorderCourseSectionsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object(["type": .string("string")]),
+            "courseCode": MCPSchema.string,
             "sections": .object([
                 "type": .string("array"),
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "sectionID": .object(["type": .string("string")]),
-                        "name": .object(["type": .string("string")]),
-                        "sortOrder": .object(["type": .string("integer")]),
+                        "sectionID": MCPSchema.string,
+                        "name": MCPSchema.string,
+                        "sortOrder": MCPSchema.integer,
                     ]),
                     "required": .array([
                         .string("sectionID"), .string("name"), .string("sortOrder"),
@@ -593,64 +581,11 @@ func resolveCourseSectionForEdit(
     return section
 }
 
-/// Reads the `gradingMode` field straight from a manifest JSON string without
-/// round-tripping `TestProperties`, defaulting to "worker" (TestProperties' own
-/// default) when the field is absent or the manifest can't be parsed — so every
-/// tool reports the same effective mode `get_assignment` does.
-func currentManifestGradingMode(_ manifest: String?) -> String {
-    guard let manifest,
-        let dict = (try? JSONSerialization.jsonObject(with: Data(manifest.utf8))) as? [String: Any]
-    else { return "worker" }
-    return (dict["gradingMode"] as? String) ?? "worker"
-}
-
-/// Sets the test setup's `gradingMode` to `mode` when it differs, mutating only
-/// that JSON field (so unknown fields the runner doesn't model survive — matching
-/// the web moveToSection / setup editor).  Returns the effective mode.
-func setManifestGradingMode(
-    setup: APITestSetup, to mode: String, on db: any Database
-) async throws -> String {
-    guard var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
-    else { return mode }
-    if (dict["gradingMode"] as? String) != mode {
-        dict["gradingMode"] = mode
-        if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
-            let json = String(data: data, encoding: .utf8)
-        {
-            setup.manifest = json
-            try await setup.save(on: db)
-        }
-    }
-    return mode
-}
-
-/// Adds or removes `filename` in the manifest's `graderOnlyFiles` list, mutating
-/// only that JSON field on `setup.manifest` (so unrelated keys are untouched) and
-/// saving only when it actually changes. A grader-only file is bundled for the
-/// worker but withheld from every student-facing path — see docs/datasets.md.
-func setManifestGraderOnly(
-    setup: APITestSetup, filename: String, graderOnly: Bool, on db: any Database
-) async throws {
-    guard
-        var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
-    else { return }
-    var files = (dict["graderOnlyFiles"] as? [String]) ?? []
-    let present = files.contains(filename)
-    if graderOnly && !present {
-        files.append(filename)
-    } else if !graderOnly && present {
-        files.removeAll { $0 == filename }
-    } else {
-        return  // already in the desired state
-    }
-    dict["graderOnlyFiles"] = files
-    if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
-        let json = String(data: data, encoding: .utf8)
-    {
-        setup.manifest = json
-        try await setup.save(on: db)
-    }
-}
+// `currentManifestGradingMode` / `setManifestGradingMode` /
+// `setManifestGraderOnly` moved to Helpers/ManifestFieldEdits.swift (#1121):
+// they are cross-surface utilities (also used by AuthorScriptTool,
+// SetGradingModeTool, and the web CourseAdminRoutes+Sections), not
+// course-section concerns.
 
 /// Resolves a course code to its id, enforcing that the acting account may act
 /// on it (read access).  Shared by the course-section tools, including the READ

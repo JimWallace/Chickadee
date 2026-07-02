@@ -48,12 +48,12 @@ struct GetServerInfoTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "version": .object(["type": .string("string")]),
-            "mcpMode": .object(["type": .string("string")]),
+            "version": MCPSchema.string,
+            "mcpMode": MCPSchema.string,
             "advertisedScopes": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
-            "writeEnabled": .object(["type": .string("boolean")]),
+            "writeEnabled": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("version"), .string("mcpMode"), .string("advertisedScopes"), .string("writeEnabled"),

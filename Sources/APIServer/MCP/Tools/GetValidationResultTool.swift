@@ -79,10 +79,7 @@ struct GetValidationResultTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ])
+            "assignmentPublicID": MCPSchema.assignmentPublicID
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -90,13 +87,13 @@ struct GetValidationResultTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "validationStatus": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "validationStatus": MCPSchema.string,
             "ranAt": .object(["type": .array([.string("string"), .string("null")])]),
             "buildStatus": .object(["type": .array([.string("string"), .string("null")])]),
             "compilerOutput": .object(["type": .array([.string("string"), .string("null")])]),
             "warnings": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
             "outcomes": .object(["type": .string("array")]),
             "counts": .object(["type": .array([.string("object"), .string("null")])]),
