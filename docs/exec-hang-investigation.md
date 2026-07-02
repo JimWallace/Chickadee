@@ -159,24 +159,38 @@ is **jedi**, installed at boot solely to back tab-completion.
 
 ## Fix options (the product decision)
 
-1. **Drop / defer jedi from the boot path.** jedi+parso are the bulk of the
-   gated tail and are needed only for tab-completion, not to *run* a cell.
-   Removing them from the boot install (or deferring jedi's load to the first
-   completion request) shrinks the tail dramatically and likely eliminates the
-   ~17 s window. **Tradeoff:** weaker/again-lazy tab-completion in the editor.
-   Requires patching the vended kernel-extension bundle (fragile, minified) and
-   browser-runtime verification.
+**UPDATE 2026-07-02 — option 1 was TRIED and is INSUFFICIENT.** Dropping jedi
+from the boot-install list (PR #1149) and re-running the WebKit delay=0 probe:
+the slow mode **persisted at ~13–14 s** (5/8 slow + one 60 s hard hang), vs.
+~16–18 s before. So jedi was only ~2–4 s of the tail; the **bulk is the
+`pyodide.asm.wasm` compile + the `ipython`/`ipykernel`/`comm`/`pyodide-kernel`
+install+import** under WebKit's WASM/JIT + SAB FS costs — none of which we can
+remove (IPython *is* the kernel). Conclusion: **the boot tail cannot be
+meaningfully shrunk by swapping or dropping the completion engine.** A lighter
+completer (jedi → e.g. Zuban) does not help — and does not even fit: it is a
+Rust LSP, not a Pyodide-importable package, and completion is not the
+bottleneck. The jedi drop was reverted (a feature loss with no fix).
+
+The remaining viable direction is **option 3** — do not try to speed boot;
+stop *presenting* a still-booting kernel as ready, and move the unavoidable
+wait to before the student's first run.
+
+1. ~~Drop / defer jedi from the boot path.~~ **Tried; insufficient (see above).**
+   Reverted.
 2. **Preload the boot packages via `loadPyodideOptions.packages`** so they load
    in parallel at `loadPyodide()` time instead of sequential `piplite.install`.
-   **Risk:** a package named there that fails to load rejects the whole boot
-   (this is exactly why nb_mypy was NOT put there) — must be rock-solid.
-3. **Honest readiness signaling + kernel warm-up.** Keep the editor showing
-   "kernel starting" until `this.ready` actually resolves (not the `kernel_info`
-   idle), and/or fire a hidden warm-up `pass` execute at boot so the ~17 s is
-   spent visibly-starting *before* the student's first real run. Doesn't speed
-   boot but removes the "I pressed run and it hung" experience; also makes the
-   boot-funnel telemetry honest (today `kernel_idle` counts kernels still
-   booting).
+   May shave some time by parallelizing, but the dominant cost is WASM compile +
+   import, not install ordering, so likely a partial win at best. **Risk:** a
+   package named there that fails to load rejects the whole boot (this is
+   exactly why nb_mypy was NOT put there) — must be rock-solid.
+3. **Honest readiness signaling + kernel warm-up (RECOMMENDED).** Keep the
+   editor showing "kernel starting" until `this.ready` actually resolves (not
+   the `kernel_info` idle), and/or fire a hidden warm-up `pass` execute at boot
+   so the ~13–17 s is spent visibly-starting *before* the student's first real
+   run. Doesn't speed boot — it removes the "I pressed run and it hung"
+   experience (the actual harm) and makes the boot-funnel telemetry honest
+   (today `kernel_idle` counts kernels still booting). This is the direction
+   that survives the negative jedi result.
 
 All three need a focused browser-verify loop (the probe is the acceptance test —
 delay=0 webkit slow-rate must drop toward zero); none should be shipped to the
@@ -186,8 +200,10 @@ student.
 ## One-line summary (second issue)
 
 The execution indicator reports "idle" off the `kernel_info` reply, which isn't
-gated on `this.ready`, while the kernel is still installing jedi/ipython/etc.;
-a cell run in that window blocks on `await this.ready` for the ~17 s remainder
-of boot (WebKit-slow, cache-intermittent). Fix = get the heavy boot work
-(jedi) off the pre-execute critical path and/or stop presenting a
-still-booting kernel as ready.
+gated on `this.ready`, while the kernel is still installing/importing
+ipython/ipykernel/etc.; a cell run in that window blocks on `await this.ready`
+for the ~13–17 s remainder of boot (WebKit-slow, cache-intermittent).
+**Dropping jedi was tried and did NOT fix it** (jedi was only ~2–4 s of the
+tail; the bulk is the WASM compile + IPython import, which can't be removed),
+so the fix is NOT to shrink boot but to **stop presenting a still-booting
+kernel as ready** and move the wait ahead of the student's first run (option 3).
