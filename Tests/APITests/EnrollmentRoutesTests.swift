@@ -505,6 +505,38 @@ import VaporTesting
         }
     }
 
+    @Test func activateCourse_taWithInstructorNext_redirectsToInstructorView() async throws {
+        // A TA is staff (the /instructor area gate admits role >= .ta), so
+        // activating their course with next=/instructor must land on the
+        // instructor view — not silently bounce home. Regression for the guard
+        // that formerly required `.instructor`, which stranded TAs on the
+        // Instructor nav button with no error.
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "ACT_TA_NEXT1", mode: .open)
+            let courseID = try course.requireID()
+            let cookie = try await loginUser(
+                username: "act_ta_next1", password: "pw",
+                role: "student", on: app)
+            let taUser = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "act_ta_next1").first())
+            try await APICourseEnrollment(
+                userID: try taUser.requireID(), courseID: courseID, role: .ta
+            ).save(on: app.db)
+
+            let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID.uuidString)/activate",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(["_csrf": token, "next": "/instructor"], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/instructor")
+                })
+        }
+    }
+
     @Test func activateCourse_studentWithInstructorNext_fallsBackHome() async throws {
         // A student selecting a course must never be dropped into the
         // instructor view (which would 403); the redirect falls back to home.
