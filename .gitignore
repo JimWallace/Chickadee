@@ -50,5 +50,5 @@ Tools/vendor/package-lock.json
 # Visual-regression working dirs (Tools/visual-regression; committed baselines
 # live in Tools/visual-regression/baselines/).
 Tools/visual-regression/node_modules/
-.visual-bootstrap/
-.visual-diffs/
+visual-bootstrap/
+visual-diffs/

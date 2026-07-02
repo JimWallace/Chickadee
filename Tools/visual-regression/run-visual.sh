@@ -96,9 +96,9 @@ if ! ls baselines/*.png >/dev/null 2>&1; then
   # Bootstrap mode: no baselines committed yet.  Leave the captures where CI
   # can pick them up as an artifact and succeed — committing them flips the
   # harness to enforcing.
-  mkdir -p "$REPO_ROOT/.visual-bootstrap"
-  cp "$OUT/capture/"*.png "$REPO_ROOT/.visual-bootstrap/"
-  echo "run-visual: NO BASELINES COMMITTED — captures saved to .visual-bootstrap/."
+  mkdir -p "$REPO_ROOT/visual-bootstrap"
+  cp "$OUT/capture/"*.png "$REPO_ROOT/visual-bootstrap/"
+  echo "run-visual: NO BASELINES COMMITTED — captures saved to visual-bootstrap/."
   echo "            Commit them to Tools/visual-regression/baselines/ to enable enforcement."
   exit 0
 fi
@@ -110,8 +110,8 @@ rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then
   # Preserve evidence for the CI artifact step.
-  mkdir -p "$REPO_ROOT/.visual-diffs"
-  cp "$OUT/diff/"* "$REPO_ROOT/.visual-diffs/" 2>/dev/null || true
-  cp "$OUT/capture/"*.png "$REPO_ROOT/.visual-diffs/" 2>/dev/null || true
+  mkdir -p "$REPO_ROOT/visual-diffs"
+  cp "$OUT/diff/"* "$REPO_ROOT/visual-diffs/" 2>/dev/null || true
+  cp "$OUT/capture/"*.png "$REPO_ROOT/visual-diffs/" 2>/dev/null || true
 fi
 exit "$rc"
