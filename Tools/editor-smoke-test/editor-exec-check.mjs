@@ -235,7 +235,7 @@ async function probeOnce(browser, storageState, notebookURL) {
 
   const result = {
     hung: true, wasmCrash: false, lostDispatch: false, dialogStole: false,
-    dialogText: "", ms: 0, status: null,
+    bootStall: false, dialogText: "", ms: 0, status: null,
     note: "", diag: [], errors, badResponses, cellState: "",
   };
   const readDiag = () => page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
@@ -265,7 +265,16 @@ async function probeOnce(browser, storageState, notebookURL) {
       if (diag.some((d) => d.kind === "kernel_phase" && d.source === "kernel_idle")) { sawIdle = true; break; }
       await page.waitForTimeout(500);
     }
-    if (!sawIdle) { result.note = "kernel never reported idle"; result.diag = await readDiag(); return result; }
+    if (!sawIdle) {
+      // Kernel never reached idle within the window — a BOOT-stall, a distinct
+      // phenomenon from a post-idle exec hang (matches production's boot→idle
+      // funnel drop). Classified separately so the deadlock bucket means only
+      // "reached idle, then the execute wedged."
+      result.note = "kernel never reported idle";
+      result.bootStall = true;
+      result.diag = await readDiag();
+      return result;
+    }
 
     if (EXEC_DELAY_MS > 0) await page.waitForTimeout(EXEC_DELAY_MS);
 
@@ -381,6 +390,7 @@ async function main() {
   let deadlocks = 0;
   let lostDispatches = 0;
   let dialogSteals = 0;
+  let bootStalls = 0;
   const latencies = [];
   for (let i = 0; i < ITER; i++) {
     // Fresh browser per iteration. A single WebKit process accumulates WASM /
@@ -395,17 +405,20 @@ async function main() {
     if (r.hung) {
       hangs++;
       if (r.wasmCrash) wasmCrashes++;
+      else if (r.bootStall) bootStalls++;
       else if (r.dialogStole) dialogSteals++;
       else if (r.lostDispatch) lostDispatches++;
       else deadlocks++;
       const exec = (r.diag || []).find((d) => d.source === "exec_hang");
       const tag = r.wasmCrash
         ? "WEBKIT-WASM-CRASH (upstream #286266)"
-        : r.dialogStole
-          ? "DIALOG-STEAL (modal dialog swallowed the keypress; cell ran after dismiss)"
-          : r.lostDispatch
-            ? "LOST-DISPATCH (second press ran — kernel healthy, first keypress lost)"
-            : "HANG";
+        : r.bootStall
+          ? "BOOT-STALL (kernel never reached idle — a boot failure, not a post-idle hang)"
+          : r.dialogStole
+            ? "DIALOG-STEAL (modal dialog swallowed the keypress; cell ran after dismiss)"
+            : r.lostDispatch
+              ? "LOST-DISPATCH (second press ran — kernel healthy, first keypress lost)"
+              : "HANG";
       console.log(
         `  iter ${i + 1}/${ITER}: ${tag}${r.note ? " (" + r.note + ")" : ""} — ` +
           `indicator=${r.status} waited=${r.ms}ms exec_hang=${exec ? exec.message : "none"}`
@@ -439,9 +452,16 @@ async function main() {
   const avg = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
   console.log(
     `EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ` +
-      `(deadlock=${deadlocks}, dialogSteal=${dialogSteals}, lostDispatch=${lostDispatches}, ` +
-      `webkitWasmCrash=${wasmCrashes}) ok=${ITER - hangs} avgRunMs=${avg}`
+      `(deadlock=${deadlocks}, bootStall=${bootStalls}, dialogSteal=${dialogSteals}, ` +
+      `lostDispatch=${lostDispatches}, webkitWasmCrash=${wasmCrashes}) ok=${ITER - hangs} avgRunMs=${avg}`
   );
+  if (bootStalls > 0) {
+    console.log(
+      `NOTE: ${bootStalls}/${ITER} run(s) never reached kernel_idle (boot-stall) — a boot-funnel ` +
+        `failure distinct from the post-idle exec hang this probe hunts, matching production's ` +
+        `boot→idle drop. Reported separately so the deadlock count means only post-idle wedges.`
+    );
+  }
   if (dialogSteals > 0) {
     console.log(
       `NOTE: ${dialogSteals}/${ITER} run(s) had a modal dialog swallow the first Shift+Enter ` +

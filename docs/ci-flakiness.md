@@ -238,6 +238,15 @@ chromium failure is treated as real, first time.
      classified as `dialogSteal` (reported, non-failing). **Next step:**
      read the captured `dialog:` text from the next probe run to identify
      which dialog, then fix the folder-setup path that raises it.
+   - **Probe classes are now fully separated (post-boot-stall-split).**
+     The probe distinguishes five outcomes so each maps to one
+     phenomenon: `deadlock` (reached idle, execute wedged — the only
+     leg-failing class), `bootStall` (never reached idle), `dialogSteal`
+     (modal dialog ate the keypress), `lostDispatch` (keypress lost, no
+     dialog), and `webkitWasmCrash` (upstream #286266). Boot-stalls and
+     dialog-steals used to be miscounted as deadlocks; a 30-iteration
+     chromium run's lone failure was a boot-stall (`iter 5/30 ... kernel
+     never reported idle, waited=0ms`), now labelled as such.
    - **Grading-hang probe: chromium also hangs (`1/12`, 2026-07-02).**
      Not webkit-only. The grading path (a SECOND Pyodide in
      grading-worker.js) intermittently never completes on chromium too;
