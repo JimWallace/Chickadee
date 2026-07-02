@@ -117,6 +117,21 @@ If two pages need the same rule, it belongs in `Public/styles.css`, not
 copied into both `<style>` blocks — the duplicate-selector guard fails CI on
 copies.
 
+## Page-local scripts
+
+Page behaviour belongs in a **`Public/*.js` file**, loaded with
+`<script src>` — there it is ESLint-checked and unit-testable
+(`Tests/BrowserRunnerJSTests`).  Inline `<script>` blocks in templates are
+invisible to every tool (ESLint can't parse Leaf-interpolated JS) and are
+why the CSP still allows inline script, so their total size is a
+**shrink-only ratchet** (`INLINE_SCRIPT_BASELINE` in
+`scripts/check-styles.sh`): new inline lines fail CI.
+
+The extraction pattern: the template carries page data — `data-*`
+attributes or a `<script type="application/json">` island — and the
+external file reads it.  When you shrink or extract a block, lower the
+baseline in the same PR.
+
 ## Page-local styles
 
 A page `<style>` block is for styling that genuinely exists on one page only.
