@@ -6,6 +6,165 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.586] - 2026-07-02
+
+### Changed
+
+- **`BrightSpaceGradeSyncService.swift` split along its seams (#1116).** The
+  1050-line file is now grade selection (pure, separately testable), grade
+  clears, and the sweep — with the sweep's 5–7-parameter free-function
+  threading replaced by a `GradeSyncSweep` struct holding the invariant
+  dependencies. The hand-rolled 60s monitor is replaced by the shared
+  `PeriodicSweepMonitor` (matching its two sibling sweeps), and the two
+  batch loaders no longer duplicate the chunked-IN loading. No behavior
+  change.
+
+### Changed
+
+- **Assignment display-order rule and section-grouping fold deduplicated
+  (#1118).** The dashboard sort comparator existed ×3 (student dashboard,
+  per-student submissions page, grades CSV) and the section-grouping loop ×3
+  — both now live once in `AssignmentListDisplayHelpers.swift`, alongside a
+  shared per-assignment submission-history row builder used by both
+  drilldown pages. The runner poll and heartbeat handlers share one
+  `recordRunnerCheckIn` path, the preferred-results loader delegates to the
+  all-results loader (one chunked-IN implementation), and `parseDueDate`
+  accepts the seconds-bearing `datetime-local` variant. No behavior change.
+
+### Removed
+
+- **The orphaned `/testsetups/new` raw-zip upload pair is gone (#1119).**
+  Nothing had linked to it since the draft-based new-assignment flow shipped
+  (reachable only by direct URL), and it had drifted behind its API twin's
+  hardening — no zip-bomb guard, no dependency-graph validation, no
+  grading-mode checks. Programmatic uploads go through the hardened
+  `POST /api/v1/testsetups`. While here, the pure notebook-JSON helpers
+  (`filterNotebook` / `mergeNotebook` / `normalizeNotebookForJupyterLite` /
+  `notebookData(for:)` / zip probes) moved out of `TestSetupRoutes.swift`
+  into `Helpers/NotebookContentHelpers.swift`.
+
+### Changed
+
+- **`WebRoutes.index` decomposed (#1120).** The 445-line student dashboard
+  handler's two heavy phases — the per-student grade-data load and the
+  per-setup row build — moved to `WebRoutes+IndexRows.swift` as
+  `loadStudentDashboardGradeData` and `buildTestSetupRow` (with typed
+  `DashboardGradeData` / `IndexRowContext` carriers), leaving the handler as
+  state dispatch plus the load/sort/group pipeline. The SwiftLint
+  function-length suppression on `index` is gone. No behavior change.
+
+### Changed
+
+- **MCP boilerplate deduplicated (#1121).** The surface-agnostic halves of MCP
+  dispatch — tools/list entry encoding, spec pagination, the tools/call result
+  envelopes, and initialize version negotiation — now live once in
+  `MCPDispatchShared.swift`, shared by the content and admin dispatchers (a
+  protocol-version bump or error-envelope change is a one-place edit). The
+  hand-written JSON-schema literals that repeated across the tool catalog
+  (`assignmentPublicID` ×29, bare-typed output properties ×212, the tier enum
+  ×7, `courseCode` ×5) are now `MCPSchema` constants/builders, and a new
+  `MCPOutputSchemaSyncTests` guards output-schema/`Output`-struct drift
+  (structural check over the whole catalog + representative-instance key sync
+  for the drift-prone write tools). The cross-cutting single-field manifest
+  helpers moved out of `CourseSectionTools`/`SetTimeLimitTool` into
+  `Helpers/ManifestFieldEdits.swift`, expressed as `mutateManifest` closures.
+
+### Changed
+
+- **`MCPOAuthRoutes.swift` split along its endpoint seams (#1122).** The
+  ~950-line OAuth 2.1 authorization-server file is now the route table plus
+  one file per concern: the authorize/consent flow, dynamic client
+  registration, the token endpoint (code exchange + refresh rotation), the
+  discovery/metadata surface, and the wire DTOs. No behavior change; the
+  endpoint set, error bodies, and token semantics are byte-identical.
+
+### Changed
+
+- **`applyPatternFamilies` decomposed (#1123).** Generated scripts are now
+  rendered exactly once per apply (`renderFamilyArtifacts`) and both the zip
+  write and the manifest rebuild consume the same artifacts — previously each
+  family was rendered twice, so a renderer that ever became non-deterministic
+  would silently desync zip bytes from manifest entries. The duplicate
+  `familyID → sectionID` map is built once; the legacy ordering
+  reconstruction, the section-contiguity validator (now unit-tested), the
+  `family:<id>` reference validation, and the raw-script variable re-inline
+  are free functions; and the drifted phase markers are renumbered. No
+  behavior change.
+
+### Changed
+
+- **Worker target hygiene (#1124).** The `chickadee-runner` target no longer
+  links Vapor (it never imported it — the dependency predated `RunnerCore`);
+  per-student `_ck_inputs.py` and personalized-file materialization moved
+  into `prepareJobWorkspace` so every workspace-mutation step lives in one
+  place; and the `TestProperties` dual-encode back-compat comment now names
+  its exit criterion (remove in the v0.7.0 cleanup). New
+  `RunnerSanitizedProjectionTests` pin what `runnerSanitized()` strips.
+
+### Fixed
+
+- **Docs drift corrected (#1125).** CLAUDE.md now describes the post-#417
+  two-level role model (deployment `user`/`admin` + per-course
+  `student`/`ta`/`instructor`), the real counts (~276 Swift test files, 40 MCP
+  tools, 8 pattern kinds), and gains a themed digest for v0.4.351–v0.4.583
+  (the #417 series, the LEARN sync arc, datasets, zero-downtime deploys).
+  `docs/multi-course-roles.md` is updated to shipped reality (TA rung, global
+  roles physically removed) and finally defines the "Slice A–G2" vocabulary
+  ~20 code comments cite. `docs/mcp-authoring-roadmap.md` gains the missing
+  `set_time_limit` row plus a sync test that fails the build when a registered
+  tool has no row. `docs/audit-2026-06.md` carries a "status as of v0.4.582 —
+  read as history" note.
+
+### Changed
+
+- **Frontend JS consolidation finished (#1126).** `chickadee-ui.js` now owns
+  the shared `setStatus`, `extractErrorMessage` (unifying the two divergent
+  copies — one parsed JSON, one scraped the error page — that flowed through
+  the same renderer ctx slot), and a `fetchJSON` wrapper that replaces the
+  repeated `if (!r.ok) return r.text()…` boilerplate (×5 in suite-table.js
+  alone). The two inputs editors' shared mechanics (value classification,
+  literal parsing, row validation, payload build, debounced auto-save) moved
+  to a new `inputs-editor-core.js`; the editors keep only their class names
+  and endpoints. Dead `suite-list.js` is deleted (only its upload
+  classification survived — folded into `suite-table.js`), and the pure
+  helpers now have `.mjs` unit tests (`suite-table.test.mjs`,
+  `inputs-editor-core.test.mjs`).
+
+### Changed
+
+- **Roles naming cleanup (#1127).** The `/instructor` area gate is renamed
+  `ActiveCourseStaffMiddleware` (it has admitted TAs since the #417 Slice-E
+  rung — it is a staff gate), and the nav context properties follow:
+  `isStaffInActiveCourse`, `staffCourses`, `isStaffAnywhere`, `showStaffTabs`,
+  `primaryStaffCourse`. The one-line `requireCourseInstructor` alias was
+  inlined into its last caller and deleted. `instructorBulkEnrollCSV`'s manual
+  archived-course guard is gone — `requireCourseWriteAccess` is the single
+  statement of that rule. Also: the support-file extraction warning goes
+  through the logging system instead of `print`, and `resolveCourseAndStudent`
+  no longer filters on a `student.id ?? UUID()` sentinel.
+
+### Changed
+
+- **`submissionPage` fetches the test setup once (#1128).** The student
+  result page's helpers — manifest display data, class-goal bonus,
+  individual-badge evaluation, built-in badges, class-goal views — each
+  re-fetched the same `APITestSetup` row and re-decoded its manifest
+  (~4–5 fetches per render of the hottest student-facing page). The handler
+  now loads `(setup, props)` once and passes them down; `classGoalBonusPoints`,
+  `suiteTotalPoints`, `earnedIndividualBadges`, and `loadClassGoalViews` take
+  the decoded manifest, and the BrightSpace grade selection shares one fetch
+  between its denominator and bonus reads. No behavior change.
+
+### Changed
+
+- **Small hygiene (#1129).** The one `Issue.record`-to-skip anti-pattern in
+  the test corpus is now a silent guard (missing zip/unzip is
+  platform-expected, not a failure), and `CHICKADEE_DEPLOY_STATE_DIR` — the
+  last env var read outside `AppConfig` after the v0.4.169 centralization —
+  now flows through `appConfig.diagnostics.deployStateDirectory` and appears
+  in the redacted startup summary.
+
+
 ## [0.4.585] - 2026-07-01
 
 ### Security
