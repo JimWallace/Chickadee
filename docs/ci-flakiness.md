@@ -185,7 +185,34 @@ chromium failure is treated as real, first time.
      maps checked in). Probably a benign JupyterLab race in the SW-free
      config, but it is exactly the kind of degraded widget state that
      could eat a keypress — worth tracing via the source map before
-     trusting it.
+     trusting it. Confirmed present on every CI boot too (both engines),
+     alongside a `updateRenderOption` null error.
+   - **First instrumented 45-iteration webkit dispatch:** the constant
+     4xx noise is identified — `POST /api/v1/client-diagnostics` 403 plus
+     403s on JupyterLite contents-API *folder-creation* attempts
+     (`Untitled Folder/all.json`, `users/all.json`,
+     `Untitled Folder1/all.json`): the editor's file browser appears to
+     try to materialize the missing `users/<uid>/<setup>` path over HTTP
+     and is refused on every boot. And webkit's exec latency is
+     **bimodal**: 13/45 iterations in a tight 16.2–18.2 s band (rest
+     ~507 ms; chromium 0/30 slow) — a timeout constant being waited out,
+     plausibly the same mechanism whose far tail is the ambient hang.
+     The one red iteration was a **boot-stall** (kernel never idle in
+     90 s), matching production's ~7 % boot→no-idle funnel drop — a
+     third distinct phenomenon, not a post-idle hang.
+
+4. **Residual WorkerDaemonTests wedge (2026-07-02 evening).** With the
+   fork bug fixed, worker-tests wedged once more via a different path:
+   `workerDaemonContinuesToNextJobAfterProcessingFailure` failed its
+   10 s wait, then the bare `try await task.value` after `task.cancel()`
+   suspended forever (`Task.value` is not cancellation-responsive) — the
+   `.timeLimit` trait *attributed* the failure but cannot interrupt a
+   non-cancellable wait, so the job still rode to the 20-minute kill.
+   All 12 cancel-then-await sites now go through a bounded
+   `awaitCancelledDaemon` helper (30 s deadline). The underlying
+   question — *what* in `daemon.run()` ignored cancellation under load —
+   is the remaining daemon-side item; suspects are the artifact-download
+   path and any wait not routed through cancellable primitives.
 2. **Watch the tolerated-webkit warning rate.** The `::warning`
    annotations from the probe and the smoke retries are the flake-rate
    telemetry now; if they show up more than occasionally, the ambient rate

@@ -1,3 +1,16 @@
+### Fixed
+
+- **Bounded daemon shutdown in WorkerDaemonTests (the residual worker-tests
+  wedge).** Twelve tests cancelled the daemon task then awaited
+  `task.value`/`task.result` unbounded; `Task.value` is not
+  cancellation-responsive, so a daemon wedged in a non-cancellable wait rode
+  the job to the CI 20-minute kill even though the `.timeLimit` trait had
+  already attributed the failure (observed 2026-07-02,
+  `workerDaemonContinuesToNextJobAfterProcessingFailure`). A shared
+  `awaitCancelledDaemon` helper now polls completion with a 30 s deadline
+  and fails the single test instead, still surfacing non-cancellation
+  shutdown errors.
+
 ### Changed
 
 - **Exec-hang probe forensics (`editor-exec-check.mjs`).** Hang iterations
