@@ -504,8 +504,16 @@ the `format-lint` CI job) — keep them green:
   and adapts to dark mode. (`scripts/check-css-vars.sh` enforces both.)
 - **No native `alert()` in templates** — surface errors with the inline
   `.form-error` banner pattern. The guard ratchets a baseline down only.
+- **Design tokens are mandatory** (`scripts/check-design-tokens.sh`): raw
+  `#hex` may appear only as a `--token:` declaration in `styles.css` (palette
+  + dark-mode mirror); every `font-size` uses the `--text-*` type scale
+  (em/`inherit` allowed for relative sizing); every `border-radius` uses the
+  `--radius-*` scale (`0`/`50%`/multi-corner allowed). Pick the nearest step —
+  never introduce a new literal. Full principles, the token tables, and the
+  component vocabulary live in [docs/ui-design.md](docs/ui-design.md).
 
-Run `scripts/check-styles.sh` locally before pushing UI changes.
+Run `scripts/check-styles.sh` locally before pushing UI changes (it runs the
+css-vars + design-token guards too — same as the CI `format-lint` job).
 
 ---
 

@@ -65,7 +65,7 @@ Import result — Admin
 .import-result-note {
     margin-top: 1rem;
     color: var(--text-secondary);
-    font-size: .9rem;
+    font-size: var(--text-base);
 }
 .import-result-actions {
     display: flex;

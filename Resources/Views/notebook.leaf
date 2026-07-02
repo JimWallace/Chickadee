@@ -11,7 +11,7 @@ Notebook
 .main { max-width: 100%; padding: 0 1rem; margin: .5rem auto 0; }
 
 /* Closed-assignment "view only" notice + fallback/small-screen text. */
-.nb-closed-notice { color: var(--gray-600); font-size: .9rem; }
+.nb-closed-notice { color: var(--gray-600); font-size: var(--text-base); }
 .nb-notice-title { margin: .2rem 0 .5rem; }
 .nb-notice-text { margin: 0; color: var(--gray-700); }
 .nb-fallback-title { margin: .2rem 0; }
@@ -29,16 +29,16 @@ Notebook
     padding: .5rem .75rem;
     background: var(--warning-bg);
     border: 1px solid var(--warning-border);
-    border-radius: .4rem;
+    border-radius: var(--radius-md);
     color: var(--gray-700);
-    font-size: .9rem;
+    font-size: var(--text-base);
 }
 .nb-device-warning-text { flex: 1; }
 .nb-device-warning-dismiss {
     border: 0;
     background: transparent;
     color: var(--gray-700);
-    font-size: 1.2rem;
+    font-size: var(--text-xl);
     line-height: 1;
     cursor: pointer;
     padding: 0 .25rem;
@@ -62,7 +62,7 @@ Notebook
         max-width: 32rem;
         padding: 1.25rem 1.5rem;
         border: 1px solid var(--gray-200);
-        border-radius: .5rem;
+        border-radius: var(--radius-lg);
         background: var(--surface);
     }
 }

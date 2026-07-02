@@ -78,7 +78,7 @@ Storage
 }
 .storage-meta {
     color: var(--gray-600);
-    font-size: .85rem;
+    font-size: var(--text-base);
 }
 .storage-muted {
     color: var(--muted);

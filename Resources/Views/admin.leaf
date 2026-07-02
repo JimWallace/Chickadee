@@ -223,7 +223,7 @@ Admin
 #courses-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
-    font-size: .75rem;
+    font-size: var(--text-xs);
 }
 #workers-table th[data-sort-key].sort-asc::after,
 #courses-table th[data-sort-key].sort-asc::after {

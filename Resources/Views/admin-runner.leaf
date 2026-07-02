@@ -141,7 +141,7 @@ Runner #(runner.workerID)
 }
 .admin-stat {
     border: 1px solid var(--gray-200);
-    border-radius: .65rem;
+    border-radius: var(--radius-lg);
     padding: .8rem .9rem;
     display: flex;
     justify-content: space-between;
@@ -150,7 +150,7 @@ Runner #(runner.workerID)
 }
 .admin-stat strong {
     color: var(--muted);
-    font-size: .9rem;
+    font-size: var(--text-base);
 }
 .admin-stat span {
     font-weight: 700;
@@ -165,11 +165,11 @@ Runner #(runner.workerID)
     display: inline-flex;
     align-items: center;
     padding: .2rem .55rem;
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     border: 1px solid var(--gray-200);
     background: var(--gray-50);
     color: var(--gray-700);
-    font-size: .8rem;
+    font-size: var(--text-sm);
     line-height: 1.2;
 }
 </style>

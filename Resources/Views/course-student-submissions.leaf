@@ -308,7 +308,7 @@
     color: var(--gray-700);
 }
 .section-group-heading {
-    font-size: 1.05rem;
+    font-size: var(--text-lg);
     font-weight: 600;
     margin-top: 1.5rem;
     margin-bottom: .4rem;
@@ -317,7 +317,7 @@
     margin-bottom: .5rem;
 }
 .extension-note {
-    font-size: .75rem;
+    font-size: var(--text-xs);
     color: var(--gray-600);
 }
 .student-row-actions {
@@ -344,11 +344,11 @@
     padding: .5rem;
     background: var(--gray-50);
     border: 1px solid var(--gray-300);
-    border-radius: .25rem;
+    border-radius: var(--radius-sm);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
 }
 .action-panel-label {
-    font-size: .78rem;
+    font-size: var(--text-sm);
     color: var(--gray-700);
 }
 .action-panel-input {

@@ -126,7 +126,7 @@
 #assignment-submissions-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
-    font-size: .75rem;
+    font-size: var(--text-xs);
 }
 #assignment-submissions-table th[data-sort-key].sort-asc::after {
     content: "  ↑";
