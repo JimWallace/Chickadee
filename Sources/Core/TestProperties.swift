@@ -435,6 +435,11 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(testItems, forKey: .testItems)
         // Mirror the legacy arrays (derived from `testItems`, so they can
         // never drift) for cross-version readers that predate `testItems`.
+        // DEPRECATED write-side mirroring — remove in the v0.7.0 cleanup,
+        // once no supported reader (runner binary or course-bundle importer)
+        // predates `testItems`.  The read-side migration in `init(from:)`
+        // stays forever: old manifests on disk / in exported bundles carry
+        // only the legacy arrays and must keep decoding.
         try c.encode(patternFamilies, forKey: .patternFamilies)
         try c.encode(notebookChecks, forKey: .notebookChecks)
         try c.encode(sections, forKey: .sections)

@@ -69,7 +69,7 @@ struct MCPDispatcher: Sendable {
             guard case .object(let fields) = full, case .array(let entries)? = fields["resources"] else {
                 return .failure(id: id, error: .internalError("Failed to list resources."))
             }
-            return paginatedListResponse(id: id, key: "resources", entries: entries, params: params)
+            return mcpPaginatedListResponse(id: id, key: "resources", entries: entries, params: params)
         } catch {
             return .failure(id: id, error: .internalError("Failed to list resources."))
         }
@@ -128,51 +128,8 @@ struct MCPDispatcher: Sendable {
             context.map { ctx in
                 tools.all.filter { ctx.grantedScopes.isSuperset(of: $0.requiredScopes) }
             } ?? tools.all
-        let entries = visible.map { tool -> JSONValue in
-            var fields: [String: JSONValue] = [
-                "name": .string(tool.name),
-                "title": .string(tool.title),
-                "description": .string(tool.description),
-                "inputSchema": tool.inputSchema,
-            ]
-            if let outputSchema = tool.outputSchema {
-                fields["outputSchema"] = outputSchema
-            }
-            if let annotations = tool.annotations, let encoded = try? JSONValue(encoding: annotations) {
-                fields["annotations"] = encoded
-            }
-            return .object(fields)
-        }
-        return paginatedListResponse(id: id, key: "tools", entries: entries, params: params)
-    }
-
-    // MARK: - List pagination
-
-    private struct ListParams: Decodable {
-        let cursor: String?
-    }
-
-    /// Applies spec pagination to a full list result: slices `entries` by the
-    /// caller's cursor and attaches `nextCursor` while more pages remain.  An
-    /// unparseable cursor is invalidParams, per the spec.
-    /// https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/pagination
-    private func paginatedListResponse(
-        id: JSONRPCID, key: String, entries: [JSONValue], params: JSONValue?
-    ) -> JSONRPCResponse {
-        let cursor: String?
-        do {
-            cursor = try (params ?? .object([:])).decoded(as: ListParams.self).cursor
-        } catch {
-            return .failure(id: id, error: .invalidParams("\"cursor\" must be a string."))
-        }
-        guard let result = MCPListPagination.page(entries, cursor: cursor) else {
-            return .failure(id: id, error: .invalidParams("Invalid cursor."))
-        }
-        var fields: [String: JSONValue] = [key: .array(result.page)]
-        if let next = result.nextCursor {
-            fields["nextCursor"] = .string(next)
-        }
-        return .success(id: id, result: .object(fields))
+        return mcpPaginatedListResponse(
+            id: id, key: "tools", entries: mcpToolsListEntries(visible), params: params)
     }
 
     // MARK: - tools/call
@@ -228,12 +185,12 @@ struct MCPDispatcher: Sendable {
         do {
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
             outcome = .success
-            response = .success(id: id, result: successToolResult(output))
+            response = .success(id: id, result: mcpToolSuccessResult(output))
         } catch let error as MCPToolError {
             // Tool-originated failures are reported inside the result with
             // isError:true so the model can see and correct them.
             outcome = MCPToolOutcome(error)
-            response = .success(id: id, result: errorToolResult(error))
+            response = .success(id: id, result: mcpToolErrorResult(error))
         } catch {
             outcome = .failed
             response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
@@ -288,74 +245,18 @@ struct MCPDispatcher: Sendable {
         _ = await recordToolCall(name: name, context: context, target: target, outcome: outcome)
     }
 
-    private func successToolResult(_ structured: JSONValue) -> JSONValue {
-        mcpToolSuccessResult(structured)
-    }
-
-    private func errorToolResult(_ error: MCPToolError) -> JSONValue {
-        let message: String
-        switch error {
-        case .unknownTool(let name):
-            message = "Unknown tool: \(name)"
-        case .invalidArguments(let tool, let detail):
-            message = "Invalid arguments for \(tool): \(detail)"
-        case .notAuthorized(let tool, let detail):
-            message = "Not authorized for \(tool): \(detail)"
-        case .executionFailed(let tool, let detail):
-            message = "\(tool) failed: \(detail)"
-        }
-        return .object([
-            "content": .array([.object(["type": .string("text"), "text": .string(message)])]),
-            "isError": .bool(true),
-        ])
-    }
-
     private func initializeResponse(
         id: JSONRPCID, params: JSONValue?, context: ToolContext?
     ) -> JSONRPCResponse {
-        let client = try? (params ?? .object([:])).decoded(as: MCPInitializeParams.self)
-        // Version negotiation (lifecycle spec): echo the requested revision
-        // when this server supports it; otherwise answer with the latest we
-        // speak and let the client decide whether to continue.
-        let negotiated =
-            client?.protocolVersion.flatMap { requested in
-                MCPProtocol.supportedVersions.contains(requested) ? requested : nil
-            } ?? MCPProtocol.version
-        // Surface who connected in the logs — operational visibility into
-        // which agents/libraries speak to this server, nothing more.
-        if let context {
-            let name = client?.clientInfo?.name ?? "unknown"
-            let clientVersion = client?.clientInfo?.version ?? "unknown"
-            let requested = client?.protocolVersion ?? "none"
-            context.logger.info(
-                "MCP initialize: client=\(name)/\(clientVersion) requestedProtocolVersion=\(requested) negotiated=\(negotiated)"
-            )
-        }
-        let result = MCPInitializeResult(
-            protocolVersion: negotiated,
-            capabilities: .v1,
-            serverInfo: serverInfo,
-            instructions: MCPServerInstructions.text
-        )
-        do {
-            return .success(id: id, result: try JSONValue(encoding: result))
-        } catch {
-            return .failure(id: id, error: .internalError("Failed to encode initialize result."))
-        }
+        mcpInitializeResponse(
+            id: id, params: params,
+            surface: MCPInitializeSurface(
+                capabilities: .v1,
+                serverInfo: serverInfo,
+                instructions: MCPServerInstructions.text,
+                logLabel: "MCP"),
+            logger: context?.logger)
     }
-}
-
-/// Wraps a tool's structured output in the MCP `tools/call` result envelope
-/// (`content` text block + `structuredContent` + `isError:false`). Shared by the
-/// dispatcher's normal path and the transport's SSE progress-streaming path so
-/// the two produce identical result shapes.
-func mcpToolSuccessResult(_ structured: JSONValue) -> JSONValue {
-    let text = (try? structured.encodedString()) ?? ""
-    return .object([
-        "content": .array([.object(["type": .string("text"), "text": .string(text)])]),
-        "structuredContent": structured,
-        "isError": .bool(false),
-    ])
 }
 
 /// Classification of a tool call's outcome, recorded in the audit metadata so a

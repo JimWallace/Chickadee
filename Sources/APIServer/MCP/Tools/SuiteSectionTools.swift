@@ -48,10 +48,7 @@ struct CreateSuiteSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "name": .object([
                 "type": .string("string"),
                 "description": .string("Display name for the new section (non-empty)."),
@@ -63,9 +60,9 @@ struct CreateSuiteSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "name": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "name": MCPSchema.string,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("sectionID"), .string("name"),
@@ -120,10 +117,7 @@ struct RenameSuiteSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "sectionID": .object([
                 "type": .string("string"),
                 "description": .string("The section's id (from get_suite)."),
@@ -141,9 +135,9 @@ struct RenameSuiteSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "name": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "name": MCPSchema.string,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("sectionID"), .string("name"),
@@ -208,10 +202,7 @@ struct DeleteSuiteSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "sectionID": .object([
                 "type": .string("string"),
                 "description": .string("The section's id (from get_suite)."),
@@ -223,10 +214,10 @@ struct DeleteSuiteSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "removed": .object(["type": .string("boolean")]),
-            "ungroupedItemCount": .object(["type": .string("integer")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "removed": MCPSchema.boolean,
+            "ungroupedItemCount": MCPSchema.integer,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("sectionID"), .string("removed"),

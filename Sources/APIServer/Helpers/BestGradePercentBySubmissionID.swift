@@ -59,8 +59,12 @@ func allResultsBySubmissionID(
         let end =
             ids.index(index, offsetBy: chunkSize, limitedBy: ids.endIndex)
             ?? ids.endIndex
+        // Newest-first within each submission: the preferred-result fold
+        // (PreferredResultsBySubmissionID) depends on this order; the
+        // highest-grade fold is order-independent.
         let page = try await APIResult.query(on: db)
             .filter(\.$submissionID ~~ Array(ids[index..<end]))
+            .sort(\.$receivedAt, .descending)
             .all()
         for result in page {
             grouped[result.submissionID, default: []].append(result)

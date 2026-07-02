@@ -119,6 +119,9 @@ struct AnyContentTool: Sendable {
     let invoke: @Sendable (_ arguments: JSONValue, _ context: ToolContext) async throws -> JSONValue
 }
 
+// The shared tools/list entry encoding reads these fields (#1121).
+extension AnyContentTool: MCPListableTool {}
+
 extension ContentTool {
     /// Erases this tool for storage in the registry.
     func erased() -> AnyContentTool {

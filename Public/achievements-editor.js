@@ -82,10 +82,7 @@
         var lingeringClose = null; // finishNow() of an in-flight animated collapse
 
         function setStatus(text, kind) {
-            if (!status) return;
-            status.textContent = text || '';
-            status.style.color = kind === 'error'
-                ? 'var(--red)' : (kind === 'ok' ? 'var(--green)' : 'var(--gray-500)');
+            ChickadeeUI.setStatus(status, text, kind);
         }
 
         function render() {

@@ -8,7 +8,7 @@
 // public ID — the same cross-course hole #417 Slice G closed on the API side.
 //
 // The acting user here ("outsider") is staff (`.ta`) in their OWN course — so
-// they pass the `/instructor` group's ActiveCourseInstructorMiddleware gate —
+// they pass the `/instructor` group's ActiveCourseStaffMiddleware gate —
 // but hold no enrollment in the course that owns the target assignment/draft.
 // Every editor read must 403. An enrolled TA of the owning course ("insider")
 // keeps access.

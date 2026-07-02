@@ -45,23 +45,10 @@ extension InstructorDashboardRoutes {
         )
 
         let fmt = waterlooDateTimeFormatter()
-
-        let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
-            let subID = submission.id ?? ""
-            let gradeText: String
-            if let pct = bestPercentBySubmissionID[subID] {
-                gradeText = "\(pct)%"
-            } else {
-                gradeText = "—"
-            }
-            return AssignmentSubmissionHistoryRow(
-                submissionID: subID,
-                attemptNumber: submission.attemptNumber ?? 1,
-                status: submission.status,
-                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                gradeText: gradeText
-            )
-        }
+        let rows = assignmentSubmissionHistoryRows(
+            submissions: submissions,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
+            fmt: fmt)
 
         return try await req.view.render(
             "assignment-student-history",

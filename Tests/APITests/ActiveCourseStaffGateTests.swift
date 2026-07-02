@@ -1,7 +1,7 @@
-// Tests/APITests/ActiveCourseInstructorGateTests.swift
+// Tests/APITests/ActiveCourseStaffGateTests.swift
 //
 // Phase 4b (docs/multi-course-roles.md): the /instructor group is gated on
-// *per-course* instructor authority (ActiveCourseInstructorMiddleware) — it
+// *per-course* instructor authority (ActiveCourseStaffMiddleware) — it
 // admits admins and a user who is an instructor in their active course, and
 // turns away a student in the active course. This is the access-control flip
 // that makes per-course instructors able to author while keeping a per-course
@@ -14,7 +14,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite struct ActiveCourseInstructorGateTests {
+@Suite struct ActiveCourseStaffGateTests {
 
     /// Drives GET /instructor as `username` (global role `globalRole`) enrolled
     /// in the single course with `courseRole`, returning the response status.

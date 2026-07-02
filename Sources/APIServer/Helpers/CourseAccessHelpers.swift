@@ -100,14 +100,9 @@ func enrolledCoursesWithRoles(
         .map { (course: $0.course, role: $0.role) }
 }
 
-/// Instructor-authorization for a specific course: admits an admin or a
-/// per-course instructor (an `.instructor` enrollment). Used by the param-taking
-/// `/instructor` endpoints so a course's instructor can't be driven against
-/// another course. Instructor authority is purely per-course as of
-/// multi-course-roles Phase 5 (the global instructor role no longer grants it).
-func requireCourseInstructor(caller: APIUser, courseID: UUID, db: Database) async throws {
-    try await requireCourseRole(caller: caller, courseID: courseID, atLeast: .instructor, db: db)
-}
+// (`requireCourseInstructor`, the pre-#417 one-line alias for
+// `requireCourseRole(atLeast: .instructor)`, was inlined into its last
+// caller and deleted — #1127.)
 
 /// True when `user` may act with *staff* visibility for `courseID`: an admin,
 /// or a per-course enrollment role of at least `.ta`. This is the per-course
@@ -209,7 +204,7 @@ func evaluateCourseWrite(
 /// read helpers carry no archived block). Admins remain write-exempt: they
 /// administer the whole deployment, and unarchiving is an admin-only action.
 ///
-/// Mutating per-course handlers call this in place of `requireCourseInstructor`,
+/// Mutating per-course handlers call this in place of a bare `requireCourseRole(atLeast: .instructor)`,
 /// scoping the check to the *resource's own* course so an instructor of one
 /// course can't drive a write against another by URL — the per-course
 /// authorization the `/instructor` group middleware (which only sees the

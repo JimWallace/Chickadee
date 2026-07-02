@@ -92,8 +92,19 @@ namespaces). Enable with `--sandbox` on the runner.
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
-**Three user roles.** `student`, `instructor`, `admin`. Role is stored on
-`APIUser` and enforced via `RoleMiddleware`. Admin implies instructor.
+**Roles are two-level: a deployment role plus a per-course role (#417).**
+The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
+(plus the non-human `mcp` service-account role) — the legacy global
+`student`/`instructor` roles were retired by the #417 multi-course-roles
+series (`CollapseUserRoles` migration). Teaching authority is **per-course**:
+each enrollment row carries a `CourseRole` (`student` < `ta` < `instructor`),
+so one account can be an instructor in one course and a student in another.
+TAs author content and grade but cannot manage enrollment/deadlines/
+archival/staff. Enforcement chokepoints: `requireCourseRole(atLeast:)` /
+`evaluateCourseWrite` in `CourseAccessHelpers.swift` (web + MCP share the
+policy); the `/instructor` area gate is `ActiveCourseStaffMiddleware`
+(staff in the *active* course), with per-resource gates on every
+parameterized route. See `docs/multi-course-roles.md`.
 
 **Auth is pluggable.** `AUTH_MODE` env var selects `.local` (username/password),
 `.sso` (OIDC/OAuth), or `.dual` (both active simultaneously). `APIUser` carries
@@ -348,13 +359,23 @@ All JSON endpoints use `application/json`. The test setup upload is multipart.
 
 ## Auth & Roles
 
-Three roles in ascending order of privilege: `student` < `instructor` < `admin`.
+Deployment roles: `user` < `admin` (plus the non-login `mcp` service role).
+Per-course roles on the enrollment row: `student` < `ta` < `instructor`
+(#417 — there is no global student/instructor anymore).
 
 - **Unauthenticated:** login, register, runner endpoints (HMAC-signed separately)
-- **Authenticated (any role):** web UI, submission queries, result views,
-  JupyterLite content routes, notebook download
-- **Instructor+:** assignment CRUD, submission intake, test setup management
-- **Admin:** admin panel, worker secret/autostart management, runner dashboard
+- **Authenticated (any user):** web UI, submission queries, result views,
+  JupyterLite content routes, notebook download — visibility scoped to
+  enrolled courses
+- **Course staff (per-course `ta`+):** assignment content editing, grading
+  actions (retest/reset/grade-override), all-tier/result visibility for that
+  course
+- **Per-course `instructor`:** everything a TA can do, plus enrollment/roster/
+  staff management, assignment lifecycle (create/delete/open/close/deadlines),
+  course sections, archival, BrightSpace binding
+- **Admin:** admin panel, course creation, worker secret/autostart management,
+  runner dashboard (admins bypass per-course role checks, but MCP agents
+  acting for them stay enrollment-scoped)
 
 Session auth uses Vapor's `SessionAuthenticator`. Sessions are persisted
 via the Fluent driver (v0.4.46), so they survive restarts and work across
@@ -511,8 +532,9 @@ Run `scripts/check-styles.sh` locally before pushing UI changes.
 
 ## Testing Conventions
 
-- **Framework: Swift Testing only.** All ~107 test files are on Swift
-  Testing as of the migration completion (PRs #597–#608). `scripts/no-new-xctest.sh`
+- **Framework: Swift Testing only.** All ~276 Swift test files (plus a
+  dozen `.mjs` frontend tests) are on Swift Testing as of the migration
+  completion (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
   `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`, and
@@ -958,7 +980,9 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   output-contract case, and `@unchecked Sendable` justification comments.
 
 - **MCP authoring-surface expansion (v0.4.328+).**  The agent tool catalog grew
-  from twelve to thirty-four content tools (`MCPToolCatalog.live`): `get_server_info`
+  from twelve to thirty-four content tools in this window — it stands at
+  **40** today (`MCPToolCatalog.live` in `MCPServerRegistration.swift` is the
+  source of truth): `get_server_info`
   (version/capability probe), `get_solution` / `update_solution` (read + replace
   the reference solution, re-validating), `author_script` (create/replace a
   hand-written test or support file through the same `applySuiteEdit` path the
@@ -990,7 +1014,7 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   (`closeOpenAssignmentForContentEdit`).
 
 - **MCP section / check / grading-mode round (v0.4.353+).**  The catalog reached
-  thirty-four tools: test-suite section management (`create_suite_section` /
+  thirty-four tools at this point (40 today): test-suite section management (`create_suite_section` /
   `rename_suite_section` / `delete_suite_section`, plus `move_suite_item` to place a
   script/family/check into a section); course-section management
   (`list_course_sections`, `create_course_section`, `rename_course_section`,
@@ -1012,6 +1036,40 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   `set_assignment_section`→`set_assignment_course_section`, so the two "section"
   families read unambiguously — a breaking change to the not-yet-public MCP
   surface.)
+
+### v0.4.351 – v0.4.583 highlights (themed digest)
+
+Per-version detail in `CHANGELOG.md`; the arcs a fresh session should know:
+
+- **#417 multi-course roles (Slices A–G2, complete).**  Teaching authority
+  moved from the global role to a per-course `CourseRole` on the enrollment
+  row: `ta` rung added (Slice E), per-course write gates on every mutating
+  route and MCP tool (Slices C/D/D-MCP), self-serve staff invites (F),
+  per-course staff view gates (G), deployment role collapsed to
+  `user`/`admin` and the legacy global roles physically removed (G2 +
+  cleanup).  See the Roles decision above and `docs/multi-course-roles.md`.
+- **BrightSpace / LEARN sync arc.**  Per-instructor Valence identity
+  (connect / designate / bind-org-unit on the LEARN tab), assignment→
+  grade-item mapping with auto-map and a "Do not sync" option, debounced
+  grade push with retry classification + a grade-sync health alert, grade
+  scaling to the item's own max with 2-decimal rounding, grade *clears* when
+  a Chickadee source disappears, LEARN roster-readiness reconciliation
+  (per-student deliverability), and D2L group→section sync.  Runbook:
+  `docs/brightspace-setup.md`; awaiting UW IST prod credentials.
+- **Per-student datasets (#1083, `docs/datasets.md`).**  A `DatasetSpec` marks
+  a bundled support file as per-student; the server materializes a
+  deterministic per-seed slice delivered under the same filename to grading
+  and the editor.
+- **Zero-downtime deploys.**  Blue-green cutover (`scripts/bluegreen-deploy.sh`),
+  the `chickadee-deployer` daemon (auto-deploys green merges, SemVer-gated,
+  snapshot + rollback), deploy oversight on the admin MCP surface, and image
+  garbage collection.  `docs/zero-downtime-deploy.md`.
+- **Notebook editor kernel-boot reliability.**  Boot-funnel telemetry,
+  watchdog threshold tuning against real-user data, the exec-hang root cause
+  fixed (`docs/exec-hang-investigation.md`), service-worker-free JupyterLite
+  configuration hardened.
+- **Ops/scale.**  Runner disk-fill guard, test corpus at ~2,400 tests / ~276
+  files, Swift 6.3, top-nav dropdown rework (#1102).
 
 **Near-term roadmap:**
 
@@ -1038,10 +1096,10 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   exercise page JS, so a JS-driven widget still wants a manual check.)
 - **Feature backlog:** continued personalization / notebook-check
   expansion (e.g. per-student refs in pattern kinds beyond
-  `boundary_equality`); pattern kinds beyond the seven shipped
+  `boundary_equality`); pattern kinds beyond the eight shipped
   (`boundaryEquality` / `approximateEquality` / `variableEquality` /
   `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
-  `stdoutEquality`); multi-provider SSO testing beyond UWaterloo DUO;
+  `stdoutEquality` / `unorderedEquality`); multi-provider SSO testing beyond UWaterloo DUO;
   refresh-token handling; gamification expansion (leaderboards, more
   badges beyond First-Try Perfect).
 

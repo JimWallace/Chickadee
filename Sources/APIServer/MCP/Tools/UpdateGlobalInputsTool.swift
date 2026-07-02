@@ -46,10 +46,7 @@ struct UpdateGlobalInputsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "variables": .object([
                 "type": .string("array"),
                 "description": .string("Replacement literal values; send [] to clear."),
@@ -94,11 +91,11 @@ struct UpdateGlobalInputsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "variables": .object(["type": .string("array")]),
             "expressions": .object(["type": .string("array")]),
             "warnings": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
         ]),
         "required": .array([

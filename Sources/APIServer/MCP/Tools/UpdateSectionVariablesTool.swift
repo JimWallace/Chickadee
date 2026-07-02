@@ -43,10 +43,7 @@ struct UpdateSectionVariablesTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "sectionID": .object([
                 "type": .string("string"),
                 "description": .string("The section's id (from get_suite)."),
@@ -97,8 +94,8 @@ struct UpdateSectionVariablesTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
             "variables": .object(["type": .string("array")]),
             "expressions": .object(["type": .string("array")]),
         ]),

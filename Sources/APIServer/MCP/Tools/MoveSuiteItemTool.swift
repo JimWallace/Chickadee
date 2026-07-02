@@ -63,10 +63,7 @@ struct MoveSuiteItemTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "script": .object([
                 "type": .string("string"),
                 "description": .string("Hand-written script filename to move (one identifier only)."),
@@ -91,12 +88,12 @@ struct MoveSuiteItemTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "kind": .object(["type": .string("string")]),
-            "item": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "kind": MCPSchema.string,
+            "item": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("item"),

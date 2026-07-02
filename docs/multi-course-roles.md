@@ -6,12 +6,37 @@ column + the behaviour-preserving backfill (Phase 1), the read-path wiring that
 carries the per-course role into the nav (Phase 2), the role-aware authorization
 chokepoint `requireCourseRole(atLeast:)` (Phase 3), per-course role seeding on
 new enrollments (Phase 4a), and the access-control flip
-(`ActiveCourseInstructorMiddleware` + the roster role dropdown, Phase 4b).
-**Phase 5 (pragmatic)** removes the transitional global-instructor fallbacks
-(authority is now purely per-course) and retires `SSO_INSTRUCTOR_USERS`; the
-`UserRole.instructor` enum case is kept for decode compatibility. Companion to
-the earlier fix that scoped the home dashboard and the "Instructor" nav tab to
-course enrollment (PR #972) — the first concrete step toward this model.
+(`ActiveCourseStaffMiddleware` + the roster role dropdown, Phase 4b).
+**Phase 5 is complete** — the transitional global-instructor fallbacks are
+removed (authority is purely per-course), `SSO_INSTRUCTOR_USERS` is retired,
+and — beyond what this doc originally deferred — the legacy global
+`student`/`instructor` roles have been **physically removed** (c646dc7:
+`UserRole` is now `user`/`admin`/`mcp`, with `CollapseUserRoles` folding old
+rows into `user`) and the global-instructor option is gone from the admin UI
+(590e2b1). The follow-on **#417 slice series (A–G2)** finished the job — see
+the slice glossary below. Companion to the earlier fix that scoped the home
+dashboard and the "Instructor" nav tab to course enrollment (PR #972) — the
+first concrete step toward this model.
+
+### The #417 slice glossary (cited by ~20 code comments)
+
+The implementation shipped as reviewable "slices" on issue #417; code comments
+cite them by letter:
+
+- **Slice A** — per-course write scoping groundwork: mutating handlers gate on
+  the *resource's own* course, not the caller's active course.
+- **Slice B** — enrollment-management hardening; `ensureNotLastInstructor`
+  (a course can't be orphaned of its last instructor).
+- **Slice C** — archived-course write blocks (web).
+- **Slice D / D-MCP** — the remaining per-course + archived write gaps closed:
+  drafts, setup upload/delete, assignment lifecycle (web), then the same
+  chokepoint on every MCP write resolver.
+- **Slice E** — the `ta` rung on `CourseRole`; content/grading floors at
+  `.ta`, lifecycle/structure floors at `.instructor`.
+- **Slice F** — self-serve staff invites; TAs read-only on the roster.
+- **Slice G / G2** — per-course staff *view* gates (tier visibility, other
+  students' submissions, solution files), then the deployment role collapsed
+  to `user`/`admin` and "student-ness" made purely per-course.
 
 The owner's design decisions are recorded in [§6](#6-decisions) and are
 settled; they shape Phases 4–5 (the behaviour-changing ones). Theme 2
@@ -84,9 +109,10 @@ representable and creatable.
 ### 3.1 Data model
 
 - Add `role` to `course_enrollments` — a new `CourseRole` enum in `Core/`
-  (`Codable`, `Sendable`). Per [§6](#6-decisions) it ships with two rungs,
-  `student` and `instructor`; `ta` is deferred (the type is string-backed, so
-  adding it later needs no schema change). Default `student`. **(Implemented —
+  (`Codable`, `Sendable`). It initially shipped with two rungs, `student` and
+  `instructor`; the deferred `ta` rung has since **shipped** (#417 Slice E,
+  3815bc9) — content/grading actions floor at `.ta`, lifecycle/structure at
+  `.instructor`. Default `student`. **(Implemented —
   `Sources/Core/CourseRole.swift`.)**
 - Reinterpret `APIUser.role`:
   - `admin` stays a **deployment** super-user (manages courses, users,
@@ -122,7 +148,7 @@ representable and creatable.
   `enrolledCoursesWithRoles` resolver (the enrollment row is already loaded —
   no extra query). `enrolledCourses` is now defined in terms of it, so the
   role-free MCP visibility set can't drift from the web one.
-- `CurrentUserContext` exposes `isInstructorInActiveCourse`, and `base.leaf`
+- `CurrentUserContext` exposes `isStaffInActiveCourse`, and `base.leaf`
   keys the Instructor tab off *that* instead of the global `isInstructor`. It
   is `true` when the active course's role is `.instructor` **or** (a
   transitional fallback) the user is a global instructor/admin — so today's
@@ -184,7 +210,7 @@ representable and creatable.
    migration, the backfill. No reads of the new column yet → zero behavior
    change.
 2. **Read path. ✓ Done.** `CourseContext.role`, nav keyed off
-   `isInstructorInActiveCourse`. Still identical behavior (the role mirrors the
+   `isStaffInActiveCourse`. Still identical behavior (the role mirrors the
    global role, plus a transitional global-role fallback in the nav predicate).
 3. **Auth path. ✓ Done (chokepoint).** `requireCourseRole(atLeast:)` +
    `CourseRole` ordering; `requireCourseEnrollment` is its `.student` case.
@@ -197,7 +223,7 @@ representable and creatable.
      stays accurate and nobody loses access when 4b flips authorization.
    - **4b. Implemented — held for review.** Replaces the global
      `RoleMiddleware(.instructor)` on `/instructor` with
-     `ActiveCourseInstructorMiddleware` (admit admin or **global** instructor —
+     `ActiveCourseStaffMiddleware` (admit admin or **global** instructor —
      transitional — or a per-course instructor in the *active* course); the
      param-taking enrollment endpoints call `requireCourseInstructor` on their
      URL course (same transitional rule) so a per-course instructor can't be
@@ -208,14 +234,16 @@ representable and creatable.
      MCP subject is a global instructor, so it's a no-op).
 5. **Shrink the global role (pragmatic slice — done).** Removed the three
    transitional global-instructor fallbacks (nav, the `/instructor` gate, and
-   `requireCourseInstructor`) so instructor authority is purely per-course; and
+   `requireCourseInstructor`, which #1127 later inlined into its last caller)
+   so instructor authority is purely per-course; and
    retired the `SSO_INSTRUCTOR_USERS` handling (kept `SSO_ADMIN_USERS`).
-   **Deferred:** physically
-   removing the `UserRole.instructor` enum case (kept for decode compatibility —
-   a future migration), and removing the global-instructor option from the admin
-   user-management UI (needs careful display handling for existing instructor
-   rows). The global instructor role is now inert for authority but still seeds
-   the per-course role on enrollment.
+   Both items originally deferred here have since shipped: the
+   `UserRole.instructor` enum case was physically removed with the
+   `CollapseUserRoles` migration (c646dc7 — legacy strings decode as a plain
+   non-admin `user`), and the global-instructor option was removed from the
+   admin user-management UI (590e2b1). Per-course roles are now seeded as
+   admin → `.instructor`, everyone else → `.student`
+   (`saveSeededEnrollment`), with staff granted explicitly from the roster.
 
 ---
 
@@ -269,7 +297,10 @@ behaviour-changing Phases 4–5, not the behaviour-neutral Phases 1–3.
 2. **`CourseRole` ships as `student` + `instructor` only; `ta` is deferred.**
    A TA rung (view/grade submissions, no suite edits) is a natural future
    addition but carries extra policy surface; the enum is string-backed, so it
-   can be added later without a schema change.
+   can be added later without a schema change. *(Since superseded: the `ta`
+   rung shipped in #417 Slice E — with a broader mandate than sketched here:
+   TAs also author content, and the line TA/instructor is
+   content-and-grading vs lifecycle-and-structure. See the slice glossary.)*
 3. **SSO mapping (decided 2026-06-22).** `SSO_INSTRUCTOR_USERS` is **retired** —
    there is no "global instructor via SSO" under the per-course model. An admin
    sets up a course and assigns its instructor manually (the Phase 4b roster

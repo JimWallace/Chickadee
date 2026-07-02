@@ -37,10 +37,7 @@ struct GetNotebookTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ])
+            "assignmentPublicID": MCPSchema.assignmentPublicID
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -48,8 +45,8 @@ struct GetNotebookTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "cellCount": .object(["type": .string("integer")]),
+            "assignmentPublicID": MCPSchema.string,
+            "cellCount": MCPSchema.integer,
             "notebook": .object(["type": .string("object")]),
         ]),
         "required": .array([

@@ -43,10 +43,7 @@ struct ValidateAssignmentTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "timeoutSeconds": .object([
                 "type": .string("integer"),
                 "description": .string("Max seconds to wait for a terminal result (1-120, default 30)."),
@@ -58,9 +55,9 @@ struct ValidateAssignmentTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "timedOut": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "validationStatus": MCPSchema.string,
+            "timedOut": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("validationStatus"), .string("timedOut"),
