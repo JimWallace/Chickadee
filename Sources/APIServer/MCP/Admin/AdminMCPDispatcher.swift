@@ -130,10 +130,11 @@ struct AdminMCPDispatcher: Sendable {
     ) -> JSONRPCResponse {
         mcpInitializeResponse(
             id: id, params: params,
-            capabilities: .toolsOnly,
-            serverInfo: serverInfo,
-            instructions: AdminMCPServerInstructions.text,
-            logger: context?.logger,
-            logLabel: "Admin MCP")
+            surface: MCPInitializeSurface(
+                capabilities: .toolsOnly,
+                serverInfo: serverInfo,
+                instructions: AdminMCPServerInstructions.text,
+                logLabel: "Admin MCP"),
+            logger: context?.logger)
     }
 }

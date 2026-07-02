@@ -250,11 +250,12 @@ struct MCPDispatcher: Sendable {
     ) -> JSONRPCResponse {
         mcpInitializeResponse(
             id: id, params: params,
-            capabilities: .v1,
-            serverInfo: serverInfo,
-            instructions: MCPServerInstructions.text,
-            logger: context?.logger,
-            logLabel: "MCP")
+            surface: MCPInitializeSurface(
+                capabilities: .v1,
+                serverInfo: serverInfo,
+                instructions: MCPServerInstructions.text,
+                logLabel: "MCP"),
+            logger: context?.logger)
     }
 }
 

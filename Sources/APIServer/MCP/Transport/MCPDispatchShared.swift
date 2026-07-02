@@ -112,6 +112,16 @@ func mcpToolErrorResult(_ error: MCPToolError) -> JSONValue {
 
 // MARK: - initialize
 
+/// What one MCP surface advertises from `initialize`: its capability set,
+/// identity, and agent-facing instructions, plus the label its log lines
+/// carry ("MCP" / "Admin MCP").
+struct MCPInitializeSurface {
+    let capabilities: MCPServerCapabilities
+    let serverInfo: MCPServerInfo
+    let instructions: String
+    let logLabel: String
+}
+
 /// Builds the `initialize` response: version negotiation per the lifecycle
 /// spec (echo the requested revision when this server supports it; otherwise
 /// answer with the latest we speak and let the client decide whether to
@@ -119,11 +129,8 @@ func mcpToolErrorResult(_ error: MCPToolError) -> JSONValue {
 func mcpInitializeResponse(
     id: JSONRPCID,
     params: JSONValue?,
-    capabilities: MCPServerCapabilities,
-    serverInfo: MCPServerInfo,
-    instructions: String,
-    logger: Logger?,
-    logLabel: String
+    surface: MCPInitializeSurface,
+    logger: Logger?
 ) -> JSONRPCResponse {
     let client = try? (params ?? .object([:])).decoded(as: MCPInitializeParams.self)
     let negotiated =
@@ -135,14 +142,14 @@ func mcpInitializeResponse(
         let clientVersion = client?.clientInfo?.version ?? "unknown"
         let requested = client?.protocolVersion ?? "none"
         logger.info(
-            "\(logLabel) initialize: client=\(name)/\(clientVersion) requestedProtocolVersion=\(requested) negotiated=\(negotiated)"
+            "\(surface.logLabel) initialize: client=\(name)/\(clientVersion) requestedProtocolVersion=\(requested) negotiated=\(negotiated)"
         )
     }
     let result = MCPInitializeResult(
         protocolVersion: negotiated,
-        capabilities: capabilities,
-        serverInfo: serverInfo,
-        instructions: instructions
+        capabilities: surface.capabilities,
+        serverInfo: surface.serverInfo,
+        instructions: surface.instructions
     )
     do {
         return .success(id: id, result: try JSONValue(encoding: result))
