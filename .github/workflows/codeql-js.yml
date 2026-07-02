@@ -16,6 +16,12 @@ permissions:
   contents: read
   actions: read
 
+# Cancel superseded PR runs; main pushes / merge-queue / scheduled runs are
+# never cancelled (their group key is the unique ref).
+concurrency:
+  group: codeql-js-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     name: Analyze (javascript-typescript)
@@ -24,8 +30,54 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Skip the analysis on PRs that touch no JS/TS at all (pure-Swift or
+      # docs-only PRs) — the job still runs and reports success, so it stays
+      # safe as a required check. Fail-safe: non-PR events (main pushes,
+      # merge queue, the weekly schedule) always analyze.
+      - name: Detect JS/TS-relevant changes
+        id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::non-PR event ($EVENT) — running CodeQL."
+            exit 0
+          fi
+          git fetch --no-tags --quiet origin "$BASE_REF" || true
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::base sha unavailable — running CodeQL (fail-safe)."
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA" HEAD)"
+          if [ -z "$changed" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::no diff computed — running CodeQL (fail-safe)."
+            exit 0
+          fi
+          # First-party JS/TS only: the vendored JupyterLite bundle is already
+          # paths-ignore'd from the analysis, and the vendored Pyodide
+          # distribution is machine-generated — a re-vendor PR gains nothing
+          # from a CodeQL pass (the weekly schedule + main pushes cover them).
+          js_changed="$(grep -E '\.(js|mjs|cjs|ts|tsx)$' <<< "$changed" | grep -vE '^Public/(jupyterlite|pyodide)/' || true)"
+          wf_changed="$(grep -E '^\.github/workflows/codeql-js\.yml$' <<< "$changed" || true)"
+          if [ -n "$js_changed" ] || [ -n "$wf_changed" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::JS/TS files changed — running CodeQL."
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no first-party JS/TS changes — skipping the analysis steps."
+          fi
 
       - name: Initialize CodeQL
+        if: steps.detect.outputs.relevant == 'true'
         uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
@@ -33,6 +85,7 @@ jobs:
             Public/jupyterlite/**
 
       - name: Perform CodeQL Analysis
+        if: steps.detect.outputs.relevant == 'true'
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript-typescript"
