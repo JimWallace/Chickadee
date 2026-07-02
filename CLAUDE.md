@@ -548,10 +548,14 @@ css-vars + design-token guards too — same as the CI `format-lint` job).
   completion (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
-  `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`, and
-  `@Test(arguments:)`. Avoid `CustomExecutionTrait`, hand-rolled trait
-  types, and anything still labelled experimental in the Swift Testing
-  source — the API is still evolving.
+  `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`,
+  `@Test(arguments:)`, and `.timeLimit(.minutes(n))` (put it on any suite
+  that spawns subprocesses or awaits daemons/network, so a stall fails
+  with a named test instead of holding the CI job to its 20-minute kill —
+  see the #1139 postmortem in `docs/ci-flakiness.md`). Avoid
+  `CustomExecutionTrait`, hand-rolled trait types, and anything still
+  labelled experimental in the Swift Testing source — the API is still
+  evolving.
 - **Struct vs class suites.**
   - **`@Suite struct Foo`** — default. Per-test instance is cheap.
   - **`@Suite final class Foo`** with `init()` / `deinit` — when the

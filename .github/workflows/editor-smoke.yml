@@ -168,8 +168,28 @@ jobs:
       #   • no SW and no SAB — must FAIL (proves the freeze detector works).
       # Running it under WebKit too is what would have caught the Safari-class
       # editor regressions in CI rather than in front of a student.
+      # webkit only: one bounded, loudly-logged retry. The webkit engine
+      # carries a known ambient exec-hang rate under CI load (~1 failure in 25
+      # gate runs — docs/ci-flakiness.md Family 3), and this job feeds the
+      # REQUIRED editor-smoke-gate, so a single ambient hang should not block
+      # an unrelated merge. Chromium stays strict: a chromium failure is
+      # treated as real, first time. The retry is logged as a ::warning so the
+      # flake rate stays visible in the annotations rather than hidden.
       - name: Run editor smoke selftest (${{ matrix.browser }}; both sync paths + freeze detector)
-        run: SMOKE_BROWSER=${{ matrix.browser }} Tools/editor-smoke-test/selftest.sh
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh; then
+            exit 0
+          fi
+          rc=$?
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
 
       # Full authenticated end-to-end against the REAL student notebook page:
       # seed a browser-graded assignment over the HTTP API, log in as a student,
@@ -179,7 +199,20 @@ jobs:
       # real Submit grades. This drives the actual page (not /jupyterlite/repl) —
       # the gap that hid the grading-worker COEP block (#986).
       - name: Run authenticated notebook-page e2e (${{ matrix.browser }})
-        run: SMOKE_BROWSER=${{ matrix.browser }} SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          fi
+          rc=$?
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit notebook-page e2e failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Families 2+3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
   # Always-running required status. Green when the smoke passed OR was skipped
   # (no editor-relevant changes), red only when the smoke actually failed — so

@@ -4,7 +4,7 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite struct WorkerDaemonTests {
+@Suite(.timeLimit(.minutes(3))) struct WorkerDaemonTests {
     private let fastRetryPolicy = RunnerRetryPolicy(
         enabled: true,
         maxAttempts: 2,
