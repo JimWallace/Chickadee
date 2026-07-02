@@ -345,7 +345,7 @@
     background: var(--gray-50);
     border: 1px solid var(--gray-300);
     border-radius: var(--radius-sm);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+    box-shadow: var(--shadow-pop);
 }
 .action-panel-label {
     font-size: var(--text-sm);

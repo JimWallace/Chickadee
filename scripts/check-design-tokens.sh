@@ -10,12 +10,13 @@ set -euo pipefail
 # across the global sheet and page <style> blocks, plus off-palette hex
 # colours (Bootstrap-green flash banners, one-off reds) that ignored dark
 # mode.  None of it is caught by the render tests — everything renders —
-# so it needs a static guard.  Three rules:
+# so it needs a static guard.  Four rules:
 #
-#   1. HEX PLACEMENT: a raw #hex colour may appear ONLY as the value of a
-#      custom-property declaration (`--x: #hex`) in Public/*.css — i.e. in
-#      the palette.  Rule bodies and page <style> blocks must use var(--x)
-#      so every colour routes through the palette and adapts to dark mode.
+#   1. COLOUR PLACEMENT: a raw colour literal — #hex, rgb()/rgba(),
+#      hsl()/hsla() — may appear ONLY as the value of a custom-property
+#      declaration (`--x: #hex`) in Public/*.css — i.e. in the palette.
+#      Rule bodies and page <style> blocks must use var(--x) so every
+#      colour routes through the palette and adapts to dark mode.
 #
 #   2. TYPE SCALE: every `font-size:` value must be a var(--text-*) token,
 #      an em value (relative sizing inside a component, e.g. `code`,
@@ -24,6 +25,13 @@ set -euo pipefail
 #
 #   3. RADIUS SCALE: every `border-radius:` value must be a var(--radius-*)
 #      token, `0`, `50%` (circles), or a multi-value corner shorthand.
+#
+#   4. SPACING LATTICE: every rem component of a padding/margin/gap value
+#      must be one of the steps below.  This is a ratchet, not a scale (33
+#      steps had accumulated; converged to 26): remove steps as usage dies,
+#      never add one for a one-off — pick the nearest existing step.
+#      px hairlines (1px/-1px), 0, auto, %, and calc()/clamp() are outside
+#      the rule.  Preferred steps for NEW code are in docs/ui-design.md.
 #
 # Scope: Public/*.css + <style> blocks in Resources/Views/*.leaf.  The
 # token scales themselves are declared in Public/styles.css (`--text-*`,
@@ -35,6 +43,9 @@ cd "$repo_root"
 css_files=(Public/*.css)
 views=(Resources/Views/*.leaf)
 status=0
+
+# The spacing lattice (rule 4).  Shrink-only — see the header comment.
+SPACING_STEPS=" -.25rem -.75rem .1rem .15rem .2rem .25rem .3rem .35rem .4rem .45rem .5rem .55rem .6rem .75rem .8rem .85rem .9rem 1rem 1.1rem 1.25rem 1.5rem 2rem 2.5rem 3rem 4rem 5rem "
 
 # Strip /* ... */ comments (multi-line aware) so commented-out examples and
 # prose mentioning a hex value don't false-positive.
@@ -76,20 +87,23 @@ decl_value() {
 hex_violations=""
 font_violations=""
 radius_violations=""
+spacing_violations=""
+
+COLOUR_LITERAL='#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\('
 
 check_source() {
   local label="$1" css
   css="$(cat)"
 
-  # 1. hex placement: allowed only on custom-property declaration lines in
-  #    Public/*.css.  Leaf <style> blocks may not contain hex at all.
+  # 1. colour placement: literals allowed only on custom-property declaration
+  #    lines in Public/*.css.  Leaf <style> blocks may not contain any.
   local hexes
   if [[ "$label" == Public/*.css ]]; then
     hexes="$(printf '%s\n' "$css" \
-      | grep -nE '#[0-9a-fA-F]{3,8}\b' \
+      | grep -nE "$COLOUR_LITERAL" \
       | grep -vE '^[0-9]+:[[:space:]]*--[A-Za-z0-9_-]+[[:space:]]*:' || true)"
   else
-    hexes="$(printf '%s\n' "$css" | grep -nE '#[0-9a-fA-F]{3,8}\b' || true)"
+    hexes="$(printf '%s\n' "$css" | grep -nE "$COLOUR_LITERAL" || true)"
   fi
   if [ -n "$hexes" ]; then
     while IFS= read -r hit; do
@@ -121,6 +135,22 @@ check_source() {
       *) radius_violations+="  ${label}: border-radius: ${v}"$'\n' ;;
     esac
   done < <(printf '%s\n' "$css" | extract_decls 'border-radius' | decl_value)
+
+  # 4. spacing lattice: each rem component of padding/margin/gap must be an
+  #    allowed step (leading zeros normalized; non-rem components ignored).
+  while IFS= read -r v; do
+    [ -z "$v" ] && continue
+    case "$SPACING_STEPS" in
+      *" $v "*) ;;
+      *) spacing_violations+="  ${label}: spacing step ${v}"$'\n' ;;
+    esac
+  done < <(printf '%s\n' "$css" \
+    | extract_decls '(padding|margin|gap)[a-z-]*' \
+    | decl_value \
+    | tr ' ' '\n' \
+    | grep -E '^-?0?\.?[0-9][0-9.]*rem$' \
+    | sed 's/^0\./\./; s/^-0\./-./' \
+    | sort -u)
 }
 
 # check_source must run in THIS shell (not a pipeline subshell) so the
@@ -135,10 +165,10 @@ done
 
 if [ -n "$hex_violations" ]; then
   status=1
-  echo "ERROR: raw #hex colour outside the palette."
-  echo "       Hex is allowed only as a --token declaration in Public/styles.css."
-  echo "       Use an existing var(--x), or add a semantic token (with a"
-  echo "       dark-mode value) to the palette."
+  echo "ERROR: raw colour literal (#hex / rgb / rgba / hsl) outside the palette."
+  echo "       Colour literals are allowed only as --token declarations in"
+  echo "       Public/styles.css.  Use an existing var(--x), or add a semantic"
+  echo "       token (with a dark-mode value) to the palette."
   printf '%s' "$hex_violations"
   echo
 fi
@@ -162,8 +192,18 @@ if [ -n "$radius_violations" ]; then
   echo
 fi
 
+if [ -n "$spacing_violations" ]; then
+  status=1
+  echo "ERROR: padding/margin/gap uses a rem value off the spacing lattice."
+  echo "       Pick the nearest existing step (preferred steps for new code"
+  echo "       are in docs/ui-design.md; the full lattice is SPACING_STEPS in"
+  echo "       this script).  Do not add a new step for a one-off."
+  printf '%s' "$spacing_violations"
+  echo
+fi
+
 if [ "$status" -eq 0 ]; then
-  echo "check-design-tokens: OK (palette-only hex; type + radius scales in use)"
+  echo "check-design-tokens: OK (palette-only colours; type/radius/spacing scales in use)"
 fi
 
 exit "$status"

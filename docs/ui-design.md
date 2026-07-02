@@ -22,7 +22,8 @@ All tokens are CSS custom properties declared in the `:root` block of
 
 ### Colour
 
-- **Raw hex may only appear as the value of a `--token:` declaration in
+- **Raw colour literals — `#hex`, `rgb()`/`rgba()`, `hsl()`/`hsla()` — may
+  only appear as the value of a `--token:` declaration in
   `Public/styles.css`** — never in a rule body, and never in a page `<style>`
   block.  Everything else uses `var(--x)`.  This is what makes dark mode
   work: a hardcoded `#d4edda` success banner is invisible-text-on-dark
@@ -68,10 +69,36 @@ right tool when the size should track the parent, not the scale.
 
 `0`, `50%` (circles), and multi-value corner shorthands are also allowed.
 
+### Spacing lattice
+
+Spacing (`padding` / `margin` / `gap`) is a **ratchet, not a scale**: every
+rem component must be one of the 26 steps allowlisted in
+`scripts/check-design-tokens.sh` (`SPACING_STEPS`).  The list only shrinks —
+never add a step for a one-off; pick the nearest existing one.  For **new**
+code prefer the core ladder:
+
+- `.25rem` / `.5rem` / `.75rem` / `1rem` / `1.25rem` / `1.5rem` / `2rem`
+  for component and layout spacing;
+- `.1rem`–`.45rem` (in .05 increments already on the lattice) only for
+  tight chrome — badge padding, icon gaps.
+
+`0`, `auto`, percentages, `1px` hairlines, and `calc()`/`clamp()` are
+outside the rule.
+
+### Shadow
+
+One elevation: `--shadow-pop`, used by every pop-out menu, dropdown, and
+floating panel.  It carries a stronger alpha in dark mode (a `.15` black
+shadow is invisible on a dark surface).  Don't hand-roll `box-shadow`
+values — if a second elevation level is ever genuinely needed, add a
+second token.
+
 ### Other tokens
 
 `--font-mono` is the one monospace stack — never restate
-`ui-monospace, SFMono-Regular, …` inline.
+`ui-monospace, SFMono-Regular, …` (or bare `monospace`) inline.
+`--nav-fg` / `--nav-fg-muted` are the white-alpha nav foregrounds (the nav
+is black in both schemes).
 
 ## Component vocabulary
 
@@ -114,9 +141,10 @@ That one entry point runs, in order:
 
 1. `scripts/check-css-vars.sh` — every `var(--x)` resolves; no
    `var(--x, #hex)` fallbacks.
-2. `scripts/check-design-tokens.sh` — hex only in palette `--token:`
-   declarations; every `font-size` on the type scale; every `border-radius`
-   on the radius scale.
+2. `scripts/check-design-tokens.sh` — colour literals (`#hex`/`rgb(a)`/
+   `hsl(a)`) only in palette `--token:` declarations; every `font-size` on
+   the type scale; every `border-radius` on the radius scale; every rem
+   spacing component on the spacing lattice.
 3. Inline-style allowlist, `alert()` ratchet, duplicate/shadowed-selector
    guards.
 
@@ -140,6 +168,9 @@ values route through the system; they cannot prove the page *looks* right.
 - **New repeated pattern** (a third page grows the same card/banner/table
   flavour) → hoist it into `styles.css` as a named component and note it in
   the component vocabulary above.
-- **Future ratchets** (candidates, not yet enforced): a spacing scale for
-  margin/padding, shadow tokens (`0 4px 16px rgba(0,0,0,.15)` appears twice),
-  and a `rgba()` placement rule to match the hex one.
+- **Shrinking the spacing lattice** → when a step's last usage disappears,
+  remove it from `SPACING_STEPS` in `scripts/check-design-tokens.sh` in the
+  same PR.
+- **Future ratchets** (candidates, not yet enforced): `font-weight` and
+  `line-height` scales, and a size ratchet on page `<style>` blocks (a
+  growing block is usually a component that wants hoisting).
