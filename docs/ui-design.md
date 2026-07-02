@@ -148,6 +148,18 @@ That one entry point runs, in order:
 3. Inline-style allowlist, `alert()` ratchet, duplicate/shadowed-selector
    guards.
 
+For changes that touch `Public/*.js` or the frontend test suite, also run
+the JS gate (CI runs it in the `browser-runner-tests` job):
+
+```bash
+scripts/eslint.sh
+node --test Tests/BrowserRunnerJSTests/*.mjs
+```
+
+ESLint is a correctness gate (`eslint:recommended`, zero warnings), not a
+formatter; scope and shared globals live in `eslint.config.mjs`.  New
+cross-file API should hang off `ChickadeeUI` rather than adding a global.
+
 For changes that add or restructure markup (not just CSS values), also run
 the render tests for the affected routes, e.g.:
 

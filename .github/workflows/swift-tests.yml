@@ -306,6 +306,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Lint first-party frontend JS
+        run: scripts/eslint.sh
+
       - name: Run browser runner execution tests
         run: node --test Tests/BrowserRunnerJSTests/*.mjs
 

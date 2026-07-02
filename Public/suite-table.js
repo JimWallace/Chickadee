@@ -151,12 +151,6 @@
             return Array.from(container.querySelectorAll('.section-block[data-section-id]'))
                 .map(function (b) { return b.getAttribute('data-section-id'); });
         }
-        function tbodyForSection(sid) {
-            var selector = sid
-                ? 'tbody[data-section-id="' + cssAttrEscape(sid) + '"]'
-                : 'tbody[data-section-id=""]';
-            return container.querySelector(selector);
-        }
         function sectionIDsInOrder() {
             return Array.from(container.querySelectorAll('.section-block[data-section-id]:not([data-ungrouped])'))
                 .map(function (b) { return b.getAttribute('data-section-id'); })
@@ -1003,9 +997,9 @@
                     // stranded.  Deps are preserved — the group is
                     // internally closed — and it lands as a contiguous block
                     // at the end of the target section.
-                    var groupSet = {};
+                    let groupSet = {};
                     connectedDependencyGroup(dragID).forEach(function (id) { groupSet[id] = true; });
-                    var moving = items.filter(function (it) { return groupSet[it.id]; });
+                    let moving = items.filter(function (it) { return groupSet[it.id]; });
                     moving.forEach(function (it) { it.sectionID = newSid || null; });
                     items = items.filter(function (it) { return !groupSet[it.id]; });
                     var lastIdx = -1;
@@ -1049,9 +1043,9 @@
                 // links) and keep their existing relative order — already
                 // topologically valid — as a contiguous block in the target
                 // section.
-                var groupSet = {};
+                let groupSet = {};
                 connectedDependencyGroup(dragID).forEach(function (id) { groupSet[id] = true; });
-                var moving = items.filter(function (it) { return groupSet[it.id]; });
+                let moving = items.filter(function (it) { return groupSet[it.id]; });
                 moving.forEach(function (it) { it.sectionID = targetSid || null; });
                 items = items.filter(function (it) { return !groupSet[it.id]; });
                 var gIdx = items.findIndex(function (it) { return it.id === tid; });
@@ -1151,10 +1145,10 @@
         container.addEventListener('click', function (e) {
             var editBtn = e.target.closest && e.target.closest('.check-edit-btn');
             if (editBtn) {
-                var row = editBtn.closest('tr[data-kind="check"]');
+                let row = editBtn.closest('tr[data-kind="check"]');
                 if (!row) return;
                 var cid = row.getAttribute('data-check-id');
-                var item = findByID('check:' + cid);
+                let item = findByID('check:' + cid);
                 if (!item) return;
                 expandInlineEditor({
                     mechanism: 'check',
