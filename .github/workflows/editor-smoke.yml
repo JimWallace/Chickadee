@@ -125,39 +125,13 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      # Normalise source mtimes to commit times so a restored .build/ stays
-      # valid for unchanged files and only new commits recompile.
-      - uses: ./.github/actions/restore-git-mtimes
-
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      # Read-only restore of the shared build cache produced by the Swift Tests
-      # `build` job (same exact key).  EXACT-MATCH ONLY: a `restore-keys` prefix
-      # fallback would incrementally build the server over a mismatched tree,
-      # which is unsound for the same mangled-symbol reason documented in
-      # swift-tests.yml's `build` job.  On a hit, building the server product is
-      # a near-no-op; on a miss we build it cold.
-      - name: Restore build artifacts
-        uses: actions/cache/restore@v5
+      # Shared scaffold: mtime normalisation, exact-match build-cache restore,
+      # server build, Node + Playwright install (engine download cached). See
+      # .github/actions/browser-probe-setup/action.yml for the cache-soundness
+      # notes that used to live inline here.
+      - uses: ./.github/actions/browser-probe-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Build chickadee-server
-        run: swift build --product chickadee-server
-
-      - name: Install Node, Playwright and the ${{ matrix.browser }} engine
-        working-directory: Tools/editor-smoke-test
-        run: |
-          set -eux
-          # Node + curl from the noble base (curl backs the readiness poll).
-          apt-get update -qq
-          apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
-          npm ci
-          # --with-deps installs the engine's system libraries via apt.
-          npx playwright install --with-deps ${{ matrix.browser }}
+          browser: ${{ matrix.browser }}
 
       # selftest.sh drives the editor THREE ways against this one build, in the
       # matrix engine (Chromium / WebKit):

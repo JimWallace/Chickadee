@@ -166,14 +166,15 @@ chromium failure is treated as real, first time.
    annotations from the probe and the smoke retries are the flake-rate
    telemetry now; if they show up more than occasionally, the ambient rate
    is rising and the tolerance should be revisited (in either direction).
-3. **Other blocking subprocess reads** (lower risk, same pattern):
-   `MimeTypeDetector`, `Core/ZipArchiver`, `TestSetupZipHelpers`,
-   `NotebookContentHelpers`, `PersonalizationEvaluator` still use
-   `readDataToEndOfFile()`/`waitUntilExit()` with unbounded pipes. All are
-   Foundation `Process` (posix_spawn — no fork-unsafety) with small
-   expected outputs, but a >64 KB output would deadlock the
-   read-after-wait sites, and none of their pipes are CLOEXEC. Worth a
-   sweep with the bounded-drain helper when touched next.
+3. **Other blocking subprocess reads** — swept in the follow-up PR. The
+   two read-after-wait sites are fixed: `MimeTypeDetector` drains before
+   waiting, and `PersonalizationEvaluator` drains both pipes concurrently
+   with a deadline before waiting (plus SIGKILL escalation when an
+   expression's interpreter ignores SIGTERM, and no more full-timeout
+   sleep on the return path). `Core/ZipArchiver`, `TestSetupZipHelpers`,
+   and `NotebookContentHelpers` already read before waiting (the safe
+   order); their pipes still aren't CLOEXEC — a cosmetic residual to fold
+   in when those files are next touched.
 
 ## Evidence index
 

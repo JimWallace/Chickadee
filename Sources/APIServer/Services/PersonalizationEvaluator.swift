@@ -20,6 +20,10 @@
 import Core
 import Foundation
 
+#if canImport(Glibc)
+import Glibc
+#endif
+
 enum PersonalizationEvaluatorError: Error {
     case driverWriteFailed
     case spawnFailed(String)
@@ -270,15 +274,41 @@ enum PersonalizationEvaluator {
             try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds) * 1_000_000_000)
             if proc.isRunning {
                 proc.terminate()
+                // SIGTERM can be caught or ignored by the expression's
+                // interpreter; escalate so the waitUntilExit below is
+                // actually bounded.
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if proc.isRunning {
+                    kill(proc.processIdentifier, SIGKILL)
+                }
                 return true
             }
             return false
         }
+
+        // Drain both pipes BEFORE waiting for exit, concurrently and with a
+        // deadline. Reading after waitUntilExit() deadlocked once the child
+        // filled a 64 KiB pipe buffer (a long expression output became a
+        // spurious .timedOut plus a blocked thread), and draining the pipes
+        // sequentially just moves the same deadlock to the other pipe. EOF
+        // normally arrives when the child exits or the timeout terminates
+        // it; the deadline covers an expression that leaks a grandchild
+        // holding the pipe open (docs/ci-flakiness.md, remaining attack
+        // order).
+        let drainDeadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds) + 2)
+        async let stdoutBytes = Self.readToEnd(
+            fileDescriptor: outPipe.fileHandleForReading.fileDescriptor, deadline: drainDeadline)
+        async let stderrBytes = Self.readToEnd(
+            fileDescriptor: errPipe.fileHandleForReading.fileDescriptor, deadline: drainDeadline)
+        let stdoutData = await stdoutBytes
+        let stderrData = await stderrBytes
         proc.waitUntilExit()
+        // Wake the timeout task now instead of letting its full sleep gate
+        // the return path: a cancelled sleep falls through to the same
+        // isRunning check, which is false for a normally-exited child.
+        timeoutTask.cancel()
         let didTimeOut = await timeoutTask.value
 
-        let stdoutData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = errPipe.fileHandleForReading.readDataToEndOfFile()
         let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
         let stderr = String(data: stderrData, encoding: .utf8) ?? ""
 
@@ -286,5 +316,38 @@ enum PersonalizationEvaluator {
             throw PersonalizationEvaluatorError.timedOut
         }
         return (stdout, stderr, proc.terminationStatus)
+    }
+
+    /// Reads a pipe descriptor toward EOF on a dedicated thread, keeping the
+    /// blocking reads (and the pipe-buffer backpressure) off the cooperative
+    /// pool. Bounded by `deadline`: if a leaked grandchild still holds the
+    /// write end after the child is gone, we return what we have instead of
+    /// stalling a server thread indefinitely.
+    private static func readToEnd(fileDescriptor: Int32, deadline: Date) async -> Data {
+        await withCheckedContinuation { continuation in
+            Thread.detachNewThread {
+                var collected = Data()
+                var chunk = [UInt8](repeating: 0, count: 65_536)
+                while true {
+                    var pollDescriptor = pollfd(fd: fileDescriptor, events: Int16(POLLIN), revents: 0)
+                    let readyCount = poll(&pollDescriptor, 1, 100)
+                    if readyCount == -1 {
+                        if errno == EINTR { continue }
+                        break
+                    }
+                    if readyCount > 0 {
+                        let bytesRead = read(fileDescriptor, &chunk, chunk.count)
+                        if bytesRead > 0 {
+                            collected.append(contentsOf: chunk[0..<bytesRead])
+                            continue
+                        }
+                        if bytesRead == -1 && errno == EINTR { continue }
+                        break  // 0 = EOF (all write ends closed); -1 = unrecoverable.
+                    }
+                    if Date() >= deadline { break }
+                }
+                continuation.resume(returning: collected)
+            }
+        }
     }
 }
