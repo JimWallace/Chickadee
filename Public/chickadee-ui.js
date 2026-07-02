@@ -62,9 +62,20 @@
         } catch (e) { /* not JSON — fall through to the HTML scrape */ }
         var m = text.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
         if (m) {
-            return m[1].replace(/<[^>]+>/g, '')
+            // Strip tags to a fixpoint so nested fragments ("<scr<script>ipt")
+            // can't survive one pass, then decode entities with `&amp;` LAST
+            // so "&amp;lt;" decodes to "&lt;" (one level), never to "<".
+            // The result is plain text for textContent/alert sinks only.
+            var stripped = m[1];
+            var prev;
+            do {
+                prev = stripped;
+                stripped = stripped.replace(/<[^>]*>/g, '');
+            } while (stripped !== prev);
+            return stripped
                 .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
-                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&')
                 .trim();
         }
         return text.length > 200 ? text.substring(0, 200) + '…' : text;

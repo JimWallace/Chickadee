@@ -82,3 +82,18 @@ test('extractErrorMessage handles JSON, error-page HTML, and raw text', () => {
   const long = 'x'.repeat(300);
   assert.equal(extractErrorMessage(long).length, 201); // 200 chars + ellipsis
 });
+
+// CodeQL hardening (#1132 review): tag stripping runs to a fixpoint and
+// entity decoding is single-level with &amp; handled last.
+test('extractErrorMessage strips nested tags and never double-unescapes', () => {
+  const { extractErrorMessage } = ChickadeeUI;
+
+  const nested = extractErrorMessage('<p class="error-message">bad <scr<script>ipt>payload</p>');
+  assert.ok(!nested.includes('<'), 'no tag-opening character may survive: ' + nested);
+  assert.equal(nested, 'bad ipt>payload');
+  // "&amp;lt;" is the ESCAPED text "&lt;" — one decode level, not "<".
+  assert.equal(
+    extractErrorMessage('<p class="error-message">use &amp;lt; carefully</p>'),
+    'use &lt; carefully',
+  );
+});
