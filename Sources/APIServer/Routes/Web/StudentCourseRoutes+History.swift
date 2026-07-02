@@ -99,7 +99,7 @@ extension StudentCourseRoutes {
         )
 
         let fmt = waterlooDateTimeFormatter()
-        let sortedAssignments = sortedStudentCourseAssignments(assignments, setupsByID: setupsByID)
+        let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupsByID)
 
         let rowContext = StudentAssignmentRowContext(
             courseCode: course.code,
@@ -232,21 +232,6 @@ extension StudentCourseRoutes {
 
     /// Sort comparator matches the student dashboard (`WebRoutes.swift`):
     /// sortOrder → createdAt → id.
-    fileprivate func sortedStudentCourseAssignments(
-        _ assignments: [APIAssignment],
-        setupsByID: [String: APITestSetup]
-    ) -> [APIAssignment] {
-        assignments.sorted { lhs, rhs in
-            let lhsOrder = lhs.sortOrder
-            let rhsOrder = rhs.sortOrder
-            if let l = lhsOrder, let r = rhsOrder, l != r { return l < r }
-            let lhsCreated = setupsByID[lhs.testSetupID]?.createdAt ?? .distantPast
-            let rhsCreated = setupsByID[rhs.testSetupID]?.createdAt ?? .distantPast
-            if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
-            return lhs.testSetupID < rhs.testSetupID
-        }
-    }
-
     fileprivate func groupStudentCourseRowsBySection(
         rows: [StudentAssignmentRow],
         assignments: [APIAssignment],
@@ -259,26 +244,18 @@ extension StudentCourseRoutes {
             },
             uniquingKeysWith: { first, _ in first }
         )
-        var rowsBySectionID: [UUID: [StudentAssignmentRow]] = [:]
-        var ungroupedRows: [StudentAssignmentRow] = []
-        for row in rows {
-            if let sID = sectionByAssignmentID[row.assignmentID] {
-                rowsBySectionID[sID, default: []].append(row)
-            } else {
-                ungroupedRows.append(row)
-            }
-        }
-        let sectionContexts: [StudentAssignmentSectionContext] = allSections.compactMap { section in
-            guard let sID = section.id else { return nil }
-            let sectionRows = rowsBySectionID[sID] ?? []
-            guard !sectionRows.isEmpty else { return nil }
-            return StudentAssignmentSectionContext(
-                sectionID: sID.uuidString,
-                name: section.name,
-                rows: sectionRows
-            )
-        }
-        return (sectionContexts, ungroupedRows)
+        // Shared section-grouping fold (#1118); empty sections stay hidden.
+        let grouped = groupRowsBySection(
+            rows: rows, sections: allSections, includeEmptySections: false,
+            sectionIDForRow: { sectionByAssignmentID[$0.assignmentID] },
+            makeSection: { section, sectionRows in
+                StudentAssignmentSectionContext(
+                    sectionID: (section.id ?? UUID()).uuidString,
+                    name: section.name,
+                    rows: sectionRows
+                )
+            })
+        return (grouped.sections, grouped.ungrouped)
     }
 
     // MARK: - GET /:courseCode/students/:urlToken/assignments/:assignmentID/history
@@ -305,22 +282,10 @@ extension StudentCourseRoutes {
         )
 
         let fmt = waterlooDateTimeFormatter()
-        let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
-            let subID = submission.id ?? ""
-            let gradeText: String
-            if let pct = bestPercentBySubmissionID[subID] {
-                gradeText = "\(pct)%"
-            } else {
-                gradeText = "—"
-            }
-            return AssignmentSubmissionHistoryRow(
-                submissionID: subID,
-                attemptNumber: submission.attemptNumber ?? 1,
-                status: submission.status,
-                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                gradeText: gradeText
-            )
-        }
+        let rows = assignmentSubmissionHistoryRows(
+            submissions: submissions,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
+            fmt: fmt)
 
         let studentToken = try student.requireURLToken()
         let backURL = StudentCoursePaths.submissions(
@@ -448,7 +413,7 @@ extension StudentCourseRoutes {
         let body = try req.content.decode(ExtensionBody.self)
         let rawDate = (body.extendedDueAt ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawDate.isEmpty,
-            let newDueAt = parseLocalInputDate(rawDate)
+            let newDueAt = parseDueDate(rawDate)
         else {
             throw WebAssignmentError.invalidParameter(
                 name: "extendedDueAt",
@@ -872,20 +837,4 @@ extension StudentCourseRoutes {
             achievements: achievements
         )
     }
-}
-
-/// Parses an HTML5 `datetime-local` input value (e.g. `"2026-05-20T23:59"`)
-/// into a `Date`.  Both with and without seconds are accepted; the value is
-/// interpreted in the Waterloo timezone, matching the rest of the UI.
-func parseLocalInputDate(_ input: String) -> Date? {
-    let tz = TimeZone(identifier: "America/Toronto") ?? .current
-    let candidates = ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss"]
-    for fmt in candidates {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.timeZone = tz
-        df.dateFormat = fmt
-        if let d = df.date(from: input) { return d }
-    }
-    return nil
 }

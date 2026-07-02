@@ -17,38 +17,24 @@ func preferredResultsBySubmissionID(
     for submissionIDs: [String],
     on db: Database
 ) async throws -> [String: APIResult] {
-    // Chunk the IN-list: a term-scale grades export can pass 100k+ IDs, which
-    // exceeds bind-parameter limits (SQLite 32k variables, Postgres 65,535
-    // wire parameters) in a single query. Each submission's results live
-    // entirely inside the chunk holding its ID, so the fold below is
-    // order-equivalent to the unchunked query.
-    let chunkSize = 5_000
-    var results: [APIResult] = []
-    var index = submissionIDs.startIndex
-    while index < submissionIDs.endIndex {
-        let end =
-            submissionIDs.index(index, offsetBy: chunkSize, limitedBy: submissionIDs.endIndex)
-            ?? submissionIDs.endIndex
-        results.append(
-            contentsOf: try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ Array(submissionIDs[index..<end]))
-                .sort(\.$receivedAt, .descending)
-                .all())
-        index = end
-    }
+    // Loading goes through the shared chunked loader (#1118), which returns
+    // each submission's results newest-first — the order this fold's
+    // "first worker result wins, else first result" rule depends on.
+    let grouped = try await allResultsBySubmissionID(for: submissionIDs, on: db)
 
     var preferredResultBySubmissionID: [String: APIResult] = [:]
-    for result in results {
-        let key = result.submissionID
-        if let existing = preferredResultBySubmissionID[key] {
-            let existingSource = existing.source ?? "worker"
-            let candidateSource = result.source ?? "worker"
-            if existingSource == "worker" { continue }
-            if candidateSource == "worker" {
+    for (key, results) in grouped {
+        for result in results {
+            if let existing = preferredResultBySubmissionID[key] {
+                let existingSource = existing.source ?? "worker"
+                let candidateSource = result.source ?? "worker"
+                if existingSource == "worker" { continue }
+                if candidateSource == "worker" {
+                    preferredResultBySubmissionID[key] = result
+                }
+            } else {
                 preferredResultBySubmissionID[key] = result
             }
-        } else {
-            preferredResultBySubmissionID[key] = result
         }
     }
     return preferredResultBySubmissionID

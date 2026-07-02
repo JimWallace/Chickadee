@@ -38,7 +38,7 @@ extension InstructorDashboardRoutes {
         let setupByID = try await setupByIDFuture
         let submissions = try await submissionsFuture
 
-        let sortedAssignments = sortedGradesCSVAssignments(assignments, setupByID: setupByID)
+        let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupByID)
         let submissionIDs = submissions.map(\.id)
 
         // Serial follow-on: needs submission IDs from phase 2.
@@ -153,23 +153,6 @@ extension InstructorDashboardRoutes {
             uniqueKeysWithValues: setups.compactMap { setup in
                 setup.id.map { ($0, setup) }
             })
-    }
-
-    private func sortedGradesCSVAssignments(
-        _ assignments: [APIAssignment],
-        setupByID: [String: APITestSetup]
-    ) -> [APIAssignment] {
-        assignments.sorted { lhs, rhs in
-            switch (lhs.sortOrder, rhs.sortOrder) {
-            case (let l?, let r?) where l != r:
-                return l < r
-            default:
-                let lhsCreated = setupByID[lhs.testSetupID]?.createdAt ?? .distantPast
-                let rhsCreated = setupByID[rhs.testSetupID]?.createdAt ?? .distantPast
-                if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
-                return lhs.testSetupID < rhs.testSetupID
-            }
-        }
     }
 
     private func loadGradesCSVSubmissions(

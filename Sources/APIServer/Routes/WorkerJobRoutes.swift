@@ -22,7 +22,7 @@ struct WorkerJobRoutes: RouteCollection {
             return conflict
         }
 
-        let runnerProfile = try await recordPollActivity(req: req, body: body, seenAt: seenAt)
+        let runnerProfile = try await recordRunnerCheckIn(req: req, body: body, seenAt: seenAt, reason: .poll)
 
         guard let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile) else {
             return Response(status: .noContent)
@@ -60,10 +60,13 @@ struct WorkerJobRoutes: RouteCollection {
         )
     }
 
-    /// Marks the runner active, upserts its capability profile, and records the
-    /// check-in.  Returns the resolved capability profile (nil if none).
-    private func recordPollActivity(
-        req: Request, body: WorkerActivityPayload, seenAt: Date
+    /// Marks the runner active, upserts its capability profile, and records
+    /// the check-in — the one check-in block shared by the poll and heartbeat
+    /// endpoints, which only differ in which activity timestamp advances and
+    /// the recorded reason (#1118; the two ~30-line copies had already been
+    /// drifting). Returns the resolved capability profile (nil if none).
+    private func recordRunnerCheckIn(
+        req: Request, body: WorkerActivityPayload, seenAt: Date, reason: RunnerCheckInReason
     ) async throws -> RunnerCapabilityProfile? {
         await req.application.workerActivityStore.markActive(
             workerID: body.workerID,
@@ -71,7 +74,8 @@ struct WorkerJobRoutes: RouteCollection {
             runnerVersion: body.runnerVersion,
             maxConcurrentJobs: body.maxConcurrentJobs,
             activeJobs: body.activeJobs,
-            lastPollAt: seenAt
+            lastPollAt: reason == .poll ? seenAt : nil,
+            lastHeartbeatAt: reason == .heartbeat ? seenAt : nil
         )
         let profileUpsert = try await req.application.runnerProfiles.registerOrUpdate(
             runnerID: body.workerID,
@@ -90,7 +94,7 @@ struct WorkerJobRoutes: RouteCollection {
         if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
             await req.application.diagnostics.recordRunnerCheckIn(
                 snapshot: snapshot,
-                reason: .poll,
+                reason: reason,
                 on: req.db,
                 logger: req.logger
             )
@@ -250,37 +254,7 @@ struct WorkerJobRoutes: RouteCollection {
     @Sendable
     func heartbeat(req: Request) async throws -> HTTPStatus {
         let body = try req.content.decode(WorkerActivityPayload.self)
-        let seenAt = Date()
-        await req.application.workerActivityStore.markActive(
-            workerID: body.workerID,
-            hostname: body.hostname,
-            runnerVersion: body.runnerVersion,
-            maxConcurrentJobs: body.maxConcurrentJobs,
-            activeJobs: body.activeJobs,
-            lastHeartbeatAt: seenAt
-        )
-        let profileUpsert = try await req.application.runnerProfiles.registerOrUpdate(
-            runnerID: body.workerID,
-            displayName: body.hostname,
-            profile: body.profile,
-            seenAt: seenAt,
-            on: req.db
-        )
-        if let profile = profileUpsert.profile, let event = profileUpsert.event {
-            req.application.diagnostics.recordRunnerProfileEvent(
-                profile: profile,
-                event: event,
-                logger: req.logger
-            )
-        }
-        if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
-            await req.application.diagnostics.recordRunnerCheckIn(
-                snapshot: snapshot,
-                reason: .heartbeat,
-                on: req.db,
-                logger: req.logger
-            )
-        }
+        _ = try await recordRunnerCheckIn(req: req, body: body, seenAt: Date(), reason: .heartbeat)
         return .ok
     }
 }
