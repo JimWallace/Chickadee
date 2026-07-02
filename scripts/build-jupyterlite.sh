@@ -78,6 +78,13 @@ PY
 # cross-origin isolated. Idempotent; fails if the upstream polyfill string drifts.
 python3 "$ROOT_DIR/scripts/patch-pyodide-waitasync-worker.py" "$OUTPUT_DIR"
 
+# Drop `jedi` from the pyodide-kernel boot-install list so the first cell execute
+# isn't blocked behind unpacking it (docs/exec-hang-investigation.md, 2nd issue:
+# the ~17s WebKit slow-first-execute). jedi backs tab-completion only, never cell
+# execution, and IPython's completer degrades cleanly when it is absent.
+# Idempotent; fails loudly if the upstream initKernel list drifts.
+python3 "$ROOT_DIR/scripts/patch-pyodide-defer-jedi.py" "$OUTPUT_DIR"
+
 # Inject the in-iframe kernel-boot diagnostics collector (jl-kernel-diagnostics.js)
 # into the editor index.html documents. `jupyter lite build` regenerates those, so
 # this re-adds the <script> tag every build. Idempotent.
