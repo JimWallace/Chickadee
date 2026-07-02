@@ -222,6 +222,29 @@ chromium failure is treated as real, first time.
      failing). The "ambient webkit exec-hang" decomposes into the wasm
      crash + boot-stalls + the fixed-endpoint blocker's tail, with
      nothing left over so far.
+   - **NEW class — DIALOG-STEAL (2026-07-02 chromium, forensic capture).**
+     A chromium exec-probe "hang" turned out to be a modal JupyterLab
+     dialog: `cell: prompt="[ ]:" active="jp-Dialog-button jp-mod-accept
+     jp-mod-styled"` — the cell never dispatched because a `.jp-Dialog`
+     had keyboard focus and swallowed the Shift+Enter (the second press
+     hit the dialog too, so it wasn't lost-dispatch either). This is a
+     distinct, student-facing bug: an error/confirm dialog over the
+     editor makes the first run silently do nothing. Very likely tied to
+     the every-boot folder-creation 403s + the `insertWidget` /
+     `updateRenderOption` null errors — the editor fails to set up its
+     working folder and surfaces a dialog. The probe now detects a
+     `.jp-Dialog` at hang time, captures its header/body text, dismisses
+     it, and re-presses to confirm the kernel underneath is healthy;
+     classified as `dialogSteal` (reported, non-failing). **Next step:**
+     read the captured `dialog:` text from the next probe run to identify
+     which dialog, then fix the folder-setup path that raises it.
+   - **Grading-hang probe: chromium also hangs (`1/12`, 2026-07-02).**
+     Not webkit-only. The grading path (a SECOND Pyodide in
+     grading-worker.js) intermittently never completes on chromium too;
+     the breadcrumb trail on the failing iteration is the lead. The gate
+     correctly held chromium to zero (webkit's PR tolerance does not
+     apply), so this failed the non-required probe — signal, not a
+     blocker.
 
 4. **Residual WorkerDaemonTests wedge (2026-07-02 evening).** With the
    fork bug fixed, worker-tests wedged once more via a different path:

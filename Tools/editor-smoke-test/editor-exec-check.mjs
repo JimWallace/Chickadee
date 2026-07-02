@@ -234,7 +234,8 @@ async function probeOnce(browser, storageState, notebookURL) {
   });
 
   const result = {
-    hung: true, wasmCrash: false, lostDispatch: false, ms: 0, status: null,
+    hung: true, wasmCrash: false, lostDispatch: false, dialogStole: false,
+    dialogText: "", ms: 0, status: null,
     note: "", diag: [], errors, badResponses, cellState: "",
   };
   const readDiag = () => page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
@@ -307,11 +308,37 @@ async function probeOnce(browser, storageState, notebookURL) {
         return `prompt="${prompt}" docFocus=${document.hasFocus()} active="${active}" out="${out}"`;
       }).catch(() => "unavailable");
 
-      // Discriminator: lost keypress vs wedged kernel. If a second
-      // Shift+Enter runs the cell promptly, the kernel was healthy the whole
-      // time and the FIRST dispatch never happened (focus race) — a
-      // different bug class than the sustained-busy exec_hang, and a
-      // student-facing one ("I pressed run and nothing happened").
+      // A modal JupyterLab dialog (`.jp-Dialog`) intercepts keyboard focus, so
+      // Shift+Enter never reaches the cell — the cell prompt stays "[ ]" and the
+      // active element is a `jp-Dialog-button` (observed 2026-07-02 chromium:
+      // the folder-creation 403s / insertWidget error surface an error dialog).
+      // This is a distinct, student-facing bug ("I pressed run and nothing
+      // happened") from a wedged kernel; capture WHICH dialog and dismiss it so
+      // the second-press discriminator can confirm the kernel underneath is
+      // healthy.
+      result.dialogText = await jlFrame.evaluate(() => {
+        const dialog = document.querySelector(".jp-Dialog");
+        if (!dialog) return "";
+        const header = (dialog.querySelector(".jp-Dialog-header") || {}).textContent || "";
+        const body = (dialog.querySelector(".jp-Dialog-body") || {}).textContent || "";
+        return (header + " | " + body).trim().slice(0, 200);
+      }).catch(() => "");
+      if (result.dialogText) {
+        // Dismiss the dialog (Escape, then reject-button fallback) before the
+        // retry so the keypress can reach the cell.
+        await jlFrame.evaluate(() => {
+          const btn = document.querySelector(".jp-Dialog-button.jp-mod-reject")
+            || document.querySelector(".jp-Dialog-button");
+          if (btn) btn.click();
+        }).catch(() => {});
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(500);
+      }
+
+      // Discriminator: lost keypress / dialog-steal vs wedged kernel. If a
+      // second Shift+Enter (after any dialog is dismissed) runs the cell
+      // promptly, the kernel was healthy the whole time and the FIRST dispatch
+      // never landed — a focus problem, not a deadlock.
       try {
         const cellAgain = jlFrame.locator(".jp-Notebook .jp-CodeCell .cm-content").first();
         await cellAgain.click({ timeout: 5_000 });
@@ -319,10 +346,14 @@ async function probeOnce(browser, storageState, notebookURL) {
         const retryStart = Date.now();
         while (Date.now() - retryStart < 15_000) {
           const body = await jlFrame.evaluate(() => (document.body && document.body.innerText) || "").catch(() => "");
-          if (body.includes(EXEC_TOKEN)) { result.lostDispatch = true; break; }
+          if (body.includes(EXEC_TOKEN)) {
+            if (result.dialogText) result.dialogStole = true;
+            else result.lostDispatch = true;
+            break;
+          }
           await page.waitForTimeout(500);
         }
-      } catch { /* second press unavailable — leave lostDispatch false */ }
+      } catch { /* second press unavailable — leave classification as deadlock */ }
     }
   } catch (e) {
     result.note = `exception: ${(e && e.message) || e}`;
@@ -349,6 +380,7 @@ async function main() {
   let wasmCrashes = 0;
   let deadlocks = 0;
   let lostDispatches = 0;
+  let dialogSteals = 0;
   const latencies = [];
   for (let i = 0; i < ITER; i++) {
     // Fresh browser per iteration. A single WebKit process accumulates WASM /
@@ -363,19 +395,23 @@ async function main() {
     if (r.hung) {
       hangs++;
       if (r.wasmCrash) wasmCrashes++;
+      else if (r.dialogStole) dialogSteals++;
       else if (r.lostDispatch) lostDispatches++;
       else deadlocks++;
       const exec = (r.diag || []).find((d) => d.source === "exec_hang");
       const tag = r.wasmCrash
         ? "WEBKIT-WASM-CRASH (upstream #286266)"
-        : r.lostDispatch
-          ? "LOST-DISPATCH (second press ran — kernel healthy, first keypress lost)"
-          : "HANG";
+        : r.dialogStole
+          ? "DIALOG-STEAL (modal dialog swallowed the keypress; cell ran after dismiss)"
+          : r.lostDispatch
+            ? "LOST-DISPATCH (second press ran — kernel healthy, first keypress lost)"
+            : "HANG";
       console.log(
         `  iter ${i + 1}/${ITER}: ${tag}${r.note ? " (" + r.note + ")" : ""} — ` +
           `indicator=${r.status} waited=${r.ms}ms exec_hang=${exec ? exec.message : "none"}`
       );
       if (r.cellState) console.log(`    cell: ${r.cellState}`);
+      if (r.dialogText) console.log(`    dialog: ${r.dialogText}`);
       if (r.errors && r.errors.length) console.log(`    console: ${r.errors.slice(0, 4).join(" | ")}`);
       if (r.badResponses && r.badResponses.length) {
         console.log(`    http: ${r.badResponses.slice(0, 6).join(" | ")}`);
@@ -403,9 +439,17 @@ async function main() {
   const avg = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
   console.log(
     `EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ` +
-      `(deadlock=${deadlocks}, lostDispatch=${lostDispatches}, webkitWasmCrash=${wasmCrashes}) ` +
-      `ok=${ITER - hangs} avgRunMs=${avg}`
+      `(deadlock=${deadlocks}, dialogSteal=${dialogSteals}, lostDispatch=${lostDispatches}, ` +
+      `webkitWasmCrash=${wasmCrashes}) ok=${ITER - hangs} avgRunMs=${avg}`
   );
+  if (dialogSteals > 0) {
+    console.log(
+      `NOTE: ${dialogSteals}/${ITER} run(s) had a modal dialog swallow the first Shift+Enter ` +
+        `(the cell ran after the dialog was dismissed — kernel healthy). Student-facing: an ` +
+        `error/confirm dialog over the editor makes the first run do nothing. See the per-iter ` +
+        `"dialog:" line for which dialog; likely tied to the folder-creation 403s / insertWidget error.`
+    );
+  }
   if (lostDispatches > 0) {
     console.log(
       `NOTE: ${lostDispatches}/${ITER} run(s) lost the first Shift+Enter (a second press ran fine — ` +
