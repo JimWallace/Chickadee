@@ -4,7 +4,9 @@ name: Visual regression
 # results, instructor list, admin) in BOTH colour schemes against committed
 # baselines (Tools/visual-regression/baselines/), failing on visual drift the
 # static token guards can't see — the "looks right" gap in docs/ui-design.md.
-# Issue #1136.
+# Issue #1136.  The same job then runs the axe-core accessibility scan over
+# the same pages (#1137): critical/serious violations are zero-tolerance,
+# moderate/minor ratchet down against a11y-baseline.json.
 #
 # NOT a required check (unlike editor-smoke-gate), so it is path-filtered at
 # the trigger: a skipped run can't block merges.  Chromium only — one
@@ -81,6 +83,10 @@ jobs:
       - name: Capture and compare
         working-directory: Tools/visual-regression
         run: ./run-visual.sh
+
+      - name: Accessibility scan (axe-core)
+        working-directory: Tools/visual-regression
+        run: ./run-a11y.sh
 
       - name: Upload visual diffs
         if: failure()

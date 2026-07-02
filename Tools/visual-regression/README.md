@@ -41,6 +41,15 @@ baseline image diff becomes part of code review. If no baselines are
 committed at all, the harness runs in bootstrap mode: captures are saved
 (uploaded in CI as `visual-baselines-bootstrap`) and the run passes.
 
+## Accessibility scan (#1137)
+
+`./run-a11y.sh` runs axe-core over the same seeded pages in both schemes
+(`a11y.mjs`; the CI job runs it after the visual compare).  Critical and
+serious violations always fail; moderate/minor are a shrink-only count
+ratchet against `a11y-baseline.json` (growth fails, shrinkage prints the
+lower-the-baseline note).  With no baseline committed it bootstraps the
+same way the visual harness does.
+
 ## Determinism
 
 Fixed 1280×900 viewport, `deviceScaleFactor: 1`, `en-CA` /
