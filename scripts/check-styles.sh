@@ -78,6 +78,35 @@ elif [ "$alert_count" -lt "$ALERT_BASELINE" ]; then
   echo "note: alert() count dropped to ${alert_count}; lower ALERT_BASELINE in scripts/check-styles.sh."
 fi
 
+# ── 3b. Inline <script> line-count ratchet (#1135) ───────────────────────────
+# JS inside a template <script> block is invisible to every tool — ESLint
+# can't parse Leaf-interpolated JS, CodeQL skips it, node --check can't run
+# it — and it's why the CSP still allows inline script.  New page behaviour
+# belongs in a lintable Public/*.js file (template carries data via data-*
+# attributes or a JSON island).  Baseline = total non-blank lines inside
+# <script> bodies across all templates; it may only go DOWN.  <script src=…>
+# includes and single-line <script>…</script> elements don't count.
+INLINE_SCRIPT_BASELINE=2481
+inline_script_count="$(
+  awk '
+    /<script[^>]*src=/ { next }
+    /<script>/ && /<\/script>/ { next }
+    /<script/ { inscript = 1; next }
+    /<\/script>/ { inscript = 0; next }
+    inscript && NF > 0 { n++ }
+    END { print n + 0 }
+  ' "${views[@]}"
+)"
+if [ "$inline_script_count" -gt "$INLINE_SCRIPT_BASELINE" ]; then
+  status=1
+  echo "ERROR: inline <script> grew (${inline_script_count} lines, baseline ${INLINE_SCRIPT_BASELINE})."
+  echo "       Put new page JS in a Public/*.js file (loaded with <script src>)"
+  echo "       so it is linted and testable; pass page data via data-* attributes"
+  echo "       or a JSON island.  See docs/ui-design.md."
+elif [ "$inline_script_count" -lt "$INLINE_SCRIPT_BASELINE" ]; then
+  echo "note: inline <script> lines dropped to ${inline_script_count}; lower INLINE_SCRIPT_BASELINE in scripts/check-styles.sh."
+fi
+
 # ── 4. No duplicated / shadowed selectors in page <style> blocks ─────────────
 # Page-local <style> blocks should only define page-unique classes.  Two
 # regressions the cleanup removed (and that render fine, so no test catches):
