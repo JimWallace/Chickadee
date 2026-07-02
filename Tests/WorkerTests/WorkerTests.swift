@@ -4,7 +4,7 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite final class WorkerTests {
+@Suite(.timeLimit(.minutes(3))) final class WorkerTests {
 
     // MARK: - Setup
 
@@ -168,6 +168,45 @@ import Testing
         #expect(
             output.stderr.contains("seed=[]"),
             "Expected unset env var when overrides is empty and parent didn't set it; got: \(output.stderr)"
+        )
+    }
+
+    @Test func scriptDoesNotInheritNonAllowlistedParentEnv() async throws {
+        // Regression test for the pre-#1139-fix Linux path, which applied the
+        // allowlisted env via setenv() on top of the child's *inherited* full
+        // parent environment — so non-allowlisted worker vars (the shape
+        // RUNNER_SHARED_SECRET arrives in) leaked into student scripts.
+        // execve() with a parent-built envp replaces the environment outright.
+        let script = try writeScript(
+            """
+            #!/bin/sh
+            echo "canary=[$WORKER_SECRET_CANARY]" >&2
+            exit 0
+            """)
+        let runner = UnsandboxedScriptRunner()
+        let workDir = tmpDir
+        let output = try await withEnvLock {
+            let original = ProcessInfo.processInfo.environment["WORKER_SECRET_CANARY"]
+            defer {
+                if let original {
+                    setenv("WORKER_SECRET_CANARY", original, 1)
+                } else {
+                    unsetenv("WORKER_SECRET_CANARY")
+                }
+            }
+            setenv("WORKER_SECRET_CANARY", "leaked-worker-secret", 1)
+            return await runScriptRobustly(
+                runner,
+                script: script,
+                workDir: workDir,
+                timeLimitSeconds: 60,
+                env: [:]
+            )
+        }
+        #expect(output.exitCode == 0)
+        #expect(
+            output.stderr.contains("canary=[]"),
+            "Non-allowlisted parent env vars must not reach the script; got: \(output.stderr)"
         )
     }
 
