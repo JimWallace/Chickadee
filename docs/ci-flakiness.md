@@ -193,13 +193,35 @@ chromium failure is treated as real, first time.
      (`Untitled Folder/all.json`, `users/all.json`,
      `Untitled Folder1/all.json`): the editor's file browser appears to
      try to materialize the missing `users/<uid>/<setup>` path over HTTP
-     and is refused on every boot. And webkit's exec latency is
-     **bimodal**: 13/45 iterations in a tight 16.2–18.2 s band (rest
-     ~507 ms; chromium 0/30 slow) — a timeout constant being waited out,
-     plausibly the same mechanism whose far tail is the ambient hang.
-     The one red iteration was a **boot-stall** (kernel never idle in
-     90 s), matching production's ~7 % boot→no-idle funnel drop — a
-     third distinct phenomenon, not a post-idle hang.
+     and is refused on every boot. The one red iteration was a
+     **boot-stall** (kernel never idle in 90 s), matching production's
+     ~7 % boot→no-idle funnel drop — a distinct phenomenon, not a
+     post-idle hang.
+   - **CONFIRMED (three-run delay experiment, 2026-07-02 evening): the
+     webkit slow-execute mode is a fixed-endpoint post-idle background
+     task, not load jitter.** Pressing run at `kernel_idle`+0 ms: 13/45
+     iterations wait 16.2–18.2 s; at +1,500 ms: 12/45 wait 15.7–16.7 s
+     (the band shifts DOWN by the delay — fixed endpoint, not fixed
+     cost); at +25,000 ms: **0/28 slow, every iteration ~510 ms**
+     (p ≈ 4×10⁻⁵ by chance). Something occupies the webkit kernel for
+     ~17–18 s after idle; a cell executed inside that window queues
+     behind it; its far tail is the ambient CI hang and, on slow student
+     hardware, plausibly the residual ~4 % production `exec_hang` (the
+     45 s telemetry threshold would classify a long-enough wait as a
+     hang, and the self-heal reload would "fix" it). It is NOT nb_mypy
+     (disabled — see `scripts/patch-pyodide-kernel.py`; CLAUDE.md was
+     stale on this and has been corrected). Chromium completes the same
+     work fast enough to never lose the race (0 slow in 75+ iterations).
+     **Next step:** identify the task — timestamp post-idle kernel/editor
+     activity (kernel-wheel patch instrumentation or a performance-trace
+     capture in the probe) and inspect what JupyterLite schedules after
+     `kernel_idle` in the SW-free config.
+   - **Cumulative webkit classification, 135 instrumented iterations:**
+     0 post-idle deadlocks, 0 lost dispatches, 1 boot-stall, 3 upstream
+     WebKit WASM crashes (bug #286266, classified separately, non-
+     failing). The "ambient webkit exec-hang" decomposes into the wasm
+     crash + boot-stalls + the fixed-endpoint blocker's tail, with
+     nothing left over so far.
 
 4. **Residual WorkerDaemonTests wedge (2026-07-02 evening).** With the
    fork bug fixed, worker-tests wedged once more via a different path:
