@@ -2,6 +2,7 @@
 // Used by JS fetch calls to satisfy the CSRF middleware on POST endpoints.
 // Kept as a global for back-compat; delegates to the shared implementation
 // in Public/chickadee-ui.js.
+/* exported getCsrfToken */
 function getCsrfToken() {
     return ChickadeeUI.getCsrfToken();
 }

@@ -214,7 +214,6 @@
             return panels[mechanism];
         }
 
-        var activeMechanism = null;
         var activeRenderer = null;
         var editingItem = null;   // { mechanism, id, item } when editing
 
@@ -232,7 +231,6 @@
             if (activeRenderer && typeof activeRenderer.cleanup === 'function') {
                 try { activeRenderer.cleanup(); } catch (e) { /* ignore */ }
             }
-            activeMechanism = mechanism;
             var r = rendererFor(mechanism);
             activeRenderer = r || null;
             if (!r) {

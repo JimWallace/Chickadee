@@ -71,11 +71,6 @@
         // section, not just its own family-scoped variables.  v0.4.100+.
         var currentSectionVariables = [];
 
-        // Section ID for the family currently being edited (or for the
-        // section the new family is destined for, via the per-section
-        // toolbar's `__chickadeeTargetSection` flag).  Used by
-        // `populateFunctionSelect` to filter the dropdown.  v0.4.108+.
-        var currentSectionID = null;
         // Display name of the same section.  v0.4.111 switched the
         // dropdown filter from "functions used by tests in this
         // section" (filename-token match) to "functions defined under
@@ -120,11 +115,6 @@
             return { vars: vars, sectionName: sectionName, sectionID: sectionID };
         }
 
-        /// Back-compat wrapper around `readSectionContextForFamily` for
-        /// sites that only need the variables list.
-        function readSectionVariablesForFamily(familyID) {
-            return readSectionContextForFamily(familyID).vars;
-        }
 
         /// Reads section context by section id (rather than by family id).
         /// Used for the "+ New Family" path: the per-section toolbar
@@ -153,57 +143,6 @@
             return { vars: vars, sectionName: sectionName, sectionID: sectionID };
         }
 
-        /// v0.4.108 (widened in v0.4.110): returns the set of function
-        /// names plausibly covered by tests in the given section.
-        /// Walks the seeded suite state and pulls function names from:
-        ///   - family.functionName (for existing pattern families)
-        ///   - displayName: "<X> exists" (auto-scaffold, v0.4.100+),
-        ///                  "<X> is defined and callable" (legacy)
-        ///   - filename: any `\w+` token whose value matches a name
-        ///     in `scannedFunctions` (covers `publictest_exists_<X>.py`,
-        ///     `publictest_<X>.py`, `publictest_<X>_v2.py`, etc.)
-        /// The scanner-name cross-check is the wide-net rule that
-        /// rescued the Challenge / Warm Up / etc. cases where scripts
-        /// follow `publictest_<fn>.py` rather than the strict
-        /// `*_exists_<fn>.py` pattern.  Returns null when the section
-        /// can't be identified; caller falls back to "show all".
-        function functionNamesInSection(sectionID) {
-            if (!sectionID) return null;
-            var seedEl = document.getElementById('suite-state-seed');
-            if (!seedEl) return null;
-            var seed;
-            try { seed = JSON.parse(seedEl.textContent); }
-            catch (_) { return null; }
-            var knownFnNames = new Set(
-                (scannedFunctions || []).map(function (f) { return f.name; })
-            );
-            var names = new Set();
-            (seed.items || []).forEach(function (it) {
-                if (it.sectionID !== sectionID) return;
-                if (it.kind === 'family' && it.family && it.family.functionName) {
-                    names.add(it.family.functionName);
-                    return;
-                }
-                if (it.kind === 'script' && it.script) {
-                    var dn = it.script.displayName || it.script.name || '';
-                    var m1 = dn.match(/^(\w+)\s+(?:exists|is defined and callable)/);
-                    if (m1 && knownFnNames.has(m1[1])) { names.add(m1[1]); return; }
-                    // Wide-net filename tokenisation: split on any non-
-                    // word run and accept any token matching a scanned
-                    // function name.  Handles publictest_exists_X.py,
-                    // publictest_X.py, X.py, X_v2.py, etc.
-                    var fn = it.script.script || '';
-                    var tokens = fn.split(/[^A-Za-z0-9_]+/);
-                    for (var ti = 0; ti < tokens.length; ti++) {
-                        if (knownFnNames.has(tokens[ti])) {
-                            names.add(tokens[ti]);
-                            break;
-                        }
-                    }
-                }
-            });
-            return names;
-        }
 
         /// Paints the read-only "Shared inputs from section: X" block
         /// inside the family editor modal from the given context.
@@ -443,7 +382,7 @@
             } else {
                 // Regenerate rows to match the new param columns, preserving
                 // existing data by position.
-                var existing = readCasesFromTableRaw(paramNames.length);
+                var existing = readCasesFromTableRaw();
                 casesBody.innerHTML = '';
                 existing.forEach(function (c) { addCaseRow(c, paramNames); });
                 if (!existing.length) addCaseRow(null, paramNames);
@@ -1184,7 +1123,7 @@
         /// references (`$name`) and "omitted" state across a header
         /// rebuild so the instructor doesn't silently lose data when
         /// adding a case, changing tolerance, etc.
-        function readCasesFromTableRaw(argCount) {
+        function readCasesFromTableRaw() {
             var rows = Array.from(casesBody.querySelectorAll('tr'));
             return rows.map(function (row) {
                 var label = row.querySelector('.pf-case-label').value;
@@ -1308,7 +1247,6 @@
                 var family = familiesState[editingIndex];
                 var ctx = readSectionContextForFamily(family.id);
                 currentSectionVariables = ctx.vars;
-                currentSectionID = ctx.sectionID;
                 currentSectionName = ctx.sectionName;
                 renderReadOnlySectionVars(ctx);
                 if (titleEl) titleEl.textContent = 'Edit Pattern Family';
@@ -1355,7 +1293,6 @@
                 var targetSid = window.__chickadeeTargetSection || '';
                 var newCtx = readSectionContextBySectionID(targetSid);
                 currentSectionVariables = newCtx.vars;
-                currentSectionID = newCtx.sectionID;
                 currentSectionName = newCtx.sectionName;
                 renderReadOnlySectionVars(newCtx);
                 rebuildCasesHeader([]);
