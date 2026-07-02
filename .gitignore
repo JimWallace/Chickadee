@@ -46,3 +46,9 @@ Tools/vendor/node_modules/
 # Root ESLint toolchain (package.json + package-lock.json are checked in).
 /node_modules/
 Tools/vendor/package-lock.json
+
+# Visual-regression working dirs (Tools/visual-regression; committed baselines
+# live in Tools/visual-regression/baselines/).
+Tools/visual-regression/node_modules/
+visual-bootstrap/
+visual-diffs/

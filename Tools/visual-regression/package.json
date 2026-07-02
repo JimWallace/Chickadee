@@ -1,0 +1,13 @@
+{
+  "name": "chickadee-visual-regression",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Visual regression harness: boots chickadee-server, screenshots key pages in light + dark colour schemes, and diffs them against committed baselines.",
+  "type": "module",
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "pixelmatch": "^7.1.0",
+    "playwright": "^1.49.1",
+    "pngjs": "^7.0.0"
+  }
+}

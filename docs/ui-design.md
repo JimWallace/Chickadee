@@ -184,6 +184,11 @@ swift test --filter WebRoutes
 
 and check the page by eye in both light and dark mode — the guards prove the
 values route through the system; they cannot prove the page *looks* right.
+The visual-regression harness (`Tools/visual-regression/`, CI
+`visual-regression.yml`) automates that last check for the key pages: it
+screenshots them in both schemes and diffs against committed baselines.  An
+intentional look change means regenerating baselines
+(`Tools/visual-regression/run-visual.sh --update`) in the same PR.
 
 ## Extending the system
 
