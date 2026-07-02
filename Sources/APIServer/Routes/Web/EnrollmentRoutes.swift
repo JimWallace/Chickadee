@@ -135,12 +135,16 @@ struct EnrollmentRoutes: RouteCollection {
         var target = safeLocalPath(nextPath) ?? req.headers.first(name: .referer) ?? "/"
 
         // Guard against an instructor dead-end: a target under /instructor 403s
-        // unless the *newly active* course is one this user instructs. If the
-        // just-activated course isn't, send them home instead of into a 403.
+        // unless the *newly active* course is one this user staffs. The threshold
+        // must match the /instructor area gate (ActiveCourseStaffMiddleware),
+        // which admits staff at `.ta` or higher — using `.instructor` here would
+        // silently bounce a TA home when they click the Instructor nav button
+        // (which activates their course with next=/instructor). If the
+        // just-activated course isn't one they staff, send them home not into a 403.
         if target.hasPrefix("/instructor") {
             let role = try await courseRole(of: userID, inCourse: courseID, db: req.db)
-            let canInstruct = activated && (user.isAdmin || (role ?? .student) >= .instructor)
-            if !canInstruct { target = "/" }
+            let canStaff = activated && (user.isAdmin || (role ?? .student) >= .ta)
+            if !canStaff { target = "/" }
         }
 
         return req.redirect(to: target)
