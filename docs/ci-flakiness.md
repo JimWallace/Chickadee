@@ -162,6 +162,111 @@ chromium failure is treated as real, first time.
    `docs/exec-hang-investigation.md` with the probe breadcrumbs. The
    dispatch/scheduled hard-zero runs of `grading-hang-probe.yml` are the
    fix's acceptance test.
+
+   *2026-07-02 evening findings (probe forensics upgraded in the same
+   change as this note):*
+   - Production telemetry (admin `get_browser_diagnostics`, 96 h window)
+     shows the **sustained-busy `exec_hang` is still real for students on
+     current builds**: 19 hangs / 465 `kernel_idle` boots (~4 %), 19
+     self-heal attempts, 2 `recover_failed`. The v0.4.526 chdir fix killed
+     the 100 % class; this ~4 % residue is a distinct bug.
+   - The **CI probe hang is a different shape**: the 2026-07-02 chromium
+     repro (`hangs=1/8`) showed `indicator=idle` for the full budget and
+     `exec_hang=none` — the cell likely never *started*, i.e. the
+     Shift+Enter dispatch was lost (post-idle focus race), not a wedged
+     kernel. `editor-exec-check.mjs` now classifies this (`lostDispatch`)
+     via a second-press discriminator, captures console-error URLs +
+     all ≥400 responses + failed requests (the four bare 403s in that repro
+     were unidentifiable), reports per-iteration noise base rates on green
+     runs too, and dumps the cell prompt/focus state on every hang.
+   - **Open lead:** `unhandledrejection: Cannot read properties of null
+     (reading 'insertWidget')` fires on essentially every production boot
+     (499 events / ~500 boots in 96 h; vendored `jlab_core` bundle, source
+     maps checked in). Probably a benign JupyterLab race in the SW-free
+     config, but it is exactly the kind of degraded widget state that
+     could eat a keypress — worth tracing via the source map before
+     trusting it. Confirmed present on every CI boot too (both engines),
+     alongside a `updateRenderOption` null error.
+   - **First instrumented 45-iteration webkit dispatch:** the constant
+     4xx noise is identified — `POST /api/v1/client-diagnostics` 403 plus
+     403s on JupyterLite contents-API *folder-creation* attempts
+     (`Untitled Folder/all.json`, `users/all.json`,
+     `Untitled Folder1/all.json`): the editor's file browser appears to
+     try to materialize the missing `users/<uid>/<setup>` path over HTTP
+     and is refused on every boot. The one red iteration was a
+     **boot-stall** (kernel never idle in 90 s), matching production's
+     ~7 % boot→no-idle funnel drop — a distinct phenomenon, not a
+     post-idle hang.
+   - **CONFIRMED (three-run delay experiment, 2026-07-02 evening): the
+     webkit slow-execute mode is a fixed-endpoint post-idle background
+     task, not load jitter.** Pressing run at `kernel_idle`+0 ms: 13/45
+     iterations wait 16.2–18.2 s; at +1,500 ms: 12/45 wait 15.7–16.7 s
+     (the band shifts DOWN by the delay — fixed endpoint, not fixed
+     cost); at +25,000 ms: **0/28 slow, every iteration ~510 ms**
+     (p ≈ 4×10⁻⁵ by chance). Something occupies the webkit kernel for
+     ~17–18 s after idle; a cell executed inside that window queues
+     behind it; its far tail is the ambient CI hang and, on slow student
+     hardware, plausibly the residual ~4 % production `exec_hang` (the
+     45 s telemetry threshold would classify a long-enough wait as a
+     hang, and the self-heal reload would "fix" it). It is NOT nb_mypy
+     (disabled — see `scripts/patch-pyodide-kernel.py`; CLAUDE.md was
+     stale on this and has been corrected). Chromium completes the same
+     work fast enough to never lose the race (0 slow in 75+ iterations).
+     **Next step:** identify the task — timestamp post-idle kernel/editor
+     activity (kernel-wheel patch instrumentation or a performance-trace
+     capture in the probe) and inspect what JupyterLite schedules after
+     `kernel_idle` in the SW-free config.
+   - **Cumulative webkit classification, 135 instrumented iterations:**
+     0 post-idle deadlocks, 0 lost dispatches, 1 boot-stall, 3 upstream
+     WebKit WASM crashes (bug #286266, classified separately, non-
+     failing). The "ambient webkit exec-hang" decomposes into the wasm
+     crash + boot-stalls + the fixed-endpoint blocker's tail, with
+     nothing left over so far.
+   - **NEW class — DIALOG-STEAL (2026-07-02 chromium, forensic capture).**
+     A chromium exec-probe "hang" turned out to be a modal JupyterLab
+     dialog: `cell: prompt="[ ]:" active="jp-Dialog-button jp-mod-accept
+     jp-mod-styled"` — the cell never dispatched because a `.jp-Dialog`
+     had keyboard focus and swallowed the Shift+Enter (the second press
+     hit the dialog too, so it wasn't lost-dispatch either). This is a
+     distinct, student-facing bug: an error/confirm dialog over the
+     editor makes the first run silently do nothing. Very likely tied to
+     the every-boot folder-creation 403s + the `insertWidget` /
+     `updateRenderOption` null errors — the editor fails to set up its
+     working folder and surfaces a dialog. The probe now detects a
+     `.jp-Dialog` at hang time, captures its header/body text, dismisses
+     it, and re-presses to confirm the kernel underneath is healthy;
+     classified as `dialogSteal` (reported, non-failing). **Next step:**
+     read the captured `dialog:` text from the next probe run to identify
+     which dialog, then fix the folder-setup path that raises it.
+   - **Probe classes are now fully separated (post-boot-stall-split).**
+     The probe distinguishes five outcomes so each maps to one
+     phenomenon: `deadlock` (reached idle, execute wedged — the only
+     leg-failing class), `bootStall` (never reached idle), `dialogSteal`
+     (modal dialog ate the keypress), `lostDispatch` (keypress lost, no
+     dialog), and `webkitWasmCrash` (upstream #286266). Boot-stalls and
+     dialog-steals used to be miscounted as deadlocks; a 30-iteration
+     chromium run's lone failure was a boot-stall (`iter 5/30 ... kernel
+     never reported idle, waited=0ms`), now labelled as such.
+   - **Grading-hang probe: chromium also hangs (`1/12`, 2026-07-02).**
+     Not webkit-only. The grading path (a SECOND Pyodide in
+     grading-worker.js) intermittently never completes on chromium too;
+     the breadcrumb trail on the failing iteration is the lead. The gate
+     correctly held chromium to zero (webkit's PR tolerance does not
+     apply), so this failed the non-required probe — signal, not a
+     blocker.
+
+4. **Residual WorkerDaemonTests wedge (2026-07-02 evening).** With the
+   fork bug fixed, worker-tests wedged once more via a different path:
+   `workerDaemonContinuesToNextJobAfterProcessingFailure` failed its
+   10 s wait, then the bare `try await task.value` after `task.cancel()`
+   suspended forever (`Task.value` is not cancellation-responsive) — the
+   `.timeLimit` trait *attributed* the failure but cannot interrupt a
+   non-cancellable wait, so the job still rode to the 20-minute kill.
+   All 12 cancel-then-await sites now go through a bounded
+   `awaitCancelledDaemon` helper (30 s deadline). The underlying
+   question — *what* in `daemon.run()` ignored cancellation under load —
+   is the remaining daemon-side item; suspects are the artifact-download
+   path and any wait not routed through cancellable primitives.
 2. **Watch the tolerated-webkit warning rate.** The `::warning`
    annotations from the probe and the smoke retries are the flake-rate
    telemetry now; if they show up more than occasionally, the ambient rate

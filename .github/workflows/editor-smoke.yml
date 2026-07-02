@@ -192,9 +192,14 @@ jobs:
   # (no editor-relevant changes), red only when the smoke actually failed — so
   # this one check can be marked required without blocking unrelated PRs. Mark
   # THIS job ("editor-smoke-gate") required in branch protection.
+  # `!cancelled()` is run-scoped: a superseded run (concurrency cancel from a
+  # newer push, or a rerun of an older head entering the shared group) skips
+  # the gate instead of reporting its cancelled smoke jobs as a failure. A
+  # smoke job killed by its own timeout-minutes still fails the gate — the
+  # run survives in that case, so the gate runs and sees result=cancelled.
   editor-smoke-gate:
     needs: [changes, smoke]
-    if: always()
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Gate on editor smoke result

@@ -371,6 +371,14 @@ jobs:
   # rename or matrix change can't silently detach a required check. Every
   # job above always runs (no internal skips), so anything short of
   # `success` fails the gate.
+  #
+  # `!cancelled()` is run-scoped: when this whole run is superseded
+  # (concurrency cancel — e.g. a newer push, or a rerun of an older head
+  # entering the shared group), the gate SKIPS instead of reporting a
+  # spurious failure for the cancelled jobs. A single job killed by its
+  # own timeout-minutes also reads "cancelled", but the run survives, so
+  # the gate still runs and still fails — that detection is load-bearing
+  # (2026-07-02: it caught the WorkerDaemonTests 20-minute wedge).
   swift-tests-gate:
     needs:
       - format-lint
@@ -380,7 +388,7 @@ jobs:
       - api-tests-postgres
       - browser-runner-tests
       - worker-tests
-    if: always()
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -448,26 +448,24 @@ version — the guard against repeating #574.  jszip is fetched by
 every contributor and CI runner sees the same bytes without a build-time
 network fetch.
 
-**Extra packages + nb_mypy.** Pure-Python packages not in the upstream Pyodide
-distribution are declared in `Tools/vendor/pyodide-extra-packages.json` (pinned
-URL + sha256) and injected into the one lock by `scripts/add-pyodide-extras.py`
-(run from `setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're
-present so a re-vendor can't silently drop them.  This is how `nb_mypy` (+
-`astor`) gets into the editor.  nb_mypy type-checking is **on by default** but
-**loaded lazily, off the kernel-boot critical path**: the kernel wheel's
-`__init__.py` is patched (deterministically, `ZIP_STORED`, by
-`scripts/patch-pyodide-kernel.py` from `setup-jupyterlite.sh`) to schedule a
-background task that — once the kernel is up — `loadPackage`s nb_mypy from the
-vended Pyodide lock and runs `%load_ext nb_mypy; %nb_mypy On`.  nb_mypy is
-deliberately **not** in `loadPyodideOptions.packages`: a package named there is
-loaded by `loadPyodide()` itself, so any failure (bad PEP 503 lock key, dropped
-wheel, ABI mismatch) would reject the boot and brick the whole editor.  The
-background load is wrapped in a fail-safe try/except so a missing/incompatible
-nb_mypy degrades to "no type warnings", never a dead kernel.  Patching a bundled
-wheel means a sha cascade (wheel → `all.json` digest → `pipliteUrls` sha);
-`verify-jupyterlite.sh` asserts that chain is consistent so a mismatch (which
-would make piplite reject the kernel) is a build failure, not a browser
-surprise.
+**Extra packages + nb_mypy (currently DISABLED).** Pure-Python packages not
+in the upstream Pyodide distribution are declared in
+`Tools/vendor/pyodide-extra-packages.json` (pinned URL + sha256) and injected
+into the one lock by `scripts/add-pyodide-extras.py` (run from
+`setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're present so
+a re-vendor can't silently drop them.  This is how the `nb_mypy` (+ `astor`)
+wheels get into the editor bundle — but **nb_mypy type-checking is disabled**
+(see the `scripts/patch-pyodide-kernel.py` docstring): its IPython
+`pre_run_cell` hook ran a synchronous compiled-WASM mypy on every cell
+execute, on the kernel's single thread, and wedged the first cell in the real
+editor.  The wheels stay vended (harmless, unloaded) and the patch keeps an
+empty activation block so re-enabling is a one-line change; revisit
+type-checking only as a feature that never runs on the cell-execute path.
+The same kernel-wheel patch is what carries the v0.4.526 chdir fix; patching
+a bundled wheel means a sha cascade (wheel → `all.json` digest →
+`pipliteUrls` sha); `verify-jupyterlite.sh` asserts that chain is consistent
+so a mismatch (which would make piplite reject the kernel) is a build
+failure, not a browser surprise.
 
 ---
 

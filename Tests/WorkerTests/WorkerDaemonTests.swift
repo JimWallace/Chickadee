@@ -289,6 +289,51 @@ import Testing
     // plus blocking Thread.sleep in mocks/teardown) that Task can be starved
     // for several seconds before it gets to run.  A tight 2–4s window made
     // these tests flaky there; 10s removes the class of failure.
+    /// Tracks daemon-task completion so `awaitCancelledDaemon` can poll it
+    /// with a deadline instead of awaiting `task.value` unbounded.
+    private actor DaemonShutdownFlag {
+        private var done = false
+        private var unexpectedError: String?
+        func markDone(unexpectedError error: String?) {
+            done = true
+            unexpectedError = error
+        }
+        func isDone() -> Bool { done }
+        func failure() -> String? { unexpectedError }
+    }
+
+    /// Cancels-and-awaits a daemon task with a deadline. `Task.value` is not
+    /// cancellation-responsive: if `daemon.run()` is wedged in a
+    /// non-cancellable wait, a bare `try await task.value` after `cancel()`
+    /// suspends forever and rides the whole job to the CI 20-minute kill —
+    /// observed 2026-07-02 in `workerDaemonContinuesToNextJobAfterProcessingFailure`
+    /// (the `.timeLimit` trait attributed it but cannot interrupt it; see
+    /// docs/ci-flakiness.md). On timeout the daemon task is left orphaned —
+    /// acceptable in a test process — and the caller should fail the test.
+    private func awaitCancelledDaemon(
+        _ task: Task<Void, Error>,
+        timeoutSeconds: TimeInterval = 30
+    ) async -> Bool {
+        task.cancel()
+        let flag = DaemonShutdownFlag()
+        Task {
+            var unexpected: String?
+            do {
+                try await task.value
+            } catch is CancellationError {
+                // Expected on cooperative shutdown.
+            } catch {
+                unexpected = String(describing: error)
+            }
+            await flag.markDone(unexpectedError: unexpected)
+        }
+        let done = await waitUntil(timeoutSeconds: timeoutSeconds) { await flag.isDone() }
+        if done, let unexpectedError = await flag.failure() {
+            Issue.record("daemon.run() threw a non-cancellation error on shutdown: \(unexpectedError)")
+        }
+        return done
+    }
+
     private func waitUntil(
         timeoutSeconds: TimeInterval = 10,
         pollIntervalNanos: UInt64 = 50_000_000,
@@ -363,12 +408,11 @@ import Testing
         }
         #expect(didPoll, "Daemon should poll for work before cancellation")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-            // Expected: the sleeping worker loop cooperatively exits on cancellation.
-        }
+        // Bounded: the sleeping worker loop cooperatively exits on
+        // cancellation; if it ever doesn't, fail here rather than suspend
+        // on task.value until the CI job kill.
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let requestCount = await poller.observedRequestCount()
         #expect(requestCount > 0)
@@ -400,12 +444,9 @@ import Testing
         }
         #expect(didReport, "Expected fallback failure report after processing error")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-            // Expected on cooperative shutdown.
-        }
+        // Bounded cooperative shutdown (see awaitCancelledDaemon).
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         #expect(reports.count == 1)
@@ -480,11 +521,8 @@ import Testing
         }
         #expect(didPollAgain, "Expected daemon to resume polling after first job")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-        }
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         let attemptCount = await reporter.observedAttempts()
@@ -547,11 +585,8 @@ import Testing
         }
         #expect(didProcessBoth, "Expected daemon to report both failed and successful jobs")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-        }
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         let runnerInvocations = await runner.observedInvocationCount()
@@ -614,8 +649,8 @@ import Testing
 
         let task = Task { try await daemon.run() }
         _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         let report = try #require(reports.first)
@@ -699,8 +734,8 @@ import Testing
         let task = Task { try await daemon.run() }
         let didReport = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
         #expect(didReport, "Expected a synthetic failure report for the failed prepare")
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         // The scratch dir name embeds the cache key, which embeds the (unique)
         // testSetupID — so any leftover entry matching the marker is a leak
@@ -801,8 +836,8 @@ import Testing
         let task = Task { try await daemon.run() }
         let didReport = await waitUntil(timeoutSeconds: 15) { await reporter.snapshot().count == 1 }
         #expect(didReport, "Expected a failure report once the hung make is killed")
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let report = try #require(await reporter.snapshot().first)
         #expect(report.buildStatus == .failed, "hung make must map to a failed build")
@@ -909,8 +944,8 @@ import Testing
             }
             #expect(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
 
-            task.cancel()
-            _ = await task.result
+            let shutDown = await awaitCancelledDaemon(task)
+            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
         }
     }
 
@@ -943,8 +978,8 @@ import Testing
             }
             #expect(didKeepPolling, "Runner should keep polling after transient HTTP 401 responses")
 
-            task.cancel()
-            _ = await task.result
+            let shutDown = await awaitCancelledDaemon(task)
+            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
         }
     }
 
@@ -977,8 +1012,8 @@ import Testing
             }
             #expect(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
 
-            task.cancel()
-            _ = await task.result
+            let shutDown = await awaitCancelledDaemon(task)
+            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
         }
     }
 
@@ -1064,8 +1099,8 @@ import Testing
 
         let task = Task { try await daemon.run() }
         _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 5 }
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let (maxConcurrent, total) = await runner.snapshot()
         #expect(total == 5, "all 5 jobs should have completed")
@@ -1115,8 +1150,8 @@ import Testing
 
         let task = Task { try await daemon.run() }
         _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         #expect(reports.count == 1, "should still produce a report for the failed job")
