@@ -69,13 +69,13 @@ struct CloneAssignmentTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "publicID": .object(["type": .string("string")]),
-            "title": .object(["type": .string("string")]),
-            "slug": .object(["type": .string("string")]),
-            "courseCode": .object(["type": .string("string")]),
-            "sourceAssignmentPublicID": .object(["type": .string("string")]),
-            "isOpen": .object(["type": .string("boolean")]),
-            "validationStatus": .object(["type": .string("string")]),
+            "publicID": MCPSchema.string,
+            "title": MCPSchema.string,
+            "slug": MCPSchema.string,
+            "courseCode": MCPSchema.string,
+            "sourceAssignmentPublicID": MCPSchema.string,
+            "isOpen": MCPSchema.boolean,
+            "validationStatus": MCPSchema.string,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),

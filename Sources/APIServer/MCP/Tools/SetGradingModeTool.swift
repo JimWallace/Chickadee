@@ -39,10 +39,7 @@ struct SetGradingModeTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "gradingMode": .object([
                 "type": .string("string"),
                 "enum": .array([.string("browser"), .string("worker")]),
@@ -55,8 +52,8 @@ struct SetGradingModeTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "gradingMode": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "gradingMode": MCPSchema.string,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("gradingMode")]),
     ])

@@ -38,7 +38,7 @@ extension InstructorDashboardRoutes {
         let setupByID = try await setupByIDFuture
         let submissions = try await submissionsFuture
 
-        let sortedAssignments = sortedGradesCSVAssignments(assignments, setupByID: setupByID)
+        let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupByID)
         let submissionIDs = submissions.map(\.id)
 
         // Serial follow-on: needs submission IDs from phase 2.
@@ -74,9 +74,11 @@ extension InstructorDashboardRoutes {
         // submission on a setup with class goals.  Overrides are authoritative,
         // so a key an override already set is left untouched.
         for setupID in setupIDs {
-            let bonus = try await classGoalBonusPoints(testSetupID: setupID, on: req.db)
-            guard bonus > 0, let setup = setupByID[setupID],
-                let total = suiteTotalPoints(setup: setup)
+            guard let setup = setupByID[setupID] else { continue }
+            let props = setup.decodedManifest()
+            let bonus = try await classGoalBonusPoints(
+                testSetupID: setupID, props: props, on: req.db)
+            guard bonus > 0, let total = suiteTotalPoints(props: props)
             else { continue }
             let suffix = "::\(setupID)"
             for (mapKey, points) in bestPointsByUserAndSetup
@@ -155,23 +157,6 @@ extension InstructorDashboardRoutes {
             })
     }
 
-    private func sortedGradesCSVAssignments(
-        _ assignments: [APIAssignment],
-        setupByID: [String: APITestSetup]
-    ) -> [APIAssignment] {
-        assignments.sorted { lhs, rhs in
-            switch (lhs.sortOrder, rhs.sortOrder) {
-            case (let l?, let r?) where l != r:
-                return l < r
-            default:
-                let lhsCreated = setupByID[lhs.testSetupID]?.createdAt ?? .distantPast
-                let rhsCreated = setupByID[rhs.testSetupID]?.createdAt ?? .distantPast
-                if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
-                return lhs.testSetupID < rhs.testSetupID
-            }
-        }
-    }
-
     private func loadGradesCSVSubmissions(
         req: Request,
         setupIDs: Set<String>,
@@ -222,7 +207,7 @@ extension InstructorDashboardRoutes {
         for (key, pct) in bestPctByKey {
             guard let setupID = key.components(separatedBy: "::").last,
                 let setup = setupByID[setupID],
-                let total = suiteTotalPoints(setup: setup)
+                let total = suiteTotalPoints(props: setup.decodedManifest())
             else { continue }
             best[key] = Double(pct) / 100.0 * total
         }

@@ -35,10 +35,7 @@ struct ListAssignmentsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object([
-                "type": .string("string"),
-                "description": .string("The course code, e.g. \"CS136\"."),
-            ])
+            "courseCode": MCPSchema.courseCode
         ]),
         "required": .array([.string("courseCode")]),
         "additionalProperties": .bool(false),
@@ -46,24 +43,24 @@ struct ListAssignmentsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "courseCode": .object(["type": .string("string")]),
+            "courseCode": MCPSchema.string,
             "assignments": .object([
                 "type": .string("array"),
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "publicID": .object(["type": .string("string")]),
-                        "title": .object(["type": .string("string")]),
-                        "slug": .object(["type": .string("string")]),
-                        "isOpen": .object(["type": .string("boolean")]),
+                        "publicID": MCPSchema.string,
+                        "title": MCPSchema.string,
+                        "slug": MCPSchema.string,
+                        "isOpen": MCPSchema.boolean,
                         "visibility": .object([
                             "type": .string("string"),
                             "enum": .array([
                                 .string("closed"), .string("preview"), .string("open"),
                             ]),
                         ]),
-                        "dueAt": .object(["type": .string("string")]),
-                        "startsAt": .object(["type": .string("string")]),
+                        "dueAt": MCPSchema.string,
+                        "startsAt": MCPSchema.string,
                     ]),
                     "required": .array([
                         .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),

@@ -105,7 +105,6 @@ let package = Package(
             dependencies: [
                 .target(name: "Core"),
                 .target(name: "RunnerCore"),
-                .product(name: "Vapor", package: "vapor"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/Worker",

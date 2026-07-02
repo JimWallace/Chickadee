@@ -47,10 +47,7 @@ struct GetAssignmentTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ])
+            "assignmentPublicID": MCPSchema.assignmentPublicID
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -58,22 +55,22 @@ struct GetAssignmentTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "publicID": .object(["type": .string("string")]),
-            "title": .object(["type": .string("string")]),
-            "slug": .object(["type": .string("string")]),
-            "courseCode": .object(["type": .string("string")]),
-            "isOpen": .object(["type": .string("boolean")]),
+            "publicID": MCPSchema.string,
+            "title": MCPSchema.string,
+            "slug": MCPSchema.string,
+            "courseCode": MCPSchema.string,
+            "isOpen": MCPSchema.boolean,
             "visibility": .object([
                 "type": .string("string"),
                 "enum": .array([.string("closed"), .string("preview"), .string("open")]),
             ]),
-            "dueAt": .object(["type": .string("string")]),
-            "startsAt": .object(["type": .string("string")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "deadlineOverrideActive": .object(["type": .string("boolean")]),
-            "gradingMode": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "sectionName": .object(["type": .string("string")]),
+            "dueAt": MCPSchema.string,
+            "startsAt": MCPSchema.string,
+            "validationStatus": MCPSchema.string,
+            "deadlineOverrideActive": MCPSchema.boolean,
+            "gradingMode": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "sectionName": MCPSchema.string,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),

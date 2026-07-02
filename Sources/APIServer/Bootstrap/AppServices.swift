@@ -69,7 +69,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
             app.logger.info(
                 "BrightSpace configured but not authorized — authorize at /admin/brightspace")
         }
-        app.lifecycle.use(BrightSpaceGradeSyncLifecycleHandler())
+        app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.brightSpaceGradeSyncMonitor })
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnRosterReadinessMonitor })
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnSectionSyncMonitor })
     }

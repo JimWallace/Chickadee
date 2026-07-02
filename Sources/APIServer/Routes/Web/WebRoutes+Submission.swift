@@ -269,10 +269,15 @@ extension WebRoutes {
             throw Abort(.forbidden)
         }
 
-        // Fetch the assignment for deadline-based output gating.
+        // Fetch the assignment for deadline-based output gating, and the test
+        // setup + decoded manifest ONCE — the page's helpers (manifest display
+        // data, class-goal bonus, badges, class-goal views) all read them, and
+        // each used to re-fetch and re-decode independently (#1128).
         let submissionAssignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
+        let setup = try await APITestSetup.find(submission.testSetupID, on: req.db)
+        let setupProps = setup?.decodedManifest()
         // Students see public + release rows itemized (release output is gated
         // on the deadline); secret is never itemized.  The grade itself spans
         // every tier — see `processDisplayResult` — so it is stable across the
@@ -295,8 +300,7 @@ extension WebRoutes {
         let displayResult = try await loadPreferredDisplayResult(subID: subID, on: req.db)
         let priorAttempt = try await loadPriorAttemptDelta(
             submission: submission, decoder: decoder, on: req.db)
-        let manifestDisplay = try await loadManifestDisplayData(
-            testSetupID: submission.testSetupID, on: req.db)
+        let manifestDisplay = manifestDisplayData(from: setupProps)
 
         var processed = ProcessedCollection.empty
         if let result = displayResult {
@@ -316,7 +320,7 @@ extension WebRoutes {
         // (no-op unless the assignment has a points-rewarded class goal).
         if processed.totalPoints > 0 {
             let bonus = try await classGoalBonusPoints(
-                testSetupID: submission.testSetupID, on: req.db)
+                testSetupID: submission.testSetupID, props: setupProps, on: req.db)
             if bonus > 0 {
                 let bonused = earnedWithClassGoalBonus(
                     earned: processed.rawEarnedPoints,
@@ -335,15 +339,14 @@ extension WebRoutes {
         // Authorable individual badges (threshold / test), earned per-student
         // from this submission's result (evaluated over all tiers so a
         // secret-test badge works without revealing the test).
-        let individualBadges = try await earnedIndividualBadgesForDisplay(
-            displayResult: displayResult, submission: submission,
-            gradePercent: processed.gradePercent, decoder: decoder, on: req.db)
-        let setupForBadges = try await APITestSetup.find(submission.testSetupID, on: req.db)
+        let individualBadges = earnedIndividualBadgesForDisplay(
+            displayResult: displayResult, props: setupProps,
+            gradePercent: processed.gradePercent, decoder: decoder)
         let badges =
             builtInBadgesForSubmission(
                 badgeContext: processed.badgeContext,
                 classAchievements: classAchievements,
-                setup: setupForBadges)
+                setup: setup)
             + individualBadges
 
         let sectionedOutcomes = buildSectionedOutcomes(
@@ -371,7 +374,7 @@ extension WebRoutes {
         }
 
         let classGoals = try await loadClassGoalViews(
-            testSetupID: submission.testSetupID, on: req.db)
+            testSetupID: submission.testSetupID, props: setupProps, on: req.db)
 
         let ctx = buildSubmissionContext(
             subID: subID,
@@ -451,7 +454,7 @@ extension WebRoutes {
         return PriorAttemptDelta(outcomeMap: outcomeMap, gradePercent: gradePercent)
     }
 
-    /// Reads the manifest from `APITestSetup` and extracts:
+    /// Extracts from the page's already-decoded manifest (#1128):
     /// - a script/stem→displayName map so the page shows friendly names for
     ///   worker results that already use the display name directly, older
     ///   worker results where testName is the filename stem, and browser
@@ -460,17 +463,12 @@ extension WebRoutes {
     ///   page can build a parallel `sectionIDPerOutcome` array.  We can't do
     ///   a name-keyed lookup because two families in different sections may
     ///   legally share case labels (v0.4.105 bug).
-    private func loadManifestDisplayData(
-        testSetupID: String, on db: Database
-    ) async throws -> ManifestDisplayData {
+    private func manifestDisplayData(from props: TestProperties?) -> ManifestDisplayData {
         var displayNameMap: [String: String] = [:]
         var hintByFilename: [String: String] = [:]
         var sections: [TestSuiteSection] = []
         var entries: [TestSuiteEntry] = []
-        if let setup = try? await APITestSetup.find(testSetupID, on: db),
-            let manifestData = setup.manifest.data(using: .utf8),
-            let props = decodeManifest(from: manifestData)
-        {
+        if let props {
             sections = props.sections
             entries = props.testSuites
             for entry in props.testSuites {

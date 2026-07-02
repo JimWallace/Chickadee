@@ -38,8 +38,8 @@ struct ListCoursesTool: ContentTool {
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "code": .object(["type": .string("string")]),
-                        "name": .object(["type": .string("string")]),
+                        "code": MCPSchema.string,
+                        "name": MCPSchema.string,
                     ]),
                     "required": .array([.string("code"), .string("name")]),
                 ]),

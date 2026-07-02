@@ -41,10 +41,7 @@ struct SetTimeLimitTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "seconds": .object([
                 "type": .string("integer"),
                 "minimum": .int(mcpTimeLimitRange.lowerBound),
@@ -60,8 +57,8 @@ struct SetTimeLimitTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "timeLimitSeconds": .object(["type": .string("integer")]),
+            "assignmentPublicID": MCPSchema.string,
+            "timeLimitSeconds": MCPSchema.integer,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("timeLimitSeconds")]),
     ])
@@ -78,23 +75,6 @@ struct SetTimeLimitTool: ContentTool {
     }
 }
 
-/// Sets the test setup's default `timeLimitSeconds` to `seconds` when it
-/// differs, mutating only that JSON field (so unknown fields the runner doesn't
-/// model survive — matching `setManifestGradingMode`). Returns the effective
-/// value.
-func setManifestTimeLimitSeconds(
-    setup: APITestSetup, to seconds: Int, on db: any Database
-) async throws -> Int {
-    guard var dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
-    else { return seconds }
-    if (dict["timeLimitSeconds"] as? Int) != seconds {
-        dict["timeLimitSeconds"] = seconds
-        if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
-            let json = String(data: data, encoding: .utf8)
-        {
-            setup.manifest = json
-            try await setup.save(on: db)
-        }
-    }
-    return seconds
-}
+// `setManifestTimeLimitSeconds` moved to Helpers/ManifestFieldEdits.swift
+// (#1121), expressed as a `mutateManifest` closure alongside its three
+// single-field siblings.

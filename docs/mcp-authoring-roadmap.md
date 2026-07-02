@@ -49,6 +49,7 @@ The catalog:
 | `get_validation_result` | `content:read` | Per-test outcomes of the reference solution's latest validation run (status + shortResult/longResult, all tiers); validation-only, never student data |
 | `update_assignment` | `content:write` | Metadata: title, due date, visibility (closed/preview/open) |
 | `set_grading_mode` | `content:write` | Set an assignment's grading path (worker vs browser); no regrade/close |
+| `set_time_limit` | `content:write` | Set the assignment-wide (or per-test) execution time limit; no regrade/close |
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_achievements` | `content:write` | Replace the assignment's composable awards (display-only; no regrade/close) |

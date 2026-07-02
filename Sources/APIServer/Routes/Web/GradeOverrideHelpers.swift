@@ -52,10 +52,8 @@ func gradeOverridePercent(
 /// exports such as the grades CSV and BrightSpace.  Nil when the manifest
 /// is missing/malformed or sums to zero.
 func gradeOverridePoints(percent: Int, setup: APITestSetup) -> Double? {
-    guard let props = setup.decodedManifest() else { return nil }
-    let total = props.testSuites.map(\.points).reduce(0, +)
-    guard total > 0 else { return nil }
-    return Double(percent) / 100.0 * Double(total)
+    guard let total = suiteTotalPoints(props: setup.decodedManifest()) else { return nil }
+    return Double(percent) / 100.0 * total
 }
 
 // MARK: - Mutating helpers (shared by every override-setting site)

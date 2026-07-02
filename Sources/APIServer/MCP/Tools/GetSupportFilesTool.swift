@@ -65,10 +65,7 @@ struct GetSupportFilesTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "filename": .object([
                 "type": .string("string"),
                 "description": .string(
@@ -87,7 +84,7 @@ struct GetSupportFilesTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "files": .object(["type": .array([.string("array"), .string("null")])]),
             "filename": .object(["type": .array([.string("string"), .string("null")])]),
             "sizeBytes": .object(["type": .array([.string("integer"), .string("null")])]),

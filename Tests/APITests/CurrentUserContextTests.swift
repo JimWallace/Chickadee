@@ -22,10 +22,10 @@ import Testing
             activeCourse: course("CS100", role: .student, isActive: true),
             enrolledCourses: [course("CS100", role: .student), course("CS200", role: .student)]
         )
-        #expect(ctx.instructorCourses.isEmpty)
-        #expect(ctx.isInstructorAnywhere == false)
-        #expect(ctx.showInstructorTabs == false)
-        #expect(ctx.primaryInstructorCourse == nil)
+        #expect(ctx.staffCourses.isEmpty)
+        #expect(ctx.isStaffAnywhere == false)
+        #expect(ctx.showStaffTabs == false)
+        #expect(ctx.primaryStaffCourse == nil)
     }
 
     @Test func instructorInOneCourse_exposesSinglePrimaryLink() {
@@ -36,13 +36,13 @@ import Testing
             activeCourse: course("CS100", role: .student, isActive: true),
             enrolledCourses: [course("CS100", role: .student), course("CS200", role: .instructor)]
         )
-        #expect(ctx.isInstructorAnywhere)
-        #expect(ctx.instructorCourses.map(\.code) == ["CS200"])
-        #expect(ctx.showInstructorTabs == false)
-        #expect(ctx.primaryInstructorCourse?.code == "CS200")
+        #expect(ctx.isStaffAnywhere)
+        #expect(ctx.staffCourses.map(\.code) == ["CS200"])
+        #expect(ctx.showStaffTabs == false)
+        #expect(ctx.primaryStaffCourse?.code == "CS200")
         // The active-course Instructor link stays keyed on the active course,
         // which here is a student course — so it must be false.
-        #expect(ctx.isInstructorInActiveCourse == false)
+        #expect(ctx.isStaffInActiveCourse == false)
     }
 
     @Test func instructorInManyCourses_showsStripNotSingleLink() {
@@ -51,9 +51,9 @@ import Testing
             activeCourse: course("CS200", role: .instructor, isActive: true),
             enrolledCourses: [course("CS200", role: .instructor), course("CS300", role: .instructor)]
         )
-        #expect(ctx.showInstructorTabs)
-        #expect(ctx.primaryInstructorCourse == nil)
-        #expect(ctx.instructorCourses.map(\.code) == ["CS200", "CS300"])
+        #expect(ctx.showStaffTabs)
+        #expect(ctx.primaryStaffCourse == nil)
+        #expect(ctx.staffCourses.map(\.code) == ["CS200", "CS300"])
     }
 
     @Test func admin_instructsEveryEnrolledCourse() {
@@ -64,17 +64,17 @@ import Testing
             activeCourse: course("CS100", role: .student, isActive: true),
             enrolledCourses: [course("CS100", role: .student), course("CS200", role: .instructor)]
         )
-        #expect(ctx.instructorCourses.map(\.code) == ["CS100", "CS200"])
-        #expect(ctx.showInstructorTabs)
+        #expect(ctx.staffCourses.map(\.code) == ["CS100", "CS200"])
+        #expect(ctx.showStaffTabs)
     }
 
     @Test func noCourseInfo_hasNoInstructorSurface() {
         // The course-free context (used by pages without tabs) must not claim
         // any instructor courses.
         let ctx = CurrentUserContext(user: user(role: "instructor"))
-        #expect(ctx.instructorCourses.isEmpty)
-        #expect(ctx.isInstructorAnywhere == false)
-        #expect(ctx.primaryInstructorCourse == nil)
+        #expect(ctx.staffCourses.isEmpty)
+        #expect(ctx.isStaffAnywhere == false)
+        #expect(ctx.primaryStaffCourse == nil)
     }
 
     @Test func trimsProfileFields() {

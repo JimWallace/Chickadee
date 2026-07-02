@@ -96,24 +96,9 @@
         script:                'Write a raw .py / .sh / .r test script by hand in the code editor.'
     };
 
-    // Status colors — single source so every renderer reports consistently.
-    var STATUS_COLORS = {
-        info:    'var(--gray-500)',
-        working: 'var(--gray-500)',
-        success: 'var(--green)',
-        error:   'var(--red)'
-    };
-
-    // One deduped error-message extractor (renderers reuse via ctx).
-    function extractErrorMessage(text) {
-        if (!text) return '';
-        try {
-            var j = JSON.parse(text);
-            return j.reason || j.error || j.message || text;
-        } catch (e) {
-            return text;
-        }
-    }
+    // Shared error-message extractor (Public/chickadee-ui.js, #1126) —
+    // renderers reuse it via ctx; it handles both JSON and error-page bodies.
+    var extractErrorMessage = ChickadeeUI.extractErrorMessage;
 
     function mechanismForKind(kind) {
         for (var g = 0; g < CATALOG.length; g++) {
@@ -206,8 +191,7 @@
         var closeBtn   = document.getElementById('test-editor-close');
 
         function setStatus(text, kind) {
-            statusEl.textContent = text || '';
-            statusEl.style.color = STATUS_COLORS[kind || 'info'] || STATUS_COLORS.info;
+            ChickadeeUI.setStatus(statusEl, text, kind);
         }
 
         // Shared context handed to every renderer.
