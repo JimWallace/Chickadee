@@ -57,7 +57,16 @@ Fixed 1280×900 viewport, `deviceScaleFactor: 1`, `en-CA` /
 disabled, and dynamic regions masked (`.js-relative-time`,
 `.admin-version-banner`, `canvas`). Comparison is anti-aliasing-aware
 (`pixelmatch`, threshold .15) with a 0.1 % differing-pixel budget — sub-pixel
-font drift passes, palette/layout changes fail. Baselines are
+font drift passes, palette/layout changes fail.
+
+**Sensitivity floor:** the 0.1 % budget (~1,150 px at 1280×900) is sized to
+absorb cross-runner anti-aliasing drift (~500 px observed on the busiest
+page). Component-scale changes (banners, cards, backgrounds) far exceed it;
+a recolour confined to a few words of small text can fit under it — the
+dark-mode chip-contrast fix on the dashboards moved only ~356 px and
+passed. That class is exactly what the axe-core scan catches (contrast is
+checked computationally, not by pixels), which is why the two checks run
+together. Baselines are
 **CI-canonical**: regenerate them in the CI image (or trust the bootstrap
 artifact) rather than committing captures from a host with different font
 rendering.
