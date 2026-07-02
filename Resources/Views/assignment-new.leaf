@@ -417,7 +417,6 @@ Create Assignment
      goes through draft-scoped endpoints — see
      AssignmentRoutes+DraftSections.swift. -->
 #if(draftID):
-<script src="/suite-list.js?v=#appVersion()"></script>
 <script src="/suite-table.js?v=#appVersion()"></script>
 <script>
 (function () {
@@ -773,9 +772,7 @@ Create Assignment
         var statusEl = document.getElementById('support-file-upload-status');
 
         function setStatus(msg, isError) {
-            if (!statusEl) return;
-            statusEl.textContent = msg;
-            statusEl.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
+            ChickadeeUI.setStatus(statusEl, msg, isError ? 'error' : undefined);
         }
 
         function readAsText(file) {

@@ -34,6 +34,69 @@
             ?? '';
     }
 
+    // ── Status line ──
+    //
+    // The one status-line setter (#1126 — this existed as six drifted
+    // copies).  Sets the element's text and palette colour by kind:
+    // 'error' → red, 'ok'/'success' → green, anything else → gray.
+    function setStatus(el, text, kind) {
+        if (!el) return;
+        el.textContent = text || '';
+        el.style.color = kind === 'error'
+            ? 'var(--red)'
+            : (kind === 'ok' || kind === 'success') ? 'var(--green)' : 'var(--gray-500)';
+    }
+
+    // ── Fetch error handling ──
+    //
+    // One error-message extractor for failed fetch bodies (#1126 — two
+    // divergent copies used to flow through the same renderer ctx slot:
+    // one parsed JSON, the other scraped the Leaf error page).  Order:
+    // JSON `{reason|error|message}` (the API endpoints), then the error
+    // page's `<p class="error-message">`, else the (truncated) raw text.
+    function extractErrorMessage(text) {
+        if (!text) return '';
+        try {
+            var j = JSON.parse(text);
+            return j.reason || j.error || j.message || text;
+        } catch (e) { /* not JSON — fall through to the HTML scrape */ }
+        var m = text.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
+        if (m) {
+            return m[1].replace(/<[^>]+>/g, '')
+                .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .trim();
+        }
+        return text.length > 200 ? text.substring(0, 200) + '…' : text;
+    }
+
+    // JSON fetch wrapper: sets the CSRF header, JSON-encodes `opts.body`
+    // (when present), and on a non-ok response rejects with an Error carrying
+    // the extracted server message — the `if (!r.ok) return r.text()...`
+    // boilerplate that repeated across the editors (#1126).  Resolves with
+    // the parsed JSON body (null for 204 / non-JSON responses).
+    function fetchJSON(url, opts) {
+        opts = opts || {};
+        var headers = {};
+        Object.keys(opts.headers || {}).forEach(function (k) { headers[k] = opts.headers[k]; });
+        if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+        var token = opts.csrfToken || getCsrfToken();
+        if (token) headers['x-csrf-token'] = token;
+        return fetch(url, {
+            method: opts.method || 'GET',
+            headers: headers,
+            body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined
+        }).then(function (r) {
+            if (!r.ok && r.status !== 204) {
+                return r.text().then(function (t) {
+                    throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status));
+                });
+            }
+            if (r.status === 204) return null;
+            return r.json().catch(function () { return null; });
+        });
+    }
+
     // Renders a sparkline (one bar per series entry) into `container`.
     // `series` is an array of numbers / nulls (null = "no data", drawn as an
     // empty slot). `labels` supplies the per-bar tooltip prefix and
@@ -188,10 +251,14 @@
         return finish;
     }
 
-    window.ChickadeeUI = {
+    var root = typeof window !== 'undefined' ? window : globalThis;
+    root.ChickadeeUI = {
         escapeHtml: escapeHtml,
         escapeAttr: escapeHtml,
         getCsrfToken: getCsrfToken,
+        setStatus: setStatus,
+        extractErrorMessage: extractErrorMessage,
+        fetchJSON: fetchJSON,
         renderSparkline: renderSparkline,
         accordion: {
             CARET_HTML: CARET_HTML,
@@ -200,4 +267,10 @@
             close: closeAccordionRow
         }
     };
+
+    // Node export for the .mjs unit tests (Tests/BrowserRunnerJSTests);
+    // browsers take the `root.ChickadeeUI` global above.
+    if (typeof module === 'object' && module.exports) {
+        module.exports = root.ChickadeeUI;
+    }
 }());

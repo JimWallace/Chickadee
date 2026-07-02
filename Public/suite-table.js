@@ -35,6 +35,67 @@
 (function (global) {
     'use strict';
 
+    // ── Upload classification (folded in from the retired suite-list.js,
+    // #1126 — that file was ~90% dead; only this classification survived) ──
+    //
+    // Decides whether an uploaded file looks like a test script (by
+    // extension, or by shebang for extensionless files) and which tier the
+    // new row should default to.  Pure; unit-tested from
+    // Tests/BrowserRunnerJSTests/suite-table.test.mjs via the module export
+    // at the bottom of this file.
+
+    var SCRIPT_EXTS = ['sh','bash','zsh','py','r','rb','pl','js','php'];
+    var BINARY_EXTS = ['exe','dll','so','dylib','class','jar','zip','tar','gz',
+                       'png','jpg','jpeg','gif','bmp','svg','pdf','doc','docx',
+                       'xls','xlsx','ppt','pptx','mp3','mp4','mov','avi'];
+
+    function extensionOf(name) {
+        var base = String(name || '').split('/').pop();
+        var dot = base.lastIndexOf('.');
+        return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
+    }
+
+    function isLikelyScriptName(name) {
+        return SCRIPT_EXTS.indexOf(extensionOf(name)) >= 0;
+    }
+
+    function hasRecognizedScriptShebang(text) {
+        var firstLine = String(text || '').split(/\r?\n/, 1)[0].trim().toLowerCase();
+        if (firstLine.indexOf('#!') !== 0) return false;
+        return /(^#!\s*\/.*\/(ba|z)?sh\b)|(^#!\s*\/usr\/bin\/env\s+(ba|z)?sh\b)|(^#!.*\bpython[0-9.]*\b)/.test(firstLine);
+    }
+
+    function classify(name, content, size) {
+        var ext = extensionOf(name);
+        var hasExt = ext.length > 0;
+        var binary = BINARY_EXTS.indexOf(ext) >= 0;
+        var scriptShebang = !hasExt && hasRecognizedScriptShebang(content || '');
+        var isScript = isLikelyScriptName(name) || scriptShebang;
+        var errs = [];
+        if (binary) errs.push('Binary file — unlikely to work as a test script');
+        if (!hasExt && !scriptShebang) {
+            errs.push('No extension or recognized shebang; this file will be included as support unless marked as a test');
+        }
+        if (size === 0) errs.push('Empty file');
+        return {
+            isScript: isScript,
+            tier: isScript ? 'public' : 'support',
+            errors: errs
+        };
+    }
+
+    function classifyFile(file) {
+        if (!file) return Promise.resolve(classify('', '', 0));
+        var ext = extensionOf(file.name);
+        if (ext) return Promise.resolve(classify(file.name, '', file.size));
+        var reader = typeof file.text === 'function'
+            ? file.text()
+            : Promise.resolve('');
+        return reader
+            .then(function (text) { return classify(file.name, text, file.size); })
+            .catch(function () { return classify(file.name, '', file.size); });
+    }
+
     function initSuiteTable(config) {
         config = config || {};
         var csrfToken = config.csrfToken || '';
@@ -717,14 +778,8 @@
         function doPush() {
             if (pushInFlight) { pushPending = true; return; }
             pushInFlight = true;
-            fetch(urls.putSuite(), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                body: JSON.stringify(buildPayload())
-            })
-            .then(function (r) {
-                if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
-                return r.json();
+            global.ChickadeeUI.fetchJSON(urls.putSuite(), {
+                method: 'PUT', csrfToken: csrfToken, body: buildPayload()
             })
             .then(function (payload) {
                 var liveEdit = captureLiveEdit();
@@ -748,17 +803,11 @@
             });
         }
 
-        function extractErrorMessage(errBody) {
-            if (!errBody) return '';
-            var m = errBody.match(/class="error-message"[^>]*>([\s\S]*?)<\/p>/);
-            if (m) {
-                return m[1].replace(/<[^>]+>/g, '')
-                    .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
-                    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-                    .trim();
-            }
-            return errBody.length > 200 ? errBody.substring(0, 200) + '…' : errBody;
-        }
+        // Shared implementation (Public/chickadee-ui.js, #1126) — this file
+        // used to carry an HTML-scraping variant that diverged from the
+        // JSON-parsing one in test-editor-modal.js; the shared extractor
+        // handles both shapes.
+        var extractErrorMessage = global.ChickadeeUI.extractErrorMessage;
 
         // ── Drag & drop: rows ──
 
@@ -1028,13 +1077,8 @@
         function persistSectionOrder() {
             var ids = sectionIDsInOrder();
             var base = (urls.putSuite() || '').replace(/\/suite$/, '/suite-sections/reorder');
-            fetch(base, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                body: JSON.stringify({ sectionIDs: ids })
-            })
-            .then(function (r) {
-                if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+            global.ChickadeeUI.fetchJSON(base, {
+                method: 'POST', csrfToken: csrfToken, body: { sectionIDs: ids }
             })
             .catch(function (err) {
                 console.error('Section reorder failed:', err);
@@ -1148,12 +1192,8 @@
             if (!item) return;
             if (!confirm('Delete test script "' + item.script + '"? This also removes it as a dependency from other items.')) return;
 
-            fetch(urls.deleteScript(item.script), {
-                method: 'DELETE',
-                headers: { 'x-csrf-token': csrfToken }
-            })
-            .then(function (r) {
-                if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
+            global.ChickadeeUI.fetchJSON(urls.deleteScript(item.script), {
+                method: 'DELETE', csrfToken: csrfToken
             })
             .then(function () {
                 items = items.filter(function (it) { return it.id !== id; });
@@ -1227,21 +1267,17 @@
                 var chain = Promise.resolve();
                 files.forEach(function (file) {
                     chain = chain.then(function () {
-                        return global.ChickadeeSuiteList.classifyFile(file).then(function (cls) {
+                        return classifyFile(file).then(function (cls) {
                             return file.text().then(function (content) {
-                                return fetch(urls.uploadScript(), {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                                    body: JSON.stringify({
+                                return global.ChickadeeUI.fetchJSON(urls.uploadScript(), {
+                                    method: 'POST', csrfToken: csrfToken,
+                                    body: {
                                         filename: file.name,
                                         content: content,
                                         tier: cls.tier,
                                         points: 1,
                                         isTest: cls.isScript
-                                    })
-                                }).then(function (r) {
-                                    if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
-                                    return r.json();
+                                    }
                                 }).then(function (data) {
                                     addExistingScript(data);
                                 });
@@ -1444,14 +1480,8 @@
         /// HTTP error so the caller can restore optimistic state and surface
         /// the message.
         function pushSuiteNow() {
-            return fetch(urls.putSuite(), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                body: JSON.stringify(buildPayload())
-            })
-            .then(function (r) {
-                if (!r.ok) return r.text().then(function (t) { throw new Error(extractErrorMessage(t) || ('HTTP ' + r.status)); });
-                return r.json();
+            return global.ChickadeeUI.fetchJSON(urls.putSuite(), {
+                method: 'PUT', csrfToken: csrfToken, body: buildPayload()
             })
             .then(function (payload) {
                 items = normaliseItems(payload.items || []);
@@ -1571,4 +1601,15 @@
     }
 
     global.initSuiteTable = initSuiteTable;
-})(window);
+
+    // Node export for the .mjs unit tests (the pure classification helpers
+    // only — everything else is DOM-bound).
+    if (typeof module === 'object' && module.exports) {
+        module.exports = {
+            classify: classify,
+            classifyFile: classifyFile,
+            isLikelyScriptName: isLikelyScriptName,
+            hasRecognizedScriptShebang: hasRecognizedScriptShebang
+        };
+    }
+})(typeof window !== 'undefined' ? window : globalThis);
