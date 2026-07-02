@@ -38,6 +38,7 @@ const COURSE = { code: "VIS101", name: "Visual Regression 101" };
 const MASKS = [
   ".js-relative-time",     // "3 minutes ago" timestamps (relative-time.js)
   ".admin-version-banner", // vX.Y.Z on the admin page
+  ".worker-secret-input",  // auto-generated diceware secret — new every boot
   "canvas",                // sparkline charts draw async
 ];
 
@@ -173,11 +174,12 @@ async function seed() {
     }),
     [200, 302, 303]
   );
-  // The submit flow redirects to /results/<id> (or renders it).
+  // The submit flow redirects to the submission page (/submissions/<id>).
   let resultsPath = null;
   const subLoc = subRes.headers()["location"] || "";
-  const m = subLoc.match(/\/results\/[A-Za-z0-9-]+/);
+  const m = subLoc.match(/\/(submissions|results)\/[A-Za-z0-9-]+/);
   if (m) resultsPath = m[0];
+  if (!resultsPath) throw new Error(`submit did not redirect to a submission page (location: "${subLoc}")`);
   const studentState = await stud.storageState();
   await stud.dispose();
 
