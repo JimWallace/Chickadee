@@ -188,7 +188,10 @@ The visual-regression harness (`Tools/visual-regression/`, CI
 `visual-regression.yml`) automates that last check for the key pages: it
 screenshots them in both schemes and diffs against committed baselines.  An
 intentional look change means regenerating baselines
-(`Tools/visual-regression/run-visual.sh --update`) in the same PR.
+(`Tools/visual-regression/run-visual.sh --update`) in the same PR.  The same
+CI job also runs the axe-core accessibility scan (`run-a11y.sh`) over those
+pages in both schemes: critical/serious violations are zero-tolerance,
+moderate/minor ratchet down via `a11y-baseline.json`.
 
 ## Extending the system
 

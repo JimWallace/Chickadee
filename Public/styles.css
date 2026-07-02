@@ -1541,7 +1541,10 @@ code { font-family: var(--font-mono); font-size: .9em; }
 }
 .diagnostic-window-chip {
     font-weight: 600;
-    color: var(--health-teal-dark);
+    /* --blue, not raw --health-teal-dark: identical in light mode, but the
+       raw palette entry has no dark value — 1.9:1 on dark cards (axe
+       serious).  --blue carries the readable dark-mode teal (8.3:1). */
+    color: var(--blue);
 }
 .diagnostic-spark {
     display: flex;

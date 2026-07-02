@@ -41,6 +41,15 @@ baseline image diff becomes part of code review. If no baselines are
 committed at all, the harness runs in bootstrap mode: captures are saved
 (uploaded in CI as `visual-baselines-bootstrap`) and the run passes.
 
+## Accessibility scan (#1137)
+
+`./run-a11y.sh` runs axe-core over the same seeded pages in both schemes
+(`a11y.mjs`; the CI job runs it after the visual compare).  Critical and
+serious violations always fail; moderate/minor are a shrink-only count
+ratchet against `a11y-baseline.json` (growth fails, shrinkage prints the
+lower-the-baseline note).  With no baseline committed it bootstraps the
+same way the visual harness does.
+
 ## Determinism
 
 Fixed 1280×900 viewport, `deviceScaleFactor: 1`, `en-CA` /
@@ -48,7 +57,16 @@ Fixed 1280×900 viewport, `deviceScaleFactor: 1`, `en-CA` /
 disabled, and dynamic regions masked (`.js-relative-time`,
 `.admin-version-banner`, `canvas`). Comparison is anti-aliasing-aware
 (`pixelmatch`, threshold .15) with a 0.1 % differing-pixel budget — sub-pixel
-font drift passes, palette/layout changes fail. Baselines are
+font drift passes, palette/layout changes fail.
+
+**Sensitivity floor:** the 0.1 % budget (~1,150 px at 1280×900) is sized to
+absorb cross-runner anti-aliasing drift (~500 px observed on the busiest
+page). Component-scale changes (banners, cards, backgrounds) far exceed it;
+a recolour confined to a few words of small text can fit under it — the
+dark-mode chip-contrast fix on the dashboards moved only ~356 px and
+passed. That class is exactly what the axe-core scan catches (contrast is
+checked computationally, not by pixels), which is why the two checks run
+together. Baselines are
 **CI-canonical**: regenerate them in the CI image (or trust the bootstrap
 artifact) rather than committing captures from a host with different font
 rendering.
