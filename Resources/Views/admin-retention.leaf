@@ -16,10 +16,10 @@ Retention
 </nav>
 <section class="admin-section">
     #if(flashSuccess):
-    <div class="flash flash-success retention-flash retention-flash--success" role="status">#(flashSuccess)</div>
+    <div class="flash flash-success" role="status">#(flashSuccess)</div>
     #endif
     #if(flashError):
-    <div class="flash flash-error retention-flash retention-flash--error" role="alert">#(flashError)</div>
+    <div class="flash flash-error" role="alert">#(flashError)</div>
     #endif
 
     <p class="retention-intro">
@@ -92,19 +92,6 @@ Retention
     #endif
 </section>
 <style>
-.retention-flash {
-    margin-bottom: 1rem;
-    padding: .6rem .8rem;
-    border-radius: .4rem;
-}
-.retention-flash--success {
-    background: #d4edda;
-    color: #155724;
-}
-.retention-flash--error {
-    background: #f8d7da;
-    color: #721c24;
-}
 .retention-intro {
     color: var(--muted);
     margin-top: 0;
@@ -122,7 +109,7 @@ Retention
     width: 11rem;
 }
 .retention-date-cell {
-    font-size: .85rem;
+    font-size: var(--text-base);
 }
 .retention-actions {
     display: flex;

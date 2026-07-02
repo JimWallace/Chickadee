@@ -28,7 +28,7 @@
     margin-bottom: .25rem;
 }
 .error-code {
-    font-size: 5rem;
+    font-size: 5em;  /* display glyph — 5x body size */
     font-weight: 700;
     line-height: 1;
     color: var(--gray-300);
@@ -36,7 +36,7 @@
 }
 .error-title {
     margin: 0;
-    font-size: 1.4rem;
+    font-size: var(--text-2xl);
 }
 .error-message {
     color: var(--gray-600);

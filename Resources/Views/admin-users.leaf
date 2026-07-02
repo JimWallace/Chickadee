@@ -97,7 +97,7 @@ Users
 #users-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
-    font-size: .75rem;
+    font-size: var(--text-xs);
 }
 #users-table th[data-sort-key].sort-asc::after {
     content: "  ↑";
@@ -112,7 +112,7 @@ Users
 }
 .role-select {
     padding: .25rem .5rem;
-    font-size: .8rem;
+    font-size: var(--text-sm);
 }
 .user-actions {
     display: flex;

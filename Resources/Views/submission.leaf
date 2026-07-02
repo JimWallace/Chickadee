@@ -5,14 +5,14 @@ Submission #(submissionID)
 #export("content"):
 <style>
 .class-goals-block { margin: 1rem 0; }
-.class-goals-heading { font-size: 1.1rem; margin: 0 0 0.5rem; }
+.class-goals-heading { font-size: var(--text-lg); margin: 0 0 0.5rem; }
 .class-goal { margin: 0.5rem 0; }
 .class-goal-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
 .class-goal-name { font-weight: 600; }
 .class-goal-reward { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .class-goal-progress { width: 100%; height: 0.6rem; }
-.class-goal-status { font-size: 0.85rem; margin-top: 0.15rem; }
-.class-goal-detail { font-size: 0.85rem; margin: 0.15rem 0 0; }
+.class-goal-status { font-size: var(--text-base); margin-top: 0.15rem; }
+.class-goal-detail { font-size: var(--text-base); margin: 0.15rem 0 0; }
 </style>
 <div id="submission-root"
      data-submission-id="#(submissionID)"

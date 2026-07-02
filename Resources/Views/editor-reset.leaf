@@ -9,7 +9,7 @@ Reset notebook editor
 .reset-panel h1 { margin: 0 0 .75rem; }
 .reset-lead { color: var(--gray-700); }
 .reset-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1.25rem; }
-.reset-note { color: var(--gray-600); font-size: .85rem; margin-top: 1rem; }
+.reset-note { color: var(--gray-600); font-size: var(--text-base); margin-top: 1rem; }
 </style>
 <div class="reset-panel">
 #if(done):

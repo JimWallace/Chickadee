@@ -88,16 +88,16 @@ Audit Log
 .audit-col-target { width: 9rem; }
 .audit-col-remote { width: 9rem; }
 .audit-mono {
-    font-family: var(--font-mono, monospace);
-    font-size: .85rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
 }
 .audit-action-code {
-    font-size: .75rem;
+    font-size: var(--text-xs);
     color: var(--muted);
 }
 .audit-metadata {
-    font-family: var(--font-mono, monospace);
-    font-size: .8rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     white-space: pre-wrap;
     word-break: break-word;
 }

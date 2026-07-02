@@ -14,6 +14,9 @@ set -euo pipefail
 #   * No new native alert() in templates — use the inline .form-error pattern.
 #   * Every var(--x) resolves, and no var(--x, #hex) colour fallbacks (see
 #     scripts/check-css-vars.sh).
+#   * Colours route through the palette (hex only in --token declarations),
+#     and font-size / border-radius use the --text-* / --radius-* scales
+#     (see scripts/check-design-tokens.sh and docs/ui-design.md).
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -23,6 +26,9 @@ status=0
 
 # ── 1. CSS custom-property guard ────────────────────────────────────────────
 scripts/check-css-vars.sh || status=1
+
+# ── 1b. Design-token guard (palette-only hex, type + radius scales) ─────────
+scripts/check-design-tokens.sh || status=1
 
 # ── 2. Inline-style allowlist ───────────────────────────────────────────────
 # A style="" attribute is allowed only if every ;-separated declaration is

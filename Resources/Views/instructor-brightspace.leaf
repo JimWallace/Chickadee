@@ -258,15 +258,15 @@ LEARN
 <style>
 .bs-section { margin-bottom: 2rem; }
 .bs-tabbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
-.bs-h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .6rem; }
+.bs-h2 { font-size: var(--text-lg); font-weight: 600; margin: 0 0 .6rem; }
 .bs-mapping-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 .bs-mapping-head .bs-h2 { margin: 0; }
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
 .bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; flex-wrap: wrap; }
-.bs-grade-input { width: 14rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
-.bs-sync-detail { font-size: .72rem; }
+.bs-grade-input { width: 14rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
+.bs-sync-detail { font-size: var(--text-2xs); }
 .bs-count {
-    display: inline-block; font-size: .88rem; font-weight: 600;
+    display: inline-block; font-size: var(--text-base); font-weight: 600;
     white-space: nowrap;
 }
 .bs-count-ok { color: var(--green); }
@@ -275,7 +275,7 @@ LEARN
 .bs-push-btn { padding: .25rem .5rem; line-height: 1; }
 .bs-issue-cell {
     max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: .85rem; color: var(--gray-600);
+    font-size: var(--text-base); color: var(--gray-600);
 }
 .bs-roster-actions { white-space: nowrap; }
 .bs-roster-actions .inline-form { display: inline; }
@@ -284,10 +284,10 @@ LEARN
     display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
     margin: .6rem 0 .3rem;
 }
-.bs-conn-label { font-size: .85rem; color: var(--gray-600); }
-.bs-conn-input { width: 16rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
+.bs-conn-label { font-size: var(--text-base); color: var(--gray-600); }
+.bs-conn-input { width: 16rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
 .bs-conn-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0 .3rem; }
-.bs-test-result { margin: .3rem 0; font-size: .88rem; }
+.bs-test-result { margin: .3rem 0; font-size: var(--text-base); }
 .bs-test-ok { color: var(--green); }
 .bs-test-err { color: var(--red); }
 </style>
