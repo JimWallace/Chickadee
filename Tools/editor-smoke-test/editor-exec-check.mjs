@@ -389,6 +389,15 @@ async function main() {
           `(indicator=${r.status}, net4xx=${(r.badResponses || []).length}, consoleErr=${(r.errors || []).length})`
       );
     }
+    // Identify the ambient noise once per run (it is constant per engine:
+    // chromium 11x4xx/6err, webkit 4x4xx/6err on 2026-07-02): the deduped
+    // URL set turns "net4xx=11" from a count into a diagnosis.
+    if (i === 0) {
+      const uniqueBad = [...new Set(r.badResponses || [])];
+      const uniqueErr = [...new Set(r.errors || [])];
+      if (uniqueBad.length) console.log(`  ambient http (iter 1): ${uniqueBad.join(" | ")}`);
+      if (uniqueErr.length) console.log(`  ambient console (iter 1): ${uniqueErr.join(" | ")}`);
+    }
   }
 
   const avg = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
