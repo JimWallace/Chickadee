@@ -111,45 +111,17 @@ struct WebRoutes: RouteCollection {
         let extensionDueAtBySetupID = try await extensionsFetch
         let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
 
-        let setups: [APITestSetup]
-        if isActiveCourseStaff {
-            // Instructors and admins see every test setup in the active course.
-            setups = try await APITestSetup.query(on: req.db)
-                .filter(\.$courseID == activeCourseUUID)
-                .sort(\.$createdAt, .descending)
-                .all()
-        } else {
-            // Enrolled students see every published assignment in their course:
-            // open ones, and ones that were published and have since closed at
-            // their deadline — kept on the list (read-only) so recent labs never
-            // silently disappear. Preview / scheduled / unpublished-draft
-            // assignments stay hidden (see assignmentVisibleToStudentByState).
-            let now = Date()
-            var visibleSetupIDs = Set(
-                allAssignments
-                    .filter { assignmentVisibleToStudentByState($0, now: now) }
-                    .map(\.testSetupID))
-            // An active per-student extension also reveals an assignment that was
-            // closed before its deadline (which the by-state rule leaves hidden
-            // for everyone else) to the one student who was granted more time.
-            for (setupID, extendedDueAt) in extensionDueAtBySetupID
-            where studentHasActiveExtension(extensionDueAt: extendedDueAt, now: now) {
-                visibleSetupIDs.insert(setupID)
-            }
-            // Any closed assignment the student already engaged with stays listed
-            // too — covers no-deadline assignments the by-state rule can't classify.
-            visibleSetupIDs.formUnion(previouslyOpenedSetupIDs)
-            guard !visibleSetupIDs.isEmpty else {
-                return try await req.view.render(
-                    "index",
-                    IndexContext(displayGroups: [], hasAny: false, currentUser: userContext)
-                ).encodeResponse(for: req)
-            }
-            setups = try await APITestSetup.query(on: req.db)
-                .filter(\.$id ~~ visibleSetupIDs)
-                .sort(\.$createdAt, .descending)
-                .all()
-        }
+        // Staff see every setup in the course; students see the published /
+        // extension-revealed / previously-engaged set (loader owns the rules).
+        // An empty list falls through to the same empty-dashboard render the
+        // grouping below produces naturally.
+        let setups = try await Self.loadDashboardSetups(
+            activeCourseUUID: activeCourseUUID,
+            isActiveCourseStaff: isActiveCourseStaff,
+            allAssignments: allAssignments,
+            extensionDueAtBySetupID: extensionDueAtBySetupID,
+            previouslyOpenedSetupIDs: previouslyOpenedSetupIDs,
+            db: req.db)
 
         let gradeData = try await Self.loadStudentDashboardGradeData(
             req: req, user: user, setups: setups, fmt: fmt)
@@ -164,22 +136,8 @@ struct WebRoutes: RouteCollection {
                 lhsSetupID: lhsID, rhsSetupID: rhsID)
         }
 
-        // Notebook presence drives the Edit button.  The zip-derived answer
-        // costs an `unzip` subprocess per setup, so it is resolved through
-        // ZipEntryListCache (keyed by zip mtime + size) instead of being
-        // recomputed on every dashboard view.
-        var hasNotebookBySetupID: [String: Bool] = [:]
-        for setup in sortedSetups {
-            let setupID = setup.id ?? ""
-            if let path = setup.notebookPath, !path.isEmpty,
-                FileManager.default.fileExists(atPath: path)
-            {
-                hasNotebookBySetupID[setupID] = true
-            } else {
-                hasNotebookBySetupID[setupID] = await req.application.zipEntryListCache
-                    .zipContainsNotebook(zipPath: setup.zipPath)
-            }
-        }
+        let hasNotebookBySetupID = await Self.loadHasNotebookBySetupID(
+            setups: sortedSetups, application: req.application)
 
         let rowContext = IndexRowContext(
             fmt: fmt,

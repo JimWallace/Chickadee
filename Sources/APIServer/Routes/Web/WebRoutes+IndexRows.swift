@@ -40,149 +40,182 @@ struct IndexRowContext {
 extension WebRoutes {
 
     /// Loads the viewer's grade/submission/badge maps for the dashboard —
-    /// overrides + submissions concurrently, then results + achievement reads
-    /// concurrently (the same phase structure the handler had inline).
+    /// overrides + submissions concurrently, then the result/achievement
+    /// phase (`applyResultDerivedData`).
     static func loadStudentDashboardGradeData(
         req: Request, user: APIUser, setups: [APITestSetup], fmt: DateFormatter
     ) async throws -> DashboardGradeData {
         var data = DashboardGradeData()
-        if let userID = user.id {
-            let setupIDs = setups.compactMap(\.id)
-            if !setupIDs.isEmpty {
-                // Instructor grade overrides for this student take precedence
-                // over the runner-computed best grade below.  The override and
-                // submission reads are independent and run concurrently.
-                async let overridesFetch = loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
-                async let submissionsFetch = APISubmission.query(on: req.db)
-                    .filter(\.$userID == userID)
-                    .filter(\.$testSetupID ~~ setupIDs)
-                    .filter(\.$kind == APISubmission.Kind.student)
-                    .sort(\.$submittedAt, .descending)
-                    .all()
-                let overrideMap = try await overridesFetch
-                for setupID in setupIDs {
-                    if let pct = overrideMap[GradeOverrideKey(setupID: setupID, userID: userID)] {
-                        data.overridePercentBySetupID[setupID] = pct
-                    }
-                }
-                let submissions = try await submissionsFetch
+        guard let userID = user.id else { return data }
+        let setupIDs = setups.compactMap(\.id)
+        guard !setupIDs.isEmpty else { return data }
 
-                var grouped: [String: [APISubmission]] = [:]
-                for submission in submissions {
-                    grouped[submission.testSetupID, default: []].append(submission)
-                }
-
-                for (setupID, items) in grouped {
-                    data.submissionCountBySetupID[setupID] = items.count
-                    if let latest = items.first {
-                        let when = latest.submittedAt.map { fmt.string(from: $0) } ?? "—"
-                        data.latestSubmissionBySetupID[setupID] = LatestSubmissionItem(
-                            submissionID: latest.id ?? "",
-                            submittedAtText: when
-                        )
-                    }
-                }
-
-                let submissionIDs = submissions.compactMap(\.id)
-                if !submissionIDs.isEmpty {
-                    // Results plus the three achievement reads only share
-                    // inputs computed above, so all four run concurrently.
-                    async let resultsFetch = APIResult.query(on: req.db)
-                        .filter(\.$submissionID ~~ submissionIDs)
-                        .sort(\.$receivedAt, .descending)
-                        .all()
-                    async let disabledFetch = BuiltInAchievements.disabledBySetup(
-                        setupIDs: Array(setupIDs), on: req.db)
-                    async let perSubFetch = BuiltInAchievements.manifestPerSubmissionBySetup(
-                        setupIDs: Array(setupIDs), on: req.db)
-                    // Class-wide badges this user currently holds across all setups.
-                    async let classAchievementsFetch = APIClassAchievement.query(on: req.db)
-                        .filter(\.$userID == userID)
-                        .filter(\.$testSetupID ~~ setupIDs)
-                        .all()
-                    let resultRows = try await resultsFetch
-
-                    // Best grade percentage per submission across ALL result
-                    // sources — the shared "highest grade wins" fold applied
-                    // to the rows we already fetched (#1111).
-                    var resultsBySubmissionID: [String: [APIResult]] = [:]
-                    for row in resultRows {
-                        resultsBySubmissionID[row.submissionID, default: []].append(row)
-                    }
-                    let bestPercentBySubmissionID =
-                        resultsBySubmissionID
-                        .compactMapValues { bestGradePercent(of: $0) }
-                    // One preferred result per submission (worker-first) is still
-                    // needed for achievement-badge display below.
-                    var preferredResultBySubmissionID: [String: APIResult] = [:]
-                    for row in resultRows {
-                        let key = row.submissionID
-                        if let existing = preferredResultBySubmissionID[key] {
-                            let existingSource = existing.source ?? "worker"
-                            let currentSource = row.source ?? "worker"
-                            if existingSource == "worker" { continue }
-                            if currentSource == "worker" {
-                                preferredResultBySubmissionID[key] = row
-                            }
-                        } else {
-                            preferredResultBySubmissionID[key] = row
-                        }
-                    }
-
-                    for submission in submissions {
-                        guard let subID = submission.id,
-                            let gradePercent = bestPercentBySubmissionID[subID]
-                        else {
-                            continue
-                        }
-                        let setupID = submission.testSetupID
-                        let existing = data.bestGradePercentBySetupID[setupID] ?? 0
-                        if gradePercent > existing {
-                            data.bestGradePercentBySetupID[setupID] = gradePercent
-                        }
-                    }
-
-                    let disabledBySetup = try await disabledFetch
-                    let perSubBySetup = try await perSubFetch
-                    for (setupID, latest) in data.latestSubmissionBySetupID {
-                        guard let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
-                            let result = preferredResultBySubmissionID[latest.submissionID],
-                            let collection = decodedCollection(from: result.collectionJSON),
-                            let gradePercent = gradePercent(from: collection)
-                        else {
-                            continue
-                        }
-                        let latestAttempt = latestSubmission.attemptNumber ?? 1
-                        let priorSub = grouped[setupID]?.first(where: { $0.attemptNumber == latestAttempt - 1 })
-                        let priorGradePercent: Int? = priorSub.flatMap { ps in
-                            guard let psID = ps.id,
-                                let pr = preferredResultBySubmissionID[psID]
-                            else { return nil }
-                            return pr.gradePercentValue
-                        }
-                        data.latestBadgesBySetupID[setupID] = AchievementBadge.forSubmission(
-                            BadgeContext(
-                                attemptNumber: latestAttempt,
-                                gradePercent: gradePercent,
-                                executionTimeMs: collection.executionTimeMs,
-                                priorGradePercent: priorGradePercent
-                            ),
-                            achievements: perSubBySetup[setupID],
-                            disabled: disabledBySetup[setupID] ?? [])
-                    }
-
-                    let classAchievements = try await classAchievementsFetch
-                    for ach in classAchievements {
-                        if let badge = AchievementBadge.forClassAchievement(
-                            ach.achievementID, disabled: disabledBySetup[ach.testSetupID] ?? [])
-                        {
-                            data.latestBadgesBySetupID[ach.testSetupID, default: []].append(badge)
-                        }
-                    }
-                }
+        // Instructor grade overrides for this student take precedence over
+        // the runner-computed best grade.  The override and submission reads
+        // are independent and run concurrently.
+        async let overridesFetch = loadGradeOverridePercents(setupIDs: setupIDs, on: req.db)
+        async let submissionsFetch = APISubmission.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$testSetupID ~~ setupIDs)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .sort(\.$submittedAt, .descending)
+            .all()
+        let overrideMap = try await overridesFetch
+        for setupID in setupIDs {
+            if let pct = overrideMap[GradeOverrideKey(setupID: setupID, userID: userID)] {
+                data.overridePercentBySetupID[setupID] = pct
             }
         }
+        let submissions = try await submissionsFetch
+
+        var grouped: [String: [APISubmission]] = [:]
+        for submission in submissions {
+            grouped[submission.testSetupID, default: []].append(submission)
+        }
+        for (setupID, items) in grouped {
+            data.submissionCountBySetupID[setupID] = items.count
+            if let latest = items.first {
+                let when = latest.submittedAt.map { fmt.string(from: $0) } ?? "—"
+                data.latestSubmissionBySetupID[setupID] = LatestSubmissionItem(
+                    submissionID: latest.id ?? "",
+                    submittedAtText: when
+                )
+            }
+        }
+
+        try await applyResultDerivedData(
+            req: req, userID: userID, setupIDs: setupIDs,
+            submissions: submissions, grouped: grouped, data: &data)
         return data
+    }
+
+    /// The result-derived phase of the grade-data load: best grade per setup
+    /// ("highest grade wins", #1111), latest-submission badges, and the class
+    /// badges this user holds.  No-op when the student has no submissions.
+    private static func applyResultDerivedData(
+        req: Request, userID: UUID, setupIDs: [String],
+        submissions: [APISubmission], grouped: [String: [APISubmission]],
+        data: inout DashboardGradeData
+    ) async throws {
+        let submissionIDs = submissions.compactMap(\.id)
+        guard !submissionIDs.isEmpty else { return }
+        // Results plus the three achievement reads only share inputs computed
+        // by the caller, so all four run concurrently.
+        async let resultsFetch = APIResult.query(on: req.db)
+            .filter(\.$submissionID ~~ submissionIDs)
+            .sort(\.$receivedAt, .descending)
+            .all()
+        async let disabledFetch = BuiltInAchievements.disabledBySetup(
+            setupIDs: setupIDs, on: req.db)
+        async let perSubFetch = BuiltInAchievements.manifestPerSubmissionBySetup(
+            setupIDs: setupIDs, on: req.db)
+        // Class-wide badges this user currently holds across all setups.
+        async let classAchievementsFetch = APIClassAchievement.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$testSetupID ~~ setupIDs)
+            .all()
+        let resultRows = try await resultsFetch
+
+        // Best grade percentage per submission across ALL result sources —
+        // the shared "highest grade wins" fold applied to the rows we
+        // already fetched (#1111).
+        var resultsBySubmissionID: [String: [APIResult]] = [:]
+        for row in resultRows {
+            resultsBySubmissionID[row.submissionID, default: []].append(row)
+        }
+        let bestPercentBySubmissionID =
+            resultsBySubmissionID
+            .compactMapValues { bestGradePercent(of: $0) }
+        let preferredResultBySubmissionID = preferredResultsWorkerFirst(resultRows)
+
+        for submission in submissions {
+            guard let subID = submission.id,
+                let gradePercent = bestPercentBySubmissionID[subID]
+            else { continue }
+            let setupID = submission.testSetupID
+            if gradePercent > (data.bestGradePercentBySetupID[setupID] ?? 0) {
+                data.bestGradePercentBySetupID[setupID] = gradePercent
+            }
+        }
+
+        let disabledBySetup = try await disabledFetch
+        let perSubBySetup = try await perSubFetch
+        for (setupID, latest) in data.latestSubmissionBySetupID {
+            if let badges = latestSubmissionBadges(
+                setupID: setupID, latest: latest, grouped: grouped,
+                preferredResultBySubmissionID: preferredResultBySubmissionID,
+                perSubmission: perSubBySetup[setupID],
+                disabled: disabledBySetup[setupID] ?? [])
+            {
+                data.latestBadgesBySetupID[setupID] = badges
+            }
+        }
+
+        let classAchievements = try await classAchievementsFetch
+        for ach in classAchievements {
+            if let badge = AchievementBadge.forClassAchievement(
+                ach.achievementID, disabled: disabledBySetup[ach.testSetupID] ?? [])
+            {
+                data.latestBadgesBySetupID[ach.testSetupID, default: []].append(badge)
+            }
+        }
+    }
+
+    /// One preferred result per submission, worker-first — the browser result
+    /// is only the fallback while the worker regrade is queued.
+    private static func preferredResultsWorkerFirst(
+        _ rows: [APIResult]
+    ) -> [String: APIResult] {
+        var preferred: [String: APIResult] = [:]
+        for row in rows {
+            let key = row.submissionID
+            if let existing = preferred[key] {
+                let existingSource = existing.source ?? "worker"
+                let currentSource = row.source ?? "worker"
+                if existingSource == "worker" { continue }
+                if currentSource == "worker" {
+                    preferred[key] = row
+                }
+            } else {
+                preferred[key] = row
+            }
+        }
+        return preferred
+    }
+
+    /// The per-submission badges for one setup's latest submission, or nil
+    /// when it has no decodable graded result.
+    private static func latestSubmissionBadges(
+        setupID: String,
+        latest: LatestSubmissionItem,
+        grouped: [String: [APISubmission]],
+        preferredResultBySubmissionID: [String: APIResult],
+        perSubmission: [Achievement]?,
+        disabled: Set<String>
+    ) -> [AchievementBadge]? {
+        guard
+            let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
+            let result = preferredResultBySubmissionID[latest.submissionID],
+            let collection = decodedCollection(from: result.collectionJSON),
+            let gradePercent = gradePercent(from: collection)
+        else { return nil }
+        let latestAttempt = latestSubmission.attemptNumber ?? 1
+        let priorSub = grouped[setupID]?.first(where: { $0.attemptNumber == latestAttempt - 1 })
+        let priorGradePercent: Int? = priorSub.flatMap { ps in
+            guard let psID = ps.id,
+                let pr = preferredResultBySubmissionID[psID]
+            else { return nil }
+            return pr.gradePercentValue
+        }
+        return AchievementBadge.forSubmission(
+            BadgeContext(
+                attemptNumber: latestAttempt,
+                gradePercent: gradePercent,
+                executionTimeMs: collection.executionTimeMs,
+                priorGradePercent: priorGradePercent
+            ),
+            achievements: perSubmission,
+            disabled: disabled)
     }
 
     /// Builds one dashboard row from a setup plus the request-wide context.
