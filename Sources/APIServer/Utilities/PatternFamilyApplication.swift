@@ -138,16 +138,16 @@ struct PatternFamilyApplyResult: Equatable {
 ///   `nextFamilies`; families in `nextFamilies` not referenced by
 ///   `authoredItems` are appended at the end (defensive).
 ///
-/// The 450+-line body is a step-by-step orchestration: resolve inputs
-/// (caller-wins with manifest fallback), normalise stale references,
-/// build the authored ordering, expand families and checks into
-/// generated `TestSuiteEntry`s with deterministic filenames + spec
-/// hashes, write rendered scripts into the setup zip, drop scripts
-/// whose families/checks are gone, then persist the rebuilt manifest.
-/// Each phase reads inputs computed by the previous one — splitting
-/// into helpers would push the same names through a context struct
-/// without reducing the branching.  See the `── N. <phase>` comment
-/// markers inside the body for the structure.
+/// The body is a step-by-step orchestration — see the `── N. <phase>`
+/// comment markers: resolve inputs (caller-wins with manifest fallback),
+/// build the authored ordering, validate, render generated scripts ONCE
+/// (`renderFamilyArtifacts` — the zip write and the manifest rebuild both
+/// consume the same artifacts, so they can't desync), mutate the zip, then
+/// rebuild and persist the manifest.  The self-contained phases live as
+/// free functions below (`reconstructAuthoredOrdering`,
+/// `validateAuthoredSectionContiguity`, `validateFamilyRefDependencies`,
+/// `renderFamilyArtifacts`, `rawScriptOverlayWrites`); what remains
+/// inline genuinely threads state between phases (#1123).
 @discardableResult
 func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclomatic_complexity
     to setup: APITestSetup,
@@ -216,6 +216,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     }
 
     // ── 2. Figure out the authored raw-entry list + ordering ────────────
+    // (Section-contiguity is enforced right after — see
+    // `validateAuthoredSectionContiguity` below.)
     let authoredRawEntries: [AuthoredRawScript]
     let itemsForOrdering: [AuthoredSuiteItem]
     if let authoredItems {
@@ -271,122 +273,39 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     timeLimitSeconds: e.timeLimitSeconds
                 )
             }
-        // Reconstruct authored ordering from the existing manifest: walk
-        // testSuites in order, emit a script item for each raw entry,
-        // one family item at the position of each family's first generated
-        // entry, and one check item at the position of each check's
-        // (single) generated entry.  Families/checks present in
-        // `nextFamilies` / `resolvedChecks` but absent from the old
-        // manifest (i.e. newly added) are appended at the end.  This
-        // preserves the instructor's hand-placed position across a family-
-        // or check-modal save, which goes through the legacy
-        // (authoredItems == nil) path.
-        let nextFamilyIDs = Set(nextFamilies.map(\.id))
-        let nextCheckIDs = Set(resolvedChecks.map(\.id))
-        var rebuilt: [AuthoredSuiteItem] = []
-        var seenFamilyIDs: Set<String> = []
-        var seenCheckIDs: Set<String> = []
-        for entry in props.testSuites {
-            if let fid = entry.generatedBy {
-                guard !seenFamilyIDs.contains(fid) else { continue }
-                seenFamilyIDs.insert(fid)
-                if nextFamilyIDs.contains(fid) {
-                    rebuilt.append(
-                        .family(
-                            id: fid,
-                            sectionID: normaliseSectionID(entry.sectionID)
-                        ))
-                }
-            } else if let cid = entry.generatedByCheck {
-                guard !seenCheckIDs.contains(cid) else { continue }
-                seenCheckIDs.insert(cid)
-                if nextCheckIDs.contains(cid) {
-                    rebuilt.append(
-                        .check(
-                            id: cid,
-                            sectionID: normaliseSectionID(entry.sectionID)
-                        ))
-                }
-            } else {
-                rebuilt.append(
-                    .script(
-                        AuthoredRawScript(
-                            script: entry.script,
-                            tier: entry.tier,
-                            points: entry.points,
-                            displayName: entry.name,
-                            dependsOn: entry.dependsOn,
-                            sectionID: normaliseSectionID(entry.sectionID),
-                            hint: entry.hint,
-                            timeLimitSeconds: entry.timeLimitSeconds
-                        )))
-            }
-        }
-        for f in nextFamilies where !seenFamilyIDs.contains(f.id) {
-            rebuilt.append(.family(id: f.id, sectionID: nil))
-        }
-        for c in resolvedChecks where !seenCheckIDs.contains(c.id) {
-            rebuilt.append(.check(id: c.id, sectionID: nil))
-        }
-        itemsForOrdering = rebuilt
+        itemsForOrdering = reconstructAuthoredOrdering(
+            props: props,
+            nextFamilies: nextFamilies,
+            resolvedChecks: resolvedChecks,
+            normaliseSectionID: normaliseSectionID
+        )
     }
 
-    // ── 2a. Enforce that items with the same sectionID form a contiguous
-    // block (nil / ungrouped counts too).  Clients are expected to group
-    // items[] before sending; enforcing it server-side catches UI bugs
-    // early instead of producing confusing manifests where the same
-    // section straddles another section.
-    do {
-        var seenCompleted: Set<String?> = []
-        var current: String?
-        var haveStarted = false
-        for item in itemsForOrdering {
-            let sid: String? = {
-                switch item {
-                case .script(let s): return s.sectionID
-                case .family(_, let sid): return sid
-                case .check(_, let sid): return sid
-                }
-            }()
-            if !haveStarted {
-                current = sid
-                haveStarted = true
-                continue
-            }
-            if sid != current {
-                seenCompleted.insert(current)
-                if seenCompleted.contains(sid) {
-                    let label = sid ?? "<ungrouped>"
-                    throw Abort(
-                        .unprocessableEntity,
-                        reason: "Items with sectionID '\(label)' are not contiguous; "
-                            + "group all items of a section together before saving.")
-                }
-                current = sid
-            }
-        }
-    }
+    try validateAuthoredSectionContiguity(itemsForOrdering)
 
-    // ── 2. Validate: family spec + family-ref dependency tokens ─────────
+    // ── 3. Validate: family spec + family-ref dependency tokens ─────────
     let authoredAsTestSuites = authoredRawEntries.map {
         TestSuiteEntry(
             tier: $0.tier, script: $0.script, name: $0.displayName,
             dependsOn: $0.dependsOn, points: $0.points, generatedBy: nil
         )
     }
-    // v0.4.100: build familySectionID map so validator knows which
-    // family lives in which section for section-variable ref checking.
-    var familySectionIDForValidation: [String: String] = [:]
+    // v0.4.100: the familyID → sectionID map tells the validator which
+    // family lives in which section (section-variable ref checking) and
+    // later tells the renderer whose section variables to prepend.  Built
+    // ONCE here — the render phase used to rebuild it with an identical
+    // loop (#1123).
+    var familySectionID: [String: String] = [:]
     for item in itemsForOrdering {
         if case .family(let fid, let sid) = item, let sid {
-            familySectionIDForValidation[fid] = sid
+            familySectionID[fid] = sid
         }
     }
     try validatePatternFamilies(
         nextFamilies,
         testSuites: authoredAsTestSuites,
         sections: resolvedSections,
-        familySectionID: familySectionIDForValidation,
+        familySectionID: familySectionID,
         globalVariableNames: Set(resolvedGlobalVariables.map(\.name)),
         perStudentExpressionNames: perStudentExpressionNames
     )
@@ -396,46 +315,11 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         testSuites: authoredAsTestSuites
     )
 
-    let knownFamilyIDs = Set(nextFamilies.map(\.id))
-    for r in authoredRawEntries {
-        for dep in r.dependsOn {
-            if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Script '\(r.script)' depends on unknown pattern family '\(fid)'.")
-            }
-        }
-    }
-    for f in nextFamilies {
-        for dep in f.dependsOn {
-            if let fid = parseFamilyDepToken(dep) {
-                if fid == f.id {
-                    throw Abort(
-                        .unprocessableEntity,
-                        reason: "Pattern family '\(f.id)' cannot depend on itself.")
-                }
-                guard knownFamilyIDs.contains(fid) else {
-                    throw Abort(
-                        .unprocessableEntity,
-                        reason: "Pattern family '\(f.id)' depends on unknown family '\(fid)'.")
-                }
-            }
-        }
-    }
-
-    // Same family-dep reference check for notebook checks.  Plain
-    // script-filename deps are validated by validateManifestDependencies
-    // after expansion (so they reference an existing entry in the
-    // post-expansion testSuites).
-    for c in resolvedChecks {
-        for dep in c.dependsOn {
-            if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Notebook check '\(c.id)' depends on unknown pattern family '\(fid)'.")
-            }
-        }
-    }
+    try validateFamilyRefDependencies(
+        authoredRawEntries: authoredRawEntries,
+        families: nextFamilies,
+        checks: resolvedChecks
+    )
 
     // Cycle detection on the authored graph (family ids + script filenames
     // as a single node set; family:<id> edges expand to the family node,
@@ -445,7 +329,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         families: nextFamilies
     )
 
-    // ── 3. Diff generated filenames and mutate the zip ──────────────────
+    // ── 4. Render generated scripts ONCE, then diff and mutate the zip ──
     // Old-side filenames for both generators are pooled into one set so
     // the deletion diff is computed in one shot.  Notebook checks may
     // produce sidecar files (e.g. `_expected_<id>.csv` for
@@ -457,40 +341,32 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         props.notebookChecks.flatMap(notebookCheckAllGeneratedFilenames)
     )
 
-    // Build a familyID → sectionID map from the authored items, so we can
-    // look up each family's home section and prepend its variables.  If
-    // the authored ordering doesn't reference a family (defensive path
-    // below), that family renders with no section variables — which
-    // matches its "unanchored" status.
-    var familySectionID: [String: String] = [:]
-    for item in itemsForOrdering {
-        if case .family(let fid, let sid) = item, let sid {
-            familySectionID[fid] = sid
-        }
-    }
+    // A family whose id is missing from `familySectionID` (defensive path
+    // below) renders with no section variables — matching its "unanchored"
+    // status.
     let sectionVarsByID: [String: [FamilyVariable]] = Dictionary(
         uniqueKeysWithValues: resolvedSections.map { ($0.id, $0.variables) }
     )
-    func sectionVars(forFamily fid: String) -> [FamilyVariable] {
-        guard let sid = familySectionID[fid] else { return [] }
-        return sectionVarsByID[sid] ?? []
-    }
+    // Every family renders exactly once, here.  Both the zip write below
+    // and the manifest rebuild (`appendFamilyConfigured`) consume these
+    // artifacts — the manifest phase used to invoke the renderer a second
+    // time per family, which wasted work and meant a renderer that ever
+    // became non-deterministic would silently desync the zip bytes from
+    // the manifest entries (#1123).
+    let artifacts = renderFamilyArtifacts(
+        families: nextFamilies,
+        familySectionID: familySectionID,
+        sectionVarsByID: sectionVarsByID,
+        globalVariables: resolvedGlobalVariables,
+        perStudentNames: perStudentExpressionNames
+    )
 
     var renderedByFilename: [String: GeneratedScript] = [:]
     for family in nextFamilies {
-        let sv = sectionVars(forFamily: family.id)
-        for generated in renderPatternFamily(
-            family, sectionVariables: sv, globalVariables: resolvedGlobalVariables,
-            perStudentNames: perStudentExpressionNames)
-        {
+        for generated in artifacts.caseScripts[family.id] ?? [] {
             renderedByFilename[generated.filename] = generated
         }
-        // Auto-existence guard (function-calling kinds): one extra generated
-        // file per family that every case depends on.  nil for
-        // `.variableEquality` / no-enabled-cases families.
-        if let guardScript = existenceGuard(
-            for: family, sectionVariables: sv, globalVariables: resolvedGlobalVariables)
-        {
+        if let guardScript = artifacts.guardScripts[family.id] {
             renderedByFilename[guardScript.filename] = guardScript
         }
     }
@@ -525,52 +401,15 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     }
 
     // Slice 1: re-inline global + section variables into every raw
-    // (non-generated) Python test script.  Idempotent — the prepender
-    // strips any existing Chickadee inputs block before adding the new
-    // one, so unchanged scripts stay byte-identical and unchanged
-    // toWrite entries skip the zip rewrite.  Raw scripts are
-    // identified from `itemsForOrdering` (.script case) so we use the
-    // new authored sectionID, not whatever the old manifest had.
-    for item in itemsForOrdering {
-        guard case .script(let s) = item else { continue }
-        let filename = s.script
-        // If this filename was just generated (e.g. instructor renamed a
-        // raw script to clash with a family-generated name), the family
-        // version wins — skip the raw-script overlay.
-        guard renderedByFilename[filename] == nil else { continue }
-        let isPython = filename.lowercased().hasSuffix(".py")
-        let sectionVars: [FamilyVariable] = {
-            guard let sid = s.sectionID else { return [] }
-            return sectionVarsByID[sid] ?? []
-        }()
-        if let provided = s.content {
-            // Declarative content from the payload (the PUT /suite channel
-            // for creating/updating a hand-written script). Write it
-            // verbatim, re-inlining global + section variables for Python
-            // scripts only. Idempotent at the zip layer — identical bytes
-            // are a no-op there.
-            toWrite[filename] =
-                isPython
-                ? TestScriptVariablePrepender.prependToRawScript(
-                    provided, variables: resolvedGlobalVariables + sectionVars)
-                : provided
-        } else if isPython {
-            // No content provided — preserve the existing file, re-inlining
-            // the current global + section variables (idempotent prepend).
-            guard
-                let existing = readScriptFromZip(
-                    zipPath: setup.zipPath,
-                    filename: filename)
-            else { continue }
-            let updated = TestScriptVariablePrepender.prependToRawScript(
-                existing,
-                variables: resolvedGlobalVariables + sectionVars
-            )
-            if updated != existing {
-                toWrite[filename] = updated
-            }
-        }
-        // (.sh/.r with no provided content: existing file left untouched.)
+    // (non-generated) Python test script (idempotent; see the helper).
+    for (filename, content) in rawScriptOverlayWrites(
+        items: itemsForOrdering,
+        generatedFilenames: Set(renderedByFilename.keys),
+        zipPath: setup.zipPath,
+        globalVariables: resolvedGlobalVariables,
+        sectionVarsByID: sectionVarsByID
+    ) {
+        toWrite[filename] = content
     }
 
     try applyScriptChangesToZip(
@@ -579,7 +418,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         deletions: Array(toDelete)
     )
 
-    // ── 4. Build new `testSuites` in authored order, expanding family refs ─
+    // ── 5. Build new `testSuites` in authored order, expanding family refs ─
     let familyByID: [String: PatternFamily] = Dictionary(
         uniqueKeysWithValues: nextFamilies.map { ($0.id, $0) }
     )
@@ -627,14 +466,13 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     /// `dependsOn` the guard — so a missing function fails once on the guard
     /// and the cases auto-skip through the runner's dependency gate.  Shared
     /// by the authored-order loop and the defensive pass below so the two
-    /// can't drift on the guard wiring.
+    /// can't drift on the guard wiring.  Consumes the render-once
+    /// `artifacts`, so the manifest entries describe exactly the bytes the
+    /// zip phase wrote.
     func appendFamilyConfigured(_ family: PatternFamily, familySection: String?) {
         let inherited = expandDeps(family.dependsOn)
-        let sv = sectionVars(forFamily: family.id)
         var guardFilename: String?
-        if let guardScript = existenceGuard(
-            for: family, sectionVariables: sv, globalVariables: resolvedGlobalVariables)
-        {
+        if let guardScript = artifacts.guardScripts[family.id] {
             order += 1
             guardFilename = guardScript.filename
             // The guard inherits the family's own prerequisites; the cases
@@ -653,10 +491,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
                     timeLimitSeconds: guardScript.timeLimitSeconds
                 ))
         }
-        for generated in renderPatternFamily(
-            family, sectionVariables: sv, globalVariables: resolvedGlobalVariables,
-            perStudentNames: perStudentExpressionNames)
-        {
+        for generated in artifacts.caseScripts[family.id] ?? [] {
             order += 1
             var combined: [String] = []
             var seen = Set<String>()
@@ -772,6 +607,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
             ))
     }
 
+    // ── 6. Rewrite and persist the manifest ─────────────────────────────
     let newManifest = try makeWorkerManifestJSON(
         testSuites: newConfigured,
         includeMakefile: props.makefile != nil,
@@ -871,3 +707,243 @@ private func detectAuthoredCycles(
 /// don't collide with a real file name like "family" (filename has no
 /// colon; a clash is impossible in practice).
 private func normaliseNode(_ dep: String) -> String { dep }
+
+// MARK: - Extracted phases (#1123)
+
+/// Reconstructs the authored ordering from an existing manifest, for the
+/// legacy (`authoredItems == nil`) path: walk `testSuites` in order, emit a
+/// script item for each raw entry, one family item at the position of each
+/// family's first generated entry, and one check item at the position of
+/// each check's (single) generated entry.  Families/checks present in
+/// `nextFamilies` / `resolvedChecks` but absent from the old manifest
+/// (i.e. newly added) are appended at the end.  This preserves the
+/// instructor's hand-placed position across a family- or check-modal save.
+private func reconstructAuthoredOrdering(
+    props: TestProperties,
+    nextFamilies: [PatternFamily],
+    resolvedChecks: [NotebookCheck],
+    normaliseSectionID: (String?) -> String?
+) -> [AuthoredSuiteItem] {
+    let nextFamilyIDs = Set(nextFamilies.map(\.id))
+    let nextCheckIDs = Set(resolvedChecks.map(\.id))
+    var rebuilt: [AuthoredSuiteItem] = []
+    var seenFamilyIDs: Set<String> = []
+    var seenCheckIDs: Set<String> = []
+    for entry in props.testSuites {
+        if let fid = entry.generatedBy {
+            guard !seenFamilyIDs.contains(fid) else { continue }
+            seenFamilyIDs.insert(fid)
+            if nextFamilyIDs.contains(fid) {
+                rebuilt.append(
+                    .family(
+                        id: fid,
+                        sectionID: normaliseSectionID(entry.sectionID)
+                    ))
+            }
+        } else if let cid = entry.generatedByCheck {
+            guard !seenCheckIDs.contains(cid) else { continue }
+            seenCheckIDs.insert(cid)
+            if nextCheckIDs.contains(cid) {
+                rebuilt.append(
+                    .check(
+                        id: cid,
+                        sectionID: normaliseSectionID(entry.sectionID)
+                    ))
+            }
+        } else {
+            rebuilt.append(
+                .script(
+                    AuthoredRawScript(
+                        script: entry.script,
+                        tier: entry.tier,
+                        points: entry.points,
+                        displayName: entry.name,
+                        dependsOn: entry.dependsOn,
+                        sectionID: normaliseSectionID(entry.sectionID),
+                        hint: entry.hint,
+                        timeLimitSeconds: entry.timeLimitSeconds
+                    )))
+        }
+    }
+    for f in nextFamilies where !seenFamilyIDs.contains(f.id) {
+        rebuilt.append(.family(id: f.id, sectionID: nil))
+    }
+    for c in resolvedChecks where !seenCheckIDs.contains(c.id) {
+        rebuilt.append(.check(id: c.id, sectionID: nil))
+    }
+    return rebuilt
+}
+
+/// Enforces that items with the same `sectionID` form a contiguous block
+/// (nil / ungrouped counts too).  Clients are expected to group `items[]`
+/// before sending; enforcing it server-side catches UI bugs early instead of
+/// producing confusing manifests where the same section straddles another
+/// section.  Internal (not private) so it has direct unit tests.
+func validateAuthoredSectionContiguity(_ items: [AuthoredSuiteItem]) throws {
+    var seenCompleted: Set<String?> = []
+    var current: String?
+    var haveStarted = false
+    for item in items {
+        let sid: String? = {
+            switch item {
+            case .script(let s): return s.sectionID
+            case .family(_, let sid): return sid
+            case .check(_, let sid): return sid
+            }
+        }()
+        if !haveStarted {
+            current = sid
+            haveStarted = true
+            continue
+        }
+        if sid != current {
+            seenCompleted.insert(current)
+            if seenCompleted.contains(sid) {
+                let label = sid ?? "<ungrouped>"
+                throw Abort(
+                    .unprocessableEntity,
+                    reason: "Items with sectionID '\(label)' are not contiguous; "
+                        + "group all items of a section together before saving.")
+            }
+            current = sid
+        }
+    }
+}
+
+/// Validates every `family:<id>` dependency token: raw scripts and notebook
+/// checks may only reference families in `families`; a family may reference
+/// other families but never itself.  (Plain script-filename deps are
+/// validated by `validateManifestDependencies` after expansion, so they
+/// reference an existing entry in the post-expansion `testSuites`.)
+private func validateFamilyRefDependencies(
+    authoredRawEntries: [AuthoredRawScript],
+    families: [PatternFamily],
+    checks: [NotebookCheck]
+) throws {
+    let knownFamilyIDs = Set(families.map(\.id))
+    for r in authoredRawEntries {
+        for dep in r.dependsOn {
+            if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason: "Script '\(r.script)' depends on unknown pattern family '\(fid)'.")
+            }
+        }
+    }
+    for f in families {
+        for dep in f.dependsOn {
+            if let fid = parseFamilyDepToken(dep) {
+                if fid == f.id {
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason: "Pattern family '\(f.id)' cannot depend on itself.")
+                }
+                guard knownFamilyIDs.contains(fid) else {
+                    throw Abort(
+                        .unprocessableEntity,
+                        reason: "Pattern family '\(f.id)' depends on unknown family '\(fid)'.")
+                }
+            }
+        }
+    }
+    for c in checks {
+        for dep in c.dependsOn {
+            if let fid = parseFamilyDepToken(dep), !knownFamilyIDs.contains(fid) {
+                throw Abort(
+                    .unprocessableEntity,
+                    reason: "Notebook check '\(c.id)' depends on unknown pattern family '\(fid)'.")
+            }
+        }
+    }
+}
+
+/// The rendered outputs of every pattern family, keyed by family id —
+/// produced exactly once per apply so the zip write and the manifest rebuild
+/// consume identical artifacts.
+private struct RenderedFamilyArtifacts {
+    /// One rendered script per enabled case, in render order.
+    let caseScripts: [String: [GeneratedScript]]
+    /// The auto existence guard (function-calling kinds only; absent for
+    /// `.variableEquality` / no-enabled-cases families).
+    let guardScripts: [String: GeneratedScript]
+}
+
+/// Renders every family's case scripts and existence guard once.
+private func renderFamilyArtifacts(
+    families: [PatternFamily],
+    familySectionID: [String: String],
+    sectionVarsByID: [String: [FamilyVariable]],
+    globalVariables: [FamilyVariable],
+    perStudentNames: Set<String>
+) -> RenderedFamilyArtifacts {
+    var caseScripts: [String: [GeneratedScript]] = [:]
+    var guardScripts: [String: GeneratedScript] = [:]
+    for family in families {
+        let sectionVariables = familySectionID[family.id].flatMap { sectionVarsByID[$0] } ?? []
+        caseScripts[family.id] = renderPatternFamily(
+            family, sectionVariables: sectionVariables, globalVariables: globalVariables,
+            perStudentNames: perStudentNames)
+        if let guardScript = existenceGuard(
+            for: family, sectionVariables: sectionVariables, globalVariables: globalVariables)
+        {
+            guardScripts[family.id] = guardScript
+        }
+    }
+    return RenderedFamilyArtifacts(caseScripts: caseScripts, guardScripts: guardScripts)
+}
+
+/// Slice 1: the re-inline of global + section variables into every raw
+/// (non-generated) Python test script, as a map of zip writes.  Idempotent —
+/// the prepender strips any existing Chickadee inputs block before adding
+/// the new one, so unchanged scripts stay byte-identical and skip the zip
+/// rewrite.  Raw scripts are identified from the authored items (`.script`
+/// case) so the new authored sectionID applies, not whatever the old
+/// manifest had.
+private func rawScriptOverlayWrites(
+    items: [AuthoredSuiteItem],
+    generatedFilenames: Set<String>,
+    zipPath: String,
+    globalVariables: [FamilyVariable],
+    sectionVarsByID: [String: [FamilyVariable]]
+) -> [String: String] {
+    var writes: [String: String] = [:]
+    for item in items {
+        guard case .script(let s) = item else { continue }
+        let filename = s.script
+        // If this filename was just generated (e.g. instructor renamed a
+        // raw script to clash with a family-generated name), the family
+        // version wins — skip the raw-script overlay.
+        guard !generatedFilenames.contains(filename) else { continue }
+        let isPython = filename.lowercased().hasSuffix(".py")
+        let sectionVars = s.sectionID.flatMap { sectionVarsByID[$0] } ?? []
+        if let provided = s.content {
+            // Declarative content from the payload (the PUT /suite channel
+            // for creating/updating a hand-written script). Write it
+            // verbatim, re-inlining global + section variables for Python
+            // scripts only. Idempotent at the zip layer — identical bytes
+            // are a no-op there.
+            writes[filename] =
+                isPython
+                ? TestScriptVariablePrepender.prependToRawScript(
+                    provided, variables: globalVariables + sectionVars)
+                : provided
+        } else if isPython {
+            // No content provided — preserve the existing file, re-inlining
+            // the current global + section variables (idempotent prepend).
+            guard
+                let existing = readScriptFromZip(
+                    zipPath: zipPath,
+                    filename: filename)
+            else { continue }
+            let updated = TestScriptVariablePrepender.prependToRawScript(
+                existing,
+                variables: globalVariables + sectionVars
+            )
+            if updated != existing {
+                writes[filename] = updated
+            }
+        }
+        // (.sh/.r with no provided content: existing file left untouched.)
+    }
+    return writes
+}
