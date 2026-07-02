@@ -162,6 +162,30 @@ chromium failure is treated as real, first time.
    `docs/exec-hang-investigation.md` with the probe breadcrumbs. The
    dispatch/scheduled hard-zero runs of `grading-hang-probe.yml` are the
    fix's acceptance test.
+
+   *2026-07-02 evening findings (probe forensics upgraded in the same
+   change as this note):*
+   - Production telemetry (admin `get_browser_diagnostics`, 96 h window)
+     shows the **sustained-busy `exec_hang` is still real for students on
+     current builds**: 19 hangs / 465 `kernel_idle` boots (~4 %), 19
+     self-heal attempts, 2 `recover_failed`. The v0.4.526 chdir fix killed
+     the 100 % class; this ~4 % residue is a distinct bug.
+   - The **CI probe hang is a different shape**: the 2026-07-02 chromium
+     repro (`hangs=1/8`) showed `indicator=idle` for the full budget and
+     `exec_hang=none` — the cell likely never *started*, i.e. the
+     Shift+Enter dispatch was lost (post-idle focus race), not a wedged
+     kernel. `editor-exec-check.mjs` now classifies this (`lostDispatch`)
+     via a second-press discriminator, captures console-error URLs +
+     all ≥400 responses + failed requests (the four bare 403s in that repro
+     were unidentifiable), reports per-iteration noise base rates on green
+     runs too, and dumps the cell prompt/focus state on every hang.
+   - **Open lead:** `unhandledrejection: Cannot read properties of null
+     (reading 'insertWidget')` fires on essentially every production boot
+     (499 events / ~500 boots in 96 h; vendored `jlab_core` bundle, source
+     maps checked in). Probably a benign JupyterLab race in the SW-free
+     config, but it is exactly the kind of degraded widget state that
+     could eat a keypress — worth tracing via the source map before
+     trusting it.
 2. **Watch the tolerated-webkit warning rate.** The `::warning`
    annotations from the probe and the smoke retries are the flake-rate
    telemetry now; if they show up more than occasionally, the ambient rate

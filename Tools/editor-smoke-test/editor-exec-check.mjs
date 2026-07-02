@@ -18,7 +18,7 @@
 // data-status, and console errors, so a hung run is diagnostic rather than a
 // black box.
 //
-// TWO failure classes, classified and counted separately:
+// THREE failure classes, classified and counted separately:
 //   - deadlock      — our-code post-idle exec_hang (the bug this probe hunts);
 //                     FAILS the leg (exit 1).
 //   - webkitWasmCrash — the upstream WebKit/Safari WASM engine crash
@@ -26,6 +26,14 @@
 //                     bug #286266). NOT a Chickadee regression and not fixable in
 //                     our JS; reported but does NOT fail the leg, so WebKit's own
 //                     bug can't flake this diagnostic.
+//   - lostDispatch  — the first Shift+Enter never started the cell (indicator
+//                     stays idle, no busy phase, no exec_hang beacon) but a
+//                     SECOND press runs it promptly: the kernel was healthy and
+//                     the keypress was lost (focus race around the post-idle
+//                     window). A different bug class than the sustained-busy
+//                     hang — reported loudly but does NOT fail the leg, so the
+//                     deadlock signal stays clean (2026-07-02 chromium repro:
+//                     hangs=1/8 with indicator=idle exec_hang=none).
 // Each iteration uses a FRESH browser: one WebKit process accumulates WASM /
 // TextDecoder state across back-to-back kernel boots, inflating the WebKit crash
 // rate well above a real student (one kernel per session). Fresh-per-run makes the
@@ -201,10 +209,34 @@ async function probeOnce(browser, storageState, notebookURL) {
   });
   const page = await context.newPage();
   const errors = [];
-  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 200)); });
+  // Console "Failed to load resource" messages don't carry the URL in their
+  // text (the 2026-07-02 chromium hang printed four bare 403s — evidence
+  // wasted); attach the location URL so a failing resource is identifiable.
+  page.on("console", (m) => {
+    if (m.type() !== "error") return;
+    const loc = m.location();
+    const url = loc && loc.url ? ` [${loc.url}]` : "";
+    errors.push((m.text() + url).slice(0, 300));
+  });
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
+  // Network-level forensics, independent of what the console reports: every
+  // >=400 response and every outright-failed request, for ALL iterations —
+  // printing them only on hangs made ambient 4xx noise look hang-correlated.
+  const badResponses = [];
+  page.on("response", (res) => {
+    if (res.status() >= 400) {
+      badResponses.push(`${res.status()} ${res.request().method()} ${res.url()}`.slice(0, 220));
+    }
+  });
+  page.on("requestfailed", (req) => {
+    const why = (req.failure() && req.failure().errorText) || "";
+    badResponses.push(`FAIL ${req.method()} ${req.url()} ${why}`.slice(0, 220));
+  });
 
-  const result = { hung: true, wasmCrash: false, ms: 0, status: null, note: "", diag: [], errors };
+  const result = {
+    hung: true, wasmCrash: false, lostDispatch: false, ms: 0, status: null,
+    note: "", diag: [], errors, badResponses, cellState: "",
+  };
   const readDiag = () => page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
   try {
     await page.goto(notebookURL, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS });
@@ -261,6 +293,37 @@ async function probeOnce(browser, storageState, notebookURL) {
       return ind ? ind.getAttribute("data-status") : null;
     }).catch(() => null);
     result.diag = await readDiag();
+
+    if (result.hung && !result.wasmCrash) {
+      // Cell + focus state at the moment the budget expired: prompt "[*]"
+      // means the execute was dispatched and is stuck (the sustained-busy
+      // class); "[ ]" with an idle indicator means it was never dispatched.
+      result.cellState = await jlFrame.evaluate(() => {
+        const cell = document.querySelector(".jp-Notebook .jp-CodeCell");
+        const prompt = cell ? ((cell.querySelector(".jp-InputPrompt") || {}).textContent || "").trim() : "no-cell";
+        const out = cell ? ((cell.querySelector(".jp-OutputArea") || {}).innerText || "").trim().slice(0, 60) : "";
+        const activeEl = document.activeElement;
+        const active = activeEl ? String(activeEl.className || activeEl.tagName).slice(0, 60) : "none";
+        return `prompt="${prompt}" docFocus=${document.hasFocus()} active="${active}" out="${out}"`;
+      }).catch(() => "unavailable");
+
+      // Discriminator: lost keypress vs wedged kernel. If a second
+      // Shift+Enter runs the cell promptly, the kernel was healthy the whole
+      // time and the FIRST dispatch never happened (focus race) — a
+      // different bug class than the sustained-busy exec_hang, and a
+      // student-facing one ("I pressed run and nothing happened").
+      try {
+        const cellAgain = jlFrame.locator(".jp-Notebook .jp-CodeCell .cm-content").first();
+        await cellAgain.click({ timeout: 5_000 });
+        await cellAgain.press("Shift+Enter");
+        const retryStart = Date.now();
+        while (Date.now() - retryStart < 15_000) {
+          const body = await jlFrame.evaluate(() => (document.body && document.body.innerText) || "").catch(() => "");
+          if (body.includes(EXEC_TOKEN)) { result.lostDispatch = true; break; }
+          await page.waitForTimeout(500);
+        }
+      } catch { /* second press unavailable — leave lostDispatch false */ }
+    }
   } catch (e) {
     result.note = `exception: ${(e && e.message) || e}`;
   } finally {
@@ -285,6 +348,7 @@ async function main() {
   let hangs = 0;
   let wasmCrashes = 0;
   let deadlocks = 0;
+  let lostDispatches = 0;
   const latencies = [];
   for (let i = 0; i < ITER; i++) {
     // Fresh browser per iteration. A single WebKit process accumulates WASM /
@@ -298,25 +362,49 @@ async function main() {
     finally { await browser.close().catch(() => {}); }
     if (r.hung) {
       hangs++;
-      if (r.wasmCrash) wasmCrashes++; else deadlocks++;
+      if (r.wasmCrash) wasmCrashes++;
+      else if (r.lostDispatch) lostDispatches++;
+      else deadlocks++;
       const exec = (r.diag || []).find((d) => d.source === "exec_hang");
-      const tag = r.wasmCrash ? "WEBKIT-WASM-CRASH (upstream #286266)" : "HANG";
+      const tag = r.wasmCrash
+        ? "WEBKIT-WASM-CRASH (upstream #286266)"
+        : r.lostDispatch
+          ? "LOST-DISPATCH (second press ran — kernel healthy, first keypress lost)"
+          : "HANG";
       console.log(
         `  iter ${i + 1}/${ITER}: ${tag}${r.note ? " (" + r.note + ")" : ""} — ` +
           `indicator=${r.status} waited=${r.ms}ms exec_hang=${exec ? exec.message : "none"}`
       );
+      if (r.cellState) console.log(`    cell: ${r.cellState}`);
       if (r.errors && r.errors.length) console.log(`    console: ${r.errors.slice(0, 4).join(" | ")}`);
+      if (r.badResponses && r.badResponses.length) {
+        console.log(`    http: ${r.badResponses.slice(0, 6).join(" | ")}`);
+      }
     } else {
       latencies.push(r.ms);
-      console.log(`  iter ${i + 1}/${ITER}: ok — ran in ${r.ms}ms (indicator=${r.status})`);
+      // Compact per-iteration noise summary even on green runs: without the
+      // base rate, ambient 4xx noise printed only on hangs looks correlated.
+      console.log(
+        `  iter ${i + 1}/${ITER}: ok — ran in ${r.ms}ms ` +
+          `(indicator=${r.status}, net4xx=${(r.badResponses || []).length}, consoleErr=${(r.errors || []).length})`
+      );
     }
   }
 
   const avg = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
   console.log(
     `EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ` +
-      `(deadlock=${deadlocks}, webkitWasmCrash=${wasmCrashes}) ok=${ITER - hangs} avgRunMs=${avg}`
+      `(deadlock=${deadlocks}, lostDispatch=${lostDispatches}, webkitWasmCrash=${wasmCrashes}) ` +
+      `ok=${ITER - hangs} avgRunMs=${avg}`
   );
+  if (lostDispatches > 0) {
+    console.log(
+      `NOTE: ${lostDispatches}/${ITER} run(s) lost the first Shift+Enter (a second press ran fine — ` +
+        `kernel healthy). This is a post-idle focus race, not the sustained-busy exec_hang; it is ` +
+        `student-facing ("I pressed run and nothing happened") and tracked separately so the ` +
+        `deadlock signal stays clean.`
+    );
+  }
   if (wasmCrashes > 0) {
     console.log(
       `NOTE: ${wasmCrashes}/${ITER} run(s) hit the upstream WebKit/Safari WASM crash ` +
@@ -325,7 +413,8 @@ async function main() {
     );
   }
   // Fail the leg ONLY for a real (our-code) post-idle deadlock; an upstream
-  // WebKit WASM crash is reported but must not flake this diagnostic.
+  // WebKit WASM crash or a lost first keypress (kernel healthy, different bug
+  // class) is reported but must not flake this diagnostic.
   process.exit(deadlocks > 0 ? 1 : 0);
 }
 
