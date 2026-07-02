@@ -63,6 +63,12 @@ struct DiagnosticsConfiguration: Sendable {
     /// purgeable; an admin still triggers the deletion manually. See
     /// `SubmissionRetentionService`.
     let submissionRetentionDays: Int
+    /// Read-only mount of the auto-deploy daemon's IPC dir (status.json /
+    /// history.jsonl), surfaced on the admin deploy-oversight views and the
+    /// admin MCP deploy tools.  An absolute host path, not under the data
+    /// volume.  (`CHICKADEE_DEPLOY_STATE_DIR` — the last env var read outside
+    /// AppConfig after the v0.4.169 centralization, folded in by #1129.)
+    let deployStateDirectory: String
 
     static func fromEnvironment() -> Self {
         Self(
@@ -76,7 +82,8 @@ struct DiagnosticsConfiguration: Sendable {
             recentMetricsWindowHours: environmentInt("METRICS_RECENT_WINDOW_HOURS") ?? 24,
             pruneIntervalHours: environmentInt("OBSERVABILITY_PRUNE_INTERVAL_HOURS") ?? 24,
             auditLogRetentionDays: environmentInt("AUDIT_LOG_RETENTION_DAYS") ?? 90,
-            submissionRetentionDays: environmentInt("SUBMISSION_RETENTION_DAYS") ?? 365
+            submissionRetentionDays: environmentInt("SUBMISSION_RETENTION_DAYS") ?? 365,
+            deployStateDirectory: Environment.get("CHICKADEE_DEPLOY_STATE_DIR") ?? "/deploy-state"
         )
     }
 }
