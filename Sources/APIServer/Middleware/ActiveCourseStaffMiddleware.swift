@@ -1,13 +1,15 @@
-// APIServer/Middleware/ActiveCourseInstructorMiddleware.swift
+// APIServer/Middleware/ActiveCourseStaffMiddleware.swift
 //
-// Gates the `/instructor` route group on *per-course* instructor authority
-// (Phase 4b of docs/multi-course-roles.md). Replaces the global
-// `RoleMiddleware(required: .instructor)` gate: instructor authority is now
+// Gates the `/instructor` route group on *per-course* staff authority
+// (Phase 4b of docs/multi-course-roles.md; renamed from
+// ActiveCourseInstructorMiddleware in #1127 — it has admitted TAs since the
+// Slice-E rung landed, so it is a staff gate). Replaces the global
+// `RoleMiddleware(required: .instructor)` gate: teaching authority is
 // per-course, so the gate admits an admin (deployment-wide bypass) or a user
-// who is an instructor in their *active course* — the course the instructor
-// handlers act on (`resolveActiveCourse`). A user who is an instructor in one
-// course but has a course where they're a student active is therefore kept out
-// of the instructor tools for that student course.
+// who is staff (TA+) in their *active course* — the course the instructor
+// handlers act on (`resolveActiveCourse`). A user who is staff in one course
+// but has a course where they're a student active is therefore kept out of
+// the instructor tools for that student course.
 //
 // Must sit downstream of `UserSessionAuthenticator`. This gate covers the
 // active-course-scoped handlers; handlers that act on a course or assignment
@@ -17,7 +19,7 @@
 import Fluent
 import Vapor
 
-struct ActiveCourseInstructorMiddleware: AsyncMiddleware {
+struct ActiveCourseStaffMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: AsyncResponder) async throws -> Response {
         guard let user = request.auth.get(APIUser.self) else {
             if request.wantsBrowserRedirect { return request.redirect(to: "/login") }
@@ -45,7 +47,7 @@ struct ActiveCourseInstructorMiddleware: AsyncMiddleware {
             return try await next.respond(to: request)
         }
 
-        // Authenticated but not an instructor here: 403, matching the prior
+        // Authenticated but not staff here: 403, matching the prior
         // RoleMiddleware behaviour for an insufficient role.
         throw Abort(.forbidden)
     }

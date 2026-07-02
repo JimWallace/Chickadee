@@ -16,7 +16,7 @@ struct RoleMiddleware: AsyncMiddleware {
         case admin  // admin only
     }
     // Note: there is no `.instructor` tier — teaching authority is per-course
-    // (`ActiveCourseInstructorMiddleware` + the per-course `requireCourseRole`
+    // (`ActiveCourseStaffMiddleware` + the per-course `requireCourseRole`
     // chokepoints), not a deployment-global role (#417).
 
     let required: Required

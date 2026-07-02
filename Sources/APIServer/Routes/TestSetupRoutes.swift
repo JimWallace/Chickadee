@@ -161,7 +161,8 @@ struct TestSetupRoutes: RouteCollection {
         // (admin bypass); the enrollment-gated student path is the separate
         // /browser-runner download (#417 Slice D). Sibling reads getAssignment /
         // downloadAssignment already scope via requireCourseEnrollment.
-        try await requireCourseInstructor(caller: caller, courseID: setup.courseID, db: req.db)
+        try await requireCourseRole(
+            caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
 
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }

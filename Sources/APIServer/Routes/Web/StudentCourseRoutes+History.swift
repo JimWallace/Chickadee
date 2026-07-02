@@ -599,14 +599,15 @@ extension StudentCourseRoutes {
         guard
             let student = try await APIUser.query(on: req.db)
                 .filter(\.$urlToken == urlTokenRaw)
-                .first()
+                .first(),
+            let studentID = student.id
         else {
             throw WebAssignmentError.notFound(resource: "Student")
         }
         let isEnrolled =
             try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseUUID)
-            .filter(\.$userID == student.id ?? UUID())
+            .filter(\.$userID == studentID)
             .count() > 0
         guard isEnrolled else {
             throw WebAssignmentError.notFound(resource: "Enrolled student")
@@ -631,7 +632,7 @@ extension StudentCourseRoutes {
     /// override save/delete).
     ///
     /// Note on the role check: these routes are registered under the
-    /// `/instructor` group's `ActiveCourseInstructorMiddleware` (routes.swift),
+    /// `/instructor` group's `ActiveCourseStaffMiddleware` (routes.swift),
     /// which gates on instructor authority in the caller's *active* course. The
     /// `isInstructor` guard here is defense-in-depth in case the route grouping
     /// ever changes. `action` carries each handler's original forbidden-message

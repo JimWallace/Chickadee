@@ -4,7 +4,7 @@
 //   Phase 1 — the `course_enrollments.role` column, its typed accessor, and the
 //     behaviour-preserving backfill from each enrolled user's global role.
 //   Phase 2 — the read path: `enrolledCoursesWithRoles` and the nav predicate
-//     `isInstructorInActiveCourse`.
+//     `isStaffInActiveCourse`.
 //   Phase 3 — the auth chokepoint: `CourseRole` ordering and
 //     `requireCourseRole(atLeast:)`.
 //   Phase 4a — `saveSeededEnrollment`: new enrollments seed their role from the
@@ -120,7 +120,7 @@ import Vapor
 
     // MARK: - Read path (Phase 2)
 
-    /// `isInstructorInActiveCourse` (which the nav keys off) is driven by the
+    /// `isStaffInActiveCourse` (which the nav keys off) is driven by the
     /// active course's per-course role, with a transitional fallback to the
     /// global role.
     @Test func instructorInActiveCourseReflectsPerCourseRole() {
@@ -134,16 +134,16 @@ import Vapor
         }
 
         // No active course → never instructor-in-course, whatever the global role.
-        #expect(context(globalRole: .instructor, active: nil).isInstructorInActiveCourse == false)
+        #expect(context(globalRole: .instructor, active: nil).isStaffInActiveCourse == false)
         // Global student, per-course student → no instructor surfaces.
-        #expect(context(globalRole: .student, active: course(.student)).isInstructorInActiveCourse == false)
+        #expect(context(globalRole: .student, active: course(.student)).isStaffInActiveCourse == false)
         // The Phase 2 point: a global *student* with a per-course instructor role → yes.
-        #expect(context(globalRole: .student, active: course(.instructor)).isInstructorInActiveCourse == true)
+        #expect(context(globalRole: .student, active: course(.instructor)).isStaffInActiveCourse == true)
         // Phase 5: authority is purely per-course — a global instructor whose
         // per-course role is student does NOT get the instructor tab here.
-        #expect(context(globalRole: .instructor, active: course(.student)).isInstructorInActiveCourse == false)
+        #expect(context(globalRole: .instructor, active: course(.student)).isStaffInActiveCourse == false)
         // Admin keeps deployment-wide instructor surfaces.
-        #expect(context(globalRole: .admin, active: course(.student)).isInstructorInActiveCourse == true)
+        #expect(context(globalRole: .admin, active: course(.student)).isStaffInActiveCourse == true)
     }
 
     /// `enrolledCoursesWithRoles` returns each enrolled (non-archived) course

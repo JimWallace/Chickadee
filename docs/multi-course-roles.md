@@ -6,7 +6,7 @@ column + the behaviour-preserving backfill (Phase 1), the read-path wiring that
 carries the per-course role into the nav (Phase 2), the role-aware authorization
 chokepoint `requireCourseRole(atLeast:)` (Phase 3), per-course role seeding on
 new enrollments (Phase 4a), and the access-control flip
-(`ActiveCourseInstructorMiddleware` + the roster role dropdown, Phase 4b).
+(`ActiveCourseStaffMiddleware` + the roster role dropdown, Phase 4b).
 **Phase 5 is complete** — the transitional global-instructor fallbacks are
 removed (authority is purely per-course), `SSO_INSTRUCTOR_USERS` is retired,
 and — beyond what this doc originally deferred — the legacy global
@@ -148,7 +148,7 @@ representable and creatable.
   `enrolledCoursesWithRoles` resolver (the enrollment row is already loaded —
   no extra query). `enrolledCourses` is now defined in terms of it, so the
   role-free MCP visibility set can't drift from the web one.
-- `CurrentUserContext` exposes `isInstructorInActiveCourse`, and `base.leaf`
+- `CurrentUserContext` exposes `isStaffInActiveCourse`, and `base.leaf`
   keys the Instructor tab off *that* instead of the global `isInstructor`. It
   is `true` when the active course's role is `.instructor` **or** (a
   transitional fallback) the user is a global instructor/admin — so today's
@@ -210,7 +210,7 @@ representable and creatable.
    migration, the backfill. No reads of the new column yet → zero behavior
    change.
 2. **Read path. ✓ Done.** `CourseContext.role`, nav keyed off
-   `isInstructorInActiveCourse`. Still identical behavior (the role mirrors the
+   `isStaffInActiveCourse`. Still identical behavior (the role mirrors the
    global role, plus a transitional global-role fallback in the nav predicate).
 3. **Auth path. ✓ Done (chokepoint).** `requireCourseRole(atLeast:)` +
    `CourseRole` ordering; `requireCourseEnrollment` is its `.student` case.
@@ -223,7 +223,7 @@ representable and creatable.
      stays accurate and nobody loses access when 4b flips authorization.
    - **4b. Implemented — held for review.** Replaces the global
      `RoleMiddleware(.instructor)` on `/instructor` with
-     `ActiveCourseInstructorMiddleware` (admit admin or **global** instructor —
+     `ActiveCourseStaffMiddleware` (admit admin or **global** instructor —
      transitional — or a per-course instructor in the *active* course); the
      param-taking enrollment endpoints call `requireCourseInstructor` on their
      URL course (same transitional rule) so a per-course instructor can't be
@@ -234,7 +234,8 @@ representable and creatable.
      MCP subject is a global instructor, so it's a no-op).
 5. **Shrink the global role (pragmatic slice — done).** Removed the three
    transitional global-instructor fallbacks (nav, the `/instructor` gate, and
-   `requireCourseInstructor`) so instructor authority is purely per-course; and
+   `requireCourseInstructor`, which #1127 later inlined into its last caller)
+   so instructor authority is purely per-course; and
    retired the `SSO_INSTRUCTOR_USERS` handling (kept `SSO_ADMIN_USERS`).
    Both items originally deferred here have since shipped: the
    `UserRole.instructor` enum case was physically removed with the

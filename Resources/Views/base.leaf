@@ -32,17 +32,17 @@
     </a>
 
     #if(currentUser):
-        #if(currentUser.primaryInstructorCourse):
+        #if(currentUser.primaryStaffCourse):
             <!-- Exactly one instructor course: a single direct link, POSTed
                  through /activate so it works even when a different course is
                  currently active (it switches active to the taught course,
                  then lands on the instructor view). -->
-            <form method="post" action="/courses/#(currentUser.primaryInstructorCourse.id)/activate" class="inline-form">
+            <form method="post" action="/courses/#(currentUser.primaryStaffCourse.id)/activate" class="inline-form">
                 #csrfFormField()
                 <input type="hidden" name="next" value="/instructor">
                 <button class="btn-link nav-link" type="submit">Instructor</button>
             </form>
-        #elseif(currentUser.showInstructorTabs):
+        #elseif(currentUser.showStaffTabs):
             <!-- More than one taught course: an Instructor menu whose items each
                  POST to /activate with next=/instructor, so picking a course both
                  switches the active course and lands on its instructor view. -->
@@ -53,7 +53,7 @@
                     <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
                 </button>
                 <div class="nav-dropdown-menu" role="menu">
-                    #for(course in currentUser.instructorCourses):
+                    #for(course in currentUser.staffCourses):
                     <form method="post" action="/courses/#(course.id)/activate" class="contents-form">
                         #csrfFormField()
                         <input type="hidden" name="next" value="/instructor">

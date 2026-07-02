@@ -1,9 +1,7 @@
 // APIServer/Routes/Web/CourseAdminRoutes+Enrollment.swift
 //
-// Enrollment-related handlers.  Phase 2 of the audit refactor moved them
-// from `AssignmentRoutes` onto `CourseAdminRoutes`; the file name still
-// starts with `AssignmentRoutes+` for blame continuity until the next
-// rename pass.
+// Enrollment-related handlers, moved from `AssignmentRoutes` onto
+// `CourseAdminRoutes` in the Phase-2 audit refactor.
 
 import Core
 import Fluent
@@ -77,12 +75,14 @@ extension CourseAdminRoutes {
         guard
             let idString = req.parameters.get("courseID"),
             let courseID = UUID(uuidString: idString),
-            let course = try await APICourse.find(courseID, on: req.db),
-            !course.isArchived
+            let course = try await APICourse.find(courseID, on: req.db)
         else {
-            throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid or archived course.")
+            throw WebAssignmentError.invalidParameter(name: "courseID", reason: "Invalid course.")
         }
 
+        // The archived-course block lives inside requireCourseWriteAccess —
+        // the single statement of the rule (#1127; a manual `!course.isArchived`
+        // guard here was dead policy duplication with a different error shape).
         let caller = try req.auth.require(APIUser.self)
         try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
 

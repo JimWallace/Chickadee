@@ -102,7 +102,7 @@ so one account can be an instructor in one course and a student in another.
 TAs author content and grade but cannot manage enrollment/deadlines/
 archival/staff. Enforcement chokepoints: `requireCourseRole(atLeast:)` /
 `evaluateCourseWrite` in `CourseAccessHelpers.swift` (web + MCP share the
-policy); the `/instructor` area gate is `ActiveCourseInstructorMiddleware`
+policy); the `/instructor` area gate is `ActiveCourseStaffMiddleware`
 (staff in the *active* course), with per-resource gates on every
 parameterized route. See `docs/multi-course-roles.md`.
 
