@@ -381,11 +381,12 @@ extension WebRoutes {
 
 /// Loads an assignment's class-goal achievements joined with their latest
 /// `APIAchievementResult` snapshot, for the student-facing "Achievements"
-/// section.  Returns `[]` when the manifest carries no class goals.
-func loadClassGoalViews(testSetupID: String, on db: Database) async throws -> [ClassGoalView] {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db),
-        let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
-    else { return [] }
+/// section.  Returns `[]` when the manifest carries no class goals.  Takes the
+/// caller's already-decoded manifest (#1128) instead of re-fetching the setup.
+func loadClassGoalViews(
+    testSetupID: String, props: TestProperties?, on db: Database
+) async throws -> [ClassGoalView] {
+    guard let props else { return [] }
     let goals = props.achievements.filter { $0.isClassGoal }
     guard !goals.isEmpty else { return [] }
 

@@ -74,9 +74,11 @@ extension InstructorDashboardRoutes {
         // submission on a setup with class goals.  Overrides are authoritative,
         // so a key an override already set is left untouched.
         for setupID in setupIDs {
-            let bonus = try await classGoalBonusPoints(testSetupID: setupID, on: req.db)
-            guard bonus > 0, let setup = setupByID[setupID],
-                let total = suiteTotalPoints(setup: setup)
+            guard let setup = setupByID[setupID] else { continue }
+            let props = setup.decodedManifest()
+            let bonus = try await classGoalBonusPoints(
+                testSetupID: setupID, props: props, on: req.db)
+            guard bonus > 0, let total = suiteTotalPoints(props: props)
             else { continue }
             let suffix = "::\(setupID)"
             for (mapKey, points) in bestPointsByUserAndSetup
@@ -205,7 +207,7 @@ extension InstructorDashboardRoutes {
         for (key, pct) in bestPctByKey {
             guard let setupID = key.components(separatedBy: "::").last,
                 let setup = setupByID[setupID],
-                let total = suiteTotalPoints(setup: setup)
+                let total = suiteTotalPoints(props: setup.decodedManifest())
             else { continue }
             best[key] = Double(pct) / 100.0 * total
         }

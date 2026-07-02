@@ -44,7 +44,10 @@ func bestGradeForStudent(
         .all()
         .compactMap(\.id)
 
-    let manifestTotal = try await suiteTotalPoints(testSetupID: testSetupID, db: db)
+    // One setup fetch + manifest decode serves both the denominator and the
+    // class-goal bonus below (#1128 — each used to re-fetch independently).
+    let setupProps = try await APITestSetup.find(testSetupID, on: db)?.decodedManifest()
+    let manifestTotal = suiteTotalPoints(props: setupProps)
 
     guard !submissionIDs.isEmpty else {
         // No submissions yet. Only an override gives us anything to push.
@@ -101,23 +104,9 @@ func bestGradeForStudent(
         basePoints = earned
     }
     // Class-goal bonus: extra credit, capped at the suite total (100%).
-    let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, on: db)
+    let bonus = try await classGoalBonusPoints(testSetupID: testSetupID, props: setupProps, on: db)
     let points = bonus > 0 ? min(total, basePoints + bonus) : basePoints
     return StudentGrade(points: points, total: total)
-}
-
-/// Total possible points for a test setup — the sum of its suite items'
-/// weights.  Used as the denominator to rescale a grade onto the BrightSpace
-/// grade item's own max.  Nil when the manifest is missing/malformed or sums to
-/// zero.
-private func suiteTotalPoints(testSetupID: String, db: Database) async throws -> Double? {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db),
-        let props = setup.decodedManifest()
-    else {
-        return nil
-    }
-    let total = props.testSuites.map(\.points).reduce(0, +)
-    return total > 0 ? Double(total) : nil
 }
 
 /// The points to push and the grade item they target, or a `refusal` message

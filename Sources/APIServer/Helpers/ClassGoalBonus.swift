@@ -17,10 +17,13 @@ import Foundation
 
 /// Total class-goal bonus points for an assignment: Σ over its points-rewarded
 /// class goals of `reward.points × current class progress`.
-func classGoalBonusPoints(testSetupID: String, on db: Database) async throws -> Double {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db),
-        let props = setup.decodedManifest()
-    else { return 0 }
+///
+/// Takes the caller's already-decoded manifest (#1128): every call site has
+/// the setup row in hand, so this no longer re-fetches and re-decodes it.
+func classGoalBonusPoints(
+    testSetupID: String, props: TestProperties?, on db: Database
+) async throws -> Double {
+    guard let props else { return 0 }
     let goals = props.achievements.filter { $0.isClassGoal }
     guard !goals.isEmpty else { return 0 }
 
@@ -43,11 +46,12 @@ func earnedWithClassGoalBonus(earned: Double, total: Double, bonus: Double) -> D
     return min(total, earned + bonus)
 }
 
-/// The suite's total possible points (sum of test-suite item weights) for a
-/// loaded setup, or nil when the manifest is missing/malformed or sums to zero.
-/// Used as the 100% cap for the class-goal bonus on the points-based exports.
-func suiteTotalPoints(setup: APITestSetup) -> Double? {
-    guard let props = setup.decodedManifest() else { return nil }
+/// The suite's total possible points (sum of test-suite item weights) from a
+/// decoded manifest, or nil when the manifest is missing/malformed or sums to
+/// zero.  Used as the 100% cap for the class-goal bonus on the points-based
+/// exports and as the BrightSpace push denominator.
+func suiteTotalPoints(props: TestProperties?) -> Double? {
+    guard let props else { return nil }
     let total = props.testSuites.map(\.points).reduce(0, +)
     return total > 0 ? Double(total) : nil
 }
