@@ -17,6 +17,8 @@
 // one zip-listing cache rather than two near-identical ones.)
 
 import Foundation
+import NIOCore
+import NIOPosix
 import Vapor
 
 actor ZipEntryListCache {
@@ -31,12 +33,31 @@ actor ZipEntryListCache {
     /// listed.  Reset wholesale in the unlikely event it grows past this.
     private static let maxEntries = 4096
 
+    /// Where the `unzip` subprocess actually runs (#1156). The old
+    /// implementation ran `listZipEntries` inside the synchronous actor
+    /// method, holding the actor's executor — a cooperative-pool thread —
+    /// for the whole subprocess and serializing every cache caller behind a
+    /// single miss. Nil (bare test instances) falls back to running the
+    /// listing inline.
+    private let threadPool: NIOThreadPool?
+    private let eventLoopGroup: EventLoopGroup?
+
+    /// One in-flight listing per zip path: concurrent misses on the same
+    /// zip (a class opening one assignment post-deploy) share a single
+    /// subprocess instead of queueing one each behind the global zip lock.
+    private var inFlight: [String: Task<[String], Never>] = [:]
+
     private var cache: [String: CachedEntries] = [:]
+
+    init(threadPool: NIOThreadPool? = nil, eventLoopGroup: EventLoopGroup? = nil) {
+        self.threadPool = threadPool
+        self.eventLoopGroup = eventLoopGroup
+    }
 
     /// The zip's entry-name list (exactly what `listZipEntries` would return),
     /// cached by the zip's mtime + size.  Returns an empty list when the zip is
     /// missing or unreadable, matching `listZipEntries`' behaviour.
-    func entries(zipPath: String) -> [String] {
+    func entries(zipPath: String) async -> [String] {
         guard
             let attributes = try? FileManager.default.attributesOfItem(atPath: zipPath),
             let zipModified = attributes[.modificationDate] as? Date
@@ -50,7 +71,25 @@ actor ZipEntryListCache {
             return cached.entries
         }
 
-        let entries = listZipEntries(zipPath: zipPath)
+        if let pending = inFlight[zipPath] {
+            return await pending.value
+        }
+
+        let threadPool = threadPool
+        let eventLoop = eventLoopGroup?.next()
+        let listing = Task<[String], Never> {
+            if let threadPool, let eventLoop {
+                return
+                    (try? await threadPool.runIfActive(eventLoop: eventLoop) {
+                        listZipEntries(zipPath: zipPath)
+                    }.get()) ?? []
+            }
+            return listZipEntries(zipPath: zipPath)
+        }
+        inFlight[zipPath] = listing
+        let entries = await listing.value
+        inFlight[zipPath] = nil
+
         if cache.count >= Self.maxEntries { cache.removeAll() }
         cache[zipPath] = CachedEntries(
             zipModified: zipModified,
@@ -62,8 +101,8 @@ actor ZipEntryListCache {
 
     /// True when the (cached) entry list contains at least one `.ipynb` entry.
     /// Returns false when the zip is missing or unreadable.
-    func zipContainsNotebook(zipPath: String) -> Bool {
-        entries(zipPath: zipPath).contains { $0.hasSuffix(".ipynb") }
+    func zipContainsNotebook(zipPath: String) async -> Bool {
+        await entries(zipPath: zipPath).contains { $0.hasSuffix(".ipynb") }
     }
 }
 
@@ -77,7 +116,8 @@ extension Application {
             if let existing = storage[ZipEntryListCacheKey.self] {
                 return existing
             }
-            let created = ZipEntryListCache()
+            let created = ZipEntryListCache(
+                threadPool: threadPool, eventLoopGroup: eventLoopGroup)
             storage[ZipEntryListCacheKey.self] = created
             return created
         }

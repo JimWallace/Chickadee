@@ -33,12 +33,51 @@ enum PersonalizationEvaluatorError: Error {
     case missingName(name: String, stdout: String)
 }
 
+/// Minimal counting semaphore for async contexts: `acquire` suspends (no
+/// thread parked) once `width` slots are in use; `release` hands the slot to
+/// the oldest waiter. Used to bound concurrent python3 evaluations (#1156).
+actor AsyncCountingSemaphore {
+    private let width: Int
+    private var inUse = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(width: Int) {
+        self.width = max(1, width)
+    }
+
+    func acquire() async {
+        if inUse < width {
+            inUse += 1
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+        // Resumed by release(), which transfers the slot without
+        // decrementing `inUse`.
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            inUse -= 1
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 enum PersonalizationEvaluator {
 
     /// Timeout (seconds) for a single evaluation subprocess.  Slice 2
     /// caps at 5 s — instructor expressions should be near-instant;
     /// anything slower is almost certainly a bug.
     static let defaultTimeoutSeconds: Int = 5
+
+    /// Caps concurrent interpreter spawns server-wide (#1156): a deadline
+    /// burst of first-opens on a personalized assignment previously forked
+    /// one python3 per request with no ceiling. Excess evaluations suspend
+    /// in the semaphore's queue; each is bounded by its own subprocess
+    /// timeout once running.
+    static let spawnGate = AsyncCountingSemaphore(
+        width: max(2, ProcessInfo.processInfo.activeProcessorCount))
 
     /// Evaluates each `expressions` entry with `seed` and all listed
     /// static variables in scope.  Returns the rendered Python literal
@@ -121,6 +160,7 @@ enum PersonalizationEvaluator {
         let stdout: String
         let stderr: String
         let exitCode: Int32
+        await Self.spawnGate.acquire()
         do {
             (stdout, stderr, exitCode) = try await spawnAndCapture(
                 executableURL: URL(fileURLWithPath: "/usr/bin/env"),
@@ -129,9 +169,12 @@ enum PersonalizationEvaluator {
                 env: env,
                 timeoutSeconds: timeoutSeconds
             )
+            await Self.spawnGate.release()
         } catch PersonalizationEvaluatorError.timedOut {
+            await Self.spawnGate.release()
             throw PersonalizationEvaluatorError.timedOut
         } catch {
+            await Self.spawnGate.release()
             throw PersonalizationEvaluatorError.spawnFailed(String(describing: error))
         }
 
