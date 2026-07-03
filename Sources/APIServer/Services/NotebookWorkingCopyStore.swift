@@ -140,18 +140,28 @@ func ensureUserNotebookWorkingCopy(
         + resolvedRelativePath
     let workingCopyDir = (workingCopyPath as NSString).deletingLastPathComponent
 
+    // All synchronous filesystem work below runs on the thread pool (#1156):
+    // this function executes on every notebook page/source request, and a
+    // burst of them (a lab section opening an assignment) previously parked
+    // cooperative-pool threads on disk reads/writes.
     if let overwriteWith {
-        try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
-        try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
+        try await runBlocking(on: req) {
+            try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+            try overwriteWith.write(to: URL(fileURLWithPath: workingCopyPath))
+        }
         await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
         await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
         return overwriteWith
     }
 
-    if let existingData = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
-        !existingData.isEmpty,
-        (try? JSONSerialization.jsonObject(with: existingData)) != nil
-    {
+    let existingWorkingCopy: Data? = try await runBlocking(on: req) {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: workingCopyPath)),
+            !data.isEmpty,
+            (try? JSONSerialization.jsonObject(with: data)) != nil
+        else { return nil }
+        return data
+    }
+    if let existingData = existingWorkingCopy {
         // Symlinks are idempotent — run on every visit so existing working copies
         // also pick up support files when the feature is first deployed.
         await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
@@ -186,8 +196,10 @@ func ensureUserNotebookWorkingCopy(
         logger: req.logger
     )
 
-    try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
-    try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
+    try await runBlocking(on: req) {
+        try fileManager.createDirectory(atPath: workingCopyDir, withIntermediateDirectories: true)
+        try processedData.write(to: URL(fileURLWithPath: workingCopyPath))
+    }
     await createSupportFileSymlinks(req: req, setup: fallbackSetup, studentDir: workingCopyDir)
     await writeDatasetFiles(req: req, setup: fallbackSetup, userID: userID, studentDir: workingCopyDir)
 
@@ -429,11 +441,14 @@ func latestNotebookSubmissionData(
         guard pathExt == "ipynb" || nameExt.hasSuffix(".ipynb") else {
             continue
         }
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: submission.zipPath)),
-            (try? JSONSerialization.jsonObject(with: data)) != nil
-        else {
-            continue
+        let zipPath = submission.zipPath
+        let candidate: Data? = try await runBlocking(on: req) {
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: zipPath)),
+                (try? JSONSerialization.jsonObject(with: data)) != nil
+            else { return nil }
+            return data
         }
+        guard let data = candidate else { continue }
         return (data, submission.filename)
     }
 
@@ -442,7 +457,10 @@ func latestNotebookSubmissionData(
         let name = URL(fileURLWithPath: path).lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }()
-    let fallbackData = try notebookData(for: fallbackSetup)
+    // The fallback reads the setup's canonical notebook — a file read or a
+    // zip-subprocess extraction; thread pool either way (#1156).
+    let source = NotebookSourceRef(fallbackSetup)
+    let fallbackData = try await runBlocking(on: req) { try notebookData(from: source) }
     return (fallbackData, fallbackFilename)
 }
 
@@ -484,14 +502,19 @@ func createSupportFileSymlinks(req: Request, setup: APITestSetup, studentDir: St
     guard !supportNames.isEmpty else { return }
 
     let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
-    let fm = FileManager.default
 
-    for name in supportNames {
-        let src = sharedDir + name
-        let dest = studentDir + "/" + name
-        guard !fm.fileExists(atPath: dest) else { continue }  // idempotent
-        guard fm.fileExists(atPath: src) else { continue }  // skip if not yet extracted
-        try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
+    // The exists/exists/symlink triple per support file is synchronous
+    // filesystem work on every notebook visit — run the whole pass on the
+    // thread pool (#1156).
+    try? await runBlocking(on: req) {
+        let fm = FileManager.default
+        for name in supportNames {
+            let src = sharedDir + name
+            let dest = studentDir + "/" + name
+            guard !fm.fileExists(atPath: dest) else { continue }  // idempotent
+            guard fm.fileExists(atPath: src) else { continue }  // skip if not yet extracted
+            try? fm.createSymbolicLink(atPath: dest, withDestinationPath: src)
+        }
     }
 }
 
@@ -525,16 +548,22 @@ func writeDatasetFiles(
     else { return }
 
     let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
-    guard
-        let files = DatasetResolver.resolve(
-            manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)
-    else { return }
 
-    for (filename, content) in files {
-        // Defense-in-depth (#1104): resolver keys are validated bare
-        // filenames, but never join an unvetted name onto the student dir.
-        guard FilenameSafety.bareFilename(filename) != nil else { continue }
-        let dest = studentDir + "/" + filename
-        try? content.write(toFile: dest, atomically: true, encoding: .utf8)
+    // Dataset resolution reads the source CSV and materializes a per-student
+    // slice, then writes one file per dataset — synchronous I/O + CPU on
+    // every visit to a dataset-carrying assignment. Thread pool (#1156).
+    try? await runBlocking(on: req) {
+        guard
+            let files = DatasetResolver.resolve(
+                manifest: props, seedHex: seedHex, sourceDirectory: sharedDir)
+        else { return }
+
+        for (filename, content) in files {
+            // Defense-in-depth (#1104): resolver keys are validated bare
+            // filenames, but never join an unvetted name onto the student dir.
+            guard FilenameSafety.bareFilename(filename) != nil else { continue }
+            let dest = studentDir + "/" + filename
+            try? content.write(toFile: dest, atomically: true, encoding: .utf8)
+        }
     }
 }

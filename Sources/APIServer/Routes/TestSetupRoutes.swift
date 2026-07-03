@@ -178,7 +178,9 @@ struct TestSetupRoutes: RouteCollection {
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let raw = try notebookData(for: setup)
+        // File read or zip-subprocess extraction — thread pool (#1156).
+        let source = NotebookSourceRef(setup)
+        let raw = try await runBlocking(on: req) { try notebookData(from: source) }
         // Staff (TA+ or admin) of this setup's course see unfiltered tiers;
         // students get the hidden tiers stripped (#417 Slice G).
         let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
@@ -205,7 +207,9 @@ struct TestSetupRoutes: RouteCollection {
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let raw = try notebookData(for: setup)
+        // File read or zip-subprocess extraction — thread pool (#1156).
+        let source = NotebookSourceRef(setup)
+        let raw = try await runBlocking(on: req) { try notebookData(from: source) }
         let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
         let filtered = isStaff ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
@@ -262,8 +266,9 @@ struct TestSetupRoutes: RouteCollection {
 
         // Confirm the file is classified as a support file: must exist
         // in the zip, must not be in `testSuites`, must not be a
-        // canonical notebook name.
-        let allEntries = listZipEntries(zipPath: setup.zipPath)
+        // canonical notebook name. Cached (#1156) — this previously spawned
+        // a serialized `unzip` subprocess on the request thread per download.
+        let allEntries = await req.application.zipEntryListCache.entries(zipPath: setup.zipPath)
         guard allEntries.contains(filename) else { throw Abort(.notFound) }
 
         let props = setup.decodedManifest()
@@ -279,7 +284,11 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.forbidden(action: "download '\(filename)' (not a student-visible support file)")
         }
 
-        guard let bytes = extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
+        let zipPath = setup.zipPath
+        let extracted = try await runBlocking(on: req) {
+            extractZipEntry(zipPath: zipPath, entryName: filename)
+        }
+        guard let bytes = extracted else {
             throw Abort(.notFound)
         }
 
