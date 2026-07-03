@@ -18,6 +18,16 @@
 //   • Sweep errors are logged via `application.logger.error` with the
 //     monitor's name and never escape the loop.
 //   • Cancellation (via `stop()`) ends the loop at the next sleep.
+//
+// Multi-process (#1155): every process runs every loop, but each tick first
+// claims/renews a DB leader lease keyed on the monitor's name
+// (SweepLeaseCoordinator) and only the lease holder executes the sweep body.
+// Without this, N instances behind a load balancer ran every sweep N times —
+// duplicate BrightSpace pushes to LEARN, doubled health alerts, racing
+// reapers. The lease TTL is 2× the interval (min 2 min), so a crashed
+// leader's sweeps resume on another instance within roughly one missed
+// cycle. Single-process deployments always hold the lease; the tick cost is
+// one small UPDATE + SELECT.
 
 import Vapor
 
@@ -28,6 +38,7 @@ final class PeriodicSweepMonitor: @unchecked Sendable {
     private var task: Task<Void, Never>?
     private let name: String
     private let intervalNanoseconds: UInt64
+    private let leaseTTLSeconds: TimeInterval
     private let runImmediately: Bool
     private let sweep: @Sendable (Application) async throws -> Void
 
@@ -48,9 +59,44 @@ final class PeriodicSweepMonitor: @unchecked Sendable {
         sweep: @escaping @Sendable (Application) async throws -> Void
     ) {
         self.name = name
-        intervalNanoseconds = UInt64(max(interval, minimumInterval) * 1_000_000_000)
+        let effectiveInterval = max(interval, minimumInterval)
+        intervalNanoseconds = UInt64(effectiveInterval * 1_000_000_000)
+        leaseTTLSeconds = max(effectiveInterval * 2, 120)
         self.runImmediately = runImmediately
         self.sweep = sweep
+    }
+
+    /// One leased tick: claim/renew the leader lease, then run the sweep
+    /// body only as the holder. Lease errors and sweep errors are both
+    /// logged and never escape (matching the pre-lease behavior contract).
+    private func runLeasedSweep(application: Application, context: String) async {
+        let isLeader: Bool
+        do {
+            isLeader = try await SweepLeaseCoordinator.acquireOrRenew(
+                name: name,
+                holder: application.sweepLeaseHolderID,
+                ttlSeconds: leaseTTLSeconds,
+                on: application.db
+            )
+        } catch {
+            application.logger.warning(
+                "\(context)\(name) sweep lease check failed: \(error.localizedDescription)"
+            )
+            return
+        }
+        guard isLeader else {
+            application.logger.debug(
+                "\(context)\(name) sweep skipped: another instance holds the lease"
+            )
+            return
+        }
+        do {
+            try await sweep(application)
+        } catch {
+            application.logger.error(
+                "\(context)\(name) sweep failed: \(error.localizedDescription)"
+            )
+        }
     }
 
     func start(application: Application) {
@@ -59,27 +105,13 @@ final class PeriodicSweepMonitor: @unchecked Sendable {
             // Best-effort boot sweep, detached from the periodic loop, so a
             // restart after a long quiet period doesn't have to wait for the
             // loop to come up to reclaim space.
-            let sweep = sweep
-            let name = name
             Task {
-                do {
-                    try await sweep(application)
-                } catch {
-                    application.logger.error(
-                        "Initial \(name) sweep failed: \(error.localizedDescription)"
-                    )
-                }
+                await self.runLeasedSweep(application: application, context: "Initial ")
             }
         }
-        task = Task { [sweep, name, intervalNanoseconds] in
+        task = Task { [intervalNanoseconds] in
             while !Task.isCancelled {
-                do {
-                    try await sweep(application)
-                } catch {
-                    application.logger.error(
-                        "\(name) sweep failed: \(error.localizedDescription)"
-                    )
-                }
+                await self.runLeasedSweep(application: application, context: "")
                 do {
                     try await Task.sleep(nanoseconds: intervalNanoseconds)
                 } catch {

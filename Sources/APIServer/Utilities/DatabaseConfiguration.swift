@@ -384,4 +384,8 @@ func registerMigrations(on app: Application) {
     // no ordering constraints.
     app.migrations.add(CreateWorkerNonces())
     app.migrations.add(CreateLoginAttempts())
+
+    // Leader leases so each periodic sweep runs on exactly one process
+    // (#1155). New table, no ordering constraints.
+    app.migrations.add(CreateSweepLeases())
 }
