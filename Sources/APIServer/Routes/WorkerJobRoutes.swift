@@ -160,9 +160,10 @@ struct WorkerJobRoutes: RouteCollection {
     /// SQLite's write lock, but the section it guards is now one UPDATE and
     /// one SELECT; on Postgres it could be retired entirely in favour of
     /// `FOR UPDATE SKIP LOCKED` (documented follow-up on #1153).
-    // Internal (not private) so the claim CAS semantics are directly
-    // testable — the lost-race path can't be triggered deterministically
-    // through the HTTP endpoint.
+    ///
+    /// Internal (not private) so the claim CAS semantics are directly
+    /// testable — the lost-race path can't be triggered deterministically
+    /// through the HTTP endpoint.
     func atomicallyClaimSubmission(
         id submissionID: String, req: Request, body: WorkerActivityPayload
     ) async throws -> APISubmission? {
