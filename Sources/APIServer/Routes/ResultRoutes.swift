@@ -14,6 +14,13 @@ struct ResultRoutes: RouteCollection {
         api.post("results", use: reportResults)
     }
 
+    /// Result-ingest body limit (#1157): well above the worker's own
+    /// serialized-collection budget so a healthy report never hits it, and
+    /// generous enough that pre-budget runners with oversized collections
+    /// land in the server-side truncation guard below instead of a rejected
+    /// report leaving the submission permanently unresolved.
+    static let resultIngestBodyLimitBytes = 32 * 1024 * 1024
+
     // POST /api/v1/worker/results
     @Sendable
     func reportResults(req: Request) async throws -> ReportResponse {
@@ -23,7 +30,7 @@ struct ResultRoutes: RouteCollection {
         let report: WorkerExecutionReport
         do {
             let collectedBuffer = try await req.body.collect(
-                upTo: req.application.routes.defaultMaxBodySize.value
+                upTo: Self.resultIngestBodyLimitBytes
             )
             var readableBuffer = collectedBuffer
             guard let data = readableBuffer.readData(length: readableBuffer.readableBytes) else {
@@ -32,8 +39,24 @@ struct ResultRoutes: RouteCollection {
             report = try decodeWorkerReport(from: data, using: decoder)
         } catch let decodingError as DecodingError {
             throw WorkerJobError.unprocessableBody(reason: "Invalid worker result payload: \(decodingError)")
+        } catch {
+            // A rejected report means a submission that never resolves —
+            // fail LOUDLY so ops sees why (#1157).
+            req.logger.error(
+                "result_report_rejected reason=\(String(describing: error)) content_length=\(req.headers.first(name: .contentLength) ?? "?")"
+            )
+            throw error
         }
-        let collection = report.collection
+
+        // Server-side half of the size budget: current runners truncate
+        // before posting; this guards against older runners and keeps the
+        // unbounded blob out of the results table either way.
+        let (collection, didTruncate) = report.collection.truncatingOversizedOutput()
+        if didTruncate {
+            req.logger.warning(
+                "result_collection_truncated submission=\(collection.submissionID) — runner sent an over-budget collection"
+            )
+        }
 
         // Persist the result and advance the submission to "complete" in one
         // transaction: a failure between the two used to leave a result row

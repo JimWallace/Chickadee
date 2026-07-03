@@ -61,9 +61,8 @@ func bestGradeForStudent(
         if let mt = manifestTotal {
             total = mt
         } else {
-            total = try await APIResult.query(on: db)
-                .filter(\.$submissionID ~~ submissionIDs)
-                .all()
+            total = try await gradeSummariesBySubmissionID(for: submissionIDs, on: db)
+                .values.joined()
                 .compactMap { $0.gradeTotalPointsValue }.max()
         }
         guard let total, total > 0 else { throw BrightSpaceSyncError.missingPoints }
@@ -76,9 +75,9 @@ func bestGradeForStudent(
     // `bestGradeResult` fold (#1111) returns the winning ROW so the push uses
     // its EXACT points — the Int percent the display surfaces use is lossy
     // for a points push (e.g. 6/7 → 86 % → 8.6 instead of 8.57).
-    let allResults = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ submissionIDs)
-        .all()
+    // Blob-free (#1157): the fold only reads the denormalized grade values.
+    let allResults = Array(
+        try await gradeSummariesBySubmissionID(for: submissionIDs, on: db).values.joined())
     guard
         let best = bestGradeResult(of: allResults),
         let earned = best.gradePointsValue

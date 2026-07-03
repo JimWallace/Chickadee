@@ -47,7 +47,7 @@ extension InstructorDashboardRoutes {
         // a later worker regrading at a lower percentage.  The best percentage is
         // then converted to points using the manifest total so the CSV column is
         // anchored to a stable scale regardless of which tier mix each result used.
-        let allResultsBySubmission = try await allResultsBySubmissionID(
+        let allResultsBySubmission = try await gradeSummariesBySubmissionID(
             for: submissionIDs, on: req.db)
         var bestPointsByUserAndSetup = bestGradePointsByUserAndSetup(
             submissions: submissions,
@@ -190,7 +190,7 @@ extension InstructorDashboardRoutes {
     /// overwritten by a lower-percentage worker result from a later regrading.
     private func bestGradePointsByUserAndSetup(
         submissions: [(id: String, userID: UUID, setupID: String)],
-        allResultsBySubmission: [String: [APIResult]],
+        allResultsBySubmission: [String: [GradeResultSummary]],
         setupByID: [String: APITestSetup]
     ) -> [String: Double] {
         // Step 1: highest grade percentage across ALL results for ALL
