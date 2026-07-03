@@ -478,12 +478,13 @@ func waitForRunnerValidation(
                     .filter(\.$submissionID == submissionID)
                     .sort(\.$receivedAt, .descending)
                     .first(),
-                let data = result.collectionJSON.data(using: .utf8)
+                let collectionJSON = try await result.loadCollectionJSON(on: req.db)
             else {
                 return .failed(summary: "no result payload")
             }
 
-            let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+            let collection = try decoder.decode(
+                TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
             let summary = "\(collection.passCount)/\(collection.totalTests) passed"
             let passed =
                 collection.buildStatus == .passed && collection.failCount == 0 && collection.errorCount == 0

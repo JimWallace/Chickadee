@@ -579,8 +579,14 @@ import VaporTesting
                 .filter(\.$submissionID == submissionID)
                 .first()
             #expect(result != nil, "a result record should be stored for the submission")
+            let storedJSON: String?
+            if let result {
+                storedJSON = try await result.loadCollectionJSON(on: app.db)
+            } else {
+                storedJSON = nil
+            }
             #expect(
-                result?.collectionJSON.contains("prerequisite") == true,
+                storedJSON?.contains("prerequisite") == true,
                 "stored result JSON should contain the dependency-skip message")
 
         }

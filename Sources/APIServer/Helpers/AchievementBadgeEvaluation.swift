@@ -33,20 +33,17 @@ func earnedIndividualBadges(
     }
 }
 
-/// The individual badges to show for a submission's display result: decodes the
-/// stored collection (reusing the handler's date-aware decoder) and evaluates
-/// the authored individual badges.  Returns [] when there is no result.  Lifted
+/// The individual badges to show for a submission's display result — the
+/// handler passes the already-decoded collection (fetched once from the
+/// result_collections side table, #1173) and this evaluates the authored
+/// individual badges.  Returns [] when there is no decodable result.  Lifted
 /// out of the submission handler to keep that function within its length budget.
 func earnedIndividualBadgesForDisplay(
-    displayResult: APIResult?,
+    collection: TestOutcomeCollection?,
     props: TestProperties?,
-    gradePercent: Int,
-    decoder: JSONDecoder
+    gradePercent: Int
 ) -> [AchievementBadge] {
-    guard let result = displayResult,
-        let collection = try? decoder.decode(
-            TestOutcomeCollection.self, from: Data(result.collectionJSON.utf8))
-    else { return [] }
+    guard let collection else { return [] }
     return earnedIndividualBadges(
         props: props,
         gradePercent: gradePercent,

@@ -79,10 +79,9 @@ import VaporTesting
         let json = try #require(String(data: encoder.encode(collection), encoding: .utf8))
         let result = APIResult(
             id: "res_\(UUID().uuidString.lowercased().prefix(8))",
-            submissionID: submissionID,
-            collectionJSON: json
+            submissionID: submissionID
         )
-        try await result.save(on: app.db)
+        try await result.saveWithCollection(json: json, on: app.db)
     }
 
     private func makeCollection(

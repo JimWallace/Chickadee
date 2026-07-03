@@ -141,8 +141,7 @@ struct ResultRoutes: RouteCollection {
 
         let result = APIResult(
             id: "res_\(UUID().uuidString.lowercased().prefix(8))",
-            submissionID: collection.submissionID,
-            collectionJSON: json
+            submissionID: collection.submissionID
         )
 
         // Mark for BrightSpace sync if the assignment is configured for it. Gate
@@ -164,7 +163,9 @@ struct ResultRoutes: RouteCollection {
             }
         }
 
-        try await result.save(on: db)
+        // Row + blob side-table row persist together; the caller's
+        // transaction (persist + submission status flip) encloses both.
+        try await result.saveWithCollection(json: json, on: db)
     }
 }
 

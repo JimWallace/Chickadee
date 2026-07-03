@@ -129,15 +129,15 @@ func allResultsBySubmissionID(
 
 /// Blob-free loader (#1157): the grade projection of every result for the
 /// given submission IDs, grouped by submission ID. Selects only the
-/// denormalized grade columns + identity fields — never `collection_json`,
-/// which dominates the row size and is irrelevant to every grade fold.
-/// Chunked like `allResultsBySubmissionID`.
+/// denormalized grade columns + identity fields — never the collection
+/// blob, which since #1173 lives in the `result_collections` side table
+/// anyway. Chunked like `allResultsBySubmissionID`.
 ///
 /// Legacy fallback: rows whose four grade columns are all nil (written
 /// mid-deploy before `AddResultGradeColumns` backfilled, where the backfill
-/// couldn't parse the blob) are re-fetched WITH the blob — normally zero
-/// rows — and summarized via `APIResult`'s blob-parsing accessors so the
-/// projected and full paths can never disagree.
+/// couldn't parse the blob) get their blob fetched from the side table —
+/// normally zero rows — and are summarized via the blob-parsing helpers so
+/// the projected and full paths can never disagree.
 func gradeSummariesBySubmissionID(
     for submissionIDs: some Collection<String>,
     on db: Database
@@ -146,7 +146,7 @@ func gradeSummariesBySubmissionID(
     let chunkSize = 5_000
     let ids = Array(submissionIDs)
     var grouped: [String: [GradeResultSummary]] = [:]
-    var legacyRowIDs: [String] = []
+    var legacyRows: [APIResult] = []
 
     var index = ids.startIndex
     while index < ids.endIndex {
@@ -169,8 +169,8 @@ func gradeSummariesBySubmissionID(
             let allColumnsNil =
                 row.earnedPoints == nil && row.totalPoints == nil
                 && row.passCount == nil && row.totalTests == nil
-            if allColumnsNil, let rowID = row.id {
-                legacyRowIDs.append(rowID)
+            if allColumnsNil {
+                legacyRows.append(row)
                 continue
             }
             grouped[row.submissionID, default: []].append(
@@ -188,24 +188,24 @@ func gradeSummariesBySubmissionID(
         index = end
     }
 
-    // Rare path: hydrate column-less rows from the blob so their grades
-    // (if any) still participate in the folds.
-    if !legacyRowIDs.isEmpty {
-        let legacyRows = try await APIResult.query(on: db)
-            .filter(\.$id ~~ legacyRowIDs)
-            .all()
+    // Rare path: hydrate column-less rows from the blob (side table, #1173)
+    // so their grades (if any) still participate in the folds.
+    if !legacyRows.isEmpty {
+        let blobByID = try await collectionJSONByResultID(
+            for: legacyRows.compactMap(\.id), on: db)
         for row in legacyRows {
+            let blob = row.id.flatMap { blobByID[$0] }
             grouped[row.submissionID, default: []].append(
                 GradeResultSummary(
                     resultID: row.id,
                     submissionID: row.submissionID,
                     source: row.source,
                     receivedAt: row.receivedAt,
-                    earnedPoints: row.gradePointsValue,
-                    totalPoints: row.gradeTotalPointsValue,
+                    earnedPoints: blob.flatMap(gradePointsFromCollectionJSON),
+                    totalPoints: blob.flatMap(gradeTotalPointsFromCollectionJSON),
                     passCount: row.passCount,
                     totalTests: row.totalTests,
-                    legacyGradePercent: row.gradePercentValue
+                    legacyGradePercent: blob.flatMap(gradePercentFromCollectionJSON)
                 ))
         }
     }

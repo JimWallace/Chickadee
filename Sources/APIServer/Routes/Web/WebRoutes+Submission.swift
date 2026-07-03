@@ -297,7 +297,8 @@ extension WebRoutes {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let displayResult = try await loadPreferredDisplayResult(subID: subID, on: req.db)
+        let (displayResult, displayCollection) = try await loadDisplayResultAndCollection(
+            subID: subID, decoder: decoder, on: req.db)
         let priorAttempt = try await loadPriorAttemptDelta(
             submission: submission, decoder: decoder, on: req.db)
         let manifestDisplay = manifestDisplayData(from: setupProps)
@@ -306,13 +307,13 @@ extension WebRoutes {
         if let result = displayResult {
             processed = processDisplayResult(
                 result: result,
+                collection: displayCollection,
                 viewer: SubmissionViewer(
                     user: user, isStaff: isStaff, itemizedTiers: itemized,
                     releaseOutputVisible: releaseOutput),
                 submission: submission,
                 priorAttempt: priorAttempt,
-                manifestDisplay: manifestDisplay,
-                decoder: decoder
+                manifestDisplay: manifestDisplay
             )
         }
 
@@ -340,8 +341,8 @@ extension WebRoutes {
         // from this submission's result (evaluated over all tiers so a
         // secret-test badge works without revealing the test).
         let individualBadges = earnedIndividualBadgesForDisplay(
-            displayResult: displayResult, props: setupProps,
-            gradePercent: processed.gradePercent, decoder: decoder)
+            collection: displayCollection, props: setupProps,
+            gradePercent: processed.gradePercent)
         let badges =
             builtInBadgesForSubmission(
                 badgeContext: processed.badgeContext,
@@ -409,6 +410,22 @@ extension WebRoutes {
         return workerResult ?? browserResult
     }
 
+    /// The preferred display result plus its collection, fetched from the
+    /// result_collections side table and decoded ONCE (#1173) — the presenter
+    /// and the individual-badge evaluation share the decoded value.
+    private func loadDisplayResultAndCollection(
+        subID: String, decoder: JSONDecoder, on db: Database
+    ) async throws -> (APIResult?, TestOutcomeCollection?) {
+        guard let result = try await loadPreferredDisplayResult(subID: subID, on: db) else {
+            return (nil, nil)
+        }
+        guard let json = try await result.loadCollectionJSON(on: db) else {
+            return (result, nil)
+        }
+        let collection = try? decoder.decode(TestOutcomeCollection.self, from: Data(json.utf8))
+        return (result, collection)
+    }
+
     /// Fetches the immediately-prior attempt for per-test delta display and the
     /// Comeback Kid badge.  Returns `(outcomeMap: empty, gradePercent: nil)`
     /// when there is no prior attempt or no decodable prior result.
@@ -435,8 +452,9 @@ extension WebRoutes {
             .all()
         let priorResult = priorResults.first { ($0.source ?? "worker") == "worker" } ?? priorResults.first
         guard let priorResult,
-            let data = priorResult.collectionJSON.data(using: .utf8),
-            let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            let priorJSON = try await priorResult.loadCollectionJSON(on: db),
+            let priorCollection = try? decoder.decode(
+                TestOutcomeCollection.self, from: Data(priorJSON.utf8))
         else {
             return .empty
         }

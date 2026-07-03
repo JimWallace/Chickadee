@@ -138,12 +138,24 @@ extension WebRoutes {
             }
         }
 
+        // Badge evaluation needs the collection (executionTimeMs) for each
+        // LATEST submission's preferred result only — batch-fetch just those
+        // blobs from the side table (#1173), one per dashboard row at most.
+        let latestResultIDs = data.latestSubmissionBySetupID.values.compactMap {
+            preferredResultBySubmissionID[$0.submissionID]?.id
+        }
+        let latestBlobs = try await collectionJSONByResultID(for: latestResultIDs, on: req.db)
+        let badgeResults = BadgeResultData(
+            preferredResultBySubmissionID: preferredResultBySubmissionID,
+            collectionByResultID: latestBlobs.compactMapValues(decodedCollection(from:))
+        )
+
         let disabledBySetup = try await disabledFetch
         let perSubBySetup = try await perSubFetch
         for (setupID, latest) in data.latestSubmissionBySetupID {
             if let badges = latestSubmissionBadges(
                 setupID: setupID, latest: latest, grouped: grouped,
-                preferredResultBySubmissionID: preferredResultBySubmissionID,
+                badgeResults: badgeResults,
                 perSubmission: perSubBySetup[setupID],
                 disabled: disabledBySetup[setupID] ?? [])
             {
@@ -183,27 +195,36 @@ extension WebRoutes {
         return preferred
     }
 
+    /// The result-derived badge inputs that don't vary per setup: the
+    /// preferred result per submission, and the decoded collection per
+    /// latest-submission preferred result (side table, #1173).
+    private struct BadgeResultData {
+        let preferredResultBySubmissionID: [String: APIResult]
+        let collectionByResultID: [String: TestOutcomeCollection]
+    }
+
     /// The per-submission badges for one setup's latest submission, or nil
     /// when it has no decodable graded result.
     private static func latestSubmissionBadges(
         setupID: String,
         latest: LatestSubmissionItem,
         grouped: [String: [APISubmission]],
-        preferredResultBySubmissionID: [String: APIResult],
+        badgeResults: BadgeResultData,
         perSubmission: [Achievement]?,
         disabled: Set<String>
     ) -> [AchievementBadge]? {
         guard
             let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
-            let result = preferredResultBySubmissionID[latest.submissionID],
-            let collection = decodedCollection(from: result.collectionJSON),
+            let result = badgeResults.preferredResultBySubmissionID[latest.submissionID],
+            let resultID = result.id,
+            let collection = badgeResults.collectionByResultID[resultID],
             let gradePercent = gradePercent(from: collection)
         else { return nil }
         let latestAttempt = latestSubmission.attemptNumber ?? 1
         let priorSub = grouped[setupID]?.first(where: { $0.attemptNumber == latestAttempt - 1 })
         let priorGradePercent: Int? = priorSub.flatMap { ps in
             guard let psID = ps.id,
-                let pr = preferredResultBySubmissionID[psID]
+                let pr = badgeResults.preferredResultBySubmissionID[psID]
             else { return nil }
             return pr.gradePercentValue
         }
