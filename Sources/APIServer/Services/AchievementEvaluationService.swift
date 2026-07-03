@@ -59,14 +59,25 @@ func evaluateClassGoalAchievements(
         }
     }
 
-    for assignment in assignments {
+    // Pre-resolve which assignments actually carry class goals, so the
+    // enrollment denominator is ONE scoped map for the whole sweep instead
+    // of a per-assignment roster query (#1160 — many assignments share a
+    // course, and this loop runs on a timer forever).
+    let goalCarrying = assignments.compactMap { assignment -> (APIAssignment, APITestSetup, [Achievement])? in
         guard let setup = setupByID[assignment.testSetupID],
-            let setupID = setup.id,
             let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
-        else { continue }
-
+        else { return nil }
         let goals = props.achievements.filter { $0.isClassGoal }
-        guard !goals.isEmpty else { continue }
+        guard !goals.isEmpty else { return nil }
+        return (assignment, setup, goals)
+    }
+    guard !goalCarrying.isEmpty else { return 0 }
+
+    let goalCourseIDs = Array(Set(goalCarrying.map { $0.0.courseID }))
+    let countsByCourse = try await enrolledStudentCountsByCourse(courseIDs: goalCourseIDs, on: db)
+
+    for (assignment, setup, goals) in goalCarrying {
+        guard let setupID = setup.id else { continue }
 
         let existing = try await APIAchievementResult.query(on: db)
             .filter(\.$testSetupID == setupID)
@@ -77,7 +88,7 @@ func evaluateClassGoalAchievements(
         // Every goal here already frozen → nothing to recompute for this setup.
         if goals.allSatisfy({ rowByAchievement[$0.id]?.locked == true }) { continue }
 
-        let denominator = try await enrolledStudentCount(forCourse: assignment.courseID, on: db)
+        let denominator = countsByCourse[assignment.courseID] ?? 0
         let locked = assignment.dueAt.map { $0 <= now } ?? false
         let bestByStudent = try await bestAssignmentGradeByStudent(testSetupID: setupID, on: db)
 
@@ -134,7 +145,8 @@ func bestAssignmentGradeByStudent(testSetupID: String, on db: Database) async th
         guard let id = sub.id, let userID = sub.userID else { return nil }
         return (id, userID)
     }
-    let preferred = try await preferredResultsBySubmissionID(for: identified.map(\.id), on: db)
+    // Blob-free (#1160): the fold only reads gradePercentValue.
+    let preferred = try await preferredGradeSummariesBySubmissionID(for: identified.map(\.id), on: db)
 
     var best: [UUID: Double] = [:]
     for sub in identified {

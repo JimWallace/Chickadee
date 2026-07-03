@@ -244,7 +244,7 @@ struct WorkerJobRoutes: RouteCollection {
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
-        let downloadVersion = await testSetupDownloadVersion(for: setup)
+        let downloadVersion = await testSetupDownloadVersion(for: setup, req: req)
         guard
             let submissionURL = URL(string: "\(base)/api/v1/worker/submissions/\(submissionID)/download"),
             let testSetupURL = URL(
@@ -559,39 +559,58 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
 private actor TestSetupDownloadVersionCache {
     static let shared = TestSetupDownloadVersionCache()
 
-    private struct Key: Hashable {
+    private var entries: [String: (key: Key, version: String)] = [:]
+
+    func cachedVersion(setupID: String, key: Key) -> String? {
+        guard let cached = entries[setupID], cached.key == key else { return nil }
+        return cached.version
+    }
+
+    func store(setupID: String, key: Key, version: String) {
+        entries[setupID] = (key, version)
+    }
+
+    static func makeKey(manifest: String, zipPath: String) -> Key {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: zipPath)
+        return Key(
+            manifest: manifest,
+            zipPath: zipPath,
+            zipSize: (attributes?[.size] as? UInt64) ?? 0,
+            zipModified: (attributes?[.modificationDate] as? Date) ?? .distantPast)
+    }
+
+    struct Key: Hashable, Sendable {
         let manifest: String
         let zipPath: String
         let zipSize: UInt64
         let zipModified: Date
     }
-
-    private var entries: [String: (key: Key, version: String)] = [:]
-
-    func version(for setup: APITestSetup) -> String {
-        let setupID = setup.id ?? setup.zipPath
-        let attributes = try? FileManager.default.attributesOfItem(atPath: setup.zipPath)
-        let key = Key(
-            manifest: setup.manifest,
-            zipPath: setup.zipPath,
-            zipSize: (attributes?[.size] as? UInt64) ?? 0,
-            zipModified: (attributes?[.modificationDate] as? Date) ?? .distantPast)
-
-        if let cached = entries[setupID], cached.key == key { return cached.version }
-
-        var material = Data(setup.manifest.utf8)
-        if let zipData = try? Data(contentsOf: URL(fileURLWithPath: setup.zipPath)) {
-            material.append(Data("|zip=".utf8))
-            material.append(zipData)
-        }
-        let version = String(sha256HexDigest(material).prefix(16))
-        entries[setupID] = (key, version)
-        return version
-    }
 }
 
-private func testSetupDownloadVersion(for setup: APITestSetup) async -> String {
-    await TestSetupDownloadVersionCache.shared.version(for: setup)
+private func testSetupDownloadVersion(for setup: APITestSetup, req: Request) async -> String {
+    let setupID = setup.id ?? setup.zipPath
+    let manifest = setup.manifest
+    let zipPath = setup.zipPath
+    let key = TestSetupDownloadVersionCache.makeKey(manifest: manifest, zipPath: zipPath)
+
+    if let cached = await TestSetupDownloadVersionCache.shared.cachedVersion(setupID: setupID, key: key) {
+        return cached
+    }
+
+    // Cache miss (first claim after any suite edit): the zip is hashed in
+    // streamed 1 MiB chunks on the thread pool (#1160) — the old
+    // Data(contentsOf:) pulled a whole dataset-heavy setup zip into heap
+    // inside the actor, on the claim path. Digest is byte-identical to the
+    // old manifest+"|zip="+bytes concatenation, so versions (and runner
+    // download caches) carry across the change.
+    let prefix = Data(manifest.utf8) + Data("|zip=".utf8)
+    let digest =
+        (try? await runBlocking(on: req) {
+            sha256HexDigest(prefix: prefix, contentsOfFile: zipPath)
+        }) ?? nil
+    let version = String((digest ?? sha256HexDigest(Data(manifest.utf8))).prefix(16))
+    await TestSetupDownloadVersionCache.shared.store(setupID: setupID, key: key, version: version)
+    return version
 }
 
 // MARK: - Application-level claim serializer

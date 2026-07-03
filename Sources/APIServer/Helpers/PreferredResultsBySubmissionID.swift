@@ -39,3 +39,35 @@ func preferredResultsBySubmissionID(
     }
     return preferredResultBySubmissionID
 }
+
+/// Blob-free variant of the worker-preferred fold (#1160): identical
+/// preference rule over `GradeResultSummary` rows, for consumers that only
+/// read grade values (the class-goal achievement sweep). Groups are
+/// re-sorted newest-first before folding because the summary loader's
+/// legacy-row fallback can append out of order.
+func preferredGradeSummariesBySubmissionID(
+    for submissionIDs: [String],
+    on db: Database
+) async throws -> [String: GradeResultSummary] {
+    let grouped = try await gradeSummariesBySubmissionID(for: submissionIDs, on: db)
+
+    var preferredBySubmissionID: [String: GradeResultSummary] = [:]
+    for (key, unsorted) in grouped {
+        let results = unsorted.sorted {
+            ($0.receivedAt ?? .distantPast) > ($1.receivedAt ?? .distantPast)
+        }
+        for result in results {
+            if let existing = preferredBySubmissionID[key] {
+                let existingSource = existing.source ?? "worker"
+                let candidateSource = result.source ?? "worker"
+                if existingSource == "worker" { continue }
+                if candidateSource == "worker" {
+                    preferredBySubmissionID[key] = result
+                }
+            } else {
+                preferredBySubmissionID[key] = result
+            }
+        }
+    }
+    return preferredBySubmissionID
+}

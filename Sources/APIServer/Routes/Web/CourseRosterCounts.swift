@@ -31,9 +31,23 @@ func studentUserIDsInCourse(_ courseID: UUID, on db: Database) async throws -> S
 /// Map of `courseID → enrolled-student count` for every course that has
 /// at least one student or pre-enrollment.  Courses with no roster do not
 /// appear in the map; callers should fall back to 0.
-func enrolledStudentCountsByCourse(on db: Database) async throws -> [UUID: Int] {
-    async let enrollmentsFetch = APICourseEnrollment.query(on: db).all()
-    async let preEnrollmentsFetch = APIPreEnrollment.query(on: db).all()
+///
+/// Pass `courseIDs` to scope the fetch (#1160) — the class-goal achievement
+/// sweep only needs the courses that carry goals, and the unscoped fetch
+/// grows with every past term. nil keeps the deployment-wide behaviour the
+/// admin dashboard needs.
+func enrolledStudentCountsByCourse(
+    courseIDs: [UUID]? = nil, on db: Database
+) async throws -> [UUID: Int] {
+    let enrollmentQuery = APICourseEnrollment.query(on: db)
+    let preEnrollmentQuery = APIPreEnrollment.query(on: db)
+    if let courseIDs {
+        guard !courseIDs.isEmpty else { return [:] }
+        _ = enrollmentQuery.filter(\.$course.$id ~~ courseIDs)
+        _ = preEnrollmentQuery.filter(\.$course.$id ~~ courseIDs)
+    }
+    async let enrollmentsFetch = enrollmentQuery.all()
+    async let preEnrollmentsFetch = preEnrollmentQuery.all()
     let (enrollments, preEnrollments) = try await (enrollmentsFetch, preEnrollmentsFetch)
 
     var counts: [UUID: Int] = [:]
