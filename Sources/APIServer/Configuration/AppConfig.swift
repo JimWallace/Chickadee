@@ -68,7 +68,10 @@ struct AppConfig: Sendable {
     /// replaced with `[redacted]`. Use the grep guardrail in CI to keep this
     /// honest.
     func logSummary(to logger: Logger) {
-        logger.info("AppConfig loaded — auth=\(auth.mode.rawValue), database=\(database.backend.rawValue)")
+        let poolDescription = database.maxConnectionsPerEventLoop.map(String.init) ?? "default"
+        logger.info(
+            "AppConfig loaded — auth=\(auth.mode.rawValue), database=\(database.backend.rawValue), dbPoolPerLoop=\(poolDescription)"
+        )
         if security.publicBaseURL != nil || security.enforceHTTPS {
             logger.info(
                 "security: publicBaseURL=\(security.publicBaseURL?.absoluteString ?? "(unset)"), enforceHTTPS=\(security.enforceHTTPS), trustForwardedProto=\(security.trustForwardedProto), sessionCookieSecure=\(security.sessionCookieSecure)"
