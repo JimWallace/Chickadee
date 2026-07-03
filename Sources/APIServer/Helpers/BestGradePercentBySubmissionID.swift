@@ -46,7 +46,7 @@ struct GradeResultSummary: Sendable, GradeValueCarrying {
     let totalTests: Int?
     /// Set only by the loader's legacy fallback, where the percent comes
     /// from parsing the blob rather than the (nil) grade columns.
-    var legacyGradePercent: Int? = nil
+    var legacyGradePercent: Int?
 
     var gradePercentValue: Int? {
         if let legacyGradePercent { return legacyGradePercent }
