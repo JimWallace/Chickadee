@@ -78,6 +78,12 @@ PY
 # cross-origin isolated. Idempotent; fails if the upstream polyfill string drifts.
 python3 "$ROOT_DIR/scripts/patch-pyodide-waitasync-worker.py" "$OUTPUT_DIR"
 
+# Gate the pyodide-kernel's kernelInfoRequest on this.ready so the editor doesn't
+# present a still-booting kernel as "idle" — the honest-readiness fix for the
+# ~13-17s WebKit slow-first-execute (docs/exec-hang-investigation.md, 2nd issue).
+# Idempotent; fails loudly if the upstream kernelInfoRequest form drifts.
+python3 "$ROOT_DIR/scripts/patch-pyodide-kernel-info-ready.py" "$OUTPUT_DIR"
+
 # Inject the in-iframe kernel-boot diagnostics collector (jl-kernel-diagnostics.js)
 # into the editor index.html documents. `jupyter lite build` regenerates those, so
 # this re-adds the <script> tag every build. Idempotent.
