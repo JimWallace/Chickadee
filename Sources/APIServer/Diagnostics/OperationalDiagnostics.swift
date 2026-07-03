@@ -170,6 +170,44 @@ actor DiagnosticsMaintenanceStore {
     }
 }
 
+/// Decides whether a runner check-in persists a `RunnerSnapshot` row.
+/// Runners poll at up to 1/s, and one INSERT per poll made `runner_snapshots`
+/// the dominant idle write load (~2,880 rows/day/runner even at the 30 s
+/// backoff — 2026-07 audit). One row per runner per sample interval is
+/// plenty for the admin dashboard's sparklines; a change in load shape
+/// (activeJobs/maxJobs) persists immediately so spikes stay visible at
+/// full resolution.
+actor RunnerSnapshotSampleStore {
+    static let defaultSampleInterval: TimeInterval = 30
+
+    private struct LastPersisted {
+        let recordedAt: Date
+        let activeJobs: Int
+        let maxJobs: Int
+    }
+
+    private var lastByRunnerID: [String: LastPersisted] = [:]
+
+    func shouldPersist(
+        runnerID: String,
+        recordedAt: Date,
+        activeJobs: Int,
+        maxJobs: Int,
+        sampleInterval: TimeInterval = RunnerSnapshotSampleStore.defaultSampleInterval
+    ) -> Bool {
+        if let last = lastByRunnerID[runnerID],
+            last.activeJobs == activeJobs,
+            last.maxJobs == maxJobs,
+            recordedAt.timeIntervalSince(last.recordedAt) < sampleInterval
+        {
+            return false
+        }
+        lastByRunnerID[runnerID] = LastPersisted(
+            recordedAt: recordedAt, activeJobs: activeJobs, maxJobs: maxJobs)
+        return true
+    }
+}
+
 actor CompatibilityCounterStore {
     private var compatibleAssignmentAttempts = 0
     private var incompatibleAssignmentAttempts = 0
@@ -210,6 +248,7 @@ final class OperationalDiagnosticsService: @unchecked Sendable {
     let configuration: DiagnosticsConfiguration
     let maintenance = DiagnosticsMaintenanceStore()
     let compatibilityCounters = CompatibilityCounterStore()
+    let snapshotSampler = RunnerSnapshotSampleStore()
 
     init(configuration: DiagnosticsConfiguration) {
         self.configuration = configuration

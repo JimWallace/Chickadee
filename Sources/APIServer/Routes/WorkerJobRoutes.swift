@@ -109,6 +109,24 @@ struct WorkerJobRoutes: RouteCollection {
     private func claimNextEligibleJob(
         req: Request, body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?
     ) async throws -> ClaimedJob? {
+        // Idle-poll short-circuit (2026-07 audit): most polls find nothing to
+        // claim, yet each one previously entered the globally-serialized
+        // claim section and opened a write transaction issuing 2–3 candidate
+        // SELECTs. One cheap indexed existence probe (status prefix of
+        // idx_submissions_status_kind_submitted_at) outside the serialized
+        // section answers the empty case. Deliberately a fresh DB read, not
+        // cached state: there is nothing to invalidate, it is correct across
+        // processes, and a submission enqueued right after the probe is
+        // simply seen by the runner's next poll — the same pickup latency
+        // the poll cadence already implies. The claim transaction below
+        // re-reads candidates, so this never affects claim atomicity.
+        let hasPendingWork =
+            try await APISubmission.query(on: req.db)
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .field(\.$id)
+            .first() != nil
+        guard hasPendingWork else { return nil }
+
         let evaluator = ClaimEvaluator(
             assignmentRequirements: req.application.assignmentRequirements,
             compatibilityMatcher: CompatibilityMatcher()

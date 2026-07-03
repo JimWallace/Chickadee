@@ -19,12 +19,23 @@ struct LoadedAssignmentRequirement: Sendable {
 }
 
 struct RunnerProfileService {
+    /// How stale the persisted `lastSeenAt` may get before an otherwise
+    /// unchanged check-in writes it again. Runners poll at up to 1/s; without
+    /// a debounce every poll is a row UPDATE (2026-07 audit). Must stay well
+    /// under `RUNNER_ACTIVE_WINDOW_SECONDS` (default 120 s) so
+    /// `refreshActiveFlags` never sees a live runner as stale: a live runner
+    /// checks in at least every 30 s (heartbeat), so persisted freshness lags
+    /// true freshness by at most ~`debounce` seconds. The live dashboard
+    /// reads `WorkerActivityStore` (in-memory), not this column.
+    static let lastSeenPersistInterval: TimeInterval = 60
+
     func registerOrUpdate(
         runnerID: String,
         displayName: String?,
         profile: RunnerCapabilityProfile?,
         seenAt: Date,
-        on db: Database
+        on db: Database,
+        lastSeenPersistInterval: TimeInterval = RunnerProfileService.lastSeenPersistInterval
     ) async throws -> RunnerProfileUpsertResult {
         guard !runnerID.isEmpty else {
             return RunnerProfileUpsertResult(profile: nil, event: nil)
@@ -34,12 +45,28 @@ struct RunnerProfileService {
             .filter(\.$runnerID == runnerID)
             .first()
 
+        // A check-in that changes nothing but the freshness timestamp only
+        // persists when the stored timestamp has aged past the debounce
+        // window — the poll-frequency UPDATE-per-poll is the thing being
+        // avoided here. Any real change (capabilities, display name,
+        // reactivation) still writes immediately.
+        func onlyRefreshesFreshness(_ existing: RunnerProfile, displayNameChanged: Bool) -> Bool {
+            !displayNameChanged
+                && existing.isActive
+                && seenAt.timeIntervalSince(existing.lastSeenAt) < lastSeenPersistInterval
+        }
+
         guard let profile else {
             if let existing {
+                let newName = nonEmpty(displayName)
+                let displayNameChanged = newName != nil && newName != existing.displayName
+                if onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
+                    return RunnerProfileUpsertResult(profile: existing, event: nil)
+                }
                 existing.lastSeenAt = seenAt
                 existing.isActive = true
-                if let displayName, !displayName.isEmpty {
-                    existing.displayName = displayName
+                if let newName {
+                    existing.displayName = newName
                 }
                 try await existing.save(on: db)
             }
@@ -49,7 +76,12 @@ struct RunnerProfileService {
         let profileHash = self.profileHash(for: profile)
         if let existing {
             let event: RunnerProfileRegistrationEvent? = existing.profileHash == profileHash ? nil : .updated
-            existing.displayName = nonEmpty(displayName) ?? existing.displayName
+            let newName = nonEmpty(displayName)
+            let displayNameChanged = newName != nil && newName != existing.displayName
+            if event == nil, onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
+                return RunnerProfileUpsertResult(profile: existing, event: nil)
+            }
+            existing.displayName = newName ?? existing.displayName
             existing.capabilityProfile = profile
             existing.profileHash = profileHash
             existing.lastRegisteredAt = seenAt
