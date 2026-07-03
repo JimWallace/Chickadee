@@ -16,18 +16,19 @@ import VaporTesting
 
     private func makeFlatNotebookSource(
         dir: URL, name: String, cellText: String
-    ) throws -> NotebookSourceRef {
+    ) throws -> (source: NotebookSourceRef, notebookPath: String) {
         let notebookPath = dir.appendingPathComponent("\(name).ipynb").path
         let notebookJSON = """
             {"cells":[{"cell_type":"code","source":["\(cellText)"],"metadata":{},"outputs":[],"execution_count":null}],"metadata":{},"nbformat":4,"nbformat_minor":5}
             """
         try notebookJSON.write(toFile: notebookPath, atomically: true, encoding: .utf8)
-        return NotebookSourceRef(
+        let source = NotebookSourceRef(
             notebookPath: notebookPath,
             zipPath: dir.appendingPathComponent("\(name).zip").path,
             starterNotebook: nil,
             setupID: name
         )
+        return (source, notebookPath)
     }
 
     private func makeTempDir() throws -> URL {
@@ -40,7 +41,8 @@ import VaporTesting
     @Test func repeatReadsHitTheCache() async throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let source = try makeFlatNotebookSource(dir: dir, name: "setup_a", cellText: "x = 1")
+        let (source, notebookPath) = try makeFlatNotebookSource(
+            dir: dir, name: "setup_a", cellText: "x = 1")
 
         // Pin the mtime through setAttributes BEFORE the first read so both
         // stats convert the same fixed Date through the same code path —
@@ -48,7 +50,7 @@ import VaporTesting
         // spuriously busts the entry.
         let fixedMtime = Date(timeIntervalSince1970: 1_750_000_000)
         try FileManager.default.setAttributes(
-            [.modificationDate: fixedMtime], ofItemAtPath: source.notebookPath!)
+            [.modificationDate: fixedMtime], ofItemAtPath: notebookPath)
 
         let cache = NotebookBytesCache()
         let first = try await cache.notebookData(for: source)
@@ -56,13 +58,13 @@ import VaporTesting
         // Prove the hit path: rewrite the file with same-length junk and the
         // same pinned mtime — a matching validator must serve the ORIGINAL
         // cached bytes, not re-read the junk.
-        let attrs = try FileManager.default.attributesOfItem(atPath: source.notebookPath!)
+        let attrs = try FileManager.default.attributesOfItem(atPath: notebookPath)
         let originalFileSize = Int((attrs[.size] as? UInt64) ?? 0)
         let sameLengthReplacement = String(repeating: " ", count: originalFileSize)
         try sameLengthReplacement.write(
-            toFile: source.notebookPath!, atomically: true, encoding: .utf8)
+            toFile: notebookPath, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes(
-            [.modificationDate: fixedMtime], ofItemAtPath: source.notebookPath!)
+            [.modificationDate: fixedMtime], ofItemAtPath: notebookPath)
 
         let second = try await cache.notebookData(for: source)
         #expect(second == first, "matching (size, mtime) must serve cached bytes")
@@ -71,13 +73,13 @@ import VaporTesting
     @Test func backingFileChangeBustsTheEntry() async throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let source = try makeFlatNotebookSource(dir: dir, name: "setup_b", cellText: "x = 1")
+        let (source, _) = try makeFlatNotebookSource(dir: dir, name: "setup_b", cellText: "x = 1")
 
         let cache = NotebookBytesCache()
         let first = try await cache.notebookData(for: source)
 
         // Rewrite with different-size content (size change alone must bust).
-        let updated = try makeFlatNotebookSource(
+        let (updated, _) = try makeFlatNotebookSource(
             dir: dir, name: "setup_b", cellText: "x = 1  # instructor edited this cell")
         let second = try await cache.notebookData(for: updated)
         #expect(second != first)
@@ -90,9 +92,9 @@ import VaporTesting
 
         // Budget fits two of the three ~1 KB notebooks.
         let padding = String(repeating: "# pad\\n", count: 100)
-        let sourceA = try makeFlatNotebookSource(dir: dir, name: "s_a", cellText: padding + "a")
-        let sourceB = try makeFlatNotebookSource(dir: dir, name: "s_b", cellText: padding + "b")
-        let sourceC = try makeFlatNotebookSource(dir: dir, name: "s_c", cellText: padding + "c")
+        let (sourceA, pathA) = try makeFlatNotebookSource(dir: dir, name: "s_a", cellText: padding + "a")
+        let (sourceB, _) = try makeFlatNotebookSource(dir: dir, name: "s_b", cellText: padding + "b")
+        let (sourceC, pathC) = try makeFlatNotebookSource(dir: dir, name: "s_c", cellText: padding + "c")
         let oneSize = try await NotebookBytesCache().notebookData(for: sourceA).count
 
         let cache = NotebookBytesCache(maxEntries: 10, maxTotalBytes: oneSize * 2 + 10)
@@ -102,8 +104,8 @@ import VaporTesting
 
         // A's backing file is now deleted; a cache hit would still return
         // bytes, a miss must throw. A was evicted → throws. C stayed → hit.
-        try FileManager.default.removeItem(atPath: sourceA.notebookPath!)
-        try FileManager.default.removeItem(atPath: sourceC.notebookPath!)
+        try FileManager.default.removeItem(atPath: pathA)
+        try FileManager.default.removeItem(atPath: pathC)
 
         // C: file gone but entry cached with old validator — validator stats
         // the deleted file and fails, so both now miss and throw. Instead
@@ -127,15 +129,14 @@ extension NotebookBytesCacheTests {
 
         // Flat file at a KNOWN path, but the source initially declares none —
         // simulating a legacy zip-only setup whose editor save later writes it.
-        let hidden = try makeFlatNotebookSource(dir: dir, name: "s_late", cellText: "v2")
-        let flatPath = hidden.notebookPath!
+        let (_, flatPath) = try makeFlatNotebookSource(dir: dir, name: "s_late", cellText: "v2")
         let stashedPath = flatPath + ".stash"
         try FileManager.default.moveItem(atPath: flatPath, toPath: stashedPath)
 
         // Zip-only source: fake the "zip" as another flat notebook is not
         // possible (extraction needs a real zip), so use a flat-backed source
         // whose notebookPath points at a v1 file, then flip the declared path.
-        let v1 = try makeFlatNotebookSource(dir: dir, name: "s_late_v1", cellText: "v1")
+        let (v1, _) = try makeFlatNotebookSource(dir: dir, name: "s_late_v1", cellText: "v1")
         let cache = NotebookBytesCache()
         let first = try await cache.notebookData(for: v1)
         #expect(String(data: first, encoding: .utf8)?.contains("v1") == true)
