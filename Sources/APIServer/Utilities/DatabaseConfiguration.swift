@@ -28,8 +28,15 @@ struct DatabaseSettings: Sendable {
     /// in-process boundary. nil → the MCP path shares the main pool.
     let postgresMCPUsername: String?
     let postgresMCPPassword: String?
+    /// Fluent connection-pool size per event loop (#1159 — the pool was
+    /// never configured, riding the driver default of 1/loop; the
+    /// MetricsCardCache header documents the ConnectionPoolTimeoutError
+    /// incident that caused). nil → per-backend default at configure time
+    /// (1 for SQLite, whose writes serialize anyway; 4 for Postgres).
+    let maxConnectionsPerEventLoop: Int?
 
     static func fromEnvironment(defaultSQLitePath: String) throws -> Self {
+        let poolSize = try parsedPoolSize()
         let backend: DatabaseBackend
         if let configuredBackend = trimmedEnv("DATABASE_BACKEND")?.lowercased() {
             guard let parsed = DatabaseBackend(rawValue: configuredBackend) else {
@@ -44,7 +51,9 @@ struct DatabaseSettings: Sendable {
 
         switch backend {
         case .sqlite:
-            return .sqlite(path: trimmedEnv("SQLITE_PATH") ?? defaultSQLitePath)
+            return .sqlite(
+                path: trimmedEnv("SQLITE_PATH") ?? defaultSQLitePath,
+                maxConnectionsPerEventLoop: poolSize)
         case .postgres:
             let host = trimmedEnv("DATABASE_HOST")
             let database = trimmedEnv("DATABASE_NAME")
@@ -72,12 +81,23 @@ struct DatabaseSettings: Sendable {
                 username: username,
                 password: password,
                 mcpUsername: trimmedEnv("MCP_DATABASE_USER"),
-                mcpPassword: trimmedEnv("MCP_DATABASE_PASSWORD")
+                mcpPassword: trimmedEnv("MCP_DATABASE_PASSWORD"),
+                maxConnectionsPerEventLoop: poolSize
             )
         }
     }
 
-    static func sqlite(path: String) -> Self {
+    private static func parsedPoolSize() throws -> Int? {
+        guard let raw = trimmedEnv("DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP") else { return nil }
+        guard let value = Int(raw), value > 0 else {
+            throw DatabaseConfigurationError.invalidSettings(
+                "DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP must be a positive integer"
+            )
+        }
+        return value
+    }
+
+    static func sqlite(path: String, maxConnectionsPerEventLoop: Int? = nil) -> Self {
         .init(
             backend: .sqlite,
             sqlitePath: path,
@@ -89,7 +109,8 @@ struct DatabaseSettings: Sendable {
             postgresPassword: nil,
             postgresSearchPath: nil,
             postgresMCPUsername: nil,
-            postgresMCPPassword: nil
+            postgresMCPPassword: nil,
+            maxConnectionsPerEventLoop: maxConnectionsPerEventLoop
         )
     }
 
@@ -105,7 +126,8 @@ struct DatabaseSettings: Sendable {
             postgresPassword: nil,
             postgresSearchPath: nil,
             postgresMCPUsername: nil,
-            postgresMCPPassword: nil
+            postgresMCPPassword: nil,
+            maxConnectionsPerEventLoop: nil
         )
     }
 
@@ -117,7 +139,8 @@ struct DatabaseSettings: Sendable {
         password: String,
         searchPath: [String]? = nil,
         mcpUsername: String? = nil,
-        mcpPassword: String? = nil
+        mcpPassword: String? = nil,
+        maxConnectionsPerEventLoop: Int? = nil
     ) -> Self {
         .init(
             backend: .postgres,
@@ -130,7 +153,8 @@ struct DatabaseSettings: Sendable {
             postgresPassword: password,
             postgresSearchPath: searchPath,
             postgresMCPUsername: mcpUsername,
-            postgresMCPPassword: mcpPassword
+            postgresMCPPassword: mcpPassword,
+            maxConnectionsPerEventLoop: maxConnectionsPerEventLoop
         )
     }
 }
@@ -175,7 +199,12 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             storage: settings.sqliteStorage,
             enableForeignKeys: true
         )
-        app.databases.use(.sqlite(sqliteConfig), as: .chickadee, isDefault: true)
+        // Default 1/loop: SQLite serializes writes anyway, and the in-memory
+        // test storage must stay on the driver default. Raising it only helps
+        // concurrent WAL reads and only when explicitly configured (#1159).
+        app.databases.use(
+            .sqlite(sqliteConfig, maxConnectionsPerEventLoop: settings.maxConnectionsPerEventLoop ?? 1),
+            as: .chickadee, isDefault: true)
 
         if case .file = settings.sqliteStorage, let sql = app.db as? SQLDatabase {
             _ = try sql.raw("PRAGMA journal_mode = WAL").all().wait()
@@ -209,11 +238,17 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
         if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
             configuration.searchPath = searchPath
         }
+        // Default 4/loop on Postgres (#1159): the driver default of 1/loop is
+        // the documented ConnectionPoolTimeoutError incident class — one
+        // long-held connection per event loop starves every other query on
+        // that loop. Override via DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP.
+        let poolSize = settings.maxConnectionsPerEventLoop ?? 4
         app.databases.use(
-            .postgres(configuration: configuration),
+            .postgres(configuration: configuration, maxConnectionsPerEventLoop: poolSize),
             as: .chickadee,
             isDefault: true
         )
+        app.logger.info("Postgres pool: \(poolSize) connections per event loop")
 
         // Optional: a second pool for the MCP path backed by a least-privilege
         // role (no access to student tables). Same host/database/search_path,
@@ -232,7 +267,9 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
                 mcpConfiguration.searchPath = searchPath
             }
-            app.databases.use(.postgres(configuration: mcpConfiguration), as: .mcp)
+            app.databases.use(
+                .postgres(configuration: mcpConfiguration, maxConnectionsPerEventLoop: poolSize),
+                as: .mcp)
             app.usesDedicatedMCPDatabase = true
             app.logger.info("MCP database: dedicated least-privilege role \(mcpUsername) in use")
         }
