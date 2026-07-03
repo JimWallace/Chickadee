@@ -161,6 +161,16 @@ struct NotebookSourceRef: Sendable {
         self.starterNotebook = setup.decodedManifest()?.starterNotebook
         self.setupID = setup.id
     }
+
+    /// Memberwise variant for callers (and tests) that don't hold a Fluent
+    /// model — e.g. the NotebookBytesCache tests building sources over
+    /// temp files (#1171).
+    init(notebookPath: String?, zipPath: String, starterNotebook: String?, setupID: String?) {
+        self.notebookPath = notebookPath
+        self.zipPath = zipPath
+        self.starterNotebook = starterNotebook
+        self.setupID = setupID
+    }
 }
 
 func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {

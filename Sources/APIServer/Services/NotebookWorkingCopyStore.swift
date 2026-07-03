@@ -457,10 +457,10 @@ func latestNotebookSubmissionData(
         let name = URL(fileURLWithPath: path).lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }()
-    // The fallback reads the setup's canonical notebook — a file read or a
-    // zip-subprocess extraction; thread pool either way (#1156).
-    let source = NotebookSourceRef(fallbackSetup)
-    let fallbackData = try await runBlocking(on: req) { try notebookData(from: source) }
+    // The fallback reads the setup's canonical notebook — cached and
+    // resolved on the thread pool (#1156/#1171).
+    let fallbackData = try await req.application.notebookBytesCache.notebookData(
+        for: NotebookSourceRef(fallbackSetup))
     return (fallbackData, fallbackFilename)
 }
 

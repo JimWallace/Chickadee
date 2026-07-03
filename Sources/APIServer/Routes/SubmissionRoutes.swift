@@ -98,12 +98,17 @@ struct SubmissionRoutes: RouteCollection {
             // cooperative executor.
             let source = NotebookSourceRef(setup)
             let studentBytes = body.file
-            fileData = try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
-                guard let instructorData = try? notebookData(from: source) else {
-                    return studentBytes  // no instructor notebook → submit as-is
-                }
-                return mergeNotebook(student: studentBytes, instructor: instructorData)
-            }.get()
+            // Cached (#1171): a deadline spike of .ipynb submissions shares one
+            // notebook resolution instead of one unzip per upload.
+            let instructorData = try? await req.application.notebookBytesCache.notebookData(
+                for: source)
+            if let instructorData {
+                fileData = try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
+                    mergeNotebook(student: studentBytes, instructor: instructorData)
+                }.get()
+            } else {
+                fileData = studentBytes  // no instructor notebook → submit as-is
+            }
         } else {
             fileData = body.file  // .py or other files — no merge needed
         }

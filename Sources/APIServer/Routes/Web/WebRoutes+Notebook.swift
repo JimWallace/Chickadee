@@ -150,7 +150,8 @@ extension WebRoutes {
 
         let starter: Data
         do {
-            starter = try notebookData(for: setup)
+            starter = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             throw Abort(.badRequest, reason: "This assignment has no starter notebook to reset to.")
         }

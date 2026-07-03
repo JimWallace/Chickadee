@@ -82,7 +82,10 @@ struct BrowserResultRoutes: RouteCollection {
         let nbPath = subsDir + "\(subID).ipynb"
         let instructorData: Data
         do {
-            instructorData = try notebookData(for: setup)
+            // Cached (#1171): this runs per browser-graded submission, and the
+            // uncached path is a serialized unzip subprocess per call.
+            instructorData = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             req.logger.warning(
                 "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
@@ -185,7 +188,10 @@ struct BrowserResultRoutes: RouteCollection {
         // Always merge with canonical instructor notebook so hidden tests are present.
         let instructorData: Data
         do {
-            instructorData = try notebookData(for: setup)
+            // Cached (#1171): this runs per browser-graded submission, and the
+            // uncached path is a serialized unzip subprocess per call.
+            instructorData = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             req.logger.warning(
                 "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
@@ -297,7 +303,8 @@ struct BrowserResultRoutes: RouteCollection {
         let studentData = Data(body.notebook.utf8)
         let instructorData: Data
         do {
-            instructorData = try notebookData(for: setup)
+            instructorData = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             req.logger.warning(
                 "Browser failover: could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
