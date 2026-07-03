@@ -378,4 +378,10 @@ func registerMigrations(on app: Application) {
     // the now-meaningless global label here loses no teaching authority.
     app.migrations.add(CollapseUserRoles())
 
+    // Multi-process security state (#1154): worker-HMAC replay nonces and
+    // login rate-limit/lockout events move from process-local memory to the
+    // database so their guarantees hold behind a load balancer. New tables,
+    // no ordering constraints.
+    app.migrations.add(CreateWorkerNonces())
+    app.migrations.add(CreateLoginAttempts())
 }
