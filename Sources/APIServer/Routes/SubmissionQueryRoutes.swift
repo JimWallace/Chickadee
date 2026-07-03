@@ -68,9 +68,14 @@ struct SubmissionQueryRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        guard try await submissionAccess(caller: caller, submission: submission, on: req.db).canView
-        else {
-            throw Abort(.forbidden)
+        // Owner-first: this endpoint is polled every 2 s by every student
+        // waiting on a grade, and only needs a view decision (no tier
+        // filtering, unlike getResults). The owner check is free; the staff
+        // check costs a setup lookup + an enrollment-role query per poll.
+        if submission.userID != caller.id {
+            guard try await isSubmissionStaff(caller, submission: submission, on: req.db) else {
+                throw Abort(.forbidden)
+            }
         }
         return SubmissionStatusResponse(submission: submission)
     }
@@ -100,6 +105,43 @@ struct SubmissionQueryRoutes: RouteCollection {
             throw AppError.notFound(resource: "Results for submission '\(subID)' (none available yet)")
         }
 
+        // Visibility inputs are resolved before touching the stored blob so
+        // the ETag can short-circuit the decode/filter/encode below.  Release
+        // is gated on the *effective* deadline — the later of the assignment
+        // due date and the caller's own per-student extension — so an
+        // accommodated student does not get release output revealed while
+        // their extended window is still open.  A non-instructor caller can
+        // only reach their own submission (`canViewSubmission`), so the caller
+        // is the submission owner; for instructors the deadline is unused
+        // (they see every tier).
+        let assignment = try await APIAssignment.query(on: req.db)
+            .filter(\.$testSetupID == submission.testSetupID)
+            .first()
+        let releaseDeadline = try await releaseVisibilityDeadline(
+            for: assignment, user: caller, on: req.db)
+        let callerVisibleTiers = visibleTiers(
+            isStaff: access.isStaff, effectiveDueAt: releaseDeadline)
+
+        // A stored result is immutable, so the response bytes are fully
+        // determined by (result row, visible tier set, ?tiers= slice).  The
+        // tier set is part of the key because it changes when the release
+        // deadline passes — the same result id must then produce a fresh
+        // response.  Repeat views (the common case: a student re-opening
+        // their grade) get a 304 without decoding the collection blob.
+        let requestedTiersParam = req.query[String.self, at: "tiers"]
+        let etagKey = [
+            result.id ?? "",
+            callerVisibleTiers.sorted().joined(separator: ","),
+            requestedTiersParam ?? "*",
+        ].joined(separator: "|")
+        let etag = "\"\(sha256HexDigest(Data(etagKey.utf8)).prefix(32))\""
+        if req.headers[.ifNoneMatch].contains(where: { header in
+            header.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                .contains(etag)
+        }) {
+            return Response(status: .notModified, headers: ["ETag": etag])
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard
@@ -109,25 +151,13 @@ struct SubmissionQueryRoutes: RouteCollection {
             throw AppError.internalFailure(reason: "Stored result is corrupt")
         }
 
-        // `fullCollection` carries the real grade across every tier.  The caller
-        // may only *inspect* certain outcomes: secret never, release after the
-        // deadline (instructors see all tiers).  Release is gated on the
-        // *effective* deadline — the later of the assignment due date and the
-        // caller's own per-student extension — so an accommodated student does
-        // not get release output revealed while their extended window is still
-        // open.  A non-instructor caller can only reach their own submission
-        // (`canViewSubmission`), so the caller is the submission owner; for
-        // instructors the deadline is unused (they see every tier).
-        let assignment = try await APIAssignment.query(on: req.db)
-            .filter(\.$testSetupID == submission.testSetupID)
-            .first()
-        let releaseDeadline = try await releaseVisibilityDeadline(
-            for: assignment, user: caller, on: req.db)
-        let visible = fullCollection.filtering(
-            tiers: visibleTiers(isStaff: access.isStaff, effectiveDueAt: releaseDeadline))
+        // `fullCollection` carries the real grade across every tier.  The
+        // caller may only *inspect* certain outcomes: secret never, release
+        // after the deadline (instructors see all tiers).
+        let visible = fullCollection.filtering(tiers: callerVisibleTiers)
 
         let responseCollection: TestOutcomeCollection
-        if let tiersParam = req.query[String.self, at: "tiers"] {
+        if let tiersParam = requestedTiersParam {
             // Explicit tier slice (?tiers=public,release): return a
             // self-consistent sub-collection — aggregates recomputed over the
             // requested ∩ visible tiers.
@@ -149,7 +179,7 @@ struct SubmissionQueryRoutes: RouteCollection {
 
         return Response(
             status: .ok,
-            headers: ["Content-Type": "application/json"],
+            headers: ["Content-Type": "application/json", "ETag": etag],
             body: .init(data: responseData)
         )
     }
