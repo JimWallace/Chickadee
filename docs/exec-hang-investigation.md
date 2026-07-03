@@ -196,17 +196,30 @@ wait to before the student's first run.
    ("Starting" vs "Idle"), an unverified UX nicety, but it is not a fix for the
    execute-blocking path. **Reverted.**
 
-### Where this leaves us
+### Where this leaves us — THREE levers tried, none fix it
 
-**Both JS-level levers are disproven:** dropping jedi (jedi wasn't the cost) and
-gating `kernel_info` (inert to the execution-readiness path). The ~13–15 s tail
-is the `pyodide.asm.wasm` compile + IPython import, and it is **irreducible
-without attacking boot itself.** The only remaining direction that *both* speeds
-boot *and* is probe-measurable is a **prebuilt Pyodide snapshot** — tracked in
-**issue #1150** (the vended Pyodide exposes `makeSnapshot`/`_loadSnapshot`; the
-kernel driver doesn't use them yet; build the snapshot at vendor time, serve it
-as a static asset, boot from it). Everything else (`loadPyodideOptions.packages`
-preload, honest-status display) is at best a partial or cosmetic mitigation.
+- **Drop jedi** — jedi wasn't the cost (~2–4 s of the tail); reverted.
+- **Gate `kernel_info` on `this.ready`** — safe (editor-smoke green) but INERT to
+  the execution-readiness path the probe/student depend on (still ~15 s);
+  reverted.
+- **Prebuilt Pyodide snapshot (#1150)** — spiked in Node and found **blocked +
+  low-ceiling**: `makeMemorySnapshot()` works on bare Pyodide (~30 MB) but
+  **fails once IPython is imported** (`Unexpected hiwire entry` — the experimental
+  API can't serialize the JS refs the imports create without custom serializers).
+  And even if unblocked, a snapshot skips Python init/import but **not** WASM
+  compilation — and the Node breakdown (compile+init ≈ 2.4 s vs import ≈ 0.4 s)
+  shows boot is **compile-dominated**, which is exactly WebKit's slow part and
+  exactly what a snapshot doesn't help. Downgraded to a research project.
+
+**Root conclusion.** The WebKit slow-first-execute is dominated by
+`pyodide.asm.wasm` **compilation** under WebKit's weak compiled-module caching —
+a browser-engine limitation, not something patchable in the kernel. No in-app
+lever found so far meaningfully shrinks it. Realistic paths: (a) a plain
+"kernel is still starting" affordance in our own `notebook.js` so the wait reads
+as progress not a hang (UX only, doesn't speed boot); (b) track upstream WebKit
+WASM-compile/caching and Pyodide module-size improvements; (c) revisit snapshots
+if pyodide-kernel ships first-class snapshot support (serializers handled).
+Details + the Node prototype findings in issue #1150.
 
 All three need a focused browser-verify loop (the probe is the acceptance test —
 delay=0 webkit slow-rate must drop toward zero); none should be shipped to the
