@@ -181,9 +181,9 @@ struct TestSetupRoutes: RouteCollection {
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        // File read or zip-subprocess extraction — thread pool (#1156).
-        let source = NotebookSourceRef(setup)
-        let raw = try await runBlocking(on: req) { try notebookData(from: source) }
+        // Cached, single-flighted, resolved on the thread pool (#1156/#1171).
+        let raw = try await req.application.notebookBytesCache.notebookData(
+            for: NotebookSourceRef(setup))
         // Staff (TA+ or admin) of this setup's course see unfiltered tiers;
         // students get the hidden tiers stripped (#417 Slice G).
         let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
@@ -210,9 +210,9 @@ struct TestSetupRoutes: RouteCollection {
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        // File read or zip-subprocess extraction — thread pool (#1156).
-        let source = NotebookSourceRef(setup)
-        let raw = try await runBlocking(on: req) { try notebookData(from: source) }
+        // Cached, single-flighted, resolved on the thread pool (#1156/#1171).
+        let raw = try await req.application.notebookBytesCache.notebookData(
+            for: NotebookSourceRef(setup))
         let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
         let filtered = isStaff ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 

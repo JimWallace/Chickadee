@@ -369,7 +369,8 @@ extension StudentCourseRoutes {
 
         let starter: Data
         do {
-            starter = try notebookData(for: setup)
+            starter = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "setup",
