@@ -156,7 +156,7 @@ actor NotebookBytesCache {
     }
 
     private func evictIfNeeded() {
-        while (entries.count > maxEntries || totalBytes > maxTotalBytes),
+        while entries.count > maxEntries || totalBytes > maxTotalBytes,
             let oldest = recentKeys.first
         {
             recentKeys.removeFirst()
