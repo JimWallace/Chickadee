@@ -297,16 +297,8 @@ extension WebRoutes {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let displayResult = try await loadPreferredDisplayResult(subID: subID, on: req.db)
-        // Fetch + decode the display result's blob ONCE (side table, #1173);
-        // the presenter and the individual-badge evaluation below share it.
-        var displayCollection: TestOutcomeCollection?
-        if let result = displayResult,
-            let json = try await result.loadCollectionJSON(on: req.db)
-        {
-            displayCollection = try? decoder.decode(
-                TestOutcomeCollection.self, from: Data(json.utf8))
-        }
+        let (displayResult, displayCollection) = try await loadDisplayResultAndCollection(
+            subID: subID, decoder: decoder, on: req.db)
         let priorAttempt = try await loadPriorAttemptDelta(
             submission: submission, decoder: decoder, on: req.db)
         let manifestDisplay = manifestDisplayData(from: setupProps)
@@ -416,6 +408,22 @@ extension WebRoutes {
         let workerResult = allResults.first { ($0.source ?? "worker") == "worker" }
         let browserResult = allResults.first { $0.source == "browser" }
         return workerResult ?? browserResult
+    }
+
+    /// The preferred display result plus its collection, fetched from the
+    /// result_collections side table and decoded ONCE (#1173) — the presenter
+    /// and the individual-badge evaluation share the decoded value.
+    private func loadDisplayResultAndCollection(
+        subID: String, decoder: JSONDecoder, on db: Database
+    ) async throws -> (APIResult?, TestOutcomeCollection?) {
+        guard let result = try await loadPreferredDisplayResult(subID: subID, on: db) else {
+            return (nil, nil)
+        }
+        guard let json = try await result.loadCollectionJSON(on: db) else {
+            return (result, nil)
+        }
+        let collection = try? decoder.decode(TestOutcomeCollection.self, from: Data(json.utf8))
+        return (result, collection)
     }
 
     /// Fetches the immediately-prior attempt for per-test delta display and the
