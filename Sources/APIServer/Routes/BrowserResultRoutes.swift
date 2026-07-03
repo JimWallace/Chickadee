@@ -56,7 +56,17 @@ struct BrowserResultRoutes: RouteCollection {
             guard let data = body.collection.data(using: .utf8) else {
                 throw AppError.invalidParameter(name: "collection", reason: "not valid UTF-8")
             }
-            collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+            let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
+            // Same serialized-size budget as the worker path (#1157) — keeps
+            // the unbounded blob out of the results table regardless of which
+            // grader produced it.
+            let (bounded, didTruncate) = decoded.truncatingOversizedOutput()
+            if didTruncate {
+                req.logger.warning(
+                    "result_collection_truncated submission=\(bounded.submissionID) source=browser"
+                )
+            }
+            collection = bounded
         } catch let e as DecodingError {
             throw AppError.unprocessable(reason: "Invalid TestOutcomeCollection: \(e)")
         }
