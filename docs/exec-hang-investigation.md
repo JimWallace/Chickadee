@@ -183,14 +183,30 @@ wait to before the student's first run.
    import, not install ordering, so likely a partial win at best. **Risk:** a
    package named there that fails to load rejects the whole boot (this is
    exactly why nb_mypy was NOT put there) — must be rock-solid.
-3. **Honest readiness signaling + kernel warm-up (RECOMMENDED).** Keep the
-   editor showing "kernel starting" until `this.ready` actually resolves (not
-   the `kernel_info` idle), and/or fire a hidden warm-up `pass` execute at boot
-   so the ~13–17 s is spent visibly-starting *before* the student's first real
-   run. Doesn't speed boot — it removes the "I pressed run and it hung"
-   experience (the actual harm) and makes the boot-funnel telemetry honest
-   (today `kernel_idle` counts kernels still booting). This is the direction
-   that survives the negative jedi result.
+3. **Honest readiness signaling — TRIED (gate `kernelInfoRequest` on
+   `this.ready`), and INERT to execution readiness.** PR #1149 made
+   `kernelInfoRequest` also `await this.ready`. Result (WebKit delay=0 probe,
+   2026-07-03): `editor-smoke` stayed **green** (safe — the delayed
+   `kernel_info` did NOT break the connection handshake / no "Kernel Unknown"),
+   but the probe still measured ~15 s first executes (`avgRunMs=13970`, majority
+   slow). The execution indicator the probe *and a student's cell-run* depend on
+   is driven by the kernel's `execution_state` messages, **not** the
+   `kernel_info` reply — so gating `kernel_info` does not change when a run can
+   dispatch. It *may* still change JupyterLab's kernel-**status** display
+   ("Starting" vs "Idle"), an unverified UX nicety, but it is not a fix for the
+   execute-blocking path. **Reverted.**
+
+### Where this leaves us
+
+**Both JS-level levers are disproven:** dropping jedi (jedi wasn't the cost) and
+gating `kernel_info` (inert to the execution-readiness path). The ~13–15 s tail
+is the `pyodide.asm.wasm` compile + IPython import, and it is **irreducible
+without attacking boot itself.** The only remaining direction that *both* speeds
+boot *and* is probe-measurable is a **prebuilt Pyodide snapshot** — tracked in
+**issue #1150** (the vended Pyodide exposes `makeSnapshot`/`_loadSnapshot`; the
+kernel driver doesn't use them yet; build the snapshot at vendor time, serve it
+as a static asset, boot from it). Everything else (`loadPyodideOptions.packages`
+preload, honest-status display) is at best a partial or cosmetic mitigation.
 
 All three need a focused browser-verify loop (the probe is the acceptance test —
 delay=0 webkit slow-rate must drop toward zero); none should be shipped to the
