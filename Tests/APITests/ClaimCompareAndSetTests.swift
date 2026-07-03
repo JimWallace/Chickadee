@@ -1,12 +1,14 @@
 // Tests/APITests/ClaimCompareAndSetTests.swift
 //
-// atomicallyClaimSubmission is the compare-and-set at the heart of the job
-// claim (#1153): the UPDATE's `status == pending` guard means concurrent
-// claimers cannot both win, and a lost race leaves the winner's row
-// untouched. The endpoint-level race is covered by
-// WorkerRoutesTests.requestJob_concurrentClaims_onlyOneSucceeds; these tests
-// pin the CAS semantics directly, including the lost-race path that can't be
-// triggered deterministically over HTTP.
+// atomicallyClaimSubmission is the atomic claim at the heart of the job
+// hand-out. On SQLite it is a compare-and-set (#1153): the UPDATE's
+// `status == pending` guard means concurrent claimers cannot both win. On
+// Postgres it is a `FOR UPDATE SKIP LOCKED` row lock in a short transaction
+// (#1172). Either way a lost race returns nil and leaves the winner's row
+// untouched — these tests pin that contract on whichever backend the suite
+// runs against (SQLite on api-tests, Postgres on api-tests-postgres). The
+// endpoint-level race is covered by
+// WorkerRoutesTests.requestJob_concurrentClaims_onlyOneSucceeds.
 
 import Fluent
 import Foundation

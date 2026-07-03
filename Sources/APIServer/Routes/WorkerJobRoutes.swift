@@ -2,6 +2,7 @@ import Core
 import Fluent
 import FluentSQLiteDriver
 import Foundation
+import SQLKit
 import Vapor
 
 struct WorkerJobRoutes: RouteCollection {
@@ -150,24 +151,36 @@ struct WorkerJobRoutes: RouteCollection {
         )
     }
 
-    /// Atomically claims one submission via compare-and-set: the UPDATE's
-    /// `status == pending` guard means concurrent claimers cannot both win,
-    /// on SQLite and Postgres alike (the same conditional-UPDATE idiom the
-    /// MCP single-use token consumption uses). The follow-up re-read
-    /// confirms *this* worker won — a lost race matched zero rows and left
-    /// the winner's id on the row. The WorkerClaimQueue actor still
-    /// serializes in-process claim attempts so concurrent polls don't thrash
-    /// SQLite's write lock, but the section it guards is now one UPDATE and
-    /// one SELECT; on Postgres it could be retired entirely in favour of
-    /// `FOR UPDATE SKIP LOCKED` (documented follow-up on #1153).
+    /// Atomically claims one submission. Both backends claim only the
+    /// already-evaluated candidate id — ordering and the requirement-
+    /// compatibility walk stay in `evaluateAndClaimCandidate` — and both
+    /// return nil on a lost race so the walk moves to the next candidate.
     ///
-    /// Internal (not private) so the claim CAS semantics are directly
-    /// testable — the lost-race path can't be triggered deterministically
-    /// through the HTTP endpoint.
+    /// **Postgres (#1172):** a short transaction takes a row lock with
+    /// `SELECT … FOR UPDATE SKIP LOCKED` and updates the locked row. SKIP
+    /// LOCKED means a row another claimer holds is skipped (nil) instead of
+    /// waited on, so concurrent claims from any number of processes scale
+    /// natively — no in-process serialization at all.
+    ///
+    /// **SQLite:** compare-and-set — the UPDATE's `status == pending` guard
+    /// means concurrent claimers cannot both win (the same conditional-
+    /// UPDATE idiom the MCP single-use token consumption uses), and the
+    /// re-read confirms *this* worker won. The WorkerClaimQueue actor
+    /// serializes in-process claim attempts so concurrent polls don't
+    /// thrash SQLite's write lock.
+    ///
+    /// Internal (not private) so the claim semantics are directly testable —
+    /// the lost-race path can't be triggered deterministically through the
+    /// HTTP endpoint. ClaimCompareAndSetTests pin both backends: the same
+    /// suite runs against SQLite (api-tests) and Postgres
+    /// (api-tests-postgres).
     func atomicallyClaimSubmission(
         id submissionID: String, req: Request, body: WorkerActivityPayload
     ) async throws -> APISubmission? {
-        try await req.application.workerClaimQueue.run {
+        if let sql = req.db as? SQLDatabase, sql.dialect.name == "postgresql" {
+            return try await claimViaPostgresRowLock(id: submissionID, req: req, body: body)
+        }
+        return try await req.application.workerClaimQueue.run {
             try await retrySQLiteBusyClaim {
                 try await APISubmission.query(on: req.db)
                     .filter(\.$id == submissionID)
@@ -183,6 +196,47 @@ struct WorkerJobRoutes: RouteCollection {
                 else { return nil }
                 return fresh
             }
+        }
+    }
+
+    /// Postgres claim (#1172): lock the pending row (or bail if another
+    /// claimer holds it / already flipped it), stamp it, and re-read inside
+    /// the same transaction. The transaction spans exactly these three
+    /// statements — candidate evaluation happens outside, before the call.
+    private func claimViaPostgresRowLock(
+        id submissionID: String, req: Request, body: WorkerActivityPayload
+    ) async throws -> APISubmission? {
+        try await req.db.transaction { db in
+            guard let sql = db as? SQLDatabase else {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Postgres claim transaction did not expose SQLDatabase")
+            }
+            // SKIP LOCKED: a concurrently-locked row is skipped, not waited
+            // on — the loser sees zero rows immediately and walks on to its
+            // next candidate instead of queueing behind the winner.
+            let locked = try await sql.raw(
+                """
+                SELECT id FROM submissions
+                WHERE id = \(bind: submissionID)
+                  AND status = \(bind: SubmissionStatus.pending.rawValue)
+                FOR UPDATE SKIP LOCKED
+                """
+            ).first()
+            guard locked != nil else { return nil }
+
+            try await APISubmission.query(on: db)
+                .filter(\.$id == submissionID)
+                .set(\.$status, to: SubmissionStatus.assigned.rawValue)
+                .set(\.$workerID, to: body.workerID)
+                .set(\.$assignedAt, to: Date())
+                .update()
+
+            guard
+                let fresh = try await APISubmission.find(submissionID, on: db),
+                fresh.status == SubmissionStatus.assigned.rawValue,
+                fresh.workerID == body.workerID
+            else { return nil }
+            return fresh
         }
     }
 
@@ -615,15 +669,14 @@ private func testSetupDownloadVersion(for setup: APITestSetup, req: Request) asy
 
 // MARK: - Application-level claim serializer
 
-/// Ensures at most one worker-job claim operation executes at a time.
-/// Claim *correctness* comes from the compare-and-set UPDATE in
-/// `atomicallyClaimSubmission` (its `status == pending` guard is atomic on
-/// SQLite and Postgres alike); this queue exists so concurrent in-process
-/// polls don't thrash SQLite's write lock and burn busy-retries. The section
-/// it guards is one UPDATE + one SELECT (2026-07 audit — evaluation moved
-/// outside). On Postgres it could be retired in favour of
-/// `FOR UPDATE SKIP LOCKED` so claims run fully in parallel (#1153
-/// follow-up).
+/// Ensures at most one worker-job claim operation executes at a time —
+/// **SQLite only** (#1172 moved Postgres to `FOR UPDATE SKIP LOCKED`, which
+/// needs no in-process serialization). Claim *correctness* comes from the
+/// compare-and-set UPDATE in `atomicallyClaimSubmission` (its
+/// `status == pending` guard is atomic); this queue exists so concurrent
+/// in-process polls don't thrash SQLite's write lock and burn busy-retries.
+/// The section it guards is one UPDATE + one SELECT (2026-07 audit —
+/// evaluation moved outside).
 ///
 /// Implemented as a Swift actor — actor isolation replaces the previous
 /// NSLock + @unchecked Sendable approach, giving compile-time concurrency
