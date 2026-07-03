@@ -492,10 +492,9 @@ private func importBundledResults(
         let result = APIResult(
             id: newResultID,
             submissionID: subID,
-            collectionJSON: bundledResult.collectionJSON,
             source: bundledResult.source
         )
-        try await result.save(on: db)
+        try await result.saveWithCollection(json: bundledResult.collectionJSON, on: db)
         tally.resultsImported += 1
     }
 }

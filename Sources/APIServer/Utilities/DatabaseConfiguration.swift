@@ -425,4 +425,10 @@ func registerMigrations(on app: Application) {
     // Leader leases so each periodic sweep runs on exactly one process
     // (#1155). New table, no ordering constraints.
     app.migrations.add(CreateSweepLeases())
+
+    // Relocates results.collection_json to the result_collections side table
+    // (#1173) so hot result-row queries never carry the blob. MUST run after
+    // AddResultGradeColumns — its backfill reads the column this migration
+    // drops.
+    app.migrations.add(CreateResultCollections())
 }

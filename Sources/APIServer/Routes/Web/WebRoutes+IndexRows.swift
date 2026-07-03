@@ -138,12 +138,22 @@ extension WebRoutes {
             }
         }
 
+        // Badge evaluation needs the collection (executionTimeMs) for each
+        // LATEST submission's preferred result only — batch-fetch just those
+        // blobs from the side table (#1173), one per dashboard row at most.
+        let latestResultIDs = data.latestSubmissionBySetupID.values.compactMap {
+            preferredResultBySubmissionID[$0.submissionID]?.id
+        }
+        let latestBlobs = try await collectionJSONByResultID(for: latestResultIDs, on: req.db)
+        let collectionByResultID = latestBlobs.compactMapValues(decodedCollection(from:))
+
         let disabledBySetup = try await disabledFetch
         let perSubBySetup = try await perSubFetch
         for (setupID, latest) in data.latestSubmissionBySetupID {
             if let badges = latestSubmissionBadges(
                 setupID: setupID, latest: latest, grouped: grouped,
                 preferredResultBySubmissionID: preferredResultBySubmissionID,
+                collectionByResultID: collectionByResultID,
                 perSubmission: perSubBySetup[setupID],
                 disabled: disabledBySetup[setupID] ?? [])
             {
@@ -190,13 +200,15 @@ extension WebRoutes {
         latest: LatestSubmissionItem,
         grouped: [String: [APISubmission]],
         preferredResultBySubmissionID: [String: APIResult],
+        collectionByResultID: [String: TestOutcomeCollection],
         perSubmission: [Achievement]?,
         disabled: Set<String>
     ) -> [AchievementBadge]? {
         guard
             let latestSubmission = grouped[setupID]?.first(where: { $0.id == latest.submissionID }),
             let result = preferredResultBySubmissionID[latest.submissionID],
-            let collection = decodedCollection(from: result.collectionJSON),
+            let resultID = result.id,
+            let collection = collectionByResultID[resultID],
             let gradePercent = gradePercent(from: collection)
         else { return nil }
         let latestAttempt = latestSubmission.attemptNumber ?? 1

@@ -123,8 +123,9 @@ struct GetValidationResultTool: ContentTool {
         guard
             let result = try await MCPStudentDataBoundary.latestResult(
                 forSubmissionID: submission.requireID(), on: context.db),
-            let data = result.collectionJSON.data(using: .utf8),
-            let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            let collectionJSON = try await result.loadCollectionJSON(on: context.db),
+            let collection = try? decoder.decode(
+                TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
         else {
             return Self.empty(assignmentPublicID: assignment.publicID, validationStatus: status)
         }

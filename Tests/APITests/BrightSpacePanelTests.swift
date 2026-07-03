@@ -365,11 +365,10 @@ import VaporTesting
 
             // A previously-synced result (not pending, has a synced timestamp).
             let result = APIResult(
-                id: "res_bs_push", submissionID: "sub_bs_push",
-                collectionJSON: "{}", source: "worker")
+                id: "res_bs_push", submissionID: "sub_bs_push", source: "worker")
             result.brightspaceSyncPending = false
             result.brightspaceSyncedAt = Date()
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(json: "{}", on: app.db)
 
             try await app.asyncTest(
                 .POST, "/instructor/\(assignment.publicID)/brightspace/push-all",
@@ -409,10 +408,10 @@ import VaporTesting
                 userID: try studentA.requireID(), on: app)
             for id in ["res_a1", "res_a2"] {
                 let synced = APIResult(
-                    id: id, submissionID: "sub_bs_a", collectionJSON: "{}", source: "worker")
+                    id: id, submissionID: "sub_bs_a", source: "worker")
                 synced.brightspaceSyncPending = false
                 synced.brightspaceSyncedAt = Date()
-                try await synced.save(on: app.db)
+                try await synced.saveWithCollection(json: "{}", on: app.db)
             }
 
             // Student B's only result errored → one failed student.
@@ -421,10 +420,10 @@ import VaporTesting
                 id: "sub_bs_b", testSetupID: "setup_bs_counts",
                 userID: try studentB.requireID(), on: app)
             let errored = APIResult(
-                id: "res_b1", submissionID: "sub_bs_b", collectionJSON: "{}", source: "worker")
+                id: "res_b1", submissionID: "sub_bs_b", source: "worker")
             errored.brightspaceSyncPending = false
             errored.brightspaceSyncError = "D2L rejected it"
-            try await errored.save(on: app.db)
+            try await errored.saveWithCollection(json: "{}", on: app.db)
 
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(

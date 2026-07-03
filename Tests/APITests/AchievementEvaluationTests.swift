@@ -65,15 +65,13 @@ import VaporTesting
             _ = try await arInsertSubmission(
                 id: "ag_sub_a", testSetupID: "ag_setup", userID: try a.requireID(), on: app)
             try await APIResult(
-                id: "ag_res_a", submissionID: "ag_sub_a",
-                collectionJSON: #"{"earnedPoints":4,"totalPoints":4}"#
-            ).save(on: app.db)
+                id: "ag_res_a", submissionID: "ag_sub_a"
+            ).saveWithCollection(json: #"{"earnedPoints":4,"totalPoints":4}"#, on: app.db)
             _ = try await arInsertSubmission(
                 id: "ag_sub_b", testSetupID: "ag_setup", userID: try b.requireID(), on: app)
             try await APIResult(
-                id: "ag_res_b", submissionID: "ag_sub_b",
-                collectionJSON: #"{"earnedPoints":2,"totalPoints":4}"#
-            ).save(on: app.db)
+                id: "ag_res_b", submissionID: "ag_sub_b"
+            ).saveWithCollection(json: #"{"earnedPoints":2,"totalPoints":4}"#, on: app.db)
 
             let written = try await evaluateClassGoalAchievements(on: app.db, logger: app.logger)
             #expect(written >= 1)
@@ -106,9 +104,8 @@ import VaporTesting
             _ = try await arInsertSubmission(
                 id: "frz_sub_a", testSetupID: "frz_setup", userID: try a.requireID(), on: app)
             try await APIResult(
-                id: "frz_res_a", submissionID: "frz_sub_a",
-                collectionJSON: #"{"earnedPoints":4,"totalPoints":4}"#
-            ).save(on: app.db)
+                id: "frz_res_a", submissionID: "frz_sub_a"
+            ).saveWithCollection(json: #"{"earnedPoints":4,"totalPoints":4}"#, on: app.db)
 
             _ = try await evaluateClassGoalAchievements(on: app.db, logger: app.logger)
             let row = try #require(
@@ -124,9 +121,8 @@ import VaporTesting
             _ = try await arInsertSubmission(
                 id: "frz_sub_b", testSetupID: "frz_setup", userID: try b.requireID(), on: app)
             try await APIResult(
-                id: "frz_res_b", submissionID: "frz_sub_b",
-                collectionJSON: #"{"earnedPoints":4,"totalPoints":4}"#
-            ).save(on: app.db)
+                id: "frz_res_b", submissionID: "frz_sub_b"
+            ).saveWithCollection(json: #"{"earnedPoints":4,"totalPoints":4}"#, on: app.db)
 
             _ = try await evaluateClassGoalAchievements(on: app.db, logger: app.logger)
             let after = try #require(

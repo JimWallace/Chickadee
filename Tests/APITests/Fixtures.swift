@@ -191,9 +191,10 @@ func makeTestResult(
     let result = APIResult(
         id: "res_\(UUID().uuidString.lowercased().prefix(8))",
         submissionID: submissionID,
-        collectionJSON: collectionJSON ?? #"{"submissionID":"\#(submissionID)","outcomes":[]}"#,
         source: source
     )
-    try await result.save(on: app.db)
+    try await result.saveWithCollection(
+        json: collectionJSON ?? #"{"submissionID":"\#(submissionID)","outcomes":[]}"#,
+        on: app.db)
     return result
 }

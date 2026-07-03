@@ -58,13 +58,11 @@ import VaporTesting
             try await seedSubmission(id: "sub_gs1")
             // Two results: browser 100 %, then a lower worker regrade.
             try await APIResult(
-                id: "res_gs1a", submissionID: "sub_gs1",
-                collectionJSON: collectionJSON(pass: 4, total: 4), source: "browser"
-            ).save(on: app.db)
+                id: "res_gs1a", submissionID: "sub_gs1", source: "browser"
+            ).saveWithCollection(json: collectionJSON(pass: 4, total: 4), on: app.db)
             try await APIResult(
-                id: "res_gs1b", submissionID: "sub_gs1",
-                collectionJSON: collectionJSON(pass: 3, total: 4), source: "worker"
-            ).save(on: app.db)
+                id: "res_gs1b", submissionID: "sub_gs1", source: "worker"
+            ).saveWithCollection(json: collectionJSON(pass: 3, total: 4), on: app.db)
 
             let viaSummaries = try await bestGradePercentBySubmissionID(
                 for: ["sub_gs1"], on: app.db)
@@ -81,15 +79,15 @@ import VaporTesting
     @Test func legacyColumnlessRowFallsBackToBlob() async throws {
         try await withApp(app) { _ in
             try await seedSubmission(id: "sub_gs2")
+            // Simulate the legacy shape: columns never populated, blob in
+            // the side table (exactly what the #1173 backfill produces for a
+            // pre-grade-columns row the AddResultGradeColumns backfill missed).
             let result = APIResult(
-                id: "res_gs2", submissionID: "sub_gs2",
-                collectionJSON: collectionJSON(pass: 1, total: 2), source: "worker")
-            // Simulate the legacy shape: columns never populated.
-            result.earnedPoints = nil
-            result.totalPoints = nil
-            result.passCount = nil
-            result.totalTests = nil
+                id: "res_gs2", submissionID: "sub_gs2", source: "worker")
             try await result.save(on: app.db)
+            try await APIResultCollection(
+                resultID: "res_gs2", collectionJSON: collectionJSON(pass: 1, total: 2)
+            ).save(on: app.db)
 
             let viaSummaries = try await bestGradePercentBySubmissionID(
                 for: ["sub_gs2"], on: app.db)
@@ -108,9 +106,8 @@ import VaporTesting
                 "runnerVersion":"shell-runner/1.0","timestamp":"2026-01-01T00:00:00Z"}
                 """
             try await APIResult(
-                id: "res_gs3", submissionID: "sub_gs3",
-                collectionJSON: json, source: "worker"
-            ).save(on: app.db)
+                id: "res_gs3", submissionID: "sub_gs3", source: "worker"
+            ).saveWithCollection(json: json, on: app.db)
 
             let summaries = try await gradeSummariesBySubmissionID(for: ["sub_gs3"], on: app.db)
             let best = try #require(bestGradeResult(of: Array(summaries.values.joined())))

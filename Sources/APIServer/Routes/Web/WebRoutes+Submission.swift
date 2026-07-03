@@ -298,6 +298,15 @@ extension WebRoutes {
         decoder.dateDecodingStrategy = .iso8601
 
         let displayResult = try await loadPreferredDisplayResult(subID: subID, on: req.db)
+        // Fetch + decode the display result's blob ONCE (side table, #1173);
+        // the presenter and the individual-badge evaluation below share it.
+        var displayCollection: TestOutcomeCollection?
+        if let result = displayResult,
+            let json = try await result.loadCollectionJSON(on: req.db)
+        {
+            displayCollection = try? decoder.decode(
+                TestOutcomeCollection.self, from: Data(json.utf8))
+        }
         let priorAttempt = try await loadPriorAttemptDelta(
             submission: submission, decoder: decoder, on: req.db)
         let manifestDisplay = manifestDisplayData(from: setupProps)
@@ -306,13 +315,13 @@ extension WebRoutes {
         if let result = displayResult {
             processed = processDisplayResult(
                 result: result,
+                collection: displayCollection,
                 viewer: SubmissionViewer(
                     user: user, isStaff: isStaff, itemizedTiers: itemized,
                     releaseOutputVisible: releaseOutput),
                 submission: submission,
                 priorAttempt: priorAttempt,
-                manifestDisplay: manifestDisplay,
-                decoder: decoder
+                manifestDisplay: manifestDisplay
             )
         }
 
@@ -340,8 +349,8 @@ extension WebRoutes {
         // from this submission's result (evaluated over all tiers so a
         // secret-test badge works without revealing the test).
         let individualBadges = earnedIndividualBadgesForDisplay(
-            displayResult: displayResult, props: setupProps,
-            gradePercent: processed.gradePercent, decoder: decoder)
+            collection: displayCollection, props: setupProps,
+            gradePercent: processed.gradePercent)
         let badges =
             builtInBadgesForSubmission(
                 badgeContext: processed.badgeContext,
@@ -435,8 +444,9 @@ extension WebRoutes {
             .all()
         let priorResult = priorResults.first { ($0.source ?? "worker") == "worker" } ?? priorResults.first
         guard let priorResult,
-            let data = priorResult.collectionJSON.data(using: .utf8),
-            let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            let priorJSON = try await priorResult.loadCollectionJSON(on: db),
+            let priorCollection = try? decoder.decode(
+                TestOutcomeCollection.self, from: Data(priorJSON.utf8))
         else {
             return .empty
         }

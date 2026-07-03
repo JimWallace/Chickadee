@@ -165,6 +165,10 @@ struct CourseBundleRoutes: RouteCollection {
                 .filter(\.$submissionID ~~ subIDs)
                 .all()
         }
+        // The bundle carries the full collection blob per result (#1173:
+        // it lives in the result_collections side table, not on the row).
+        let resultCollectionJSONByID = try await collectionJSONByResultID(
+            for: results.compactMap(\.id), on: db)
 
         return ExportData(
             testSetups: testSetups,
@@ -173,7 +177,8 @@ struct CourseBundleRoutes: RouteCollection {
             enrolledUserIDs: enrolledUserIDs,
             allUsers: Array(allUsers),
             submissions: submissions,
-            results: results
+            results: results,
+            resultCollectionJSONByID: resultCollectionJSONByID
         )
     }
 
@@ -291,10 +296,13 @@ struct CourseBundleRoutes: RouteCollection {
         }
 
         let bundledResults = data.results.compactMap { r -> BundledResult? in
-            guard let subBid = bundleIDs.subBundleIDByID[r.submissionID] else { return nil }
+            guard let subBid = bundleIDs.subBundleIDByID[r.submissionID],
+                let rid = r.id,
+                let collectionJSON = data.resultCollectionJSONByID[rid]
+            else { return nil }
             return BundledResult(
                 submissionBundleID: subBid,
-                collectionJSON: r.collectionJSON,
+                collectionJSON: collectionJSON,
                 source: r.source ?? "worker",
                 receivedAt: r.receivedAt
             )
@@ -393,6 +401,8 @@ private struct ExportData {
     let allUsers: [APIUser]
     let submissions: [APISubmission]
     let results: [APIResult]
+    /// Collection blob per result id, batch-fetched from the side table.
+    let resultCollectionJSONByID: [String: String]
 }
 
 /// Maps from live DB ids to in-bundle synthetic identifiers used for cross-references.

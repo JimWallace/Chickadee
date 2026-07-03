@@ -20,10 +20,9 @@ import VaporTesting
     private func result(
         id: String, submissionID: String = "sub", source: String, pass: Int, total: Int
     ) -> APIResult {
-        APIResult(
-            id: id, submissionID: submissionID,
-            collectionJSON: #"{"passCount": \#(pass), "totalTests": \#(total)}"#,
-            source: source)
+        let result = APIResult(id: id, submissionID: submissionID, source: source)
+        result.stampGradeFields(from: #"{"passCount": \#(pass), "totalTests": \#(total)}"#)
+        return result
     }
 
     @Test func bestGradePercentTakesMaxAcrossSources() {
@@ -36,7 +35,7 @@ import VaporTesting
     }
 
     @Test func bestGradePercentNilWhenNoParseableGrade() {
-        let noGrade = APIResult(id: "r0", submissionID: "sub", collectionJSON: "{}", source: "worker")
+        let noGrade = APIResult(id: "r0", submissionID: "sub", source: "worker")
         #expect(bestGradePercent(of: [noGrade]) == nil)
         #expect(bestGradePercent(of: [APIResult]()) == nil)
     }
@@ -48,7 +47,7 @@ import VaporTesting
             result(id: "r3", source: "worker", pass: 4, total: 5),
         ]
         #expect(bestGradeResult(of: rows)?.id == "r2")
-        let noGrade = APIResult(id: "r0", submissionID: "sub", collectionJSON: "{}", source: "worker")
+        let noGrade = APIResult(id: "r0", submissionID: "sub", source: "worker")
         #expect(bestGradeResult(of: [noGrade]) == nil)
     }
 }
@@ -80,14 +79,12 @@ import VaporTesting
 
             try await APIResult(
                 id: "res_ddg_browser", submissionID: "sub_ddg",
-                collectionJSON: #"{"passCount": 5, "totalTests": 5}"#,
                 source: "browser"
-            ).save(on: app.db)
+            ).saveWithCollection(json: #"{"passCount": 5, "totalTests": 5}"#, on: app.db)
             try await APIResult(
                 id: "res_ddg_worker", submissionID: "sub_ddg",
-                collectionJSON: #"{"passCount": 4, "totalTests": 5}"#,
                 source: "worker"
-            ).save(on: app.db)
+            ).saveWithCollection(json: #"{"passCount": 4, "totalTests": 5}"#, on: app.db)
 
             try await app.asyncTest(
                 .GET, "/instructor/\(assignment.publicID)/students/\(studentID.uuidString)/history",

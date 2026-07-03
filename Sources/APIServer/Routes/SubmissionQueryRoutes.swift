@@ -142,11 +142,14 @@ struct SubmissionQueryRoutes: RouteCollection {
             return Response(status: .notModified, headers: ["ETag": etag])
         }
 
+        // The blob lives in the result_collections side table (#1173) and is
+        // fetched only past the ETag short-circuit — a 304 never touches it.
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard
-            let data = result.collectionJSON.data(using: .utf8),
-            let fullCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            let collectionJSON = try await result.loadCollectionJSON(on: req.db),
+            let fullCollection = try? decoder.decode(
+                TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
         else {
             throw AppError.internalFailure(reason: "Stored result is corrupt")
         }

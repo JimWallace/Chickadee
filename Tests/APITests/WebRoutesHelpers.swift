@@ -186,10 +186,9 @@ func wrInsertResult(
     let result = APIResult(
         id: "res_\(UUID().uuidString.lowercased().prefix(8))",
         submissionID: submissionID,
-        collectionJSON: json,
         source: source
     )
-    try await result.save(on: app.db)
+    try await result.saveWithCollection(json: json, on: app.db)
     return result
 }
 

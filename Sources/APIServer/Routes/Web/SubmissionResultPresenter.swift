@@ -102,25 +102,25 @@ extension WebRoutes {
     // MARK: - Result presentation
 
     // Internal (was private): called from `submissionPage` in WebRoutes+Submission.swift.
-    /// Decodes the chosen result's `TestOutcomeCollection`, computes the
-    /// all-tier grade (so the number matches the dashboard and is stable across
-    /// the deadline), and renders each *itemized* outcome into an `OutcomeRow`.
-    /// Students see public + release rows; release output is redacted until the
-    /// deadline.  Secret never appears as a row — for non-instructors it is
-    /// surfaced as an aggregate pass/fail `TierSummary` instead.
+    /// Renders the chosen result's already-decoded `TestOutcomeCollection`
+    /// (the caller fetches the blob from the result_collections side table,
+    /// #1173): computes the all-tier grade (so the number matches the
+    /// dashboard and is stable across the deadline), and renders each
+    /// *itemized* outcome into an `OutcomeRow`. Students see public + release
+    /// rows; release output is redacted until the deadline. Secret never
+    /// appears as a row — for non-instructors it is surfaced as an aggregate
+    /// pass/fail `TierSummary` instead.
     func processDisplayResult(
         result: APIResult,
+        collection maybeCollection: TestOutcomeCollection?,
         viewer: SubmissionViewer,
         submission: APISubmission,
         priorAttempt: PriorAttemptDelta,
-        manifestDisplay: ManifestDisplayData,
-        decoder: JSONDecoder
+        manifestDisplay: ManifestDisplayData
     ) -> ProcessedCollection {
         var processed = ProcessedCollection.empty
         processed.resultSource = result.source ?? "worker"
-        guard let data = result.collectionJSON.data(using: .utf8),
-            let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
-        else {
+        guard let collection = maybeCollection else {
             return processed
         }
 

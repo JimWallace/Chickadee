@@ -177,11 +177,12 @@ import VaporTesting
             )
             let result = APIResult(
                 id: "res_ovr_sync",
-                submissionID: "sub_ovr_sync",
-                collectionJSON: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#
+                submissionID: "sub_ovr_sync"
             )
             result.brightspaceSyncPending = false
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(
+                json: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#,
+                on: app.db)
 
             try await app.asyncTest(
                 .POST,
@@ -256,10 +257,11 @@ import VaporTesting
             // Runner grade 25% (1/4) — should be replaced by the 90% override.
             let result = APIResult(
                 id: "res_ovr_roster",
-                submissionID: "sub_ovr_roster",
-                collectionJSON: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#
+                submissionID: "sub_ovr_roster"
             )
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(
+                json: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#,
+                on: app.db)
             try await APIGradeOverride(
                 testSetupID: "ovr_roster_setup",
                 userID: try student.requireID(),
@@ -318,16 +320,16 @@ import VaporTesting
             try await APIResult(
                 id: "res_multi_src_browser",
                 submissionID: "sub_multi_src",
-                collectionJSON: #"{"earnedPoints":10,"totalPoints":10,"passCount":10,"totalTests":10}"#,
                 source: "browser"
-            ).save(on: app.db)
+            ).saveWithCollection(
+                json: #"{"earnedPoints":10,"totalPoints":10,"passCount":10,"totalTests":10}"#, on: app.db)
             // Worker result: 9/10 (one secret test fails) → 90 %.
             try await APIResult(
                 id: "res_multi_src_worker",
                 submissionID: "sub_multi_src",
-                collectionJSON: #"{"earnedPoints":9,"totalPoints":10,"passCount":9,"totalTests":10}"#,
                 source: "worker"
-            ).save(on: app.db)
+            ).saveWithCollection(
+                json: #"{"earnedPoints":9,"totalPoints":10,"passCount":9,"totalTests":10}"#, on: app.db)
 
             try await app.asyncTest(
                 .GET, "/instructor/grades.csv",
@@ -419,10 +421,11 @@ import VaporTesting
             )
             let result = APIResult(
                 id: "res_ovr_csv",
-                submissionID: "sub_ovr_csv",
-                collectionJSON: #"{"earnedPoints":4,"totalPoints":4,"passCount":4,"totalTests":4}"#
+                submissionID: "sub_ovr_csv"
             )
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(
+                json: #"{"earnedPoints":4,"totalPoints":4,"passCount":4,"totalTests":4}"#,
+                on: app.db)
             try await APIGradeOverride(
                 testSetupID: "ovr_csv_setup",
                 userID: try student.requireID(),

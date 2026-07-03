@@ -97,6 +97,14 @@ extension StudentCourseRoutes {
             for: submissions.compactMap(\.id),
             on: req.db
         )
+        // Badges need the collection (executionTimeMs) for each assignment's
+        // LATEST submission only — batch-fetch just those blobs from the
+        // result_collections side table (#1173).
+        let latestResultIDs = submissionsBySetupID.values.compactMap { history in
+            history.first?.id.flatMap { preferredResultBySubmissionID[$0]?.id }
+        }
+        let latestBlobs = try await collectionJSONByResultID(for: latestResultIDs, on: req.db)
+        let collectionByResultID = latestBlobs.compactMapValues(decodedCollection(from:))
 
         let fmt = waterlooDateTimeFormatter()
         let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupsByID)
@@ -105,6 +113,7 @@ extension StudentCourseRoutes {
             courseCode: course.code,
             urlToken: try student.requireURLToken(),
             preferredResultBySubmissionID: preferredResultBySubmissionID,
+            collectionByResultID: collectionByResultID,
             bestPercentBySubmissionID: bestPercentBySubmissionID,
             student: student,
             fmt: fmt,
@@ -698,6 +707,10 @@ extension StudentCourseRoutes {
         let courseCode: String
         let urlToken: String
         let preferredResultBySubmissionID: [String: APIResult]
+        /// Decoded collection per latest-submission preferred result id —
+        /// pre-fetched from the result_collections side table (#1173) for
+        /// the badge path.
+        let collectionByResultID: [String: TestOutcomeCollection]
         /// "Highest grade wins" percent per submission (#1111) — feeds the
         /// grade cells; `preferredResultBySubmissionID` feeds the badges.
         let bestPercentBySubmissionID: [String: Int]
@@ -736,6 +749,7 @@ extension StudentCourseRoutes {
         var badges = submissionBadges(
             history: history,
             preferredResultBySubmissionID: preferredResultBySubmissionID,
+            collectionByResultID: context.collectionByResultID,
             achievements: context.perSubBySetup[assignment.testSetupID]
         ).filter { !disabledHere.contains($0.id) }
         badges.append(contentsOf: classBadges)
@@ -811,12 +825,14 @@ extension StudentCourseRoutes {
     fileprivate func submissionBadges(
         history: [APISubmission],
         preferredResultBySubmissionID: [String: APIResult],
+        collectionByResultID: [String: TestOutcomeCollection],
         achievements: [Achievement]?
     ) -> [AchievementBadge] {
         guard let latestSubmission = history.first,
             let latestSubID = latestSubmission.id,
             let result = preferredResultBySubmissionID[latestSubID],
-            let collection = decodedCollection(from: result.collectionJSON),
+            let resultID = result.id,
+            let collection = collectionByResultID[resultID],
             let gradePct = gradePercent(from: collection)
         else {
             return []

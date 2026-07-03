@@ -14,8 +14,10 @@ final class APIResult: Model, Content, @unchecked Sendable {
     @Field(key: "submission_id")
     var submissionID: String
 
-    @Field(key: "collection_json")
-    var collectionJSON: String  // serialised TestOutcomeCollection
+    // The serialised TestOutcomeCollection blob lives in the
+    // `result_collections` side table (#1173) — see APIResultCollection.
+    // Create result rows via `saveWithCollection(json:on:)` so the two rows
+    // persist together; read the blob via `loadCollectionJSON(on:)`.
 
     /// "worker" (official, authoritative) or "browser" (student preview).
     /// Nil on rows created before this migration — treated as "worker".
@@ -65,18 +67,17 @@ final class APIResult: Model, Content, @unchecked Sendable {
 
     init() {}
 
-    init(id: String, submissionID: String, collectionJSON: String, source: String = "worker") {
+    init(id: String, submissionID: String, source: String = "worker") {
         self.id = id
         self.submissionID = submissionID
-        self.collectionJSON = collectionJSON
         self.source = source
-        populateGradeFields()
     }
 
-    /// Stamps the denormalized grade columns from `collectionJSON`. Called by
-    /// the designated initializer so every creation path (worker report,
-    /// browser report, bundle import) gets the columns without remembering to.
-    func populateGradeFields() {
+    /// Stamps the denormalized grade columns from a serialized collection.
+    /// Called by `saveWithCollection(json:on:)` so every creation path
+    /// (worker report, browser report, bundle import) gets the columns
+    /// without remembering to.
+    func stampGradeFields(from collectionJSON: String) {
         guard let data = collectionJSON.data(using: .utf8),
             let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return }
@@ -91,18 +92,17 @@ final class APIResult: Model, Content, @unchecked Sendable {
 //
 // Same semantics as gradePercentFromCollectionJSON / gradePointsFromCollectionJSON
 // / gradeTotalPointsFromCollectionJSON in AssignmentHelpers.swift, but reading
-// the denormalized columns. Rows that predate the columns (all four nil — e.g.
-// written mid-deploy before AddResultGradeColumns ran) fall back to parsing the
-// blob, so the two paths can never disagree.
+// the denormalized columns. Since #1173 the blob is not on this row, so there
+// is no synchronous fallback: rows whose four columns are all nil report no
+// grade — which matches the old fallback in every reachable state, because
+// `AddResultGradeColumns` backfilled every parseable blob and a blob the
+// backfill couldn't parse yielded nil from the fallback too. Loaders that
+// must hydrate such rows anyway (gradeSummariesBySubmissionID's legacy path)
+// fetch the blob from the side table explicitly.
 extension APIResult {
-    private var hasGradeColumns: Bool {
-        earnedPoints != nil || totalPoints != nil || passCount != nil || totalTests != nil
-    }
-
     /// Whole-result grade percent: weighted (earned/total) when totalPoints > 0,
     /// else unweighted pass/total test counts. Nil when neither is available.
     var gradePercentValue: Int? {
-        guard hasGradeColumns else { return gradePercentFromCollectionJSON(collectionJSON) }
         if let earned = earnedPoints, let total = totalPoints, total > 0 {
             return Int((earned / total * 100).rounded())
         }
@@ -112,14 +112,12 @@ extension APIResult {
 
     /// Earned points (weighted when available, else pass count) for CSV/LEARN export.
     var gradePointsValue: Double? {
-        guard hasGradeColumns else { return gradePointsFromCollectionJSON(collectionJSON) }
         if let total = totalPoints, total > 0, let earned = earnedPoints { return earned }
         return passCount.map(Double.init)
     }
 
     /// Total possible weighted points; nil when the result predates weighted grading.
     var gradeTotalPointsValue: Double? {
-        guard hasGradeColumns else { return gradeTotalPointsFromCollectionJSON(collectionJSON) }
         if let total = totalPoints, total > 0 { return total }
         return nil
     }
