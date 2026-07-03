@@ -36,7 +36,10 @@ import Vapor
 struct TestSetupRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let api = routes.grouped("api", "v1", "testsetups")
-        api.post(use: uploadTestSetup)
+        // Explicit cap sized to the zip-bomb guard (256 MB uncompressed,
+        // TestSetupZipHelpers): the 10 MB global default rejected legitimate
+        // dataset-heavy setups before validation ever ran (#1158).
+        api.on(.POST, body: .collect(maxSize: "300mb"), use: uploadTestSetup)
         api.group(":testSetupID") { group in
             group.get("download", use: downloadTestSetup)
             group.get("assignment", use: getAssignment)
@@ -94,14 +97,14 @@ struct TestSetupRoutes: RouteCollection {
         let zipPath = setupsDir + "\(setupID).zip"
 
         let zipBytes = upload.files
-        try zipBytes.write(to: URL(fileURLWithPath: zipPath))
+        try await req.fileio.writeFile(.init(data: zipBytes), at: zipPath)
 
         // Reject zip bombs before any DB row references this file.  The
         // upload sits in setupsDir until validation passes; on failure we
         // delete it so a malicious upload doesn't leave stale bytes on
-        // disk indefinitely.
+        // disk indefinitely.  (Subprocess — thread pool, #1158.)
         do {
-            try validateZipUploadSize(zipPath: zipPath)
+            try await runBlocking(on: req) { try validateZipUploadSize(zipPath: zipPath) }
         } catch let error as ZipUploadValidationError {
             try? FileManager.default.removeItem(atPath: zipPath)
             throw AppError.unprocessable(reason: String(describing: error))
@@ -123,7 +126,7 @@ struct TestSetupRoutes: RouteCollection {
         // instructor can edit it later without re-uploading the zip.
         if manifest.gradingMode == .browser {
             let notebookPath = setupsDir + "\(setupID).ipynb"
-            if let data = extractNotebookFromZip(zipPath: zipPath) {
+            if let data = try await runBlocking(on: req, { extractNotebookFromZip(zipPath: zipPath) }) {
                 let normalized = normalizeNotebookForJupyterLite(data)
                 try normalized.write(to: URL(fileURLWithPath: notebookPath))
                 setup.notebookPath = notebookPath

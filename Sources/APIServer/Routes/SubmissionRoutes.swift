@@ -155,8 +155,14 @@ struct SubmissionDownloadRoute: RouteCollection {
         let downloadName =
             submission.filename
             ?? URL(fileURLWithPath: submission.zipPath).lastPathComponent
-        let data = try Data(contentsOf: URL(fileURLWithPath: submission.zipPath))
-        return buildFileResponse(data: data, filename: downloadName)
+        // Stream from disk (#1158): the old Data(contentsOf:) buffered the
+        // whole artifact per request — the sibling test-setup download has
+        // streamed for a long time.
+        let response = try await req.fileio.asyncStreamFile(at: submission.zipPath)
+        response.headers.replaceOrAdd(
+            name: .contentDisposition,
+            value: "attachment; filename=\"\(downloadName)\"")
+        return response
     }
 }
 

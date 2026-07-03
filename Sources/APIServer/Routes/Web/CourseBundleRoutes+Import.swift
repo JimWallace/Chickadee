@@ -26,7 +26,7 @@ extension CourseBundleRoutes {
         let caller = try req.auth.require(APIUser.self)
         guard caller.isAdmin else { throw Abort(.forbidden) }
 
-        let fileBytes = try readUploadedBundleBytes(req: req)
+        let uploadBuffer = try readUploadedBundleBuffer(req: req)
 
         let tmpZipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-import-\(UUID().uuidString).zip").path
@@ -39,7 +39,7 @@ extension CourseBundleRoutes {
         }
 
         try await extractUploadedBundle(
-            fileBytes: fileBytes, tmpZipPath: tmpZipPath, extractDir: extractDir)
+            req: req, buffer: uploadBuffer, tmpZipPath: tmpZipPath, extractDir: extractDir)
 
         let manifest = try parseBundleManifest(extractDir: extractDir)
 
@@ -73,26 +73,26 @@ extension CourseBundleRoutes {
 
     // ── 1. Receive the uploaded bundle ────────────────────────────────
 
-    private func readUploadedBundleBytes(req: Request) throws -> [UInt8] {
+    private func readUploadedBundleBuffer(req: Request) throws -> ByteBuffer {
         struct BundleUpload: Content {
             let file: File
         }
         let upload = try req.content.decode(BundleUpload.self)
-        var buffer = upload.file.data
-        guard buffer.readableBytes > 0,
-            let fileBytes = buffer.readBytes(length: buffer.readableBytes)
-        else {
+        guard upload.file.data.readableBytes > 0 else {
             throw AppError.badRequest(reason: "Empty bundle upload")
         }
-        return fileBytes
+        // The ByteBuffer goes straight to fileio — the old
+        // ByteBuffer → [UInt8] → Data chain held three full copies of a
+        // potentially multi-hundred-MB bundle in heap at once (#1158).
+        return upload.file.data
     }
 
     // ── 2. Save to temp file and extract ─────────────────────────────
 
     private func extractUploadedBundle(
-        fileBytes: [UInt8], tmpZipPath: String, extractDir: URL
+        req: Request, buffer: ByteBuffer, tmpZipPath: String, extractDir: URL
     ) async throws {
-        try Data(fileBytes).write(to: URL(fileURLWithPath: tmpZipPath))
+        try await req.fileio.writeFile(buffer, at: tmpZipPath)
         try await extractZipArchive(zipPath: tmpZipPath, into: extractDir)
     }
 
