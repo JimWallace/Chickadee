@@ -73,24 +73,11 @@ extension StudentCourseRoutes {
         let overrideBySetupID = try await overrideBySetupIDFuture
 
         // Honor per-assignment disabled built-in awards across the page (reuses
-        // the setups already loaded above, so no extra query).  Badge mapping
-        // happens here — after the setups resolve — so manifest-authored class
-        // records (custom IDs / renamed built-ins) display instead of being
-        // dropped by the registry-only lookup (audit A6).
+        // the setups already loaded above, so no extra query).
         let disabledBySetup = setupsByID.mapValues { BuiltInAchievements.disabled(in: $0) }
         let perSubBySetup = setupsByID.compactMapValues { BuiltInAchievements.manifestPerSubmission(in: $0) }
-        let achievementsBySetup = setupsByID.mapValues { $0.decodedManifest()?.achievements ?? [] }
-        var classBadgesBySetupID: [String: [AchievementBadge]] = [:]
-        for achievement in classAchievementRows {
-            let setupID = achievement.testSetupID
-            if let badge = AchievementBadge.forClassAchievement(
-                achievement.achievementID,
-                manifestAchievements: achievementsBySetup[setupID] ?? [],
-                disabled: disabledBySetup[setupID] ?? [])
-            {
-                classBadgesBySetupID[setupID, default: []].append(badge)
-            }
-        }
+        let classBadgesBySetupID = classBadgesBySetup(
+            rows: classAchievementRows, setupsByID: setupsByID, disabledBySetup: disabledBySetup)
 
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
         // preferredResults must wait until submissions resolves (it needs
@@ -213,6 +200,30 @@ extension StudentCourseRoutes {
             extensionByAssignmentID[row.assignmentID] = row
         }
         return extensionByAssignmentID
+    }
+
+    /// Maps the student's class-achievement rows to display badges once the
+    /// setups (and their manifests) are loaded — after phase 2, so
+    /// manifest-authored records (custom IDs / renamed built-ins) resolve
+    /// instead of being dropped by the registry-only lookup (audit A6).
+    fileprivate func classBadgesBySetup(
+        rows: [APIClassAchievement],
+        setupsByID: [String: APITestSetup],
+        disabledBySetup: [String: Set<String>]
+    ) -> [String: [AchievementBadge]] {
+        let achievementsBySetup = setupsByID.mapValues { $0.decodedManifest()?.achievements ?? [] }
+        var badges: [String: [AchievementBadge]] = [:]
+        for achievement in rows {
+            let setupID = achievement.testSetupID
+            if let badge = AchievementBadge.forClassAchievement(
+                achievement.achievementID,
+                manifestAchievements: achievementsBySetup[setupID] ?? [],
+                disabled: disabledBySetup[setupID] ?? [])
+            {
+                badges[setupID, default: []].append(badge)
+            }
+        }
+        return badges
     }
 
     /// The raw class-achievement rows this student holds; badge mapping happens

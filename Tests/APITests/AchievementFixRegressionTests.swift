@@ -76,7 +76,9 @@ import Testing
 
     @Test func curatedEmptyManifestAwardsNoBuiltIns() throws {
         let curated = TestProperties(achievements: [], builtInAchievementsSeeded: true)
-        #expect(BuiltInAchievements.manifestPerSubmission(props: curated) == [])
+        // Must be a non-nil empty list — nil would mean "fall back to the registry".
+        let perSubmission = BuiltInAchievements.manifestPerSubmission(props: curated)
+        #expect(perSubmission?.isEmpty == true)
         let curatedSetup = try setup(withProps: curated)
         #expect(BuiltInAchievements.classRecordsForAward(in: curatedSetup, disabled: []).isEmpty)
     }
