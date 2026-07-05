@@ -131,4 +131,78 @@ import VaporTesting
             #expect(after.studentsMeeting == 1, "A locked snapshot must not be recomputed")
         }
     }
+
+    /// Audit A7 regression: the numerator must count only currently-enrolled
+    /// per-course students — a 100% submission from a user with no enrollment
+    /// (staff testing the assignment, or a student who dropped) used to
+    /// inflate `studentsMeeting` while the denominator excluded them.
+    @Test func sweepNumeratorExcludesUnenrolledSubmitters() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let setup = APITestSetup(
+                id: "enr_setup",
+                manifest: try makeClassGoalManifest(id: "goalE", threshold: 0.8, classFraction: 1.0),
+                zipPath: app.testSetupsDirectory + "enr_setup.zip",
+                courseID: courseID)
+            try await setup.save(on: app.db)
+            _ = try await arInsertAssignment(
+                testSetupID: "enr_setup", title: "Enrollment Lab", isOpen: true, on: app)
+
+            // Enrolled student at 100%.
+            let enrolled = try await arInsertStudent(username: "enr_a", on: app)
+            try await arEnrollStudentInTestCourse(enrolled, on: app)
+            _ = try await arInsertSubmission(
+                id: "enr_sub_a", testSetupID: "enr_setup", userID: try enrolled.requireID(), on: app)
+            try await APIResult(
+                id: "enr_res_a", submissionID: "enr_sub_a"
+            ).saveWithCollection(json: #"{"earnedPoints":4,"totalPoints":4}"#, on: app.db)
+
+            // Un-enrolled user, also at 100% — must NOT count.
+            let outsider = try await arInsertStudent(username: "enr_x", on: app)
+            _ = try await arInsertSubmission(
+                id: "enr_sub_x", testSetupID: "enr_setup", userID: try outsider.requireID(), on: app)
+            try await APIResult(
+                id: "enr_res_x", submissionID: "enr_sub_x"
+            ).saveWithCollection(json: #"{"earnedPoints":4,"totalPoints":4}"#, on: app.db)
+
+            _ = try await evaluateClassGoalAchievements(on: app.db, logger: app.logger)
+            let snapshot = try #require(
+                try await APIAchievementResult.query(on: app.db)
+                    .filter(\.$testSetupID == "enr_setup").first())
+            #expect(snapshot.studentsMeeting == 1, "un-enrolled submitters must not count")
+        }
+    }
+
+    /// Audit A4 regression: a hand-authored class goal whose conditions the
+    /// sweep cannot evaluate is skipped (no snapshot), not silently reduced to
+    /// a grade-only goal.
+    @Test func sweepSkipsUnsupportedGoalShapes() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let props = TestProperties(
+                achievements: [
+                    Achievement(
+                        id: "goalU", name: "Unsupported", scope: .classWide,
+                        conditions: [
+                            AchievementCondition(signal: .attempts, comparator: .atMost, value: 3)
+                        ],
+                        reward: AchievementReward(type: .points, label: "Unsupported", points: 1),
+                        classFraction: 0.5)
+                ])
+            let manifest = try #require(
+                String(bytes: try JSONEncoder().encode(props), encoding: .utf8))
+            let setup = APITestSetup(
+                id: "uns_setup", manifest: manifest,
+                zipPath: app.testSetupsDirectory + "uns_setup.zip",
+                courseID: courseID)
+            try await setup.save(on: app.db)
+            _ = try await arInsertAssignment(
+                testSetupID: "uns_setup", title: "Unsupported Lab", isOpen: true, on: app)
+
+            _ = try await evaluateClassGoalAchievements(on: app.db, logger: app.logger)
+            let rows = try await APIAchievementResult.query(on: app.db)
+                .filter(\.$testSetupID == "uns_setup").all()
+            #expect(rows.isEmpty, "an unevaluable goal must be skipped, not mis-graded")
+        }
+    }
 }

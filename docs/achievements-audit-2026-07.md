@@ -27,9 +27,17 @@ had to be *designed around* four known bugs. Fix priorities are at the end.
 Three parallel audits (evaluation path, authoring surfaces, student-facing
 display), cross-verified. Ranked; file:line references are v0.4.609.
 
+> **Status update (same PR):** the P0s and P1s below are now **fixed** in this
+> branch — A1 (+A14 mixed-signal badges, + save-time ref/id validation), A2,
+> A3, A4 (save-time restriction + sweep skip-and-log), A5, A6, A7, A9 (docs),
+> A10, and A19. Still open, deliberately: A8 (rounded-percent 100), A11–A13
+> and A15–A18 (lifecycle/robustness items — revocation on retest, deadline
+> unfreeze, manifest version check, dashboard display of authored badges,
+> orphan-row FKs, sweep perf). Each fixed finding below is tagged FIXED.
+
 ### P0 — fix before the labs open
 
-**A1. `testPass` conditions never match real runner outcomes as documented.**
+**A1 (FIXED). `testPass` conditions never match real runner outcomes as documented.**
 `AchievementCondition.isSatisfied` compares `outcome.testName == target.ref`
 (`Sources/Core/AchievementEvaluation.swift:50-53`), and both authoring
 surfaces document `testRef` as the *script filename* (editor placeholder
@@ -49,7 +57,7 @@ display name (`PatternFamilyRenderer.swift:216`), and case labels can
 collide across families (Lab 8 has "single reading" in three families) —
 ref resolution should prefer the filename.
 
-**A2. Browser-graded assignments never award records or Pathfinder.**
+**A2 (FIXED). Browser-graded assignments never award records or Pathfinder.**
 Class records (`firstToSolve`/`fastest`/`shortest`) are awarded only in the
 worker report handler (`ResultRoutes.swift:106-127`);
 `BrowserResultRoutes.submitBrowserResult` never calls
@@ -59,7 +67,7 @@ only in the zip-upload form handler (`WebRoutes+Submission.swift:155-175`)
 all record-scope achievements are silently dead there (except when the
 v0.4.56 worker backstop happens to regrade one — arbitrary and unfair).
 
-**A3. Web suite editor script add/delete wipes authored achievements.**
+**A3 (FIXED). Web suite editor script add/delete wipes authored achievements.**
 `updateManifestAddingScript` / `updateManifestRemovingScript`
 (`ManifestFileHelpers.swift:93-105, 139-151`) rebuild the manifest via
 `makeWorkerManifestJSON` without forwarding `achievements`,
@@ -73,7 +81,7 @@ to built-in defaults**.
 
 ### P1 — correctness, fix soon
 
-**A4. The class-goal sweep evaluates only "first grade condition, atLeast".**
+**A4 (FIXED). The class-goal sweep evaluates only "first grade condition, atLeast".**
 `evaluateClassGoalAchievements` reduces every goal to `best grade >= first
 .grade condition` (`AchievementEvaluationService.swift:98-99` via
 `gradeThresholdFraction`, `Core/AchievementEvaluation.swift:116-118`).
@@ -86,7 +94,7 @@ likewise never consulted at award time (`ClassAchievements.swift:36-55`).
 *Fix:* either evaluate the full condition list in the sweep or reject
 unsupported shapes at save time.
 
-**A5. Clearing built-ins doesn't stop them being awarded.** Removing *all*
+**A5 (FIXED). Clearing built-ins doesn't stop them being awarded.** Removing *all*
 per-submission badges (or all records) — including `update_achievements`
 with `[]`, advertised as "clear every achievement" — falls back to the
 registry at evaluation: `manifestPerSubmission` returns nil for an empty
@@ -96,7 +104,7 @@ filtered list and `classRecordsForAward` does the same
 true in the editor's GET view. (A curated list that keeps ≥1 badge and ≥1
 record behaves correctly — the case-study sets do.)
 
-**A6. Custom-ID class records award invisibly; rethemes don't display.**
+**A6 (FIXED). Custom-ID class records award invisibly; rethemes don't display.**
 The award path writes manifest-authored record IDs
 (`BuiltInAchievements.classRecordsForAward`), but all three display sites
 resolve via the **registry only** (`AchievementBadge.forClassAchievement`,
@@ -104,7 +112,7 @@ resolve via the **registry only** (`AchievementBadge.forClassAchievement`,
 kept built-in ID renders the registry's name/detail, not the instructor's
 rename. A custom record is a permanently invisible DB row.
 
-**A7. Class-goal numerator counts staff and unenrolled users.**
+**A7 (FIXED). Class-goal numerator counts staff and unenrolled users.**
 `bestAssignmentGradeByStudent` filters only `kind == .student`
 (`AchievementEvaluationService.swift:139-147`) — staff test submissions and
 dropped students inflate `studentsMeeting`, while the denominator counts
@@ -118,7 +126,7 @@ sweep numerator (`APIResult.swift:105-111` rounds before the `/100` at
 `AchievementEvaluationService.swift:156`). Low impact on 4–8-point labs;
 real on large suites.
 
-**A9. `shortest` record dimension is mislabeled.** Evaluated as **fewest
+**A9 (FIXED). `shortest` record dimension is mislabeled.** Evaluated as **fewest
 attempts** (`ClassAchievements.swift:47-51`), matching the built-in
 Minimalist's student-facing copy — but documented as "shortest solution" in
 Core (`Achievement.swift:326-335`) and implied by the MCP schema. Rename the
@@ -126,7 +134,7 @@ case (or fix the docs) before an agent authors against the contract.
 
 ### P2 — robustness / lifecycle
 
-- **A10. Achievements editor destructive empty-state:** a failed initial
+- **A10 (FIXED). Achievements editor destructive empty-state:** a failed initial
   GET renders an empty table (`achievements-editor.js:305-308`), and the
   next save PUTs that emptiness wholesale. No error banner, no write guard.
 - **A11. Manifest last-writer-wins race** between `PUT /achievements` and
@@ -173,7 +181,7 @@ case (or fix the docs) before an agent authors against the contract.
   `isSatisfied` (`Core/AchievementEvaluation.swift:39-40`); dead
   scope/reward combos (classWide+badge, individual+points) decode but never
   evaluate. `equals` on `executionTimeMs` is a Double-equality footgun.
-- **A19. "+1 pts" pluralization** (`SubmissionResultPresenter.swift:404`).
+- **A19 (FIXED). "+1 pts" pluralization** (`SubmissionResultPresenter.swift:404`).
 
 ### Privacy and tier interaction (clean, with one deliberate caveat)
 

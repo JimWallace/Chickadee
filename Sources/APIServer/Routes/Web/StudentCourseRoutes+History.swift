@@ -62,26 +62,34 @@ extension StudentCourseRoutes {
             req: req, student: student, setupIDs: setupIDs)
         async let extensionByAssignmentIDFuture = loadStudentCourseExtensions(
             req: req, student: student, assignments: assignments)
-        async let classBadgesBySetupIDFuture = loadStudentCourseClassBadges(
+        async let classAchievementRowsFuture = loadStudentCourseClassAchievements(
             req: req, student: student, setupIDs: setupIDs)
         async let overrideBySetupIDFuture = loadStudentCourseOverrides(
             req: req, student: student, setupIDs: setupIDs)
         let setupsByID = try await setupsByIDFuture
         let submissions = try await submissionsFuture
         let extensionByAssignmentID = try await extensionByAssignmentIDFuture
-        let classBadgesBySetupIDRaw = try await classBadgesBySetupIDFuture
+        let classAchievementRows = try await classAchievementRowsFuture
         let overrideBySetupID = try await overrideBySetupIDFuture
 
         // Honor per-assignment disabled built-in awards across the page (reuses
-        // the setups already loaded above, so no extra query).
+        // the setups already loaded above, so no extra query).  Badge mapping
+        // happens here — after the setups resolve — so manifest-authored class
+        // records (custom IDs / renamed built-ins) display instead of being
+        // dropped by the registry-only lookup (audit A6).
         let disabledBySetup = setupsByID.mapValues { BuiltInAchievements.disabled(in: $0) }
         let perSubBySetup = setupsByID.compactMapValues { BuiltInAchievements.manifestPerSubmission(in: $0) }
-        let classBadgesBySetupID = classBadgesBySetupIDRaw.reduce(
-            into: [String: [AchievementBadge]]()
-        ) { acc, entry in
-            let disabled = disabledBySetup[entry.key] ?? []
-            let kept = disabled.isEmpty ? entry.value : entry.value.filter { !disabled.contains($0.id) }
-            if !kept.isEmpty { acc[entry.key] = kept }
+        let achievementsBySetup = setupsByID.mapValues { $0.decodedManifest()?.achievements ?? [] }
+        var classBadgesBySetupID: [String: [AchievementBadge]] = [:]
+        for achievement in classAchievementRows {
+            let setupID = achievement.testSetupID
+            if let badge = AchievementBadge.forClassAchievement(
+                achievement.achievementID,
+                manifestAchievements: achievementsBySetup[setupID] ?? [],
+                disabled: disabledBySetup[setupID] ?? [])
+            {
+                classBadgesBySetupID[setupID, default: []].append(badge)
+            }
         }
 
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
@@ -207,21 +215,17 @@ extension StudentCourseRoutes {
         return extensionByAssignmentID
     }
 
-    fileprivate func loadStudentCourseClassBadges(
+    /// The raw class-achievement rows this student holds; badge mapping happens
+    /// at the call site once the setups (and their manifests) are loaded, so
+    /// manifest-authored records resolve (audit A6).
+    fileprivate func loadStudentCourseClassAchievements(
         req: Request, student: APIUser, setupIDs: [String]
-    ) async throws -> [String: [AchievementBadge]] {
-        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [:] }
-        let classAchievements = try await APIClassAchievement.query(on: req.db)
+    ) async throws -> [APIClassAchievement] {
+        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [] }
+        return try await APIClassAchievement.query(on: req.db)
             .filter(\.$userID == studentUUID)
             .filter(\.$testSetupID ~~ Set(setupIDs))
             .all()
-        var classBadgesBySetupID: [String: [AchievementBadge]] = [:]
-        for achievement in classAchievements {
-            if let badge = AchievementBadge.forClassAchievement(achievement.achievementID) {
-                classBadgesBySetupID[achievement.testSetupID, default: []].append(badge)
-            }
-        }
-        return classBadgesBySetupID
     }
 
     fileprivate func loadStudentCourseOverrides(

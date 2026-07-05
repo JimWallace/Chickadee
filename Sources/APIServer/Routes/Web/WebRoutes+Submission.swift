@@ -22,13 +22,17 @@ func builtInBadgesForSubmission(
     classAchievements: [APIClassAchievement],
     setup: APITestSetup?
 ) -> [AchievementBadge] {
-    let disabled = setup.map { BuiltInAchievements.disabled(in: $0) } ?? []
+    let props = setup?.decodedManifest()
+    let disabled = Set(props?.disabledBuiltInAwardIDs ?? [])
     return AchievementBadge.forSubmission(
         badgeContext,
-        achievements: BuiltInAchievements.manifestPerSubmission(in: setup),
+        achievements: BuiltInAchievements.manifestPerSubmission(props: props),
         disabled: disabled)
         + classAchievements.compactMap {
-            AchievementBadge.forClassAchievement($0.achievementID, disabled: disabled)
+            AchievementBadge.forClassAchievement(
+                $0.achievementID,
+                manifestAchievements: props?.achievements ?? [],
+                disabled: disabled)
         }
 }
 
@@ -142,36 +146,12 @@ extension WebRoutes {
         )
 
         // Award Pathfinder to the first STUDENT in the class who submits.
-        // Pre-v0.4.127 this gated on `classCount == 1` over student-kind
-        // submissions, with no role check on the submitter — so an admin
-        // or instructor testing the assignment would lock in this
-        // immutable badge before any real student had a chance.  The fix
-        // checks the submitter's role and uses the existence of a
-        // pathfinder row directly (the unique constraint on
-        // (test_setup_id, achievement_id) makes this the natural query).
-        // Award only to a per-course STUDENT in this setup's course (#417 Slice
-        // G2 — the global student role was retired); an admin/TA/instructor
-        // testing the assignment must not lock in the immutable badge.
-        if let uid = user.id,
-            try await courseRole(of: uid, inCourse: setup.courseID, db: req.db) == .student
-        {
-            // First-to-submit records (Pathfinder) — the manifest's authored
-            // ones, or the registry default, minus any the instructor disabled.
-            let records = BuiltInAchievements.classRecordsForAward(
-                in: setup, disabled: BuiltInAchievements.disabled(in: setup))
-            for record in records where record.recordDimension == .firstToSubmit {
-                let exists =
-                    try await APIClassAchievement.query(on: req.db)
-                    .filter(\.$testSetupID == setupID)
-                    .filter(\.$achievementID == record.id)
-                    .first() != nil
-                if !exists {
-                    try? await APIClassAchievement(
-                        testSetupID: setupID, achievementID: record.id,
-                        userID: uid, submissionID: subID
-                    ).save(on: req.db)
-                }
-            }
+        // The shared helper carries the v0.4.127 role gate (an admin/TA/
+        // instructor testing the assignment must not lock in the immutable
+        // badge) and is the same code path the notebook submission routes use.
+        if let uid = user.id {
+            try await awardFirstToSubmitRecords(
+                setup: setup, userID: uid, submissionID: subID, on: req.db)
         }
 
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
@@ -503,7 +483,8 @@ extension WebRoutes {
         }
         return ManifestDisplayData(
             displayNameMap: displayNameMap, hintByFilename: hintByFilename,
-            sections: sections, entries: entries)
+            sections: sections, entries: entries,
+            testNameAliases: props?.testNameAliases() ?? [:])
     }
 }
 

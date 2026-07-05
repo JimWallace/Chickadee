@@ -113,11 +113,24 @@ enum AchievementsEditing {
                 throw WebAssignmentError.invalidParameter(
                     name: "points", reason: "Bonus points must be ≥ 0.")
             }
-            return Achievement(
+            let goal = Achievement(
                 id: id, name: name, detail: cleanDetail, scope: .classWide,
                 conditions: conditions, match: match,
                 reward: AchievementReward(type: .points, label: name, points: points),
                 classFraction: classPercent / 100)
+            // The class-goal sweep counts students by their best
+            // whole-assignment grade, so only the shapes it can evaluate are
+            // authorable: no conditions (= everyone must reach 100%) or a
+            // single "grade at least X" condition.  Richer goals used to save
+            // fine and then be silently mis-evaluated as grade-only (audit A4).
+            guard goal.isSweepEvaluableClassGoal else {
+                throw WebAssignmentError.invalidParameter(
+                    name: "conditions",
+                    reason: "A class goal currently supports at most one condition, and it must be "
+                        + "'grade at least X%'. Attempts/time/test conditions and atMost/equals "
+                        + "comparators aren't evaluated for class goals yet.")
+            }
+            return goal
         case .record:
             guard let dim = RecordDimension(rawValue: input.recordDimension ?? "firstToSolve") else {
                 throw WebAssignmentError.invalidParameter(
@@ -219,6 +232,7 @@ enum AchievementsEditing {
         rows: [AchievementRow], setup: APITestSetup, on db: Database
     ) async throws -> [AchievementRow] {
         let achievements = try rows.map { try achievement(from: $0) }
+        try validate(achievements, againstManifest: setup.manifest)
         try await mutateManifest(setup: setup, on: db) { dict in
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
@@ -228,5 +242,40 @@ enum AchievementsEditing {
             dict["builtInAchievementsSeeded"] = true
         }
         return Self.rows(fromManifest: setup.manifest)
+    }
+
+    /// Cross-row validation the per-row converter can't do: ids must be unique
+    /// (duplicates collapse into one snapshot in the class-goal sweep), and
+    /// every `testPass` ref must resolve to a test actually in the suite —
+    /// by script filename, filename stem, or display name (audit A1/A17; a
+    /// typo'd or stale ref used to save fine and then silently never fire).
+    static func validate(_ achievements: [Achievement], againstManifest manifest: String) throws {
+        var seen = Set<String>()
+        for achievement in achievements {
+            guard seen.insert(achievement.id).inserted else {
+                throw WebAssignmentError.invalidParameter(
+                    name: "id", reason: "Duplicate achievement id '\(achievement.id)'.")
+            }
+        }
+        // A malformed manifest can't provide a suite to check against; the
+        // rest of the achievements pipeline already treats that as "no suite
+        // knowledge", so skip ref validation rather than block the save.
+        guard
+            let props = try? JSONDecoder().decode(
+                TestProperties.self, from: Data(manifest.utf8))
+        else { return }
+        let validRefs = props.allTestRefNames
+        for achievement in achievements {
+            for condition in achievement.conditions where condition.signal == .testPass {
+                guard let ref = condition.target?.ref, validRefs.contains(ref) else {
+                    let ref = condition.target?.ref ?? ""
+                    throw WebAssignmentError.invalidParameter(
+                        name: "testRef",
+                        reason: "'\(ref)' doesn't match any test in this suite. "
+                            + "Use the test's script filename (e.g. secrettest_x.py) "
+                            + "or its display name.")
+                }
+            }
+        }
     }
 }

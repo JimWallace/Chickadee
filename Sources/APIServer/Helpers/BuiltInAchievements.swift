@@ -126,21 +126,35 @@ enum BuiltInAchievements {
         Set(setup.decodedManifest()?.disabledBuiltInAwardIDs ?? [])
     }
 
-    /// Batch `[setupID: disabled-ids]` for several setups in one query; only
-    /// setups that disable something appear.  For the multi-assignment pages
-    /// (dashboard) that don't already have the setups loaded.
-    static func disabledBySetup(
+    /// Per-setup achievement data for the multi-assignment pages: disabled
+    /// built-in ids, the authored per-submission list (nil = registry
+    /// fallback), and the full authored achievements (so manifest-authored
+    /// class records resolve at display time, audit A6).  One setups query
+    /// covers all three maps — this replaced the separate `disabledBySetup` /
+    /// `manifestPerSubmissionBySetup` fetches that each queried the same rows.
+    struct SetupAchievementData {
+        var disabled: Set<String> = []
+        var perSubmission: [Achievement]?
+        var achievements: [Achievement] = []
+    }
+
+    /// Batch `[setupID: SetupAchievementData]`; setups whose manifest can't be
+    /// decoded are absent (callers treat that as "registry defaults, nothing
+    /// disabled").
+    static func achievementDataBySetup(
         setupIDs: [String], on db: Database
-    ) async throws -> [String: Set<String>] {
+    ) async throws -> [String: SetupAchievementData] {
         guard !setupIDs.isEmpty else { return [:] }
         let setups = try await APITestSetup.query(on: db)
             .filter(\.$id ~~ Set(setupIDs))
             .all()
-        var map: [String: Set<String>] = [:]
+        var map: [String: SetupAchievementData] = [:]
         for setup in setups {
-            guard let id = setup.id else { continue }
-            let d = disabled(in: setup)
-            if !d.isEmpty { map[id] = d }
+            guard let id = setup.id, let props = setup.decodedManifest() else { continue }
+            map[id] = SetupAchievementData(
+                disabled: Set(props.disabledBuiltInAwardIDs),
+                perSubmission: manifestPerSubmission(props: props),
+                achievements: props.achievements)
         }
         return map
     }
@@ -148,39 +162,40 @@ enum BuiltInAchievements {
     /// The manifest's authored per-submission achievements, or nil to fall back
     /// to the registry.  `forSubmission` uses this so seeded / edited
     /// per-submission badges take effect once a manifest carries any.
+    /// A **curated** manifest (`builtInAchievementsSeeded`) is authoritative
+    /// even when the filtered list is empty — the instructor removed every
+    /// per-submission badge, so return [] rather than nil (audit A5: an empty
+    /// curated list used to silently resurrect the registry defaults).
     static func manifestPerSubmission(in setup: APITestSetup?) -> [Achievement]? {
-        let perSub = (setup?.decodedManifest()?.achievements ?? [])
-            .filter { $0.isPerSubmissionBadge }
-        return perSub.isEmpty ? nil : perSub
+        manifestPerSubmission(props: setup?.decodedManifest())
     }
 
-    /// Batch `[setupID: per-submission achievements]` for the multi-assignment
-    /// pages; only setups whose manifest authors per-submission achievements
-    /// appear (others fall back to the registry).
-    static func manifestPerSubmissionBySetup(
-        setupIDs: [String], on db: Database
-    ) async throws -> [String: [Achievement]] {
-        guard !setupIDs.isEmpty else { return [:] }
-        let setups = try await APITestSetup.query(on: db)
-            .filter(\.$id ~~ Set(setupIDs))
-            .all()
-        var map: [String: [Achievement]] = [:]
-        for setup in setups {
-            guard let id = setup.id, let perSub = manifestPerSubmission(in: setup) else { continue }
-            map[id] = perSub
-        }
-        return map
+    /// `manifestPerSubmission(in:)` over an already-decoded manifest.
+    static func manifestPerSubmission(props: TestProperties?) -> [Achievement]? {
+        guard let props else { return nil }
+        let perSub = props.achievements.filter { $0.isPerSubmissionBadge }
+        if !perSub.isEmpty { return perSub }
+        return props.builtInAchievementsSeeded ? [] : nil
     }
 
     /// The class records to award for a setup: the manifest's authored
     /// `classRecord` achievements (or the registry default when none), minus
     /// any the instructor disabled.  Callers award each by its `recordDimension`.
+    /// Like `manifestPerSubmission`, a curated manifest with no records means
+    /// the instructor removed them all — award none, don't fall back (audit A5).
     static func classRecordsForAward(
         in setup: APITestSetup?, disabled: Set<String>
     ) -> [Achievement] {
-        let manifest = (setup?.decodedManifest()?.achievements ?? [])
-            .filter { $0.isClassRecord }
-        let source = manifest.isEmpty ? classRecords : manifest
+        let props = setup?.decodedManifest()
+        let manifest = (props?.achievements ?? []).filter { $0.isClassRecord }
+        let source: [Achievement]
+        if !manifest.isEmpty {
+            source = manifest
+        } else if props?.builtInAchievementsSeeded == true {
+            source = []
+        } else {
+            source = classRecords
+        }
         return source.filter { !disabled.contains($0.id) }
     }
 }

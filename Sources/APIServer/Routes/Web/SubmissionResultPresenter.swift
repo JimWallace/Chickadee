@@ -151,7 +151,9 @@ extension WebRoutes {
             attemptNumber: submission.attemptNumber ?? 1,
             gradePercent: processed.gradePercent,
             executionTimeMs: collection.executionTimeMs,
-            priorGradePercent: priorAttempt.gradePercent
+            priorGradePercent: priorAttempt.gradePercent,
+            outcomes: collection.outcomes,
+            testNameAliases: manifestDisplay.testNameAliases
         )
         let weighted = collection.totalPoints != collection.totalTests
         let itemized = collection.filtering(tiers: viewer.itemizedTiers)
@@ -401,7 +403,7 @@ func loadClassGoalViews(
         let progress = row?.progress ?? 0
         let rewardLabel: String
         if goal.reward.type == .points, let points = goal.reward.points {
-            rewardLabel = "+\(points) pts"
+            rewardLabel = "+\(points) \(points == 1 ? "pt" : "pts")"
         } else {
             rewardLabel = goal.reward.label
         }
@@ -521,6 +523,23 @@ struct ManifestDisplayData {
     let hintByFilename: [String: String]
     let sections: [TestSuiteSection]
     let entries: [TestSuiteEntry]
+    /// Manifest-derived alias map for achievement `testPass` matching (audit
+    /// A1): outcome test name → every name that suite entry answers to.
+    let testNameAliases: [String: Set<String>]
+
+    init(
+        displayNameMap: [String: String],
+        hintByFilename: [String: String],
+        sections: [TestSuiteSection],
+        entries: [TestSuiteEntry],
+        testNameAliases: [String: Set<String>] = [:]
+    ) {
+        self.displayNameMap = displayNameMap
+        self.hintByFilename = hintByFilename
+        self.sections = sections
+        self.entries = entries
+        self.testNameAliases = testNameAliases
+    }
 }
 
 // Internal (was private): constructed by `submissionPage` in

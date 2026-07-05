@@ -101,6 +101,9 @@ func updateManifestAddingScript(
         sections: props.sections,
         globalVariables: props.globalVariables,
         globalExpressions: props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
         datasets: props.datasets
     )
 }
@@ -147,6 +150,9 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         sections: props.sections,
         globalVariables: props.globalVariables,
         globalExpressions: props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
         datasets: props.datasets
     )
 }
