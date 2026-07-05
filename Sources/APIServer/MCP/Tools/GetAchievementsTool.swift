@@ -126,7 +126,9 @@ let achievementRowSchema: JSONValue = .object([
                     ]),
                     "testRef": .object([
                         "type": .string("string"),
-                        "description": .string("For a testPass condition: the test filename that must pass."),
+                        "description": .string(
+                            "For a testPass condition: the test that must pass, by script filename "
+                                + "(e.g. secrettest_x.py) or display name. Validated against the suite on save."),
                     ]),
                 ]),
                 "required": .array([.string("signal"), .string("comparator")]),
@@ -147,7 +149,11 @@ let achievementRowSchema: JSONValue = .object([
                 .string("firstToSolve"), .string("firstToSubmit"), .string("fastest"),
                 .string("shortest"),
             ]),
-            "description": .string("record only: the dimension students are ranked on."),
+            "description": .string(
+                "record only: the dimension students are ranked on. firstToSolve = first to 100%; "
+                    + "firstToSubmit = first submission of any kind; fastest = lowest execution time "
+                    + "at 100%; shortest = FEWEST ATTEMPTS to reach 100% (a legacy name — it does not "
+                    + "measure solution length)."),
         ]),
     ]),
     "required": .array([.string("name"), .string("scope")]),

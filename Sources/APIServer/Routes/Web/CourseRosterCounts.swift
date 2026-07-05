@@ -28,6 +28,25 @@ func studentUserIDsInCourse(_ courseID: UUID, on db: Database) async throws -> S
     return Set(enrollments.filter { $0.role == .student }.map(\.userID))
 }
 
+/// Batch variant of `studentUserIDsInCourse` — one enrollments query for all
+/// `courseIDs`.  Used by the class-goal sweep to keep its numerator to real,
+/// currently-enrolled students (audit A7: staff test submissions and dropped
+/// students used to inflate `studentsMeeting` while the denominator counted
+/// only enrolled students).
+func studentUserIDsByCourse(
+    courseIDs: [UUID], on db: Database
+) async throws -> [UUID: Set<UUID>] {
+    guard !courseIDs.isEmpty else { return [:] }
+    let enrollments = try await APICourseEnrollment.query(on: db)
+        .filter(\.$course.$id ~~ courseIDs)
+        .all()
+    var map: [UUID: Set<UUID>] = [:]
+    for e in enrollments where e.role == .student {
+        map[e.$course.id, default: []].insert(e.userID)
+    }
+    return map
+}
+
 /// Map of `courseID → enrolled-student count` for every course that has
 /// at least one student or pre-enrollment.  Courses with no roster do not
 /// appear in the map; callers should fall back to 0.

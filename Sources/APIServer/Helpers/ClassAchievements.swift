@@ -55,6 +55,31 @@ func awardClassBadgesFor100Percent(
     }
 }
 
+/// Awards the first-to-submit records (Pathfinder) if this class has no holder
+/// yet.  Shared by every submission-creating path — the zip-upload form, the
+/// notebook `runner-submit`, `browser-result`, and `browser-failover` routes —
+/// so browser-graded assignments award it too (audit A2: it used to exist only
+/// in the zip-upload handler, and notebook submissions never awarded it).
+/// Same per-course student gate as `awardClassBadgesFor100Percent`: staff
+/// test submissions must not lock in the immutable badge.
+func awardFirstToSubmitRecords(
+    setup: APITestSetup,
+    userID: UUID,
+    submissionID: String,
+    on db: Database
+) async throws {
+    guard let setupID = setup.id,
+        try await courseRole(of: userID, inCourse: setup.courseID, db: db) == .student
+    else { return }
+    let records = BuiltInAchievements.classRecordsForAward(
+        in: setup, disabled: BuiltInAchievements.disabled(in: setup))
+    for record in records where record.recordDimension == .firstToSubmit {
+        try await awardImmutableBadge(
+            achievementID: record.id,
+            testSetupID: setupID, userID: userID, submissionID: submissionID, on: db)
+    }
+}
+
 /// Inserts the badge record only if no holder exists yet (first-to wins).
 private func awardImmutableBadge(
     achievementID: String,

@@ -75,6 +75,11 @@ func evaluateClassGoalAchievements(
 
     let goalCourseIDs = Array(Set(goalCarrying.map { $0.0.courseID }))
     let countsByCourse = try await enrolledStudentCountsByCourse(courseIDs: goalCourseIDs, on: db)
+    // Numerator guard (audit A7): only currently-enrolled per-course students
+    // count toward `studentsMeeting` — staff test submissions and students who
+    // dropped used to inflate it (the denominator already excludes them),
+    // which could grant unearned bonus points all the way to the CSV/LMS.
+    let studentIDsByCourse = try await studentUserIDsByCourse(courseIDs: goalCourseIDs, on: db)
 
     for (assignment, setup, goals) in goalCarrying {
         guard let setupID = setup.id else { continue }
@@ -90,10 +95,26 @@ func evaluateClassGoalAchievements(
 
         let denominator = countsByCourse[assignment.courseID] ?? 0
         let locked = assignment.dueAt.map { $0 <= now } ?? false
+        let enrolledStudents = studentIDsByCourse[assignment.courseID] ?? []
         let bestByStudent = try await bestAssignmentGradeByStudent(testSetupID: setupID, on: db)
+            .filter { enrolledStudents.contains($0.key) }
 
         for goal in goals {
             if rowByAchievement[goal.id]?.locked == true { continue }  // frozen at the deadline
+
+            // Authoring rejects goal shapes the sweep can't evaluate (a single
+            // "grade ≥ X" condition at most), but a hand-authored manifest can
+            // still carry one — skip it loudly rather than silently mis-grade
+            // the bonus as grade-only (audit A4).
+            guard goal.isSweepEvaluableClassGoal else {
+                logger.warning(
+                    """
+                    Class goal '\(goal.id)' on setup \(setupID) has conditions the sweep \
+                    cannot evaluate (only a single 'grade atLeast' condition is supported); skipping.
+                    """
+                )
+                continue
+            }
 
             let threshold = goal.gradeThresholdFraction ?? 1
             let studentsMeeting = bestByStudent.values.filter { $0 >= threshold }.count

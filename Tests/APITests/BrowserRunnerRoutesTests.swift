@@ -592,6 +592,83 @@ import VaporTesting
         }
     }
 
+    /// Audit A2 regression: browser-graded submissions must award the
+    /// first-to-submit record (Pathfinder) and, on a 100% grade, the class
+    /// records (Trailblazer etc.) — both used to exist only on the zip-upload
+    /// and worker-report paths, so browser-graded assignments never awarded
+    /// any record.
+    @Test func browserResultAwardsPathfinderAndClassRecords() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = minimalNotebook()
+
+            // A perfect one-test run: reconcile recomputes the grade from the
+            // outcome (1 point x score 1.0 = 100%).
+            let collection = """
+                {
+                  "submissionID": "",
+                  "testSetupID": "\(setupID)",
+                  "attemptNumber": 1,
+                  "buildStatus": "passed",
+                  "compilerOutput": null,
+                  "outcomes": [
+                    {
+                      "testName": "test_public",
+                      "testClass": null,
+                      "tier": "public",
+                      "status": "pass",
+                      "shortResult": "passed",
+                      "longResult": null,
+                      "executionTimeMs": 5,
+                      "memoryUsageBytes": null,
+                      "attemptNumber": 1,
+                      "isFirstPassSuccess": true
+                    }
+                  ],
+                  "totalTests": 1,
+                  "passCount": 1,
+                  "failCount": 0,
+                  "errorCount": 0,
+                  "timeoutCount": 0,
+                  "executionTimeMs": 5,
+                  "runnerVersion": "browser-wasm-runner/1.0",
+                  "timestamp": "2026-01-01T00:00:00Z"
+                }
+                """
+
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/browser-result",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.body = .init(
+                        buffer: multipartBody(
+                            boundary: "award-test-boundary",
+                            fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                            file: ("notebook", "notebook.ipynb", nb)
+                        ))
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": "award-test-boundary"])
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "browser-result should accept, body: \(res.body.string)")
+                })
+
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student1").first())
+            let awards = try await APIClassAchievement.query(on: app.db)
+                .filter(\.$testSetupID == setupID)
+                .all()
+            let awardIDs = Set(awards.map(\.achievementID))
+            #expect(awardIDs.contains("pathfinder"), "first browser submission should hold Pathfinder")
+            #expect(awardIDs.contains("trailblazer"), "100% browser grade should hold Trailblazer")
+            #expect(awards.allSatisfy { $0.userID == student.id })
+        }
+    }
+
     @Test func runnerSubmitRejectsBrowserGradedAssignments() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())

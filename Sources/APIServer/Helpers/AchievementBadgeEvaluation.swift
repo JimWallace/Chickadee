@@ -26,8 +26,13 @@ func earnedIndividualBadges(
 
     // Grade + test-pass badges read only the grade and the per-test outcomes;
     // the dynamic signals (attempt count, time) belong to the per-submission
-    // badges, evaluated separately in `AchievementBadge.forSubmission`.
-    let signals = AchievementSignals(gradePercent: gradePercent, outcomes: outcomes)
+    // badges, evaluated separately in `AchievementBadge.forSubmission`.  The
+    // alias map lets a `testPass` ref authored as a filename resolve against
+    // the display-name-or-stem `testName` runners actually stamp (audit A1).
+    let signals = AchievementSignals(
+        gradePercent: gradePercent,
+        outcomes: outcomes,
+        testNameAliases: props.testNameAliases())
     return authored.compactMap { ach in
         ach.isSatisfied(by: signals) ? AchievementBadge(from: ach) : nil
     }

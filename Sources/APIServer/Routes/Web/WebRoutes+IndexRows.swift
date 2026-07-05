@@ -105,9 +105,7 @@ extension WebRoutes {
             .filter(\.$submissionID ~~ submissionIDs)
             .sort(\.$receivedAt, .descending)
             .all()
-        async let disabledFetch = BuiltInAchievements.disabledBySetup(
-            setupIDs: setupIDs, on: req.db)
-        async let perSubFetch = BuiltInAchievements.manifestPerSubmissionBySetup(
+        async let achievementFetch = BuiltInAchievements.achievementDataBySetup(
             setupIDs: setupIDs, on: req.db)
         // Class-wide badges this user currently holds across all setups.
         async let classAchievementsFetch = APIClassAchievement.query(on: req.db)
@@ -150,14 +148,13 @@ extension WebRoutes {
             collectionByResultID: latestBlobs.compactMapValues(decodedCollection(from:))
         )
 
-        let disabledBySetup = try await disabledFetch
-        let perSubBySetup = try await perSubFetch
+        let achievementBySetup = try await achievementFetch
         for (setupID, latest) in data.latestSubmissionBySetupID {
             if let badges = latestSubmissionBadges(
                 setupID: setupID, latest: latest, grouped: grouped,
                 badgeResults: badgeResults,
-                perSubmission: perSubBySetup[setupID],
-                disabled: disabledBySetup[setupID] ?? [])
+                perSubmission: achievementBySetup[setupID]?.perSubmission,
+                disabled: achievementBySetup[setupID]?.disabled ?? [])
             {
                 data.latestBadgesBySetupID[setupID] = badges
             }
@@ -166,7 +163,9 @@ extension WebRoutes {
         let classAchievements = try await classAchievementsFetch
         for ach in classAchievements {
             if let badge = AchievementBadge.forClassAchievement(
-                ach.achievementID, disabled: disabledBySetup[ach.testSetupID] ?? [])
+                ach.achievementID,
+                manifestAchievements: achievementBySetup[ach.testSetupID]?.achievements ?? [],
+                disabled: achievementBySetup[ach.testSetupID]?.disabled ?? [])
             {
                 data.latestBadgesBySetupID[ach.testSetupID, default: []].append(badge)
             }
@@ -233,7 +232,8 @@ extension WebRoutes {
                 attemptNumber: latestAttempt,
                 gradePercent: gradePercent,
                 executionTimeMs: collection.executionTimeMs,
-                priorGradePercent: priorGradePercent
+                priorGradePercent: priorGradePercent,
+                outcomes: collection.outcomes
             ),
             achievements: perSubmission,
             disabled: disabled)

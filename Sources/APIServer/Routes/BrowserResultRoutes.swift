@@ -111,6 +111,14 @@ struct BrowserResultRoutes: RouteCollection {
         try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
         let attemptNumber = submission.attemptNumber ?? 1
 
+        // First-to-submit records (Pathfinder): notebook submissions are the
+        // dominant flow, but only the zip-upload handler used to award this —
+        // browser-graded assignments never had a Pathfinder (audit A2).
+        if let userID = caller.id {
+            try await awardFirstToSubmitRecords(
+                setup: setup, userID: userID, submissionID: subID, on: req.db)
+        }
+
         // Persist the browser result, tagged source="browser".  The browser
         // builds its collection before it knows the server-authoritative attempt
         // number, so it always stamps attemptNumber=1 (and isFirstPassSuccess for
@@ -138,6 +146,28 @@ struct BrowserResultRoutes: RouteCollection {
         }
 
         req.logger.info("Browser result stored for \(subID)")
+
+        // Class records (Trailblazer / fastest / fewest-attempts) on a 100%
+        // browser grade.  These were only awarded in the worker report handler,
+        // so browser-graded assignments never awarded any record unless a
+        // retest or the failover backstop happened to route through a worker
+        // (audit A2).  Same rounded-percent gate and student-role guard as
+        // `ResultRoutes`; the reconciled collection carries the
+        // server-authoritative attempt number.
+        if reconciled.buildStatus == .passed,
+            let userID = caller.id,
+            gradePercent(from: reconciled) == 100
+        {
+            try await awardClassBadgesFor100Percent(
+                testSetupID: body.testSetupID,
+                userID: userID,
+                submissionID: subID,
+                executionTimeMs: reconciled.executionTimeMs,
+                attemptNumber: attemptNumber,
+                disabled: BuiltInAchievements.disabled(in: setup),
+                on: req.db
+            )
+        }
 
         // Update the student's server-side working copy with what they just
         // submitted. Without this, the working copy stays as the blank starter
@@ -213,6 +243,13 @@ struct BrowserResultRoutes: RouteCollection {
             kind: APISubmission.Kind.student
         )
         try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
+
+        // First-to-submit records (Pathfinder) — same as the zip-upload and
+        // browser-result paths (audit A2).
+        if let userID = caller.id {
+            try await awardFirstToSubmitRecords(
+                setup: setup, userID: userID, submissionID: subID, on: req.db)
+        }
 
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing
@@ -325,6 +362,12 @@ struct BrowserResultRoutes: RouteCollection {
             kind: APISubmission.Kind.student
         )
         try await saveSubmissionWithNextAttemptNumber(submission, userID: userID, on: req.db)
+
+        // A failover row IS the student's real submission for this attempt —
+        // if they're the first in the class to submit, the frozen browser run
+        // must not cost them the record (audit A2).
+        try await awardFirstToSubmitRecords(
+            setup: setup, userID: userID, submissionID: subID, on: req.db)
 
         req.logger.warning(
             "Browser grading failed/froze for setup \(body.testSetupID); enqueued worker backstop grade \(subID)"
