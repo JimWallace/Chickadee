@@ -192,6 +192,11 @@ struct MCPDispatcher: Sendable {
             outcome = MCPToolOutcome(error)
             response = .success(id: id, result: mcpToolErrorResult(error))
         } catch {
+            // A non-MCPToolError throw is opaque to the agent (bare -32603), so
+            // the underlying error must at least reach the log ring buffer —
+            // this is how a Postgres permission-denied on the least-privilege
+            // MCP role surfaces (e.g. the missing result_collections grant).
+            context.logger.error("MCP tool \(call.name) failed: \(error)")
             outcome = .failed
             response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
         }

@@ -103,6 +103,9 @@ struct AdminMCPDispatcher: Sendable {
             outcome = MCPToolOutcome(error).rawValue
             response = .success(id: id, result: mcpToolErrorResult(error))
         } catch {
+            // A non-MCPToolError throw is opaque to the agent (bare -32603);
+            // log the underlying error so the failure is diagnosable.
+            context.request.logger.error("Admin MCP tool \(call.name) failed: \(error)")
             outcome = MCPToolOutcome.failed.rawValue
             response = .failure(id: id, error: .internalError("Tool \(call.name) failed."))
         }

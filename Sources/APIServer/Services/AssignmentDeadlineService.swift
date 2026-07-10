@@ -285,7 +285,17 @@ func openScheduledAssignment(
     // already been consumed.
     guard assignment.visibility == .closed || assignment.visibility == .preview else { return false }
     guard let startsAt = assignment.startsAt, startsAt <= now else { return false }
-    guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else { return false }
+    guard assignment.validationStatus == nil || assignment.validationStatus == "passed" else {
+        // The open date has arrived but validation is blocking the publish.
+        // This state used to be completely silent — the sweep just skipped the
+        // row every minute while students stayed locked out and nobody was
+        // told why (the Lab 6 incident). One warning per tick keeps the
+        // blockage visible in the log buffer until it is resolved.
+        logger.warning(
+            "Scheduled open blocked for '\(assignment.title)' (\(assignment.publicID)): open date \(startsAt) has arrived but validationStatus is '\(assignment.validationStatus ?? "nil")' — it stays \(assignment.visibility.rawValue) until validation passes"
+        )
+        return false
+    }
     if let dueAt = assignment.dueAt, dueAt <= now { return false }
 
     assignment.visibility = .open
@@ -339,6 +349,12 @@ func requireOpenStudentAssignment(
     // `requireCourseEnrollment`'s own short-circuit.
     try await requireCourseEnrollment(caller: user, courseID: assignment.courseID, db: req.db)
 
+    // Lazy schedule enforcement, both directions. The close has always been
+    // enforced here as a safety net under the periodic sweep; the open gets
+    // the same treatment so a student following a direct link to a scheduled
+    // assignment whose open date has arrived is let in even if the background
+    // sweep is not running (the dashboard loader applies the same repair).
+    _ = try await openScheduledAssignment(assignment, on: req.db, logger: req.logger, now: now)
     _ = try await closeAssignmentIfExpired(assignment, on: req.db, logger: req.logger, now: now)
 
     // Preview is open for course staff and closed for students — handled

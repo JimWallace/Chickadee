@@ -247,9 +247,16 @@ private func resolveAndCacheValidationMaterialization(
 ///
 /// Errors are swallowed: this is a nice-to-have trigger from live-edit
 /// endpoints and must not block the edit save.
+///
+/// `submitterUserID` attributes the validation submission. Web callers omit it
+/// (the session user is resolved from `req.auth`); MCP callers MUST pass the
+/// acting subject's id — bearer-authenticated requests carry no session
+/// `APIUser`, so the `req.auth` fallback throws 401 and the validation is
+/// silently never enqueued.
 func scheduleValidationAfterSuiteEdit(
     req: Request,
-    assignment: APIAssignment
+    assignment: APIAssignment,
+    submitterUserID: UUID? = nil
 ) async {
     do {
         let existingPending = try await APISubmission.query(on: req.db)
@@ -280,7 +287,8 @@ func scheduleValidationAfterSuiteEdit(
             req: req,
             setupID: assignment.testSetupID,
             solutionNotebookData: solution.data,
-            filename: solution.filename
+            filename: solution.filename,
+            submitterUserID: submitterUserID
         )
         assignment.validationSubmissionID = subID
         assignment.validationStatus = "pending"
