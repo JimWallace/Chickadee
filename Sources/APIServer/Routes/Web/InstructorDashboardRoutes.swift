@@ -319,17 +319,27 @@ struct InstructorDashboardRoutes: RouteCollection {
         }
         let body = try req.content.decode(BSBody.self)
         let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let mapping: String
         if raw == BrightspaceSync.doNotSyncToken {
             // The instructor picked the "Do not sync" option in the grade-item
             // dropdown — exclude this assignment from LEARN. The sweep then skips
             // it; the dropdown shows "Do not sync" until a real item is chosen.
             assignment.brightspaceSyncExcluded = true
             assignment.brightspaceGradeObjectID = nil
+            mapping = "do_not_sync"
         } else {
             assignment.brightspaceSyncExcluded = false
             assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
+            mapping = raw.isEmpty ? "cleared" : raw
         }
         try await assignment.save(on: req.db)
+        await AuditLogger.record(
+            action: .brightspaceGradeItemMapped,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: ["assignment": assignment.publicID, "grade_item": mapping],
+            on: req
+        )
         if body.returnTo == "brightspace" {
             return req.redirect(to: "/instructor/brightspace")
         }

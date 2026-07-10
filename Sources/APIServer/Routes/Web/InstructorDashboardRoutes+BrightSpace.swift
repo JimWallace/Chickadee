@@ -136,6 +136,13 @@ extension InstructorDashboardRoutes {
         }
 
         req.logger.info("BrightSpace connected by \(user.username) as \(identity)")
+        await AuditLogger.record(
+            action: .brightspaceAccountConnected,
+            targetType: .user,
+            targetID: userUUID.uuidString,
+            metadata: ["identity": identity, "claimed_course_identity": String(claimedCourse)],
+            on: req
+        )
         req.session.data["bs_flash_success"] =
             claimedCourse
             ? "Connected as \(identity). This course now syncs grades as your LEARN account."
@@ -171,6 +178,13 @@ extension InstructorDashboardRoutes {
         }
         course.brightspaceSyncUserID = userUUID
         try await course.save(on: req.db)
+        await AuditLogger.record(
+            action: .brightspaceSyncIdentitySet,
+            targetType: .course,
+            targetID: courseUUID.uuidString,
+            metadata: ["course_code": course.code],
+            on: req
+        )
         req.session.data["bs_flash_success"] = "This course now syncs grades as your LEARN account."
         return req.redirect(to: "/instructor/brightspace")
     }
@@ -189,6 +203,12 @@ extension InstructorDashboardRoutes {
         }
         try await BrightSpaceCredentialStore.clear(userID: userUUID, on: req.db)
         await req.application.brightSpaceClientRegistry.invalidate(userUUID.uuidString)
+        await AuditLogger.record(
+            action: .brightspaceAccountDisconnected,
+            targetType: .user,
+            targetID: userUUID.uuidString,
+            on: req
+        )
         req.session.data["bs_flash_success"] = "Your LEARN account has been disconnected."
         return req.redirect(to: "/instructor/brightspace")
     }
@@ -225,6 +245,13 @@ extension InstructorDashboardRoutes {
             course.brightspaceOrgUnitID = nil
             course.brightspaceOrgUnitName = nil
             try await course.save(on: req.db)
+            await AuditLogger.record(
+                action: .brightspaceOrgUnitCleared,
+                targetType: .course,
+                targetID: courseUUID.uuidString,
+                metadata: ["course_code": course.code],
+                on: req
+            )
             req.session.data["bs_flash_success"] = "Org-unit binding cleared."
             return req.redirect(to: "/instructor/brightspace")
         }
@@ -243,6 +270,13 @@ extension InstructorDashboardRoutes {
         course.brightspaceSyncUserID = userUUID
         course.brightspaceOrgUnitName = nil
         try await course.save(on: req.db)
+        await AuditLogger.record(
+            action: .brightspaceOrgUnitBound,
+            targetType: .course,
+            targetID: courseUUID.uuidString,
+            metadata: ["course_code": course.code, "org_unit": rawOrgUnit],
+            on: req
+        )
 
         guard let client = try await req.application.brightSpaceClient(forCourse: course) else {
             req.session.data["bs_flash_success"] = "Org unit \(rawOrgUnit) saved (unverified)."
@@ -337,6 +371,13 @@ extension InstructorDashboardRoutes {
             }
         }
 
+        await AuditLogger.record(
+            action: .brightspaceAutoMapped,
+            targetType: .course,
+            targetID: courseUUID.uuidString,
+            metadata: ["course_code": course.code, "mapped_count": String(mapped)],
+            on: req
+        )
         req.session.data["bs_flash_success"] =
             mapped == 0
             ? "No new matches — every assignment is already mapped or has no grade item with the same name."
@@ -361,6 +402,12 @@ extension InstructorDashboardRoutes {
             try await requeueErroredGradePushes(req: req, courseUUID: courseUUID)
         }
         await runImmediateBrightspaceSweep(req: req)
+        await AuditLogger.record(
+            action: .brightspaceSyncNow,
+            targetType: .course,
+            targetID: courseState.activeCourseUUID?.uuidString,
+            on: req
+        )
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -475,6 +522,17 @@ extension InstructorDashboardRoutes {
             .all()
         try await requeueForImmediateSync(overrides, on: req.db)
         await runImmediateBrightspaceSweep(req: req)
+        await AuditLogger.record(
+            action: .brightspacePushAll,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: [
+                "assignment": assignment.publicID,
+                "requeued_results": String(results.count),
+                "requeued_overrides": String(overrides.count),
+            ],
+            on: req
+        )
         return req.redirect(to: "/instructor/brightspace")
     }
 
