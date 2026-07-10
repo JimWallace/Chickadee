@@ -130,6 +130,20 @@ enum AuditAction: String, Sendable, CaseIterable {
     case runnerSecretRotated = "runner.secret_rotated"
     case runnerAutostartChanged = "runner.autostart_changed"
 
+    // BrightSpace / LEARN grade sync (actor-driven actions only — individual
+    // grade pushes are background events recorded in `brightspace_sync_log`)
+    case brightspaceAdminAuthorized = "brightspace.admin_authorized"
+    case brightspaceAdminCleared = "brightspace.admin_cleared"
+    case brightspaceAccountConnected = "brightspace.account_connected"
+    case brightspaceAccountDisconnected = "brightspace.account_disconnected"
+    case brightspaceSyncIdentitySet = "brightspace.sync_identity_set"
+    case brightspaceOrgUnitBound = "brightspace.org_unit_bound"
+    case brightspaceOrgUnitCleared = "brightspace.org_unit_cleared"
+    case brightspaceGradeItemMapped = "brightspace.grade_item_mapped"
+    case brightspaceAutoMapped = "brightspace.auto_mapped"
+    case brightspaceSyncNow = "brightspace.sync_now"
+    case brightspacePushAll = "brightspace.push_all"
+
     // MCP / agents
     case mcpAccountCreated = "mcp.account_created"
     case mcpAccountDeleted = "mcp.account_deleted"
@@ -162,6 +176,11 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .grading
         case .runnerSecretRotated, .runnerAutostartChanged:
             return .runner
+        case .brightspaceAdminAuthorized, .brightspaceAdminCleared, .brightspaceAccountConnected,
+            .brightspaceAccountDisconnected, .brightspaceSyncIdentitySet, .brightspaceOrgUnitBound,
+            .brightspaceOrgUnitCleared, .brightspaceGradeItemMapped, .brightspaceAutoMapped,
+            .brightspaceSyncNow, .brightspacePushAll:
+            return .brightspace
         case .mcpAccountCreated, .mcpAccountDeleted, .mcpTokenMinted, .mcpToolCalled,
             .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled, .mcpClientRegistered,
             .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected, .adminMcpToolCalled:
@@ -201,6 +220,17 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .gradeOverrideCleared: return "Grade override cleared"
         case .runnerSecretRotated: return "Runner secret rotated"
         case .runnerAutostartChanged: return "Runner autostart changed"
+        case .brightspaceAdminAuthorized: return "LEARN deployment key authorized"
+        case .brightspaceAdminCleared: return "LEARN deployment key cleared"
+        case .brightspaceAccountConnected: return "LEARN account connected"
+        case .brightspaceAccountDisconnected: return "LEARN account disconnected"
+        case .brightspaceSyncIdentitySet: return "LEARN sync identity set"
+        case .brightspaceOrgUnitBound: return "LEARN org unit linked"
+        case .brightspaceOrgUnitCleared: return "LEARN org unit unlinked"
+        case .brightspaceGradeItemMapped: return "LEARN grade item mapping changed"
+        case .brightspaceAutoMapped: return "LEARN grade items auto-mapped"
+        case .brightspaceSyncNow: return "LEARN manual sync"
+        case .brightspacePushAll: return "LEARN push all grades"
         case .mcpAccountCreated: return "MCP account created"
         case .mcpAccountDeleted: return "MCP account deleted"
         case .mcpTokenMinted: return "MCP token minted (admin)"
@@ -228,6 +258,7 @@ enum AuditCategory: String, Sendable, CaseIterable {
     case grading = "Grading"
     case runner = "Runner"
     case mcp = "MCP / agents"
+    case brightspace = "LEARN sync"
 }
 
 /// Resolves a stored (raw) action string to its display category + label,

@@ -499,4 +499,129 @@ import VaporTesting
             #expect(found.attemptedAt != nil)
         }
     }
+
+    // MARK: - Audit trail for actor-driven LEARN actions
+
+    /// All audit rows recorded for one action, oldest first.
+    private func auditEntries(
+        _ action: AuditAction, on app: Application
+    ) async throws -> [APIAuditLogEntry] {
+        try await APIAuditLogEntry.query(on: app.db)
+            .filter(\.$action == action.rawValue)
+            .sort(\.$createdAt, .ascending)
+            .all()
+    }
+
+    @Test func syncNowWritesAuditEntry() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/instructor/brightspace/sync-now",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+
+            let entries = try await auditEntries(.brightspaceSyncNow, on: app)
+            let entry = try #require(entries.first)
+            #expect(entry.actorUsername == "testinstructor")
+            #expect(entry.targetID == courseID.uuidString)
+        }
+    }
+
+    @Test func gradeItemMappingWritesAuditEntries() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await arInsertSetup(id: "setup_bs_audit", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_bs_audit", title: "BS Audit", isOpen: true, on: app)
+
+            func postMapping(_ gradeObjectID: String) async throws {
+                try await app.asyncTest(
+                    .POST, "/instructor/\(assignment.publicID)/brightspace",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: sessionCookie)
+                        try req.content.encode(
+                            ["gradeObjectID": gradeObjectID, "returnTo": "brightspace", "_csrf": csrf],
+                            as: .urlEncodedForm)
+                    },
+                    afterResponse: { res in #expect(res.status == .seeOther) })
+            }
+            try await postMapping("78901")
+            try await postMapping(BrightspaceSync.doNotSyncToken)
+
+            let entries = try await auditEntries(.brightspaceGradeItemMapped, on: app)
+            #expect(entries.count == 2)
+            let mapped = try #require(entries.first)
+            #expect(mapped.actorUsername == "testinstructor")
+            #expect(mapped.targetID == assignment.id?.uuidString)
+            #expect((mapped.metadata ?? "").contains("78901"))
+            let excluded = try #require(entries.last)
+            #expect((excluded.metadata ?? "").contains("do_not_sync"))
+        }
+    }
+
+    @Test func bindAndClearOrgUnitWriteAuditEntries() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
+            try await BrightSpaceCredentialStore.save(
+                valenceUserID: "vu", valenceUserKey: "vk", identityName: "Test Instructor",
+                capturedByUserID: instructor.id, userID: instructor.id, on: app.db)
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            func postOrgUnit(_ orgUnitID: String) async throws {
+                try await app.asyncTest(
+                    .POST, "/instructor/brightspace/bind-org-unit",
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: sessionCookie)
+                        req.headers.add(name: "x-csrf-token", value: csrf)
+                        try req.content.encode(["orgUnitID": orgUnitID], as: .urlEncodedForm)
+                    },
+                    afterResponse: { res in #expect(res.status == .seeOther) })
+            }
+            try await postOrgUnit("1106038")
+            try await postOrgUnit("")
+
+            let bound = try await auditEntries(.brightspaceOrgUnitBound, on: app)
+            let boundEntry = try #require(bound.first)
+            #expect(boundEntry.targetID == courseID.uuidString)
+            #expect((boundEntry.metadata ?? "").contains("1106038"))
+
+            let cleared = try await auditEntries(.brightspaceOrgUnitCleared, on: app)
+            #expect(cleared.count == 1)
+        }
+    }
+
+    @Test func disconnectWritesAuditEntry() async throws {
+        try await withAssignmentRoutesApp { app in
+            _ = try await app.testCourseID(enrollmentMode: .auto)
+            let cookie = try await arLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
+            try await BrightSpaceCredentialStore.save(
+                valenceUserID: "vu", valenceUserKey: "vk", identityName: "Test Instructor",
+                capturedByUserID: instructor.id, userID: instructor.id, on: app.db)
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/instructor/brightspace/disconnect",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .seeOther) })
+
+            let entries = try await auditEntries(.brightspaceAccountDisconnected, on: app)
+            let entry = try #require(entries.first)
+            #expect(entry.actorUsername == "testinstructor")
+            #expect(entry.targetID == instructor.id?.uuidString)
+        }
+    }
 }
