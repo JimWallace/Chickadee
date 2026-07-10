@@ -111,19 +111,29 @@ struct GetValidationResultTool: ContentTool {
             publicID: input.assignmentPublicID, tool: Self.name)
         let status = assignment.validationStatus ?? "none"
 
-        guard
-            let submission = try await MCPStudentDataBoundary.validationSubmission(
-                for: assignment, on: context.db)
-        else {
-            return Self.empty(assignmentPublicID: assignment.publicID, validationStatus: status)
+        // Map database failures to executionFailed so the agent sees the reason
+        // (e.g. a missing SELECT grant for the least-privilege MCP role) instead
+        // of an opaque protocol-level internal error.
+        let collectionJSON: String?
+        do {
+            if let submission = try await MCPStudentDataBoundary.validationSubmission(
+                for: assignment, on: context.db),
+                let result = try await MCPStudentDataBoundary.latestResult(
+                    forSubmissionID: submission.requireID(), on: context.db)
+            {
+                collectionJSON = try await result.loadCollectionJSON(on: context.db)
+            } else {
+                collectionJSON = nil
+            }
+        } catch {
+            throw MCPToolError.executionFailed(
+                tool: Self.name, detail: "Could not read the validation result: \(error)")
         }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard
-            let result = try await MCPStudentDataBoundary.latestResult(
-                forSubmissionID: submission.requireID(), on: context.db),
-            let collectionJSON = try await result.loadCollectionJSON(on: context.db),
+            let collectionJSON,
             let collection = try? decoder.decode(
                 TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
         else {

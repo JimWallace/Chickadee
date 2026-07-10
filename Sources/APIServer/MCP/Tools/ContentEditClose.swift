@@ -102,6 +102,12 @@ func finalizeContentEdit(
     if retest {
         await retestSubmissionsAfterContentEdit(setup: setup, context: context)
     }
-    await scheduleValidationAfterSuiteEdit(req: context.request, assignment: assignment)
+    // Pass the acting subject explicitly: an MCP request is bearer-authenticated
+    // with no session `APIUser`, so the helper's `req.auth` fallback would throw
+    // 401 inside its swallow-all catch and the re-validation would silently
+    // never be enqueued (the assignment kept its stale validationStatus).
+    let submitterUserID = try? await context.requireEligibleSubject(tool: "validate").id
+    await scheduleValidationAfterSuiteEdit(
+        req: context.request, assignment: assignment, submitterUserID: submitterUserID)
     return closed
 }

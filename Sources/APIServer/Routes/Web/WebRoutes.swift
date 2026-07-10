@@ -91,6 +91,18 @@ struct WebRoutes: RouteCollection {
         let allAssignments = try await APIAssignment.query(on: req.db)
             .filter(\.$courseID == activeCourseUUID)
             .all()
+
+        // Lazy safety net for scheduled opens, mirroring the lazy deadline
+        // close in requireOpenStudentAssignment: if the periodic sweep missed
+        // an assignment whose open date has arrived, the very dashboard load
+        // that would otherwise show it stuck (a TA checking why the lab isn't
+        // up, a student looking for it) repairs the state instead of just
+        // observing it. Row-wise on the already-loaded list; every guard
+        // short-circuits in memory, so this writes nothing unless a scheduled
+        // open is actually due.
+        for assignment in allAssignments {
+            _ = try? await openScheduledAssignment(assignment, on: req.db, logger: req.logger)
+        }
         let assignmentBySetup = Dictionary(
             allAssignments.map { ($0.testSetupID, $0) },
             uniquingKeysWith: { first, _ in first }

@@ -42,8 +42,10 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
 
     /// Optional automatic open date. nil = open as soon as published.
     /// When set and still in the future, students cannot access or submit
-    /// even if `isOpen` is true; the assignment becomes submittable on its
-    /// own once this time passes (gated live, no background job).
+    /// even if `isOpen` is true. Once the time arrives, a `.closed`/`.preview`
+    /// assignment is published by `openScheduledAssignment` — via the periodic
+    /// deadline sweep, the dashboard load, and the submission gate (the latter
+    /// two as lazy safety nets) — which consumes this field (sets it nil).
     @OptionalField(key: "starts_at")
     var startsAt: Date?
 

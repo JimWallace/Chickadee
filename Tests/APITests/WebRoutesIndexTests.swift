@@ -50,6 +50,43 @@ import VaporTesting
         }
     }
 
+    /// Regression for the Lab 6 incident: a `.preview` assignment whose
+    /// scheduled open date has arrived (validation passed) must be published by
+    /// the dashboard load itself — the lazy safety net under the periodic
+    /// sweep. Pre-fix, a dead sweep meant the lab stayed staff-only preview
+    /// forever and every dashboard load just observed the stuck state.
+    @Test func indexLazilyOpensScheduledAssignment() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_sched_open", on: app)
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_sched_open", title: "Scheduled Lab", isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400), on: app)
+            assignment.visibility = .preview
+            assignment.startsAt = Date().addingTimeInterval(-60)
+            assignment.validationStatus = "passed"
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    // The dashboard load repaired the missed scheduled open, so
+                    // the student sees the lab on this very render.
+                    #expect(res.body.string.contains("Scheduled Lab"))
+                })
+
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.visibility == .open, "Dashboard load publishes a due scheduled assignment")
+            #expect(reloaded.startsAt == nil, "Open date is consumed once it fires")
+        }
+    }
+
     @Test func indexShowsOpenAssignmentForStudent() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
