@@ -32,8 +32,8 @@ import Vapor
             source.contains("name = \"df\""),
             "variable name should be embedded as a Python string literal")
         #expect(
-            source.contains("getattr(student_module, name, _MISSING)"),
-            "must use the standard _MISSING sentinel idiom")
+            source.contains("getattr(_tr.student_main_state(), name, _MISSING)"),
+            "must read main-mode (as-executed) state with the standard _MISSING sentinel idiom")
         #expect(
             source.contains("is not defined in the student notebook"),
             "missing-variable failure message should be present")

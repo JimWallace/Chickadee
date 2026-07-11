@@ -33,12 +33,15 @@ func renderNumericArrayClose(_ check: NotebookCheck, specHash: String) -> String
         # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=numeric_array_close spec_hash=\(specHash) — edit the check, not this file.
 
         import numpy as np
+        import test_runtime as _tr
 
         variable_name = \(variableLiteral)
         expected = np.array(\(expectedLiteral), dtype=float)
 
+        # Runtime-state check: read the notebook AS EXECUTED (an array is
+        # built by function calls, which the extractor quarantines at import).
         _MISSING = object()
-        actual_obj = getattr(student_module, variable_name, _MISSING)
+        actual_obj = getattr(_tr.student_main_state(), variable_name, _MISSING)
         if actual_obj is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined in the student notebook.\\n"
@@ -112,11 +115,14 @@ func renderFigureCount(_ check: NotebookCheck, specHash: String) -> String {
         except Exception as ex:
             errored(f"matplotlib is not available in the grading environment: {ex}")
 
-        # plt.get_fignums() reads matplotlib's global Figure registry.  By the
-        # time this script runs, test_runtime.py has already loaded the student
-        # module, which executed every plt.figure / df.plot / sns.* call the
-        # student wrote — those Figure objects are still in the registry even
-        # though plt.show was a no-op.
+        import test_runtime as _tr
+
+        # Plotting calls are side effects, which the extractor quarantines out
+        # of plain imports — so execute the notebook in main mode (with the Agg
+        # backend already selected above), then read matplotlib's global Figure
+        # registry.  The figures are still registered even though plt.show()
+        # was a no-op under Agg.
+        _tr.student_main_state()
         figure_count = len(plt.get_fignums())
 
         if figure_count < minimum:
