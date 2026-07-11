@@ -164,10 +164,15 @@ func renderVariableExists(_ check: NotebookCheck, specHash: String) -> String {
         # Test: \(label)
         # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=variable_exists spec_hash=\(specHash) — edit the check, not this file.
 
+        import test_runtime as _tr
+
         name = \(nameLiteral)
 
+        # Runtime-state check: read the notebook AS EXECUTED (the extractor
+        # quarantines side-effecting top-level statements out of plain imports,
+        # so `x = compute(...)` is only defined in main-mode state).
         _MISSING = object()
-        actual = getattr(student_module, name, _MISSING)
+        actual = getattr(_tr.student_main_state(), name, _MISSING)
         if actual is _MISSING:
             failed(
                 f"Variable `{name}` is not defined in the student notebook.\\n"

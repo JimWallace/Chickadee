@@ -64,6 +64,12 @@ import Testing
                 SetTimeLimitTool.Output(assignmentPublicID: "abc123", timeLimitSeconds: 10)
             ),
             (
+                SetDatasetTool.name, SetDatasetTool.outputSchema,
+                SetDatasetTool.Output(
+                    assignmentPublicID: "abc123",
+                    datasets: [SetDatasetTool.DatasetEntry(file: "cases.csv", sampleSize: 100)])
+            ),
+            (
                 AuthorScriptTool.name, AuthorScriptTool.outputSchema,
                 AuthorScriptTool.Output(
                     assignmentPublicID: "abc123", filename: "test_x.py", tier: "public",

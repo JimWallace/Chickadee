@@ -140,7 +140,11 @@ enum MCPServerInstructions {
         passing the body inline as content, or, for a data file too large to inline faithfully (e.g. a \
         big CSV), passing sourceUrl (an https URL the server fetches under an SSRF guard: https only, \
         no private/loopback/metadata hosts, no redirects, 8 MB cap, UTF-8 body). \
-        Confirm a data file is bundled before authoring checks that load it.
+        Confirm a data file is bundled before authoring checks that load it. A support data file can \
+        also be marked as a per-student DATASET with set_dataset: each student then receives a \
+        deterministic per-seed sample of its rows under the same filename (the uploaded file becomes \
+        the hidden server-side pool), so every student explores their own data; get_support_files \
+        reports the mark (isDataset / datasetSampleSize) and remove:true clears it.
         - Global inputs (personalization) — assignment-scoped names that vary the assignment per \
         student: literal `variables` (a name + JSON value) and `expressions` (a name + Python source \
         evaluated against the student's `seed`). They inline into generated/raw tests and substitute \
@@ -231,7 +235,7 @@ enum MCPServerInstructions {
         you can see which check failed and why before fixing the suite or solution. It is \
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
-        Metadata-only edits (update_assignment, set_grading_mode, set_time_limit, \
+        Metadata-only edits (update_assignment, set_grading_mode, set_time_limit, set_dataset, \
         update_achievements, the section-organization tools) never trigger a regrade or a close. \
         update_global_inputs and update_section_variables re-inline the shared inputs into the \
         affected scripts in place and likewise neither close nor regrade (matching the web Global \
