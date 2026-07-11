@@ -142,7 +142,7 @@ import Vapor
             #expect(out.datasets.isEmpty)
 
             let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
-            #expect(setup.decodedManifest()?.datasets == [])
+            #expect(setup.decodedManifest()?.datasets.isEmpty == true)
             #expect(setup.manifest.contains("\"datasets\"") == false)
         }
     }

@@ -218,4 +218,25 @@ import Testing
         #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }
+
+    @Test func figureCount_countsPerShowFlush_withoutExplicitFigures() throws {
+        guard Self.python3Available, pythonModuleAvailable("matplotlib") else { return }
+
+        // Notebook-style plotting with NO plt.figure() calls: in Jupyter each
+        // plt.show() renders its own chart, but under batch Agg execution both
+        // plots would overlay one figure. The check's show-flush emulation must
+        // count 2, not 1.
+        let cells = [
+            NotebookCell(
+                cellType: "code",
+                source: "import matplotlib\nmatplotlib.use(\"Agg\")\nimport matplotlib.pyplot as plt"),
+            NotebookCell(cellType: "code", source: "plt.plot([1, 2, 3])\nplt.show()"),
+            NotebookCell(cellType: "code", source: "plt.plot([3, 2, 1])\nplt.show()"),
+        ]
+        let check = NotebookCheck(id: "two_figs_flush", kind: .figureCount, minFigures: 2)
+
+        let result = try runCheck(cells: cells, check: check)
+        #expect(result.exitCode == 0, "stdout: \(result.stdout)\nstderr: \(result.stderr)")
+        #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
+    }
 }

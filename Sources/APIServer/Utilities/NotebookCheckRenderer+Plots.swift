@@ -119,11 +119,28 @@ func renderFigureCount(_ check: NotebookCheck, specHash: String) -> String {
 
         # Plotting calls are side effects, which the extractor quarantines out
         # of plain imports — so execute the notebook in main mode (with the Agg
-        # backend already selected above), then read matplotlib's global Figure
-        # registry.  The figures are still registered even though plt.show()
-        # was a no-op under Agg.
-        _tr.student_main_state()
-        figure_count = len(plt.get_fignums())
+        # backend already selected above) and count charts as Jupyter renders
+        # them.  In a notebook each plt.show() flushes the current figure(s);
+        # under batch Agg execution show() is a no-op, so successive .plot()
+        # calls without plt.figure() would overlay one figure and undercount.
+        # Emulate the notebook: each show() counts the open figures and closes
+        # them; figures left open at the end (plt.figure() without show) count
+        # once more.
+        _shown_total = 0
+
+        def _counting_show(*args, **kwargs):
+            global _shown_total
+            _shown_total += len(plt.get_fignums())
+            plt.close("all")
+
+        _real_show = plt.show
+        plt.show = _counting_show
+        try:
+            _tr.student_main_state()
+        finally:
+            plt.show = _real_show
+
+        figure_count = _shown_total + len(plt.get_fignums())
 
         if figure_count < minimum:
             failed(
