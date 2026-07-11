@@ -35,6 +35,11 @@ struct GetSupportFilesTool: ContentTool {
     struct FileEntry: Encodable, Sendable {
         let filename: String
         let sizeBytes: Int
+        /// Present when the file is marked as a per-student dataset
+        /// (see set_dataset): rows each student receives, nil = whole file.
+        let datasetSampleSize: Int?
+        /// True when the file is a per-student dataset (docs/datasets.md).
+        let isDataset: Bool
     }
 
     struct Output: Encodable, Sendable {
@@ -58,7 +63,9 @@ struct GetSupportFilesTool: ContentTool {
         + "script (read those via get_suite) or the starter/solution notebook (get_notebook / "
         + "get_solution). Omit filename to list filenames and sizes; pass filename to read that file's "
         + "UTF-8 content, capped at maxBytes (default 65536) with truncated:true when the file is "
-        + "larger — so a big dataset returns a useful head. Write support files with "
+        + "larger — so a big dataset returns a useful head. Listed entries report per-student "
+        + "dataset marks (isDataset / datasetSampleSize — set them with set_dataset). Write "
+        + "support files with "
         + "author_script(tier:\"support\"). Read-only, instructor-authored content only; use it to "
         + "confirm a data file is actually bundled (and what its columns/rows look like) before "
         + "authoring checks that depend on it."
@@ -114,10 +121,15 @@ struct GetSupportFilesTool: ContentTool {
         }
 
         guard let filename = input.filename else {
+            let datasetSpecs = Dictionary(
+                (setup.decodedManifest()?.datasets ?? []).map { ($0.file, $0) },
+                uniquingKeysWith: { first, _ in first })
             let entries = supportNames.sorted().map { name in
                 FileEntry(
                     filename: name,
-                    sizeBytes: extractZipEntry(zipPath: setup.zipPath, entryName: name)?.count ?? 0)
+                    sizeBytes: extractZipEntry(zipPath: setup.zipPath, entryName: name)?.count ?? 0,
+                    datasetSampleSize: datasetSpecs[name]?.sampleSize,
+                    isDataset: datasetSpecs[name] != nil)
             }
             return Output(
                 assignmentPublicID: assignment.publicID,

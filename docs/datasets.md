@@ -503,6 +503,12 @@ pool. Secrecy becomes load-bearing only for Phase 2 mystery answers.
    hatch (reuses `PersonalizationEvaluator`'s file-writing subprocess), the
    bridge to Phase 2.
 
+**Authoring surfaces:** the `PUT /instructor/:id/datasets` endpoint shipped
+with the slices above, but the Files-panel inline control has not landed yet —
+the first shipping authoring surface is the **`set_dataset` MCP tool** (mark a
+bundled support file with a `sampleSize`, `remove:true` to clear;
+`get_support_files` reports `isDataset` / `datasetSampleSize`).
+
 ## Train/test splits & grader-only files (option B)
 
 The dataset feature also supports **train/test splits**, built from two

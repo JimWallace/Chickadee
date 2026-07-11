@@ -64,6 +64,10 @@ import Testing
         "SetGradingModeTool.swift",
         // Time limits are enforced at run time; no content change.
         "SetTimeLimitTool.swift",
+        // Dataset marks change delivery (per-student slices), not the graded
+        // suite; mirrors the web PUT /datasets endpoint, which neither closes
+        // nor regrades. Slices apply on the next (re)grade.
+        "SetDatasetTool.swift",
         // Display-only awards; never change what the suite grades.
         "UpdateAchievementsTool.swift",
         // Shared inputs re-inline into scripts in place, matching the web
