@@ -972,8 +972,10 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   generated script is byte-identical across students (cache + `spec_hash`
   unchanged); only the resolved-values map differs.  Authorable via the browser
   editor (type `$name` in an arg/Expected cell) and MCP (`update_pattern_family`
-  `expectedVarRef`); `preview_personalization` audits the refs.  Restricted to
-  `boundary_equality` families for now.  Doc:
+  `expectedVarRef`); `preview_personalization` audits the refs.  Supported in
+  the equality kinds (`boundary_equality`, `approximate_equality`,
+  `unordered_equality` — the `kindSupportsPerStudentRefs` allowlist in
+  `PatternFamilyValidator.swift`).  Doc:
   `docs/personalization-pattern-families.md`.
 
 - **Notebook checks, BrightSpace grade sync, AppScan/security hardening,
@@ -1108,8 +1110,8 @@ Per-version detail in `CHANGELOG.md`; the arcs a fresh session should know:
   (Render tests catch this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
 - **Feature backlog:** continued personalization / notebook-check
-  expansion (e.g. per-student refs in pattern kinds beyond
-  `boundary_equality`); pattern kinds beyond the eight shipped
+  expansion (e.g. per-student refs in pattern kinds beyond the three
+  equality kinds); pattern kinds beyond the eight shipped
   (`boundaryEquality` / `approximateEquality` / `variableEquality` /
   `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
   `stdoutEquality` / `unorderedEquality`); multi-provider SSO testing beyond UWaterloo DUO;
