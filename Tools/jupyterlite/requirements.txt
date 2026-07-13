@@ -1,6 +1,6 @@
-jupyterlite==0.8.0
-jupyterlite-core==0.8.0
-jupyterlite-pyodide-kernel==0.8.0
+jupyterlite==0.8.1
+jupyterlite-core==0.8.1
+jupyterlite-pyodide-kernel==0.8.1
 # jupyter-iframe-commands — labextension running INSIDE the editor iframe that
 # exposes the JupyterLab command registry to the parent frame over postMessage.
 # Paired with the vendored jupyter-iframe-commands-host bridge (Public/vendor/),
@@ -8,12 +8,12 @@ jupyterlite-pyodide-kernel==0.8.0
 # cross-frame poking with a supported API.  Federated into the bundle by
 # `jupyter lite build`; do not add to litePluginSettings (auto-discovered).
 jupyter-iframe-commands==0.3.0
-# R kernel (WebR) — BLOCKED: jupyterlite-webr 0.6.0 (latest) requires
-# jupyterlite-core<0.7, which conflicts with our 0.7.1 pin.  Additionally,
-# WebR requires COOP/COEP HTTP headers (Cross-Origin-Opener-Policy: same-origin
-# + Cross-Origin-Embedder-Policy: require-corp) that Chickadee does not yet
-# send.  Uncomment and pin once a jupyterlite-webr release targeting core 0.7.x
-# is available, then run scripts/build-jupyterlite.sh.
+# R kernel (WebR) — BLOCKED: jupyterlite-webr 0.6.0 (latest, checked 2026-07)
+# requires jupyterlite-core<0.7, which conflicts with our 0.8.x pin.  Uncomment
+# and pin once a jupyterlite-webr release targeting core 0.8.x is available,
+# then run scripts/build-jupyterlite.sh.  (The COOP/COEP headers WebR needs are
+# now sent on the editor routes — cross-origin isolation shipped with the
+# SharedArrayBuffer kernel work — so the header blocker is gone.)
 # Package: jupyterlite-webr (CDN-hosted WASM — no self-build required)
 # Tracker: #77
 # jupyterlite-webr
