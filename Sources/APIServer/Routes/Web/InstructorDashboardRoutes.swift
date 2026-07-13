@@ -64,6 +64,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(
             ":assignmentID", "students", ":studentID", "grade-override", "delete",
             use: deleteStudentGradeOverride)
+        r.post(
+            ":assignmentID", "students", ":studentID", "regrant-reveal-token",
+            use: regrantSecretRevealToken)
         // Draft-assignment authoring (create page, save, publish, draft
         // suite / family / check / script / suite-section CRUD) lives on
         // `DraftAssignmentRoutes` (registered in routes.swift).
@@ -72,6 +75,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         // `CourseAdminRoutes` (registered in routes.swift).
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
+        r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
@@ -346,6 +350,36 @@ struct InstructorDashboardRoutes: RouteCollection {
         return req.redirect(to: "/instructor/\(assignment.publicID)/edit?notice=BrightSpace+grade+item+ID+saved")
     }
 
+    // MARK: - POST /instructor/:assignmentID/secret-reveal
+
+    /// Saves the per-assignment secret-reveal toggle. A dedicated lightweight
+    /// endpoint rather than a field on the main Save form: `saveEditedAssignment`
+    /// closes the assignment and re-enqueues validation on every save, which
+    /// would make a mid-semester toggle flip needlessly destructive. Display
+    /// policy only — no manifest change, no regrade, no close.
+    @Sendable
+    func saveSecretRevealSetting(req: Request) async throws -> Response {
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        struct ToggleBody: Content {
+            // Checkbox: "on" when checked, absent from the body when not —
+            // decode as optional and treat absence as false, so unchecking
+            // actually turns the toggle off.
+            var enabled: String?
+        }
+        let enabled = ((try? req.content.decode(ToggleBody.self))?.enabled) != nil
+        try await AssignmentAuthoringService.updateMetadata(
+            assignment, secretRevealEnabled: enabled, on: req.db)
+        await AuditLogger.record(
+            action: .secretRevealToggled,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: ["assignment": assignment.publicID, "enabled": String(enabled)],
+            on: req
+        )
+        return req.redirect(
+            to: "/instructor/\(assignment.publicID)/edit?notice=Secret+reveal+token+setting+saved")
+    }
+
     // MARK: - POST /instructor/:assignmentID/delete
 
     @Sendable
@@ -487,6 +521,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             achievementSignalOptions: AchievementSignalPresentation.all,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
+            secretRevealEnabled: assignment.secretRevealEnabled == true,
             notice: q?.notice,
             error: q?.error
         )

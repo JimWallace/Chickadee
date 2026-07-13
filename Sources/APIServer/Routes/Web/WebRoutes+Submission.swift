@@ -259,17 +259,22 @@ extension WebRoutes {
         let setup = try await APITestSetup.find(submission.testSetupID, on: req.db)
         let setupProps = setup?.decodedManifest()
         // Students see public + release rows itemized (release output is gated
-        // on the deadline); secret is never itemized.  The grade itself spans
-        // every tier — see `processDisplayResult` — so it is stable across the
-        // deadline and matches the dashboard.
+        // on the deadline); secret is itemized only after the student spends
+        // their secret-reveal token (toggle + spend row, see
+        // `SecretRevealState`).  The grade itself spans every tier — see
+        // `processDisplayResult` — so it is stable across the deadline and
+        // matches the dashboard.
         //
         // Release *output* is gated on the *effective* deadline — the later of
         // the assignment due date and the viewer's own per-student extension —
         // so a student with an active extension keeps the hidden release output
         // redacted until their extended window closes.  A non-instructor may
         // only view their own submission (guarded above), so `user` is the
-        // submission owner; instructors see release output regardless.
-        let itemized = itemizedTiers(isStaff: isStaff)
+        // submission owner (which is why resolving the reveal state by viewer
+        // ID is correct); instructors see release output regardless.
+        let reveal = try await SecretRevealState.resolve(
+            assignment: submissionAssignment, userID: user.id, isStaff: isStaff, on: req.db)
+        let itemized = itemizedTiers(isStaff: isStaff, secretRevealed: reveal.revealed)
         let releaseDeadline = try await releaseVisibilityDeadline(
             for: submissionAssignment, user: user, on: req.db)
         let releaseOutput = releaseOutputVisible(isStaff: isStaff, effectiveDueAt: releaseDeadline)
@@ -290,7 +295,8 @@ extension WebRoutes {
                 collection: displayCollection,
                 viewer: SubmissionViewer(
                     user: user, isStaff: isStaff, itemizedTiers: itemized,
-                    releaseOutputVisible: releaseOutput),
+                    releaseOutputVisible: releaseOutput,
+                    secretRevealed: reveal.revealed),
                 submission: submission,
                 priorAttempt: priorAttempt,
                 manifestDisplay: manifestDisplay
@@ -368,7 +374,11 @@ extension WebRoutes {
                 overrideGradePercent: overrideGradePercent,
                 classGoals: classGoals
             ),
-            delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
+            delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText),
+            secretReveal: SecretRevealBanner(
+                available: reveal.enabled && !reveal.spent && !isStaff
+                    && hasSecretTierTests(setupProps),
+                active: reveal.revealed)
         )
         return try await req.view.render("submission", ctx)
     }

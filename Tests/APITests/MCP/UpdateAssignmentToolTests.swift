@@ -259,6 +259,29 @@ import Vapor
         }
     }
 
+    @Test func setsAndClearsSecretRevealEnabled() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await enrolledAssignment(on: app)
+
+            let enabled = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, secretRevealEnabled: true),
+                context(app))
+            #expect(enabled.secretRevealEnabled)
+            var reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.secretRevealEnabled == true)
+
+            let disabled = try await UpdateAssignmentTool().execute(
+                UpdateAssignmentTool.Input(
+                    assignmentPublicID: assignment.publicID, secretRevealEnabled: false),
+                context(app))
+            #expect(disabled.secretRevealEnabled == false)
+            reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
+            #expect(reloaded?.secretRevealEnabled == false)
+        }
+    }
+
     @Test func deniesWhenSubjectNotEnrolled() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

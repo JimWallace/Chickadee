@@ -393,6 +393,13 @@ struct SubmissionContext: Encodable {
     /// `!classGoals.isEmpty` in Leaf, so an empty goal list never leaks a bare
     /// heading regardless of how the Leaf encoder represents an empty array.
     let hasClassGoals: Bool
+    /// True when this viewer may spend their secret-reveal token here:
+    /// toggle on, manifest has secret tests, viewer is the (non-staff)
+    /// owner, token not yet spent.  Renders the offer box + POST form.
+    let secretRevealAvailable: Bool
+    /// True when the reveal is active (toggle on + token spent): secret
+    /// rows are itemized and the "revealed" info banner shows.
+    let secretRevealActive: Bool
 }
 
 /// One class-goal achievement's display state for the submission page.

@@ -126,6 +126,11 @@ enum AuditAction: String, Sendable, CaseIterable {
     case gradeOverrideSet = "grade_override.set"
     case gradeOverrideCleared = "grade_override.cleared"
 
+    // Secret reveal tokens
+    case secretRevealSpent = "secret_reveal.spent"
+    case secretRevealRegranted = "secret_reveal.regranted"
+    case secretRevealToggled = "secret_reveal.toggle_changed"
+
     // Runner / worker
     case runnerSecretRotated = "runner.secret_rotated"
     case runnerAutostartChanged = "runner.autostart_changed"
@@ -172,7 +177,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .enrollment
         case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent:
             return .submissions
-        case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared:
+        case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
+            .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled:
             return .grading
         case .runnerSecretRotated, .runnerAutostartChanged:
             return .runner
@@ -218,6 +224,9 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .extensionRevoked: return "Extension revoked"
         case .gradeOverrideSet: return "Grade override set"
         case .gradeOverrideCleared: return "Grade override cleared"
+        case .secretRevealSpent: return "Reveal token spent"
+        case .secretRevealRegranted: return "Reveal token re-granted"
+        case .secretRevealToggled: return "Reveal token setting changed"
         case .runnerSecretRotated: return "Runner secret rotated"
         case .runnerAutostartChanged: return "Runner autostart changed"
         case .brightspaceAdminAuthorized: return "LEARN deployment key authorized"

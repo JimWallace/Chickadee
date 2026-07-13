@@ -333,6 +333,46 @@ extension InstructorDashboardRoutes {
         return req.redirect(to: redirectPath)
     }
 
+    // MARK: - POST /instructor/:assignmentID/students/:studentID/regrant-reveal-token
+
+    /// Staff re-grant of a student's secret-reveal token: deletes the spend
+    /// row, so secret results are hidden again for the student until they
+    /// spend the (restored) token. TA+ — a grading-support action, same rung
+    /// as reset-notebook and grade overrides.
+    @Sendable
+    func regrantSecretRevealToken(req: Request) async throws -> Response {
+        struct RegrantBody: Content { var returnTo: String? }
+
+        _ = try req.auth.require(APIUser.self)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
+        let assignmentIDRaw = assignment.publicID
+        let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
+        guard let studentUUID = student.id else {
+            throw WebAssignmentError.notFound(resource: "Student")
+        }
+
+        if try await SecretRevealStore.regrantToken(
+            userID: studentUUID, assignmentID: assignment.requireID(), on: req.db)
+        {
+            await AuditLogger.record(
+                action: .secretRevealRegranted,
+                targetType: .assignment,
+                targetID: assignment.id?.uuidString,
+                metadata: [
+                    "assignment": assignmentIDRaw,
+                    "student_username": student.username,
+                ],
+                on: req
+            )
+        }
+
+        let body = try? req.content.decode(RegrantBody.self)
+        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
+        let redirectPath = sanitizedAssignmentReturnPath(
+            body?.returnTo, assignmentIDRaw: assignmentIDRaw, fallbackPath: fallbackPath)
+        return req.redirect(to: redirectPath)
+    }
+
     /// Resolves the `:studentID` UUID parameter to a `role == "student"` user
     /// enrolled in the assignment's course.  Throws `notFound` when the
     /// parameter is missing/invalid, the user doesn't exist or isn't a

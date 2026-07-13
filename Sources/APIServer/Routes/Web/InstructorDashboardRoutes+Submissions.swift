@@ -48,6 +48,16 @@ extension InstructorDashboardRoutes {
             overrideByStudentID[key.userID] = pct
         }
 
+        // Reveal-token spends, fetched only when the assignment's toggle is
+        // on — with it off the affordance is hidden and the page renders
+        // identically to the pre-feature layout.
+        let secretRevealEnabled = assignment.secretRevealEnabled == true
+        var spentRevealUserIDs: Set<UUID> = []
+        if secretRevealEnabled {
+            spentRevealUserIDs = try await SecretRevealStore.spentUserIDs(
+                assignmentID: assignment.requireID(), on: req.db)
+        }
+
         let fmt = waterlooDateTimeFormatter()
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             buildAssignmentStudentRow(
@@ -55,6 +65,7 @@ extension InstructorDashboardRoutes {
                 submissionsByStudentID: submissionsByStudentID,
                 bestPercentBySubmissionID: bestPercentBySubmissionID,
                 overrideByStudentID: overrideByStudentID,
+                spentRevealUserIDs: spentRevealUserIDs,
                 assignmentIDRaw: assignmentIDRaw,
                 fmt: fmt
             )
@@ -74,7 +85,8 @@ extension InstructorDashboardRoutes {
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 metrics: metrics,
-                rows: rows
+                rows: rows,
+                secretRevealEnabled: secretRevealEnabled
             )
         )
     }
@@ -122,6 +134,7 @@ extension InstructorDashboardRoutes {
         submissionsByStudentID: [UUID: [APISubmission]],
         bestPercentBySubmissionID: [String: Int],
         overrideByStudentID: [UUID: Int],
+        spentRevealUserIDs: Set<UUID>,
         assignmentIDRaw: String,
         fmt: DateFormatter
     ) -> AssignmentStudentRow? {
@@ -163,7 +176,8 @@ extension InstructorDashboardRoutes {
             latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
             additionalSubmissionCount: max(history.count - 1, 0),
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
-            bestGradePercent: bestGradePercent
+            bestGradePercent: bestGradePercent,
+            secretRevealSpent: spentRevealUserIDs.contains(studentID)
         )
     }
 

@@ -431,4 +431,10 @@ func registerMigrations(on app: Application) {
     // AddResultGradeColumns — its backfill reads the column this migration
     // drops.
     app.migrations.add(CreateResultCollections())
+
+    // Secret reveal tokens: per-assignment instructor toggle plus one
+    // spent-token row per (student, assignment). Column-only + new table;
+    // no migration full-queries APIAssignment, so ordering is unconstrained.
+    app.migrations.add(AddAssignmentSecretRevealEnabled())
+    app.migrations.add(CreateSecretRevealUnlocks())
 }

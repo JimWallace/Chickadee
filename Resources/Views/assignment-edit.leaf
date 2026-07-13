@@ -145,6 +145,26 @@
     </div>
 </form>
 
+<!-- ── Student Options ─────────────────────────────────────────────────
+     Per-assignment student-facing policy toggles.  Lives OUTSIDE the
+     multipart Save & Validate form (nested forms are stripped by the
+     browser) and persists via its own lightweight endpoint so a
+     mid-semester flip doesn't close/re-validate the assignment. -->
+<section class="editor-block">
+    <div class="editor-block-head">
+        <h2>Student Options</h2>
+    </div>
+    <form method="post" action="/instructor/#(assignmentID)/secret-reveal">
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="enabled" #if(secretRevealEnabled):checked#endif>
+            Allow each student to spend their one reveal token to see this assignment&rsquo;s secret test results
+        </label>
+        <p class="field-note text-muted">Spending is permanent for the student (staff can re-grant from the submissions page). Revealed secret tests show like public ones — names, output, and hints. Grades are unaffected.</p>
+        <button class="btn action-btn" type="submit">Save</button>
+    </form>
+</section>
+
 <!-- ── Global Inputs (Slice 1 of #461) ─────────────────────────────────
      Assignment-scope named values, inlined at save time everywhere they
      can be referenced: pattern-family case args (`$name`), prepended to

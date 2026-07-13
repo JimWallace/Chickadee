@@ -75,17 +75,30 @@ func wrEnrollUser(_ user: APIUser, on app: Application) async throws {
 }
 
 @discardableResult
-func wrInsertSetup(id: String, on app: Application) async throws -> APITestSetup {
-    let manifest = """
-        {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
-        """
+func wrInsertSetup(
+    id: String,
+    manifest: String? = nil,
+    on app: Application
+) async throws -> APITestSetup {
+    let manifestJSON =
+        manifest
+            ?? """
+            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+            """
     let course = try await wrMakeCourse(on: app)
     let courseID = try course.requireID()
     let setup = APITestSetup(
-        id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
+        id: id, manifest: manifestJSON, zipPath: app.testSetupsDirectory + "\(id).zip",
+        courseID: courseID)
     try await setup.save(on: app.db)
     return setup
 }
+
+/// A manifest with one public and one secret suite entry — the seed for
+/// secret-reveal-token tests (`wrInsertSetup(id:manifest:)`).
+let wrManifestWithSecretTier = """
+    {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"},{"tier":"secret","script":"secrettest.sh"}],"timeLimitSeconds":10}
+    """
 
 @discardableResult
 func wrInsertAssignment(
@@ -93,11 +106,15 @@ func wrInsertAssignment(
     title: String,
     isOpen: Bool,
     dueAt: Date? = nil,
+    secretRevealEnabled: Bool = false,
     on app: Application
 ) async throws -> APIAssignment {
     let course = try await wrMakeCourse(on: app)
     let courseID = try course.requireID()
     let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: dueAt, isOpen: isOpen, courseID: courseID)
+    if secretRevealEnabled {
+        a.secretRevealEnabled = true
+    }
     try await a.save(on: app.db)
     return a
 }
