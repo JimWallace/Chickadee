@@ -35,7 +35,10 @@ struct GetAssignmentTool: ContentTool {
         let sectionID: String?
         let sectionName: String?
         /// Whether students may spend their one secret-reveal token here to
-        /// see secret-tier test results. Set with update_assignment.
+        /// see secret-tier test results. Set via the assignment-update tool.
+        /// (The write tool's name must not appear in this read tool's
+        /// serialized description: the read-only-mode contract tests assert
+        /// the whole tools/list JSON never contains a write tool's name.)
         let secretRevealEnabled: Bool
     }
 
@@ -48,7 +51,7 @@ struct GetAssignmentTool: ContentTool {
         + "\"browser\" = graded in-browser via Pyodide), the course section (assignment group "
         + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped), and "
         + "secretRevealEnabled (whether students may spend their one secret-reveal token to see "
-        + "secret-tier test results; set with update_assignment)."
+        + "secret-tier test results; set via the assignment-update tool)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
