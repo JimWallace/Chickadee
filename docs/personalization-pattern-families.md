@@ -196,9 +196,16 @@ So the feature's strongest wins are for **worker-graded** assignments and for
   expression names (so per-student refs validate + highlight rather than being
   red-flagged), serializes the Expected ref as `expectedVarRef`, and skips
   Pyodide auto-compute for per-student rows — mirroring the existing arg-cell
-  `$name` UX. Follow-ups (not blocking): surfacing `expectedVarRef` on the
-  `get_suite` read DTO, and extending the `preview_personalization` placeholder
-  audit to test scripts.
+  `$name` UX. The two follow-ups originally noted here have both since shipped:
+  `get_suite` returns each case's `expectedVarRef` (the read DTO embeds the
+  full `PatternFamily` spec), and the `preview_personalization` placeholder
+  audit covers test-script refs (`argVarRefs` / `expectedVarRef` on every
+  family case), not just the notebook.
+
+Since the initial `.boundaryEquality`-only MVP, per-student refs have expanded
+to `.approximateEquality` and `.unorderedEquality` — the supported set is the
+`kindSupportsPerStudentRefs` allowlist in `PatternFamilyValidator.swift`
+(the equality kinds; the remaining kinds are future work).
 
 ## Open questions
 
