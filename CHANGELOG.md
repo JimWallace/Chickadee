@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.614] - 2026-07-13
+
+### Fixed
+
+- **Per-student pattern-family validation messages name the full supported
+  set.** The validator's error for a per-student `$name` / `expectedVarRef`
+  on an unsupported kind still claimed only `boundary_equality` and
+  `approximate_equality` were allowed; `unordered_equality` gained the
+  personalization preamble but the messages (and docs) were never updated.
+  The messages now derive from a single description constant kept next to
+  the `kindSupportsPerStudentRefs` allowlist, and the design doc / CLAUDE.md
+  status notes for #814 were refreshed (both previously-listed follow-ups —
+  `expectedVarRef` on the `get_suite` DTO and the `preview_personalization`
+  test-script audit — had already shipped).
+
+### Changed
+
+- **Type-check expression rendering deduplicated (#497).** The
+  byte-for-byte duplicate type-name → check-expression mappings in the
+  pattern-family `.returnTypeCheck` renderer and the notebook-check
+  `.variableExists` renderer are now one shared
+  `pythonTypeCheckExpression(typeName:valueExpr:)` helper in
+  `PythonScriptHelpers.swift`, alongside the helpers extracted in
+  v0.4.170. Generated script bytes are unchanged, so `spec_hash` and
+  `TestSetupCache` keys are stable. This was the last tracked item on
+  #497.
+
+
 ## [0.4.613] - 2026-07-11
 
 ### Fixed
