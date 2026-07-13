@@ -336,9 +336,9 @@ extension WebRoutes {
         processed: ProcessedCollection,
         sectionedOutcomes: [SectionedOutcomes],
         decorations: SubmissionDecorations,
-        delta: DeltaBanner,
-        secretReveal: SecretRevealBanner
+        delta: DeltaBanner
     ) -> SubmissionContext {
+        let secretReveal = decorations.secretReveal
         let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
         let currentUser = decorations.currentUser
@@ -603,4 +603,6 @@ struct SubmissionDecorations {
     let overrideGradePercent: Int?
     /// Class-goal progress views for the "Achievements" section.
     let classGoals: [ClassGoalView]
+    /// Secret-reveal offer/active state for the reveal-token UI.
+    let secretReveal: SecretRevealBanner
 }

@@ -58,14 +58,16 @@ extension InstructorDashboardRoutes {
                 assignmentID: assignment.requireID(), on: req.db)
         }
 
+        let lookups = StudentRowLookups(
+            submissionsByStudentID: submissionsByStudentID,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
+            overrideByStudentID: overrideByStudentID,
+            spentRevealUserIDs: spentRevealUserIDs)
         let fmt = waterlooDateTimeFormatter()
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             buildAssignmentStudentRow(
                 student: student,
-                submissionsByStudentID: submissionsByStudentID,
-                bestPercentBySubmissionID: bestPercentBySubmissionID,
-                overrideByStudentID: overrideByStudentID,
-                spentRevealUserIDs: spentRevealUserIDs,
+                lookups: lookups,
                 assignmentIDRaw: assignmentIDRaw,
                 fmt: fmt
             )
@@ -129,23 +131,29 @@ extension InstructorDashboardRoutes {
         return submissionsByStudentID
     }
 
+    /// Per-assignment lookup tables shared by every roster row build, bundled
+    /// so `buildAssignmentStudentRow` stays within the parameter-count limit.
+    private struct StudentRowLookups {
+        let submissionsByStudentID: [UUID: [APISubmission]]
+        let bestPercentBySubmissionID: [String: Int]
+        let overrideByStudentID: [UUID: Int]
+        let spentRevealUserIDs: Set<UUID>
+    }
+
     private func buildAssignmentStudentRow(
         student: APIUser,
-        submissionsByStudentID: [UUID: [APISubmission]],
-        bestPercentBySubmissionID: [String: Int],
-        overrideByStudentID: [UUID: Int],
-        spentRevealUserIDs: Set<UUID>,
+        lookups: StudentRowLookups,
         assignmentIDRaw: String,
         fmt: DateFormatter
     ) -> AssignmentStudentRow? {
         guard let studentID = student.id else { return nil }
-        let history = submissionsByStudentID[studentID] ?? []
+        let history = lookups.submissionsByStudentID[studentID] ?? []
         let latest = history.first
         let runnerBestGradePercent: Int? = {
             var best = -1
             for submission in history {
                 guard let subID = submission.id,
-                    let pct = bestPercentBySubmissionID[subID]
+                    let pct = lookups.bestPercentBySubmissionID[subID]
                 else {
                     continue
                 }
@@ -155,7 +163,7 @@ extension InstructorDashboardRoutes {
         }()
         // An instructor override is the student's effective grade — it feeds
         // both the displayed grade and the median metric.
-        let override = overrideByStudentID[studentID]
+        let override = lookups.overrideByStudentID[studentID]
         let bestGradePercent = override ?? runnerBestGradePercent
         let inferredName =
             splitHumanName(student.displayName)
@@ -177,7 +185,7 @@ extension InstructorDashboardRoutes {
             additionalSubmissionCount: max(history.count - 1, 0),
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
             bestGradePercent: bestGradePercent,
-            secretRevealSpent: spentRevealUserIDs.contains(studentID)
+            secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID)
         )
     }
 

@@ -303,38 +303,13 @@ extension WebRoutes {
             )
         }
 
-        // Class-goal bonus: extra credit on the autograded grade, capped at 100%
-        // (no-op unless the assignment has a points-rewarded class goal).
-        if processed.totalPoints > 0 {
-            let bonus = try await classGoalBonusPoints(
-                testSetupID: submission.testSetupID, props: setupProps, on: req.db)
-            if bonus > 0 {
-                let bonused = earnedWithClassGoalBonus(
-                    earned: processed.rawEarnedPoints,
-                    total: Double(processed.totalPoints),
-                    bonus: bonus)
-                processed.gradePercent = Int(
-                    (bonused / Double(processed.totalPoints) * 100).rounded())
-                processed.earnedPoints = formatPoints(bonused)
-            }
-        }
+        try await applyClassGoalBonus(
+            to: &processed, setupProps: setupProps,
+            testSetupID: submission.testSetupID, on: req.db)
 
-        // Append class-wide achievement badges held by this specific submission.
-        let classAchievements = try await APIClassAchievement.query(on: req.db)
-            .filter(\.$submissionID == subID)
-            .all()
-        // Authorable individual badges (threshold / test), earned per-student
-        // from this submission's result (evaluated over all tiers so a
-        // secret-test badge works without revealing the test).
-        let individualBadges = earnedIndividualBadgesForDisplay(
-            collection: displayCollection, props: setupProps,
-            gradePercent: processed.gradePercent)
-        let badges =
-            builtInBadgesForSubmission(
-                badgeContext: processed.badgeContext,
-                classAchievements: classAchievements,
-                setup: setup)
-            + individualBadges
+        let badges = try await submissionBadges(
+            req: req, subID: subID, displayCollection: displayCollection,
+            setupProps: setupProps, setup: setup, processed: processed)
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
@@ -372,18 +347,65 @@ extension WebRoutes {
                 badges: badges,
                 currentUser: req.currentUserContext,
                 overrideGradePercent: overrideGradePercent,
-                classGoals: classGoals
+                classGoals: classGoals,
+                secretReveal: SecretRevealBanner(
+                    available: reveal.enabled && !reveal.spent && !isStaff
+                        && hasSecretTierTests(setupProps),
+                    active: reveal.revealed)
             ),
-            delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText),
-            secretReveal: SecretRevealBanner(
-                available: reveal.enabled && !reveal.spent && !isStaff
-                    && hasSecretTierTests(setupProps),
-                active: reveal.revealed)
+            delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
         return try await req.view.render("submission", ctx)
     }
 
     // MARK: - submissionPage helpers
+
+    /// Class-goal bonus: extra credit on the autograded grade, capped at 100%
+    /// (no-op unless the assignment has a points-rewarded class goal).
+    private func applyClassGoalBonus(
+        to processed: inout ProcessedCollection,
+        setupProps: TestProperties?,
+        testSetupID: String,
+        on db: Database
+    ) async throws {
+        guard processed.totalPoints > 0 else { return }
+        let bonus = try await classGoalBonusPoints(
+            testSetupID: testSetupID, props: setupProps, on: db)
+        guard bonus > 0 else { return }
+        let bonused = earnedWithClassGoalBonus(
+            earned: processed.rawEarnedPoints,
+            total: Double(processed.totalPoints),
+            bonus: bonus)
+        processed.gradePercent = Int(
+            (bonused / Double(processed.totalPoints) * 100).rounded())
+        processed.earnedPoints = formatPoints(bonused)
+    }
+
+    /// Assembles the badge strip for one submission: class-wide achievement
+    /// badges held by this specific submission, built-in badges, and
+    /// authorable individual badges (threshold / test) earned per-student from
+    /// this submission's result — the latter evaluated over all tiers so a
+    /// secret-test badge works without revealing the test.
+    private func submissionBadges(
+        req: Request,
+        subID: String,
+        displayCollection: TestOutcomeCollection?,
+        setupProps: TestProperties?,
+        setup: APITestSetup?,
+        processed: ProcessedCollection
+    ) async throws -> [AchievementBadge] {
+        let classAchievements = try await APIClassAchievement.query(on: req.db)
+            .filter(\.$submissionID == subID)
+            .all()
+        let individualBadges = earnedIndividualBadgesForDisplay(
+            collection: displayCollection, props: setupProps,
+            gradePercent: processed.gradePercent)
+        return builtInBadgesForSubmission(
+            badgeContext: processed.badgeContext,
+            classAchievements: classAchievements,
+            setup: setup)
+            + individualBadges
+    }
 
     /// Selects the result row to render on the submission page: the worker
     /// result is preferred (official grade); the browser result is the
