@@ -411,7 +411,7 @@ aren't leaked to `cdn.jsdelivr.net` and `esm.sh` on every page load
 (FIPPA / PIPEDA concern surfaced in the v0.4.171 audit).
 
 ```
-Public/pyodide/              — the ONE canonical Pyodide distribution (~1.4 GB)
+Public/pyodide/              — the ONE canonical Pyodide distribution (~465 MB)
 Public/vendor/jszip.min.js   — jszip browser-runner uses for zip extraction
 Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
 ```
