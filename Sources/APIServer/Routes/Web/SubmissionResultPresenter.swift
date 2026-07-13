@@ -107,9 +107,9 @@ extension WebRoutes {
     /// #1173): computes the all-tier grade (so the number matches the
     /// dashboard and is stable across the deadline), and renders each
     /// *itemized* outcome into an `OutcomeRow`. Students see public + release
-    /// rows; release output is redacted until the deadline. Secret never
-    /// appears as a row — for non-instructors it is surfaced as an aggregate
-    /// pass/fail `TierSummary` instead.
+    /// rows; release output is redacted until the deadline. Secret appears as
+    /// rows only for staff or a student with a spent secret-reveal token —
+    /// otherwise it is surfaced as an aggregate pass/fail `TierSummary`.
     func processDisplayResult(
         result: APIResult,
         collection maybeCollection: TestOutcomeCollection?,
@@ -124,11 +124,14 @@ extension WebRoutes {
             return processed
         }
 
-        // Secret tests count toward the grade but are never itemized for
-        // students; they are bucketed into per-section aggregate pass/fail
-        // summaries by `buildSectionedOutcomes`.  Kept in collection order so
-        // the section correlation lines up with the secret manifest entries.
-        if !viewer.isStaff {
+        // Secret tests count toward the grade but are not itemized for
+        // students (unless they spent their secret-reveal token); they are
+        // bucketed into per-section aggregate pass/fail summaries by
+        // `buildSectionedOutcomes`.  Kept in collection order so the section
+        // correlation lines up with the secret manifest entries.  When
+        // revealed, secret outcomes flow through the itemized rows below
+        // instead, and this stays empty — so the aggregate never doubles up.
+        if !viewer.isStaff && !viewer.secretRevealed {
             processed.secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
         }
 
@@ -335,6 +338,7 @@ extension WebRoutes {
         decorations: SubmissionDecorations,
         delta: DeltaBanner
     ) -> SubmissionContext {
+        let secretReveal = decorations.secretReveal
         let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
         let currentUser = decorations.currentUser
@@ -376,7 +380,9 @@ extension WebRoutes {
             badges: badges,
             currentUser: currentUser,
             classGoals: decorations.classGoals,
-            hasClassGoals: !decorations.classGoals.isEmpty
+            hasClassGoals: !decorations.classGoals.isEmpty,
+            secretRevealAvailable: secretReveal.available,
+            secretRevealActive: secretReveal.active
         )
     }
 }
@@ -553,11 +559,17 @@ struct SubmissionViewer {
     /// Slice G, per-course; was the global `user.isInstructor`).
     let isStaff: Bool
     /// Tiers rendered as individual rows (public + release for students; all
-    /// tiers for instructors).  Secret is never itemized for students.
+    /// tiers for instructors).  Secret is itemized for students only when
+    /// `secretRevealed`.
     let itemizedTiers: Set<String>
     /// Whether release-tier output is shown (true after the deadline / for
     /// instructors).  Release rows are listed by name either way.
     let releaseOutputVisible: Bool
+    /// True when this student has spent their secret-reveal token on an
+    /// assignment whose reveal option is enabled — secret rows are then
+    /// itemized like public rows instead of aggregated.  Always false for
+    /// staff (they itemize secret regardless).
+    let secretRevealed: Bool
 }
 
 // Internal (was private): constructed by `submissionPage` in
@@ -567,6 +579,16 @@ struct SubmissionViewer {
 struct DeltaBanner {
     let hasDelta: Bool
     let headerText: String?
+}
+
+// Internal: constructed by `submissionPage` in WebRoutes+Submission.swift.
+/// Secret-reveal display state for the submission page.  `available` renders
+/// the "spend your reveal token" offer box; `active` renders the "secret
+/// tests revealed" info banner (and secret rows itemize via the viewer's
+/// tier set).  Both are always false for staff.
+struct SecretRevealBanner {
+    let available: Bool
+    let active: Bool
 }
 
 // Internal (was private): constructed by `submissionPage` in
@@ -581,4 +603,6 @@ struct SubmissionDecorations {
     let overrideGradePercent: Int?
     /// Class-goal progress views for the "Achievements" section.
     let classGoals: [ClassGoalView]
+    /// Secret-reveal offer/active state for the reveal-token UI.
+    let secretReveal: SecretRevealBanner
 }

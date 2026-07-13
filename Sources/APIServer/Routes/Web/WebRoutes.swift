@@ -25,6 +25,7 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "notebook", use: notebookPage)
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
         routes.post("testsetups", ":testSetupID", "reset-notebook", use: resetOwnNotebook)
+        routes.post("testsetups", ":testSetupID", "reveal-secret", use: spendSecretRevealToken)
         // Self-service "clear cached editor data" page for a wedged kernel
         // (Clear-Site-Data: cache + storage; see WebRoutes+EditorReset.swift).
         routes.get("reset-editor", use: editorResetPage)

@@ -34,6 +34,12 @@ struct GetAssignmentTool: ContentTool {
         /// belongs to, or nil when ungrouped. Manage with set_assignment_course_section.
         let sectionID: String?
         let sectionName: String?
+        /// Whether students may spend their one secret-reveal token here to
+        /// see secret-tier test results. Set via the assignment-update tool.
+        /// (The write tool's name must not appear in this read tool's
+        /// serialized description: the read-only-mode contract tests assert
+        /// the whole tools/list JSON never contains a write tool's name.)
+        let secretRevealEnabled: Bool
     }
 
     static let name = "get_assignment"
@@ -42,8 +48,10 @@ struct GetAssignmentTool: ContentTool {
         + "visibility (closed/preview/open; preview is a staff-only beta state), the "
         + "derived isOpen flag, due date (ISO 8601), scheduled open date (ISO 8601, if any), "
         + "runner validation status, gradingMode (\"worker\" = graded by the native runner, "
-        + "\"browser\" = graded in-browser via Pyodide), and the course section (assignment group "
-        + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped)."
+        + "\"browser\" = graded in-browser via Pyodide), the course section (assignment group "
+        + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped), and "
+        + "secretRevealEnabled (whether students may spend their one secret-reveal token to see "
+        + "secret-tier test results; set via the assignment-update tool)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -71,11 +79,12 @@ struct GetAssignmentTool: ContentTool {
             "gradingMode": MCPSchema.string,
             "sectionID": MCPSchema.string,
             "sectionName": MCPSchema.string,
+            "secretRevealEnabled": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
             .string("isOpen"), .string("visibility"), .string("deadlineOverrideActive"),
-            .string("gradingMode"),
+            .string("gradingMode"), .string("secretRevealEnabled"),
         ]),
     ])
     static let requiredScopes: Set<ContentScope> = [.read]
@@ -113,7 +122,8 @@ struct GetAssignmentTool: ContentTool {
             deadlineOverrideActive: assignment.deadlineOverrideActive ?? false,
             gradingMode: gradingMode,
             sectionID: assignment.sectionID?.uuidString,
-            sectionName: sectionName
+            sectionName: sectionName,
+            secretRevealEnabled: assignment.secretRevealEnabled == true
         )
     }
 }

@@ -119,15 +119,19 @@ struct SubmissionQueryRoutes: RouteCollection {
             .first()
         let releaseDeadline = try await releaseVisibilityDeadline(
             for: assignment, user: caller, on: req.db)
+        let reveal = try await SecretRevealState.resolve(
+            assignment: assignment, userID: caller.id, isStaff: access.isStaff, on: req.db)
         let callerVisibleTiers = visibleTiers(
-            isStaff: access.isStaff, effectiveDueAt: releaseDeadline)
+            isStaff: access.isStaff, effectiveDueAt: releaseDeadline,
+            secretRevealed: reveal.revealed)
 
         // A stored result is immutable, so the response bytes are fully
         // determined by (result row, visible tier set, ?tiers= slice).  The
         // tier set is part of the key because it changes when the release
-        // deadline passes — the same result id must then produce a fresh
-        // response.  Repeat views (the common case: a student re-opening
-        // their grade) get a 304 without decoding the collection blob.
+        // deadline passes or a secret-reveal token is spent / re-granted /
+        // toggled — the same result id must then produce a fresh response.
+        // Repeat views (the common case: a student re-opening their grade)
+        // get a 304 without decoding the collection blob.
         let requestedTiersParam = req.query[String.self, at: "tiers"]
         let etagKey = [
             result.id ?? "",
@@ -155,8 +159,9 @@ struct SubmissionQueryRoutes: RouteCollection {
         }
 
         // `fullCollection` carries the real grade across every tier.  The
-        // caller may only *inspect* certain outcomes: secret never, release
-        // after the deadline (instructors see all tiers).
+        // caller may only *inspect* certain outcomes: secret only with a
+        // spent reveal token, release after the deadline (instructors see
+        // all tiers).
         let visible = fullCollection.filtering(tiers: callerVisibleTiers)
 
         let responseCollection: TestOutcomeCollection

@@ -103,6 +103,12 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_sync_excluded")
     var brightspaceSyncExcluded: Bool?
 
+    /// When true, students may spend their one secret-reveal token on this
+    /// assignment to see secret-tier test results itemized. nil/false = off
+    /// (the default): secret results stay aggregate-only for students.
+    @OptionalField(key: "secret_reveal_enabled")
+    var secretRevealEnabled: Bool?
+
     /// The course this assignment belongs to.
     @Field(key: "course_id")
     var courseID: UUID

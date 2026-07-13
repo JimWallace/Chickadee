@@ -295,6 +295,10 @@ struct AssignmentSubmissionsContext: Encodable {
     let assignmentTitle: String
     let metrics: [AssignmentStatCard]
     let rows: [AssignmentStudentRow]
+    /// The assignment's secret-reveal toggle.  Gates the whole reveal-token
+    /// affordance on this page (spent tag + re-grant action) — when off the
+    /// page renders identically to the pre-feature layout.
+    let secretRevealEnabled: Bool
 }
 
 struct AssignmentStudentRow: Encodable {
@@ -320,4 +324,8 @@ struct AssignmentStudentRow: Encodable {
     let additionalSubmissionCount: Int
     let fullHistoryURL: String
     let bestGradePercent: Int?
+    /// True when this student has spent their secret-reveal token on the
+    /// assignment (always false when the assignment's toggle is off — the
+    /// affordance is hidden entirely then).
+    let secretRevealSpent: Bool
 }

@@ -10,7 +10,9 @@
 //              they're failing), but the per-test output is hidden until the
 //              deadline passes (or immediately when there is no deadline)
 //   secret   — never itemized; shown to students only as an aggregate pass/fail
-//              count.  Always fully visible to instructors/admins.
+//              count, unless the student has spent their secret-reveal token
+//              on an assignment with the reveal option enabled.  Always fully
+//              visible to instructors/admins.
 
 import Core
 import Foundation
@@ -82,7 +84,9 @@ extension TestOutcomeCollection {
 ///
 /// - Instructors and admins always see all three tiers.
 /// - Students see `public` always, `release` after the deadline passes
-///   (or immediately when there is no deadline), and never `secret`.
+///   (or immediately when there is no deadline), and `secret` only when
+///   `secretRevealed` — the student spent their secret-reveal token on an
+///   assignment whose reveal option is enabled (see `SecretRevealState`).
 ///
 /// `effectiveDueAt` is the deadline that actually applies to the student whose
 /// submission is being viewed — the *later* of the assignment-wide due date and
@@ -94,24 +98,31 @@ extension TestOutcomeCollection {
 /// The student *web* view is more nuanced — it lists release tests by name
 /// before the deadline but redacts their output — so it uses `itemizedTiers`
 /// and `releaseOutputVisible` instead.
-func visibleTiers(isStaff: Bool, effectiveDueAt: Date?, now: Date = Date()) -> Set<String> {
+func visibleTiers(
+    isStaff: Bool, effectiveDueAt: Date?, secretRevealed: Bool, now: Date = Date()
+) -> Set<String> {
     if isStaff {
         return ["public", "release", "secret"]
     }
     // nil effectiveDueAt → no deadline → release is immediately visible.
     let releaseVisible = effectiveDueAt.map { $0 <= now } ?? true
-    return releaseVisible ? ["public", "release"] : ["public"]
+    var tiers: Set<String> = releaseVisible ? ["public", "release"] : ["public"]
+    if secretRevealed {
+        tiers.insert("secret")
+    }
+    return tiers
 }
 
 /// Tiers whose individual test rows are itemized (listed by name) in the
 /// student submission view.  Students always see `public` and `release` rows —
 /// release names are shown even before the deadline so a student knows which
-/// hidden tests they are failing — but `secret` is never itemized.  Instructors
-/// see every tier.  The grade is computed over *all* tiers regardless of this
-/// set, so the number is stable across the deadline; only release *output* is
-/// additionally gated (see `releaseOutputVisible`).
-func itemizedTiers(isStaff: Bool) -> Set<String> {
-    isStaff ? ["public", "release", "secret"] : ["public", "release"]
+/// hidden tests they are failing — but `secret` is only itemized for staff or
+/// for a student who spent their secret-reveal token (`secretRevealed`).  The
+/// grade is computed over *all* tiers regardless of this set, so the number is
+/// stable across the deadline; only release *output* is additionally gated
+/// (see `releaseOutputVisible` — the reveal token does not affect it).
+func itemizedTiers(isStaff: Bool, secretRevealed: Bool) -> Set<String> {
+    (isStaff || secretRevealed) ? ["public", "release", "secret"] : ["public", "release"]
 }
 
 /// Whether release-tier *output* (the result message + stderr/traceback panel)
@@ -137,6 +148,15 @@ func decodedCollection(from collectionJSON: String) -> TestOutcomeCollection? {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return try? decoder.decode(TestOutcomeCollection.self, from: data)
+}
+
+/// Whether the manifest contains any secret-tier test.  Pattern-family and
+/// notebook-check cases both materialize into `testSuites` entries at save
+/// time, so scanning the suite list covers every kind.  Gates the student
+/// "spend your reveal token" offer — an assignment with nothing secret has
+/// nothing to reveal.
+func hasSecretTierTests(_ props: TestProperties?) -> Bool {
+    props?.testSuites.contains { $0.tier == .secret } ?? false
 }
 
 func gradePercent(from collection: TestOutcomeCollection) -> Int? {
