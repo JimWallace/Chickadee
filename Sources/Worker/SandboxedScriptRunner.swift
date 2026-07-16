@@ -96,9 +96,9 @@ private func configureLinuxSandboxedProcess(
     env: [String: String]
 ) -> LinuxProcessLaunchConfiguration {
     let invocation = scriptInvocation(for: script)
-    // `unshare` inherits envp from the parent on Linux, but we drive the child
-    // through execvpe directly (see executeLinuxScriptProcess) so the env in
-    // the LinuxProcessLaunchConfiguration is what reaches the script.
+    // The child is driven through execve() with a parent-built envp (see
+    // executeLinuxScriptProcess), so the env in the
+    // LinuxProcessLaunchConfiguration is exactly what reaches the script.
     return LinuxProcessLaunchConfiguration(
         executablePath: "/usr/bin/unshare",
         arguments: [

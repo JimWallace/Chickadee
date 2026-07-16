@@ -77,6 +77,22 @@ func enqueueRunnerValidationSubmission(
         on: req.db)
 
     try await materialized.saveClaimable(on: req.db)
+
+    // Keep the server-side `shared/{setupID}/solution.py` in lockstep with the
+    // reference solution, so a Global Input expression can compute an expected
+    // value as `solution.<fn>(...)` — one source of truth — instead of a
+    // hand-maintained answer key that can silently drift from the solution.
+    // This file lives ONLY in the shared directory (never the test-setup zip),
+    // so it never reaches the worker, the browser, or a student support-file
+    // download — mirroring how `solution.ipynb` is kept out of every
+    // student-facing path. Best-effort: failure just leaves `import solution`
+    // unavailable (the prior behaviour) and never blocks the save.
+    let sharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+    SolutionNotebookExtractor.writeSolutionPy(
+        notebookData: solutionNotebookData,
+        sharedDirectory: sharedDir,
+        overwrite: true)
+
     return subID
 }
 
@@ -231,9 +247,16 @@ private func resolveAndCacheValidationMaterialization(
 ///
 /// Errors are swallowed: this is a nice-to-have trigger from live-edit
 /// endpoints and must not block the edit save.
+///
+/// `submitterUserID` attributes the validation submission. Web callers omit it
+/// (the session user is resolved from `req.auth`); MCP callers MUST pass the
+/// acting subject's id — bearer-authenticated requests carry no session
+/// `APIUser`, so the `req.auth` fallback throws 401 and the validation is
+/// silently never enqueued.
 func scheduleValidationAfterSuiteEdit(
     req: Request,
-    assignment: APIAssignment
+    assignment: APIAssignment,
+    submitterUserID: UUID? = nil
 ) async {
     do {
         let existingPending = try await APISubmission.query(on: req.db)
@@ -264,7 +287,8 @@ func scheduleValidationAfterSuiteEdit(
             req: req,
             setupID: assignment.testSetupID,
             solutionNotebookData: solution.data,
-            filename: solution.filename
+            filename: solution.filename,
+            submitterUserID: submitterUserID
         )
         assignment.validationSubmissionID = subID
         assignment.validationStatus = "pending"
@@ -462,12 +486,13 @@ func waitForRunnerValidation(
                     .filter(\.$submissionID == submissionID)
                     .sort(\.$receivedAt, .descending)
                     .first(),
-                let data = result.collectionJSON.data(using: .utf8)
+                let collectionJSON = try await result.loadCollectionJSON(on: req.db)
             else {
                 return .failed(summary: "no result payload")
             }
 
-            let collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+            let collection = try decoder.decode(
+                TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
             let summary = "\(collection.passCount)/\(collection.totalTests) passed"
             let passed =
                 collection.buildStatus == .passed && collection.failCount == 0 && collection.errorCount == 0

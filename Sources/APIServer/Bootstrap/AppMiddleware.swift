@@ -19,6 +19,11 @@
 //                               lookup.  Whitelist-only: the auth-guarded
 //                               /jupyterlite/…/files/users/ paths are not
 //                               listed and still ride the full chain below.
+//   RequestTimingMiddleware — records request_metrics rows (admin dashboard
+//                               + get_request_metrics MCP tool). Below the
+//                               asset fast path, above sessions so timings
+//                               include the session/auth cost. Idle runner
+//                               check-ins are excluded from persistence.
 //   sessions.middleware
 //   UserSessionAuthenticator
 //   SessionIdleTimeoutMiddleware — runs before UserActivityMiddleware
@@ -56,7 +61,6 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     app.storage[ScanModeConfigurationKey.self] = scanModeConfiguration
     app.storage[LoginRateLimitConfigurationKey.self] = appConfig.lockout
     app.storage[SSOAdminUsersKey.self] = appConfig.auth.ssoAdminUsers
-    app.storage[SSOInstructorUsersKey.self] = appConfig.auth.ssoInstructorUsers
 
     // MARK: - Sessions (Fluent-backed; persisted in the database)
 
@@ -94,8 +98,26 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     }
     // Vendored editor assets short-circuit here, before any session work.
     // See EditorAssetFastPathMiddleware for the whitelist + cache policy.
+    // It serves the editor asset trees (/jupyterlite/build, /jupyterlite/extensions,
+    // /pyodide, /vendor) — including the Pyodide kernel WORKER chunk — and returns
+    // WITHOUT calling next, so the slow-path NotebookAssetIsolationMiddleware never
+    // sees them.  It must therefore carry the cross-origin-isolation headers itself,
+    // or the isolated editor page spawns a worker whose script lacks COEP and
+    // Chrome blocks it (ERR_BLOCKED_BY_RESPONSE).
     app.middleware.use(
-        EditorAssetFastPathMiddleware(publicDirectory: app.directory.publicDirectory))
+        EditorAssetFastPathMiddleware(
+            publicDirectory: app.directory.publicDirectory,
+            crossOriginIsolation: true))
+    // Request timing feeds the request_metrics table behind the admin
+    // dashboard and the get_request_metrics diagnostic tool.  It sits below
+    // the editor-asset fast path (a JupyterLite boot's asset storm never
+    // reaches it) and above the session chain so measured durations include
+    // the real per-request session/auth cost.  recordRequestMetric gates
+    // persistence to /api/*, /submissions/*, /testsetups/* (everything under
+    // VERBOSE_REQUEST_TIMING) and skips idle runner check-ins, so hot-path
+    // worker polls don't turn into per-poll INSERTs.  (Shipped in v0.4.573
+    // but never registered — the metrics pipeline had been silently empty.)
+    app.middleware.use(RequestTimingMiddleware())
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
@@ -150,11 +172,12 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // calling next), so middleware registered AFTER it only runs for dynamic
     // Leaf-rendered pages — which is why COEPMiddleware (after it) covers the
     // dynamic notebook page, while NotebookAssetIsolationMiddleware (before it)
-    // is needed to decorate the static /jupyterlite/* responses. Together they
-    // cross-origin-isolate the notebook editor so the Pyodide kernel gets
-    // SharedArrayBuffer — the fix for the main-thread freeze when there's no SAB
-    // and the service-worker sync fallback is disabled (see COEPMiddleware /
-    // NotebookAssetIsolationMiddleware).
+    // is needed to decorate the static /jupyterlite/* responses. Cross-origin
+    // isolation for the editor — which gives the Pyodide kernel SharedArrayBuffer
+    // so it no longer depends on the service worker for synchronous stdin/Drive
+    // (fixing both the main-thread freeze and the SW-control "Kernel Unknown"
+    // race) — is now unconditional (see COEPMiddleware /
+    // NotebookAssetIsolationMiddleware / EditorAssetFastPathMiddleware).
     // Registered just OUTSIDE FileMiddleware so it can set immutable cache +
     // application/wasm headers on the content-hashed wasm runner served from
     // Public/runner-wasm/ (FileMiddleware short-circuits, so a middleware after
@@ -165,11 +188,36 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // existing Cache-Control.
     app.middleware.use(StaticAssetCacheMiddleware())
     app.middleware.use(RunnerWasmCacheMiddleware())
-    // Cross-origin isolation for the notebook editor. The asset middleware runs
-    // BEFORE FileMiddleware so it can decorate the short-circuited /jupyterlite/*
-    // static responses; COEPMiddleware (after FileMiddleware) covers the dynamic
-    // notebook page itself.
-    app.middleware.use(NotebookAssetIsolationMiddleware())
+    // Cache discipline for the editor bundle assets that ride the SLOW path
+    // (FileMiddleware) rather than EditorAssetFastPathMiddleware — notably
+    // /jupyterlite/jupyter-lite.json and the lab/notebooks/repl entry HTML, whose
+    // stable filenames hide mutable content. Stamps `no-cache` so a deploy
+    // propagates on the next load; immutable only for content-hashed chunks. The
+    // fast path stamps the build/extensions/pyodide trees itself (it
+    // short-circuits before this runs); this covers what falls through to it.
+    app.middleware.use(BundleAssetCacheMiddleware())
+    // Cross-origin isolation for the notebook editor (unconditional). This
+    // middleware runs BEFORE FileMiddleware so it can decorate the SLOW-PATH
+    // /jupyterlite/* responses FileMiddleware serves (the editor HTML documents —
+    // repl/lab/notebooks index.html — which are NOT on the fast path); the fast
+    // path above isolates the vendored asset trees it serves itself, and
+    // COEPMiddleware (after FileMiddleware) covers the dynamic notebook page.
+    app.middleware.use(NotebookAssetIsolationMiddleware(enabled: true))
+    // Inject the `exposeAppInBrowser` PageConfig flag into the served JupyterLite
+    // jupyter-lite.json configs (kept OUT of the verified bundle — see the
+    // middleware). Runs just before FileMiddleware so it intercepts the static
+    // config fetch; the cache + isolation middlewares above still decorate its
+    // response on the way back.
+    app.middleware.use(
+        JupyterLiteConfigFlagMiddleware(publicDirectory: app.directory.publicDirectory))
+    // JupyterLite (Notebook 7) opens documents at canonical URLs like
+    // `/jupyterlite/notebooks?path=…` with no `/index.html` — it assumes the host
+    // rewrites an app directory to its index (a real Jupyter server / nginx
+    // try_files). Our static FileMiddleware doesn't, so those URLs 404 (e.g. a
+    // notebook opened in a new tab). Redirect the app dirs to their index.html,
+    // preserving the query, so the app loads. Runs just before FileMiddleware,
+    // which would otherwise 404 the bare directory.
+    app.middleware.use(JupyterLiteAppIndexMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.middleware.use(COEPMiddleware())
+    app.middleware.use(COEPMiddleware(isolateNotebook: true))
 }

@@ -8,7 +8,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -31,6 +31,9 @@ import XCTVapor
                 zipPath: app.testSetupsDirectory + "cr_setup.zip", courseID: courseID)
             try await setup.save(on: app.db)
             let student = try await arInsertStudent(username: "cr_student", on: app)
+            // Class badges award only to a per-course `.student` now (#417 Slice
+            // G2) — enrol the student in the setup's course.
+            try await arEnrollStudentInTestCourse(student, on: app)
             let uid = try student.requireID()
             _ = try await arInsertSubmission(
                 id: "cr_sub", testSetupID: "cr_setup", userID: uid, on: app)

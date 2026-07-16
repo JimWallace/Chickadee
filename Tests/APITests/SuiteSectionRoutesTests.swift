@@ -16,7 +16,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -81,7 +81,7 @@ import XCTVapor
         guard let setup = try await APITestSetup.find(setupID, on: app.db),
             let data = setup.manifest.data(using: .utf8),
             let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { throw XCTSkip("manifest load failed") }
+        else { throw IssueRecorded("manifest load failed") }
         return dict
     }
 
@@ -91,6 +91,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let (aid, setupID) = try await makeAssignment()
             let cookie = try await loginUser(username: "ssrt_inst1", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("ssrt_inst1", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/\(aid)/edit", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -120,6 +121,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let (aid, _) = try await makeAssignment()
             let cookie = try await loginUser(username: "ssrt_inst2", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("ssrt_inst2", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/\(aid)/edit", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -145,6 +147,7 @@ import XCTVapor
             let sid = UUID().uuidString
             let (aid, setupID) = try await makeAssignment(seedSections: [(sid, "Original")])
             let cookie = try await loginUser(username: "ssrt_inst3", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("ssrt_inst3", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/\(aid)/edit", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -173,6 +176,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let (aid, _) = try await makeAssignment(seedSections: [(UUID().uuidString, "Existing")])
             let cookie = try await loginUser(username: "ssrt_inst4", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("ssrt_inst4", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/\(aid)/edit", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -206,6 +210,7 @@ import XCTVapor
                 ]
             )
             let cookie = try await loginUser(username: "ssrt_inst5", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("ssrt_inst5", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/\(aid)/edit", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -244,6 +249,7 @@ import XCTVapor
                 seedSections: [(sidA, "A"), (sidB, "B"), (sidC, "C")]
             )
             let cookie = try await loginUser(username: "ssrt_inst6", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("ssrt_inst6", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/\(aid)/edit", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -273,6 +279,7 @@ import XCTVapor
             let sidB = UUID().uuidString
             let (aid, _) = try await makeAssignment(seedSections: [(sidA, "A"), (sidB, "B")])
             let cookie = try await loginUser(username: "ssrt_inst7", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("ssrt_inst7", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/\(aid)/edit", cookie: cookie, on: app)
 
             try await app.asyncTest(

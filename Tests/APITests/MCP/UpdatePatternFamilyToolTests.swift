@@ -167,6 +167,71 @@ import Vapor
         }
     }
 
+    @Test func setsAndClearsFamilyAndPerCaseTimeLimits() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // Set a family default and a per-case override on case 01.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    defaultTimeLimitSeconds: 30,
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", timeLimitSeconds: 120)]),
+                context(app))
+            var family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.defaults.timeLimitSeconds == 30)
+            #expect(family.cases.first { $0.key == "01" }?.timeLimitSeconds == 120)
+            // Case 02 has no override → resolves to the family default.
+            let c2 = try #require(family.cases.first { $0.key == "02" })
+            #expect(c2.timeLimitSeconds == nil)
+            #expect(c2.resolvedTimeLimit(defaults: family.defaults) == 30)
+
+            // get_suite surfaces the values on the family spec.
+            let readCtx = ToolContext(
+                request: Request(application: app, on: app.eventLoopGroup.any()),
+                subject: "tester", grantedScopes: [.read])
+            let suite = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
+            let famRow = try #require(suite.items.compactMap(\.family).first { $0.id == "bmi_category" })
+            #expect(famRow.defaults.timeLimitSeconds == 30)
+            #expect(famRow.cases.first { $0.key == "01" }?.timeLimitSeconds == 120)
+
+            // 0 clears both the family default and the per-case override.
+            _ = try await UpdatePatternFamilyTool().execute(
+                UpdatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                    defaultTimeLimitSeconds: 0,
+                    cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", timeLimitSeconds: 0)]),
+                context(app))
+            family = try await reloadFamily(assignment, on: app.db)
+            #expect(family.defaults.timeLimitSeconds == nil)
+            #expect(family.cases.first { $0.key == "01" }?.timeLimitSeconds == nil)
+        }
+    }
+
+    @Test func rejectsOutOfRangeTimeLimit() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            // 601 is above the 1...600 ceiling.
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        defaultTimeLimitSeconds: 601),
+                    context(app))
+            }
+            // A per-case value below the floor is rejected too.
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdatePatternFamilyTool().execute(
+                    UpdatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, familyID: "bmi_category",
+                        cases: [UpdatePatternFamilyTool.CaseEdit(key: "01", timeLimitSeconds: -5)]),
+                    context(app))
+            }
+        }
+    }
+
     @Test func setsPerStudentExpectedVarRefAndClearsOnLiteralEdit() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

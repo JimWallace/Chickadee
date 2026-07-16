@@ -54,7 +54,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func getGlobalVariables(req: Request) async throws -> GlobalVariablesResponse {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let result = try GlobalInputsService.current(setup: setup)
         return GlobalVariablesResponse(
             variables: result.variables,
@@ -67,7 +67,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func putGlobalVariables(req: Request) async throws -> GlobalVariablesResponse {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try req.content.decode(GlobalVariablesBody.self)
 
         // The save-time expression check evaluates against the acting
@@ -81,7 +81,9 @@ extension PublishedAssignmentRoutes {
             actingUserID: actingUserID,
             inputs: .init(variables: body.variables, expressions: body.expressions ?? []),
             testSetupsDirectory: req.application.testSetupsDirectory,
-            on: req.db
+            // Web requests use one (owner) pool; seed bookkeeping and content
+            // share it here. The split only matters on the MCP least-privilege path.
+            pools: .init(content: req.db, seed: req.db)
         )
         return GlobalVariablesResponse(
             variables: result.variables,

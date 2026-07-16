@@ -1,0 +1,130 @@
+name: Browser grading-hang probe
+
+# DIAGNOSTIC harness — NOT a required gate. Reproduces and MEASURES the
+# intermittent browser-grading hang seen on JupyterLite 0.8 / Pyodide 314: the
+# real student notebook page boots the editor kernel's Pyodide AND, on Submit, a
+# SECOND Pyodide in grading-worker.js under cross-origin isolation, and the grade
+# intermittently never completes (~1 in 6 on 314; reliable on 0.7.6). The
+# required editor-smoke gate runs the grading check ONCE per engine, so a 1/6
+# flake usually slips through; this probe loops it to surface the rate and, on a
+# hang, prints the grading submit-phase breadcrumbs (grading_init_start/done,
+# pyodide_loaded, env_configured, suite_started/done) that localize WHERE it
+# wedged. A reproduced hang is the SIGNAL. Thresholds (docs/ci-flakiness.md,
+# Family 2): chromium is green only at hangs=0 everywhere; webkit tolerates
+# hangs<=1 on pull_request runs (with a loud warning — the known ambient
+# exec-hang under CI load must not fail unrelated PRs) while dispatch and
+# scheduled runs keep the hard zero, so the probe stays the regression guard
+# a real fix must turn green.
+#
+# Intentionally NOT required in branch protection: a reproduced hang must not
+# block unrelated PRs. Runs on PRs touching the grading / editor / isolation
+# surface, and on demand (workflow_dispatch) with a larger iteration count.
+
+on:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: "Engine to probe (chromium | webkit | both)"
+        default: "both"
+      iterations:
+        description: "full open -> submit -> grade cycles per engine"
+        default: "12"
+      submit_ms:
+        description: "per-grade result budget in ms (a true hang exceeds this)"
+        default: "300000"
+  pull_request:
+    paths:
+      - "Tools/editor-smoke-test/**"
+      - ".github/workflows/grading-hang-probe.yml"
+      - "Public/browser-runner.js"
+      - "Public/grading-worker.js"
+      - "Public/notebook*.js"
+      - "Public/pyodide/**"
+      - "Public/jupyterlite/**"
+      - "scripts/patch-pyodide-kernel.py"
+
+concurrency:
+  group: grading-hang-probe-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  grading-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    # Same Swift image as the other editor jobs so the cached server binary runs
+    # and the vended Public/pyodide it serves is the exact build CI ships.
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Shared scaffold: mtime normalisation, build-cache restore, server
+      # build, Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+
+      # Skip the non-selected engine on a single-engine workflow_dispatch; always
+      # run both on a pull_request (inputs are empty there).
+      - name: Probe browser grading rate (${{ matrix.browser }})
+        # Force bash: the container's default `run` shell is `sh` (dash), which
+        # lacks `set -o pipefail` (the loop below otherwise dies with "Illegal
+        # option -o pipefail" before running a single iteration).
+        shell: bash
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-page-check.mjs
+          SMOKE_SUBMIT_MS: ${{ github.event.inputs.submit_ms || '300000' }}
+          ITER: ${{ github.event.inputs.iterations || '12' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+          runs="$ITER"
+          hangs=0
+          for i in $(seq 1 "$runs"); do
+            echo "::group::grading iteration $i/$runs (engine=$SMOKE_BROWSER)"
+            # Distinct port per iteration so a lingering socket from a killed
+            # server can't block the next boot. run-smoke.sh boots a fresh server
+            # (serving the 0.8 bundle), runs ONE full seed -> submit -> grade,
+            # and tears down; the check prints the grading breadcrumb trail.
+            if PORT=$((8100 + i)) Tools/editor-smoke-test/run-smoke.sh; then
+              echo "iter $i: PASS"
+            else
+              rc=$?
+              hangs=$((hangs + 1))
+              echo "iter $i: HANG/FAIL (rc=$rc)"
+            fi
+            echo "::endgroup::"
+          done
+          echo "GRADING-HANG PROBE RESULT — hangs=${hangs}/${runs} engine=${SMOKE_BROWSER}"
+          # Gate policy (docs/ci-flakiness.md, Family 2): chromium is hard-zero
+          # everywhere. webkit carries a known, tracked ambient exec-hang rate
+          # under CI load (docs/exec-hang-investigation.md), so on PR runs a
+          # SINGLE webkit hang warns loudly instead of failing an unrelated PR.
+          # workflow_dispatch / scheduled runs keep the hard zero — the probe
+          # remains the regression guard a real fix must turn green, and the
+          # ambient rate stays visible there rather than silently tolerated.
+          allowed=0
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$SMOKE_BROWSER" = "webkit" ]; then
+            allowed=1
+          fi
+          if [ "$hangs" -gt "$allowed" ]; then
+            echo "::error::grading hangs=${hangs}/${runs} on ${SMOKE_BROWSER} exceeds allowed=${allowed} for event=${EVENT_NAME}"
+            exit 1
+          fi
+          if [ "$hangs" -gt 0 ]; then
+            echo "::warning::AMBIENT FLAKE TOLERATED on PR run: hangs=${hangs}/${runs} on ${SMOKE_BROWSER} (allowed<=${allowed}). The webkit exec-hang is real and tracked — docs/ci-flakiness.md Family 2, docs/exec-hang-investigation.md. Do not treat this warning as noise: if you see it often, the ambient rate is rising."
+          fi

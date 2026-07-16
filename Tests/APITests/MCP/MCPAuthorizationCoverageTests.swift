@@ -25,11 +25,18 @@ import Testing
     /// Any of these in a tool's source satisfies the per-resource check.
     private static let authorizationCalls = [
         "authorizeCourseAccess",
-        "authorizedAssignment",  // also matches authorizedAssignmentAndSetup
+        // Write chokepoint = authorizeCourseAccess + archived block (#417
+        // Slice D-MCP). NOT a superstring of authorizeCourseAccess, so it needs
+        // its own entry; tools that only write (e.g. create_assignment) call it.
+        "authorizeCourseWriteAccess",
+        "authorizedAssignment",  // also matches authorizedAssignment{AndSetup}{ForWrite}
         "requireEligibleSubject",
-        // Course-scoped wrapper: resolves the course code, then calls
-        // authorizeCourseAccess before returning the id (CourseSectionTools.swift).
+        // Course-scoped wrappers: resolve the course code / section, then
+        // authorize (read = authorizeCourseAccess, write =
+        // authorizeCourseWriteAccess) before returning (CourseSectionTools.swift).
+        // "resolveCourseID" also matches "resolveCourseIDForWrite".
         "resolveCourseID",
+        "resolveCourseSectionForEdit",
     ]
 
     /// Tools that legitimately need no per-resource authorization: they touch no

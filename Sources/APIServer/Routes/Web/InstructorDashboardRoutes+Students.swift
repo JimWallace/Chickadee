@@ -62,10 +62,26 @@ extension InstructorDashboardRoutes {
                 courseEnrollmentMode = course.enrollmentMode.rawValue
                 courseIsArchived = course.isArchived
                 brightspaceLinkAvailable =
-                    req.application.brightSpaceClient != nil
+                    req.application.brightSpaceAppCredentials != nil
                     && !((course.brightspaceOrgUnitID ?? "").isEmpty)
             }
         }
+
+        // Roster management (roles, unenroll, staff invite) is instructor-only;
+        // a TA in the active course reaches this page but sees it read-only.
+        let canManageRoster =
+            user.isAdmin || (courseState.active?.role ?? .student) >= .instructor
+
+        let flashSuccess: String? =
+            req.query[String.self, at: "staffAdded"] != nil
+            ? "Staff member added." : nil
+        let flashError: String? = {
+            switch req.query[String.self, at: "staffError"] {
+            case "role": return "Choose a staff role (TA or Instructor)."
+            case "identifier": return "Enter a valid username or email address."
+            default: return nil
+            }
+        }()
 
         let ctx = InstructorStudentsContext(
             currentUser: userContext,
@@ -75,7 +91,11 @@ extension InstructorDashboardRoutes {
             enrolledStudentCount: enrolledStudentCount,
             courseEnrollmentMode: courseEnrollmentMode,
             courseIsArchived: courseIsArchived,
-            brightspaceLinkAvailable: brightspaceLinkAvailable
+            brightspaceLinkAvailable: brightspaceLinkAvailable,
+            canManageRoster: canManageRoster,
+            rosterReadOnly: courseIsArchived || !canManageRoster,
+            flashSuccess: flashSuccess,
+            flashError: flashError
         )
         return try await req.view.render("instructor-students", ctx).encodeResponse(for: req)
     }

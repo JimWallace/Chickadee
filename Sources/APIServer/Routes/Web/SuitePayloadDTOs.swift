@@ -51,6 +51,11 @@ struct ScriptDTO: Content {
     /// the manifest entry; on `PUT /suite` it's persisted onto the entry.
     /// Omitted by older clients, which keeps decoding.
     var hint: String?
+    /// Optional per-test execution time limit (seconds). nil = inherit the
+    /// assignment-wide default. On `GET /suite` it's read from the manifest
+    /// entry; on `PUT /suite` it's persisted onto the entry. Omitted by older
+    /// clients, which keeps decoding.
+    var timeLimitSeconds: Int?
 }
 
 /// Name + opaque id of a single section.  Order of `SuitePayload.sections`

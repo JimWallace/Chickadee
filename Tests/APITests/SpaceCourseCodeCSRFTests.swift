@@ -11,7 +11,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -25,6 +25,19 @@ import XCTVapor
             let course = APICourse(code: "HLTH 230", name: "Health 230", enrollmentMode: .open)
             try await course.save(on: app.db)
             let courseID = try course.requireID()
+
+            // Granting an extension is a per-course write, so the acting
+            // instructor must hold an instructor enrollment in *this* course
+            // (#417 — authorization is scoped to the resource's own course, not
+            // the caller's active course). `arLoginAsInstructor` only enrols
+            // them in the AR test course, so enrol them here too; the test is
+            // about the spaced course code round-tripping CSRF, not about
+            // cross-course access.
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
+            try await APICourseEnrollment(
+                userID: try instructor.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
 
             let student = try await arInsertStudent(username: "spaced_student", on: app)
             try await APICourseEnrollment(userID: try student.requireID(), courseID: courseID)

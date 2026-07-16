@@ -88,6 +88,8 @@ func executeScriptProcess(
 
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
+    setCloseOnExec(stdoutPipe)
+    setCloseOnExec(stderrPipe)
     let stdoutBuffer = CapturedPipeBuffer()
     let stderrBuffer = CapturedPipeBuffer()
 
@@ -181,11 +183,58 @@ private func installPipeCapture(for pipe: Pipe, buffer: CapturedPipeBuffer) {
     }
 }
 
+/// Foundation's `Pipe` does not set `FD_CLOEXEC` (verified on Swift 6.3 /
+/// glibc 2.39 and Darwin). Without it, any subprocess spawned concurrently
+/// with this run — another job's fork, a `Process` launch elsewhere in the
+/// daemon or test process — inherits duplicates of these descriptors across
+/// its exec, and the read side then never sees EOF until that unrelated
+/// process exits (issue #1139's cross-test stall). The intended child still
+/// receives its ends: `dup2`/spawn file actions clear the flag on the
+/// duplicate they install.
+private func setCloseOnExec(_ pipe: Pipe) {
+    for handle in [pipe.fileHandleForReading, pipe.fileHandleForWriting] {
+        let descriptor = handle.fileDescriptor
+        let flags = fcntl(descriptor, F_GETFD)
+        guard flags != -1 else { continue }
+        _ = fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC)
+    }
+}
+
 private func finishPipeCapture(for pipe: Pipe, buffer: CapturedPipeBuffer) -> Data {
     let handle = pipe.fileHandleForReading
     handle.readabilityHandler = nil
-    buffer.append(handle.readDataToEndOfFile())
+    drainRemainingPipeData(fromDescriptor: handle.fileDescriptor, into: buffer)
     return buffer.snapshot()
+}
+
+/// Final drain after the child has been reaped: everything it wrote is
+/// already in the kernel pipe buffer, so a zero-byte read means EOF and the
+/// happy path completes on the first iteration. Bounded by a short deadline
+/// because a leaked duplicate of the write end in an unrelated process keeps
+/// EOF from ever arriving — the previous blocking `readDataToEndOfFile()`
+/// turned exactly that into an unbounded stall on a cooperative-pool thread
+/// (issue #1139); now stragglers get a grace period and we keep what we have.
+private func drainRemainingPipeData(fromDescriptor descriptor: Int32, into buffer: CapturedPipeBuffer) {
+    let deadline = Date().addingTimeInterval(2)
+    var chunk = [UInt8](repeating: 0, count: 65_536)
+    while true {
+        var pollDescriptor = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+        let readyCount = poll(&pollDescriptor, 1, 100)
+        if readyCount == -1 {
+            if errno == EINTR { continue }
+            return
+        }
+        if readyCount > 0 {
+            let bytesRead = read(descriptor, &chunk, chunk.count)
+            if bytesRead > 0 {
+                buffer.append(Data(chunk[0..<bytesRead]))
+                continue
+            }
+            if bytesRead == -1 && errno == EINTR { continue }
+            return  // 0 = EOF (every write end closed); -1 = unrecoverable.
+        }
+        if Date() >= deadline { return }
+    }
 }
 
 private func terminateScriptProcess(_ proc: Process, usesSeparateProcessGroup: Bool) async {
@@ -337,25 +386,46 @@ func executeLinuxScriptProcess(
     launchErrorPrefix: String
 ) async -> ScriptOutput {
     let start = Date()
-    let pipes = makeLinuxScriptPipes()
 
+    // Materialize every buffer the child touches BEFORE fork(). fork() in a
+    // multithreaded process snapshots glibc's locks (malloc arenas, the
+    // environ lock) in whatever state other threads held them, with no thread
+    // left in the child to ever release them — so between fork() and execve()
+    // only async-signal-safe calls are allowed. An earlier revision called
+    // setenv() and bridged Swift Strings in the child and deadlocked under
+    // parallel-test load: the 60 s stalls and 20-minute job wedges of
+    // issue #1139.
     let rawArguments = [launch.executablePath] + launch.arguments
-    let executable = strdup(launch.executablePath)
-    let argvStorage = rawArguments.map { strdup($0) }
-    defer {
-        if let executable { free(executable) }
-        for pointer in argvStorage where pointer != nil {
-            free(pointer)
-        }
-    }
-
-    guard let executable else {
+    let environmentEntries = launch.env.map { "\($0.key)=\($0.value)" }
+    let executableOrNil = strdup(launch.executablePath)
+    let workDirPathOrNil = strdup(workDir.path)
+    guard let executable = executableOrNil, let workDirPath = workDirPathOrNil else {
+        if let executableOrNil { free(executableOrNil) }
+        if let workDirPathOrNil { free(workDirPathOrNil) }
         return linuxLaunchFailure(
             prefix: launchErrorPrefix,
             detail: "out of memory",
             start: start
         )
     }
+    let argv = CStringVector(rawArguments)
+    let envp = CStringVector(environmentEntries)
+    defer {
+        free(executable)
+        free(workDirPath)
+        argv.deallocate()
+        envp.deallocate()
+    }
+
+    let pipes = makeLinuxScriptPipes()
+    // Resolve the raw descriptors up front: the child must not call into
+    // Foundation (FileHandle property accesses included) after fork().
+    let childDescriptors = LinuxChildDescriptors(
+        stdoutRead: pipes.stdoutPipe.fileHandleForReading.fileDescriptor,
+        stdoutWrite: pipes.stdoutPipe.fileHandleForWriting.fileDescriptor,
+        stderrRead: pipes.stderrPipe.fileHandleForReading.fileDescriptor,
+        stderrWrite: pipes.stderrPipe.fileHandleForWriting.fileDescriptor
+    )
 
     let pid = fork()
     if pid == -1 {
@@ -368,13 +438,13 @@ func executeLinuxScriptProcess(
 
     if pid == 0 {
         linuxChildExec(
-            pipes: pipes,
-            workDir: workDir,
-            envOverrides: launch.env,
+            descriptors: childDescriptors,
+            workDirPath: workDirPath,
             executable: executable,
-            argvStorage: argvStorage
+            argv: argv.pointer,
+            envp: envp.pointer
         )
-        // execvp never returns on success; the child path _exit()s on error.
+        // execve never returns on success; the child path _exit()s on error.
     }
 
     pipes.stdoutPipe.fileHandleForWriting.closeFile()
@@ -408,6 +478,8 @@ func executeLinuxScriptProcess(
 private func makeLinuxScriptPipes() -> LinuxScriptPipes {
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
+    setCloseOnExec(stdoutPipe)
+    setCloseOnExec(stderrPipe)
     let stdoutBuffer = CapturedPipeBuffer()
     let stderrBuffer = CapturedPipeBuffer()
     installPipeCapture(for: stdoutPipe, buffer: stdoutBuffer)
@@ -431,48 +503,85 @@ private func linuxLaunchFailure(prefix: String, detail: String, start: Date) -> 
     )
 }
 
-/// Runs in the forked child between `fork()` and `execvp`.  Sets up FDs,
-/// applies env overrides, then execs. Always terminates the child via
-/// `_exit(127)` on any failure path.  Never returns on success.
+/// A NULL-terminated C string vector (the argv/envp shape) materialized in
+/// the parent before `fork()` so the forked child never allocates.
+private struct CStringVector {
+    let pointer: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+    private let count: Int
+
+    init(_ strings: [String]) {
+        count = strings.count
+        pointer = .allocate(capacity: count + 1)
+        for (index, string) in strings.enumerated() {
+            pointer[index] = strdup(string)
+        }
+        pointer[count] = nil
+    }
+
+    func deallocate() {
+        for index in 0..<count {
+            if let entry = pointer[index] { free(entry) }
+        }
+        pointer.deallocate()
+    }
+}
+
+/// The four pipe descriptors, resolved from Foundation handles pre-fork so
+/// the child works with plain integers only.
+private struct LinuxChildDescriptors {
+    let stdoutRead: Int32
+    let stdoutWrite: Int32
+    let stderrRead: Int32
+    let stderrWrite: Int32
+}
+
+/// Runs in the forked child between `fork()` and `execve`.
+///
+/// The parent is heavily multithreaded (Swift concurrency pool, Dispatch
+/// pipe readers, parallel test scheduler), so this function may only use
+/// async-signal-safe calls: close/dup2/setsid/sigprocmask/chdir/execve/_exit.
+/// No Swift allocation, no String bridging, no setenv — any of those can
+/// block on a glibc lock that fork() captured mid-acquire, deadlocking the
+/// child forever (issue #1139). Every input is a raw C buffer materialized
+/// by the caller before fork(). Always terminates the child via `_exit(127)`
+/// on any failure path.  Never returns on success.
 private func linuxChildExec(
-    pipes: LinuxScriptPipes,
-    workDir: URL,
-    envOverrides: [String: String],
-    executable: UnsafeMutablePointer<CChar>,
-    argvStorage: [UnsafeMutablePointer<CChar>?]
+    descriptors: LinuxChildDescriptors,
+    workDirPath: UnsafePointer<CChar>,
+    executable: UnsafePointer<CChar>,
+    argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+    envp: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) {
-    let stdoutRead = pipes.stdoutPipe.fileHandleForReading.fileDescriptor
-    let stdoutWrite = pipes.stdoutPipe.fileHandleForWriting.fileDescriptor
-    let stderrRead = pipes.stderrPipe.fileHandleForReading.fileDescriptor
-    let stderrWrite = pipes.stderrPipe.fileHandleForWriting.fileDescriptor
-
-    _ = Glibc.close(stdoutRead)
-    _ = Glibc.close(stderrRead)
-
-    if dup2(stdoutWrite, STDOUT_FILENO) == -1 || dup2(stderrWrite, STDERR_FILENO) == -1 {
-        _exit(127)
-    }
-
-    _ = Glibc.close(stdoutWrite)
-    _ = Glibc.close(stderrWrite)
-
-    if chdir(workDir.path) == -1 {
-        _exit(127)
-    }
-
+    // New session (and process group) first, so the parent's timeout
+    // group-kill can reach this child even if a later step here wedges.
     if setsid() == -1 {
         _exit(127)
     }
 
-    // Apply env overrides to the child's `environ` before exec.  setenv()
-    // with overwrite=1 mutates the child's copy of the parent env; execvp
-    // then inherits it.
-    for (key, value) in envOverrides {
-        _ = setenv(key, value, 1)
+    _ = Glibc.close(descriptors.stdoutRead)
+    _ = Glibc.close(descriptors.stderrRead)
+
+    if dup2(descriptors.stdoutWrite, STDOUT_FILENO) == -1
+        || dup2(descriptors.stderrWrite, STDERR_FILENO) == -1
+    {
+        _exit(127)
     }
 
-    var argv = argvStorage + [nil]
-    execvp(executable, &argv)
+    _ = Glibc.close(descriptors.stdoutWrite)
+    _ = Glibc.close(descriptors.stderrWrite)
+
+    if chdir(workDirPath) == -1 {
+        _exit(127)
+    }
+
+    // The forking thread's signal mask survives execve; unblock everything so
+    // an inherited blocked SIGTERM can't neuter the timeout kill's first,
+    // graceful stage.
+    var allSignals = sigset_t()
+    sigfillset(&allSignals)
+    _ = sigprocmask(SIG_UNBLOCK, &allSignals, nil)
+
+    _ = execve(executable, argv, envp)
     _exit(127)
 }
 
@@ -497,12 +606,25 @@ private func linuxWaitForChild(pid: pid_t, timeLimitSeconds: Int) -> LinuxWaitOu
 
         if Date() >= deadline {
             timedOut = true
+            // The child setsid()s first thing, so the group kill normally
+            // lands; the direct-pid kill covers the fork()→setsid() window.
             _ = kill(-pid, SIGTERM)
+            _ = kill(pid, SIGTERM)
             usleep(250_000)
             if waitpid(pid, &status, WNOHANG) == 0 {
                 _ = kill(-pid, SIGKILL)
+                _ = kill(pid, SIGKILL)
             }
-            _ = waitpid(pid, &status, 0)
+            // Bounded reap — never a blocking waitpid() here. A child that a
+            // missed kill left running once pinned this thread (and with it
+            // the whole test process) until the CI job-level timeout: the
+            // 20-minute wedge shape of issue #1139. SIGKILLed processes reap
+            // within milliseconds; five seconds of grace is generous.
+            var reapAttempts = 0
+            while waitpid(pid, &status, WNOHANG) == 0, reapAttempts < 100 {
+                reapAttempts += 1
+                usleep(50_000)
+            }
             break
         }
 

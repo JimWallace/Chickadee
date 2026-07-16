@@ -71,13 +71,13 @@ CSV Enrollment Result
     margin: 0;
 }
 .csv-result-pre-note {
-    font-size: .85rem;
+    font-size: var(--text-base);
     color: var(--gray-600);
     margin-top: .75rem;
     margin-bottom: 0;
 }
 .csv-result-reject-note {
-    font-size: .875rem;
+    font-size: var(--text-base);
     color: var(--gray-600);
     margin-top: 0;
 }

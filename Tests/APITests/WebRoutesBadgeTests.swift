@@ -7,7 +7,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -93,6 +93,12 @@ import XCTVapor
                 username: "student_100", passwordHash: try testPasswordHash("pass"), role: "student"
             )
             try await student.save(on: app.db)
+
+            // Class badges gate on the per-course enrollment role now (#417 Slice
+            // G2): enrol each in the setup's course (CS101). The global role seeds
+            // the per-course role — admin/instructor become staff (no badge), the
+            // student becomes a per-course `.student` (earns badges).
+            for user in [admin, instructor, student] { try await wrEnrollUser(user, on: app) }
 
             // Admin call — must persist no badges.
             try await awardClassBadgesFor100Percent(

@@ -201,7 +201,7 @@ extension AdminRoutes {
             .filter(\.$course.$id == courseID)
             .count() > 0
         if !already {
-            try await APICourseEnrollment(userID: userID, courseID: courseID).save(on: req.db)
+            try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
             await AuditLogger.record(
                 action: .mcpAccountEnrolled, targetType: .user, targetID: user.id?.uuidString,
                 metadata: ["username": user.username, "course": course.code], on: req)

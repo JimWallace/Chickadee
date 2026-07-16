@@ -247,6 +247,50 @@ import Testing
         #expect(HealthRule.runnerOffline.severity == "warning")
         #expect(HealthRule.queueBackedUp.severity == "warning")
         #expect(HealthRule.errorRateSpike.severity == "warning")
+        #expect(HealthRule.editorKernelUnrecoverable.severity == "warning")
+    }
+
+    // MARK: - decideEditorKernelUnrecoverable
+
+    @Test func editorKernelUnrecoverable_firesAtThreshold() {
+        let evaluation = decideEditorKernelUnrecoverable(failedCount: 2, threshold: 2, windowMinutes: 60)
+        #expect(evaluation.isFiring)
+        #expect(evaluation.details["recover_failed_count"] == "2")
+        #expect(evaluation.details["window_minutes"] == "60")
+    }
+
+    @Test func editorKernelUnrecoverable_okBelowThreshold() {
+        let evaluation = decideEditorKernelUnrecoverable(failedCount: 1, threshold: 2, windowMinutes: 60)
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func editorKernelUnrecoverable_okWhenThresholdDisabled() {
+        // A zero/negative threshold must never fire, even with failures present.
+        let evaluation = decideEditorKernelUnrecoverable(failedCount: 99, threshold: 0, windowMinutes: 60)
+        #expect(evaluation.isFiring == false)
+    }
+
+    // MARK: - decideBrightspaceSyncFailing
+
+    @Test func brightspaceSyncFailing_firesAtThreshold() {
+        let evaluation = decideBrightspaceSyncFailing(
+            errorCount: 3, threshold: 3, windowMinutes: 60, lastDetail: "HTTP 503")
+        #expect(evaluation.isFiring)
+        #expect(evaluation.details["error_count"] == "3")
+        #expect(evaluation.details["last_error"] == "HTTP 503")
+        #expect(evaluation.summary.contains("503"))
+    }
+
+    @Test func brightspaceSyncFailing_okBelowThreshold() {
+        let evaluation = decideBrightspaceSyncFailing(
+            errorCount: 2, threshold: 3, windowMinutes: 60, lastDetail: nil)
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func brightspaceSyncFailing_okWhenThresholdDisabled() {
+        let evaluation = decideBrightspaceSyncFailing(
+            errorCount: 99, threshold: 0, windowMinutes: 60, lastDetail: nil)
+        #expect(evaluation.isFiring == false)
     }
 
     // MARK: - JobFailureClassification

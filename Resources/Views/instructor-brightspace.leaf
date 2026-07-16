@@ -9,80 +9,124 @@ LEARN
     <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
 </nav>
 
-<h1 class="bs-title">LEARN</h1>
+#if(hasActiveCourse):
+<div class="bs-tabbar">
+    #if(canSyncNow):
+    <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
+        #csrfFormField()
+        <button class="btn btn-primary" type="submit"
+                title="Re-queue any failed grades and push every pending grade to LEARN now">Sync now</button>
+    </form>
+    #endif
+    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
+</div>
+#endif
 
 #if(!brightspaceSyncEnabled):
 #elseif(!hasActiveCourse):
 <section class="bs-section">
-    <p class="empty">Select a course to manage its BrightSpace grade sync.</p>
+    <p class="empty">Select a course to manage its LEARN grade sync.</p>
 </section>
 #else:
 
-<!-- ── Connection & course link ──────────────────────────── -->
+#if(flashSuccess):
+<div class="notice-banner"><p>#(flashSuccess)</p></div>
+#endif
+#if(flashError):
+<div class="form-error">#(flashError)</div>
+#endif
+
+<!-- ── LEARN connection (per-instructor identity, #1114) ────── -->
 <section class="bs-section">
     <h2 class="bs-h2">Connection</h2>
-    <div class="bs-connection-row">
-        <button class="btn action-btn" type="button" id="bs-test-btn">Test connection</button>
-        <span id="bs-test-result" class="card-meta"></span>
+    #if(account.connected):
+    <p class="bs-conn-line">Your LEARN account: <strong>#(account.identity)</strong>#(account.since)</p>
+    #else:
+    <p class="bs-conn-line">Your LEARN account is not connected.</p>
+    #endif
+    #if(syncIdentity.hasName):
+    <p class="bs-conn-line">This course pushes grades as <strong>#(syncIdentity.name)</strong>.</p>
+    #endif
+    #if(syncIdentity.needsReconnect):
+    <div class="form-error">
+        This course's designated LEARN identity is disconnected — grade pushes are
+        paused until they reconnect, or a connected co-instructor takes over below.
     </div>
-    <p class="card-meta bs-connection-note">
-        #if(courseLinked):
-            #if(orgUnitName):
-            <span class="tier tier-open">linked</span>
-            This course pushes grades to D2L org unit <strong>#(orgUnitName)</strong>
-            (ID <code>#(orgUnitID)</code>).
-            #else:
-            <span class="tier tier-closed">unverified</span>
-            Bound to org unit <code>#(orgUnitID)</code>, but it couldn't be confirmed in D2L.
-            An admin should re-save the binding on the course page.
-            #endif
-        #else:
-            <span class="tier tier-closed">not linked</span>
-            This course isn't bound to a D2L org unit yet, so no grades will sync.
-            An admin sets the Org Unit ID on the course page.
-        #endif
-    </p>
-</section>
+    #endif
+    #if(courseLinked):
+    <p class="bs-conn-line">Linked to LEARN org unit <strong>#(orgUnitDisplay)</strong>.</p>
+    #endif
 
-<!-- ── Summary ───────────────────────────────────────────── -->
-<section class="bs-section">
-    <div class="bs-cards">
-        <div class="bs-card"><div class="bs-card-label">Synced</div><div class="bs-card-value">#(summary.synced)</div></div>
-        <div class="bs-card"><div class="bs-card-label">Pending</div><div class="bs-card-value">#(summary.pending)</div></div>
-        <div class="bs-card"><div class="bs-card-label">Errored</div><div class="bs-card-value">#(summary.errored)</div></div>
-        <div class="bs-card"><div class="bs-card-label">Unmapped students</div><div class="bs-card-value">#(summary.unmapped)</div></div>
-    </div>
-    #if(!courseIsArchived):
-    <div class="bs-summary-actions">
-        <form method="post" action="/instructor/brightspace/sync-now" class="inline-form">
+    #if(showConnectForm):
+    <form method="post" action="/instructor/brightspace/connect" class="bs-connect-form">
+        #csrfFormField()
+        <label class="bs-conn-label" for="bs-valence-user-id">Valence User ID</label>
+        <input class="form-input bs-conn-input" type="text" id="bs-valence-user-id"
+               name="userID" autocomplete="off" required>
+        <label class="bs-conn-label" for="bs-valence-user-key">Valence User Key</label>
+        <input class="form-input bs-conn-input" type="password" id="bs-valence-user-key"
+               name="userKey" autocomplete="off" required>
+        <button class="btn btn-primary" type="submit">Connect my LEARN account</button>
+    </form>
+    <p class="card-meta bs-section-note">
+        Paste the Valence User ID + User Key minted for your own account (see the
+        LEARN setup guide). Chickadee verifies the pair against D2L before storing it.
+    </p>
+    #endif
+
+    #if(showIdentityActions):
+    <div class="bs-conn-actions">
+        <button class="btn action-btn" type="button" id="bs-test-connection"
+                title="Verify this course's grade-push credentials against D2L">Test connection</button>
+        #if(showUseMyIdentity):
+        <form method="post" action="/instructor/brightspace/use-my-identity" class="inline-form">
             #csrfFormField()
-            <button class="btn btn-primary" type="submit">Sync now</button>
+            <button class="btn action-btn" type="submit"
+                    title="Push this course's grades as your LEARN account">Use my account for this course</button>
         </form>
-        <form method="post" action="/instructor/brightspace/retry-failed" class="inline-form">
+        #endif
+        <form method="post" action="/instructor/brightspace/disconnect" class="inline-form"
+              onsubmit="return confirm('Disconnect your LEARN account? Courses that push grades as you will pause until someone reconnects.')">
             #csrfFormField()
-            <button class="btn action-btn" type="submit">Retry failed</button>
+            <button class="btn action-btn action-danger" type="submit">Disconnect my account</button>
         </form>
     </div>
+    <div class="bs-test-result" id="bs-test-result" hidden></div>
+    <form method="post" action="/instructor/brightspace/bind-org-unit" class="bs-link-form">
+        #csrfFormField()
+        <label class="bs-conn-label" for="bs-org-unit-input">LEARN org unit ID</label>
+        <input class="form-input bs-conn-input" type="text" id="bs-org-unit-input"
+               name="orgUnitID" value="#(orgUnitFieldValue)" autocomplete="off"
+               placeholder="e.g. 1106038">
+        <button class="btn action-btn" type="submit"
+                title="Bind this course to its LEARN org unit (blank to clear); verified with your key">Link course</button>
+    </form>
     #endif
 </section>
 
-<!-- ── Assignment → grade-item mapping ───────────────────── -->
+<!-- ── Assignment → grade-item mapping ────────────────────── -->
 <section class="bs-section">
-    <h2 class="bs-h2">Grade-item mapping</h2>
+    <div class="bs-mapping-head">
+        <h2 class="bs-h2">Grade-item mapping</h2>
+        #if(!courseIsArchived):
+        <form method="post" action="/instructor/brightspace/auto-map" class="inline-form">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit"
+                    title="Map unmapped assignments to grade items with a matching name">Auto-map by name</button>
+        </form>
+        #endif
+    </div>
     #if(!hasAssignments):
     <p class="empty">No assignments in this course yet.</p>
     #else:
-    <p class="card-meta bs-section-note">
-        Map each assignment to its D2L grade item. Start typing to pick from the course's
-        grade book (when connected), or paste the numeric grade-item ID. Leave blank to skip
-        an assignment.
-    </p>
     <datalist id="bs-grade-objects"></datalist>
     <div class="table-scroll"><table class="results-table">
         <thead>
             <tr>
                 <th>Assignment</th>
-                <th>Grade item ID</th>
+                <th>LEARN Assessment</th>
+                <th class="bs-col-synced" title="Students whose most recent grade sync reached LEARN">Synced</th>
+                <th class="bs-col-failed" title="Students whose most recent grade sync failed — these need a fix">Failed</th>
                 <th>Last sync</th>
                 <th>Actions</th>
             </tr>
@@ -93,15 +137,35 @@ LEARN
                 <td><strong>#(row.title)</strong></td>
                 <td>
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace"
-                          class="bs-grade-form">
+                          class="bs-grade-form" data-assignment-id="#(row.assignmentID)">
                         #csrfFormField()
                         <input type="hidden" name="returnTo" value="brightspace">
-                        <label class="visually-hidden" for="bs-go-#(row.assignmentID)">Grade item ID for #(row.title)</label>
-                        <input class="form-input bs-grade-input" type="text" name="gradeObjectID"
+                        <input type="hidden" name="gradeObjectID" class="bs-grade-id-hidden">
+                        <label class="visually-hidden" for="bs-go-#(row.assignmentID)">LEARN Assessment for #(row.title)</label>
+                        <input class="form-input bs-grade-input" type="text"
                                id="bs-go-#(row.assignmentID)" list="bs-grade-objects"
-                               value="#(row.gradeObjectID)" placeholder="e.g. 78901">
+                               value="#(row.gradeFieldValue)" placeholder="Search assessments…"
+                               data-raw-id="#(row.gradeFieldValue)" autocomplete="off">
                         <button class="btn action-btn" type="submit">Save</button>
                     </form>
+                </td>
+                <td class="bs-col-synced">
+                    #if(row.hasSyncActivity):
+                    <span class="bs-count bs-count-ok" title="Synced to LEARN">#(row.syncedCount)</span>
+                    #else:
+                    <span class="card-meta">—</span>
+                    #endif
+                </td>
+                <td class="bs-col-failed">
+                    #if(row.hasSyncActivity):
+                    #if(row.hasErrored):
+                    <span class="bs-count bs-count-err" title="Failed to push">#(row.erroredCount)</span>
+                    #else:
+                    <span class="bs-count bs-count-ok">0</span>
+                    #endif
+                    #else:
+                    <span class="card-meta">—</span>
+                    #endif
                 </td>
                 <td>
                     #if(row.lastSyncStatus == "success"):
@@ -119,10 +183,15 @@ LEARN
                     #if(!courseIsArchived):
                     <form method="post" action="/instructor/#(row.assignmentID)/brightspace/push-all"
                           class="inline-form"
-                          onsubmit="return confirm('Re-push every student’s best grade for #(row.title) to BrightSpace?')">
+                          onsubmit="return confirm('Re-push every student's best grade for #(row.title) to LEARN?')">
                         #csrfFormField()
-                        <button class="btn action-btn" type="submit"
-                                title="Re-push all grades for this assignment">Push all</button>
+                        <button class="btn action-btn bs-push-btn" type="submit"
+                                title="Re-push all grades for #(row.title)">
+                            <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+                                <path d="M8 1.5a.5.5 0 0 1 .5.5v8.793l2.646-2.647a.5.5 0 0 1 .708.708l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L7.5 10.793V2a.5.5 0 0 1 .5-.5z"/>
+                                <path d="M1 13.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13a.5.5 0 0 1-.5-.5z"/>
+                            </svg>
+                        </button>
                     </form>
                     #endif
                 </td>
@@ -133,160 +202,210 @@ LEARN
     #endif
 </section>
 
-<!-- ── Unmapped students ─────────────────────────────────── -->
-#if(hasUnmapped):
+<!-- ── Class Roster ────────────────────────────────────────── -->
 <section class="bs-section">
-    <h2 class="bs-h2">Unmapped students (#(summary.unmapped))</h2>
+    <div class="bs-mapping-head">
+        <h2 class="bs-h2">Class Roster</h2>
+        #if(canReconcile):
+        <form method="post" action="/instructor/brightspace/reconcile-now" class="inline-form">
+            #csrfFormField()
+            <button class="btn action-btn" type="submit"
+                    title="Re-check the roster against the LEARN classlist now">Reconcile now</button>
+        </form>
+        #endif
+    </div>
+    #if(!courseLinked):
     <p class="card-meta bs-section-note">
-        These students' grades can't sync because Chickadee can't resolve a BrightSpace account
-        for them. Fix the student number on file, or confirm they're enrolled in the D2L course.
+        Link this course to its LEARN org unit (in the Connection panel above) to check
+        whether each student's grade can be delivered to the LEARN gradebook.
     </p>
+    #endif
+    #if(courseLinked):
+    #if(hasUnreachable):
     <div class="table-scroll"><table class="results-table">
-        <thead><tr><th>Name</th><th>Username</th><th>Reason</th></tr></thead>
+        <thead><tr><th>Name</th><th>Username</th><th>Issue</th><th>Actions</th></tr></thead>
         <tbody>
-        #for(student in unmappedStudents):
+        #for(student in unreachableStudents):
             <tr>
                 <td>#(student.displayName)</td>
                 <td><code>#(student.username)</code></td>
-                <td>#(student.reason)</td>
-            </tr>
-        #endfor
-        </tbody>
-    </table></div>
-</section>
-#endif
-
-<!-- ── Sync log ──────────────────────────────────────────── -->
-<section class="bs-section">
-    <h2 class="bs-h2">Recent sync activity</h2>
-    #if(!hasLog):
-    <p class="empty">No grade pushes recorded yet.</p>
-    #else:
-    <div class="table-scroll"><table class="results-table">
-        <thead>
-            <tr>
-                <th>When</th>
-                <th>Student</th>
-                <th>Assignment</th>
-                <th>Points</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-        #for(log in logRows):
-            <tr>
-                <td class="bs-log-when">#(log.attemptedAt)</td>
-                <td><code>#(log.username)</code></td>
-                <td>#(log.assignmentTitle)</td>
-                <td>#(log.points)</td>
-                <td>
-                    #if(log.status == "success"):
-                    <span class="tier tier-open">success</span>
-                    #elseif(log.status == "error"):
-                    <span class="tier tier-closed" title="#if(log.detail):#(log.detail)#endif">error</span>
-                    #else:
-                    <span class="tier" title="#if(log.detail):#(log.detail)#endif">skipped</span>
-                    #endif
+                <td class="bs-issue-cell" title="#(student.detail)">Couldn't match to LEARN</td>
+                <td class="bs-roster-actions">
+                    <a class="btn action-btn action-btn-icon" href="/instructor/students?highlight=#(student.userID)"
+                       title="Match this student's LEARN ID" aria-label="Match this student's LEARN ID">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    </a>
+                    <form method="post" action="#(student.unenrollURL)" class="inline-form"
+                          onsubmit="return confirm('Remove #(student.displayName) from this course?')">
+                        #csrfFormField()
+                        <button class="btn action-btn action-btn-icon action-danger" type="submit"
+                                title="Remove from course" aria-label="Remove from course">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        </button>
+                    </form>
                 </td>
             </tr>
         #endfor
         </tbody>
     </table></div>
+    #else:
+    <p class="empty">All students can receive grades in LEARN.</p>
+    #endif
     #endif
 </section>
 #endif
 
-<!-- ── Export grades (always available) ──────────────────── -->
-<section class="bs-section">
-    <h2 class="bs-h2">Export grades</h2>
-    <p class="card-meta bs-section-note">
-        Download a CSV of every enrolled student's best grade per assignment, formatted for
-        BrightSpace grade import (OrgDefinedId + per-assignment points columns).
-    </p>
-    #if(hasActiveCourse):
-    <a class="btn action-btn" href="/instructor/grades.csv">Export Grades CSV</a>
-    #else:
-    <p class="empty">Select a course to export grades.</p>
-    #endif
-</section>
-
 <style>
 .bs-section { margin-bottom: 2rem; }
-.bs-h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .6rem; }
-.bs-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
-.bs-card {
-    padding: .75rem .9rem; border: 1px solid var(--border);
-    border-radius: .5rem; background: var(--surface);
-}
-.bs-card-label { color: var(--gray-600); font-size: .82rem; }
-.bs-card-value { margin-top: .2rem; font-size: 1.4rem; font-weight: 600; color: var(--gray-900); }
-.bs-connection-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
-.bs-connection-note { margin-top: .6rem; max-width: 60ch; }
-.bs-summary-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
+.bs-tabbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+.bs-h2 { font-size: var(--text-lg); font-weight: 600; margin: 0 0 .6rem; }
+.bs-mapping-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.bs-mapping-head .bs-h2 { margin: 0; }
 .bs-section-note { margin: 0 0 .6rem; max-width: 62ch; }
-.bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; }
-.bs-grade-input { width: 11rem; max-width: 100%; font-size: .85rem; padding: .25rem .45rem; }
-@media (max-width: 640px) {
-    .bs-grade-form { flex-wrap: wrap; }
+.bs-grade-form { display: flex; gap: .4rem; align-items: center; margin: 0; flex-wrap: wrap; }
+.bs-grade-input { width: 14rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
+.bs-sync-detail { font-size: var(--text-2xs); }
+.bs-count {
+    display: inline-block; font-size: var(--text-base); font-weight: 600;
+    white-space: nowrap;
 }
-.bs-sync-detail { font-size: .72rem; }
-.bs-log-when { white-space: nowrap; }
+.bs-count-ok { color: var(--green); }
+.bs-count-err { color: var(--red); }
+.bs-col-synced, .bs-col-failed { text-align: center; width: 5rem; }
+.bs-push-btn { padding: .25rem .5rem; line-height: 1; }
+.bs-issue-cell {
+    max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: var(--text-base); color: var(--gray-600);
+}
+.bs-roster-actions { white-space: nowrap; }
+.bs-roster-actions .inline-form { display: inline; }
+.bs-conn-line { margin: 0 0 .45rem; }
+.bs-connect-form, .bs-link-form {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    margin: .6rem 0 .3rem;
+}
+.bs-conn-label { font-size: var(--text-base); color: var(--gray-600); }
+.bs-conn-input { width: 16rem; max-width: 100%; font-size: var(--text-base); padding: .25rem .45rem; }
+.bs-conn-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .6rem 0 .3rem; }
+.bs-test-result { margin: .3rem 0; font-size: var(--text-base); }
+.bs-test-ok { color: var(--green); }
+.bs-test-err { color: var(--red); }
 </style>
 <script>
 (function () {
     'use strict';
 
-    // ── Test connection ──────────────────────────────────────────────
-    var testBtn = document.getElementById('bs-test-btn');
-    var testResult = document.getElementById('bs-test-result');
+    // ── Connection panel: "Test connection" ────────────────────────────────
+    // POSTs to the whoami test endpoint and renders the JSON verdict inline,
+    // so credential problems surface here instead of at grade-push time.
+    var testBtn = document.getElementById('bs-test-connection');
     if (testBtn) {
-        testBtn.addEventListener('click', async function () {
-            var meta = document.querySelector('meta[name="csrf-token"]');
-            var csrf = meta ? meta.getAttribute('content') : '';
-            testBtn.disabled = true;
-            if (testResult) testResult.textContent = 'Testing…';
-            try {
-                var res = await fetch('/instructor/brightspace/test', {
-                    method: 'POST',
-                    headers: { 'x-csrf-token': csrf, 'Accept': 'application/json' }
-                });
-                var data = await res.json();
-                if (testResult) {
-                    testResult.textContent = data.message || (data.ok ? 'OK' : 'Failed');
-                    testResult.style.color = data.ok ? 'var(--green)' : 'var(--red)';
-                }
-            } catch (_) {
-                if (testResult) {
-                    testResult.textContent = 'Test request failed.';
-                    testResult.style.color = 'var(--red)';
-                }
-            } finally {
-                testBtn.disabled = false;
-            }
+        testBtn.addEventListener('click', function () {
+            var out = document.getElementById('bs-test-result');
+            if (!out) return;
+            out.hidden = false;
+            out.className = 'bs-test-result';
+            out.textContent = 'Testing…';
+            fetch('/instructor/brightspace/test', {
+                method: 'POST',
+                headers: { 'x-csrf-token': ChickadeeUI.getCsrfToken() }
+            }).then(function (res) {
+                return res.json();
+            }).then(function (result) {
+                out.textContent = result.message;
+                out.className = 'bs-test-result ' + (result.ok ? 'bs-test-ok' : 'bs-test-err');
+            }).catch(function () {
+                out.textContent = 'The connection test could not be run.';
+                out.className = 'bs-test-result bs-test-err';
+            });
         });
     }
 
-    // ── Grade-item dropdown (progressive enhancement) ─────────────────
-    // Populate the shared <datalist> from D2L so the free-text inputs gain a
-    // searchable picker. If the fetch fails or returns nothing, the inputs
-    // stay as plain free-text fields — sync still works.
+    // ── Grade-item dropdown ────────────────────────────────────────────────
+    // Fetch grade objects from D2L, populate the shared <datalist> with names
+    // (not IDs), and resolve existing raw IDs to display names.
     var datalist = document.getElementById('bs-grade-objects');
-    if (datalist) {
-        fetch('/instructor/brightspace/grade-objects', {
-            headers: { 'Accept': 'application/json' }, cache: 'no-store'
-        }).then(function (res) {
-            return res.ok ? res.json() : [];
-        }).then(function (items) {
-            if (!Array.isArray(items)) return;
-            datalist.innerHTML = items.map(function (it) {
-                var label = it.name + (it.maxPoints != null ? ' (' + it.maxPoints + ' pts)' : '');
-                var opt = document.createElement('option');
-                opt.value = String(it.id);
-                opt.textContent = label;
-                return opt.outerHTML;
-            }).join('');
-        }).catch(function () { /* leave free-text inputs */ });
+    if (!datalist) return;
+
+    // "Do not sync" is an option in this same dropdown: picking it excludes the
+    // assignment from LEARN. It resolves to a reserved token (kept in sync with
+    // BrightspaceSync.doNotSyncToken on the server) the save handler maps to the
+    // do-not-sync flag — never a real grade item.
+    var DO_NOT_SYNC_ID = "#(doNotSyncToken)";
+    var DO_NOT_SYNC_LABEL = 'Do not sync (exclude from LEARN)';
+
+    function optionHTML(value, id) {
+        var opt = document.createElement('option');
+        opt.value = value;
+        opt.dataset.id = id;
+        return opt.outerHTML;
     }
+
+    // Wire each row: resolve its stored value to a display name on load, and
+    // resolve the chosen name back to an ID (or the do-not-sync token) on submit.
+    function wireForms(byId, byName) {
+        document.querySelectorAll('.bs-grade-form').forEach(function (form) {
+            var visibleInput = form.querySelector('.bs-grade-input');
+            var hiddenInput = form.querySelector('.bs-grade-id-hidden');
+            if (!visibleInput || !hiddenInput) return;
+            var rawId = visibleInput.dataset.rawId || '';
+            if (rawId && byId[rawId]) {
+                visibleInput.value = byId[rawId];
+            }
+            // Pre-fill hidden with the raw value so save works even without a match.
+            hiddenInput.value = rawId;
+            form.addEventListener('submit', function () {
+                var val = visibleInput.value.trim();
+                // Resolve a display name to its ID / the do-not-sync token; else
+                // submit the typed value as-is.
+                hiddenInput.value = byName[val] || val;
+            });
+        });
+    }
+
+    fetch('/instructor/brightspace/grade-objects', {
+        headers: { 'Accept': 'application/json' }, cache: 'no-store'
+    }).then(function (res) {
+        return res.ok ? res.json() : [];
+    }).then(function (items) {
+        if (!Array.isArray(items)) items = [];
+
+        // Build id→name and name→id maps, seeded with the do-not-sync option.
+        var byId = {};
+        var byName = {};
+        byId[DO_NOT_SYNC_ID] = DO_NOT_SYNC_LABEL;
+        byName[DO_NOT_SYNC_LABEL] = DO_NOT_SYNC_ID;
+        items.forEach(function (it) {
+            var label = it.name;
+            if (it.gradeType && it.gradeType !== 'Numeric') {
+                label += ' — ' + it.gradeType + ' (not supported)';
+            }
+            byId[String(it.id)] = label;
+            byName[label] = String(it.id);
+        });
+
+        // Populate datalist: do-not-sync first, then the grade items by name.
+        datalist.innerHTML = optionHTML(DO_NOT_SYNC_LABEL, DO_NOT_SYNC_ID)
+            + items.map(function (it) {
+                var label = it.name;
+                if (it.gradeType && it.gradeType !== 'Numeric') {
+                    label += ' — ' + it.gradeType + ' (not supported)';
+                }
+                return optionHTML(label, String(it.id));
+            }).join('');
+
+        wireForms(byId, byName);
+
+    }).catch(function () {
+        // D2L unreachable: only the do-not-sync option is offered; grade-item
+        // names can't be resolved, so any typed ID passes through unchanged.
+        var byId = {};
+        var byName = {};
+        byId[DO_NOT_SYNC_ID] = DO_NOT_SYNC_LABEL;
+        byName[DO_NOT_SYNC_LABEL] = DO_NOT_SYNC_ID;
+        datalist.innerHTML = optionHTML(DO_NOT_SYNC_LABEL, DO_NOT_SYNC_ID);
+        wireForms(byId, byName);
+    });
 })();
 </script>
 #endexport

@@ -6,7 +6,7 @@ import Fluent
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -25,13 +25,13 @@ import XCTVapor
         return app
     }
 
-    private func register(_ app: Application, body: String) async throws -> XCTHTTPResponse {
+    private func register(_ app: Application, body: String) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/register",
             headers: ["Content-Type": "application/json"], body: ByteBuffer(string: body))
     }
 
-    private func jsonObject(_ res: XCTHTTPResponse) -> [String: Any]? {
+    private func jsonObject(_ res: TestingHTTPResponse) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8))) as? [String: Any]
     }
 
@@ -96,6 +96,9 @@ import XCTVapor
 
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent renders the permitted screen only for per-course
+            // staff now (#417 Slice G2); enrol prof so the client name shows.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             var components = URLComponents()
             components.path = "/oauth/authorize"
             components.queryItems = [

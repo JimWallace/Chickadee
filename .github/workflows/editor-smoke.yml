@@ -1,0 +1,223 @@
+name: Editor smoke test
+
+# Boots the real chickadee-server and drives the JupyterLite notebook editor in
+# a headless browser, asserting the Pyodide kernel comes up and runs a cell.
+# This is the gate the recent editor breakages slipped through: swift test, the
+# render tests, and BrowserRunnerJSTests all prove code/templates *resolve* —
+# none put a browser in front of the editor, so a change that loads the page but
+# blocks the kernel worker (the COEP cross-origin-isolation attempt) or leaves a
+# dead kernel ("Kernel Unknown") passes CI and only fails in front of a student.
+#
+# Runs the selftest (Tools/editor-smoke-test/selftest.sh) under a matrix of BOTH
+# engines we ship to — Chromium (Chrome/Edge) and WebKit (Safari) — against one
+# build. The selftest proves the editor boots cross-origin isolated, stays
+# healthy with the service worker disabled (SharedArrayBuffer carries stdin), and
+# still FAILS a deliberately no-sync config (so the freeze detector is real).
+# Adding WebKit is what catches the Safari-class breakages that a Chromium-only
+# check shipped blind (spurious phase-1 timeouts; the Atomics.waitAsync
+# data:-worker blocked under COEP).
+#
+# REQUIRED-GATE DESIGN. The trigger is intentionally NOT path-filtered: a path-
+# filtered workflow is *skipped* on unrelated PRs, and a required status check
+# that is skipped blocks those merges forever. Instead the workflow runs on every
+# PR, a `changes` job decides whether the editor surface was touched (fail-safe:
+# any uncertainty runs the smoke), the expensive `smoke` matrix runs only when it
+# was, and an always-running `editor-smoke-gate` job reports the single status to
+# require in branch protection: green when the smoke passed OR was skipped, red
+# only when it actually failed. To enforce it, mark **editor-smoke-gate** as a
+# required status check (see docs/notebook-editor-smoke-test.md).
+
+on:
+  schedule:
+    # ~03:30 America/Toronto (07:30 UTC) — off the nightly coverage slot.
+    - cron: "30 7 * * *"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: editor-smoke-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Decide whether this PR touches any editor / grading / isolation surface.
+  # Filtering here (rather than at the trigger) keeps the workflow running on
+  # every PR so `editor-smoke-gate` always reports a status — while still
+  # skipping the expensive smoke when nothing relevant changed. Fail-safe: a
+  # non-PR event, a missing base commit, or an empty diff all run the smoke.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      editor: ${{ steps.detect.outputs.editor }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::non-PR event ($EVENT) — running editor smoke."
+            exit 0
+          fi
+          git fetch --no-tags --quiet origin "$BASE_REF" || true
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::base sha unavailable — running editor smoke (fail-safe)."
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA" HEAD)"
+          if [ -z "$changed" ]; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::no diff computed — running editor smoke (fail-safe)."
+            exit 0
+          fi
+          # Editor / grading / cross-origin-isolation surface. Keep in sync with
+          # the assets the editor actually loads and the middlewares that isolate
+          # them. Over-matching is safe (it just runs the smoke); under-matching
+          # is the dangerous direction.
+          pattern='^(Public/notebook[^/]*\.js|Public/browser-runner\.js|Public/grading-worker\.js|Public/pyodide-worker\.js|Public/assignment-validate\.js|Public/freeze-watchdog-worker\.js|Public/jupyterlite/|Public/pyodide/|Public/vendor/|Sources/APIServer/Middleware/COEPMiddleware\.swift|Sources/APIServer/Middleware/NotebookAssetIsolationMiddleware\.swift|Sources/APIServer/Middleware/EditorEngineDetection\.swift|Sources/APIServer/Middleware/JupyterLiteConfigFlagMiddleware\.swift|Sources/APIServer/Middleware/CrossOriginIsolationHeaders\.swift|Sources/APIServer/Middleware/SecurityHeadersMiddleware\.swift|Sources/APIServer/Middleware/EditorAssetFastPathMiddleware\.swift|Sources/APIServer/Bootstrap/AppMiddleware\.swift|Sources/APIServer/Configuration/SecurityConfig\.swift|Tools/jupyterlite/|Tools/editor-smoke-test/|\.github/workflows/editor-smoke\.yml)'
+          # Use a here-string, NOT `echo "$changed" | grep -qE`: with a large
+          # changed-file list (e.g. a full JupyterLite bundle re-vendor) grep -q
+          # matches early and closes the pipe, echo takes SIGPIPE, and the
+          # `set -o pipefail` above then makes the pipeline exit non-zero EVEN ON
+          # A MATCH — silently misclassifying the PR as "no editor changes" and
+          # skipping the required smoke (a falsely-green gate). A here-string has
+          # no upstream writer process to receive SIGPIPE, so the match stands.
+          if grep -qE "$pattern" <<< "$changed"; then
+            echo "editor=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::editor-relevant files changed — running editor smoke."
+          else
+            echo "editor=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no editor-relevant changes — skipping editor smoke."
+          fi
+
+  smoke:
+    needs: changes
+    if: ${{ needs.changes.outputs.editor == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Run the editor against BOTH engines we ship to: Chromium (Chrome/Edge) and
+    # WebKit (the engine behind Safari — every Safari-class editor bug we have
+    # shipped was invisible to a Chromium-only check). fail-fast:false so one
+    # engine's failure still reports the other.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    # Run in the same swift image the other jobs use so the cached server binary
+    # (dynamically linked against this image's Swift runtime) actually runs, and
+    # so the vended Public/pyodide it serves is the exact build CI ships.
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Shared scaffold: mtime normalisation, exact-match build-cache restore,
+      # server build, Node + Playwright install (engine download cached). See
+      # .github/actions/browser-probe-setup/action.yml for the cache-soundness
+      # notes that used to live inline here.
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+
+      # selftest.sh drives the editor THREE ways against this one build, in the
+      # matrix engine (Chromium / WebKit):
+      #   • default boot — must PASS, crossOriginIsolated=true (SharedArrayBuffer
+      #     path; also the live guard against the COEP kernel-worker block);
+      #   • service worker disabled — must STILL PASS (SAB independent of the SW —
+      #     the "Kernel Unknown" race is gone);
+      #   • no SW and no SAB — must FAIL (proves the freeze detector works).
+      # Running it under WebKit too is what would have caught the Safari-class
+      # editor regressions in CI rather than in front of a student.
+      # webkit only: one bounded, loudly-logged retry. The webkit engine
+      # carries a known ambient exec-hang rate under CI load (~1 failure in 25
+      # gate runs — docs/ci-flakiness.md Family 3), and this job feeds the
+      # REQUIRED editor-smoke-gate, so a single ambient hang should not block
+      # an unrelated merge. Chromium stays strict: a chromium failure is
+      # treated as real, first time. The retry is logged as a ::warning so the
+      # flake rate stays visible in the annotations rather than hidden.
+      - name: Run editor smoke selftest (${{ matrix.browser }}; both sync paths + freeze detector)
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh; then
+            exit 0
+          fi
+          rc=$?
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
+
+      # Full authenticated end-to-end against the REAL student notebook page:
+      # seed a browser-graded assignment over the HTTP API, log in as a student,
+      # open /testsetups/:id/notebook (the isolated parent that embeds the editor
+      # iframe AND spawns our grading/freeze workers), and assert it is isolated,
+      # the workers spawn, the editor loads the notebook from the Drive, and a
+      # real Submit grades. This drives the actual page (not /jupyterlite/repl) —
+      # the gap that hid the grading-worker COEP block (#986).
+      - name: Run authenticated notebook-page e2e (${{ matrix.browser }})
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          fi
+          rc=$?
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit notebook-page e2e failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Families 2+3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
+
+  # Always-running required status. Green when the smoke passed OR was skipped
+  # (no editor-relevant changes), red only when the smoke actually failed — so
+  # this one check can be marked required without blocking unrelated PRs. Mark
+  # THIS job ("editor-smoke-gate") required in branch protection.
+  # `!cancelled()` is run-scoped: a superseded run (concurrency cancel from a
+  # newer push, or a rerun of an older head entering the shared group) skips
+  # the gate instead of reporting its cancelled smoke jobs as a failure. A
+  # smoke job killed by its own timeout-minutes still fails the gate — the
+  # run survives in that case, so the gate runs and sees result=cancelled.
+  editor-smoke-gate:
+    needs: [changes, smoke]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on editor smoke result
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+          EDITOR_CHANGED: ${{ needs.changes.outputs.editor }}
+        run: |
+          echo "changes job: ${CHANGES_RESULT}; editor-relevant: ${EDITOR_CHANGED}; smoke: ${SMOKE_RESULT}"
+          # If we couldn't even determine what changed, fail closed.
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::change-detection job did not succeed (${CHANGES_RESULT}) — failing closed."
+            exit 1
+          fi
+          # smoke is 'skipped' when no editor files changed (pass), 'success'
+          # when it ran green, 'failure'/'cancelled' when it broke.
+          if [ "$SMOKE_RESULT" = "failure" ] || [ "$SMOKE_RESULT" = "cancelled" ]; then
+            echo "::error::Editor smoke test failed — see the smoke job."
+            exit 1
+          fi
+          echo "Editor smoke gate passed (smoke: ${SMOKE_RESULT})."

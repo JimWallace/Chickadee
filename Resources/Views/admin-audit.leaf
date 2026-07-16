@@ -9,6 +9,7 @@ Audit Log
     <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
     <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
     <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
+    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
     #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
     <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
@@ -45,7 +46,7 @@ Audit Log
         #endif
     </form>
 
-    #if(!rows.count):
+    #if(rows.isEmpty):
     <p class="audit-muted">#if(filtered):No audit entries match this filter.#else:No audit entries recorded yet.#endif</p>
     #else:
     <p class="audit-count">
@@ -87,16 +88,16 @@ Audit Log
 .audit-col-target { width: 9rem; }
 .audit-col-remote { width: 9rem; }
 .audit-mono {
-    font-family: var(--font-mono, monospace);
-    font-size: .85rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
 }
 .audit-action-code {
-    font-size: .75rem;
+    font-size: var(--text-xs);
     color: var(--muted);
 }
 .audit-metadata {
-    font-family: var(--font-mono, monospace);
-    font-size: .8rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     white-space: pre-wrap;
     word-break: break-word;
 }

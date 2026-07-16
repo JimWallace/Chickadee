@@ -1,0 +1,66 @@
+name: Browser probe setup
+description: >
+  Shared scaffold for the browser probe / smoke / visual jobs: normalise git
+  mtimes, restore the shared Swift build cache, build chickadee-server, and
+  install Node + Playwright (engine download cached). Callers must run
+  actions/checkout with fetch-depth: 0 + filter: blob:none first
+  (restore-git-mtimes needs commit times), inside the
+  ghcr.io/jimwallace/chickadee/swift container.
+
+inputs:
+  browser:
+    description: "Playwright engine to install (chromium | webkit)"
+    required: true
+  node-project:
+    description: "Directory holding the npm project (package-lock.json) to install"
+    required: false
+    default: "Tools/editor-smoke-test"
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/restore-git-mtimes
+
+    - name: Resolve toolchain cache key
+      id: toolchain
+      shell: bash
+      run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+    # Read-only restore of the shared build cache (same exact key as the Swift
+    # Tests `build` job). EXACT-MATCH ONLY — a restore-keys prefix fallback
+    # would incrementally build over a mismatched tree, which is unsound for
+    # the mangled-symbol reason documented in swift-tests.yml. On a hit,
+    # building the server product is near-no-op; on a miss it builds cold.
+    - name: Restore build artifacts
+      uses: actions/cache/restore@v5
+      with:
+        path: .build
+        key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
+
+    - name: Build chickadee-server
+      shell: bash
+      run: swift build --product chickadee-server
+
+    - name: Install Node and npm dependencies
+      shell: bash
+      working-directory: ${{ inputs.node-project }}
+      run: |
+        set -eux
+        apt-get update -qq
+        apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
+        npm ci
+
+    # The engine download (~150 MB) is the slow, network-dependent part of
+    # `playwright install`; cache it keyed on the lockfile so probe legs stop
+    # re-downloading it every run. `--with-deps` still apt-installs the
+    # engine's system libraries each run (not cacheable inside the container).
+    - name: Cache Playwright ${{ inputs.browser }} download
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ inputs.browser }}-${{ hashFiles(format('{0}/package-lock.json', inputs.node-project)) }}
+
+    - name: Install Playwright ${{ inputs.browser }} engine
+      shell: bash
+      working-directory: ${{ inputs.node-project }}
+      run: npx playwright install --with-deps ${{ inputs.browser }}

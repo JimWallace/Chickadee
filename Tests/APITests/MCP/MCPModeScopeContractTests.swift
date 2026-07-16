@@ -12,7 +12,7 @@ import Fluent
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -48,7 +48,7 @@ import XCTVapor
 
     // MARK: - Request helpers (mirror the real client handshake)
 
-    private func register(_ app: Application) async throws -> XCTHTTPResponse {
+    private func register(_ app: Application) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/register",
             headers: ["Content-Type": "application/json"],
@@ -74,7 +74,7 @@ import XCTVapor
     /// (cookie-less, like the cross-site connector POST) and returns the 303.
     private func consent(
         _ app: Application, cookie: String, clientID: String, scope: String
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         var html = ""
         try await app.asyncTest(
             .GET, authorizePath(clientID: clientID, scope: scope),
@@ -93,7 +93,7 @@ import XCTVapor
             })
     }
 
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> XCTHTTPResponse {
+    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/token",
             beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
@@ -104,12 +104,12 @@ import XCTVapor
         return components.queryItems?.first(where: { $0.name == name })?.value
     }
 
-    private func jsonField(_ name: String, in res: XCTHTTPResponse) -> String? {
+    private func jsonField(_ name: String, in res: TestingHTTPResponse) -> String? {
         let object = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
         return object?[name] as? String
     }
 
-    private func scopesSupported(_ res: XCTHTTPResponse) -> [String]? {
+    private func scopesSupported(_ res: TestingHTTPResponse) -> [String]? {
         let object =
             (try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8))) as? [String: Any]
         return object?["scopes_supported"] as? [String]
@@ -127,7 +127,7 @@ import XCTVapor
         try await withApp(app) { app in
             // 1. Discovery: both well-known docs advertise exactly the mode's scopes.
             for path in ["/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
                     #expect(self.scopesSupported(res) == expectedScopes)
                 }
@@ -142,6 +142,8 @@ import XCTVapor
             // 3. Authorize: the agent requests the granted scope; consent yields a code.
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // Content consent requires per-course staff now (#417); enrol prof.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, clientID: clientID, scope: expectedScopes.joined(separator: " "))
             #expect(consentRes.status == .seeOther)
@@ -213,6 +215,8 @@ import XCTVapor
             let clientID = try #require(jsonField("client_id", in: try await register(app)))
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // In-mode consent renders the permitted screen; enrol prof as staff.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             try await app.asyncTest(
                 .GET, authorizePath(clientID: clientID, scope: "content:read"),
                 beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },

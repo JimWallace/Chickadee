@@ -44,6 +44,20 @@ struct AuthorScriptTool: ContentTool {
         let displayName: String?
         let dependsOn: [String]?
         let sectionID: String?
+        /// Per-test execution time limit override (seconds) for a test tier. A
+        /// value in 1...600 sets the override; 0 clears it (revert to the
+        /// assignment default); absent/null leaves an existing script's
+        /// override unchanged and a new script on the assignment default.
+        let timeLimitSeconds: Int?
+        /// Support files only: mark the file **grader-only** (true) or clear the
+        /// mark (false). A grader-only support file still reaches the native
+        /// worker (via the zip) but is withheld from every student-facing path —
+        /// editor symlinks, the browser-runner download, and the student
+        /// support-file download. Use it for answer keys / reserved holdout
+        /// data. Requires worker grading (a browser-graded assignment can't keep
+        /// a file from the student). Absent/null leaves the current mark
+        /// unchanged. Ignored for test tiers.
+        let graderOnly: Bool?
     }
 
     struct Output: Encodable, Sendable {
@@ -82,18 +96,20 @@ struct AuthorScriptTool: ContentTool {
         + "\"support\" for a helper file that tests or personalization expressions can import but that "
         + "is not itself graded; omit tier to keep an existing file's kind (new files default to a "
         + "public test). For test tiers you may also set points, displayName, dependsOn (prerequisite "
-        + "script names or family:<id> tokens), and sectionID (an existing section). Cannot edit "
-        + "pattern-family or notebook-check generated scripts — edit the family/check instead. Saving "
+        + "script names or family:<id> tokens), sectionID (an existing section), and timeLimitSeconds "
+        + "(a per-test execution time-limit override in seconds, 1–600; 0 clears it so the script uses "
+        + "the assignment default). Cannot edit "
+        + "pattern-family or notebook-check generated scripts — edit the family/check instead. "
+        + "For a support file, set graderOnly:true to withhold it from every student-facing path "
+        + "(editor, browser-runner download, support download) while still bundling it for the worker — "
+        + "use it for answer keys / reserved holdout data on worker-graded assignments. Saving "
         + "re-runs the assignment's validation and closes the assignment if it was open (re-open with "
         + "update_assignment once validation passes)."
 
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "filename": .object([
                 "type": .string("string"),
                 "description": .string(
@@ -116,16 +132,10 @@ struct AuthorScriptTool: ContentTool {
                         + "cloud-metadata address; redirects are not followed; capped at 8 MB; body must "
                         + "be UTF-8 text). Provide this OR content, not both."),
             ]),
-            "tier": .object([
-                "type": .string("string"),
-                "enum": .array([
-                    .string("public"), .string("release"), .string("secret"),
-                    .string("student"), .string("support"),
-                ]),
-                "description": .string(
-                    "Graded tier, or \"support\" for a non-graded helper file. "
-                        + "Omit to keep an existing file's kind; new files default to public."),
-            ]),
+            "tier": MCPSchema.tierEnum(
+                TestTierValues.withSupport,
+                description: "Graded tier, or \"support\" for a non-graded helper file. "
+                    + "Omit to keep an existing file's kind; new files default to public."),
             "points": .object([
                 "type": .string("integer"),
                 "description": .string("Marks for a test tier (ignored for support). Defaults to 1 on create."),
@@ -135,7 +145,7 @@ struct AuthorScriptTool: ContentTool {
                 "description": .string("Friendly name shown in the suite and results (test tiers only)."),
             ]),
             "dependsOn": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string(
                     "Prerequisite script filenames or family:<id> tokens (test tiers only)."),
             ]),
@@ -144,6 +154,23 @@ struct AuthorScriptTool: ContentTool {
                 "description": .string(
                     "Existing section id to place a test row into (test tiers only); "
                         + "an unknown id is treated as ungrouped."),
+            ]),
+            "timeLimitSeconds": .object([
+                "type": .string("integer"),
+                "description": .string(
+                    "Per-test execution time-limit override in seconds for a test tier "
+                        + "(\(mcpTimeLimitRange.lowerBound)–\(mcpTimeLimitRange.upperBound)); 0 clears the "
+                        + "override (revert to the assignment default set by set_time_limit). Ignored for "
+                        + "support files."),
+            ]),
+            "graderOnly": .object([
+                "type": .string("boolean"),
+                "description": .string(
+                    "Support files only: true marks the file grader-only (reaches the worker via the "
+                        + "zip but is withheld from every student-facing path — editor symlinks, "
+                        + "browser-runner download, student support-file download); false clears the mark. "
+                        + "Use for answer keys / reserved holdout data. Requires worker grading. "
+                        + "Absent leaves the current mark unchanged; ignored for test tiers."),
             ]),
         ]),
         // content/sourceUrl are a one-of (validated in execute), so neither is
@@ -155,13 +182,13 @@ struct AuthorScriptTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "filename": .object(["type": .string("string")]),
-            "tier": .object(["type": .string("string")]),
-            "isTest": .object(["type": .string("boolean")]),
-            "created": .object(["type": .string("boolean")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "filename": MCPSchema.string,
+            "tier": MCPSchema.string,
+            "isTest": MCPSchema.boolean,
+            "created": MCPSchema.boolean,
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("filename"), .string("tier"),
@@ -217,8 +244,8 @@ struct AuthorScriptTool: ContentTool {
         // outbound request for a call we are about to refuse.
         let source = try Self.resolveContentSource(input)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         // Never clobber a pattern-family / notebook-check generated script —
         // those are owned by the family/check, mirroring the web 409.
@@ -262,8 +289,22 @@ struct AuthorScriptTool: ContentTool {
                     detail: "\"\(cleaned)\" is currently a graded test; change its tier with update_suite "
                         + "or delete it before re-authoring it as a support file.")
             }
+            // A grader-only file is only safe under worker grading — the browser
+            // path ships the workspace to the student. Refuse before writing.
+            if input.graderOnly == true,
+                (setup.decodedManifest()?.gradingMode ?? .worker) != .worker
+            {
+                throw MCPToolError.invalidArguments(
+                    tool: Self.name,
+                    detail: "graderOnly requires worker grading, but this assignment is browser-graded. "
+                        + "Switch it with set_grading_mode(\"worker\") first.")
+            }
             try authorSupportFile(
                 filename: cleaned, content: content, setup: setup, assignment: assignment, context: context)
+            if let graderOnly = input.graderOnly {
+                try await setManifestGraderOnly(
+                    setup: setup, filename: cleaned, graderOnly: graderOnly, on: context.db)
+            }
         case .test(let tier):
             try await authorTestScript(
                 filename: cleaned, content: content, tier: tier, input: input,
@@ -345,6 +386,11 @@ struct AuthorScriptTool: ContentTool {
         let normalizedSection = input.sectionID.flatMap { $0.isEmpty ? nil : $0 }
         let displayName = input.displayName.flatMap { $0.isEmpty ? nil : $0 }
         let points = max(0, input.points ?? 1)
+        // Resolve the override: a value in 1...600 sets it; 0 clears it; nil
+        // means "leave unchanged on replace / default on create".
+        let validatedLimit: Int? = try input.timeLimitSeconds.map { limit in
+            limit == 0 ? 0 : try validateTimeLimitSeconds(limit, tool: Self.name, field: "timeLimitSeconds")
+        }
 
         if let idx = payload.items.firstIndex(where: { $0.kind == "script" && $0.script?.script == filename }) {
             // Replace an existing hand-written script. Content + tier always
@@ -355,6 +401,9 @@ struct AuthorScriptTool: ContentTool {
             if let dn = input.displayName { payload.items[idx].script?.displayName = dn.isEmpty ? nil : dn }
             if let deps = input.dependsOn { payload.items[idx].script?.dependsOn = deps }
             if input.sectionID != nil { payload.items[idx].sectionID = normalizedSection }
+            if let validatedLimit {
+                payload.items[idx].script?.timeLimitSeconds = validatedLimit == 0 ? nil : validatedLimit
+            }
         } else {
             // Create a new hand-written script. Insert it adjacent to its
             // section's existing block (or the ungrouped block) so the
@@ -362,7 +411,8 @@ struct AuthorScriptTool: ContentTool {
             let dto = ScriptDTO(
                 script: filename, tier: tier, points: points,
                 displayName: displayName, dependsOn: input.dependsOn ?? [],
-                content: content, hint: nil)
+                content: content, hint: nil,
+                timeLimitSeconds: (validatedLimit == 0 ? nil : validatedLimit))
             let item = SuiteItemDTO(
                 kind: "script", script: dto, family: nil, check: nil,
                 dependsOn: nil, sectionID: normalizedSection)

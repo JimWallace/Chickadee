@@ -4,7 +4,7 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite struct WorkerDaemonTests {
+@Suite(.timeLimit(.minutes(3))) struct WorkerDaemonTests {
     private let fastRetryPolicy = RunnerRetryPolicy(
         enabled: true,
         maxAttempts: 2,
@@ -289,6 +289,51 @@ import Testing
     // plus blocking Thread.sleep in mocks/teardown) that Task can be starved
     // for several seconds before it gets to run.  A tight 2–4s window made
     // these tests flaky there; 10s removes the class of failure.
+    /// Tracks daemon-task completion so `awaitCancelledDaemon` can poll it
+    /// with a deadline instead of awaiting `task.value` unbounded.
+    private actor DaemonShutdownFlag {
+        private var done = false
+        private var unexpectedError: String?
+        func markDone(unexpectedError error: String?) {
+            done = true
+            unexpectedError = error
+        }
+        func isDone() -> Bool { done }
+        func failure() -> String? { unexpectedError }
+    }
+
+    /// Cancels-and-awaits a daemon task with a deadline. `Task.value` is not
+    /// cancellation-responsive: if `daemon.run()` is wedged in a
+    /// non-cancellable wait, a bare `try await task.value` after `cancel()`
+    /// suspends forever and rides the whole job to the CI 20-minute kill —
+    /// observed 2026-07-02 in `workerDaemonContinuesToNextJobAfterProcessingFailure`
+    /// (the `.timeLimit` trait attributed it but cannot interrupt it; see
+    /// docs/ci-flakiness.md). On timeout the daemon task is left orphaned —
+    /// acceptable in a test process — and the caller should fail the test.
+    private func awaitCancelledDaemon(
+        _ task: Task<Void, Error>,
+        timeoutSeconds: TimeInterval = 30
+    ) async -> Bool {
+        task.cancel()
+        let flag = DaemonShutdownFlag()
+        Task {
+            var unexpected: String?
+            do {
+                try await task.value
+            } catch is CancellationError {
+                // Expected on cooperative shutdown.
+            } catch {
+                unexpected = String(describing: error)
+            }
+            await flag.markDone(unexpectedError: unexpected)
+        }
+        let done = await waitUntil(timeoutSeconds: timeoutSeconds) { await flag.isDone() }
+        if done, let unexpectedError = await flag.failure() {
+            Issue.record("daemon.run() threw a non-cancellation error on shutdown: \(unexpectedError)")
+        }
+        return done
+    }
+
     private func waitUntil(
         timeoutSeconds: TimeInterval = 10,
         pollIntervalNanos: UInt64 = 50_000_000,
@@ -363,12 +408,11 @@ import Testing
         }
         #expect(didPoll, "Daemon should poll for work before cancellation")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-            // Expected: the sleeping worker loop cooperatively exits on cancellation.
-        }
+        // Bounded: the sleeping worker loop cooperatively exits on
+        // cancellation; if it ever doesn't, fail here rather than suspend
+        // on task.value until the CI job kill.
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let requestCount = await poller.observedRequestCount()
         #expect(requestCount > 0)
@@ -400,12 +444,9 @@ import Testing
         }
         #expect(didReport, "Expected fallback failure report after processing error")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-            // Expected on cooperative shutdown.
-        }
+        // Bounded cooperative shutdown (see awaitCancelledDaemon).
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         #expect(reports.count == 1)
@@ -480,11 +521,8 @@ import Testing
         }
         #expect(didPollAgain, "Expected daemon to resume polling after first job")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-        }
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         let attemptCount = await reporter.observedAttempts()
@@ -547,11 +585,8 @@ import Testing
         }
         #expect(didProcessBoth, "Expected daemon to report both failed and successful jobs")
 
-        task.cancel()
-        do {
-            try await task.value
-        } catch is CancellationError {
-        }
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         let runnerInvocations = await runner.observedInvocationCount()
@@ -614,8 +649,8 @@ import Testing
 
         let task = Task { try await daemon.run() }
         _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         let report = try #require(reports.first)
@@ -642,6 +677,176 @@ import Testing
             longResult.contains("{") == false,
             "No JSON braces should appear in longResult"
         )
+    }
+
+    @Test func prepareFailureDoesNotLeakTestSetupScratchCopy() async throws {
+        // #1106 — the per-job scratch copy (`chickadee_ts_*` in the shared
+        // temp dir) is caller-owned from the moment TestSetupCache.acquire
+        // returns, but process(_:) only registers its cleanup defer AFTER
+        // prepareJobWorkspace returns. A throw in any later prepare stage
+        // (here: the submission download 404s while the setup zip is served
+        // fine) must remove the scratch dir before rethrowing, or every
+        // failed job leaks a fully-prepared setup directory.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worker-daemon-scratch-leak-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-scratch-leak-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
+        defer { server.stop() }
+
+        // Serve ONLY the setup zip; the submission URL will 404 after the
+        // scratch copy has been acquired.
+        let marker = "scratchleak\(UUID().uuidString.prefix(8))"
+        let setupZipPath = root.appendingPathComponent("\(marker)-setup.zip").path
+        try await makeZip(
+            at: setupZipPath,
+            files: [("test.sh", "#!/bin/sh\necho passed\n")])
+        let job = Job(
+            submissionID: "sub_\(marker)",
+            testSetupID: "setup-\(marker)",
+            attemptNumber: 1,
+            submissionURL: testURL("http://127.0.0.1:\(server.port)/no-such-submission.ipynb"),
+            testSetupURL: testURL("http://127.0.0.1:\(server.port)/\(marker)-setup.zip"),
+            manifest: try makeManifest(),
+            submissionFilename: "submission.ipynb"
+        )
+
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: testURL("http://localhost:8080"),
+            workerID: "worker-scratch-leak",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot)
+        )
+
+        let task = Task { try await daemon.run() }
+        let didReport = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
+        #expect(didReport, "Expected a synthetic failure report for the failed prepare")
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
+
+        // The scratch dir name embeds the cache key, which embeds the (unique)
+        // testSetupID — so any leftover entry matching the marker is a leak
+        // from THIS job, regardless of concurrent tests' scratch dirs.
+        let leaked =
+            (try? FileManager.default.contentsOfDirectory(
+                atPath: FileManager.default.temporaryDirectory.path))?
+            .filter { $0.hasPrefix("chickadee_ts_") && $0.contains(marker) } ?? []
+        #expect(leaked.isEmpty, "prepare-phase failure leaked scratch dirs: \(leaked)")
+    }
+
+    @Test func hungMakeStepIsKilledAtTheConfiguredTimeout() async throws {
+        // #1107 — the pre-test `make` step runs after the student submission
+        // is merged into the workspace, so a hung `make` used to pin a
+        // cooperative-pool thread and a job slot forever. It must now be
+        // killed at `config.makeTimeoutSeconds` and reported as a failed
+        // build, not a wedged runner.
+        //
+        // Requires a real `make` (the hang comes from its `sleep` recipe);
+        // environments without it — e.g. the CI test image — skip silently,
+        // matching the repo's "expected on this platform" convention.
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/make") else { return }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worker-daemon-make-timeout-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cacheRoot = try makeTempCacheRoot(named: "worker-daemon-make-timeout-cache")
+        defer { try? FileManager.default.removeItem(at: cacheRoot) }
+
+        let server = try await LocalHTTPTestServer.staticFiles(directory: root)
+        defer { server.stop() }
+
+        let submissionID = "sub_make_timeout"
+        let submissionPath = root.appendingPathComponent("\(submissionID).ipynb")
+        try Data(notebookJSON(code: "print(1)\n").utf8).write(to: submissionPath)
+        let setupZipPath = root.appendingPathComponent("\(submissionID)-setup.zip").path
+        try await makeZip(
+            at: setupZipPath,
+            files: [
+                ("test.sh", "#!/bin/sh\necho passed\n"),
+                ("Makefile", "all:\n\tsleep 60\n"),
+            ])
+        let manifest = try JSONDecoder().decode(
+            TestProperties.self,
+            from: Data(
+                #"""
+                {
+                  "schemaVersion": 1,
+                  "gradingMode": "worker",
+                  "requiredFiles": [],
+                  "testSuites": [{"tier": "public", "script": "test.sh"}],
+                  "timeLimitSeconds": 1,
+                  "makefile": {"target": null}
+                }
+                """#.utf8))
+        let job = Job(
+            submissionID: submissionID,
+            testSetupID: "setup-\(submissionID)",
+            attemptNumber: 1,
+            submissionURL: testURL("http://127.0.0.1:\(server.port)/\(submissionID).ipynb"),
+            testSetupURL: testURL("http://127.0.0.1:\(server.port)/\(submissionID)-setup.zip"),
+            manifest: manifest,
+            submissionFilename: "submission.ipynb"
+        )
+
+        var boundedMakeConfig = RunnerDaemonConfig.defaults
+        boundedMakeConfig = RunnerDaemonConfig(
+            capabilityDiscoveryEnabled: boundedMakeConfig.capabilityDiscoveryEnabled,
+            testSetupCacheDir: nil,
+            networkRetryEnabled: true,
+            retryBaseDelayMs: 10,
+            retryMaxDelayMs: 20,
+            heartbeatRetryMaxAttempts: 2,
+            resultUploadRetryMaxAttempts: 2,
+            downloadRetryMaxAttempts: 2,
+            minFreeDiskMB: 0,
+            makeTimeoutSeconds: 1
+        )
+
+        let poller = MockPoller(jobs: [job, nil])
+        let reporter = MockReporter()
+        let runner = MockRunner(
+            output: ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false))
+        let daemon = WorkerDaemon(
+            poller: poller,
+            reporter: reporter,
+            runner: runner,
+            apiBaseURL: testURL("http://localhost:8080"),
+            workerID: "worker-make-timeout",
+            workerSecret: "secret",
+            maxConcurrentJobs: 1,
+            runnerProfile: nil,
+            downloadRetryPolicy: fastRetryPolicy,
+            testSetupCache: TestSetupCache(cacheRoot: cacheRoot),
+            config: boundedMakeConfig
+        )
+
+        let task = Task { try await daemon.run() }
+        let didReport = await waitUntil(timeoutSeconds: 15) { await reporter.snapshot().count == 1 }
+        #expect(didReport, "Expected a failure report once the hung make is killed")
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
+
+        let report = try #require(await reporter.snapshot().first)
+        #expect(report.buildStatus == .failed, "hung make must map to a failed build")
+        let compilerOutput = report.compilerOutput ?? ""
+        #expect(
+            compilerOutput.contains("makeTimedOut") || compilerOutput.contains("time limit"),
+            "compilerOutput should say the make step timed out, got: \(compilerOutput)")
+        let runnerInvocations = await runner.observedInvocationCount()
+        #expect(runnerInvocations == 0, "tests must not run after a failed make")
     }
 
     @Test func workerDaemonHeartbeatFailuresDoNotStopPolling() async throws {
@@ -739,8 +944,8 @@ import Testing
             }
             #expect(didKeepPolling, "Runner should keep polling after transient HTTP 500 responses")
 
-            task.cancel()
-            _ = await task.result
+            let shutDown = await awaitCancelledDaemon(task)
+            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
         }
     }
 
@@ -773,8 +978,8 @@ import Testing
             }
             #expect(didKeepPolling, "Runner should keep polling after transient HTTP 401 responses")
 
-            task.cancel()
-            _ = await task.result
+            let shutDown = await awaitCancelledDaemon(task)
+            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
         }
     }
 
@@ -807,8 +1012,8 @@ import Testing
             }
             #expect(didKeepPolling, "Runner should keep polling after duplicate worker ID conflicts")
 
-            task.cancel()
-            _ = await task.result
+            let shutDown = await awaitCancelledDaemon(task)
+            #expect(shutDown, "daemon did not shut down within 30s of cancellation")
         }
     }
 
@@ -894,8 +1099,8 @@ import Testing
 
         let task = Task { try await daemon.run() }
         _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 5 }
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let (maxConcurrent, total) = await runner.snapshot()
         #expect(total == 5, "all 5 jobs should have completed")
@@ -945,8 +1150,8 @@ import Testing
 
         let task = Task { try await daemon.run() }
         _ = await waitUntil(timeoutSeconds: 10) { await reporter.snapshot().count == 1 }
-        task.cancel()
-        try? await task.value
+        let shutDown = await awaitCancelledDaemon(task)
+        #expect(shutDown, "daemon did not shut down within 30s of cancellation")
 
         let reports = await reporter.snapshot()
         #expect(reports.count == 1, "should still produce a report for the failed job")

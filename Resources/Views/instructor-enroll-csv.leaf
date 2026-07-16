@@ -13,10 +13,10 @@ Enrol from CSV — #(courseCode)
 #endif
 
 <section class="admin-section">
-    <h2>Upload enrollment list</h2>
+    <h2>Add students</h2>
     <p class="enroll-csv-intro">
-        Upload a CSV or text file containing one username per line. The first column is used, and a header row like
-        <code>username</code> is ignored automatically.
+        Upload a CSV file, type user IDs directly, or both — supplied IDs are merged. Unknown IDs are recorded as
+        pending enrolments and resolved when the student first signs in.
     </p>
     <form method="post"
           action="/courses/#(courseID)/enroll-csv"
@@ -24,8 +24,16 @@ Enrol from CSV — #(courseCode)
           class="enroll-csv-form">
         #csrfFormField()
         <label class="form-label">
-            Enrollment CSV
-            <input class="form-input enroll-csv-file-input" type="file" name="file" accept=".csv,.txt" required>
+            Upload a CSV
+            <input class="form-input enroll-csv-file-input" type="file" name="file" accept=".csv,.txt">
+            <span class="enroll-csv-hint">One username per line. The first column is used, and a header row like
+                <code>username</code> is ignored automatically.</span>
+        </label>
+        <label class="form-label">
+            Or type user IDs
+            <textarea class="form-input enroll-csv-textarea" name="usernames" rows="5"
+                      placeholder="alice&#10;bob&#10;carol"></textarea>
+            <span class="enroll-csv-hint">Separate IDs with new lines, commas, or spaces.</span>
         </label>
         <div class="enroll-csv-form-buttons">
             <button class="btn btn-primary" type="submit">Enrol</button>
@@ -36,9 +44,11 @@ Enrol from CSV — #(courseCode)
 <style>
 .enroll-csv-titlebar { margin-bottom: 1.5rem; }
 .enroll-csv-course-name { color: var(--text-secondary); }
-.enroll-csv-intro { margin-bottom: 1rem; color: var(--text-secondary); font-size: .9rem; }
+.enroll-csv-intro { margin-bottom: 1rem; color: var(--text-secondary); font-size: var(--text-base); }
 .enroll-csv-form { display: flex; flex-direction: column; gap: 1rem; max-width: 480px; }
 .enroll-csv-file-input { display: block; margin-top: .25rem; }
+.enroll-csv-textarea { display: block; margin-top: .25rem; width: 100%; font-family: var(--font-mono); resize: vertical; }
+.enroll-csv-hint { display: block; margin-top: .25rem; color: var(--text-secondary); font-size: var(--text-sm); }
 .enroll-csv-form-buttons { display: flex; gap: .75rem; }
 </style>
 #endexport

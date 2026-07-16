@@ -28,7 +28,7 @@ extension PublishedAssignmentRoutes {
     /// runner-facing expanded form.
     @Sendable
     func getSuite(req: Request) async throws -> Response {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
@@ -41,7 +41,7 @@ extension PublishedAssignmentRoutes {
     /// view without a second round-trip.
     @Sendable
     func putSuite(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
 
         let body: SuitePayload
         do { body = try req.content.decode(SuitePayload.self) } catch {
@@ -161,7 +161,8 @@ func buildSuitePayload(fromManifest manifest: String, zipPath: String? = nil) ->
                         points: entry.points,
                         displayName: entry.name,
                         dependsOn: collapseDeps(entry.dependsOn),
-                        hint: entry.hint
+                        hint: entry.hint,
+                        timeLimitSeconds: entry.timeLimitSeconds
                     ),
                     family: nil,
                     check: nil,

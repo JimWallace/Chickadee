@@ -14,7 +14,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -439,6 +439,7 @@ import XCTVapor
 
             let staffCookie = try await loginUser(
                 username: "prof1", password: "pass", role: "instructor", on: app)
+            try await promoteToInstructor("prof1", on: app)
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
@@ -473,6 +474,7 @@ import XCTVapor
 
             let staffCookie = try await loginUser(
                 username: "prof1", password: "pass", role: "instructor", on: app)
+            try await promoteToInstructor("prof1", on: app)
             try await app.asyncTest(
                 .GET, "/api/v1/browser-runner/testsetups/\(setupID)/manifest",
                 beforeRequest: { req in req.headers.add(name: .cookie, value: staffCookie) },
@@ -577,10 +579,93 @@ import XCTVapor
                 .filter(\.$submissionID == submissionID)
                 .first()
             #expect(result != nil, "a result record should be stored for the submission")
+            let storedJSON: String?
+            if let result {
+                storedJSON = try await result.loadCollectionJSON(on: app.db)
+            } else {
+                storedJSON = nil
+            }
             #expect(
-                result?.collectionJSON.contains("prerequisite") == true,
+                storedJSON?.contains("prerequisite") == true,
                 "stored result JSON should contain the dependency-skip message")
 
+        }
+    }
+
+    /// Audit A2 regression: browser-graded submissions must award the
+    /// first-to-submit record (Pathfinder) and, on a 100% grade, the class
+    /// records (Trailblazer etc.) — both used to exist only on the zip-upload
+    /// and worker-report paths, so browser-graded assignments never awarded
+    /// any record.
+    @Test func browserResultAwardsPathfinderAndClassRecords() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = minimalNotebook()
+
+            // A perfect one-test run: reconcile recomputes the grade from the
+            // outcome (1 point x score 1.0 = 100%).
+            let collection = """
+                {
+                  "submissionID": "",
+                  "testSetupID": "\(setupID)",
+                  "attemptNumber": 1,
+                  "buildStatus": "passed",
+                  "compilerOutput": null,
+                  "outcomes": [
+                    {
+                      "testName": "test_public",
+                      "testClass": null,
+                      "tier": "public",
+                      "status": "pass",
+                      "shortResult": "passed",
+                      "longResult": null,
+                      "executionTimeMs": 5,
+                      "memoryUsageBytes": null,
+                      "attemptNumber": 1,
+                      "isFirstPassSuccess": true
+                    }
+                  ],
+                  "totalTests": 1,
+                  "passCount": 1,
+                  "failCount": 0,
+                  "errorCount": 0,
+                  "timeoutCount": 0,
+                  "executionTimeMs": 5,
+                  "runnerVersion": "browser-wasm-runner/1.0",
+                  "timestamp": "2026-01-01T00:00:00Z"
+                }
+                """
+
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/browser-result",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.body = .init(
+                        buffer: multipartBody(
+                            boundary: "award-test-boundary",
+                            fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                            file: ("notebook", "notebook.ipynb", nb)
+                        ))
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": "award-test-boundary"])
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "browser-result should accept, body: \(res.body.string)")
+                })
+
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student1").first())
+            let awards = try await APIClassAchievement.query(on: app.db)
+                .filter(\.$testSetupID == setupID)
+                .all()
+            let awardIDs = Set(awards.map(\.achievementID))
+            #expect(awardIDs.contains("pathfinder"), "first browser submission should hold Pathfinder")
+            #expect(awardIDs.contains("trailblazer"), "100% browser grade should hold Trailblazer")
+            #expect(awards.allSatisfy { $0.userID == student.id })
         }
     }
 
@@ -709,6 +794,131 @@ import XCTVapor
                 try await APIAssignment.find(assignment.id, on: app.db))
             #expect(refreshed.isOpen == false)
 
+        }
+    }
+
+    // MARK: - Browser failover (freeze → worker backstop)
+
+    /// Helper: POST the JSON browser-failover body with the CSRF token in the
+    /// header (the freeze-watchdog worker / browser-runner both send it there).
+    private func postFailover(
+        setupID: String, notebook: String, csrf: String, cookie: String
+    ) async throws -> (HTTPStatus, String?) {
+        var status: HTTPStatus = .ok
+        var submissionID: String?
+        try await app.asyncTest(
+            .POST, "/api/v1/submissions/browser-failover",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: cookie)
+                req.headers.add(name: "x-csrf-token", value: csrf)
+                try req.content.encode(
+                    BrowserFailoverBody(testSetupID: setupID, notebook: notebook), as: .json)
+            },
+            afterResponse: { res in
+                status = res.status
+                if let json = try? JSONSerialization.jsonObject(
+                    with: Data(res.body.readableBytesView)) as? [String: String]
+                {
+                    submissionID = json["submissionID"]
+                }
+            })
+        return (status, submissionID)
+    }
+
+    /// A frozen/failed browser grade enqueues a `pending`, browser-mode student
+    /// submission that the worker backstop (WorkerJobRoutes) will claim.
+    @Test func browserFailoverEnqueuesPendingSubmission() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())  // browser
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (status, submissionID) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            #expect(status == .ok)
+            let id = try #require(submissionID)
+            #expect(id.isEmpty == false)
+
+            let sub = try #require(try await APISubmission.find(id, on: app.db))
+            #expect(sub.statusValue == .pending, "failover row must be pending for the backstop to claim")
+            #expect(sub.kind == APISubmission.Kind.student)
+            #expect(sub.testSetupID == setupID)
+            #expect(sub.userID != nil)
+        }
+    }
+
+    /// Repeated failover fires (watchdog + catch path, retries, reloads) reuse
+    /// the existing queued row instead of piling up duplicate grades.
+    @Test func browserFailoverIsIdempotentPerStudentAndSetup() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (_, first) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            let (_, second) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+
+            let firstID = try #require(first)
+            let secondID = try #require(second)
+            #expect(firstID == secondID, "second fire must reuse the first row")
+            let pending = try await APISubmission.query(on: app.db)
+                .filter(\.$status == SubmissionStatus.pending.rawValue)
+                .all()
+            #expect(pending.count == 1, "exactly one backstop row should exist, got \(pending.count)")
+        }
+    }
+
+    /// The failover is browser-only: a worker-graded setup already enqueues via
+    /// runner-submit, so the inverse is rejected and no row is created.
+    @Test func browserFailoverRejectsWorkerGradedSetup() async throws {
+        try await withApp(app) { _ in
+            let manifest = """
+                {
+                  "schemaVersion": 1,
+                  "gradingMode": "worker",
+                  "requiredFiles": [],
+                  "testSuites": [ { "tier": "public", "script": "test_public.py" } ],
+                  "timeLimitSeconds": 10,
+                  "makefile": null
+                }
+                """
+            let setupID = try await insertSetup(manifest: manifest)
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (status, _) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            #expect(status == .badRequest)
+
+            let all = try await APISubmission.query(on: app.db).all()
+            #expect(all.isEmpty, "worker-mode failover must not create a submission")
+        }
+    }
+
+    /// A closed (or overdue) assignment can't be graded via the failover any more
+    /// than via the normal browser submit path — same effective-open gate.
+    @Test func browserFailoverRejectsClosedAssignment() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: false)
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = try #require(String(data: minimalNotebook(), encoding: .utf8))
+
+            let (status, _) = try await postFailover(
+                setupID: setupID, notebook: nb, csrf: csrf, cookie: sessionCookie)
+            #expect(status == .forbidden, "closed assignment must reject the failover, got \(status)")
+
+            let all = try await APISubmission.query(on: app.db).all()
+            #expect(all.isEmpty, "closed-assignment failover must not create a submission")
         }
     }
 

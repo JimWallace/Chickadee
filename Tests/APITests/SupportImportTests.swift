@@ -75,6 +75,96 @@ import Testing
         #expect(onDisk == instructorOwn)
     }
 
+    @Test func extractor_overwriteRefreshesExistingSolutionPy() throws {
+        // The solution-save path uses `overwrite: true` to keep
+        // `shared/solution.py` in lockstep with the reference solution, so a
+        // Global Input expression's `solution.<fn>(...)` never drifts.
+        let nb: [String: Any] = [
+            "cells": [["cell_type": "code", "source": "def f(x):\n    return x + 1\n"]],
+            "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: nb)
+        let shared = tempDir.path + "/"
+        let pyPath = shared + "solution.py"
+
+        // A stale solution.py is present.
+        try "STALE = 1\n".write(toFile: pyPath, atomically: true, encoding: .utf8)
+
+        // overwrite:false leaves it (instructor-uploaded support file wins).
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: shared, overwrite: false) == false)
+        #expect(try String(contentsOfFile: pyPath, encoding: .utf8) == "STALE = 1\n")
+
+        // overwrite:true refreshes it from the current solution notebook.
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: shared, overwrite: true))
+        let refreshed = try String(contentsOfFile: pyPath, encoding: .utf8)
+        #expect(refreshed.contains("def f(x):"))
+        #expect(refreshed.contains("STALE") == false)
+    }
+
+    @Test func evaluator_importsSolutionAfterOverwriteWrite() async throws {
+        // End-to-end keystone: once `shared/solution.py` exists, an expression
+        // can source an expected value straight from the reference solution.
+        let nb: [String: Any] = [
+            "cells": [
+                ["cell_type": "code", "source": "def double(x):\n    return x * 2\n"]
+            ],
+            "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: nb)
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: tempDir.path + "/", overwrite: true))
+
+        let result = try await PersonalizationEvaluator.evaluate(
+            seedHex: "0005",
+            staticVariables: [],
+            expressions: [PersonalizationExpression(name: "x", expression: "solution.double(seed)")],
+            supportFilesDirectory: tempDir.path
+        )
+        // seed = 5; solution.double(5) = 10.
+        #expect(result["x"] == "10")
+    }
+
+    @Test func evaluator_resilientToBrokenDemoCellInSolution() async throws {
+        // Regression (HLTH-230 A3): a solution notebook whose demo/example cell
+        // errors at import — here a JSON-ism `null` in a module-level list
+        // literal (copy-pasted JSON) — must NOT take the instructor's helper
+        // functions down with it. A naive concat aborted `import solution` for
+        // the whole module; the evaluator's import guard then swallowed it and
+        // every `solution.<fn>` surfaced as a baffling
+        // `name 'solution' is not defined`. The resilient per-cell load skips
+        // only the broken cell, so the helpers flanking it still resolve.
+        let nb: [String: Any] = [
+            "cells": [
+                ["cell_type": "code", "source": "def triple(x):\n    return x * 3\n"],
+                ["cell_type": "code", "source": "patients = [{\"unit\": null}]\n"],
+                ["cell_type": "code", "source": "def quad(x):\n    return x * 4\n"],
+            ],
+            "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: nb)
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: tempDir.path + "/", overwrite: true))
+
+        let result = try await PersonalizationEvaluator.evaluate(
+            seedHex: "0004",
+            staticVariables: [],
+            expressions: [
+                PersonalizationExpression(name: "a", expression: "solution.triple(seed)"),
+                PersonalizationExpression(name: "b", expression: "solution.quad(seed)"),
+            ],
+            supportFilesDirectory: tempDir.path
+        )
+        // seed = 4 → triple 12, quad 16; the broken middle cell is skipped.
+        #expect(result["a"] == "12")
+        #expect(result["b"] == "16")
+    }
+
     @Test func extractor_skipsEmptyNotebook() throws {
         let nb: [String: Any] = [
             "cells": [["cell_type": "markdown", "source": "Just text"]],

@@ -182,6 +182,63 @@ import Vapor
         }
     }
 
+    @Test func createsFamilyWithDefaultAndPerCaseTimeLimits() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            _ = try await CreatePatternFamilyTool().execute(
+                CreatePatternFamilyTool.Input(
+                    assignmentPublicID: assignment.publicID, id: "timed", name: "Timed",
+                    kind: "boundary_equality", function: "f", paramNames: ["x"],
+                    defaultTimeLimitSeconds: 30,
+                    cases: [
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "01", args: [.int(1)], expected: .string("one"),
+                            timeLimitSeconds: 120),
+                        CreatePatternFamilyTool.CaseInput(
+                            key: "02", args: [.int(2)], expected: .string("two")),
+                    ]),
+                context(app))
+
+            let family = try await reloadFamily(assignment, id: "timed", on: app.db)
+            #expect(family.defaults.timeLimitSeconds == 30)
+            #expect(family.cases.first { $0.key == "01" }?.timeLimitSeconds == 120)
+            // Case 02 has no override → resolves to the family default.
+            let c2 = try #require(family.cases.first { $0.key == "02" })
+            #expect(c2.timeLimitSeconds == nil)
+            #expect(c2.resolvedTimeLimit(defaults: family.defaults) == 30)
+
+            // get_suite surfaces the values on the returned family spec.
+            let readCtx = ToolContext(
+                request: Request(application: app, on: app.eventLoopGroup.any()),
+                subject: "tester", grantedScopes: [.read])
+            let suite = try await GetSuiteTool().execute(
+                GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
+            let famRow = try #require(suite.items.compactMap(\.family).first { $0.id == "timed" })
+            #expect(famRow.defaults.timeLimitSeconds == 30)
+            #expect(famRow.cases.first { $0.key == "01" }?.timeLimitSeconds == 120)
+        }
+    }
+
+    @Test func rejectsOutOfRangeTimeLimitOnCreate() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.self) {
+                _ = try await CreatePatternFamilyTool().execute(
+                    CreatePatternFamilyTool.Input(
+                        assignmentPublicID: assignment.publicID, id: "bad", name: "Bad",
+                        kind: "boundary_equality", function: "f", paramNames: ["x"],
+                        defaultTimeLimitSeconds: 9999,
+                        cases: [
+                            CreatePatternFamilyTool.CaseInput(
+                                key: "01", args: [.int(1)], expected: .string("one"))
+                        ]),
+                    context(app))
+            }
+        }
+    }
+
     @Test func blankPerCaseHintIsStoredAsNil() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

@@ -38,6 +38,29 @@ import Testing
         #expect(parseUsernamesFromCSV(Data(csv.utf8)) == ["alice", "bob"])
     }
 
+    // MARK: - Free-text (typed-in) parsing
+
+    @Test func textParsesOnePerLine() {
+        #expect(parseUsernamesFromText("alice\nbob\ncarol\n") == ["alice", "bob", "carol"])
+    }
+
+    @Test func textParsesCommaSeparated() {
+        #expect(parseUsernamesFromText("alice, bob, carol") == ["alice", "bob", "carol"])
+    }
+
+    @Test func textParsesMixedSeparators() {
+        #expect(parseUsernamesFromText("alice bob,carol;dave\neve") == ["alice", "bob", "carol", "dave", "eve"])
+    }
+
+    @Test func textStripsQuotesAndWhitespace() {
+        #expect(parseUsernamesFromText("  \"alice\" , 'bob' ") == ["alice", "bob"])
+    }
+
+    @Test func textDropsBlanks() {
+        #expect(parseUsernamesFromText("alice,,  ,\n\nbob") == ["alice", "bob"])
+        #expect(parseUsernamesFromText("   \n  ").isEmpty)
+    }
+
     // MARK: - Header detection
 
     @Test func skipsUsernameHeader() {

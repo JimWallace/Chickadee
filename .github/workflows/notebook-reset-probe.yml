@@ -1,0 +1,67 @@
+name: Notebook reset probe
+
+# DIAGNOSTIC harness — NOT a required gate. Confirms instructor/self "Reset
+# notebook" actually takes effect on the JupyterLite 0.8 editor — the regression
+# fixed in the same PR: 0.8 doesn't expose window.jupyterapp, so the client
+# reseed silently no-op'd and a reset left the student's stale IndexedDB copy on
+# screen. Seeds a published, open, no-suite assignment (no runner needed), has
+# the student edit+save, hits the self-reset endpoint, reloads, and asserts the
+# edit marker is GONE. Without the fix this FAILS (stale copy survives); with it,
+# the Drive entry is evicted and the editor re-fetches the reset starter.
+#
+# Runs both engines (Chromium + WebKit). Not wired into branch protection — a
+# flaky reset run must not block unrelated merges; it's a confidence signal for
+# editor / reseed changes and an on-demand check.
+
+on:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: "Engine to drive (chromium | webkit | both)"
+        default: "both"
+  pull_request:
+    paths:
+      - "Tools/editor-smoke-test/**"
+      - ".github/workflows/notebook-reset-probe.yml"
+      - "Public/notebook*.js"
+      - "Public/jupyterlite/**"
+      - "Public/pyodide/**"
+      - "scripts/patch-pyodide-kernel.py"
+
+concurrency:
+  group: notebook-reset-probe-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Shared scaffold: mtime normalisation, build-cache restore, server
+      # build, Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+
+      - name: Drive notebook reset probe (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: notebook-reset-check.mjs
+        run: Tools/editor-smoke-test/run-smoke.sh

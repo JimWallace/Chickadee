@@ -50,6 +50,15 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
     // hint comes from the family case / notebook check spec instead; this
     // field carries the hint for hand-written raw scripts. nil = none.
     public let hint: String?
+    // Optional per-test execution time limit (seconds). When nil the entry
+    // inherits the assignment-wide default `TestProperties.timeLimitSeconds`.
+    // Resolution happens in each executor (the worker's NativeScriptExecutor,
+    // the browser runner's JS) rather than in RunnerCore's `executeSuites`,
+    // which is the wasm-pinned shared loop and still receives the assignment
+    // default as the fallback timeLimit. Effective limit for a script is
+    // `entry.timeLimitSeconds ?? manifest.timeLimitSeconds`. Back-compat:
+    // absent in JSON decodes to nil (inherit the default).
+    public let timeLimitSeconds: Int?
 
     public init(
         tier: TestTier, script: String, name: String? = nil,
@@ -57,7 +66,8 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedBy: String? = nil,
         generatedByCheck: String? = nil,
         sectionID: String? = nil,
-        hint: String? = nil
+        hint: String? = nil,
+        timeLimitSeconds: Int? = nil
     ) {
         self.tier = tier
         self.script = script
@@ -68,6 +78,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         self.generatedByCheck = generatedByCheck
         self.sectionID = sectionID
         self.hint = hint
+        self.timeLimitSeconds = timeLimitSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -81,6 +92,7 @@ public struct TestSuiteEntry: Codable, Equatable, Sendable {
         generatedByCheck = try c.decodeIfPresent(String.self, forKey: .generatedByCheck)
         sectionID = try c.decodeIfPresent(String.self, forKey: .sectionID)
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
+        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
     }
 
     /// True if this entry was produced by a pattern family or a notebook
@@ -245,6 +257,31 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `seed`.
     public let globalExpressions: [PersonalizationExpression]
 
+    /// Per-student dataset specs (Phase 1 — see docs/datasets.md).  Each entry
+    /// marks one bundled support file as a per-student dataset: the server
+    /// materializes a deterministic slice from the assignment seed (see
+    /// `DatasetMaterializer`) and delivers the bytes to grading + the editor
+    /// under the same filename.  A save-time authoring concern — the runner
+    /// receives the already-materialized file, never the spec — so
+    /// `runnerSanitized()` strips it via the memberwise default (like
+    /// `patternFamilies` / `globalExpressions`).
+    public let datasets: [DatasetSpec]
+
+    /// Filenames the instructor has designated as **grader-only** (option B —
+    /// see docs/datasets.md): bundled in the test setup so the native worker's
+    /// grading scripts can read them, but withheld from every student-facing
+    /// path (editor symlinks, browser-runner download, student support-file
+    /// download).  This is the reserved holdout / secret test set.  A
+    /// grader-only entry is otherwise an ordinary support file; this list just
+    /// flags it as student-hidden.  Server-side only — the worker receives the
+    /// file via the test-setup zip and needs no marker — so `runnerSanitized()`
+    /// strips it via the memberwise default (like `datasets`).
+    public let graderOnlyFiles: [String]
+
+    /// The grader-only filenames as a set, for unioning into the student-facing
+    /// `reservedNames` filters at each delivery point.
+    public var graderOnlyFileSet: Set<String> { Set(graderOnlyFiles) }
+
     /// True when the manifest declares any per-student `=` expression, global
     /// or section-scoped.  Expressions are the only personalization inputs
     /// that need a per-(student, assignment) seed to resolve — use this to
@@ -293,6 +330,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         sections: [TestSuiteSection] = [],
         globalVariables: [FamilyVariable] = [],
         globalExpressions: [PersonalizationExpression] = [],
+        datasets: [DatasetSpec] = [],
+        graderOnlyFiles: [String] = [],
         achievements: [Achievement] = [],
         disabledBuiltInAwardIDs: [String] = [],
         builtInAchievementsSeeded: Bool = false,
@@ -315,6 +354,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.sections = sections
         self.globalVariables = globalVariables
         self.globalExpressions = globalExpressions
+        self.datasets = datasets
+        self.graderOnlyFiles = graderOnlyFiles
         self.achievements = achievements
         self.disabledBuiltInAwardIDs = disabledBuiltInAwardIDs
         self.builtInAchievementsSeeded = builtInAchievementsSeeded
@@ -348,6 +389,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
             try c.decodeIfPresent(
                 [PersonalizationExpression].self,
                 forKey: .globalExpressions) ?? []
+        datasets = try c.decodeIfPresent([DatasetSpec].self, forKey: .datasets) ?? []
+        graderOnlyFiles = try c.decodeIfPresent([String].self, forKey: .graderOnlyFiles) ?? []
         achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
         disabledBuiltInAwardIDs =
             try c.decodeIfPresent([String].self, forKey: .disabledBuiltInAwardIDs) ?? []
@@ -373,6 +416,8 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case sections
         case globalVariables
         case globalExpressions
+        case datasets
+        case graderOnlyFiles
         case achievements
         case disabledBuiltInAwardIDs
         case builtInAchievementsSeeded
@@ -390,11 +435,18 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(testItems, forKey: .testItems)
         // Mirror the legacy arrays (derived from `testItems`, so they can
         // never drift) for cross-version readers that predate `testItems`.
+        // DEPRECATED write-side mirroring — remove in the v0.7.0 cleanup,
+        // once no supported reader (runner binary or course-bundle importer)
+        // predates `testItems`.  The read-side migration in `init(from:)`
+        // stays forever: old manifests on disk / in exported bundles carry
+        // only the legacy arrays and must keep decoding.
         try c.encode(patternFamilies, forKey: .patternFamilies)
         try c.encode(notebookChecks, forKey: .notebookChecks)
         try c.encode(sections, forKey: .sections)
         try c.encode(globalVariables, forKey: .globalVariables)
         try c.encode(globalExpressions, forKey: .globalExpressions)
+        try c.encode(datasets, forKey: .datasets)
+        try c.encode(graderOnlyFiles, forKey: .graderOnlyFiles)
         try c.encode(achievements, forKey: .achievements)
         try c.encode(disabledBuiltInAwardIDs, forKey: .disabledBuiltInAwardIDs)
         try c.encode(builtInAchievementsSeeded, forKey: .builtInAchievementsSeeded)
@@ -436,6 +488,10 @@ public struct TestProperties: Codable, Equatable, Sendable {
             },
             globalVariables: globalVariables,
             globalExpressions: [],
+            // `datasets` and `graderOnlyFiles` are dropped via the memberwise
+            // default: the runner receives the materialized per-student file
+            // (delivered with the job, like `_ck_inputs.py`) and the grader-only
+            // file (via the test-setup zip) directly — never the specs/markers.
             achievements: []
         )
     }

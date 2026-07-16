@@ -24,13 +24,14 @@ extension StudentCourseRoutes {
     @Sendable
     func courseStudentSubmissionsPage(req: Request) async throws -> View {
         let viewer = try req.auth.require(APIUser.self)
-        guard viewer.isInstructor else {
-            throw WebAssignmentError.forbidden(action: "view student submissions")
-        }
         let (course, student) = try await resolveCourseAndStudent(req: req)
         guard let courseID = course.id else {
             throw WebAssignmentError.notFound(resource: "Course")
         }
+        // Per-course staff (TA+) may view a student's submissions — replaces the
+        // old global `isInstructor` guard, which would reject a per-course TA
+        // whose deployment role is student (#417 Slice E).
+        try await requireCourseRole(caller: viewer, courseID: courseID, atLeast: .ta, db: req.db)
 
         // Phase 1: assignments + sections in parallel.  The sections query
         // only needs `courseID`, so it doesn't have to wait for assignments
@@ -61,27 +62,22 @@ extension StudentCourseRoutes {
             req: req, student: student, setupIDs: setupIDs)
         async let extensionByAssignmentIDFuture = loadStudentCourseExtensions(
             req: req, student: student, assignments: assignments)
-        async let classBadgesBySetupIDFuture = loadStudentCourseClassBadges(
+        async let classAchievementRowsFuture = loadStudentCourseClassAchievements(
             req: req, student: student, setupIDs: setupIDs)
         async let overrideBySetupIDFuture = loadStudentCourseOverrides(
             req: req, student: student, setupIDs: setupIDs)
         let setupsByID = try await setupsByIDFuture
         let submissions = try await submissionsFuture
         let extensionByAssignmentID = try await extensionByAssignmentIDFuture
-        let classBadgesBySetupIDRaw = try await classBadgesBySetupIDFuture
+        let classAchievementRows = try await classAchievementRowsFuture
         let overrideBySetupID = try await overrideBySetupIDFuture
 
         // Honor per-assignment disabled built-in awards across the page (reuses
         // the setups already loaded above, so no extra query).
         let disabledBySetup = setupsByID.mapValues { BuiltInAchievements.disabled(in: $0) }
         let perSubBySetup = setupsByID.compactMapValues { BuiltInAchievements.manifestPerSubmission(in: $0) }
-        let classBadgesBySetupID = classBadgesBySetupIDRaw.reduce(
-            into: [String: [AchievementBadge]]()
-        ) { acc, entry in
-            let disabled = disabledBySetup[entry.key] ?? []
-            let kept = disabled.isEmpty ? entry.value : entry.value.filter { !disabled.contains($0.id) }
-            if !kept.isEmpty { acc[entry.key] = kept }
-        }
+        let classBadgesBySetupID = classBadgesBySetup(
+            rows: classAchievementRows, setupsByID: setupsByID, disabledBySetup: disabledBySetup)
 
         let submissionsBySetupID = submissionsGroupedBySetupID(submissions)
         // preferredResults must wait until submissions resolves (it needs
@@ -90,14 +86,30 @@ extension StudentCourseRoutes {
             for: submissions.compactMap(\.id),
             on: req.db
         )
+        // Grade cells use the shared "highest grade wins" fold across ALL
+        // result sources (#1111); preferredResults stays for the badge path.
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
+            for: submissions.compactMap(\.id),
+            on: req.db
+        )
+        // Badges need the collection (executionTimeMs) for each assignment's
+        // LATEST submission only — batch-fetch just those blobs from the
+        // result_collections side table (#1173).
+        let latestResultIDs = submissionsBySetupID.values.compactMap { history in
+            history.first?.id.flatMap { preferredResultBySubmissionID[$0]?.id }
+        }
+        let latestBlobs = try await collectionJSONByResultID(for: latestResultIDs, on: req.db)
+        let collectionByResultID = latestBlobs.compactMapValues(decodedCollection(from:))
 
         let fmt = waterlooDateTimeFormatter()
-        let sortedAssignments = sortedStudentCourseAssignments(assignments, setupsByID: setupsByID)
+        let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupsByID)
 
         let rowContext = StudentAssignmentRowContext(
             courseCode: course.code,
             urlToken: try student.requireURLToken(),
             preferredResultBySubmissionID: preferredResultBySubmissionID,
+            collectionByResultID: collectionByResultID,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
             student: student,
             fmt: fmt,
             disabledBySetup: disabledBySetup,
@@ -190,21 +202,41 @@ extension StudentCourseRoutes {
         return extensionByAssignmentID
     }
 
-    fileprivate func loadStudentCourseClassBadges(
+    /// Maps the student's class-achievement rows to display badges once the
+    /// setups (and their manifests) are loaded — after phase 2, so
+    /// manifest-authored records (custom IDs / renamed built-ins) resolve
+    /// instead of being dropped by the registry-only lookup (audit A6).
+    fileprivate func classBadgesBySetup(
+        rows: [APIClassAchievement],
+        setupsByID: [String: APITestSetup],
+        disabledBySetup: [String: Set<String>]
+    ) -> [String: [AchievementBadge]] {
+        let achievementsBySetup = setupsByID.mapValues { $0.decodedManifest()?.achievements ?? [] }
+        var badges: [String: [AchievementBadge]] = [:]
+        for achievement in rows {
+            let setupID = achievement.testSetupID
+            if let badge = AchievementBadge.forClassAchievement(
+                achievement.achievementID,
+                manifestAchievements: achievementsBySetup[setupID] ?? [],
+                disabled: disabledBySetup[setupID] ?? [])
+            {
+                badges[setupID, default: []].append(badge)
+            }
+        }
+        return badges
+    }
+
+    /// The raw class-achievement rows this student holds; badge mapping happens
+    /// at the call site once the setups (and their manifests) are loaded, so
+    /// manifest-authored records resolve (audit A6).
+    fileprivate func loadStudentCourseClassAchievements(
         req: Request, student: APIUser, setupIDs: [String]
-    ) async throws -> [String: [AchievementBadge]] {
-        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [:] }
-        let classAchievements = try await APIClassAchievement.query(on: req.db)
+    ) async throws -> [APIClassAchievement] {
+        guard let studentUUID = student.id, !setupIDs.isEmpty else { return [] }
+        return try await APIClassAchievement.query(on: req.db)
             .filter(\.$userID == studentUUID)
             .filter(\.$testSetupID ~~ Set(setupIDs))
             .all()
-        var classBadgesBySetupID: [String: [AchievementBadge]] = [:]
-        for achievement in classAchievements {
-            if let badge = AchievementBadge.forClassAchievement(achievement.achievementID) {
-                classBadgesBySetupID[achievement.testSetupID, default: []].append(badge)
-            }
-        }
-        return classBadgesBySetupID
     }
 
     fileprivate func loadStudentCourseOverrides(
@@ -224,21 +256,6 @@ extension StudentCourseRoutes {
 
     /// Sort comparator matches the student dashboard (`WebRoutes.swift`):
     /// sortOrder → createdAt → id.
-    fileprivate func sortedStudentCourseAssignments(
-        _ assignments: [APIAssignment],
-        setupsByID: [String: APITestSetup]
-    ) -> [APIAssignment] {
-        assignments.sorted { lhs, rhs in
-            let lhsOrder = lhs.sortOrder
-            let rhsOrder = rhs.sortOrder
-            if let l = lhsOrder, let r = rhsOrder, l != r { return l < r }
-            let lhsCreated = setupsByID[lhs.testSetupID]?.createdAt ?? .distantPast
-            let rhsCreated = setupsByID[rhs.testSetupID]?.createdAt ?? .distantPast
-            if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
-            return lhs.testSetupID < rhs.testSetupID
-        }
-    }
-
     fileprivate func groupStudentCourseRowsBySection(
         rows: [StudentAssignmentRow],
         assignments: [APIAssignment],
@@ -251,26 +268,18 @@ extension StudentCourseRoutes {
             },
             uniquingKeysWith: { first, _ in first }
         )
-        var rowsBySectionID: [UUID: [StudentAssignmentRow]] = [:]
-        var ungroupedRows: [StudentAssignmentRow] = []
-        for row in rows {
-            if let sID = sectionByAssignmentID[row.assignmentID] {
-                rowsBySectionID[sID, default: []].append(row)
-            } else {
-                ungroupedRows.append(row)
-            }
-        }
-        let sectionContexts: [StudentAssignmentSectionContext] = allSections.compactMap { section in
-            guard let sID = section.id else { return nil }
-            let sectionRows = rowsBySectionID[sID] ?? []
-            guard !sectionRows.isEmpty else { return nil }
-            return StudentAssignmentSectionContext(
-                sectionID: sID.uuidString,
-                name: section.name,
-                rows: sectionRows
-            )
-        }
-        return (sectionContexts, ungroupedRows)
+        // Shared section-grouping fold (#1118); empty sections stay hidden.
+        let grouped = groupRowsBySection(
+            rows: rows, sections: allSections, includeEmptySections: false,
+            sectionIDForRow: { sectionByAssignmentID[$0.assignmentID] },
+            makeSection: { section, sectionRows in
+                StudentAssignmentSectionContext(
+                    sectionID: (section.id ?? UUID()).uuidString,
+                    name: section.name,
+                    rows: sectionRows
+                )
+            })
+        return (grouped.sections, grouped.ungrouped)
     }
 
     // MARK: - GET /:courseCode/students/:urlToken/assignments/:assignmentID/history
@@ -288,30 +297,19 @@ extension StudentCourseRoutes {
             .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
             .all()
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // "Highest grade wins" across ALL result sources — matches the
+        // roster/dashboard surfaces this page is reached from (#1111; it
+        // used to show the worker-preferred grade instead).
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissions.compactMap(\.id),
             on: req.db
         )
 
         let fmt = waterlooDateTimeFormatter()
-        let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
-            let subID = submission.id ?? ""
-            let gradeText: String
-            if let result = preferredResultBySubmissionID[subID],
-                let pct = result.gradePercentValue
-            {
-                gradeText = "\(pct)%"
-            } else {
-                gradeText = "—"
-            }
-            return AssignmentSubmissionHistoryRow(
-                submissionID: subID,
-                attemptNumber: submission.attemptNumber ?? 1,
-                status: submission.status,
-                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                gradeText: gradeText
-            )
-        }
+        let rows = assignmentSubmissionHistoryRows(
+            submissions: submissions,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
+            fmt: fmt)
 
         let studentToken = try student.requireURLToken()
         let backURL = StudentCoursePaths.submissions(
@@ -345,7 +343,7 @@ extension StudentCourseRoutes {
     @Sendable
     func retestStudentAssignment(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "retest student submissions")
+            req: req, action: "retest student submissions", writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
 
@@ -386,7 +384,7 @@ extension StudentCourseRoutes {
     @Sendable
     func resetStudentAssignmentNotebook(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "reset student notebooks")
+            req: req, action: "reset student notebooks", writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: req.db) else {
@@ -395,7 +393,8 @@ extension StudentCourseRoutes {
 
         let starter: Data
         do {
-            starter = try notebookData(for: setup)
+            starter = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             throw WebAssignmentError.invalidParameter(
                 name: "setup",
@@ -403,12 +402,12 @@ extension StudentCourseRoutes {
             )
         }
 
-        _ = try await ensureUserNotebookWorkingCopy(
+        _ = try await overwriteUserNotebookWithPersonalizedStarter(
             req: req,
+            setup: setup,
             setupID: setup.id ?? assignment.testSetupID,
             userID: action.studentID,
-            fallbackSetup: setup,
-            overwriteWith: starter
+            starter: starter
         )
 
         req.logger.info(
@@ -428,7 +427,7 @@ extension StudentCourseRoutes {
         }
 
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "grant deadline extensions")
+            req: req, action: "grant deadline extensions", writeFloor: .instructor)
         let (actor, student) = (action.actor, action.student)
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -439,7 +438,7 @@ extension StudentCourseRoutes {
         let body = try req.content.decode(ExtensionBody.self)
         let rawDate = (body.extendedDueAt ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawDate.isEmpty,
-            let newDueAt = parseLocalInputDate(rawDate)
+            let newDueAt = parseDueDate(rawDate)
         else {
             throw WebAssignmentError.invalidParameter(
                 name: "extendedDueAt",
@@ -490,7 +489,7 @@ extension StudentCourseRoutes {
     @Sendable
     func deleteStudentAssignmentExtension(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "revoke deadline extensions")
+            req: req, action: "revoke deadline extensions", writeFloor: .instructor)
         let student = action.student
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -529,7 +528,7 @@ extension StudentCourseRoutes {
         }
 
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "override grades")
+            req: req, action: "override grades", writeFloor: .ta)
         let (actor, student, assignment) = (action.actor, action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -574,7 +573,7 @@ extension StudentCourseRoutes {
     @Sendable
     func deleteStudentAssignmentGradeOverride(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "clear grade overrides")
+            req: req, action: "clear grade overrides", writeFloor: .ta)
         let (student, assignment) = (action.student, action.assignment)
         let assignmentIDRaw = assignment.publicID
         let studentUUID = action.studentID
@@ -625,14 +624,15 @@ extension StudentCourseRoutes {
         guard
             let student = try await APIUser.query(on: req.db)
                 .filter(\.$urlToken == urlTokenRaw)
-                .first()
+                .first(),
+            let studentID = student.id
         else {
             throw WebAssignmentError.notFound(resource: "Student")
         }
         let isEnrolled =
             try await APICourseEnrollment.query(on: req.db)
             .filter(\.$course.$id == courseUUID)
-            .filter(\.$userID == student.id ?? UUID())
+            .filter(\.$userID == studentID)
             .count() > 0
         guard isEnrolled else {
             throw WebAssignmentError.notFound(resource: "Enrolled student")
@@ -656,27 +656,44 @@ extension StudentCourseRoutes {
     /// (history page, retest, notebook reset, extension save/delete, grade
     /// override save/delete).
     ///
-    /// Note on the role check: these routes are registered under
-    /// `RoleMiddleware(required: .instructor)` (routes.swift), so the
-    /// `isInstructor` guard here is redundant — it is kept once, in this
-    /// helper, as defense-in-depth in case the route grouping ever changes.
-    /// `action` carries each handler's original forbidden-message wording.
+    /// Note on the role check: these routes are registered under the
+    /// `/instructor` group's `ActiveCourseStaffMiddleware` (routes.swift),
+    /// which gates on instructor authority in the caller's *active* course. The
+    /// `isInstructor` guard here is defense-in-depth in case the route grouping
+    /// ever changes. `action` carries each handler's original forbidden-message
+    /// wording.
+    ///
+    /// Authorization is per-course (#417 Slice E): every caller must be staff
+    /// (TA or instructor) in the assignment's **own** course — `requireCourseRole
+    /// (atLeast: .ta)`, which replaces the old global `isInstructor` guard that
+    /// would wrongly reject a per-course TA whose deployment role is student.
+    /// This covers the read-only history page.
+    ///
+    /// `writeFloor`, when non-nil, additionally authorizes a *write* on that
+    /// course via `requireCourseWriteAccess` (archived-course block + the
+    /// action's minimum role): grading actions (retest / reset / grade-override)
+    /// pass `.ta`; deadline grants (extensions) pass `.instructor`. The read-only
+    /// history page leaves it nil so archived courses stay auditable.
     ///
     /// Error semantics match the guard chain each handler previously
     /// inlined: `notFound("Assignment '<id>'")` when the assignment is
     /// missing, belongs to a different course, or (unreachable for a
     /// DB-loaded model) the student row has no id.
     fileprivate func resolveStudentAssignmentAction(
-        req: Request, action: String
+        req: Request, action: String, writeFloor: CourseRole? = nil
     ) async throws -> StudentAssignmentActionContext {
         let actor = try req.auth.require(APIUser.self)
-        guard actor.isInstructor else {
-            throw WebAssignmentError.forbidden(action: action)
-        }
         let (course, student) = try await resolveCourseAndStudent(req: req)
         let assignment = try await loadAssignment(req)
         guard assignment.courseID == course.id, let studentID = student.id else {
             throw WebAssignmentError.notFound(resource: "Assignment '\(assignment.publicID)'")
+        }
+        // Per-course staff gate (TA+ in THIS course; admin bypass).
+        try await requireCourseRole(
+            caller: actor, courseID: assignment.courseID, atLeast: .ta, db: req.db)
+        if let writeFloor {
+            try await requireCourseWriteAccess(
+                caller: actor, courseID: assignment.courseID, atLeast: writeFloor, db: req.db)
         }
         return StudentAssignmentActionContext(
             actor: actor, course: course, student: student,
@@ -705,6 +722,13 @@ extension StudentCourseRoutes {
         let courseCode: String
         let urlToken: String
         let preferredResultBySubmissionID: [String: APIResult]
+        /// Decoded collection per latest-submission preferred result id —
+        /// pre-fetched from the result_collections side table (#1173) for
+        /// the badge path.
+        let collectionByResultID: [String: TestOutcomeCollection]
+        /// "Highest grade wins" percent per submission (#1111) — feeds the
+        /// grade cells; `preferredResultBySubmissionID` feeds the badges.
+        let bestPercentBySubmissionID: [String: Int]
         let student: APIUser
         let fmt: DateFormatter
         /// `[setupID: disabled built-in award ids]` — the same map for every row.
@@ -727,24 +751,20 @@ extension StudentCourseRoutes {
         let preferredResultBySubmissionID = context.preferredResultBySubmissionID
         let fmt = context.fmt
         let latest = history.first
-        let bestGradePercent: Int? = {
-            var best = -1
-            for submission in history {
-                guard let subID = submission.id,
-                    let result = preferredResultBySubmissionID[subID],
-                    let pct = result.gradePercentValue
-                else {
-                    continue
-                }
-                if pct > best { best = pct }
+        // Highest grade across the whole history, from the shared
+        // highest-grade-wins map — NOT the worker-preferred result (#1111).
+        let bestGradePercent: Int? =
+            history
+            .compactMap { submission in
+                submission.id.flatMap { context.bestPercentBySubmissionID[$0] }
             }
-            return best >= 0 ? best : nil
-        }()
+            .max()
 
         let disabledHere = context.disabledBySetup[assignment.testSetupID] ?? []
         var badges = submissionBadges(
             history: history,
             preferredResultBySubmissionID: preferredResultBySubmissionID,
+            collectionByResultID: context.collectionByResultID,
             achievements: context.perSubBySetup[assignment.testSetupID]
         ).filter { !disabledHere.contains($0.id) }
         badges.append(contentsOf: classBadges)
@@ -820,12 +840,14 @@ extension StudentCourseRoutes {
     fileprivate func submissionBadges(
         history: [APISubmission],
         preferredResultBySubmissionID: [String: APIResult],
+        collectionByResultID: [String: TestOutcomeCollection],
         achievements: [Achievement]?
     ) -> [AchievementBadge] {
         guard let latestSubmission = history.first,
             let latestSubID = latestSubmission.id,
             let result = preferredResultBySubmissionID[latestSubID],
-            let collection = decodedCollection(from: result.collectionJSON),
+            let resultID = result.id,
+            let collection = collectionByResultID[resultID],
             let gradePct = gradePercent(from: collection)
         else {
             return []
@@ -848,20 +870,4 @@ extension StudentCourseRoutes {
             achievements: achievements
         )
     }
-}
-
-/// Parses an HTML5 `datetime-local` input value (e.g. `"2026-05-20T23:59"`)
-/// into a `Date`.  Both with and without seconds are accepted; the value is
-/// interpreted in the Waterloo timezone, matching the rest of the UI.
-func parseLocalInputDate(_ input: String) -> Date? {
-    let tz = TimeZone(identifier: "America/Toronto") ?? .current
-    let candidates = ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss"]
-    for fmt in candidates {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.timeZone = tz
-        df.dateFormat = fmt
-        if let d = df.date(from: input) { return d }
-    }
-    return nil
 }

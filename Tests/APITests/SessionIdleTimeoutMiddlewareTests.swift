@@ -8,7 +8,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -56,7 +56,7 @@ import XCTVapor
     @Test func activeBrowserRequestPassesThrough() async throws {
         let user = makeUser(lastSeenAt: Date().addingTimeInterval(-60))  // 1 min ago
         try await withApp(try await makeApp(user: user, idleTimeoutSeconds: 30 * 60)) { app in
-            try await app.testable().test(.GET, "/page") { res async in
+            try await app.testing().test(.GET, "/page") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string == "ok")
             }
@@ -66,7 +66,7 @@ import XCTVapor
     @Test func idleBrowserRequestRedirectsToLoginWithTimeoutError() async throws {
         let user = makeUser(lastSeenAt: Date().addingTimeInterval(-31 * 60))  // 31 min ago
         try await withApp(try await makeApp(user: user, idleTimeoutSeconds: 30 * 60)) { app in
-            try await app.testable().test(.GET, "/page") { res async in
+            try await app.testing().test(.GET, "/page") { res async in
                 #expect(res.status == .seeOther)
                 #expect(res.headers.first(name: .location) == "/login?error=timeout")
             }
@@ -78,7 +78,7 @@ import XCTVapor
     @Test func idleAPIRequestReturns401() async throws {
         let user = makeUser(lastSeenAt: Date().addingTimeInterval(-31 * 60))
         try await withApp(try await makeApp(user: user, idleTimeoutSeconds: 30 * 60)) { app in
-            try await app.testable().test(.GET, "/api/v1/thing") { res async in
+            try await app.testing().test(.GET, "/api/v1/thing") { res async in
                 #expect(res.status == .unauthorized)
             }
         }
@@ -87,7 +87,7 @@ import XCTVapor
     @Test func activeAPIRequestPassesThrough() async throws {
         let user = makeUser(lastSeenAt: Date())
         try await withApp(try await makeApp(user: user, idleTimeoutSeconds: 30 * 60)) { app in
-            try await app.testable().test(.GET, "/api/v1/thing") { res async in
+            try await app.testing().test(.GET, "/api/v1/thing") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string == "ok-api")
             }
@@ -100,7 +100,7 @@ import XCTVapor
         // Even an ancient lastSeenAt should pass through when disabled.
         let user = makeUser(lastSeenAt: Date.distantPast)
         try await withApp(try await makeApp(user: user, idleTimeoutSeconds: 0)) { app in
-            try await app.testable().test(.GET, "/page") { res async in
+            try await app.testing().test(.GET, "/page") { res async in
                 #expect(res.status == .ok)
             }
         }
@@ -112,7 +112,7 @@ import XCTVapor
         // so the gate must not lock the user out before they get a signal.
         let user = makeUser(lastSeenAt: nil)
         try await withApp(try await makeApp(user: user, idleTimeoutSeconds: 30 * 60)) { app in
-            try await app.testable().test(.GET, "/page") { res async in
+            try await app.testing().test(.GET, "/page") { res async in
                 #expect(res.status == .ok)
             }
         }

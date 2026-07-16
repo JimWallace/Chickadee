@@ -184,3 +184,70 @@ struct DatabaseConfigurationTests {
         }
     }
 }
+
+// MARK: - Pool sizing (#1159)
+
+@Suite(.serialized)
+struct DatabasePoolSizingTests {
+
+    @Test func poolSizeDefaultsToNilWhenUnset() async throws {
+        try await withTestEnvironment([
+            "DATABASE_BACKEND": nil,
+            "DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP": nil,
+        ]) {
+            let settings = try DatabaseSettings.fromEnvironment(
+                defaultSQLitePath: "/tmp/chickadee.sqlite")
+            #expect(settings.maxConnectionsPerEventLoop == nil)
+        }
+    }
+
+    @Test func poolSizeParsesForBothBackends() async throws {
+        try await withTestEnvironment([
+            "DATABASE_BACKEND": "sqlite",
+            "DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP": "8",
+        ]) {
+            let settings = try DatabaseSettings.fromEnvironment(
+                defaultSQLitePath: "/tmp/chickadee.sqlite")
+            #expect(settings.maxConnectionsPerEventLoop == 8)
+        }
+        try await withTestEnvironment([
+            "DATABASE_BACKEND": "postgres",
+            "DATABASE_HOST": "db",
+            "DATABASE_PORT": "5432",
+            "DATABASE_NAME": "chickadee",
+            "DATABASE_USER": "chickadee",
+            "DATABASE_PASSWORD": "secret",
+            "DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP": "6",
+        ]) {
+            let settings = try DatabaseSettings.fromEnvironment(
+                defaultSQLitePath: "/tmp/chickadee.sqlite")
+            #expect(settings.maxConnectionsPerEventLoop == 6)
+        }
+    }
+
+    @Test func poolSizeRejectsNonPositiveOrGarbageValues() async throws {
+        for bad in ["0", "-2", "many"] {
+            try await withTestEnvironment([
+                "DATABASE_BACKEND": "sqlite",
+                "DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP": bad,
+            ]) {
+                #expect(throws: DatabaseConfigurationError.self) {
+                    _ = try DatabaseSettings.fromEnvironment(
+                        defaultSQLitePath: "/tmp/chickadee.sqlite")
+                }
+            }
+        }
+    }
+
+    @Test func configureDatabaseAcceptsExplicitPoolSize() async throws {
+        let app = try await makeTestingApplication { app in
+            try configureDatabase(
+                app,
+                settings: .sqlite(
+                    path: FileManager.default.temporaryDirectory
+                        .appendingPathComponent("chickadee-pool-\(UUID().uuidString).sqlite").path,
+                    maxConnectionsPerEventLoop: 4))
+        }
+        try await app.asyncShutdown()
+    }
+}

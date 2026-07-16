@@ -101,31 +101,30 @@ jobs:
         id: toolchain
         run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      # `CACHE_SALT` is a manual bust knob.  Bump it whenever an incremental
-      # build on a restored `.build/` would be unsound — most notably when a
-      # cross-module type changes *kind* (struct↔enum): files that reference it
-      # only transitively (e.g. via a function whose mangled signature embeds
-      # the type) keep their old source mtime, so `git restore-mtime` marks
-      # them "fresh" and llbuild reuses stale object files compiled against the
-      # old symbol → "undefined reference" link errors. Bumping the salt forces
-      # one clean rebuild for everyone.  (v2: TestItem struct→enum, v0.4.228;
-      # v3: TestProperties gained the `achievements` field — its init's mangled
-      # signature changed, so stale transitive objects fail to link.
-      # v4: CourseBundleManifest gained the `sections` field, same init-mangling
-      # story.)
+      # Build-artifact cache is EXACT-MATCH ONLY — no `restore-keys` prefix
+      # fallback.  Incrementally rebuilding over a `.build/` restored from a
+      # *different* tree is unsound: when a cross-module type changes kind
+      # (struct↔enum) or a struct's init gains a field, files that reference it
+      # only transitively keep their old source mtime, so `git restore-mtime`
+      # marks them "fresh" and llbuild reuses stale object files compiled
+      # against the old mangled symbol → "undefined reference" link errors.
+      # This recurred on every such change (TestItem struct→enum, v0.4.228;
+      # TestProperties.achievements; CourseBundleManifest.sections;
+      # TestProperties.datasets) and used to need a manual cache-salt bump each
+      # time.  Exact-match-only removes the failure class outright: a tree that
+      # doesn't match an existing cache does a clean cold build instead of an
+      # unsound incremental one.  Trade-off: any Sources/Tests change pays a
+      # full rebuild (no partial reuse); an exact re-run of the same tree still
+      # hits and skips the build.
       - name: Cache build artifacts
         id: build-cache
         uses: actions/cache@v5
         with:
           path: .build
           key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-          restore-keys: |
-            ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-
 
-      # Exact cache hit: artifacts already match this tree, skip even the
-      # near-no-op build.  Restore-keys partial hit (cache-hit is false): the
-      # git-normalised mtimes let `swift build` recompile only the files
-      # changed since the restored `.build/` was produced.
+      # Exact cache hit: artifacts already match this exact tree, skip even the
+      # near-no-op build.  Any miss = clean cold build (no stale-object reuse).
       - name: Build all targets and tests
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: swift build --build-tests
@@ -307,6 +306,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Lint first-party frontend JS
+        run: scripts/eslint.sh
+
       - name: Run browser runner execution tests
         run: node --test Tests/BrowserRunnerJSTests/*.mjs
 
@@ -363,3 +365,45 @@ jobs:
           else
             swift test --filter WorkerTests
           fi
+
+  # Single aggregate status for branch protection (the editor-smoke-gate
+  # pattern): require THIS job instead of the individual jobs, so a job
+  # rename or matrix change can't silently detach a required check. Every
+  # job above always runs (no internal skips), so anything short of
+  # `success` fails the gate.
+  #
+  # `!cancelled()` is run-scoped: when this whole run is superseded
+  # (concurrency cancel — e.g. a newer push, or a rerun of an older head
+  # entering the shared group), the gate SKIPS instead of reporting a
+  # spurious failure for the cancelled jobs. A single job killed by its
+  # own timeout-minutes also reads "cancelled", but the run survives, so
+  # the gate still runs and still fails — that detection is load-bearing
+  # (2026-07-02: it caught the WorkerDaemonTests 20-minute wedge).
+  swift-tests-gate:
+    needs:
+      - format-lint
+      - build
+      - core-tests
+      - api-tests
+      - api-tests-postgres
+      - browser-runner-tests
+      - worker-tests
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gate on Swift test job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          echo "${NEEDS_JSON}"
+          failed="$(echo "${NEEDS_JSON}" | python3 -c '
+          import json, sys
+          needs = json.load(sys.stdin)
+          print(" ".join(sorted(name for name, need in needs.items() if need["result"] != "success")))
+          ')"
+          if [ -n "${failed}" ]; then
+            echo "::error::jobs not successful: ${failed}"
+            exit 1
+          fi
+          echo "All Swift test jobs green."

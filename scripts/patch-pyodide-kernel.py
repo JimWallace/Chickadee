@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
-"""Patch the bundled pyodide-kernel wheel to enable nb_mypy by default.
+"""Patch the bundled pyodide-kernel wheel's kernel-startup activation block.
+
+The injected block does ONE thing now:
+
+1. exec_hang FIX (synchronous): wrap `os.chdir` to create the target directory
+   first. The notebook frontend chdir's the kernel into the notebook's Drive
+   folder, which is absent from the kernel FS when the DriveFS service worker is
+   disabled (our SAB-only isolation), so the bare chdir raises FileNotFoundError
+   and wedges the cell execute forever (the production exec_hang). See the block
+   comment for the full mechanism. (Applies identically on JupyterLite 0.7.6 and
+   0.8 — the bug is the frontend chdir, not the kernel version.)
+
+nb_mypy type-checking is DISABLED. It previously scheduled a background task that
+ran nb_mypy's synchronous compiled-WASM `mypy.api.run(...)` before every cell, on
+the kernel's single thread, which wedged the first cell execute in the real
+editor (reproduced 5/5 on Chromium and WebKit, immediately AND after a 45s
+settle — deferring the load did not help; the per-cell mypy run itself was the
+cost). The activation is left empty rather than removed so re-enabling is a
+one-line change and the sha-cascade machinery below is unchanged; revisit
+type-checking only as a background/language-server feature that NEVER runs on
+the cell-execute path. The nb_mypy / mypy / astor wheels stay vended in the
+Pyodide lock (harmless, just unloaded).
 
 JupyterLite has no config hook for "run Python at kernel startup", so we append
 a fail-safe activation block to `pyodide_kernel/__init__.py` inside the
 pyodide_kernel wheel that the pyodide-kernel labextension ships (the one
-`jupyter lite build` bundles into Public/jupyterlite/.../pypi/). At kernel boot
-the editor schedules a background task that loads nb_mypy and runs
-`%load_ext nb_mypy; %nb_mypy On`, so mypy diagnostics show on every cell —
-across every notebook, with no setup cell.
-
-LAZY + NON-FATAL by design. nb_mypy is deliberately NOT listed in
-`loadPyodideOptions.packages` (the kernel-boot critical path): a package named
-there is loaded by `loadPyodide()` itself, so ANY failure (a bad PEP 503 lock
-key, a future Pyodide bump dropping the wheel, an ABI mismatch) rejects the
-boot and bricks the WHOLE editor — even though type-checking is only an
-optional nicety. Instead the injected block schedules a background coroutine
-that loads the wheel from the vended Pyodide lock (`pyodide.loadPackage`) AFTER
-the kernel is up, then enables nb_mypy. The whole thing is wrapped so any
-failure degrades to "no type warnings" while the kernel stays healthy.
+`jupyter lite build` bundles into Public/jupyterlite/.../pypi/).
 
 Run from scripts/setup-jupyterlite.sh AFTER pip install and BEFORE the build, so
 CI's rebuild applies the identical patch (reproducible).
@@ -36,10 +44,8 @@ re-appended, so editing the block below and re-running yields identical bytes;
 combined with sorted entries + fixed timestamps + stable JSON the bundle stays
 byte-stable → `git diff Public/jupyterlite` is clean.
 
-FAIL-SAFE: the injected block swallows every exception, so a missing or
-IPython-incompatible nb_mypy degrades to "no type warnings", never a dead
-kernel. Because the load is off the boot critical path, even a wheel that
-cannot be fetched/loaded at all no longer takes the kernel down with it.
+FAIL-SAFE: the chdir wrapper swallows every exception, so even if makedirs/chdir
+fails the kernel keeps running rather than dying at import.
 """
 from __future__ import annotations
 
@@ -58,38 +64,46 @@ TARGET_MEMBER = "pyodide_kernel/__init__.py"
 ACTIVATION = '''
 
 # --- CHICKADEE_NB_MYPY_ACTIVATION -----------------------------------------------------------
-# Enable nb_mypy type-checking for the in-browser editor — LAZILY, off the
-# kernel-boot critical path. nb_mypy (+ mypy, astor) lives in the vended Pyodide
-# lock but is deliberately NOT in loadPyodideOptions.packages: loading it there
-# would tie kernel boot to nb_mypy, so any load failure would brick the whole
-# editor. Instead we schedule a background task that loads it AFTER the kernel
-# is up, then turns type-checking on. Fail-safe: any failure (missing or
-# incompatible wheel, bad lock key, scheduling error) degrades to "no type
-# warnings" — the kernel stays healthy and usable.
+# exec_hang FIX (synchronous — must run at kernel import, before the first cell
+# execute). The JupyterLite notebook frontend sets the kernel's working directory
+# to the notebook's Drive folder by running os.chdir("users/<uid>/<setup>/") on
+# the first execute. That folder only exists in the kernel's Pyodide filesystem
+# if the DriveFS is mounted, which needs the service worker we disable to run
+# SAB-only under cross-origin isolation (SecurityHeadersMiddleware / #989/#1003).
+# With no service worker the folder is absent, so chdir raises FileNotFoundError;
+# that error is unhandled inside Pyodide's WebLoop, so the execute coroutine never
+# completes and the cell wedges "[*]"-forever — the production exec_hang (~1 in 4
+# students; 100% in the headless repro; students carrying a stale SW registration
+# have a working DriveFS and never hit it, which is exactly the partial rate).
+#
+# Fix: make chdir create the target directory first. SAFE + TARGETED — when the
+# DriveFS already provides the folder (the working majority) makedirs is a no-op
+# and behaviour is unchanged; when it is missing the kernel runs in a (possibly
+# empty) folder instead of hanging. (Support files the DriveFS would surface into
+# that folder are a separate follow-up; a working kernel strictly beats a hung
+# one.) Verified: 100% headless hang -> 0% with this patch.
 try:  # pragma: no cover - exercised only in the in-browser kernel
-    import asyncio as _chickadee_asyncio
+    import os as _chickadee_os
 
-    async def _chickadee_enable_nb_mypy():
+    _chickadee_orig_chdir = _chickadee_os.chdir
+
+    def _chickadee_chdir(path):
         try:
-            import pyodide_js as _chickadee_pyodide_js
+            _chickadee_os.makedirs(path, exist_ok=True)
+        except Exception:  # noqa: BLE001
+            pass
+        return _chickadee_orig_chdir(path)
 
-            await _chickadee_pyodide_js.loadPackage("nb-mypy")
-            ipython_shell.run_line_magic("load_ext", "nb_mypy")
-            ipython_shell.run_line_magic("nb_mypy", "On")
-        except Exception as _chickadee_nbmypy_err:  # noqa: BLE001
-            import warnings as _chickadee_warnings
+    _chickadee_os.chdir = _chickadee_chdir
+except Exception:  # noqa: BLE001
+    pass
 
-            _chickadee_warnings.warn(
-                f"Chickadee: nb_mypy type-checking not enabled: {_chickadee_nbmypy_err!r}"
-            )
-
-    _chickadee_asyncio.ensure_future(_chickadee_enable_nb_mypy())
-except Exception as _chickadee_nbmypy_sched_err:  # noqa: BLE001
-    import warnings as _chickadee_warnings
-
-    _chickadee_warnings.warn(
-        f"Chickadee: nb_mypy activation could not be scheduled: {_chickadee_nbmypy_sched_err!r}"
-    )
+# nb_mypy type-checking is DISABLED — intentionally NO code is injected here.
+# It registered an IPython pre_run_cell hook that ran a synchronous compiled-WASM
+# mypy on EVERY cell execute (on the kernel's single thread) and wedged the first
+# cell; see the module docstring. The markers are kept so re-enabling is a
+# one-line change and the sha cascade below is unchanged. The nb_mypy / mypy /
+# astor wheels stay vended (harmless, just unloaded).
 # --- end CHICKADEE_NB_MYPY_ACTIVATION -------------------------------------------------------
 '''
 
@@ -138,7 +152,7 @@ def repack_wheel(wheel: pathlib.Path) -> None:
             info.compress_type = zipfile.ZIP_STORED
             info.external_attr = 0o644 << 16
             zout.writestr(info, members[name])
-    print(f"patch-pyodide-kernel: nb_mypy activation injected into {wheel.name}")
+    print(f"patch-pyodide-kernel: chdir-fix activation injected (nb_mypy disabled) into {wheel.name}")
 
 
 def refresh_all_json(pypi_dir: pathlib.Path, wheel: pathlib.Path) -> None:

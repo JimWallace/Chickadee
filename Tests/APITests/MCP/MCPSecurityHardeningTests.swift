@@ -12,7 +12,7 @@ import Fluent
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -81,7 +81,7 @@ import XCTVapor
     private func consent(
         _ app: Application, cookie: String, clientID: String, redirectURI: String,
         scope: String, decision: String
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         // GET the consent screen (authenticated) to mint the single-use token,
         // then submit it. The POST carries no cookie — the token alone guards it.
         var html = ""
@@ -102,7 +102,7 @@ import XCTVapor
             })
     }
 
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> XCTHTTPResponse {
+    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/token",
             beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
@@ -131,7 +131,7 @@ import XCTVapor
         #expect(tokenRes.status == .ok)
     }
 
-    private func mcpPost(_ app: Application, token: String) async throws -> XCTHTTPResponse {
+    private func mcpPost(_ app: Application, token: String) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/mcp",
             headers: ["Content-Type": "application/json", "Authorization": "Bearer \(token)"],
@@ -192,6 +192,8 @@ import XCTVapor
             try await seedClient(app, clientID: clientID, name: clientName, redirectURI: redirectURI)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, clientID: clientID, redirectURI: redirectURI,
                 scope: "content:read", decision: "authorize")
@@ -218,10 +220,15 @@ import XCTVapor
             try await seedClient(app, clientID: "agent-b", name: "Agent Beta", redirectURI: redirectURI)
             let profA = try await loginUser(
                 username: "profA", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profA", on: app)
             try await createGrant(
                 app, cookie: profA, clientID: "agent-a", redirectURI: redirectURI, scope: "content:read")
             let profB = try await loginUser(
                 username: "profB", password: "testpassword", role: "instructor", on: app)
+            // Phase 5: /agents is under the per-course-gated /instructor group;
+            // MCP content consent also needs per-course staff (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profB", on: app)
             try await createGrant(
                 app, cookie: profB, clientID: "agent-b", redirectURI: redirectURI, scope: "content:read")
 
@@ -242,6 +249,8 @@ import XCTVapor
             try await seedClient(app, clientID: clientID, name: clientName, redirectURI: redirectURI)
             let profA = try await loginUser(
                 username: "profA", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profA", on: app)
             try await createGrant(
                 app, cookie: profA, clientID: clientID, redirectURI: redirectURI, scope: "content:read")
             let grantID = try #require(try await MCPGrant.query(on: app.db).first()).requireID()
@@ -249,6 +258,8 @@ import XCTVapor
             // A second instructor, with a valid CSRF token, attempts the revoke.
             let profB = try await loginUser(
                 username: "profB", password: "testpassword", role: "instructor", on: app)
+            // Phase 5: /agents is under the per-course-gated /instructor group.
+            try await enrollAsTestInstructor(username: "profB", on: app)
             let (csrf, bound) = try await csrfFields(for: "/agents", cookie: profB, on: app)
             let res = try await app.asyncSendRequest(
                 .POST, "/agents/\(grantID.uuidString)/revoke",
@@ -269,6 +280,8 @@ import XCTVapor
             try await seedClient(app, clientID: clientID, name: clientName, redirectURI: redirectURI)
             let profA = try await loginUser(
                 username: "profA", password: "testpassword", role: "instructor", on: app)
+            // MCP content consent needs per-course staff now (#417 Slice G2).
+            try await enrollAsTestInstructor(username: "profA", on: app)
             try await createGrant(
                 app, cookie: profA, clientID: clientID, redirectURI: redirectURI, scope: "content:read")
             let grantID = try #require(try await MCPGrant.query(on: app.db).first()).requireID()

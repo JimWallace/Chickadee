@@ -2,8 +2,9 @@
   "jupyter-config-data": {
     "appName": "JupyterLite",
     "appUrl": "./lab",
-    "appVersion": "0.7.6-chickadee.1",
+    "appVersion": "0.8.1-chickadee.1",
     "baseUrl": "./",
+    "contentsAllJsonFile": "all.json",
     "defaultKernelName": "python",
     "disabledExtensions": [
       "@jupyterlite/application-extension:service-worker-manager"
@@ -12,8 +13,13 @@
     "federated_extensions": [
       {
         "extension": "./extension",
-        "load": "static/remoteEntry.75ddd7589fd94926c419.js",
+        "load": "static/remoteEntry.af5d2dda3bb046a0.js",
         "name": "@jupyterlite/pyodide-kernel-extension"
+      },
+      {
+        "extension": "./extension",
+        "load": "static/remoteEntry.a4977091f52be18e7851.js",
+        "name": "jupyter-iframe-commands"
       }
     ],
     "fileTypes": {
@@ -396,10 +402,19 @@
       "@jupyterlite/pyodide-kernel-extension:kernel": {
         "disablePyPIFallback": true,
         "pipliteUrls": [
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=783d01f64a330ecbbd82318ba2fde8842bc8eece502b821b8c0f57cacdde5cdc",
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=b9716dbed8ec49193ad09d5dcc9ff682b55bc5b7f5d03a93a13cd3f737d46f2d"
+          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=e30b96ab0418c9595ea142c52f23aa5abc04e4c97e5113099ae17a8dd9af2343"
         ],
-        "pyodideUrl": "/pyodide/pyodide.js"
+        "pyodideUrl": "/pyodide/pyodide.mjs"
+      }
+    },
+    "versionInfo": {
+      "@jupyter-notebook/application": {
+        "label": "Jupyter Notebook",
+        "version": "7.6.0"
+      },
+      "@jupyterlab/application": {
+        "label": "JupyterLab",
+        "version": "4.6.0"
       }
     }
   },

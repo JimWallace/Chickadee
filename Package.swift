@@ -31,7 +31,7 @@ let package = Package(
         // binary so CI / fresh checkouts don't pay a SwiftLint-from-source build.
         // Invoked on demand via `scripts/swiftlint.sh`; no `plugins:` entry on
         // any target, so `swift build` / `swift test` are unaffected.
-        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.63.3"),
+        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.64.0"),
     ],
     targets: [
         // MARK: - Runner core
@@ -105,7 +105,6 @@ let package = Package(
             dependencies: [
                 .target(name: "Core"),
                 .target(name: "RunnerCore"),
-                .product(name: "Vapor", package: "vapor"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             path: "Sources/Worker",
@@ -126,7 +125,7 @@ let package = Package(
             name: "APITests",
             dependencies: [
                 .target(name: "APIServer"),
-                .product(name: "XCTVapor", package: "vapor"),
+                .product(name: "VaporTesting", package: "vapor"),
                 .product(name: "FluentPostgresDriver", package: "fluent-postgres-driver"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "CSRF", package: "CSRF"),

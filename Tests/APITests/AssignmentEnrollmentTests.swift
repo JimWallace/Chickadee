@@ -9,7 +9,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -32,8 +32,28 @@ import XCTVapor
     }
 
     private func enroll(user: APIUser, in course: APICourse) async throws {
-        let enrollment = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID())
+        // Seed the per-course role from the global role so a global-instructor
+        // caller becomes a per-course instructor (Phase 5: authority is per-course).
+        // The global `instructor` UserRole case is gone (#417 Slice G2); a legacy
+        // `"instructor"` role string or an admin seeds to instructor.
+        let role: CourseRole =
+            (user.role == "instructor") || user.isAdmin ? .instructor : .student
+        let enrollment = APICourseEnrollment(
+            userID: try user.requireID(), courseID: try course.requireID(), role: role)
         try await enrollment.save(on: app.db)
+    }
+
+    /// Logs in a global instructor and enrols them as a per-course instructor in
+    /// `course`, returning the session cookie. Phase 5 gates `/instructor` on the
+    /// per-course role, so an instructor managing a course must be enrolled in it.
+    private func loginInstructor(_ username: String, in course: APICourse) async throws -> String {
+        let cookie = try await loginUser(username: username, password: "pw", role: "instructor", on: app)
+        let user = try #require(
+            try await APIUser.query(on: app.db).filter(\.$username == username).first())
+        try await APICourseEnrollment(
+            userID: try user.requireID(), courseID: try course.requireID(), role: .instructor
+        ).save(on: app.db)
+        return cookie
     }
 
     // MARK: - POST /courses/:courseID/enrollment-mode
@@ -41,9 +61,7 @@ import XCTVapor
     @Test func setEnrollmentMode_instructorCanSetToOpen() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "OE_TOGGLE1", mode: .closed)
-            let cookie = try await loginUser(
-                username: "oe_instructor1", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("oe_instructor1", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -66,9 +84,7 @@ import XCTVapor
     @Test func setEnrollmentMode_instructorCanSetToClosed() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "OE_TOGGLE2", mode: .open)
-            let cookie = try await loginUser(
-                username: "oe_instructor2", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("oe_instructor2", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -112,9 +128,10 @@ import XCTVapor
 
     @Test func setEnrollmentMode_notFound() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginUser(
-                username: "oe_instructor3", password: "pw",
-                role: "instructor", on: app)
+            // Enrol the instructor in a real course so they clear the per-course
+            // section gate; the POST then targets a bogus course → 404.
+            let realCourse = try await makeCourse(code: "OE_NOTFOUND")
+            let cookie = try await loginInstructor("oe_instructor3", in: realCourse)
             let bogusID = UUID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -168,9 +185,7 @@ import XCTVapor
             let course = try await makeCourse(code: "CSV_ENROLL1")
             _ = try await makeStudent(username: "csv_alice")
             _ = try await makeStudent(username: "csv_bob")
-            let cookie = try await loginUser(
-                username: "csv_instructor1", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_instructor1", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -203,6 +218,7 @@ import XCTVapor
 
             let enrollments = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)  // exclude the instructor fixture
                 .all()
             #expect(enrollments.count == 2, "Both existing users should be enrolled")
 
@@ -217,9 +233,7 @@ import XCTVapor
             let enrollment = APICourseEnrollment(userID: try student.requireID(), courseID: try course.requireID())
             try await enrollment.save(on: app.db)
 
-            let cookie = try await loginUser(
-                username: "csv_instructor2", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_instructor2", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -245,9 +259,84 @@ import XCTVapor
 
             let enrollments = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)  // exclude the instructor fixture
                 .all()
             #expect(enrollments.count == 1, "Should still be exactly one enrollment (no duplicate)")
 
+        }
+    }
+
+    @Test func bulkEnroll_enrollsTypedUsernamesWithoutFile() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_TYPED1")
+            _ = try await makeStudent(username: "typed_alice")
+            _ = try await makeStudent(username: "typed_bob")
+            let cookie = try await loginInstructor("typed_instructor1", in: course)
+            let courseID = try course.requireID().uuidString
+            let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+            // No `file` part at all — only the typed `usernames` textarea.
+            let typed = "typed_alice, typed_bob"
+            let boundary = "----TypedBoundary1"
+            let part =
+                "--\(boundary)\r\nContent-Disposition: form-data; name=\"usernames\"\r\n\r\n\(typed)\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID)/enroll-csv",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    var body = ByteBufferAllocator().buffer(capacity: 256)
+                    body.writeString(part)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": boundary])
+                    req.body = .init(buffer: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+
+            let enrollments = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)
+                .all()
+            #expect(enrollments.count == 2, "Both typed users should be enrolled")
+        }
+    }
+
+    @Test func bulkEnroll_rendersErrorWhenNothingSupplied() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_EMPTY1")
+            let cookie = try await loginInstructor("empty_instructor1", in: course)
+            let courseID = try course.requireID().uuidString
+            let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+            // Empty textarea, no file.
+            let boundary = "----EmptyBoundary1"
+            let part =
+                "--\(boundary)\r\nContent-Disposition: form-data; name=\"usernames\"\r\n\r\n   \r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"_csrf\"\r\n\r\n\(token)\r\n--\(boundary)--\r\n"
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID)/enroll-csv",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    var body = ByteBufferAllocator().buffer(capacity: 256)
+                    body.writeString(part)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": boundary])
+                    req.body = .init(buffer: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("type at least one user ID"))
+                })
+
+            let enrollments = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)
+                .all()
+            #expect(enrollments.isEmpty, "Nothing supplied should enroll no one")
         }
     }
 
@@ -258,9 +347,7 @@ import XCTVapor
             let course = try await makeCourse(code: "CSV_PRE1")
             // alice exists; carol does not
             _ = try await makeStudent(username: "csv_pre_alice")
-            let cookie = try await loginUser(
-                username: "csv_pre_instructor1", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_pre_instructor1", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -287,6 +374,7 @@ import XCTVapor
             // alice was enrolled directly.
             let enrollments = try await APICourseEnrollment.query(on: app.db)
                 .filter(\.$course.$id == course.requireID())
+                .filter(\.$roleRaw == CourseRole.student.rawValue)  // exclude the instructor fixture
                 .all()
             #expect(enrollments.count == 1)
 
@@ -355,9 +443,7 @@ import XCTVapor
     @Test func bulkEnrollCSV_isIdempotentOnReupload() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "CSV_PRE4")
-            let cookie = try await loginUser(
-                username: "csv_pre_instructor4", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_pre_instructor4", in: course)
             let courseID = try course.requireID().uuidString
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
@@ -404,9 +490,7 @@ import XCTVapor
             try await pending.save(on: app.db)
             let preID = try pending.requireID().uuidString
 
-            let cookie = try await loginUser(
-                username: "csv_pre_instructor5", password: "pw",
-                role: "instructor", on: app)
+            let cookie = try await loginInstructor("csv_pre_instructor5", in: course)
             let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -459,6 +543,90 @@ import XCTVapor
                 .count()
             #expect(remaining == 1)
 
+        }
+    }
+
+    @Test func registerPreEnrollment_materializesUserAndEnrolls() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_REG1")
+            let courseID = try course.requireID()
+
+            let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_register")
+            try await pending.save(on: app.db)
+            let preID = try pending.requireID().uuidString
+
+            let cookie = try await loginInstructor("csv_reg_instructor1", in: course)
+            let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID.uuidString)/pre-enroll/\(preID)/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        [
+                            "_csrf": token,
+                            "displayName": "Reggie Test",
+                            "externalSubject": "duo-sub-123",
+                            "studentID": "20260001",
+                        ], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            // Pre-enrollment is gone.
+            let remaining = try await APIPreEnrollment.query(on: app.db)
+                .filter(\.$id == pending.requireID())
+                .count()
+            #expect(remaining == 0)
+
+            // A real student user now exists, carrying the supplied SSO identity.
+            let user = try #require(
+                try await APIUser.query(on: app.db)
+                    .filter(\.$username == "csv_pre_register").first())
+            #expect(user.role == UserRole.user.rawValue)
+            #expect(user.authProvider == "duo-oidc")
+            #expect(user.externalSubject == "duo-sub-123")
+            #expect(user.displayName == "Reggie Test")
+            #expect(user.studentID == "20260001")
+
+            // And they're enrolled in the course.
+            let enrollment = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == courseID)
+                .filter(\.$userID == user.requireID())
+                .count()
+            #expect(enrollment == 1)
+        }
+    }
+
+    @Test func registerPreEnrollment_studentForbidden() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_REG2")
+            let courseID = try course.requireID()
+
+            let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_regforbidden")
+            try await pending.save(on: app.db)
+            let preID = try pending.requireID().uuidString
+
+            let cookie = try await loginUser(
+                username: "csv_reg_student2", password: "pw", role: "student", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID.uuidString)/pre-enroll/\(preID)/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+            // Pending row untouched.
+            let remaining = try await APIPreEnrollment.query(on: app.db)
+                .filter(\.$id == pending.requireID())
+                .count()
+            #expect(remaining == 1)
         }
     }
 

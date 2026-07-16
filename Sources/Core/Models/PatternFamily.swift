@@ -80,15 +80,21 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
     /// still counts as a pass, for floating-point `.approximateEquality`
     /// families.  When nil the renderer uses a sensible default (1e-6).
     public let tolerance: Double?
+    /// Family-level per-test execution time limit (seconds) applied to every
+    /// generated entry in this family — the cases and the auto-existence
+    /// guard.  A case may override it (`PatternCase.timeLimitSeconds`); when
+    /// both are nil the entry inherits the assignment-wide default.
+    public let timeLimitSeconds: Int?
 
     public init(
         tier: TestTier = .pub, points: Int = 1, hint: String? = nil,
-        tolerance: Double? = nil
+        tolerance: Double? = nil, timeLimitSeconds: Int? = nil
     ) {
         self.tier = tier
         self.points = points
         self.hint = hint
         self.tolerance = tolerance
+        self.timeLimitSeconds = timeLimitSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -97,6 +103,7 @@ public struct PatternDefaults: Codable, Equatable, Sendable {
         points = try c.decodeIfPresent(Int.self, forKey: .points) ?? 1
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         tolerance = try c.decodeIfPresent(Double.self, forKey: .tolerance)
+        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
     }
 }
 
@@ -147,6 +154,10 @@ public struct PatternCase: Codable, Equatable, Sendable {
     public let tier: TestTier?
     /// Per-case points override.  When nil, `defaults.points` is used.
     public let points: Int?
+    /// Per-case execution time limit (seconds).  When nil, the family default
+    /// (`defaults.timeLimitSeconds`) applies; when both are nil the generated
+    /// entry inherits the assignment-wide default.
+    public let timeLimitSeconds: Int?
     /// Disabled cases remain in the spec but are not rendered into the zip.
     public let enabled: Bool
 
@@ -155,6 +166,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         argsProvided: [Bool] = [], argVarRefs: [String?] = [],
         expectedVarRef: String? = nil,
         hint: String? = nil, tier: TestTier? = nil, points: Int? = nil,
+        timeLimitSeconds: Int? = nil,
         enabled: Bool = true
     ) {
         self.key = key
@@ -167,6 +179,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         self.hint = hint
         self.tier = tier
         self.points = points
+        self.timeLimitSeconds = timeLimitSeconds
         self.enabled = enabled
     }
 
@@ -184,6 +197,7 @@ public struct PatternCase: Codable, Equatable, Sendable {
         hint = try c.decodeIfPresent(String.self, forKey: .hint)
         tier = try c.decodeIfPresent(TestTier.self, forKey: .tier)
         points = try c.decodeIfPresent(Int.self, forKey: .points)
+        timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
     }
 }
@@ -291,5 +305,12 @@ extension PatternCase {
     /// Points applied to this case: override if set, else family default.
     public func resolvedPoints(defaults: PatternDefaults) -> Int {
         points ?? defaults.points
+    }
+
+    /// Per-test time limit (seconds) applied to this case: the case's own
+    /// override if set, else the family default, else nil (inherit the
+    /// assignment-wide default).
+    public func resolvedTimeLimit(defaults: PatternDefaults) -> Int? {
+        timeLimitSeconds ?? defaults.timeLimitSeconds
     }
 }

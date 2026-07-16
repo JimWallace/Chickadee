@@ -115,8 +115,7 @@ private func resolveAppConfig(
                 mode: override,
                 requestedMode: auth.requestedMode,
                 nonSSOModesEnabled: auth.nonSSOModesEnabled,
-                ssoAdminUsers: auth.ssoAdminUsers,
-                ssoInstructorUsers: auth.ssoInstructorUsers
+                ssoAdminUsers: auth.ssoAdminUsers
             )
             return AppConfig(
                 auth: auth,
@@ -127,6 +126,7 @@ private func resolveAppConfig(
                 lockout: preloaded.lockout,
                 workers: preloaded.workers,
                 brightspace: preloaded.brightspace,
+                brightspaceApp: preloaded.brightspaceApp,
                 diagnostics: preloaded.diagnostics,
                 alerts: preloaded.alerts,
                 outboundProxy: preloaded.outboundProxy,
@@ -148,6 +148,12 @@ struct TestSetupsDirectoryKey: StorageKey {
     typealias Value = String
 }
 struct SubmissionsDirectoryKey: StorageKey {
+    typealias Value = String
+}
+struct DataExportsDirectoryKey: StorageKey {
+    typealias Value = String
+}
+struct DeployStateDirectoryKey: StorageKey {
     typealias Value = String
 }
 struct WorkerSecretStoreKey: StorageKey {
@@ -178,9 +184,6 @@ struct SecurityConfigurationKey: StorageKey {
 struct SSOAdminUsersKey: StorageKey {
     typealias Value = Set<String>
 }
-struct SSOInstructorUsersKey: StorageKey {
-    typealias Value = Set<String>
-}
 
 extension Application {
     var authMode: AuthMode {
@@ -197,11 +200,6 @@ extension Application {
         get { storage[SSOAdminUsersKey.self] ?? [] }
         set { storage[SSOAdminUsersKey.self] = newValue }
     }
-
-    var ssoInstructorUsers: Set<String> {
-        get { storage[SSOInstructorUsersKey.self] ?? [] }
-        set { storage[SSOInstructorUsersKey.self] = newValue }
-    }
 }
 
 extension Application {
@@ -216,6 +214,21 @@ extension Application {
     var submissionsDirectory: String {
         get { storage[SubmissionsDirectoryKey.self] ?? "submissions/" }
         set { storage[SubmissionsDirectoryKey.self] = newValue }
+    }
+    /// Where generated personal-data export zips live (#557).  Contents are
+    /// bundled user PII: never served statically, only streamed through the
+    /// owner-gated download route, and reaped by `DataExportRetentionService`.
+    var dataExportsDirectory: String {
+        get { storage[DataExportsDirectoryKey.self] ?? "data-exports/" }
+        set { storage[DataExportsDirectoryKey.self] = newValue }
+    }
+    /// Directory holding the auto-deploy daemon's IPC files (status.json,
+    /// history.jsonl), mounted read-only into the container. Read by the
+    /// admin-MCP deploy tools. Defaults to the conventional mount point;
+    /// overridden from CHICKADEE_DEPLOY_STATE_DIR at startup.
+    var deployStateDirectory: String {
+        get { storage[DeployStateDirectoryKey.self] ?? "/deploy-state" }
+        set { storage[DeployStateDirectoryKey.self] = newValue }
     }
 
     var workerSecretStore: WorkerSecretStore {

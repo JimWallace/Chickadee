@@ -21,6 +21,15 @@ struct CourseAdminRoutes: RouteCollection {
         routes.post("courses", ":courseID", "enroll-csv", use: instructorBulkEnrollCSV)
         routes.post("courses", ":courseID", "unenroll", ":userID", use: instructorUnenrollUser)
         routes.post("courses", ":courseID", "pre-unenroll", ":preEnrollmentID", use: instructorCancelPreEnrollment)
+        // Manually materialize a pending pre-enrollment into a real user (debug
+        // / grade-sync-testing escape valve).
+        routes.post(
+            "courses", ":courseID", "pre-enroll", ":preEnrollmentID", "register",
+            use: instructorRegisterPreEnrollment)
+        // Set a roster member's per-course role (Phase 4b).
+        routes.post("courses", ":courseID", "role", ":userID", use: instructorSetEnrollmentRole)
+        // Self-serve staff invite: add a co-instructor / TA by username or email (#417 Slice F).
+        routes.post("courses", ":courseID", "staff", use: instructorInviteStaff)
 
         let r = routes.grouped("instructor")
         r.get("enroll-csv", use: enrollCSVForm)

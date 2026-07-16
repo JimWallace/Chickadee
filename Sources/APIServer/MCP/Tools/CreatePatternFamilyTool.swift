@@ -45,12 +45,16 @@ struct CreatePatternFamilyTool: ContentTool {
         let hint: String?
         let points: Int?
         let tier: String?
+        /// Per-case execution time limit (seconds), in `1...600`, overriding the
+        /// family default. 0 / omitted = no per-case override.
+        let timeLimitSeconds: Int?
         let enabled: Bool?
 
         init(
             key: String, label: String? = nil, args: [JSONValue]? = nil, expected: JSONValue? = nil,
             argVarRefs: [String?]? = nil, argsProvided: [Bool]? = nil, expectedVarRef: String? = nil,
-            hint: String? = nil, points: Int? = nil, tier: String? = nil, enabled: Bool? = nil
+            hint: String? = nil, points: Int? = nil, tier: String? = nil,
+            timeLimitSeconds: Int? = nil, enabled: Bool? = nil
         ) {
             self.key = key
             self.label = label
@@ -62,6 +66,7 @@ struct CreatePatternFamilyTool: ContentTool {
             self.hint = hint
             self.points = points
             self.tier = tier
+            self.timeLimitSeconds = timeLimitSeconds
             self.enabled = enabled
         }
     }
@@ -87,6 +92,10 @@ struct CreatePatternFamilyTool: ContentTool {
         let defaultPoints: Int?
         /// Family-wide "💡 Hint" applied to any case that has no per-case `hint`.
         let defaultHint: String?
+        /// Family-level per-test execution time limit (seconds), in `1...600`,
+        /// applied to every generated entry (cases + existence guard) without a
+        /// per-case override. 0 / omitted = inherit the assignment default.
+        let defaultTimeLimitSeconds: Int?
         let tolerance: Double?
         /// Existing section id to place the family in; nil = ungrouped.
         let sectionID: String?
@@ -98,6 +107,7 @@ struct CreatePatternFamilyTool: ContentTool {
             assignmentPublicID: String, id: String, name: String, kind: String,
             function: String? = nil, paramNames: [String]? = nil,
             defaultTier: String? = nil, defaultPoints: Int? = nil, defaultHint: String? = nil,
+            defaultTimeLimitSeconds: Int? = nil,
             tolerance: Double? = nil, sectionID: String? = nil, dependsOn: [String]? = nil,
             variables: [VariableInput]? = nil, cases: [CaseInput]
         ) {
@@ -110,6 +120,7 @@ struct CreatePatternFamilyTool: ContentTool {
             self.defaultTier = defaultTier
             self.defaultPoints = defaultPoints
             self.defaultHint = defaultHint
+            self.defaultTimeLimitSeconds = defaultTimeLimitSeconds
             self.tolerance = tolerance
             self.sectionID = sectionID
             self.dependsOn = dependsOn
@@ -145,6 +156,8 @@ struct CreatePatternFamilyTool: ContentTool {
         + "the cases skip — you don't need a separate function_exists check. "
         + "Set a `defaultHint` (family-wide) and/or per-case `hint` to give the student a \"💡 Hint\" "
         + "shown only when that test fails (per-case overrides the family default). "
+        + "Set a family-level `defaultTimeLimitSeconds` and/or per-case `timeLimitSeconds` "
+        + "(per-test execution time limit, 1–600s, overriding the assignment default). "
         + "Saving renders the family's scripts and runs validation synchronously, rejecting a wrong arg "
         + "count, an expected of the wrong shape for the kind, an unknown $ref, or a duplicate id. It "
         + "also closes the assignment if it was open (reported as `assignmentClosed`; re-open with "
@@ -152,10 +165,7 @@ struct CreatePatternFamilyTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "id": .object([
                 "type": .string("string"),
                 "description": .string("New family id (unique; must not already exist)."),
@@ -177,21 +187,22 @@ struct CreatePatternFamilyTool: ContentTool {
                 "description": .string("Student function the family calls (omit for variable_equality)."),
             ]),
             "paramNames": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Parameter names, in order (drives arg-count validation)."),
             ]),
-            "defaultTier": .object([
-                "type": .string("string"),
-                "enum": .array([
-                    .string("public"), .string("release"), .string("secret"), .string("student"),
-                ]),
-            ]),
-            "defaultPoints": .object(["type": .string("integer")]),
+            "defaultTier": MCPSchema.tierEnum(),
+            "defaultPoints": MCPSchema.integer,
             "defaultHint": .object([
                 "type": .string("string"),
                 "description": .string(
                     "Family-wide \"💡 Hint\" shown to the student on any failing case that has no "
                         + "per-case hint."),
+            ]),
+            "defaultTimeLimitSeconds": .object([
+                "type": .string("integer"),
+                "description": .string(
+                    "Family-level per-test execution time limit (seconds, 1–600) for every generated "
+                        + "entry without a per-case override. Omit / 0 to inherit the assignment default."),
             ]),
             "tolerance": .object([
                 "type": .string("number"),
@@ -202,7 +213,7 @@ struct CreatePatternFamilyTool: ContentTool {
                 "description": .string("Existing section id to group under; omit for ungrouped."),
             ]),
             "dependsOn": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Prerequisite script names or family:<id> tokens."),
             ]),
             "variables": .object([
@@ -211,7 +222,7 @@ struct CreatePatternFamilyTool: ContentTool {
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "name": .object(["type": .string("string")]),
+                        "name": MCPSchema.string,
                         "value": .object(["description": .string("Any JSON value.")]),
                     ]),
                     "required": .array([.string("name"), .string("value")]),
@@ -228,7 +239,7 @@ struct CreatePatternFamilyTool: ContentTool {
                             "type": .string("string"),
                             "description": .string("Unique case key (also part of the generated filename)."),
                         ]),
-                        "label": .object(["type": .string("string")]),
+                        "label": MCPSchema.string,
                         "args": .object([
                             "type": .string("array"),
                             "description": .string("Args in parameter order (raw JSON values)."),
@@ -253,15 +264,15 @@ struct CreatePatternFamilyTool: ContentTool {
                             "description": .string(
                                 "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint)."),
                         ]),
-                        "points": .object(["type": .string("integer")]),
-                        "tier": .object([
-                            "type": .string("string"),
-                            "enum": .array([
-                                .string("public"), .string("release"), .string("secret"),
-                                .string("student"),
-                            ]),
+                        "points": MCPSchema.integer,
+                        "tier": MCPSchema.tierEnum(),
+                        "timeLimitSeconds": .object([
+                            "type": .string("integer"),
+                            "description": .string(
+                                "Per-case execution time limit (seconds, 1–600), overriding the family "
+                                    + "default. Omit / 0 for no per-case override."),
                         ]),
-                        "enabled": .object(["type": .string("boolean")]),
+                        "enabled": MCPSchema.boolean,
                     ]),
                     "required": .array([.string("key")]),
                     "additionalProperties": .bool(false),
@@ -277,14 +288,14 @@ struct CreatePatternFamilyTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "familyID": .object(["type": .string("string")]),
-            "kind": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "familyID": MCPSchema.string,
+            "kind": MCPSchema.string,
             "caseKeys": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("familyID"), .string("kind"), .string("caseKeys"),
@@ -309,8 +320,8 @@ struct CreatePatternFamilyTool: ContentTool {
         }
         try Self.assertUniqueCaseKeys(input.cases, tool: Self.name)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard
@@ -369,7 +380,9 @@ struct CreatePatternFamilyTool: ContentTool {
             tier: try parseOptionalTier(input.defaultTier, tool: Self.name) ?? .pub,
             points: input.defaultPoints ?? 1,
             hint: normalizedHint(input.defaultHint),
-            tolerance: input.tolerance)
+            tolerance: input.tolerance,
+            timeLimitSeconds: try normalizedTimeLimit(
+                input.defaultTimeLimitSeconds, tool: Self.name, field: "defaultTimeLimitSeconds"))
         let cases = try input.cases.map { try patternCase(from: $0, tool: Self.name) }
         return PatternFamily(
             id: id, name: input.name, kind: kind, functionName: input.function ?? "",
@@ -398,6 +411,8 @@ struct CreatePatternFamilyTool: ContentTool {
             argsProvided: provided, argVarRefs: refs, expectedVarRef: ref,
             hint: normalizedHint(c.hint), tier: try parseOptionalTier(c.tier, tool: tool),
             points: c.points,
+            timeLimitSeconds: try normalizedTimeLimit(
+                c.timeLimitSeconds, tool: tool, field: "cases[\(c.key)].timeLimitSeconds"),
             enabled: c.enabled ?? true)
     }
 
@@ -440,5 +455,14 @@ struct CreatePatternFamilyTool: ContentTool {
     static func normalizedHint(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
         return raw
+    }
+
+    /// Normalizes a create-path time limit: nil/0 → nil (no override), and any
+    /// non-zero value is bound-checked to `1...600` (mirroring 0 as the "clear"
+    /// sentinel used on the update path). Shared by the family default and the
+    /// per-case create path so a malformed value is rejected here, not shipped.
+    static func normalizedTimeLimit(_ raw: Int?, tool: String, field: String) throws -> Int? {
+        guard let raw, raw != 0 else { return nil }
+        return try validateTimeLimitSeconds(raw, tool: tool, field: field)
     }
 }

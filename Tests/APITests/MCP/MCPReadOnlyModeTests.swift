@@ -7,7 +7,7 @@
 import Fluent
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -29,7 +29,7 @@ import XCTVapor
         return (app, authority)
     }
 
-    private func post(_ app: Application, body: String, token: String) async throws -> XCTHTTPResponse {
+    private func post(_ app: Application, body: String, token: String) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/mcp",
             headers: ["Content-Type": "application/json", "Authorization": "Bearer \(token)"],
@@ -101,7 +101,7 @@ import XCTVapor
     @Test func discoveryMetadataIsReachableInReadOnly() async throws {
         let (app, _) = try await makeReadOnlyApp()
         try await withApp(app) { app in
-            try await app.testable().test(.GET, "/.well-known/oauth-protected-resource") { res async in
+            try await app.testing().test(.GET, "/.well-known/oauth-protected-resource") { res async in
                 #expect(res.status == .ok)
                 #expect(String(buffer: res.body).contains("\"resource\""))
             }

@@ -40,6 +40,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let message: String?
         let stack: String?
         let userAgent: String?
+        let appVersion: String?
         let testSetupID: String?
         let createdAt: Date
     }
@@ -50,11 +51,30 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let byKind: [CountEntry]
         let bySource: [CountEntry]
         let byFailedCheck: [CountEntry]
+        /// Events grouped by coarse browser/OS (e.g. "Safari/iOS", "Chrome/Windows")
+        /// so failures vs successes can be seen per browser/device class — the
+        /// breakdown needed to localize editor problems (e.g. "Kernel Unknown" on
+        /// a specific platform). Derived from the User-Agent; no student identity.
+        let byBrowser: [CountEntry]
+        /// Events grouped by the page build's ChickadeeVersion (the `app_version`
+        /// the client sent; "unknown" when absent). An `exec_hang` / `recover_failed`
+        /// concentrated on an OLD appVersion is a stale-tab / cached-bundle symptom
+        /// (that browser never re-fetched the fixed bundle/wheel), distinct from one
+        /// on the CURRENT build, which would mean the deployed fix is incomplete.
+        let byAppVersion: [CountEntry]
         /// Submit-flow funnel: `submit_phase` breadcrumb counts in phase order
         /// (grading_start → … → result_posted). The drop-off between consecutive
         /// phases shows where in-browser submissions are lost to a freeze — the
         /// last phase a frozen student reaches has no successor record.
         let submitFunnel: [CountEntry]
+        /// Kernel-boot funnel: `kernel_phase` breadcrumb counts in phase order
+        /// (boot_start → app_ready → kernel_starting → kernel_idle), forwarded by
+        /// the in-iframe collector. The drop-off localizes WHERE a kernel boot
+        /// stalls — a kernel that spins forever reaches some phase and stops, so
+        /// `kernel_idle` far below `boot_start` is the hung-kernel signature the
+        /// parent page could never see across the iframe boundary. Pair with the
+        /// `kernel_error` rows in bySource/recentSamples for the WHY.
+        let kernelBootFunnel: [CountEntry]
         let recentSamples: [Sample]
     }
 
@@ -65,19 +85,41 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         "suite_started", "suite_done", "result_posting", "result_posted",
     ]
 
+    /// Canonical order of the kernel-boot breadcrumbs (emitted by the in-iframe
+    /// collector Public/jl-kernel-diagnostics.js, forwarded by notebook.js).
+    static let kernelPhaseOrder = [
+        "boot_start", "app_ready", "kernel_starting", "kernel_idle",
+    ]
+
     static let name = "get_browser_diagnostics"
     static let description =
         "In-browser editor + submission diagnostics (JupyterLite/Pyodide) for diagnosis: totals and "
         + "breakdowns by kind (preflight_fail / watchdog_timeout / editor_error / page_unresponsive for "
-        + "editor load — page_unresponsive is a main-thread freeze beaconed by a watchdog worker — and "
-        + "submit_phase / submit_error for the grading/submission flow), source, and failed capability "
-        + "check over a window, plus recent samples carrying the actual error message and stack. Also "
+        + "editor-load failures, editor_ready as the success denominator and sw_state for service-worker "
+        + "registration, and submit_phase / submit_error for the grading/submission flow), by source, by "
+        + "failed capability check, by browser/OS (byBrowser, e.g. Safari/iOS) so failures can be "
+        + "localized per device class, and by page-build version (byAppVersion: the ChickadeeVersion the "
+        + "client was running; an exec_hang/recover_failed concentrated on an OLD version is a stale-tab / "
+        + "cached-bundle symptom, vs. one on the current build meaning the deployed fix is incomplete), over "
+        + "a window, plus recent samples with the error message and stack. Also "
         + "returns submitFunnel: the submit_phase breadcrumb counts in phase order "
         + "(grading_start → runtime_loaded → setup_unpacked → suite_started → suite_done → "
         + "result_posting → result_posted) — the drop-off between consecutive phases shows where "
         + "in-browser submissions are lost to a freeze (a frozen student's last reached phase has no "
-        + "successor). Optionally filter by testSetupID. Read-only; reports infrastructure breadcrumbs "
-        + "only and never includes a student identifier."
+        + "successor). And kernelBootFunnel: the kernel_phase breadcrumb counts in phase order "
+        + "(boot_start → app_ready → kernel_starting → kernel_idle), forwarded by the in-iframe "
+        + "collector — the drop-off localizes WHERE a kernel boot stalls (a kernel that spins forever "
+        + "reaches some phase and stops, so kernel_idle far below boot_start is the hung-kernel "
+        + "signature); pair it with the kernel_error rows (in bySource / recentSamples: csp_violation, "
+        + "resource_error, kernel_dead, boot_stalled, exec_hang, …) for the WHY. exec_hang is the "
+        + "POST-IDLE hang the boot funnel can't see: the kernel booted to idle (counted as success) "
+        + "then wedged on execute, so cells sit busy forever; its count is distinct students who hit a "
+        + "sustained-busy hang, message busy_ms=… the hang duration. recover_attempt / recover_failed "
+        + "track the editor's self-heal for that hang (auto-reload the kernel): recover_attempt fired the "
+        + "reload, recover_failed means the rebooted kernel hung AGAIN — so success ≈ attempts − failures, "
+        + "and both should drop toward zero once the underlying deadlock is fixed (the headline KPI for it). "
+        + "Optionally filter by testSetupID. "
+        + "Read-only; reports infrastructure breadcrumbs only and never includes a student identifier."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -114,8 +156,12 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         var byKind: [String: Int] = [:]
         var bySource: [String: Int] = [:]
         var byCheck: [String: Int] = [:]
+        var byBrowser: [String: Int] = [:]
+        var byAppVersion: [String: Int] = [:]
         for row in rows {
             byKind[row.kind, default: 0] += 1
+            byBrowser[Self.browserLabel(forUserAgent: row.userAgent), default: 0] += 1
+            byAppVersion[row.appVersion ?? "unknown", default: 0] += 1
             if let source = row.source { bySource[source, default: 0] += 1 }
             if let checks = row.failedChecks {
                 for check in checks.split(separator: ",") {
@@ -135,6 +181,18 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let knownPhases = Set(Self.submitPhaseOrder)
         submitFunnel += Self.sortedCounts(submitPhaseCounts.filter { !knownPhases.contains($0.key) })
 
+        // Kernel-boot funnel from the `kernel_phase` breadcrumbs, in phase order
+        // (then any unknown phases by count). The drop-off pinpoints where a boot
+        // stalls — the in-iframe collector's view of the cross-process kernel.
+        let kernelPhaseCounts = rows.reduce(into: [String: Int]()) { acc, row in
+            if row.kind == "kernel_phase", let source = row.source { acc[source, default: 0] += 1 }
+        }
+        var kernelBootFunnel = Self.kernelPhaseOrder.compactMap { phase -> CountEntry? in
+            kernelPhaseCounts[phase].map { CountEntry(key: phase, count: $0) }
+        }
+        let knownKernelPhases = Set(Self.kernelPhaseOrder)
+        kernelBootFunnel += Self.sortedCounts(kernelPhaseCounts.filter { !knownKernelPhases.contains($0.key) })
+
         let samples = rows.prefix(sampleLimit).map { row in
             Sample(
                 kind: row.kind,
@@ -143,6 +201,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
                 message: row.message,
                 stack: row.stack,
                 userAgent: row.userAgent,
+                appVersion: row.appVersion,
                 testSetupID: row.testSetupID,
                 createdAt: row.createdAt ?? Date())
         }
@@ -153,7 +212,10 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
             byKind: Self.sortedCounts(byKind),
             bySource: Self.sortedCounts(bySource),
             byFailedCheck: Self.sortedCounts(byCheck),
+            byBrowser: Self.sortedCounts(byBrowser),
+            byAppVersion: Self.sortedCounts(byAppVersion),
             submitFunnel: submitFunnel,
+            kernelBootFunnel: kernelBootFunnel,
             recentSamples: Array(samples))
     }
 
@@ -161,5 +223,43 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
     private static func sortedCounts(_ counts: [String: Int]) -> [CountEntry] {
         counts.map { CountEntry(key: $0.key, count: $0.value) }
             .sorted { ($0.count, $1.key) > ($1.count, $0.key) }
+    }
+
+    /// Coarse, PII-safe "browser/OS" label from a User-Agent (e.g.
+    /// "Chrome/Windows", "Safari/iOS"). Browser order matters — Chrome and
+    /// Edge UAs also contain "Safari", and Edge contains "Chrome" — so the more
+    /// specific tokens are checked first. "Unknown" when the UA is absent.
+    static func browserLabel(forUserAgent userAgent: String?) -> String {
+        guard let ua = userAgent, !ua.isEmpty else { return "Unknown" }
+
+        let browser: String
+        if ua.contains("Edg/") || ua.contains("Edge/") || ua.contains("EdgiOS/") {
+            browser = "Edge"
+        } else if ua.contains("Firefox/") || ua.contains("FxiOS/") {
+            browser = "Firefox"
+        } else if ua.contains("CriOS/") || ua.contains("Chrome/") || ua.contains("Chromium/") {
+            browser = "Chrome"
+        } else if ua.contains("Safari/") {
+            browser = "Safari"
+        } else {
+            browser = "Other"
+        }
+
+        let os: String
+        if ua.contains("Windows") {
+            os = "Windows"
+        } else if ua.contains("iPhone") || ua.contains("iPad") || ua.contains("iPod") {
+            os = "iOS"
+        } else if ua.contains("Android") {
+            os = "Android"
+        } else if ua.contains("Mac OS X") || ua.contains("Macintosh") {
+            os = "macOS"
+        } else if ua.contains("Linux") {
+            os = "Linux"
+        } else {
+            os = "Other"
+        }
+
+        return "\(browser)/\(os)"
     }
 }

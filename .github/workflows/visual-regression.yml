@@ -1,0 +1,85 @@
+name: Visual regression
+
+# Screenshots the key pages (login, student dashboard, submit, pending
+# results, instructor list, admin) in BOTH colour schemes against committed
+# baselines (Tools/visual-regression/baselines/), failing on visual drift the
+# static token guards can't see — the "looks right" gap in docs/ui-design.md.
+# Issue #1136.  The same job then runs the axe-core accessibility scan over
+# the same pages (#1137): critical/serious violations are zero-tolerance,
+# moderate/minor ratchet down against a11y-baseline.json.
+#
+# NOT a required check (unlike editor-smoke-gate), so it is path-filtered at
+# the trigger: a skipped run can't block merges.  Chromium only — one
+# deterministic engine is enough to catch palette/layout regressions; engine-
+# specific rendering bugs are the smoke tests' job.
+#
+# Intentional UI change?  Regenerate baselines (Tools/visual-regression/
+# run-visual.sh --update) and commit them in the same PR — the baseline diff
+# becomes part of review.  If no baselines are committed yet the job captures
+# and uploads them as the `visual-baselines-bootstrap` artifact instead of
+# failing (bootstrap mode).
+
+on:
+  pull_request:
+    paths:
+      - "Public/**"
+      - "!Public/pyodide/**"
+      - "!Public/jupyterlite/**"
+      - "Resources/Views/**"
+      - "Tools/visual-regression/**"
+      - ".github/workflows/visual-regression.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: visual-regression-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Same swift image as the other browser jobs so the cached server binary
+    # links against the right runtime, and so font rendering is stable across
+    # runs (the captures pin DejaVu, shipped in this image).
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Shared scaffold: mtime normalisation, build-cache restore, server
+      # build, Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: chromium
+          node-project: Tools/visual-regression
+
+      - name: Capture and compare
+        working-directory: Tools/visual-regression
+        run: ./run-visual.sh
+
+      - name: Accessibility scan (axe-core)
+        working-directory: Tools/visual-regression
+        run: ./run-a11y.sh
+
+      - name: Upload visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs
+          path: visual-diffs/
+          if-no-files-found: ignore
+
+      - name: Upload bootstrap baselines
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines-bootstrap
+          path: visual-bootstrap/
+          if-no-files-found: ignore

@@ -1,5 +1,5 @@
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -11,8 +11,9 @@ import XCTVapor
 ///      fast path must not serve student working copies to anonymous
 ///      callers just because they live under /jupyterlite/.
 ///   2. Immutable cache headers land only on content-hashed bundle
-///      filenames; everything else keeps default revalidation so a
-///      re-vendor that rewrites bytes in place is picked up.
+///      filenames; everything else gets an explicit `no-cache` so a
+///      re-vendor that rewrites bytes in place is picked up on the next load
+///      (an ETag alone lets the browser cache heuristically and skip the check).
 @Suite final class EditorAssetFastPathMiddlewareTests {
     private let publicDir: String
     private let tempRoot: String
@@ -50,11 +51,13 @@ import XCTVapor
         try? FileManager.default.removeItem(atPath: tempRoot)
     }
 
-    private func makeApp() async throws -> Application {
+    private func makeApp(crossOriginIsolation: Bool = false) async throws -> Application {
         let app = try await Application.make(.testing)
         // Production order: fast path runs before any session/auth work,
         // the user-namespace guard and FileMiddleware after it.
-        app.middleware.use(EditorAssetFastPathMiddleware(publicDirectory: publicDir))
+        app.middleware.use(
+            EditorAssetFastPathMiddleware(
+                publicDirectory: publicDir, crossOriginIsolation: crossOriginIsolation))
         app.middleware.use(UserFileNamespaceMiddleware())
         app.middleware.use(FileMiddleware(publicDirectory: publicDir))
         return app
@@ -62,7 +65,7 @@ import XCTVapor
 
     @Test func hashedBuildChunkIsServedWithImmutableCaching() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/jupyterlite/build/100.5a28c9e.js") { res async in
+            try await app.testing().test(.GET, "/jupyterlite/build/100.5a28c9e.js") { res async in
                 #expect(res.status == .ok)
                 #expect(res.body.string == "hashed-chunk")
                 #expect(
@@ -74,7 +77,7 @@ import XCTVapor
 
     @Test func hashedExtensionAssetIsServedWithImmutableCaching() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js"
             ) { res async in
                 #expect(res.status == .ok)
@@ -87,18 +90,18 @@ import XCTVapor
 
     @Test func unhashedBundleFilenameKeepsRevalidating() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/jupyterlite/build/MathJax_Main-Regular.woff"
             ) { res async in
                 #expect(res.status == .ok)
-                #expect(res.headers.first(name: .cacheControl) == nil)
+                #expect(res.headers.first(name: .cacheControl) == "no-cache")
                 #expect(res.headers.first(name: .eTag) != nil)
             }
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/jupyterlite/extensions/@jupyterlite/kernel/install.json"
             ) { res async in
                 #expect(res.status == .ok)
-                #expect(res.headers.first(name: .cacheControl) == nil)
+                #expect(res.headers.first(name: .cacheControl) == "no-cache")
             }
         }
     }
@@ -106,9 +109,9 @@ import XCTVapor
     @Test func pyodideAndVendorAreFastPathedWithoutImmutableCaching() async throws {
         try await withApp(try await makeApp()) { app in
             for path in ["/pyodide/pyodide-lock.json", "/vendor/jszip.min.js"] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status == .ok)
-                    #expect(res.headers.first(name: .cacheControl) == nil)
+                    #expect(res.headers.first(name: .cacheControl) == "no-cache")
                     #expect(res.headers.first(name: .eTag) != nil)
                 }
             }
@@ -117,7 +120,7 @@ import XCTVapor
 
     @Test func userNamespaceFilesStillRequireAuthentication() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET,
                 "/jupyterlite/files/users/5f1c0b9a-0000-0000-0000-000000000000/work.ipynb"
             ) { res async in
@@ -133,7 +136,7 @@ import XCTVapor
                 "/jupyterlite/build/../../secret.txt",
                 "/jupyterlite/build/%2e%2e/%2e%2e/secret.txt",
             ] {
-                try await app.testable().test(.GET, path) { res async in
+                try await app.testing().test(.GET, path) { res async in
                     #expect(res.status != .ok)
                     #expect(res.body.string.contains("top-secret") == false)
                 }
@@ -143,8 +146,52 @@ import XCTVapor
 
     @Test func missingFastPathFileFallsThroughToTheNormalChain() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(.GET, "/jupyterlite/build/absent.js") { res async in
+            try await app.testing().test(.GET, "/jupyterlite/build/absent.js") { res async in
                 #expect(res.status == .notFound)
+            }
+        }
+    }
+
+    // When cross-origin isolation is OFF (the default), the fast path must NOT
+    // add COEP — the long-standing non-isolated behaviour the editor relies on
+    // for its service-worker sync path.
+    @Test func fastPathOmitsCOEPWhenIsolationDisabled() async throws {
+        try await withApp(try await makeApp(crossOriginIsolation: false)) { app in
+            for path in [
+                "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js",
+                "/pyodide/pyodide-lock.json",
+            ] {
+                try await app.testing().test(.GET, path) { res async in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.first(name: "Cross-Origin-Embedder-Policy") == nil)
+                }
+            }
+        }
+    }
+
+    // When cross-origin isolation is ON, the fast path must stamp the COOP +
+    // COEP + CORP trio on the vendored editor assets it serves — especially the
+    // Pyodide kernel WORKER chunk, whose missing COEP was the worker-block: an
+    // isolated editor page spawning a worker without COEP is blocked by Chrome.
+    @Test func fastPathIsolatesEditorAssetsWhenEnabled() async throws {
+        try await withApp(try await makeApp(crossOriginIsolation: true)) { app in
+            // The hashed extension chunk stands in for the kernel worker chunk.
+            for path in [
+                "/jupyterlite/extensions/@jupyterlite/kernel/static/154.377fd2862adcf65a4294.js",
+                "/jupyterlite/build/100.5a28c9e.js",
+                "/pyodide/pyodide-lock.json",
+                "/vendor/jszip.min.js",
+            ] {
+                try await app.testing().test(.GET, path) { res async in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Embedder-Policy") == "require-corp",
+                        "fast-path asset \(path) must carry COEP so the isolated worker can load")
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Opener-Policy") == "same-origin")
+                    #expect(
+                        res.headers.first(name: "Cross-Origin-Resource-Policy") == "same-origin")
+                }
             }
         }
     }

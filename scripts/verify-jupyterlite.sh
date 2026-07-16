@@ -112,5 +112,55 @@ piplite_shas = [u.split("sha256=", 1)[1] for u in piplite_urls if "sha256=" in u
 if all_json_sha not in piplite_shas:
     fail(f"sha256(all.json)={all_json_sha} not referenced by pipliteUrls {piplite_shas}")
 
+# The Atomics.waitAsync polyfill worker must be the blob: form
+# (scripts/patch-pyodide-waitasync-worker.py). A data: worker is blocked by our
+# CSP (worker-src 'self' blob:) and COEP, so an un-patched chunk hangs the kernel
+# on engines without native waitAsync (older Safari / iPadOS). Assert the patch is
+# applied so a rebuild that drops it fails here, not in front of a student.
+data_worker_chunks = [
+    p.name for p in remote_entry_dir.glob("*.js")
+    if "data:application/javascript,onmessage" in p.read_text()
+]
+if data_worker_chunks:
+    fail(
+        f"pyodide-kernel waitAsync polyfill still uses a data: worker in {data_worker_chunks} — "
+        "run scripts/patch-pyodide-waitasync-worker.py (build-jupyterlite.sh does this)."
+    )
+
+# The in-iframe kernel-boot diagnostics collector must be injected into the
+# kernel-bearing editor documents (scripts/patch-jupyterlite-diagnostics.py). A
+# `jupyter lite build` regenerates these index.html files and would drop the
+# <script> tag; without it the collector never runs and the kernel boot is
+# invisible again. Assert it's present so a rebuild that forgets the patch fails
+# here, not silently in front of a student. The tag carries a ?v=<hash> derived
+# from the collector's bytes (cache-buster); assert the hash matches the current
+# script so a stale tag — which would serve students an old cached collector
+# after the script changed — fails here, not silently in the browser.
+import hashlib
+import re
+
+diag_source = build_dir.parent / "jl-kernel-diagnostics.js"
+if not diag_source.is_file():
+    fail(f"missing kernel-diagnostics collector source: {diag_source}")
+expected_hash = hashlib.sha256(diag_source.read_bytes()).hexdigest()[:8]
+expected_tag = f'<script src="/jl-kernel-diagnostics.js?v={expected_hash}"></script>'
+diag_tag_re = re.compile(r'<script src="/jl-kernel-diagnostics\.js\?v=([0-9a-f]+)"></script>')
+for rel in ("notebooks/index.html", "repl/index.html"):
+    index_path = build_dir / rel
+    if not index_path.is_file():
+        fail(f"missing editor document: {index_path}")
+    found = diag_tag_re.search(index_path.read_text())
+    if not found:
+        fail(
+            f"{rel} is missing the cache-busted kernel-diagnostics collector tag — "
+            "run scripts/patch-jupyterlite-diagnostics.py (build-jupyterlite.sh does this)."
+        )
+    if found.group(1) != expected_hash:
+        fail(
+            f"{rel} has a stale kernel-diagnostics cache-buster "
+            f"(?v={found.group(1)}, expected ?v={expected_hash}) — the collector changed "
+            "but the tag was not re-patched; run scripts/patch-jupyterlite-diagnostics.py."
+        )
+
 print("JupyterLite verification passed.")
 PY

@@ -19,8 +19,8 @@
 # /pyodide, and BOTH consumers load it:
 #   - the JupyterLite editor kernel (via pyodideUrl in
 #     Tools/jupyterlite/jupyter-lite.json), and
-#   - Chickadee's own browser paths (browser-runner.js, assignment-validate.js,
-#     pyodide-worker.js, setup-edit.js, notebook.js).
+#   - Chickadee's own browser paths (browser-runner.js, grading-worker.js,
+#     assignment-validate.js, pyodide-worker.js, setup-edit.js, notebook.js).
 # The version is NOT pinned here — it is DERIVED from the JupyterLite kernel
 # (jupyterlite-pyodide-kernel in Tools/jupyterlite/requirements.txt, surfaced
 # in the built bundle), because that kernel's bundled core wheels are
@@ -112,6 +112,18 @@ npx esbuild codemirror-entry.js \
     --target=es2020 \
     --minify \
     --outfile="$public_vendor/codemirror.js"
+
+# ── jupyter-iframe-commands host bridge ───────────────────────────────
+# The parent-frame half of the iframe command bridge (comlink folded in).
+# Pairs with the `jupyter-iframe-commands` labextension federated into the
+# JupyterLite bundle (Tools/jupyterlite/requirements.txt).
+echo "==> Bundling jupyter-iframe-commands host bridge via esbuild"
+npx esbuild iframe-commands-host-entry.js \
+    --bundle \
+    --format=esm \
+    --target=es2020 \
+    --minify \
+    --outfile="$public_vendor/iframe-commands-host.js"
 
 # Inject Chickadee's extra pure-Python wheels (nb_mypy + deps) that aren't in
 # the upstream Pyodide distribution, so a re-vendor never silently drops them.

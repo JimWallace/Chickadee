@@ -7,7 +7,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -47,6 +47,43 @@ import XCTVapor
                 afterResponse: { res in
                     #expect(res.status == .ok)
                 })
+        }
+    }
+
+    /// Regression for the Lab 6 incident: a `.preview` assignment whose
+    /// scheduled open date has arrived (validation passed) must be published by
+    /// the dashboard load itself — the lazy safety net under the periodic
+    /// sweep. Pre-fix, a dead sweep meant the lab stayed staff-only preview
+    /// forever and every dashboard load just observed the stuck state.
+    @Test func indexLazilyOpensScheduledAssignment() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_sched_open", on: app)
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_sched_open", title: "Scheduled Lab", isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400), on: app)
+            assignment.visibility = .preview
+            assignment.startsAt = Date().addingTimeInterval(-60)
+            assignment.validationStatus = "passed"
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    // The dashboard load repaired the missed scheduled open, so
+                    // the student sees the lab on this very render.
+                    #expect(res.body.string.contains("Scheduled Lab"))
+                })
+
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.visibility == .open, "Dashboard load publishes a due scheduled assignment")
+            #expect(reloaded.startsAt == nil, "Open date is consumed once it fires")
         }
     }
 
@@ -501,6 +538,141 @@ import XCTVapor
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     #expect(!res.body.string.contains("First-Try Perfect"))
+                })
+        }
+    }
+
+    // MARK: - Unenrolled admin scoping
+
+    /// An admin who is not enrolled in any course is an *administrator*, not a
+    /// course participant. The home dashboard must not fall through to a
+    /// deployment-wide assignment list for them, and the course-scoped
+    /// "Instructor" nav tab must not appear (their global admin role still gives
+    /// them the Admin tab + /admin). Regression for the unenrolled-admin leak:
+    /// the index `else` branches queried every assignment/setup in the
+    /// deployment, and `isInstructor` (admin-implies-instructor) rendered the tab.
+    @Test func unenrolledAdminSeesNoInstructorTabAndNoOtherCourseAssignments() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await loginUser(
+                username: "admin1", password: "pass", role: "admin", on: app)
+
+            // A closed-enrollment course (so the unenrolled admin is neither
+            // auto-enrolled nor redirected to /enroll) with a published assignment.
+            let course = APICourse(code: "CS200", name: "Other Course", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+            let setupID = "setup_other_course"
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+                """
+            try await APITestSetup(
+                id: setupID, manifest: manifest,
+                zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID
+            ).save(on: app.db)
+            try await APIAssignment(
+                testSetupID: setupID, title: "Other Course Lab", dueAt: nil, isOpen: true, courseID: courseID
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        !html.contains("Other Course Lab"),
+                        "An unenrolled admin must not see assignments from a course they're not in")
+                    #expect(
+                        html.contains("not enrolled in any courses"),
+                        "The dashboard should show the empty not-enrolled state")
+                    #expect(
+                        !html.contains(#"value="/instructor""#),
+                        "The Instructor nav entry must not render for an unenrolled admin")
+                    #expect(
+                        html.contains(#"href="/admin""#),
+                        "The admin keeps their deployment-wide Admin tab")
+                })
+        }
+    }
+
+    /// The other side of the unenrolled-admin fix: an instructor enrolled in a
+    /// single course gets a direct Instructor link (the one-course case renders
+    /// a single "Instructor" entry rather than the multi-course strip).
+    @Test func enrolledInstructorSeesCourseScopedInstructorTab() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"value="/instructor""#),
+                        "An enrolled instructor must still see the Instructor entry")
+                    #expect(
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link, not a per-course strip")
+                })
+        }
+    }
+
+    /// The nav (Instructor link + course tabs) must persist on pages whose
+    /// handler only builds a course-free `req.currentUserContext` — the bug the
+    /// `NavCourseContextMiddleware` fixes.  `/account` is such a page; an
+    /// enrolled instructor must still see the Instructor link there.
+    @Test func instructorNavPersistsOnCourseFreePage() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains(#"value="/instructor""#),
+                        "The Instructor nav link must persist on a course-free page like /account")
+                })
+        }
+    }
+
+    /// Phase 2 wiring, end-to-end: the nav's Instructor tab keys off the
+    /// *per-course* role. A global `student` whose enrollment in the active
+    /// course carries `.instructor` sees the Instructor tab there — the
+    /// "instructor here, student elsewhere" case the per-course role exists for.
+    @Test func studentWithPerCourseInstructorRoleSeesInstructorTab() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await loginUser(
+                username: "student_ic", password: "pass", role: "student", on: app)
+            let user = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "student_ic").first())
+
+            let course = APICourse(code: "CS301", name: "Lab", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            try await APICourseEnrollment(
+                userID: try user.requireID(), courseID: try course.requireID(), role: .instructor
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains(#"value="/instructor""#),
+                        "A per-course instructor (global student) must see the Instructor entry")
+                    #expect(
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link")
                 })
         }
     }

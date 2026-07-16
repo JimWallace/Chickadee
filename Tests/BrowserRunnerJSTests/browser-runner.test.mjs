@@ -24,7 +24,7 @@ function defaultClassifyStub(name, source) {
   const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
   const byExt = { py: 'python', sh: 'sh', bash: 'bash', zsh: 'zsh', rb: 'ruby', pl: 'perl', js: 'node', php: 'php', r: 'rscript' };
   if (byExt[ext]) return byExt[ext];
-  const first = String(source || '').replace(/^[﻿\s]+/, '').split('\n', 1)[0] || '';
+  const first = String(source || '').replace(/^[\uFEFF\s]+/, '').split('\n', 1)[0] || '';
   if (first.startsWith('#!')) {
     const lo = first.toLowerCase();
     if (lo.includes('python')) return 'python';
@@ -357,6 +357,99 @@ function resolveScriptBehavior(scriptName, fs, cwd, configured = {}) {
   };
 }
 
+// A fake grading worker (Public/grading-worker.js stand-in) for the
+// GradingWorkerExecutor path.  It speaks the same postMessage protocol:
+//   { id, type:'init', files, seed } -> { id, ok:true }
+//   { id, type:'run', script, limit } -> { id, ok:true, result:{exitCode,stdout,stderr} }
+// A `{ pending: true }` behavior NEVER replies — simulating a real worker stuck
+// in a synchronous CPU-bound loop (the exact case that hung the old
+// main-thread Promise.race).  The real worker can't be loaded under `node
+// --test` (it needs real Pyodide), so this double exercises the kill/respawn
+// glue the executor wraps around it.  The factory tracks every worker it spawns
+// so a test can assert a fresh worker was created after a terminate().
+function makeFakeGradingWorkerFactory(options) {
+  const created = [];
+
+  class FakeGradingWorker {
+    constructor() {
+      this.onmessage = null;
+      this.onerror = null;
+      this.terminated = false;
+      this.postedTypes = [];
+      this.files = {};
+      // Records every `run` message's { script, limit } so a test can assert
+      // the per-script time limit the executor handed down.
+      this.runCalls = [];
+      created.push(this);
+    }
+
+    _reply(message) {
+      // Replies are always async (matches a real Worker's message channel).
+      Promise.resolve().then(() => {
+        if (this.terminated) return;
+        if (typeof this.onmessage === 'function') this.onmessage({ data: message });
+      });
+    }
+
+    _behaviorFor(scriptName) {
+      const configured = options.scriptBehaviors || {};
+      if (configured[scriptName]) return configured[scriptName];
+      const raw = this.files[scriptName];
+      const text = typeof raw === 'string'
+        ? raw
+        : new TextDecoder().decode(raw instanceof Uint8Array ? raw : new Uint8Array(raw || []));
+      const lines = String(text).trim().split('\n');
+      const lastLine = lines[lines.length - 1] || '';
+      if (lastLine.includes('JSON_RESULT_PASS')) {
+        return { stdout: `${JSON.stringify({ shortResult: `${scriptName}: passed`, status: 'pass' })}\n`, stderr: '', exitCode: 0 };
+      }
+      if (lastLine.includes('JSON_RESULT_FAIL')) {
+        return { stdout: `${JSON.stringify({ shortResult: `${scriptName}: failed`, status: 'fail' })}\n`, stderr: 'assertion failed\n', exitCode: 1 };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+
+    postMessage(msg) {
+      this.postedTypes.push(msg.type);
+      if (this.terminated) return;
+      if (msg.type === 'init') {
+        this.files = msg.files || {};
+        this.seed = msg.seed ?? null;
+        // `initPending` simulates a worker whose loadPyodide()/env-config never
+        // completes (the intermittent Pyodide-314 init hang) — it NEVER replies,
+        // so the executor's bounded-init timeout must terminate + retry it.
+        if (options.initPending) return;
+        this._reply({ id: msg.id, ok: true });
+        return;
+      }
+      if (msg.type === 'run') {
+        this.runCalls.push({ script: msg.script, limit: msg.limit });
+        const behavior = this._behaviorFor(msg.script);
+        if (behavior.pending) return;  // never reply — simulates a real hang
+        this._reply({
+          id: msg.id,
+          ok: true,
+          result: {
+            exitCode: behavior.exitCode ?? 0,
+            stdout: behavior.stdout ?? '',
+            stderr: behavior.stderr ?? '',
+          },
+        });
+        return;
+      }
+      this._reply({ id: msg.id, ok: false, error: `unknown message type: ${msg.type}` });
+    }
+
+    terminate() {
+      this.terminated = true;
+    }
+  }
+
+  const factory = () => new FakeGradingWorker();
+  factory.created = created;
+  return factory;
+}
+
 async function loadRunnerHarness(options = {}) {
   const statusEl = { hidden: true, textContent: '', className: '' };
   const scriptLoads = [];
@@ -498,6 +591,23 @@ async function loadRunnerHarness(options = {}) {
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
+  // Web-Worker executor seam.  By default the harness exposes NO Worker and no
+  // factory override, so the runner falls back to the main-thread Pyodide path
+  // (the rest of the suite exercises that).  When a test opts in via
+  // `useGradingWorker`, install a fake-worker factory so the GradingWorkerExecutor
+  // path runs without real Pyodide.
+  let gradingWorkerFactory = null;
+  if (options.useGradingWorker) {
+    gradingWorkerFactory = options.workerFactory ?? makeFakeGradingWorkerFactory(options);
+    context.__CHICKADEE_GRADING_WORKER_FACTORY__ = gradingWorkerFactory;
+  }
+
+  // Optional override for the GradingWorkerExecutor's bounded-init budget (read
+  // once at module-eval from globalThis), so a timeout test runs in milliseconds.
+  if (options.gradingInitTimeoutMs != null) {
+    context.__CHICKADEE_GRADING_INIT_TIMEOUT_MS__ = options.gradingInitTimeoutMs;
+  }
+
   context.window = {
     document,
     fetch: fetchImpl,
@@ -522,6 +632,7 @@ async function loadRunnerHarness(options = {}) {
     fetchCalls,
     breadcrumbs,
     py,
+    gradingWorkerFactory,
   };
 }
 
@@ -621,6 +732,9 @@ test('runAndSubmit emits ordered submit-phase breadcrumbs; validation stays sile
 
   // The breadcrumb funnel must cover the whole grading flow, in order, so a
   // freeze in any phase leaves a server-visible "last reached" record.
+  // This case runs on the MAIN-THREAD executor (no useGradingWorker), so the
+  // GradingWorkerExecutor's bounded-init breadcrumbs do not appear here; they are
+  // covered by the worker-path test below.
   assert.deepEqual(
     harness.breadcrumbs.map(b => b.source),
     [
@@ -738,7 +852,7 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
     zipFiles: {
       'test_slow.py': '# slow\n',
       'test_shell.sh': 'echo hi\n',
-      'test_r.R': 'print(\"hi\")\n',
+      'test_r.R': 'print("hi")\n',
     },
     manifest: {
       gradingMode: 'browser',
@@ -770,6 +884,275 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
   assert.equal(result.outcomes[0].shortResult, 'timed out');
   assert.match(result.outcomes[1].shortResult, /Shell scripts cannot run/);
   assert.match(result.outcomes[2].shortResult, /WebR/);
+});
+
+test('GradingWorkerExecutor kills a CPU-bound run-away via terminate() and respawns for the next script', async () => {
+  // The bug: with Pyodide on the MAIN thread, a synchronous CPU-bound infinite
+  // loop in student code never yields to JS, so the Promise.race sleep timer
+  // never fires — the tab froze and the submission was lost.  The fix moves
+  // Pyodide into a Web Worker so the per-test timeout can call Worker.terminate()
+  // to forcibly kill the run-away thread (no SIGKILL on the main thread, no
+  // COOP/COEP needed), then spin up a fresh worker for the next script.
+  //
+  // The fake worker NEVER replies for the `{ pending: true }` script — a real
+  // worker stuck in `while True: pass` would be exactly this unresponsive.  The
+  // old main-thread code could not recover from this; the executor must time it
+  // out (terminate), then grade the next script in a brand-new worker.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: {
+      'runaway.py': '# runaway\nJSON_RESULT_PASS\n',  // would "pass" if it ever returned
+      'after.py': '# after\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 0.05,  // small, so the run-away trips it fast
+      testSuites: [
+        { script: 'runaway.py', tier: 'public' },
+        { script: 'after.py', tier: 'public' },
+      ],
+    },
+    scriptBehaviors: {
+      'runaway.py': { pending: true },  // hangs forever — never posts a reply
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_runaway',
+  );
+
+  // The hung script times out; the SUBSEQUENT script still grades — proving the
+  // run-away didn't take the whole submission down with it.
+  assert.deepEqual(
+    plain(result.outcomes.map(outcome => [outcome.testName, outcome.status])),
+    [
+      ['runaway', 'timeout'],
+      ['after', 'pass'],
+    ],
+  );
+  assert.equal(result.outcomes[0].shortResult, 'timed out');
+
+  // The kill path the old main-thread Promise.race could not provide: the first
+  // worker was terminated (forcibly killed mid-run), and a SECOND worker was
+  // spawned to grade `after.py`.
+  const workers = harness.gradingWorkerFactory.created;
+  assert.ok(workers.length >= 2, `expected a respawn after terminate, saw ${workers.length} worker(s)`);
+  assert.ok(workers[0].terminated, 'the run-away worker must be terminated');
+  // The fresh worker was re-initialized with the same workspace before running.
+  assert.ok(workers[1].postedTypes.includes('init'), 'respawned worker must be re-init()ed');
+  assert.ok(workers[1].postedTypes.includes('run'), 'respawned worker must run the next script');
+});
+
+test('GradingWorkerExecutor brackets the worker init with start/done breadcrumbs', async () => {
+  // The init path (loadPyodide + env-config) used to be awaited with NO timer, so
+  // a wedged boot hung the whole grade with zero telemetry. It is now bracketed
+  // by grading_init_start/grading_init_done breadcrumbs (and bounded — see the
+  // timeout test below) so a future init hang is localizable server-side via the
+  // keepalive submit-phase funnel. Only the student submit path emits them
+  // (runAndSubmit wires reportPhase; instructor validation stays silent).
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'tests/test_pass.py', tier: 'public' }],
+    },
+    scriptBehaviors: {
+      'tests/test_pass.py': {
+        stdout: `${JSON.stringify({ shortResult: 'ok', status: 'pass' })}\n`,
+        stderr: '',
+        exitCode: 0,
+      },
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_init_bc',
+  );
+
+  const sources = harness.breadcrumbs.map(b => b.source);
+  // Exactly one start/done pair (init is cached across the suite's scripts).
+  assert.deepEqual(
+    sources.filter(s => s.startsWith('grading_init')),
+    ['grading_init_start', 'grading_init_done'],
+  );
+  // …and it brackets the run, between suite_started and suite_done.
+  const ordered = ['suite_started', 'grading_init_start', 'grading_init_done', 'suite_done']
+    .map(s => sources.indexOf(s));
+  assert.ok(ordered.every((idx, i) => idx >= 0 && (i === 0 || idx > ordered[i - 1])),
+    `init breadcrumbs out of order in ${JSON.stringify(sources)}`);
+});
+
+test('GradingWorkerExecutor bounds a wedged worker init: times out, retries once, then fails instead of hanging', async () => {
+  // A worker whose init never replies (loadPyodide that never resolves — the
+  // intermittent Pyodide-314 init hang) must NOT hang the grade forever. With a
+  // tiny init budget the executor times out, terminates, retries once on a fresh
+  // worker, and — when that also hangs — surfaces a bounded failure. Two
+  // grading_init_start breadcrumbs (the attempts) prove the retry; the run never
+  // exceeds the budget. This is the safety net the old unbounded init lacked.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    initPending: true,          // fake worker never replies to 'init'
+    gradingInitTimeoutMs: 25,   // tiny budget so the test is fast
+    zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'tests/test_pass.py', tier: 'public' }],
+    },
+  });
+
+  await assert.rejects(
+    harness.window.BrowserRunner.runAndSubmit(
+      new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+      'setup_init_hang',
+    ),
+    /init|configure Python/i,
+  );
+
+  const sources = harness.breadcrumbs.map(b => b.source);
+  assert.equal(sources.filter(s => s === 'grading_init_start').length, 2, 'two init attempts');
+  assert.equal(sources.filter(s => s === 'grading_init_failed').length, 2, 'both attempts reported failed');
+  assert.ok(!sources.includes('grading_init_done'), 'init must not report done when it never succeeds');
+
+  // Both spawned workers were terminated (the kill path on a wedged init).
+  const workers = harness.gradingWorkerFactory.created;
+  assert.equal(workers.length, 2, `expected two init attempts, saw ${workers.length}`);
+  assert.ok(workers.every(w => w.terminated), 'every wedged init worker must be terminated');
+});
+
+test('a grading-runtime init failure fails over (throws, posts nothing) even when the wasm loop swallows run errors', async () => {
+  // Regression guard for the Pyodide-3.14 WebKit grading break (the
+  // `call_indirect to a null table entry` trap during env-config). The REAL
+  // RunnerCore wasm catches a rejected run() and returns an exit-2 `error`
+  // ScriptOutput (wasm/Sources/RunnerWasm/main.swift), so a grading-worker that
+  // can't initialize would otherwise make executeSuites COMPLETE with an
+  // all-`error` collection — which runAndSubmit posts as a real 0% result,
+  // never reaching submitBrowserNotebook's server-failover catch. The init
+  // probe in runScripts must THROW before the loop so the failover fires.
+  //
+  // The default executeSuitesStub re-throws a rejected run() (so the existing
+  // "bounds a wedged worker init" test passes via the stub) — which HIDES this
+  // production gap. Here we model the wasm's swallowing faithfully: an
+  // executeSuites that resolves with error outcomes and NEVER rejects. The
+  // probe must still reject, and crucially must post NO browser result.
+  const swallowingExecuteSuites = (suites) => Promise.resolve(
+    suites.map((s) => ({
+      testName: s.script, testClass: null, tier: s.tier, status: 'error',
+      shortResult: 'browser executor: script run rejected', longResult: null,
+      points: 1, executionTimeMs: 0, memoryUsageBytes: null,
+      attemptNumber: 1, isFirstPassSuccess: false,
+    })),
+  );
+
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    initPending: true,          // worker init never replies → init fails
+    gradingInitTimeoutMs: 25,   // tiny budget so the test is fast
+    runnerExecuteSuites: swallowingExecuteSuites,
+    zipFiles: { 'tests/test_pass.py': '# pass\nJSON_RESULT_PASS\n' },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [{ script: 'tests/test_pass.py', tier: 'public' }],
+    },
+  });
+
+  await assert.rejects(
+    harness.window.BrowserRunner.runAndSubmit(
+      new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+      'setup_init_trap',
+    ),
+    /initialize|init/i,
+  );
+
+  // The whole point: a failed grading runtime must NOT post a 0% browser result.
+  // The submission belongs to the server-side failover backstop instead.
+  assert.equal(harness.postBodies.length, 0, 'a failed init must not post a browser result');
+});
+
+test('GradingWorkerExecutor grades pass/fail through one worker and classifies non-python on the main thread', async () => {
+  // Happy path of the worker executor: one worker is spawned and re-used for
+  // every python script (no terminate), pass/fail are graded from the worker's
+  // RAW output, and a shell script is rejected on the MAIN thread without ever
+  // touching the worker (its 'run' never reaches the worker).
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: {
+      'test_pass.py': '# pass\nJSON_RESULT_PASS\n',
+      'test_fail.py': '# fail\nJSON_RESULT_FAIL\n',
+      'test_shell.sh': 'echo hi\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 5,
+      testSuites: [
+        { script: 'test_pass.py', tier: 'public' },
+        { script: 'test_fail.py', tier: 'public' },
+        { script: 'test_shell.sh', tier: 'public' },
+      ],
+    },
+  });
+
+  const result = await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_worker_happy',
+  );
+
+  assert.deepEqual(
+    plain(result.outcomes.map(outcome => [outcome.testName, outcome.status])),
+    [
+      ['test_pass', 'pass'],
+      ['test_fail', 'fail'],
+      ['test_shell', 'error'],
+    ],
+  );
+  assert.match(result.outcomes[2].shortResult, /Shell scripts cannot run/);
+
+  // Exactly one worker, never terminated mid-run (dispose() at the end may
+  // terminate it, which is fine) — and the shell script was classified on the
+  // main thread, so the worker only ever ran the two python scripts.
+  const workers = harness.gradingWorkerFactory.created;
+  assert.equal(workers.length, 1, 'a non-timing-out run reuses one worker');
+  const runCount = workers[0].postedTypes.filter(t => t === 'run').length;
+  assert.equal(runCount, 2, 'only the two python scripts reached the worker (shell handled on main thread)');
+  assert.equal(harness.postBodies.length, 1, 'results are still posted');
+});
+
+test('per-script timeLimitSeconds in the manifest overrides the assignment default for that script', async () => {
+  // The assignment default is 12s; `slow.py` carries a 3s per-test override.
+  // The override must be the limit handed to the executor for `slow.py`, while
+  // `fast.py` (no override) still gets the assignment default.
+  const harness = await loadRunnerHarness({
+    useGradingWorker: true,
+    zipFiles: {
+      'slow.py': '# slow\nJSON_RESULT_PASS\n',
+      'fast.py': '# fast\nJSON_RESULT_PASS\n',
+    },
+    manifest: {
+      gradingMode: 'browser',
+      timeLimitSeconds: 12,
+      testSuites: [
+        { script: 'slow.py', tier: 'public', timeLimitSeconds: 3 },
+        { script: 'fast.py', tier: 'public' },
+      ],
+    },
+  });
+
+  await harness.window.BrowserRunner.runAndSubmit(
+    new TextEncoder().encode('{"nbformat":4,"metadata":{},"cells":[]}'),
+    'setup_per_test_limit',
+  );
+
+  // The happy path reuses one worker; its runCalls record the { script, limit }
+  // each script was launched with — the override is applied before executor.run.
+  const worker = harness.gradingWorkerFactory.created[0];
+  const limitFor = name => worker.runCalls.find(c => c.script === name)?.limit;
+  assert.equal(limitFor('slow.py'), 3, 'the per-script override is the limit for slow.py');
+  assert.equal(limitFor('fast.py'), 12, 'an override-less script keeps the assignment default');
 });
 
 test('extensionless Python test scripts dispatch via their shebang instead of failing as unsupported', async () => {

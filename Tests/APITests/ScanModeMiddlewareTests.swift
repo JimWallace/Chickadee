@@ -1,6 +1,6 @@
 import Fluent
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -39,7 +39,7 @@ import XCTVapor
                 (.POST, "/testsetups/setup_42/submit"),
             ]
             for (method, path) in gated {
-                try await app.testable().test(method, path) { res async in
+                try await app.testing().test(method, path) { res async in
                     #expect(
                         res.status == .serviceUnavailable,
                         "expected 503 for \(method.rawValue) \(path), got \(res.status)"
@@ -52,10 +52,10 @@ import XCTVapor
 
     @Test func nonGatedRoutesStillWorkWhenEnabled() async throws {
         try await withApp(try await makeApp(scanEnabled: true)) { app in
-            try await app.testable().test(.POST, "/login") { res async in
+            try await app.testing().test(.POST, "/login") { res async in
                 #expect(res.status == .ok)
             }
-            try await app.testable().test(.GET, "/dashboard") { res async in
+            try await app.testing().test(.GET, "/dashboard") { res async in
                 #expect(res.status == .ok)
             }
         }
@@ -63,10 +63,10 @@ import XCTVapor
 
     @Test func gatedRoutesPassThroughWhenDisabled() async throws {
         try await withApp(try await makeApp(scanEnabled: false)) { app in
-            try await app.testable().test(.POST, "/api/v1/submissions") { res async in
+            try await app.testing().test(.POST, "/api/v1/submissions") { res async in
                 #expect(res.status == .ok)
             }
-            try await app.testable().test(.POST, "/admin/users/x/delete") { res async in
+            try await app.testing().test(.POST, "/admin/users/x/delete") { res async in
                 #expect(res.status == .ok)
             }
         }

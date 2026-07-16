@@ -19,6 +19,10 @@ struct AppConfig: Sendable {
     let lockout: LoginRateLimitConfiguration
     let workers: WorkerConfig
     let brightspace: BrightSpaceSyncConfig?
+    /// Deployment-level BrightSpace app creds (URL/App ID/App Key), present
+    /// whenever those three env vars are set even if no user key is configured.
+    /// The user key may instead arrive via the admin authorize flow.
+    let brightspaceApp: BrightSpaceAppCredentials?
     let diagnostics: DiagnosticsConfiguration
     let alerts: ServerHealthAlertConfiguration
     let outboundProxy: OutboundProxyConfig?
@@ -51,6 +55,7 @@ struct AppConfig: Sendable {
             ),
             workers: WorkerConfig.fromEnvironment(),
             brightspace: BrightSpaceSyncConfig.fromEnvironment(),
+            brightspaceApp: BrightSpaceAppCredentials.fromEnvironment(),
             diagnostics: DiagnosticsConfiguration.fromEnvironment(),
             alerts: ServerHealthAlertConfiguration.fromEnvironment(),
             outboundProxy: OutboundProxyConfig.fromEnvironment(),
@@ -63,7 +68,10 @@ struct AppConfig: Sendable {
     /// replaced with `[redacted]`. Use the grep guardrail in CI to keep this
     /// honest.
     func logSummary(to logger: Logger) {
-        logger.info("AppConfig loaded — auth=\(auth.mode.rawValue), database=\(database.backend.rawValue)")
+        let poolDescription = database.maxConnectionsPerEventLoop.map(String.init) ?? "default"
+        logger.info(
+            "AppConfig loaded — auth=\(auth.mode.rawValue), database=\(database.backend.rawValue), dbPoolPerLoop=\(poolDescription)"
+        )
         if security.publicBaseURL != nil || security.enforceHTTPS {
             logger.info(
                 "security: publicBaseURL=\(security.publicBaseURL?.absoluteString ?? "(unset)"), enforceHTTPS=\(security.enforceHTTPS), trustForwardedProto=\(security.trustForwardedProto), sessionCookieSecure=\(security.sessionCookieSecure)"
@@ -99,9 +107,13 @@ struct AppConfig: Sendable {
             logger.info(
                 "brightspace: baseURL=\(bs.baseURL), appID=\(redactPresence(bs.appID)), appKey=[redacted], userID=\(redactPresence(bs.userID)), userKey=[redacted], debounceSecs=\(bs.debounceSecs)"
             )
+        } else if let bsApp = brightspaceApp {
+            logger.info(
+                "brightspace: baseURL=\(bsApp.baseURL), appID=\(redactPresence(bsApp.appID)), appKey=[redacted], userKey=(awaiting authorize), debounceSecs=\(bsApp.debounceSecs)"
+            )
         }
         logger.info(
-            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots/audit/submissions)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d/\(diagnostics.auditLogRetentionDays)d/\(diagnostics.submissionRetentionDays)d"
+            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots/audit/submissions)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d/\(diagnostics.auditLogRetentionDays)d/\(diagnostics.submissionRetentionDays)d, deployStateDir=\(diagnostics.deployStateDirectory)"
         )
         if alerts.enabled {
             logger.info(
@@ -179,8 +191,7 @@ extension AppConfig {
             mode: authMode,
             requestedMode: authMode,
             nonSSOModesEnabled: true,
-            ssoAdminUsers: [],
-            ssoInstructorUsers: []
+            ssoAdminUsers: []
         )
         return AppConfig(
             auth: auth,
@@ -191,6 +202,7 @@ extension AppConfig {
             lockout: .default,
             workers: .default,
             brightspace: nil,
+            brightspaceApp: nil,
             // Mirror production defaults (enabled by default) so test apps
             // exercise the same observability code paths the runtime uses.
             diagnostics: DiagnosticsConfiguration(
@@ -202,7 +214,8 @@ extension AppConfig {
                 recentMetricsWindowHours: 24,
                 pruneIntervalHours: 24,
                 auditLogRetentionDays: 90,
-                submissionRetentionDays: 365
+                submissionRetentionDays: 365,
+                deployStateDirectory: "/deploy-state"
             ),
             alerts: .default,
             outboundProxy: nil,

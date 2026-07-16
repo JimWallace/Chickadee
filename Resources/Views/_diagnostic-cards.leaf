@@ -1,21 +1,54 @@
 <!--
-    Diagnostic-cards loop shared by the instructor dashboard
-    (`assignments.leaf`) and the per-assignment submissions drilldown
-    (`assignment-submissions.leaf`).  Expects a `metrics` array in
-    scope, each entry shaped `{ label, value }`.  The outer `<section>`
-    wrapper stays in the caller so the caller can scope styling via
-    its own section class (`instructor-diagnostics`,
-    `assignment-diagnostics`, …).
+    Diagnostic-cards loop for the per-assignment submissions drilldown
+    (`assignment-submissions.leaf`).  Expects a `metrics` array in scope, each
+    entry an `AssignmentStatCard` shaped `{ label, value, hasSpark,
+    sparkSummary, bars[], cyclable, windowChip, windows[] }`.
 
-    `admin.leaf` keeps its own hardcoded 5-card structure — those
-    cards have JS-targeted `id="diag-…"` attributes filled in by
-    polling, not a Swift-side `metrics` array.
+      * `hasSpark`  → a fixed server-rendered distribution sparkline (grade
+                      spread, attempts) drawn from pre-normalized bar heights.
+      * `cyclable`  → the Submissions card: three pre-rendered windows
+                      (24h/7d/30d); the 24h view shows server-side and the
+                      page's click handler reveals the others (cycle.js inline).
+
+    Empty buckets carry `isEmpty` and render as a faint baseline tick (see
+    `.spark-fill-empty`) so a populated bucket is always visibly distinct while
+    the chart still shows its full axis.  The outer `<section>` wrapper stays in
+    the caller so it can scope styling via its own section class
+    (`assignment-diagnostics`).
+
+    The instructor dashboard (`assignments.leaf`) and admin dashboard
+    (`admin.leaf`) keep their own card markup — their sparklines poll a
+    `/metrics/cards` endpoint, rather than rendering windows server-side.
 -->
 <div class="diagnostics-cards">
     #for(metric in metrics):
+    #if(metric.cyclable):
+    <article class="diagnostic-card diagnostic-card-cyclable" data-subm-trend
+             role="button" tabindex="0"
+             aria-label="Submissions over time. Press to change the time window between 24 hours, 7 days, and 30 days.">
+        <div class="diagnostic-label"><span class="diagnostic-window-chip" data-subm-chip>#(metric.windowChip)</span> #(metric.label)</div>
+        <div class="diagnostic-value" data-subm-value>#(metric.value)</div>
+        #for(win in metric.windows):
+        <div class="diagnostic-spark subm-trend-spark" data-subm-window="#(win.key)" data-subm-headline="#(win.headline)" aria-hidden="true"#if(win.initiallyHidden): hidden#endif>
+            #for(bar in win.bars):
+            <div class="spark-slot" title="#(bar.title)"><span class="spark-fill#if(bar.isEmpty): spark-fill-empty#endif" style="--bar-h:#(bar.heightPercent)%"></span></div>
+            #endfor
+        </div>
+        #endfor
+    </article>
+    #else:
     <article class="diagnostic-card">
         <div class="diagnostic-label">#(metric.label)</div>
         <div class="diagnostic-value">#(metric.value)</div>
+        #if(metric.hasSpark):
+        <div class="diagnostic-spark" aria-hidden="true">
+            #for(bar in metric.bars):
+            <div class="spark-slot" title="#(bar.title)"><span class="spark-fill#if(bar.isEmpty): spark-fill-empty#endif" style="--bar-h:#(bar.heightPercent)%"></span></div>
+            #endfor
+        </div>
+        <span class="visually-hidden">#(metric.sparkSummary)</span>
+        #endif
     </article>
+    #endif
     #endfor
 </div>

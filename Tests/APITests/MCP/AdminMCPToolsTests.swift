@@ -4,10 +4,11 @@
 
 import Core
 import Fluent
+import Foundation
 import Logging
 import Testing
 import Vapor
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -43,6 +44,88 @@ import XCTVapor
             _ = try await makeTestUser(on: app, username: "ms-prof", role: "instructor")
             await #expect(throws: MCPToolError.self) {
                 _ = try await GetMetricsSnapshotTool().execute(.init(), context(subject: "ms-prof"))
+            }
+        }
+    }
+
+    @Test func getDeployStatusReturnsDaemonStateForAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "dep-admin", role: "admin")
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("deploy-state-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let status = """
+                {"state":"idle","deployedVersion":"0.4.558","latestSeen":"v0.4.558",\
+                "detail":"up to date","paused":false,"updatedAt":"2026-06-28T17:40:00Z"}
+                """
+            try status.write(
+                to: dir.appendingPathComponent("status.json"), atomically: true, encoding: .utf8)
+            app.deployStateDirectory = dir.path
+
+            let output = try await GetDeployStatusTool().execute(
+                .init(), context(subject: "dep-admin"))
+            #expect(output.available)
+            #expect(output.deployedVersion == "0.4.558")
+            #expect(output.state == "idle")
+            #expect(output.paused == false)
+        }
+    }
+
+    @Test func getDeployStatusReportsUnavailableWhenNoFile() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "dep-admin2", role: "admin")
+            app.deployStateDirectory =
+                FileManager.default.temporaryDirectory
+                .appendingPathComponent("missing-\(UUID().uuidString)").path
+            let output = try await GetDeployStatusTool().execute(
+                .init(), context(subject: "dep-admin2"))
+            #expect(!output.available)
+            #expect(output.note != nil)
+        }
+    }
+
+    @Test func getDeployStatusRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "dep-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetDeployStatusTool().execute(
+                    .init(), context(subject: "dep-prof"))
+            }
+        }
+    }
+
+    @Test func getDeployHistoryReturnsRecentEntriesNewestFirst() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "hist-admin", role: "admin")
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("deploy-hist-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let lines = """
+                {"ts":"2026-06-28T17:00:00Z","version":"v0.4.557","action":"deploy","result":"success","detail":""}
+                {"ts":"2026-06-28T17:30:00Z","version":"v0.4.558","action":"deploy","result":"success","detail":"running=0.4.558"}
+                """
+            try lines.write(
+                to: dir.appendingPathComponent("history.jsonl"), atomically: true, encoding: .utf8)
+            app.deployStateDirectory = dir.path
+
+            let output = try await GetDeployHistoryTool().execute(
+                .init(limit: 10), context(subject: "hist-admin"))
+            #expect(output.available)
+            #expect(output.entries.count == 2)
+            // Newest first.
+            #expect(output.entries.first?.version == "v0.4.558")
+            #expect(output.entries.last?.version == "v0.4.557")
+        }
+    }
+
+    @Test func getDeployHistoryRejectsNonAdmin() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "hist-prof", role: "instructor")
+            await #expect(throws: MCPToolError.self) {
+                _ = try await GetDeployHistoryTool().execute(
+                    .init(limit: nil), context(subject: "hist-prof"))
             }
         }
     }
@@ -95,6 +178,51 @@ import XCTVapor
                     "suite_started", "suite_done", "result_posting", "result_posted",
                 ])
             #expect(output.submitFunnel.map(\.count) == [5, 5, 4, 4, 3, 2, 2])
+        }
+    }
+
+    @Test func getBrowserDiagnosticsBuildsKernelBootFunnelInPhaseOrder() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "kb-admin", role: "admin")
+            let student = try await makeTestUser(on: app, username: "kb-student", role: "student")
+            let studentID = try student.requireID()
+            // kernel_phase breadcrumbs from the in-iframe collector, inserted out
+            // of order. The funnel must come back in canonical boot-phase order so
+            // the drop-off (where the kernel stalled) reads top-to-bottom: here
+            // boot_start=6 → app_ready=6 → kernel_starting=5 → kernel_idle=2, i.e.
+            // 4 of 6 boots never reached idle (the silent-spinner signature).
+            let phaseSeeds: [(String, Int)] = [
+                ("kernel_idle", 2),
+                ("boot_start", 6),
+                ("kernel_starting", 5),
+                ("app_ready", 6),
+            ]
+            for (phase, count) in phaseSeeds {
+                for _ in 0..<count {
+                    try await APIClientDiagnostic(
+                        userID: studentID, testSetupID: nil, kind: "kernel_phase",
+                        failedChecks: nil, userAgent: "UA", message: nil,
+                        stack: nil, source: phase
+                    ).save(on: app.db)
+                }
+            }
+            // A kernel_error must NOT leak into the phase funnel (different kind).
+            try await APIClientDiagnostic(
+                userID: studentID, testSetupID: nil, kind: "kernel_error",
+                failedChecks: nil, userAgent: "UA", message: "blocked",
+                stack: nil, source: "csp_violation"
+            ).save(on: app.db)
+
+            let output = try await GetBrowserDiagnosticsTool().execute(
+                .init(), context(subject: "kb-admin"))
+
+            #expect(
+                output.kernelBootFunnel.map(\.key) == [
+                    "boot_start", "app_ready", "kernel_starting", "kernel_idle",
+                ])
+            #expect(output.kernelBootFunnel.map(\.count) == [6, 6, 5, 2])
+            // The error shows up by source, not in the boot funnel.
+            #expect(output.bySource.contains { $0.key == "csp_violation" && $0.count == 1 })
         }
     }
 

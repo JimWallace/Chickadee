@@ -23,7 +23,7 @@ private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
 
 // MARK: - TestSetupCacheTests
 
-@Suite struct TestSetupCacheTests {
+@Suite(.timeLimit(.minutes(3))) struct TestSetupCacheTests {
 
     // MARK: - Helpers
 

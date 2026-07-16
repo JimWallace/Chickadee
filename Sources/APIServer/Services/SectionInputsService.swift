@@ -49,12 +49,19 @@ enum SectionInputsService {
     }
 
     /// Validate + persist a replacement set of inputs for one section.
+    ///
+    /// `db` carries the content reads/writes (the manifest mutation); on the MCP
+    /// path that is the least-privilege `.mcp` pool. `seedDB` carries the
+    /// acting-user seed bookkeeping (`assignment_personalization_seeds`) and on
+    /// the MCP path MUST be the owner pool (`ToolContext.mainDB`) — the
+    /// `chickadee_mcp` role is denied that table; web callers pass `req.db`.
     static func apply(
         setup: APITestSetup,
         sectionID: String,
         inputs: Inputs,
         seed: SeedContext,
-        on db: any Database
+        on db: any Database,
+        seedDB: any Database
     ) async throws {
         guard let manifest = setup.decodedManifest() else {
             throw WebAssignmentError.internalFailure(reason: "Manifest is not valid JSON.")
@@ -64,9 +71,11 @@ enum SectionInputsService {
         let seenNames = try validateNames(variables: inputs.variables, expressions: inputs.expressions)
         // 2. Cross-section + global clash check.
         try validateAgainstOtherScopes(seenNames: seenNames, manifest: manifest, sectionID: sectionID)
-        // 3. Save-time eval check against the acting account's own seed.
+        // 3. Save-time eval check against the acting account's own seed. The
+        // seed lookup/insert runs on `seedDB` (the owner pool on the MCP path),
+        // not the content `db`, so it never needs a grant on the `.mcp` role.
         try await evaluateForActingSeed(
-            manifest: manifest, sectionID: sectionID, inputs: inputs, seed: seed, on: db)
+            manifest: manifest, sectionID: sectionID, inputs: inputs, seed: seed, seedDB: seedDB)
         // 4. Persist onto the manifest's section list.
         try await persist(setup: setup, sectionID: sectionID, inputs: inputs, on: db)
     }
@@ -143,12 +152,17 @@ enum SectionInputsService {
     /// Runs every expression once against the acting account's own seed so
     /// typos surface before students hit them.  No-op when there are no
     /// expressions or no acting seed.
+    ///
+    /// `seedDB` is the pool the acting-user seed bookkeeping runs on — the owner
+    /// pool on the MCP path (`assignment_personalization_seeds` is denied to the
+    /// `chickadee_mcp` role). The expression eval itself is a `python3`
+    /// subprocess and touches no database.
     static func evaluateForActingSeed(
         manifest: TestProperties,
         sectionID: String,
         inputs: Inputs,
         seed: SeedContext,
-        on db: any Database
+        seedDB: any Database
     ) async throws {
         guard !inputs.expressions.isEmpty,
             let userID = seed.actingUserID,
@@ -156,7 +170,7 @@ enum SectionInputsService {
         else { return }
 
         let seedHex = try await AssignmentSeedStore.ensureSeed(
-            userID: userID, assignmentID: assignmentID, on: db)
+            userID: userID, assignmentID: assignmentID, on: seedDB)
         // Combine globals + this section's new vars + other sections' vars
         // (matches the runtime scope the evaluator uses at first-open).
         var staticVars: [FamilyVariable] = manifest.globalVariables

@@ -1,22 +1,29 @@
 // Tests/APITests/JupyterLiteConfigTests.swift
 //
 // Regression guard for the JupyterLite bundle config (`Public/jupyterlite/
-// jupyter-lite.json`).  Asserts the disabledExtensions entries we rely on
-// are present — currently:
+// jupyter-lite.json`).  Asserts the service-worker-manager plugin is DISABLED
+// (i.e. listed in disabledExtensions).
 //
-//   @jupyterlite/application-extension:service-worker-manager
+// History — this guard has flipped twice, tracking the kernel's sync mechanism:
 //
-// Background: in JupyterLite 0.7.x the pyodide-kernel auto-mounts the
-// JupyterLite Drive whenever the service-worker-manager plugin reports
-// `enabled` (or the page is cross-origin isolated).  When mounted, the
-// kernel POSTs to `/api/drive` expecting the service worker to intercept
-// and broadcast the call to the in-browser drive plugin.  On Chickadee
-// the SW interception was inconsistent — students were seeing 404s on
-// `/jupyterlite/api/drive` and the kernel ending up in "Unknown" state
-// (PR #467 → v0.4.149 then v0.4.150).  Disabling the SW manager forces
-// `mountDrive=false` in the kernel and avoids the entire failure mode.
-// We don't rely on the JupyterLite Drive for persistence — Chickadee
-// has its own server-side notebook snapshot mechanism.
+//   * v0.4.150 (PR #467) DISABLED the SW (kernel stuck "Unknown" from an SW
+//     registration/controller race) — but that removed the kernel's only
+//     synchronous-execution path, so `input()` hard-froze the page (#959).
+//   * v0.4.467 RE-ENABLED the SW to restore sync and kill the freeze — at the
+//     cost of reintroducing the SW-control "Kernel Unknown" race on devices
+//     where the SW failed to control the page in time.
+//   * Now: cross-origin isolation is unconditional, so the kernel uses
+//     `SharedArrayBuffer` for synchronous stdin/Drive and no longer needs the
+//     SW at all.  The SW is therefore DISABLED again — but this time there is no
+//     freeze (SAB carries sync) AND no control race (no SW to race).  This is
+//     the deterministic end state: one sync path, no fallback.
+//
+// This is browser-verified by the editor-smoke harness
+// (`Tools/editor-smoke-test`): the selftest boots the editor with no SW and
+// asserts the kernel + `input()` work over SAB, and the authenticated
+// notebook-page e2e loads the student's notebook from the Drive and grades a
+// real submission — both under Chromium AND WebKit (Safari engine).  If you ever
+// re-ENABLE the SW, restore the old "must be enabled" assertion and rationale.
 
 import Foundation
 import Testing
@@ -33,6 +40,9 @@ import Testing
     /// built bundle on the next rebuild.
     private let sourceConfigPath = "Tools/jupyterlite/jupyter-lite.json"
 
+    private static let serviceWorkerManager =
+        "@jupyterlite/application-extension:service-worker-manager"
+
     @Test func sourceConfigDisablesServiceWorkerManager() throws {
         let url = URL(fileURLWithPath: sourceConfigPath)
         let data = try Data(contentsOf: url)
@@ -44,16 +54,13 @@ import Testing
 
         let disabled = cfg["disabledExtensions"] as? [String] ?? []
         let sourceMsg: Comment = """
-            Expected source JupyterLite config (\(sourceConfigPath)) to disable the \
-            service-worker-manager plugin so pyodide-kernel sets mountDrive=false \
-            after the next rebuild. Got disabledExtensions=\(disabled). \
-            Re-add the entry; do not remove without checking that pyodide-kernel \
-            no longer auto-mounts the Drive (the failure mode caught in PR #467 / v0.4.150).
+            Expected source JupyterLite config (\(sourceConfigPath)) to DISABLE the \
+            service-worker-manager plugin (listed in disabledExtensions): the kernel \
+            now syncs stdin/Drive over SharedArrayBuffer (cross-origin isolation), so \
+            the SW is redundant. Got disabledExtensions=\(disabled). Do not re-enable \
+            without reverting the editor to the SW sync path — see the file header.
             """
-        #expect(
-            disabled.contains("@jupyterlite/application-extension:service-worker-manager"),
-            sourceMsg
-        )
+        #expect(disabled.contains(Self.serviceWorkerManager), sourceMsg)
     }
 
     @Test func bundleDisablesServiceWorkerManager() throws {
@@ -67,14 +74,12 @@ import Testing
 
         let disabled = cfg["disabledExtensions"] as? [String] ?? []
         let bundleMsg: Comment = """
-            Expected built JupyterLite bundle to disable the service-worker-manager \
-            plugin so pyodide-kernel sets mountDrive=false. Got disabledExtensions=\(disabled). \
-            Add it to Tools/jupyterlite/jupyter-lite.json and re-run scripts/build-jupyterlite.sh.
+            Expected built JupyterLite bundle to DISABLE the service-worker-manager \
+            plugin (listed in disabledExtensions); the kernel uses SharedArrayBuffer \
+            now. Got disabledExtensions=\(disabled). Add it to \
+            Tools/jupyterlite/jupyter-lite.json and sync the served config.
             """
-        #expect(
-            disabled.contains("@jupyterlite/application-extension:service-worker-manager"),
-            bundleMsg
-        )
+        #expect(disabled.contains(Self.serviceWorkerManager), bundleMsg)
     }
 
     @Test func bundleAppVersionMatchesRequirementsPin() throws {

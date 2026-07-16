@@ -30,9 +30,9 @@ extension InstructorDashboardRoutes {
         else {
             return .unavailable("No active course selected.")
         }
-        guard let client = req.application.brightSpaceClient else {
+        guard let client = try await req.application.brightSpaceClient(forCourse: course) else {
             return .unavailable(
-                "BrightSpace is not configured on this server.", configured: false)
+                "BrightSpace isn't connected for this course yet.", configured: false)
         }
         guard let orgUnitID = course.brightspaceOrgUnitID, !orgUnitID.isEmpty else {
             return .unavailable(
@@ -48,7 +48,7 @@ extension InstructorDashboardRoutes {
             return .unavailable("Couldn't fetch the LEARN classlist: \(error).")
         }
 
-        let learnIdentities = LearnRosterReconciler.identitySet(from: classlist)
+        let learnIdentities = BrightSpaceIdentityIndex(classlist: classlist)
 
         var notOnLearn: [String] = []
         var unverifiable: [String] = []
@@ -57,16 +57,15 @@ extension InstructorDashboardRoutes {
         // Enrolled (logged-in) students: match on student ID, fall back to
         // username.  Only `student` rows can have "dropped"; instructor/admin
         // test accounts aren't roster members and must never be flagged.
-        let enrollments = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == courseUUID)
-            .all()
-        let enrolledUserIDs = enrollments.map(\.userID)
+        // Only `.student`-role enrollments are roster members; TA/instructor
+        // enrollments (staff who joined to see the course) are never flagged
+        // (#417 Slice G2 — was the global `role == "student"`).
+        let studentUserIDs = try await studentUserIDsInCourse(courseUUID, on: req.db)
         let enrolledUsers =
-            enrolledUserIDs.isEmpty
+            studentUserIDs.isEmpty
             ? []
             : try await APIUser.query(on: req.db)
-                .filter(\.$id ~~ enrolledUserIDs)
-                .filter(\.$role == UserRole.student.rawValue)
+                .filter(\.$id ~~ Array(studentUserIDs))
                 .all()
         for student in enrolledUsers {
             guard let id = student.id else { continue }

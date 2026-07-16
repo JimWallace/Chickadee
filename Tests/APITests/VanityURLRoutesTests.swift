@@ -2,10 +2,11 @@
 //
 // Tests for GET /:courseCode/:assignmentSlug vanity URL redirects.
 
+import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -95,7 +96,7 @@ import XCTVapor
             let user = try await APIUser.query(on: app.db)
                 .filter(\.$username == username).first()
         else {
-            XCTFail("Expected user \(username) to exist")
+            Issue.record("Expected user \(username) to exist")
             return
         }
         try await APICourseEnrollment(
@@ -356,10 +357,12 @@ import XCTVapor
         }
     }
 
-    @Test func vanityURL_instructor_bypassesEnrollment() async throws {
+    @Test func vanityURL_courseStaff_resolvesAssignment() async throws {
         try await withApp(app) { _ in
-            // Instructors and admins skip the enrollment check so they can
-            // QA assignments in courses they aren't formally enrolled in.
+            // Course staff (a per-course instructor/TA) resolve the vanity URL to
+            // the notebook. A viewer no longer bypasses enrollment by holding a
+            // global instructor role — authority is per-course now (#417 Slice G),
+            // so the instructor is enrolled as staff in this course.
             let course = try await seedCourse(code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van_enr02")
@@ -367,6 +370,11 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "vanity_instructor", password: "pw",
                 role: "instructor", on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "vanity_instructor").first())
+            try await APICourseEnrollment(
+                userID: try instructor.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
             try await app.asyncTest(
                 .GET, "/hlth230/lab-1",
                 beforeRequest: { req in

@@ -121,11 +121,21 @@ private func makeOutcome(item: SuiteItem, output: ScriptOutput, attemptNumber: I
 /// non-blank, otherwise the script filename with its extension stripped (or the
 /// raw filename if it has no stem).
 private func outcomeTestName(for item: SuiteItem) -> String {
-    if let name = nonBlankDisplayName(item.displayName) {
+    runnerOutcomeTestName(displayName: item.displayName, script: item.script)
+}
+
+/// The `testName` a runner stamps on the outcome for a suite entry: the
+/// instructor's display name when present and non-blank, otherwise the script
+/// filename with its extension stripped (or the raw filename if it has no
+/// stem).  Public because it is a cross-target contract: achievement
+/// `testPass` refs (Core) must resolve against the same name this rule
+/// produces, so both sides call this one implementation instead of drifting.
+public func runnerOutcomeTestName(displayName: String?, script: String) -> String {
+    if let name = nonBlankDisplayName(displayName) {
         return name
     }
-    let stem = scriptStem(item.script)
-    return stem.isEmpty ? item.script : stem
+    let stem = runnerScriptStem(script)
+    return stem.isEmpty ? script : stem
 }
 
 /// Returns `name` unchanged if it has any non-(space/tab) character, else nil.
@@ -142,7 +152,13 @@ private func nonBlankDisplayName(_ name: String?) -> String? {
 /// Strips the last filename extension, mirroring `NSString.deletingPathExtension`
 /// for the bare-filename case the runner always sees. A leading dot is treated
 /// as part of the name (`.gitignore` stays `.gitignore`), and a name with no dot
-/// is returned unchanged.
+/// is returned unchanged.  Public for the same cross-target contract as
+/// `runnerOutcomeTestName` — achievement refs may be authored as filenames and
+/// must strip to the same stem.
+public func runnerScriptStem(_ name: String) -> String {
+    scriptStem(name)
+}
+
 private func scriptStem(_ name: String) -> String {
     guard let dotIndex = name.lastIndex(of: "."), dotIndex != name.startIndex else {
         return name

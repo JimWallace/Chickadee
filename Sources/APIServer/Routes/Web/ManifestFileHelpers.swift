@@ -71,7 +71,8 @@ func updateManifestAddingScript(
             generatedBy: e.generatedBy,
             generatedByCheck: e.generatedByCheck,
             sectionID: e.sectionID,
-            hint: e.hint
+            hint: e.hint,
+            timeLimitSeconds: e.timeLimitSeconds
         )
     }
     let nextOrder = (existing.map(\.order).max() ?? 0) + 1
@@ -85,19 +86,25 @@ func updateManifestAddingScript(
         generatedBy: entry.generatedBy,
         generatedByCheck: entry.generatedByCheck,
         sectionID: entry.sectionID,
-        hint: entry.hint
+        hint: entry.hint,
+        timeLimitSeconds: entry.timeLimitSeconds
     )
     let updated = existing + [newEntry]
     return try? makeWorkerManifestJSON(
         testSuites: updated,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
+        timeLimitSeconds: props.timeLimitSeconds,
         starterNotebook: props.starterNotebook,
         patternFamilies: props.patternFamilies,
         notebookChecks: props.notebookChecks,
         sections: props.sections,
         globalVariables: props.globalVariables,
-        globalExpressions: props.globalExpressions
+        globalExpressions: props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
+        datasets: props.datasets
     )
 }
 
@@ -128,19 +135,25 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
                 generatedBy: e.generatedBy,
                 generatedByCheck: e.generatedByCheck,
                 sectionID: e.sectionID,
-                hint: e.hint
+                hint: e.hint,
+                timeLimitSeconds: e.timeLimitSeconds
             )
         }
     return try? makeWorkerManifestJSON(
         testSuites: updated,
         includeMakefile: props.makefile != nil,
         gradingMode: props.gradingMode.rawValue,
+        timeLimitSeconds: props.timeLimitSeconds,
         starterNotebook: props.starterNotebook,
         patternFamilies: props.patternFamilies,
         notebookChecks: props.notebookChecks,
         sections: props.sections,
         globalVariables: props.globalVariables,
-        globalExpressions: props.globalExpressions
+        globalExpressions: props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
+        datasets: props.datasets
     )
 }
 
@@ -148,6 +161,7 @@ func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],
     includeMakefile: Bool,
     gradingMode: String = "worker",
+    timeLimitSeconds: Int = 10,
     starterNotebook: String? = "assignment.ipynb",
     patternFamilies: [PatternFamily] = [],
     notebookChecks: [NotebookCheck] = [],
@@ -156,7 +170,8 @@ func makeWorkerManifestJSON(
     globalExpressions: [PersonalizationExpression] = [],
     achievements: [Achievement] = [],
     disabledBuiltInAwardIDs: [String] = [],
-    builtInAchievementsSeeded: Bool = false
+    builtInAchievementsSeeded: Bool = false,
+    datasets: [DatasetSpec] = []
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -168,7 +183,7 @@ func makeWorkerManifestJSON(
         "gradingMode": gradingMode,
         "requiredFiles": [],
         "testSuites": testSuiteJSON,
-        "timeLimitSeconds": 10,
+        "timeLimitSeconds": timeLimitSeconds,
         "makefile": includeMakefile ? ["target": NSNull()] : NSNull(),
     ]
     if let starterNotebook {
@@ -196,6 +211,9 @@ func makeWorkerManifestJSON(
     // Slice 2 — assignment-scope expressions (notebook only). Each
     // entry is `{ name, expression }`.
     try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
+    // Phase 1 dataset specs (authoring-side only; `runnerSanitized()` strips them
+    // before sending to the runner so older workers aren't affected).
+    try spliceEncodedArray(into: &manifest, key: "datasets", values: datasets)
     // Display/award-only fields (server-side; `runnerSanitized()` strips them).
     // Spliced here so a suite rebuild doesn't wipe authored achievements or the
     // instructor's built-in-award toggles — `makeWorkerManifestJSON` builds a
@@ -267,6 +285,12 @@ private func testSuiteEntryToDict(_ entry: ConfiguredSuiteEntry) -> [String: Any
     }
     if let hint = entry.hint, !hint.isEmpty {
         dict["hint"] = hint
+    }
+    // Per-test execution time limit override (seconds). Absent = inherit the
+    // assignment-wide default. Only positive values are meaningful; a nil/0
+    // value is omitted so the decoder falls back to the default.
+    if let limit = entry.timeLimitSeconds, limit > 0 {
+        dict["timeLimitSeconds"] = limit
     }
     return dict
 }

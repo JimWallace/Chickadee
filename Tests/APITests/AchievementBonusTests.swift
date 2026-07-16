@@ -9,7 +9,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -57,9 +57,9 @@ import XCTVapor
                 userID: try student.requireID(), on: app)
             // Earned 18/20; the class reached the goal (progress 1.0) → +5 bonus.
             try await APIResult(
-                id: "csv_bonus_res", submissionID: "csv_bonus_sub",
-                collectionJSON: #"{"earnedPoints":18,"totalPoints":20,"passCount":18,"totalTests":20}"#
-            ).save(on: app.db)
+                id: "csv_bonus_res", submissionID: "csv_bonus_sub"
+            ).saveWithCollection(
+                json: #"{"earnedPoints":18,"totalPoints":20,"passCount":18,"totalTests":20}"#, on: app.db)
             try await APIAchievementResult(
                 testSetupID: "csv_bonus_setup", achievementID: "g_csv",
                 studentsMeeting: 8, denominator: 10, progress: 1.0, locked: false,

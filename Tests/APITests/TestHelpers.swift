@@ -12,7 +12,7 @@ import Leaf
 import LeafKit
 import SQLKit
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -50,7 +50,18 @@ func configureTestDatabase(_ app: Application) async throws {
 
     registerMigrations(on: app)
 
+    // FluentKit logs two info lines per migration ("Starting/Finished prepare").
+    // Across the API suite's ~1,100 per-test Applications × 50+ migrations that
+    // is >120k log lines that bury real test failures in CI output. Quiet just
+    // the migration burst — the test body keeps its normal level (restored
+    // below), so nothing that inspects warnings/errors (the query_logs / ring
+    // buffer tests) is affected. Override the floor with TEST_LOG_LEVEL (e.g.
+    // =info) when debugging migrations.
+    let priorLogLevel = app.logger.logLevel
+    app.logger.logLevel =
+        Environment.get("TEST_LOG_LEVEL").flatMap(Logger.Level.init(rawValue:)) ?? .warning
     try await app.autoMigrate()
+    app.logger.logLevel = priorLogLevel
 }
 
 struct TestPostgresSchemaKey: StorageKey {
@@ -163,6 +174,49 @@ extension Application {
     }
 }
 
+/// Enrols `username` as a per-course instructor in the shared TEST101 course so
+/// the per-course `/instructor` gate (Phase 5) admits them. Idempotent.
+func enrollAsTestInstructor(
+    username: String, on app: Application, courseCode: String = "TEST101"
+) async throws {
+    let courseID = try await app.testCourseID(code: courseCode)
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+    else { return }
+    let userID = try user.requireID()
+    // Upsert to `.instructor` — a `.auto` course auto-enrolls the user at login
+    // and (post role-collapse, #417 Slice G2) seeds a non-admin as a per-course
+    // `.student`, so skipping on "already enrolled" could leave them a student
+    // and 403 the per-course staff gates.
+    if let existing = try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).filter(\.$course.$id == courseID).first()
+    {
+        if existing.role != .instructor {
+            existing.role = .instructor
+            try await existing.save(on: app.db)
+        }
+    } else {
+        try await APICourseEnrollment(userID: userID, courseID: courseID, role: .instructor)
+            .save(on: app.db)
+    }
+}
+
+/// Demotes every one of `username`'s course enrollments to `.student` — the
+/// per-course equivalent of the retired "downgrade the global role" move (#417
+/// Slice G2 collapsed the deployment role to user/admin/mcp, so teaching
+/// authority lives on the enrollment). After this the user is staff nowhere, so
+/// MCP content consent / refresh re-authorization (`isStaffAnywhere`) must fail.
+func demoteToStudentEverywhere(username: String, on app: Application) async throws {
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first()
+    else { return }
+    let userID = try user.requireID()
+    for enrollment in try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).all()
+    {
+        enrollment.role = .student
+        try await enrollment.save(on: app.db)
+    }
+}
+
 // MARK: - Async app lifecycle
 
 /// Runs an async test body with a Vapor application and always shuts it down.
@@ -256,13 +310,14 @@ func makeTestApp(
         let tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
             .path
-        let dirs = ["results/", "testsetups/", "submissions/"].map { tmpDir + $0 }
+        let dirs = ["results/", "testsetups/", "submissions/", "data-exports/"].map { tmpDir + $0 }
         for dir in dirs {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
         app.resultsDirectory = dirs[0]
         app.testSetupsDirectory = dirs[1]
         app.submissionsDirectory = dirs[2]
+        app.dataExportsDirectory = dirs[3]
         // Seed the worker-secret and local-runner-autostart paths into the
         // per-test temp directory so admin/worker-management tests don't
         // collide with each other or with the dev .worker-secret on disk.
@@ -288,18 +343,22 @@ extension Application {
         _ path: String,
         headers: HTTPHeaders = [:],
         body: ByteBuffer? = nil,
-        file: StaticString = #filePath,
-        line: UInt = #line,
-        afterResponse: (XCTHTTPResponse) throws -> Void
-    ) async throws -> XCTApplicationTester {
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column,
+        afterResponse: (TestingHTTPResponse) throws -> Void
+    ) async throws -> TestingApplicationTester {
         try await self.asyncTest(
             method: runnerMethod,
             method,
             path,
             headers: headers,
             body: body,
-            file: file,
+            fileID: fileID,
+            filePath: filePath,
             line: line,
+            column: column,
             beforeRequest: { _ in },
             afterResponse: afterResponse
         )
@@ -312,19 +371,23 @@ extension Application {
         _ path: String,
         headers: HTTPHeaders = [:],
         body: ByteBuffer? = nil,
-        file: StaticString = #filePath,
-        line: UInt = #line,
-        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in },
-        afterResponse: (XCTHTTPResponse) throws -> Void = { _ in }
-    ) async throws -> XCTApplicationTester {
-        let tester = try self.testable(method: runnerMethod)
+        fileID: String = #fileID,
+        filePath: String = #filePath,
+        line: Int = #line,
+        column: Int = #column,
+        beforeRequest: (inout TestingHTTPRequest) throws -> Void = { _ in },
+        afterResponse: (TestingHTTPResponse) throws -> Void = { _ in }
+    ) async throws -> TestingApplicationTester {
+        let tester = try self.testing(method: runnerMethod)
         return try await tester.test(
             method,
             path,
             headers: headers,
             body: body,
-            file: file,
+            fileID: fileID,
+            filePath: filePath,
             line: line,
+            column: column,
             beforeRequest: { request async throws in
                 try beforeRequest(&request)
             },
@@ -341,9 +404,9 @@ extension Application {
         _ path: String,
         headers: HTTPHeaders = [:],
         body: ByteBuffer? = nil,
-        beforeRequest: (inout XCTHTTPRequest) throws -> Void = { _ in }
-    ) async throws -> XCTHTTPResponse {
-        var captured: XCTHTTPResponse?
+        beforeRequest: (inout TestingHTTPRequest) throws -> Void = { _ in }
+    ) async throws -> TestingHTTPResponse {
+        var captured: TestingHTTPResponse?
         try await self.asyncTest(
             method, path,
             headers: headers,
@@ -522,6 +585,26 @@ func loginUser(
             if let c = res.headers.first(name: .setCookie) { authCookie = c }
         })
     return authCookie
+}
+
+/// Explicit-roster promotion: an admin promotes an already-enrolled user to a
+/// per-course instructor. Teaching authority is per-course now (#417 Slice G2):
+/// login auto-enrolls a non-admin as a `.student` and there is NO auto-grant, so
+/// suites whose `.auto` fixtures used to rely on "auto-enroll the instructor on
+/// login" call this after `loginUser(role: "instructor")` to simulate the admin
+/// promotion. Upgrades every `.student` enrollment the user holds to
+/// `.instructor` (a fresh test instructor's only enrollments are the ones login
+/// just auto-created); anything enrolled explicitly at another role is untouched.
+func promoteToInstructor(_ username: String, on app: Application) async throws {
+    guard let user = try await APIUser.query(on: app.db).filter(\.$username == username).first(),
+        let userID = user.id
+    else { return }
+    for enrollment in try await APICourseEnrollment.query(on: app.db)
+        .filter(\.$userID == userID).all() where enrollment.role == .student
+    {
+        enrollment.role = .instructor
+        try await enrollment.save(on: app.db)
+    }
 }
 
 /// Wraps a runtime skip-or-fail condition as a throwable error.  Use

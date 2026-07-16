@@ -32,6 +32,8 @@ enum MCPToolCatalog {
             GetValidationResultTool().erased(),
             UpdateAssignmentTool().erased(),
             SetGradingModeTool().erased(),
+            SetTimeLimitTool().erased(),
+            SetDatasetTool().erased(),
             UpdateSuiteTool().erased(),
             UpdateGlobalInputsTool().erased(),
             UpdateAchievementsTool().erased(),

@@ -86,8 +86,7 @@ struct EnrollmentRoutes: RouteCollection {
                 .filter(\.$course.$id == courseID)
                 .count()
             if existing == 0 {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-                try await enrollment.save(on: req.db)
+                try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
             }
         }
 
@@ -113,19 +112,52 @@ struct EnrollmentRoutes: RouteCollection {
             throw Abort(.badRequest)
         }
 
-        // Verify the user is actually enrolled in this course.
-        let enrolled = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$userID == userID)
-            .filter(\.$course.$id == courseID)
-            .count()
+        struct ActivateBody: Content {
+            /// Optional post-activation destination. The instructor nav chips
+            /// set this to "/instructor" so selecting a course jumps straight
+            /// into its instructor view; the course strip omits it and lands
+            /// back where the user clicked.
+            var next: String?
+        }
+        let nextPath = (try? req.content.decode(ActivateBody.self))?.next
 
-        if enrolled > 0 {
+        // Verify the user is actually enrolled in this course.
+        let activated: Bool
+        if try await userIsEnrolled(userID: userID, inCourse: courseID, db: req.db) {
             req.session.data["activeCourseID"] = idString
+            activated = true
+        } else {
+            activated = false
         }
 
-        // Redirect back to where the user came from (tab click).
-        let referer = req.headers.first(name: .referer) ?? "/"
-        return req.redirect(to: referer)
+        // Resolve the redirect target: an explicit (safe, local) `next` wins,
+        // otherwise return to where the click came from, otherwise home.
+        var target = safeLocalPath(nextPath) ?? req.headers.first(name: .referer) ?? "/"
+
+        // Guard against an instructor dead-end: a target under /instructor 403s
+        // unless the *newly active* course is one this user staffs. The threshold
+        // must match the /instructor area gate (ActiveCourseStaffMiddleware),
+        // which admits staff at `.ta` or higher — using `.instructor` here would
+        // silently bounce a TA home when they click the Instructor nav button
+        // (which activates their course with next=/instructor). If the
+        // just-activated course isn't one they staff, send them home not into a 403.
+        if target.hasPrefix("/instructor") {
+            let role = try await courseRole(of: userID, inCourse: courseID, db: req.db)
+            let canStaff = activated && (user.isAdmin || (role ?? .student) >= .ta)
+            if !canStaff { target = "/" }
+        }
+
+        return req.redirect(to: target)
+    }
+
+    /// Returns `path` only when it is a safe in-app destination: a root-relative
+    /// path (`/…`) that is not protocol-relative (`//host`). Anything else —
+    /// absolute URLs, scheme-relative URLs, nil — returns nil so the caller
+    /// falls back to the referer/home. Keeps the post-activation redirect from
+    /// becoming an open redirect.
+    private func safeLocalPath(_ path: String?) -> String? {
+        guard let path, path.hasPrefix("/"), !path.hasPrefix("//") else { return nil }
+        return path
     }
 }
 

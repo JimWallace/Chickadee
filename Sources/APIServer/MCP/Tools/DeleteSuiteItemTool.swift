@@ -58,10 +58,7 @@ struct DeleteSuiteItemTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "script": .object([
                 "type": .string("string"),
                 "description": .string("Hand-written script filename to remove."),
@@ -81,12 +78,12 @@ struct DeleteSuiteItemTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "kind": .object(["type": .string("string")]),
-            "removed": .object(["type": .string("string")]),
-            "remainingItemCount": .object(["type": .string("integer")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "kind": MCPSchema.string,
+            "removed": MCPSchema.string,
+            "remainingItemCount": MCPSchema.integer,
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("kind"), .string("removed"),
@@ -100,8 +97,8 @@ struct DeleteSuiteItemTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         let target = try Self.resolveTarget(input)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard let idx = payload.items.firstIndex(where: { Self.matches($0, target) }) else {

@@ -1,8 +1,9 @@
+import Core
 import Fluent
 import Foundation
 import Testing
 import Vapor
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -25,6 +26,10 @@ import XCTVapor
 
     private func makeNamespaceApp(user: APIUser?) async throws -> Application {
         let app = try await Application.make(.testing)
+        // The namespace guard now resolves per-course staff status through
+        // `req.db` (#417 Slice G), so the app needs a database — it used to read
+        // the global `caller.isInstructor` off the injected user with no DB.
+        try await configureTestDatabase(app)
         app.middleware.use(InjectAuthMiddleware(user: user))
         app.middleware.use(UserFileNamespaceMiddleware())
         app.get("ok") { _ in
@@ -114,8 +119,28 @@ import XCTVapor
         }
     }
 
-    @Test func userFileNamespaceAllowsInstructorAcrossNamespaces() async throws {
-        try await withApp(try await makeNamespaceApp(user: makeUser(role: "instructor"))) { app in
+    @Test func userFileNamespaceAllowsCourseStaffAcrossNamespaces() async throws {
+        // Deployment-wide namespace: a user who is staff (instructor/TA) in ANY
+        // course may reach another user's folder (#417 Slice G — per-course
+        // `isStaffAnywhere`, not the old global `instructor` role).
+        let staff = makeUser(role: "student")
+        try await withApp(try await makeNamespaceApp(user: staff)) { app in
+            // Persist the staff user: the enrollment's FK to `users` is enforced
+            // on Postgres, and the injected auth user isn't otherwise saved.
+            try await staff.save(on: app.db)
+            let course = try await makeTestCourse(on: app, code: "NSSTAFF", mode: .closed)
+            try await APICourseEnrollment(
+                userID: try staff.requireID(), courseID: try course.requireID(), role: .instructor
+            ).save(on: app.db)
+            try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
+            { res in
+                #expect(res.status == .ok)
+            }
+        }
+    }
+
+    @Test func userFileNamespaceAllowsAdminAcrossNamespaces() async throws {
+        try await withApp(try await makeNamespaceApp(user: makeUser(role: "admin"))) { app in
             try await app.asyncTest(.GET, "/jupyterlite/files/users/\(UUID().uuidString.lowercased())/assignment.ipynb")
             { res in
                 #expect(res.status == .ok)

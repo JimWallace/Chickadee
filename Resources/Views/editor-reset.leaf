@@ -1,0 +1,55 @@
+#extend("base"):
+#export("title"):
+Reset notebook editor
+#endexport
+#export("content"):
+<style>
+/* Narrow utility page; the global .main caps at 900px, trim further. */
+.reset-panel { max-width: 36rem; margin: 2rem auto; }
+.reset-panel h1 { margin: 0 0 .75rem; }
+.reset-lead { color: var(--gray-700); }
+.reset-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1.25rem; }
+.reset-note { color: var(--gray-600); font-size: var(--text-base); margin-top: 1rem; }
+</style>
+<div class="reset-panel">
+#if(done):
+    <div class="notice-box" role="status">
+        <h1>Editor reset</h1>
+        <p class="reset-lead">
+            Your browser&rsquo;s cached notebook-editor data has been cleared.
+            Reopen your assignment and the Python kernel will start from a clean
+            slate. Your submitted work is safe &mdash; only unsaved local edits
+            sitting in this browser were cleared, and you are still logged in.
+        </p>
+    </div>
+    <div class="reset-actions">
+        <a class="btn btn-primary" href="#(next)">Reopen your assignment</a>
+        <a class="btn" href="/">Return to dashboard</a>
+    </div>
+#else:
+    <h1>Reset the notebook editor</h1>
+    <p class="reset-lead">
+        If the in-browser notebook editor keeps spinning and the Python kernel
+        never finishes loading, resetting clears the editor&rsquo;s cached data
+        in <strong>this browser</strong> so it can boot from a clean slate. It is
+        the same as &ldquo;Clear site data&rdquo; in your browser settings, scoped
+        to Chickadee.
+    </p>
+    <p class="reset-lead">
+        Your submitted work is safe and you stay logged in. Only unsaved local
+        edits sitting in this browser&rsquo;s editor cache are cleared.
+    </p>
+    <form method="post" action="/reset-editor" class="reset-actions">
+        #csrfFormField()
+        <input type="hidden" name="next" value="#(next)">
+        <button type="submit" class="btn btn-primary">Reset editor</button>
+        <a class="btn" href="#(next)">Cancel</a>
+    </form>
+    <p class="reset-note">
+        If the editor still won&rsquo;t load afterward, you can submit your
+        <code>.ipynb</code> file directly from the assignment page.
+    </p>
+#endif
+</div>
+#endexport
+#endextend

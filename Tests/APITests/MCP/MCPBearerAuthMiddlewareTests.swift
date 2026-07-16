@@ -3,7 +3,7 @@
 
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -38,7 +38,7 @@ import XCTVapor
     @Test func missingTokenReturns401WithChallenge() async throws {
         let (app, _) = try await makeGuardedApp()
         try await withApp(app) { app in
-            try await app.testable().test(.GET, "/guarded") { res async in
+            try await app.testing().test(.GET, "/guarded") { res async in
                 #expect(res.status == .unauthorized)
                 #expect(res.headers.first(name: .wwwAuthenticate)?.contains("resource_metadata=") == true)
             }
@@ -51,7 +51,7 @@ import XCTVapor
             let token = try await authority.mint(
                 subject: "agent", scopes: [.read, .write],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/guarded", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .ok)
@@ -66,7 +66,7 @@ import XCTVapor
             let token = try await authority.mint(
                 subject: "a", scopes: [.read],
                 issuer: issuer, audience: "https://evil.example/mcp", ttlSeconds: 3600)
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/guarded", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .unauthorized)
@@ -80,7 +80,7 @@ import XCTVapor
             let token = try await authority.mint(
                 subject: "a", scopes: [],
                 issuer: issuer, audience: resource, ttlSeconds: 3600)
-            try await app.testable().test(
+            try await app.testing().test(
                 .GET, "/guarded", headers: ["Authorization": "Bearer \(token)"]
             ) { res async in
                 #expect(res.status == .forbidden)

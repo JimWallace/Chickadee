@@ -9,7 +9,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -101,7 +101,7 @@ import XCTVapor
 
     private func makeAssignment(setupID: String, title: String = "Assignment") async throws -> APIAssignment {
         guard let courseID = try await APITestSetup.find(setupID, on: app.db)?.courseID else {
-            throw XCTSkip("setup missing course")
+            throw IssueRecorded("setup missing course")
         }
         let assignment = APIAssignment(testSetupID: setupID, title: title, isOpen: true, courseID: courseID)
         try await assignment.save(on: app.db)
@@ -458,8 +458,8 @@ import XCTVapor
             let secret = workerSecret  // String — Sendable
             let testApp = app  // Application — @unchecked Sendable
 
-            var responses: [XCTHTTPResponse] = []
-            try await withThrowingTaskGroup(of: XCTHTTPResponse.self) { group in
+            var responses: [TestingHTTPResponse] = []
+            try await withThrowingTaskGroup(of: TestingHTTPResponse.self) { group in
                 for workerID in ["w1", "w2"] {
                     // Compute per-worker values outside the task so the closure
                     // captures only Sendable types and avoids capturing `self`.
@@ -725,11 +725,16 @@ import XCTVapor
     // the same seed feeding `_ck_inputs.py`. Requires a real seed (→ user +
     // assignment) and `python3`.
     @Test func materializeValidation_resolvesExpressionForSeed() async throws {
-        let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
-        guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
-            return  // python3 unavailable on this platform — skip
-        }
         try await withApp(app) { _ in
+            // Keep the python3 skip-guard *inside* withApp so the test
+            // Application is always shut down.  An early `return` before withApp
+            // leaks the app, and its deinit then trips Vapor's
+            // `ServeCommand did not shutdown before deinit` assertion → SIGILL,
+            // which kills the whole test process (see TestHelpers.swift).
+            let python3Paths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+            guard python3Paths.contains(where: { FileManager.default.fileExists(atPath: $0) }) else {
+                return  // python3 unavailable on this platform — skip
+            }
             let manifest = """
                 {"schemaVersion":1,"testSuites":[{"tier":"public","script":"test.sh"}],\
                 "timeLimitSeconds":10,\

@@ -22,7 +22,7 @@
 // a *streaming* body, and the CSRF token retrieval used to read `_csrf` with
 // a synchronous `content.get` — nil for a streaming body — so the request
 // 403'd "No CSRF token provided." even though the field was on the wire.
-// XCTVapor's in-memory transport always delivers pre-collected bodies, so
+// VaporTesting's in-memory transport always delivers pre-collected bodies, so
 // that path needs a real socket: the test boots the server on a loopback
 // port and POSTs the extension form with `Transfer-Encoding: chunked`, which
 // the decoder deterministically dispatches as a stream.
@@ -31,7 +31,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -181,7 +181,7 @@ import Glibc
 /// Sends raw bytes to 127.0.0.1:`port` and returns the full response read
 /// until the server closes the connection (`Connection: close` request).
 /// Plain blocking POSIX sockets — the point is to exercise the real server
-/// pipeline, which XCTVapor's in-memory transport bypasses.
+/// pipeline, which VaporTesting's in-memory transport bypasses.
 private func rawLoopbackHTTPExchange(port: Int, request: String) throws -> String {
     #if os(Linux)
     let sockStream = Int32(SOCK_STREAM.rawValue)

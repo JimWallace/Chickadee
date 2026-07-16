@@ -2,7 +2,7 @@ import Fluent
 import Foundation
 import Testing
 import Vapor
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -44,6 +44,10 @@ import XCTVapor
             atPath: publicDir + "jupyterlite/files/",
             withIntermediateDirectories: true
         )
+        // The contents routes now resolve the viewer's per-course staff status
+        // through `req.db` (#417 Slice G), so the test app needs a database —
+        // previously the route was filesystem-only.
+        try await configureTestDatabase(app)
         try app.register(collection: JupyterLiteContentsRoutes())
     }
 

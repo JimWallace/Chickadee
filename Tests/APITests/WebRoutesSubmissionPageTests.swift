@@ -7,7 +7,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -526,6 +526,11 @@ import XCTVapor
     @Test func instructorCanViewAnySubmission() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
+            // A viewer sees another student's submission only as per-course staff
+            // now (#417 Slice G), so enrol the instructor in the setup's course.
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
             let student = APIUser(username: "s2", passwordHash: try testPasswordHash("pass"), role: "student")
             try await student.save(on: app.db)
             let studentID = try student.requireID()
@@ -913,6 +918,10 @@ import XCTVapor
     @Test func instructorSeesAllTiers() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
+            // All-tier visibility is per-course staff now (#417 Slice G).
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
             let student = APIUser(username: "s3", passwordHash: try testPasswordHash("pass"), role: "student")
             try await student.save(on: app.db)
             let studentID = try student.requireID()

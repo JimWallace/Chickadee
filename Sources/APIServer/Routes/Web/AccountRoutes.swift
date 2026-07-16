@@ -61,6 +61,12 @@ struct AccountRoutes: RouteCollection {
                     enrollmentMode: c.enrollmentMode.rawValue)
             }
 
+        // Personal-data export state (#557) for the "Your data" section.
+        let export = try await APIDataExport.query(on: req.db)
+            .filter(\.$userID == userID)
+            .first()
+        let dateFormatter = waterlooDateTimeFormatter()
+
         return try await req.view.render(
             "account",
             AccountContext(
@@ -71,7 +77,13 @@ struct AccountRoutes: RouteCollection {
                 email: user.email,
                 enrolledCourses: enrolledRows,
                 availableCourses: availableRows,
-                error: req.query[String.self, at: "error"]
+                error: req.query[String.self, at: "error"],
+                exportStatus: export?.statusValue?.rawValue ?? "none",
+                exportRequestedAtDisplay: export.map { dateFormatter.string(from: $0.requestedAt) },
+                exportCompletedAtDisplay: export?.completedAt.map(dateFormatter.string(from:)),
+                exportCanRequest: dataExportCanBeRequested(export),
+                exportNotice: req.query[String.self, at: "exportNotice"],
+                exportError: req.query[String.self, at: "exportError"]
             ))
     }
 
@@ -98,8 +110,7 @@ struct AccountRoutes: RouteCollection {
             .count()
 
         if existing == 0 {
-            let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-            try await enrollment.save(on: req.db)
+            try await saveSeededEnrollment(userID: userID, courseID: courseID, on: req.db)
         }
 
         return req.redirect(to: "/account")
@@ -153,6 +164,14 @@ private struct AccountContext: Encodable {
     let enrolledCourses: [AccountCourseRow]
     let availableCourses: [AccountCourseRow]
     let error: String?
+    /// Personal-data export state (#557): "none" | "pending" | "complete" |
+    /// "failed", plus display timestamps and whether the request button shows.
+    let exportStatus: String
+    let exportRequestedAtDisplay: String?
+    let exportCompletedAtDisplay: String?
+    let exportCanRequest: Bool
+    let exportNotice: String?
+    let exportError: String?
 }
 
 private struct AccountCourseRow: Encodable {

@@ -8,7 +8,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -101,10 +101,69 @@ import XCTVapor
             let mtimeAfter =
                 (try FileManager.default.attributesOfItem(atPath: workingCopyPath)[.modificationDate] as? Date)
                 ?? Date.distantPast
-            XCTAssertGreaterThan(
-                mtimeAfter, mtimeBefore,
+            #expect(
+                mtimeAfter > mtimeBefore,
                 "Reset must bump the working-copy file mtime so notebook.js force-reseeds the browser's local copy.")
 
+        }
+    }
+
+    /// Regression: resetting a *personalized* assignment must apply the same
+    /// `{{name}}` substitution the first-open seeding path performs.  The
+    /// reset used to write the raw template, leaving the student with
+    /// `patients = {{patients}}` — a NameError on the first cell and no way
+    /// to get their data back by resetting again.
+    @Test func resetStudentNotebookAppliesPersonalizationSubstitutions() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"globalVariables":[{"name":"patients","value":[{"name":"Maria","age":42}]}]}
+                """
+            let setup = try await arInsertSetup(id: "setup_reset_personalized", manifest: manifest, on: app)
+            let starterBytes = Data(
+                #"""
+                {"nbformat":4,"nbformat_minor":5,"metadata":{"kernelspec":{"name":"python"}},"cells":[{"cell_type":"code","execution_count":null,"metadata":{},"outputs":[],"source":["patients = {{patients}}"]}]}
+                """#.utf8)
+            try await arAttachStarterNotebook(to: setup, bytes: starterBytes, on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_reset_personalized", title: "Personalized Lab", isOpen: true, on: app
+            )
+            let assignmentID = assignment.publicID
+
+            let student = try await arInsertStudent(username: "reset_student_personalized", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            let studentUUID = try student.requireID()
+
+            let workingCopyPath = try arSeedStudentWorkingCopy(
+                setupID: "setup_reset_personalized",
+                userID: studentUUID,
+                bytes: Data(#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#.utf8),
+                on: app
+            )
+
+            try await app.asyncTest(
+                .POST,
+                "/instructor/\(assignmentID)/students/\(studentUUID.uuidString)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                }
+            )
+
+            let resetText = try String(
+                contentsOf: URL(fileURLWithPath: workingCopyPath), encoding: .utf8)
+            #expect(
+                resetText.contains("{{patients}}") == false,
+                "Reset must substitute the {{patients}} placeholder — the raw template leaves the student with a NameError."
+            )
+            #expect(
+                resetText.contains("Maria"),
+                "Reset working copy must carry the substituted global-variable value.")
         }
     }
 

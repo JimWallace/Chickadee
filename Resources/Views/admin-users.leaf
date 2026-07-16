@@ -9,6 +9,7 @@ Users
     <a class="admin-tab" href="/admin/users"#if(activeAdminTab == "users"): aria-current="page"#endif>Users</a>
     <a class="admin-tab" href="/admin/storage"#if(activeAdminTab == "storage"): aria-current="page"#endif>Storage</a>
     <a class="admin-tab" href="/admin/retention"#if(activeAdminTab == "retention"): aria-current="page"#endif>Retention</a>
+    <a class="admin-tab" href="/admin/brightspace"#if(activeAdminTab == "brightspace"): aria-current="page"#endif>LEARN</a>
     #if(mcpEnabled()):<a class="admin-tab" href="/admin/mcp"#if(activeAdminTab == "mcp"): aria-current="page"#endif>MCP</a>#endif
     <a class="admin-tab" href="/admin/audit"#if(activeAdminTab == "audit"): aria-current="page"#endif>Audit Log</a>
     <a class="admin-tab" href="/admin/alerts"#if(activeAdminTab == "alerts"): aria-current="page"#endif>Health Alerts</a>
@@ -43,17 +44,20 @@ Users
                 </td>
                 <td><code>#(user.username)</code></td>
                 <td>
+                    #if(user.role == "mcp"):
+                    <code class="role-fixed">mcp</code>
+                    #else:
                     <form method="post" action="/admin/users/#(user.id)/role"
                           class="role-form">
                         #csrfFormField()
                         <label class="visually-hidden" for="role-#(user.id)">Role for #(user.username)</label>
                         <select id="role-#(user.id)" name="role" class="form-input role-select">
-                            <option value="student"    #if(user.role == "student"):selected#endif>student</option>
-                            <option value="instructor" #if(user.role == "instructor"):selected#endif>instructor</option>
-                            <option value="admin"      #if(user.role == "admin"):selected#endif>admin</option>
+                            <option value="user"  #if(user.role == "user"):selected#endif>user</option>
+                            <option value="admin" #if(user.role == "admin"):selected#endif>admin</option>
                         </select>
                         <button class="btn action-btn" type="submit">Save</button>
                     </form>
+                    #endif
                 </td>
                 <td class="time js-relative-time col-hide-phone" data-iso="#(user.lastSeenAt)">
                     #if(user.lastSeenAt):
@@ -93,7 +97,7 @@ Users
 #users-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
-    font-size: .75rem;
+    font-size: var(--text-xs);
 }
 #users-table th[data-sort-key].sort-asc::after {
     content: "  ↑";
@@ -108,7 +112,7 @@ Users
 }
 .role-select {
     padding: .25rem .5rem;
-    font-size: .8rem;
+    font-size: var(--text-sm);
 }
 .user-actions {
     display: flex;
@@ -254,19 +258,22 @@ Users
         function roleOption(value) {
             return '<option value="' + value + '"' + (user.role === value ? ' selected' : '') + '>' + value + '</option>';
         }
+        // mcp service accounts render read-only so they can't be flipped to a
+        // human role by mistake; humans get the user|admin toggle (#417 G2).
+        var roleCell = user.role === 'mcp'
+            ? '<code class="role-fixed">mcp</code>'
+            : '<form method="post" action="/admin/users/' + id + '/role" class="role-form">'
+                + csrfField
+                + '<label class="visually-hidden" for="role-' + id + '">Role for ' + username + '</label>'
+                + '<select id="role-' + id + '" name="role" class="form-input role-select">'
+                    + roleOption('user') + roleOption('admin')
+                + '</select>'
+                + '<button class="btn action-btn" type="submit">Save</button>'
+            + '</form>';
         return '<tr>'
             + '<td>' + displayName + '</td>'
             + '<td><code>' + username + '</code></td>'
-            + '<td>'
-                + '<form method="post" action="/admin/users/' + id + '/role" class="role-form">'
-                    + csrfField
-                    + '<label class="visually-hidden" for="role-' + id + '">Role for ' + username + '</label>'
-                    + '<select id="role-' + id + '" name="role" class="form-input role-select">'
-                        + roleOption('student') + roleOption('instructor') + roleOption('admin')
-                    + '</select>'
-                    + '<button class="btn action-btn" type="submit">Save</button>'
-                + '</form>'
-            + '</td>'
+            + '<td>' + roleCell + '</td>'
             + '<td class="time js-relative-time col-hide-phone" data-iso="' + lastSeen + '">' + (user.lastSeenAt ? lastSeen : '—') + '</td>'
             + '<td class="time js-relative-time col-hide-phone" data-iso="' + created + '">' + created + '</td>'
             + '<td>'

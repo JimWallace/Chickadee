@@ -10,7 +10,7 @@ import Fluent
 import Foundation
 import JWT
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -91,7 +91,7 @@ import XCTVapor
     /// is the whole point (Safari/ITP drops the cookie on this cross-site hop).
     private func submitConsent(
         _ app: Application, token: String, decision: String, cookie: String? = nil
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/authorize",
             beforeRequest: { req in
@@ -105,7 +105,7 @@ import XCTVapor
     /// returns the POST response (a 303 to the client).
     private func consent(
         _ app: Application, cookie: String, scope: String, decision: String
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         let token = try await mintConsentToken(app, cookie: cookie, scope: scope)
         return try await submitConsent(app, token: token, decision: decision)
     }
@@ -115,13 +115,13 @@ import XCTVapor
         return components.queryItems?.first(where: { $0.name == name })?.value
     }
 
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> XCTHTTPResponse {
+    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(
             .POST, "/oauth/token",
             beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
     }
 
-    private func jsonField(_ name: String, in res: XCTHTTPResponse) -> String? {
+    private func jsonField(_ name: String, in res: TestingHTTPResponse) -> String? {
         let object = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
         return object?[name] as? String
     }
@@ -132,6 +132,8 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // Content consent requires per-course staff now (#417); enrol prof.
+            try await enrollAsTestInstructor(username: "prof", on: app)
 
             // Consent → authorization code.
             let consentRes = try await consent(
@@ -188,6 +190,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
 
             let consentRes = try await consent(
                 app, cookie: cookie, scope: "content:read content:write", decision: "authorize")
@@ -219,6 +222,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, scope: "content:read content:write", decision: "authorize")
             let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
@@ -232,10 +236,9 @@ import XCTVapor
             let refreshToken = try #require(jsonField("refresh_token", in: tokenRes))
 
             // The instructor is demoted to student (role downgrade / repurpose).
-            let prof = try #require(
-                await APIUser.query(on: app.db).filter(\.$username == "prof").first())
-            prof.role = "student"
-            try await prof.save(on: app.db)
+            // Authority is per-course now (#417 Slice G2), so strip the enrollment
+            // staff role — the global role no longer governs MCP eligibility.
+            try await demoteToStudentEverywhere(username: "prof", on: app)
 
             // Refresh now fails, and the grant is revoked so a retry also fails.
             let refreshRes = try await tokenPost(
@@ -253,6 +256,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentRes = try await consent(
                 app, cookie: cookie, scope: "content:read", decision: "authorize")
             let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
@@ -275,6 +279,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let res = try await consent(
                 app, cookie: cookie, scope: "content:read", decision: "deny")
             #expect(res.status == .seeOther)
@@ -290,6 +295,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(
                 app, cookie: cookie, scope: "content:read content:write")
             let res = try await submitConsent(app, token: token, decision: "authorize", cookie: nil)
@@ -314,6 +320,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(app, cookie: cookie, scope: "content:read")
             #expect(try await submitConsent(app, token: token, decision: "authorize").status == .seeOther)
             // Single-use: replaying the same token is rejected.
@@ -352,12 +359,11 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(app, cookie: cookie, scope: "content:read")
             // Demote the consenting user after the screen rendered but before submit.
-            let prof = try #require(
-                await APIUser.query(on: app.db).filter(\.$username == "prof").first())
-            prof.role = "student"
-            try await prof.save(on: app.db)
+            // Authority is per-course now (#417 Slice G2) — strip the enrollment.
+            try await demoteToStudentEverywhere(username: "prof", on: app)
             let res = try await submitConsent(app, token: token, decision: "authorize")
             #expect(res.status == .forbidden)
         }
@@ -401,6 +407,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let refresh = try await obtainRefreshToken(app, cookie: cookie)
 
             let revokeRes = try await app.asyncSendRequest(
@@ -421,6 +428,7 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let firstRefresh = try await obtainRefreshToken(app, cookie: cookie)
 
             // Legitimate rotation.
@@ -448,6 +456,8 @@ import XCTVapor
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // Phase 5: /agents is under the per-course-gated /instructor group.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let refresh = try await obtainRefreshToken(app, cookie: cookie)
 
             let grantID = try #require(try await MCPGrant.query(on: app.db).first()).requireID()

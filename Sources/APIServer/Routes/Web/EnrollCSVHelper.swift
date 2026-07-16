@@ -119,6 +119,35 @@ func parseUsernamesFromCSV(_ data: Data) -> [String] {
     }
 }
 
+/// Parses a flat list of usernames from a free-text field — the typed-in
+/// alternative to a CSV upload.  Splits on any common separator (newlines,
+/// commas, semicolons, and surrounding whitespace) so an instructor can
+/// paste one-per-line, comma-separated, or space-separated user IDs.  Each
+/// token is trimmed of surrounding whitespace and quotes; blanks are
+/// dropped.  Shape validation (and pre-enrollment recording) happens later
+/// in `enrollUsernamesInCourse`, exactly as for the CSV path.
+func parseUsernamesFromText(_ text: String) -> [String] {
+    let separators = CharacterSet(charactersIn: ",;\n\r\t ")
+    return
+        text
+        .components(separatedBy: separators)
+        .map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        }
+        .filter { !$0.isEmpty }
+}
+
+/// Context for the `instructor-enroll-csv` upload form (GET render + the
+/// "nothing supplied" re-render of the POST handler).
+struct EnrollCSVFormContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let courseID: String
+    let courseCode: String
+    let courseName: String
+    let error: String?
+}
+
 /// Context for the shared `admin-enroll-csv-result` view, rendered by both
 /// admin and instructor CSV enrollment handlers.
 struct EnrollCSVResultContext: Encodable {
@@ -212,8 +241,7 @@ func enrollUsernamesInCourse(
             if alreadyEnrolledUserIDs.contains(userID) {
                 alreadyEnrolledCount += 1
             } else {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
-                try await enrollment.save(on: db)
+                try await saveSeededEnrollment(for: user, courseID: courseID, on: db)
                 enrolledCount += 1
             }
             continue
@@ -272,9 +300,8 @@ func resolvePendingPreEnrollments(
         for row in pending {
             let courseID = row.$course.id
             if !existingCourseIDs.contains(courseID) {
-                let enrollment = APICourseEnrollment(userID: userID, courseID: courseID)
                 do {
-                    try await enrollment.save(on: db)
+                    try await saveSeededEnrollment(for: user, courseID: courseID, on: db)
                 } catch {
                     logger.warning("Pre-enrollment resolve: failed to enroll \(username) in \(courseID): \(error)")
                     continue

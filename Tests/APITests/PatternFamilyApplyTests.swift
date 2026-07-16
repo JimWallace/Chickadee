@@ -315,6 +315,151 @@ import Vapor
         }
     }
 
+    /// A raw script carrying a per-test `timeLimitSeconds` override persists it
+    /// onto the resulting `TestSuiteEntry`, and an `authoredItems == nil`
+    /// re-apply (the family/check-modal save path) preserves it.
+    @Test func apply_rawScriptTimeLimitPersistsAndSurvivesReapply() async throws {
+        try await withPatternFamilyFixture { fixture in
+
+            try updateScriptInZip(
+                zipPath: fixture.setup.zipPath,
+                filename: "publictest_slow.py",
+                content: "# slow\npassed('ok')\n"
+            )
+            let rawEntry = AuthoredRawScript(
+                script: "publictest_slow.py",
+                tier: .pub, points: 1, displayName: nil,
+                dependsOn: [], timeLimitSeconds: 45
+            )
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: [pfBMIFamily()],
+                authoredItems: [.script(rawEntry), .family(id: "bmi_category")],
+                on: fixture.app.db
+            )
+
+            // The override is persisted onto the raw entry; generated entries
+            // inherit the default (nil).
+            let props = try pfDecodeManifest(fixture.setup.manifest)
+            let slow = try #require(props.testSuites.first { $0.script == "publictest_slow.py" })
+            #expect(slow.timeLimitSeconds == 45)
+            for generated in props.testSuites where generated.generatedBy != nil {
+                #expect(generated.timeLimitSeconds == nil, "Generated entries inherit the default")
+            }
+
+            // Re-apply through the legacy (authoredItems == nil) path — the
+            // family-modal save — which rebuilds AuthoredRawScript from the
+            // existing manifest. The override must survive.
+            let existingFamilies = props.patternFamilies
+            _ = try await applyPatternFamilies(
+                to: fixture.setup,
+                nextFamilies: existingFamilies,
+                on: fixture.app.db
+            )
+            let reapplied = try pfDecodeManifest(fixture.setup.manifest)
+            let slowAfter = try #require(reapplied.testSuites.first { $0.script == "publictest_slow.py" })
+            #expect(slowAfter.timeLimitSeconds == 45, "Override must survive an authoredItems==nil re-apply")
+        }
+    }
+
+    /// A family with a `defaults.timeLimitSeconds` and one per-case override
+    /// threads the resolved value onto every generated entry: the override case
+    /// carries its own value, the others (and the existence guard) carry the
+    /// family default. The values survive an `authoredItems == nil` re-apply.
+    @Test func apply_familyAndPerCaseTimeLimitPropagateToGeneratedEntries() async throws {
+        try await withPatternFamilyFixture { fixture in
+
+            var cases = pfBMIFamily().cases
+            // Case "02" overrides the family default with a longer limit.
+            cases[1] = PatternCase(
+                key: cases[1].key, label: cases[1].label,
+                args: cases[1].args, expected: cases[1].expected,
+                timeLimitSeconds: 120)
+            let family = PatternFamily(
+                id: "bmi_category", name: "BMI", kind: .boundaryEquality,
+                functionName: "bmi_category", paramNames: ["bmi"],
+                defaults: PatternDefaults(tier: .pub, points: 1, hint: "x", timeLimitSeconds: 30),
+                cases: cases
+            )
+
+            _ = try await applyPatternFamilies(
+                to: fixture.setup, nextFamilies: [family], on: fixture.app.db)
+
+            func assertLimits(_ props: TestProperties, label: String) throws {
+                let generated = props.testSuites.filter { $0.generatedBy != nil }
+                #expect(generated.count == 4, "\(label): 3 cases + guard")
+                let guardName = pfGuardFilename("bmi_category")
+                // Guard inherits the family default.
+                #expect(
+                    generated.first { $0.script == guardName }?.timeLimitSeconds == 30,
+                    "\(label): guard inherits the family default")
+                // Override case carries 120.
+                #expect(
+                    generated.first { $0.script == "publictest_bmi_category_02.py" }?
+                        .timeLimitSeconds == 120,
+                    "\(label): per-case override wins")
+                // The other two cases inherit the family default (30).
+                #expect(
+                    generated.first { $0.script == "publictest_bmi_category_01.py" }?
+                        .timeLimitSeconds == 30)
+                #expect(
+                    generated.first { $0.script == "publictest_bmi_category_03.py" }?
+                        .timeLimitSeconds == 30)
+            }
+
+            try assertLimits(try pfDecodeManifest(fixture.setup.manifest), label: "initial apply")
+
+            // Re-apply through the legacy (authoredItems == nil) path — the
+            // family-modal save — which reconstructs ordering from the manifest.
+            let existing = try pfDecodeManifest(fixture.setup.manifest).patternFamilies
+            _ = try await applyPatternFamilies(
+                to: fixture.setup, nextFamilies: existing, on: fixture.app.db)
+            try assertLimits(try pfDecodeManifest(fixture.setup.manifest), label: "re-apply")
+        }
+    }
+
+    /// A family with no time limits yields generated entries with nil
+    /// (absent) `timeLimitSeconds` — they inherit the assignment-wide default.
+    @Test func apply_familyWithoutTimeLimitsYieldsNilEntries() async throws {
+        try await withPatternFamilyFixture { fixture in
+            _ = try await applyPatternFamilies(
+                to: fixture.setup, nextFamilies: [pfBMIFamily()], on: fixture.app.db)
+            let props = try pfDecodeManifest(fixture.setup.manifest)
+            for generated in props.testSuites where generated.generatedBy != nil {
+                #expect(
+                    generated.timeLimitSeconds == nil,
+                    "A family with no limits must leave generated entries inheriting the default")
+            }
+        }
+    }
+
+    /// A notebook check carrying `timeLimitSeconds` threads the value onto its
+    /// generated entry, including through the `authoredItems == nil` re-apply.
+    @Test func apply_notebookCheckTimeLimitPropagatesToGeneratedEntry() async throws {
+        try await withPatternFamilyFixture { fixture in
+            let check = NotebookCheck(
+                id: "figs", kind: .figureCount, tier: .pub, points: 1,
+                timeLimitSeconds: 45, minFigures: 2)
+
+            _ = try await applyPatternFamilies(
+                to: fixture.setup, nextFamilies: [], nextChecks: [check],
+                authoredItems: [.check(id: "figs", sectionID: nil)], on: fixture.app.db)
+
+            func checkEntry(_ props: TestProperties) throws -> TestSuiteEntry {
+                try #require(props.testSuites.first { $0.generatedByCheck == "figs" })
+            }
+            #expect(try checkEntry(try pfDecodeManifest(fixture.setup.manifest)).timeLimitSeconds == 45)
+
+            // Re-apply via the legacy (authoredItems == nil) path.
+            let existing = try pfDecodeManifest(fixture.setup.manifest).notebookChecks
+            _ = try await applyPatternFamilies(
+                to: fixture.setup, nextFamilies: [], nextChecks: existing, on: fixture.app.db)
+            #expect(
+                try checkEntry(try pfDecodeManifest(fixture.setup.manifest)).timeLimitSeconds == 45,
+                "Check time limit must survive an authoredItems==nil re-apply")
+        }
+    }
+
     /// Family-level `dependsOn` propagates to every generated case, with
     /// family-ref tokens expanded to the referenced family's filenames.
     @Test func apply_familyLevelDepsExpandedAndInheritedByCases() async throws {

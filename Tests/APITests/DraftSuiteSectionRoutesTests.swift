@@ -16,7 +16,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -84,6 +84,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let draftID = try await makeDraft()
             let cookie = try await loginUser(username: "dssrt_inst1", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst1", on: app)
             // CSRF token cooks against any GET — the create page itself works fine here.
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
@@ -114,6 +115,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let draftID = try await makeDraft()
             let cookie = try await loginUser(username: "dssrt_inst2", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst2", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -136,6 +138,7 @@ import XCTVapor
         try await withApp(app) { _ in
             _ = try await makeDraft()
             let cookie = try await loginUser(username: "dssrt_inst3", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst3", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -161,6 +164,7 @@ import XCTVapor
             let sid = UUID().uuidString
             let draftID = try await makeDraft(seedSections: [(sid, "Original")])
             let cookie = try await loginUser(username: "dssrt_inst4", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst4", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -189,6 +193,7 @@ import XCTVapor
         try await withApp(app) { _ in
             let draftID = try await makeDraft(seedSections: [(UUID().uuidString, "Existing")])
             let cookie = try await loginUser(username: "dssrt_inst5", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst5", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -222,6 +227,7 @@ import XCTVapor
                 ]
             )
             let cookie = try await loginUser(username: "dssrt_inst6", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst6", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -256,6 +262,7 @@ import XCTVapor
             let sid = UUID().uuidString
             let draftID = try await makeDraft(seedSections: [(sid, "Q1")])
             let cookie = try await loginUser(username: "dssrt_inst7", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst7", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             // Persist a valid pair (use the real `FamilyVariable` shape — same
@@ -331,6 +338,7 @@ import XCTVapor
                 seedSections: [(sidA, "A"), (sidB, "B"), (sidC, "C")]
             )
             let cookie = try await loginUser(username: "dssrt_inst8", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst8", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -360,6 +368,7 @@ import XCTVapor
             let sidB = UUID().uuidString
             let draftID = try await makeDraft(seedSections: [(sidA, "A"), (sidB, "B")])
             let cookie = try await loginUser(username: "dssrt_inst9", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst9", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(

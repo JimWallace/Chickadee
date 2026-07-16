@@ -343,56 +343,126 @@ extension WorkerDaemon {
         )
         stageTimings.testSetupCacheHit = acquireResult.didHit
 
-        try await submissionDownload
-        stageTimings.record(
-            "submission_download",
-            milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000)
-        )
+        // From here the scratch copy is caller-owned, but `process(_:)` only
+        // registers its cleanup `defer` after we return — so any throw in the
+        // remaining prepare stages (submission download, staging, the routine
+        // invalid-upload normalization failure, `make`, helper writes) must
+        // remove the directory itself before rethrowing, or every failed job
+        // leaks a fully-prepared test-setup dir in /tmp (#1106; disk-fill has
+        // taken prod down once already).
+        do {
+            try await submissionDownload
+            stageTimings.record(
+                "submission_download",
+                milliseconds: Int(Date().timeIntervalSince(submissionDownloadStartedAt) * 1000)
+            )
 
-        let manifest = job.manifest
+            let manifest = job.manifest
 
-        try await stageSubmissionIntoWorkspace(
-            job: job,
-            paths: paths,
-            stageTimings: &stageTimings
-        )
+            try await stageSubmissionIntoWorkspace(
+                job: job,
+                paths: paths,
+                stageTimings: &stageTimings
+            )
 
-        try removeStarterNotebookIfPresent(
-            manifest: manifest,
-            testSetupDir: testSetupDir,
-            submissionFilename: job.submissionFilename,
-            stageTimings: &stageTimings
-        )
+            try removeStarterNotebookIfPresent(
+                manifest: manifest,
+                testSetupDir: testSetupDir,
+                submissionFilename: job.submissionFilename,
+                stageTimings: &stageTimings
+            )
 
-        let (normalizationWarnings, preferredStudentModule) = try normalizeSubmission(
-            job: job,
-            manifest: manifest,
-            paths: paths,
-            testSetupDir: testSetupDir,
-            stageTimings: &stageTimings
-        )
+            let (normalizationWarnings, preferredStudentModule) = try normalizeSubmission(
+                job: job,
+                manifest: manifest,
+                paths: paths,
+                testSetupDir: testSetupDir,
+                stageTimings: &stageTimings
+            )
 
-        // Optional make step.
-        try stageTimings.measureSync("make_step") {
+            // Optional make step (bounded — see runMake, #1107). Timed
+            // inline: `measure`'s closure can't hop to this actor's
+            // isolation, and the failure path doesn't record a timing
+            // (matching the old measureSync behaviour).
             if let makefile = manifest.makefile {
-                try runMake(in: testSetupDir, target: makefile.target)
+                let makeStartedAt = Date()
+                try await runMake(in: testSetupDir, target: makefile.target)
+                stageTimings.record(
+                    "make_step", milliseconds: Int(Date().timeIntervalSince(makeStartedAt) * 1000))
             }
-        }
 
-        // Install shared Python test runtime helpers for every run.
-        try stageTimings.measureSync("runtime_helper_setup") {
-            try writePythonRuntimeHelpers(in: testSetupDir)
-            try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
-            try writeRRuntimeHelper(in: testSetupDir)
-        }
+            // Materialize per-student personalization inputs (issue #461) into the
+            // grading workspace as `_ck_inputs.py`, so generated pattern-family
+            // scripts that reference per-student args / expected can load them by
+            // path. Each value is already a Python literal (`repr`) resolved
+            // server-side; keys are emitted as escaped Python string literals via
+            // `JSONValue.string(_:).pythonLiteral` — the same canonical escaping the
+            // renderer's reader and the browser path (`JSON.stringify`) use, so the
+            // three stay byte-for-byte consistent (input names are validated
+            // identifiers today, so this is defense in depth). The filename is
+            // reserved (excluded from student-module candidates in test_runtime), so
+            // it can't be mistaken for the submission.
+            if let inputs = job.personalizedInputs, !inputs.isEmpty {
+                var lines = [
+                    "# Auto-generated per-student grading inputs (issue #461). Do not edit.",
+                    "_ck = {",
+                ]
+                for key in inputs.keys.sorted() {
+                    lines.append("    \(JSONValue.string(key).pythonLiteral): \(inputs[key] ?? "None"),")
+                }
+                lines.append("}")
+                let source = lines.joined(separator: "\n") + "\n"
+                // A failed write here would make every personalized test error with
+                // a confusing missing-file traceback that looks like a student
+                // mistake — and persist it as their grade. Throw instead so the job
+                // is reported as buildStatus:failed and stays retestable.
+                try source.write(
+                    to: testSetupDir.appendingPathComponent("_ck_inputs.py"),
+                    atomically: true, encoding: .utf8)
+            }
 
-        return JobPreparedWorkspace(
-            testSetupDir: testSetupDir,
-            manifest: manifest,
-            normalizationWarnings: normalizationWarnings,
-            preferredStudentModule: preferredStudentModule,
-            testSetupCacheHit: acquireResult.didHit
-        )
+            // Materialize per-student dataset slices (Phase 1 datasets — see
+            // docs/datasets.md) into the grading workspace, overwriting the source
+            // pool copied from the cached test-setup so student scripts read only
+            // their slice. Same delivery shape as `_ck_inputs.py`: the server
+            // resolved the bytes (`DatasetResolver` over the seed); we only write
+            // them. A failed write would silently grade the student against the
+            // wrong (pool) data, so throw — the job is reported buildStatus:failed
+            // and stays retestable, matching the `_ck_inputs.py` rationale above.
+            if let files = job.personalizedFiles, !files.isEmpty {
+                for name in files.keys.sorted() {
+                    guard let content = files[name] else { continue }
+                    // A personalized file replaces a bundled support file by bare
+                    // name; a path-carrying key must never write outside the
+                    // grading workspace (#1104). Throw rather than skip — same
+                    // rationale as the write-failure case above.
+                    guard FilenameSafety.bareFilename(name) != nil else {
+                        throw WorkerDaemonError.unsafePersonalizedFilename(name)
+                    }
+                    try content.write(
+                        to: testSetupDir.appendingPathComponent(name),
+                        atomically: true, encoding: .utf8)
+                }
+            }
+
+            // Install shared Python test runtime helpers for every run.
+            try stageTimings.measureSync("runtime_helper_setup") {
+                try writePythonRuntimeHelpers(in: testSetupDir)
+                try writeStudentModuleHint(in: testSetupDir, preferredFilename: preferredStudentModule)
+                try writeRRuntimeHelper(in: testSetupDir)
+            }
+
+            return JobPreparedWorkspace(
+                testSetupDir: testSetupDir,
+                manifest: manifest,
+                normalizationWarnings: normalizationWarnings,
+                preferredStudentModule: preferredStudentModule,
+                testSetupCacheHit: acquireResult.didHit
+            )
+        } catch {
+            removeWorkspaceItem(at: testSetupDir, label: "test_setup_dir", job: job)
+            throw error
+        }
     }
 
     /// Stage the submission independently from the grading workspace so the
@@ -569,37 +639,23 @@ extension WorkerDaemon {
             scriptEnv["CHICKADEE_ASSIGNMENT_SEED"] = seed
         }
 
-        // Materialize per-student personalization inputs (issue #461) into the
-        // grading workspace as `_ck_inputs.py`, so generated pattern-family
-        // scripts that reference per-student args / expected can load them by
-        // path. Each value is already a Python literal (`repr`) resolved
-        // server-side; keys are emitted as escaped Python string literals via
-        // `JSONValue.string(_:).pythonLiteral` — the same canonical escaping the
-        // renderer's reader and the browser path (`JSON.stringify`) use, so the
-        // three stay byte-for-byte consistent (input names are validated
-        // identifiers today, so this is defense in depth). The filename is
-        // reserved (excluded from student-module candidates in test_runtime), so
-        // it can't be mistaken for the submission.
-        if let inputs = job.personalizedInputs, !inputs.isEmpty {
-            var lines = [
-                "# Auto-generated per-student grading inputs (issue #461). Do not edit.",
-                "_ck = {",
-            ]
-            for key in inputs.keys.sorted() {
-                lines.append("    \(JSONValue.string(key).pythonLiteral): \(inputs[key] ?? "None"),")
-            }
-            lines.append("}")
-            let source = lines.joined(separator: "\n") + "\n"
-            // A failed write here would make every personalized test error with
-            // a confusing missing-file traceback that looks like a student
-            // mistake — and persist it as their grade. Throw instead so the job
-            // is reported as buildStatus:failed and stays retestable.
-            try source.write(
-                to: testSetupDir.appendingPathComponent("_ck_inputs.py"),
-                atomically: true, encoding: .utf8)
-        }
+        // Per-student file materialization (`_ck_inputs.py` + dataset slices)
+        // happens in `prepareJobWorkspace` — workspace prep, not execution —
+        // so `test_execution` stage timing measures only the suite run and the
+        // prepare-phase scratch cleanup (#1106) covers materialization throws.
 
-        let executor = NativeScriptExecutor(runner: runner, workDir: testSetupDir, env: scriptEnv)
+        // Per-test time-limit overrides resolved in the executor (the shared
+        // `executeSuites` loop still receives the assignment default below as
+        // the fallback). Only entries carrying an explicit positive override
+        // are mapped; everything else inherits `manifest.timeLimitSeconds`.
+        var timeLimitOverrides: [String: Int] = [:]
+        for entry in manifest.testSuites {
+            if let limit = entry.timeLimitSeconds, limit > 0 {
+                timeLimitOverrides[entry.script] = limit
+            }
+        }
+        let executor = NativeScriptExecutor(
+            runner: runner, workDir: testSetupDir, env: scriptEnv, overrides: timeLimitOverrides)
         let items = manifest.testSuites.map { entry in
             SuiteItem(
                 script: entry.script,

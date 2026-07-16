@@ -1,7 +1,7 @@
 import Crypto
 import Fluent
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -12,6 +12,17 @@ import XCTVapor
     private func makeApp() async throws -> Application {
         let app = try await Application.make(.testing)
         app.routes.defaultMaxBodySize = "10mb"
+        // Replay nonces persist to the database as of #1154, so the stub app
+        // needs one (accessing request.db with no default database configured
+        // is a process-killing fatalError on Linux, not a catchable throw).
+        do {
+            try configureDatabase(app, settings: .sqliteInMemory())
+            app.migrations.add(CreateWorkerNonces())
+            try await app.autoMigrate()
+        } catch {
+            try? await app.asyncShutdown()
+            throw error
+        }
         app.workerSecretStore = WorkerSecretStore(initialOverride: sharedSecret)
         let middleware = WorkerHMACAuthMiddleware(maxClockSkewSeconds: 60, nonceTTLSeconds: 300)
         app.grouped(middleware).post("internal", "worker", "ping") { _ in
@@ -62,7 +73,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -76,7 +87,7 @@ import XCTVapor
 
     @Test func rejectsMissingHeaders() async throws {
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, "/internal/worker/ping",
                 beforeRequest: { req async in
                     req.headers.contentType = .json
@@ -101,7 +112,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -127,7 +138,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -137,7 +148,7 @@ import XCTVapor
                     #expect(res.status == .ok)
                 })
 
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -163,7 +174,7 @@ import XCTVapor
         headers.replaceOrAdd(name: "X-Worker-Signature", value: "deadbeef")
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable().test(
+            try await app.testing().test(
                 .POST, path,
                 beforeRequest: { req async in
                     req.headers = headers
@@ -191,7 +202,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .POST,
                 path,
                 headers: headers,
@@ -216,7 +227,7 @@ import XCTVapor
         )
 
         try await withApp(try await makeApp()) { app in
-            try await app.testable(method: .running(hostname: "localhost", port: 0)).test(
+            try await app.testing(method: .running(hostname: "localhost", port: 0)).test(
                 .POST,
                 path,
                 headers: headers,

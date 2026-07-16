@@ -11,7 +11,7 @@ import Core
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -75,6 +75,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor1", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor1", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -110,6 +111,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor2", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor2", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -140,6 +142,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor3", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor3", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -164,6 +167,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor4", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor4", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -223,6 +227,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_ro", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_ro", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             // Reverse the order: C, B, A
@@ -254,6 +259,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_ri", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_ri", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             struct ReorderBody: Content { var sectionIDs: [String] }
@@ -286,6 +292,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_rn", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_rn", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -318,6 +325,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_rne", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_rne", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -342,6 +350,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_rnf", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_rnf", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             let randomID = UUID().uuidString
@@ -373,6 +382,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_del", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_del", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -408,6 +418,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_del2", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_del2", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -444,6 +455,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_mv", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_mv", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             struct MoveBody: Content { var sectionID: String }
@@ -481,6 +493,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_mv2", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_mv2", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             struct MoveBody: Content { var sectionID: String }
@@ -529,6 +542,7 @@ import XCTVapor
             let cookie = try await loginUser(
                 username: "sect_instructor_mv3", password: "pw",
                 role: "instructor", on: app)
+            try await promoteToInstructor("sect_instructor_mv3", on: app)
             let (token, newCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
             struct MoveBody: Content { var sectionID: String }

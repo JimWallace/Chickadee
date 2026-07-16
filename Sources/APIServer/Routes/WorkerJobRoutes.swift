@@ -2,6 +2,7 @@ import Core
 import Fluent
 import FluentSQLiteDriver
 import Foundation
+import SQLKit
 import Vapor
 
 struct WorkerJobRoutes: RouteCollection {
@@ -22,7 +23,7 @@ struct WorkerJobRoutes: RouteCollection {
             return conflict
         }
 
-        let runnerProfile = try await recordPollActivity(req: req, body: body, seenAt: seenAt)
+        let runnerProfile = try await recordRunnerCheckIn(req: req, body: body, seenAt: seenAt, reason: .poll)
 
         guard let claimed = try await claimNextEligibleJob(req: req, body: body, runnerProfile: runnerProfile) else {
             return Response(status: .noContent)
@@ -60,10 +61,13 @@ struct WorkerJobRoutes: RouteCollection {
         )
     }
 
-    /// Marks the runner active, upserts its capability profile, and records the
-    /// check-in.  Returns the resolved capability profile (nil if none).
-    private func recordPollActivity(
-        req: Request, body: WorkerActivityPayload, seenAt: Date
+    /// Marks the runner active, upserts its capability profile, and records
+    /// the check-in — the one check-in block shared by the poll and heartbeat
+    /// endpoints, which only differ in which activity timestamp advances and
+    /// the recorded reason (#1118; the two ~30-line copies had already been
+    /// drifting). Returns the resolved capability profile (nil if none).
+    private func recordRunnerCheckIn(
+        req: Request, body: WorkerActivityPayload, seenAt: Date, reason: RunnerCheckInReason
     ) async throws -> RunnerCapabilityProfile? {
         await req.application.workerActivityStore.markActive(
             workerID: body.workerID,
@@ -71,7 +75,8 @@ struct WorkerJobRoutes: RouteCollection {
             runnerVersion: body.runnerVersion,
             maxConcurrentJobs: body.maxConcurrentJobs,
             activeJobs: body.activeJobs,
-            lastPollAt: seenAt
+            lastPollAt: reason == .poll ? seenAt : nil,
+            lastHeartbeatAt: reason == .heartbeat ? seenAt : nil
         )
         let profileUpsert = try await req.application.runnerProfiles.registerOrUpdate(
             runnerID: body.workerID,
@@ -90,7 +95,7 @@ struct WorkerJobRoutes: RouteCollection {
         if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
             await req.application.diagnostics.recordRunnerCheckIn(
                 snapshot: snapshot,
-                reason: .poll,
+                reason: reason,
                 on: req.db,
                 logger: req.logger
             )
@@ -98,32 +103,140 @@ struct WorkerJobRoutes: RouteCollection {
         return profileUpsert.profile?.capabilityProfile
     }
 
-    /// Atomically finds and claims the best pending job for this runner.
-    /// WorkerClaimQueue serializes concurrent calls at the application level;
-    /// the inner transaction provides the DB-level guarantee for multi-process
-    /// deployments where SQLite WAL serializes write transactions.
+    /// Finds and claims the best pending job for this runner.
+    ///
+    /// Structure (2026-07 audit): candidate collection, per-candidate
+    /// requirement loading, and compatibility evaluation are all reads and
+    /// run OUTSIDE the serialized claim section — holding the global
+    /// WorkerClaimQueue (and a write transaction) across those queries
+    /// multiplied the serialized section by the number of skipped candidates
+    /// exactly when the queue was deepest. Only the claim itself is
+    /// serialized, and it is an atomic compare-and-set
+    /// (`UPDATE … WHERE status = 'pending'`), so a candidate another runner
+    /// claimed between our scan and our claim matches zero rows and the walk
+    /// simply moves to the next candidate.
     private func claimNextEligibleJob(
         req: Request, body: WorkerActivityPayload, runnerProfile: RunnerCapabilityProfile?
     ) async throws -> ClaimedJob? {
+        // Idle-poll short-circuit (2026-07 audit): most polls find nothing to
+        // claim, yet each one previously entered the globally-serialized
+        // claim section and opened a write transaction issuing 2–3 candidate
+        // SELECTs. One cheap indexed existence probe (status prefix of
+        // idx_submissions_status_kind_submitted_at) outside the serialized
+        // section answers the empty case. Deliberately a fresh DB read, not
+        // cached state: there is nothing to invalidate, it is correct across
+        // processes, and a submission enqueued right after the probe is
+        // simply seen by the runner's next poll — the same pickup latency
+        // the poll cadence already implies. The claim transaction below
+        // re-reads candidates, so this never affects claim atomicity.
+        let hasPendingWork =
+            try await APISubmission.query(on: req.db)
+            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .field(\.$id)
+            .first() != nil
+        guard hasPendingWork else { return nil }
+
         let evaluator = ClaimEvaluator(
             assignmentRequirements: req.application.assignmentRequirements,
             compatibilityMatcher: CompatibilityMatcher()
         )
 
+        let candidates = try await collectClaimCandidates(on: req.db)
+        return try await evaluateAndClaimCandidate(
+            candidates: candidates,
+            req: req,
+            body: body,
+            runnerProfile: runnerProfile,
+            evaluator: evaluator
+        )
+    }
+
+    /// Atomically claims one submission. Both backends claim only the
+    /// already-evaluated candidate id — ordering and the requirement-
+    /// compatibility walk stay in `evaluateAndClaimCandidate` — and both
+    /// return nil on a lost race so the walk moves to the next candidate.
+    ///
+    /// **Postgres (#1172):** a short transaction takes a row lock with
+    /// `SELECT … FOR UPDATE SKIP LOCKED` and updates the locked row. SKIP
+    /// LOCKED means a row another claimer holds is skipped (nil) instead of
+    /// waited on, so concurrent claims from any number of processes scale
+    /// natively — no in-process serialization at all.
+    ///
+    /// **SQLite:** compare-and-set — the UPDATE's `status == pending` guard
+    /// means concurrent claimers cannot both win (the same conditional-
+    /// UPDATE idiom the MCP single-use token consumption uses), and the
+    /// re-read confirms *this* worker won. The WorkerClaimQueue actor
+    /// serializes in-process claim attempts so concurrent polls don't
+    /// thrash SQLite's write lock.
+    ///
+    /// Internal (not private) so the claim semantics are directly testable —
+    /// the lost-race path can't be triggered deterministically through the
+    /// HTTP endpoint. ClaimCompareAndSetTests pin both backends: the same
+    /// suite runs against SQLite (api-tests) and Postgres
+    /// (api-tests-postgres).
+    func atomicallyClaimSubmission(
+        id submissionID: String, req: Request, body: WorkerActivityPayload
+    ) async throws -> APISubmission? {
+        if let sql = req.db as? SQLDatabase, sql.dialect.name == "postgresql" {
+            return try await claimViaPostgresRowLock(id: submissionID, req: req, body: body)
+        }
         return try await req.application.workerClaimQueue.run {
             try await retrySQLiteBusyClaim {
-                try await req.db.transaction { db -> ClaimedJob? in
-                    let candidates = try await collectClaimCandidates(on: db)
-                    return try await evaluateAndClaimCandidate(
-                        candidates: candidates,
-                        req: req,
-                        body: body,
-                        runnerProfile: runnerProfile,
-                        evaluator: evaluator,
-                        on: db
-                    )
-                }
+                try await APISubmission.query(on: req.db)
+                    .filter(\.$id == submissionID)
+                    .filter(\.$status == SubmissionStatus.pending.rawValue)
+                    .set(\.$status, to: SubmissionStatus.assigned.rawValue)
+                    .set(\.$workerID, to: body.workerID)
+                    .set(\.$assignedAt, to: Date())
+                    .update()
+                guard
+                    let fresh = try await APISubmission.find(submissionID, on: req.db),
+                    fresh.status == SubmissionStatus.assigned.rawValue,
+                    fresh.workerID == body.workerID
+                else { return nil }
+                return fresh
             }
+        }
+    }
+
+    /// Postgres claim (#1172): lock the pending row (or bail if another
+    /// claimer holds it / already flipped it), stamp it, and re-read inside
+    /// the same transaction. The transaction spans exactly these three
+    /// statements — candidate evaluation happens outside, before the call.
+    private func claimViaPostgresRowLock(
+        id submissionID: String, req: Request, body: WorkerActivityPayload
+    ) async throws -> APISubmission? {
+        try await req.db.transaction { db in
+            guard let sql = db as? SQLDatabase else {
+                throw WorkerJobError.internalInconsistency(
+                    reason: "Postgres claim transaction did not expose SQLDatabase")
+            }
+            // SKIP LOCKED: a concurrently-locked row is skipped, not waited
+            // on — the loser sees zero rows immediately and walks on to its
+            // next candidate instead of queueing behind the winner.
+            let locked = try await sql.raw(
+                """
+                SELECT id FROM submissions
+                WHERE id = \(bind: submissionID)
+                  AND status = \(bind: SubmissionStatus.pending.rawValue)
+                FOR UPDATE SKIP LOCKED
+                """
+            ).first()
+            guard locked != nil else { return nil }
+
+            try await APISubmission.query(on: db)
+                .filter(\.$id == submissionID)
+                .set(\.$status, to: SubmissionStatus.assigned.rawValue)
+                .set(\.$workerID, to: body.workerID)
+                .set(\.$assignedAt, to: Date())
+                .update()
+
+            guard
+                let fresh = try await APISubmission.find(submissionID, on: db),
+                fresh.status == SubmissionStatus.assigned.rawValue,
+                fresh.workerID == body.workerID
+            else { return nil }
+            return fresh
         }
     }
 
@@ -185,7 +298,7 @@ struct WorkerJobRoutes: RouteCollection {
         guard let submissionID = submission.id, let setupID = setup.id else {
             throw WorkerJobError.internalInconsistency(reason: "Claimed submission or test setup missing id")
         }
-        let downloadVersion = await testSetupDownloadVersion(for: setup)
+        let downloadVersion = await testSetupDownloadVersion(for: setup, req: req)
         guard
             let submissionURL = URL(string: "\(base)/api/v1/worker/submissions/\(submissionID)/download"),
             let testSetupURL = URL(
@@ -210,6 +323,18 @@ struct WorkerJobRoutes: RouteCollection {
                 manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir)
         }
 
+        // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
+        // Cheap and deterministic (a file read + in-memory sample, no
+        // subprocess), so we resolve live for both student and validation
+        // submissions rather than caching it on the materialization row. A
+        // strict no-op for every assignment that declares no datasets — which is
+        // all of them until the dataset editor ships — so existing jobs are
+        // byte-identical to before. The runner-sanitized manifest below drops
+        // the dataset specs; only the resolved bytes travel, in `personalizedFiles`.
+        let datasetSharedDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
+        let personalizedFiles = DatasetResolver.resolve(
+            manifest: claimed.manifest, seedHex: assignmentSeed, sourceDirectory: datasetSharedDir)
+
         return Job(
             submissionID: submissionID,
             testSetupID: setupID,
@@ -219,7 +344,8 @@ struct WorkerJobRoutes: RouteCollection {
             manifest: claimed.manifest.runnerSanitized(),
             submissionFilename: submission.filename,
             assignmentSeed: assignmentSeed,
-            personalizedInputs: personalizedInputs
+            personalizedInputs: personalizedInputs,
+            personalizedFiles: personalizedFiles
         )
     }
 
@@ -237,37 +363,7 @@ struct WorkerJobRoutes: RouteCollection {
     @Sendable
     func heartbeat(req: Request) async throws -> HTTPStatus {
         let body = try req.content.decode(WorkerActivityPayload.self)
-        let seenAt = Date()
-        await req.application.workerActivityStore.markActive(
-            workerID: body.workerID,
-            hostname: body.hostname,
-            runnerVersion: body.runnerVersion,
-            maxConcurrentJobs: body.maxConcurrentJobs,
-            activeJobs: body.activeJobs,
-            lastHeartbeatAt: seenAt
-        )
-        let profileUpsert = try await req.application.runnerProfiles.registerOrUpdate(
-            runnerID: body.workerID,
-            displayName: body.hostname,
-            profile: body.profile,
-            seenAt: seenAt,
-            on: req.db
-        )
-        if let profile = profileUpsert.profile, let event = profileUpsert.event {
-            req.application.diagnostics.recordRunnerProfileEvent(
-                profile: profile,
-                event: event,
-                logger: req.logger
-            )
-        }
-        if let snapshot = await req.application.workerActivityStore.snapshot(for: body.workerID) {
-            await req.application.diagnostics.recordRunnerCheckIn(
-                snapshot: snapshot,
-                reason: .heartbeat,
-                on: req.db,
-                logger: req.logger
-            )
-        }
+        _ = try await recordRunnerCheckIn(req: req, body: body, seenAt: Date(), reason: .heartbeat)
         return .ok
     }
 }
@@ -294,7 +390,8 @@ private struct BlockedCandidate {
     let result: CompatibilityResult
 }
 
-/// Loads the ordered list of claim candidates inside the claim transaction.
+/// Loads the ordered list of claim candidates (plain reads, outside the
+/// serialized claim section — the compare-and-set claim re-checks pending).
 /// Fresh student work (retestedAt == nil) is claimed before any retest
 /// (retestedAt != nil), so a manifest-revision sweep can't starve students who
 /// are actively submitting (#427). Within each group, oldest submittedAt wins.
@@ -348,9 +445,10 @@ private func collectClaimCandidates(
         guard let manifest = decodeManifest(from: Data(setup.manifest.utf8)) else { continue }
         resolvedBySetupID[candidate.testSetupID] = (setup, manifest)
         // Accept both worker-mode and browser-mode pending submissions.
-        // Browser-mode submissions only become pending when the client-side
-        // runner fails or times out; the worker serves as a backstop that
-        // runs the .py test scripts natively via python3.
+        // Browser-mode submissions become pending when the client-side runner
+        // fails or freezes (the `browser-failover` endpoint enqueues them) or
+        // when an instructor retests; the worker serves as a backstop that runs
+        // the .py test scripts natively via python3.
         candidates.append((candidate, setup, manifest))
     }
 
@@ -379,90 +477,97 @@ private func collectClaimCandidates(
 }
 
 /// Walks the ordered candidate list, checks each against the runner's
-/// capability profile, and claims the first compatible one inside the
-/// transaction.  When no candidate is claimable, emits a single
-/// "no compatible runner available" diagnostic for the first blocked candidate
-/// we saw and returns nil.
-/// Bundles the per-claim collaborators that don't change between candidates,
-/// so the per-candidate evaluation helper stays under the parameter-count cap.
+/// capability profile, and atomically claims the first compatible one that is
+/// still pending.  All evaluation (requirement queries, compatibility
+/// matching, diagnostics) happens outside the serialized claim section; only
+/// the compare-and-set claim itself is serialized.  A candidate that another
+/// runner claimed since the scan fails its CAS and the walk continues.  When
+/// no candidate is claimable, emits a single "no compatible runner available"
+/// diagnostic for the first blocked candidate we saw and returns nil.
+/// ClaimEvaluator bundles the per-claim collaborators that don't change
+/// between candidates, so the evaluation helper stays under the
+/// parameter-count cap.
 private struct ClaimEvaluator {
     let assignmentRequirements: AssignmentRequirementService
     let compatibilityMatcher: CompatibilityMatcher
 }
 
-private func evaluateAndClaimCandidate(
-    candidates: [(APISubmission, APITestSetup, TestProperties)],
-    req: Request,
-    body: WorkerActivityPayload,
-    runnerProfile: RunnerCapabilityProfile?,
-    evaluator: ClaimEvaluator,
-    on db: Database
-) async throws -> ClaimedJob? {
-    var blockedCandidate: BlockedCandidate?
+extension WorkerJobRoutes {
+    fileprivate func evaluateAndClaimCandidate(
+        candidates: [(APISubmission, APITestSetup, TestProperties)],
+        req: Request,
+        body: WorkerActivityPayload,
+        runnerProfile: RunnerCapabilityProfile?,
+        evaluator: ClaimEvaluator
+    ) async throws -> ClaimedJob? {
+        var blockedCandidate: BlockedCandidate?
 
-    for (submission, setup, manifest) in candidates {
-        let loadedRequirements = try await evaluator.assignmentRequirements.loadRequirement(
-            for: submission, on: db)
-        let requirementSpec = loadedRequirements.requirement?.requirementSpec
+        for (submission, setup, manifest) in candidates {
+            let loadedRequirements = try await evaluator.assignmentRequirements.loadRequirement(
+                for: submission, on: req.db)
+            let requirementSpec = loadedRequirements.requirement?.requirementSpec
 
-        req.application.diagnostics.recordAssignmentRequirementsLoaded(
-            submission: submission,
-            assignmentID: loadedRequirements.assignmentID,
-            requirements: requirementSpec,
-            logger: req.logger
-        )
+            req.application.diagnostics.recordAssignmentRequirementsLoaded(
+                submission: submission,
+                assignmentID: loadedRequirements.assignmentID,
+                requirements: requirementSpec,
+                logger: req.logger
+            )
 
-        let compatibilityResult = evaluator.compatibilityMatcher.evaluate(
-            runnerProfile: runnerProfile,
-            requirements: requirementSpec
-        )
-        await req.application.diagnostics.recordCompatibilityDecision(
-            submission: submission,
-            assignmentID: loadedRequirements.assignmentID,
-            runnerID: body.workerID,
-            requirements: requirementSpec,
-            result: compatibilityResult,
-            logger: req.logger
-        )
+            let compatibilityResult = evaluator.compatibilityMatcher.evaluate(
+                runnerProfile: runnerProfile,
+                requirements: requirementSpec
+            )
+            await req.application.diagnostics.recordCompatibilityDecision(
+                submission: submission,
+                assignmentID: loadedRequirements.assignmentID,
+                runnerID: body.workerID,
+                requirements: requirementSpec,
+                result: compatibilityResult,
+                logger: req.logger
+            )
 
-        guard compatibilityResult.isCompatible else {
-            if blockedCandidate == nil {
-                blockedCandidate = BlockedCandidate(
-                    submission: submission,
-                    assignmentID: loadedRequirements.assignmentID,
-                    requirements: requirementSpec,
-                    result: compatibilityResult
-                )
+            guard compatibilityResult.isCompatible else {
+                if blockedCandidate == nil {
+                    blockedCandidate = BlockedCandidate(
+                        submission: submission,
+                        assignmentID: loadedRequirements.assignmentID,
+                        requirements: requirementSpec,
+                        result: compatibilityResult
+                    )
+                }
+                continue
             }
-            continue
+
+            guard let submissionID = submission.id,
+                let claimed = try await atomicallyClaimSubmission(id: submissionID, req: req, body: body)
+            else {
+                // Lost the claim race (or a malformed row) — the next
+                // candidate may still be ours.
+                continue
+            }
+
+            return ClaimedJob(
+                submission: claimed,
+                setup: setup,
+                manifest: manifest,
+                assignmentID: loadedRequirements.assignmentID,
+                requirementSpec: requirementSpec
+            )
         }
 
-        // Claim inside the transaction — atomic with the select above.
-        submission.setStatus(.assigned)
-        submission.workerID = body.workerID
-        submission.assignedAt = Date()
-        try await submission.save(on: db)
-
-        return ClaimedJob(
-            submission: submission,
-            setup: setup,
-            manifest: manifest,
-            assignmentID: loadedRequirements.assignmentID,
-            requirementSpec: requirementSpec
-        )
+        if let blockedCandidate {
+            await req.application.diagnostics.recordNoCompatibleRunnerAvailable(
+                submission: blockedCandidate.submission,
+                assignmentID: blockedCandidate.assignmentID,
+                runnerID: body.workerID,
+                requirements: blockedCandidate.requirements,
+                result: blockedCandidate.result,
+                logger: req.logger
+            )
+        }
+        return nil
     }
-
-    if let blockedCandidate {
-        await req.application.diagnostics.recordNoCompatibleRunnerAvailable(
-            submission: blockedCandidate.submission,
-            assignmentID: blockedCandidate.assignmentID,
-            runnerID: body.workerID,
-            requirements: blockedCandidate.requirements,
-            result: blockedCandidate.result,
-            logger: req.logger
-        )
-    }
-    return nil
 }
 
 private func resolvedWorkerBaseURL(req: Request) -> String {
@@ -508,47 +613,70 @@ private func normalizedWorkerBindHost(_ raw: String) -> String {
 private actor TestSetupDownloadVersionCache {
     static let shared = TestSetupDownloadVersionCache()
 
-    private struct Key: Hashable {
+    private var entries: [String: (key: Key, version: String)] = [:]
+
+    func cachedVersion(setupID: String, key: Key) -> String? {
+        guard let cached = entries[setupID], cached.key == key else { return nil }
+        return cached.version
+    }
+
+    func store(setupID: String, key: Key, version: String) {
+        entries[setupID] = (key, version)
+    }
+
+    static func makeKey(manifest: String, zipPath: String) -> Key {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: zipPath)
+        return Key(
+            manifest: manifest,
+            zipPath: zipPath,
+            zipSize: (attributes?[.size] as? UInt64) ?? 0,
+            zipModified: (attributes?[.modificationDate] as? Date) ?? .distantPast)
+    }
+
+    struct Key: Hashable, Sendable {
         let manifest: String
         let zipPath: String
         let zipSize: UInt64
         let zipModified: Date
     }
-
-    private var entries: [String: (key: Key, version: String)] = [:]
-
-    func version(for setup: APITestSetup) -> String {
-        let setupID = setup.id ?? setup.zipPath
-        let attributes = try? FileManager.default.attributesOfItem(atPath: setup.zipPath)
-        let key = Key(
-            manifest: setup.manifest,
-            zipPath: setup.zipPath,
-            zipSize: (attributes?[.size] as? UInt64) ?? 0,
-            zipModified: (attributes?[.modificationDate] as? Date) ?? .distantPast)
-
-        if let cached = entries[setupID], cached.key == key { return cached.version }
-
-        var material = Data(setup.manifest.utf8)
-        if let zipData = try? Data(contentsOf: URL(fileURLWithPath: setup.zipPath)) {
-            material.append(Data("|zip=".utf8))
-            material.append(zipData)
-        }
-        let version = String(sha256HexDigest(material).prefix(16))
-        entries[setupID] = (key, version)
-        return version
-    }
 }
 
-private func testSetupDownloadVersion(for setup: APITestSetup) async -> String {
-    await TestSetupDownloadVersionCache.shared.version(for: setup)
+private func testSetupDownloadVersion(for setup: APITestSetup, req: Request) async -> String {
+    let setupID = setup.id ?? setup.zipPath
+    let manifest = setup.manifest
+    let zipPath = setup.zipPath
+    let key = TestSetupDownloadVersionCache.makeKey(manifest: manifest, zipPath: zipPath)
+
+    if let cached = await TestSetupDownloadVersionCache.shared.cachedVersion(setupID: setupID, key: key) {
+        return cached
+    }
+
+    // Cache miss (first claim after any suite edit): the zip is hashed in
+    // streamed 1 MiB chunks on the thread pool (#1160) — the old
+    // Data(contentsOf:) pulled a whole dataset-heavy setup zip into heap
+    // inside the actor, on the claim path. Digest is byte-identical to the
+    // old manifest+"|zip="+bytes concatenation, so versions (and runner
+    // download caches) carry across the change.
+    let prefix = Data(manifest.utf8) + Data("|zip=".utf8)
+    let digest =
+        (try? await runBlocking(on: req) {
+            sha256HexDigest(prefix: prefix, contentsOfFile: zipPath)
+        }).flatMap { $0 }
+    let version = String((digest ?? sha256HexDigest(Data(manifest.utf8))).prefix(16))
+    await TestSetupDownloadVersionCache.shared.store(setupID: setupID, key: key, version: version)
+    return version
 }
 
 // MARK: - Application-level claim serializer
 
-/// Ensures at most one worker-job claim operation executes at a time.
-/// This complements the DB transaction: SQLite WAL serializes write
-/// transactions in file-based deployments; this queue does the same for
-/// in-process scenarios (single-node servers, test environments).
+/// Ensures at most one worker-job claim operation executes at a time —
+/// **SQLite only** (#1172 moved Postgres to `FOR UPDATE SKIP LOCKED`, which
+/// needs no in-process serialization). Claim *correctness* comes from the
+/// compare-and-set UPDATE in `atomicallyClaimSubmission` (its
+/// `status == pending` guard is atomic); this queue exists so concurrent
+/// in-process polls don't thrash SQLite's write lock and burn busy-retries.
+/// The section it guards is one UPDATE + one SELECT (2026-07 audit —
+/// evaluation moved outside).
 ///
 /// Implemented as a Swift actor — actor isolation replaces the previous
 /// NSLock + @unchecked Sendable approach, giving compile-time concurrency

@@ -11,7 +11,7 @@ import Core
 import Fluent
 import Testing
 import Vapor
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 

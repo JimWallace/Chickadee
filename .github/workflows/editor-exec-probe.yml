@@ -1,0 +1,86 @@
+name: Editor exec-hang probe
+
+# DIAGNOSTIC harness — NOT a required gate. Reproduces the production post-idle
+# kernel execution hang (`exec_hang`) in CI: it opens the REAL student notebook
+# page, waits for kernel_idle, then runs an EDITOR cell and asserts its output
+# renders — the path the required editor-smoke never exercises (that one checks
+# boot + browser grading, but never an editor-cell execute, which is exactly
+# where ~1 in 5 students wedge `[*]`-forever). Loops to measure the hang RATE per
+# engine and, on a hang, prints the in-iframe kernel-diag breadcrumbs (incl.
+# exec_hang), the execution-indicator status, and console errors.
+#
+# Intentionally NOT marked required in branch protection: while the root cause is
+# open, a reproduced hang is the SIGNAL we want, not a merge blocker. It is the
+# failing test a fix must turn green; once consistently green it becomes a
+# regression guard. Runs on PRs that touch the editor/probe surface, and on
+# demand (workflow_dispatch) with a larger iteration count for a rate sweep.
+
+on:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: "Engine to probe (chromium | webkit | both)"
+        default: "both"
+      iterations:
+        description: "open→idle→execute cycles per engine"
+        default: "8"
+      budget_ms:
+        description: "per-cell execute budget in ms (>45000 also trips exec_hang)"
+        default: "60000"
+      delay_ms:
+        description: "ms to wait after kernel_idle before running the cell"
+        default: "0"
+  pull_request:
+    paths:
+      - "Tools/editor-smoke-test/**"
+      - ".github/workflows/editor-exec-probe.yml"
+      - "Public/notebook*.js"
+      - "Public/jl-kernel-diagnostics.js"
+      - "Public/browser-runner.js"
+      - "Public/jupyterlite/**"
+      - "scripts/patch-pyodide-kernel.py"
+
+concurrency:
+  group: editor-exec-probe-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  exec-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    # Same Swift image as the other jobs so the cached server binary runs and the
+    # vended Public/pyodide it serves is the exact build CI ships.
+    container:
+      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Shared scaffold: mtime normalisation, build-cache restore, server
+      # build, Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
+        with:
+          browser: ${{ matrix.browser }}
+
+      # Skip the non-selected engine on a single-engine workflow_dispatch; always
+      # run both on a pull_request (inputs are empty there).
+      - name: Probe editor-cell execute (${{ matrix.browser }})
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}
+        env:
+          SMOKE_BROWSER: ${{ matrix.browser }}
+          SMOKE_CHECK: editor-exec-check.mjs
+          EXEC_ITER: ${{ github.event.inputs.iterations || '8' }}
+          EXEC_BUDGET_MS: ${{ github.event.inputs.budget_ms || '60000' }}
+          EXEC_DELAY_MS: ${{ github.event.inputs.delay_ms || '0' }}
+        run: Tools/editor-smoke-test/run-smoke.sh

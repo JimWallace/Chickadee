@@ -44,6 +44,7 @@ Edit `.env`:
 | `DATABASE_BACKEND` | Optional. Leave unset or set to `sqlite` to keep the current default backend. Set to `postgres` to use PostgreSQL. |
 | `SQLITE_PATH` | Optional. Path to the SQLite file. Defaults to `/data/chickadee.sqlite` in the containerized deployment. |
 | `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` / `DATABASE_PASSWORD` | Required only when `DATABASE_BACKEND=postgres`. |
+| `DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP` | Optional Fluent pool size per event loop. Defaults: 4 on Postgres, 1 on SQLite. Total Postgres connections is roughly this value times CPU cores; raise it if long admin reports overlap enough to produce `ConnectionPoolTimeoutError`, and keep the product under the Postgres `max_connections` budget shared with the runner and any second server process. |
 | `AUTH_MODE` | `local` for username/password; `sso` for OIDC |
 | `PUBLIC_BASE_URL` | Your public URL, e.g. `https://chickadee.example.com` |
 

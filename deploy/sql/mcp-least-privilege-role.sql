@@ -11,8 +11,10 @@
 -- which registers a dedicated connection pool (DatabaseID.mcp) that every MCP
 -- tool query runs on (see Sources/APIServer/Utilities/DatabaseConfiguration.swift
 -- and ToolContext.db). The main app keeps using its own (owner) role, so the
--- web UI, worker, and migrations are unaffected. The MCP audit row and the
--- content-edit re-grade run on the main pool, not this one.
+-- web UI, worker, and migrations are unaffected. The MCP audit row, the
+-- content-edit re-grade, and the acting-user personalization-seed bookkeeping
+-- (assignment_personalization_seeds, via ToolContext.mainDB) all run on the
+-- main (owner) pool, not this one -- so none of them need a grant here.
 --
 -- IMPORTANT: review and TEST this against your schema before production use.
 -- Grants must cover everything the MCP write tools do; a missing grant surfaces
@@ -45,7 +47,14 @@ GRANT SELECT ON users, course_enrollments TO chickadee_mcp;
 --    MCP query forgot the in-app kind filter, the database returns no student
 --    rows. The table owner (the main app role) bypasses RLS, so the web app and
 --    worker are unaffected.
-GRANT SELECT ON submissions, results TO chickadee_mcp;
+--
+--    result_collections (added by #1176, v0.4.587) holds the serialized
+--    TestOutcomeCollection blob that used to live on results.collection_json;
+--    get_validation_result reads it via loadCollectionJSON. Deployments that
+--    applied this file before v0.4.611 must re-run this section: without the
+--    grant, every get_validation_result call fails with "permission denied for
+--    table result_collections".
+GRANT SELECT ON submissions, results, result_collections TO chickadee_mcp;
 
 ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS mcp_validation_submissions ON submissions;
@@ -62,6 +71,16 @@ CREATE POLICY mcp_validation_results ON results
         WHERE s.id = results.submission_id AND s.kind = 'validation'
     ));
 
+ALTER TABLE result_collections ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS mcp_validation_result_collections ON result_collections;
+CREATE POLICY mcp_validation_result_collections ON result_collections
+    FOR SELECT TO chickadee_mcp
+    USING (EXISTS (
+        SELECT 1 FROM results r
+        JOIN submissions s ON s.id = r.submission_id
+        WHERE r.id = result_collections.result_id AND s.kind = 'validation'
+    ));
+
 -- 5. Everything else is DENIED by omission — no GRANT is issued, so the role
 --    cannot touch any of these student-data tables:
 --      grade_overrides, client_diagnostics, submission_diagnostics,
@@ -70,8 +89,23 @@ CREATE POLICY mcp_validation_results ON results
 --      user_activity_events, brightspace_sync_log, pre_enrollments, audit_log,
 --      request_metrics, runner_profiles, runner_snapshots, oauth_* ...
 --    Do NOT add blanket "GRANT ... ON ALL TABLES" — that would defeat the wall.
+--
+--    assignment_personalization_seeds STAYS DENIED. The MCP personalization
+--    tools (update_global_inputs, update_section_variables,
+--    preview_personalization) DO ensure the acting account's own per-assignment
+--    seed, but that bookkeeping runs on the MAIN (owner) pool via
+--    ToolContext.mainDB — never this role — so it needs no grant here. (If you
+--    applied the temporary stopgap
+--        GRANT SELECT, INSERT ON assignment_personalization_seeds TO chickadee_mcp;
+--    REVOKE it after deploying the build that routes the seed write to the owner
+--    pool:
+--        REVOKE SELECT, INSERT ON assignment_personalization_seeds FROM chickadee_mcp;
+--    Leaving the grant in place would re-open the very table this wall denies.)
 
 -- 6. Verify (run as chickadee_mcp):
 --      SELECT count(*) FROM submissions;            -- only validation rows
 --      SELECT * FROM grade_overrides LIMIT 1;       -- must ERROR: permission denied
 --      SELECT * FROM users LIMIT 1;                 -- allowed (authz)
+--      SELECT * FROM assignment_personalization_seeds LIMIT 1;
+--                                                   -- must ERROR: permission denied
+--                                                   -- (seed bookkeeping runs on the owner pool)

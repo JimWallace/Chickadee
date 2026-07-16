@@ -18,7 +18,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentNotebookFile(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
 
         let data = try notebookData(for: setup)
         let downloadName = currentSetupFiles(
@@ -33,7 +33,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentSetupItem(req: Request) async throws -> Response {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForStaffRead(req)
 
         struct FileQuery: Content {
             let name: String
@@ -54,13 +54,16 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func downloadCurrentSolutionFile(req: Request) async throws -> Response {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
 
         // Look for a solution.* entry inside the test setup zip.
-        let solutionZipEntry = listZipEntries(zipPath: setup.zipPath)
+        // Cached entry list + off-thread extraction (#1158): both helpers
+        // spawn serialized unzip subprocesses.
+        let zipPath = setup.zipPath
+        let solutionZipEntry = await req.application.zipEntryListCache.entries(zipPath: zipPath)
             .first(where: { $0.hasPrefix("solution.") })
         if let entryName = solutionZipEntry,
-            let data = extractZipEntry(zipPath: setup.zipPath, entryName: entryName)
+            let data = try await runBlocking(on: req, { extractZipEntry(zipPath: zipPath, entryName: entryName) })
         {
             return buildFileResponse(data: data, filename: entryName)
         }
@@ -69,10 +72,11 @@ extension PublishedAssignmentRoutes {
         // the instructor's original filename (e.g. bmi.py, dna.py).
         if let validationID = assignment.validationSubmissionID,
             let validationSubmission = try await APISubmission.find(validationID, on: req.db),
-            let data = try? Data(contentsOf: URL(fileURLWithPath: validationSubmission.zipPath)),
-            !data.isEmpty
+            let response = try await streamedFileResponse(
+                req: req, path: validationSubmission.zipPath,
+                filename: validationSubmission.filename ?? "solution.ipynb")
         {
-            return buildFileResponse(data: data, filename: validationSubmission.filename ?? "solution.ipynb")
+            return response
         }
 
         if let fallbackSubmission = try await APISubmission.query(on: req.db)
@@ -80,12 +84,36 @@ extension PublishedAssignmentRoutes {
             .filter(\.$kind == APISubmission.Kind.validation)
             .sort(\.$submittedAt, .descending)
             .first(),
-            let data = try? Data(contentsOf: URL(fileURLWithPath: fallbackSubmission.zipPath)),
-            !data.isEmpty
+            let response = try await streamedFileResponse(
+                req: req, path: fallbackSubmission.zipPath,
+                filename: fallbackSubmission.filename ?? "solution.ipynb")
         {
-            return buildFileResponse(data: data, filename: fallbackSubmission.filename ?? "solution.ipynb")
+            return response
         }
 
         throw WebAssignmentError.notFound(resource: "Solution notebook for this assignment")
     }
+}
+
+/// Streams a file-backed download with the shared content-type/disposition
+/// shape of `buildFileResponse`, or nil when the file is missing/empty so
+/// callers can fall through to the next candidate (#1158).
+private func streamedFileResponse(
+    req: Request, path: String, filename: String
+) async throws -> Response? {
+    let exists: Bool = try await runBlocking(on: req) {
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+            !isDirectory.boolValue,
+            let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+            (attrs[.size] as? UInt64 ?? 0) > 0
+        else { return false }
+        return true
+    }
+    guard exists else { return nil }
+    let response = try await req.fileio.asyncStreamFile(at: path)
+    response.headers.contentType = contentType(for: filename)
+    response.headers.replaceOrAdd(
+        name: .contentDisposition, value: "attachment; filename=\"\(filename)\"")
+    return response
 }

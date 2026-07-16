@@ -5,7 +5,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -41,7 +41,7 @@ import XCTVapor
         }
     }
 
-    @Test func registerSecondUserBecomesStudent() async throws {
+    @Test func registerSecondUserBecomesUser() async throws {
         try await withApp(try await makeApp()) { app in
             // Seed an existing admin.
             let hash = try testPasswordHash("password1")
@@ -63,7 +63,9 @@ import XCTVapor
             let student = try await APIUser.query(on: app.db)
                 .filter(\.$username == "student1")
                 .first()
-            #expect(student?.role == "student")
+            // Roles collapsed to user|admin (#417 Slice G2): a non-first
+            // registrant is a plain `user`, not the retired `student` role.
+            #expect(student?.role == "user")
 
         }
     }
@@ -249,8 +251,8 @@ import XCTVapor
                     #expect(res.status == .seeOther)
                 })
             let elapsed = Date().timeIntervalSince(start)
-            XCTAssertGreaterThan(
-                elapsed, 0.05,
+            #expect(
+                elapsed > 0.05,
                 "User-not-found login completed in \(elapsed)s; bcrypt verify likely skipped (cost 12 is ≥100 ms).")
 
         }
@@ -416,9 +418,10 @@ import XCTVapor
         }
     }
 
-    @Test func studentCannotAccessTestSetupNew() async throws {
+    @Test func studentCannotAccessInstructorArea() async throws {
+        // (Formerly probed /testsetups/new; that legacy upload pair was
+        // deleted in #1119, so the probe target is the instructor area gate.)
         try await withApp(try await makeApp()) { app in
-            // Create a student, get a session cookie, then try to access instructor-only page.
             let hash = try testPasswordHash("pass1234")
             let student = APIUser(username: "student", passwordHash: hash, role: "student")
             try await student.save(on: app.db)
@@ -426,7 +429,7 @@ import XCTVapor
             let sessionCookie = try await loginUser(username: "student", password: "pass1234", role: "student", on: app)
 
             try await app.asyncTest(
-                .GET, "/testsetups/new",
+                .GET, "/instructor",
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                 },

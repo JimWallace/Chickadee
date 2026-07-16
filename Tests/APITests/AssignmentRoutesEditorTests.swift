@@ -15,7 +15,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -30,9 +30,13 @@ import XCTVapor
     // MARK: - Auth helpers
 
     private func loginAsInstructor() async throws -> String {
-        try await loginUser(
+        let cookie = try await loginUser(
             username: "testinstructor_editor", password: "testpassword",
             role: "instructor", on: app)
+        // Phase 5: /instructor is gated on the per-course role — enrol in EDIT101.
+        try await enrollAsTestInstructor(
+            username: "testinstructor_editor", on: app, courseCode: "EDIT101")
+        return cookie
     }
 
     private func loginAsStudent() async throws -> String {
@@ -71,9 +75,11 @@ import XCTVapor
     /// pattern in ScriptEditRoutesTests so the same skip-on-missing-tooling
     /// guard applies).
     private func makeZipAt(zipPath: String, entries: [(name: String, content: Data)]) throws {
+        // Missing zip/unzip is platform-expected -> silent skip (the testing
+        // conventions reserve Issue.record for broken setup, not this).
         guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
             FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { Issue.record("skipped: " + "zip/unzip not available"); return }
+        else { return }
 
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("chickadee-editor-zip-\(UUID().uuidString)")

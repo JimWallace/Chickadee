@@ -8,7 +8,7 @@
 import Fluent
 import Foundation
 import Testing
-import XCTVapor
+import VaporTesting
 
 @testable import APIServer
 
@@ -54,7 +54,7 @@ import XCTVapor
         _ body: String,
         auth: (cookie: String, csrf: String),
         userAgent: String? = nil
-    ) async throws -> XCTHTTPResponse {
+    ) async throws -> TestingHTTPResponse {
         try await app.asyncSendRequest(.POST, "/api/v1/client-diagnostics") { req in
             req.headers.add(name: .cookie, value: auth.cookie)
             req.headers.add(name: "x-csrf-token", value: auth.csrf)
@@ -123,6 +123,95 @@ import XCTVapor
             #expect(records.first?.kind == "page_unresponsive")
             #expect(records.first?.testSetupID == "setup_frozen")
             #expect(records.first?.message == "stalled_ms=9120")
+        }
+    }
+
+    @Test func acceptsEditorReadyAndSwStateTelemetry() async throws {
+        try await withApp(app) { _ in
+            // Non-failure telemetry: editor_ready is the success denominator,
+            // sw_state reports service-worker registration. Both are accepted
+            // and persisted, and surface in get_browser_diagnostics by kind.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_tele")
+            let bodies = [
+                #"{"kind":"editor_ready","testSetupID":"setup_tele","message":"elapsed_ms=3400"}"#,
+                #"{"kind":"sw_state","testSetupID":"setup_tele","message":"supported=true;registrations=1"}"#,
+            ]
+            for body in bodies {
+                let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
+                #expect(res.status == .accepted)
+            }
+
+            let kinds = try await APIClientDiagnostic.query(on: app.db).all().map(\.kind).sorted()
+            #expect(kinds == ["editor_ready", "sw_state"])
+        }
+    }
+
+    @Test func acceptsKernelReadyTelemetry() async throws {
+        try await withApp(app) { _ in
+            // kernel_ready is the stronger success signal — the Pyodide kernel
+            // (not just the shell) reached idle/busy — so a hung kernel is
+            // distinguishable from a healthy boot. Accepted + persisted.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_kready")
+            let body = #"""
+                {"kind":"kernel_ready","testSetupID":"setup_kready","message":"elapsed_ms=4200;coi=true;waitasync=true;compat=false"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.kind == "kernel_ready")
+            #expect(rec.testSetupID == "setup_kready")
+        }
+    }
+
+    @Test func acceptsInIframeKernelPhaseAndErrorTelemetry() async throws {
+        try await withApp(app) { _ in
+            // The in-iframe collector (jl-kernel-diagnostics.js), forwarded by
+            // notebook.js, reports the kernel boot from inside the cross-process
+            // iframe: kernel_phase breadcrumbs (phase name in `source`) and
+            // kernel_error (failure source + detail). Both are accepted and feed
+            // get_browser_diagnostics (kernelBootFunnel / bySource).
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_kphase")
+            let bodies = [
+                #"{"kind":"kernel_phase","testSetupID":"setup_kphase","source":"boot_start"}"#,
+                #"{"kind":"kernel_phase","testSetupID":"setup_kphase","source":"kernel_idle"}"#,
+                #"{"kind":"kernel_error","testSetupID":"setup_kphase","source":"csp_violation","message":"worker-src blocked data:"}"#,
+            ]
+            for body in bodies {
+                let res = try await postJSON(body, auth: auth, userAgent: "Mozilla/5.0 (TestRunner)")
+                #expect(res.status == .accepted)
+            }
+
+            let records = try await APIClientDiagnostic.query(on: app.db).all()
+            let kinds = records.map(\.kind).sorted()
+            #expect(kinds == ["kernel_error", "kernel_phase", "kernel_phase"])
+            let err = try #require(records.first { $0.kind == "kernel_error" })
+            #expect(err.source == "csp_violation")
+            #expect(err.message == "worker-src blocked data:")
+        }
+    }
+
+    @Test func persistsKernelBootTimeoutSubtype() async throws {
+        try await withApp(app) { _ in
+            // A kernel that mounts the shell but never reaches ready is reported
+            // as watchdog_timeout with the distinct failedChecks
+            // ["kernel-boot-timeout"] subtype (vs the positive-evidence
+            // "kernel-unhealthy" one), so the silent spinner is finally counted.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_boot_timeout")
+            let body = #"""
+                {"kind":"watchdog_timeout","testSetupID":"setup_boot_timeout","failedChecks":["kernel-boot-timeout"],"source":"kernel","message":"coi=true;waitasync=false;compat=false"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "TestUA/5.0")
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.kind == "watchdog_timeout")
+            #expect(rec.failedChecks == "kernel-boot-timeout")
+            #expect(rec.source == "kernel")
         }
     }
 
@@ -226,6 +315,48 @@ import XCTVapor
             #expect(rec.source == "suite_started")
             #expect(rec.message == "elapsed_ms=4200;tests=8")
             #expect(rec.userAgent == "TestUA/4.0")
+        }
+    }
+
+    @Test func persistsAppVersionWhenProvided() async throws {
+        try await withApp(app) { _ in
+            // Every diagnostic stamps the page build's `app-version` so a report
+            // can be attributed to a build — an old value flags a stale browser
+            // tab still serving the pre-deploy bundle.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_ver")
+            let body = #"""
+                {"kind":"kernel_error","testSetupID":"setup_ver","source":"recover_failed","appVersion":"0.4.530"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "TestUA/9.0")
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.source == "recover_failed")
+            #expect(rec.appVersion == "0.4.530")
+        }
+    }
+
+    @Test func appVersionIsOptionalAndTrimmed() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_nover")
+            // Absent → nil (older clients that don't send it). Checked while it's
+            // the only row, so `first()` is unambiguous.
+            _ = try await postJSON(
+                #"{"kind":"editor_ready","testSetupID":"setup_nover","message":"elapsed_ms=1"}"#,
+                auth: auth)
+            let none = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(none.appVersion == nil)
+
+            // Over-long → trimmed to the 32-char column bound.
+            let longVersion = String(repeating: "v", count: 40)
+            _ = try await postJSON(
+                #"{"kind":"editor_ready","testSetupID":"setup_nover","source":"x","appVersion":"\#(longVersion)"}"#,
+                auth: auth)
+            let rows = try await APIClientDiagnostic.query(on: app.db).all()
+            let trimmed = try #require(rows.first { $0.appVersion != nil })
+            #expect(trimmed.appVersion?.count == 32)
         }
     }
 

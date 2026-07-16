@@ -59,9 +59,38 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         // service-worker sync path) and a dedicated worker — which keeps running
         // while the page is frozen — reported it. Such freezes are otherwise
         // invisible: the blocked main thread can't post anything itself.
+        // "editor_ready", "kernel_ready" and "sw_state" are non-failure
+        // telemetry. editor_ready is the SHELL-up denominator (message
+        // "elapsed_ms=…"). kernel_ready is the stronger signal — the Pyodide
+        // KERNEL reached idle/busy — so a hung kernel is distinguishable from a
+        // healthy one (editor_ready alone over-counts success: the shell can
+        // mount while the kernel never starts, which is exactly the spinning-
+        // forever symptom). A kernel that never reaches ready is reported as a
+        // "watchdog_timeout" with failedChecks ["kernel-boot-timeout"] — a
+        // distinct subtype from the positive-evidence "kernel-unhealthy" one.
+        // sw_state reports service-worker registration + cross-origin-isolation
+        // state ("supported=…;registrations=…;coi=…;sab=…;waitasync=…").
+        // "kernel_phase" / "kernel_error" are forwarded by the parent page from
+        // the IN-IFRAME collector (jl-kernel-diagnostics.js): the editor document
+        // observes the Pyodide kernel boot from inside the cross-process iframe —
+        // the one context where it is visible — and postMessages breadcrumbs out.
+        // kernel_phase carries the phase name in `source`
+        // (boot_start → app_ready → kernel_starting → kernel_idle), the boot
+        // funnel whose drop-off point localizes WHERE a boot stalls; kernel_error
+        // carries the failure (source = csp_violation / resource_error /
+        // kernel_dead / boot_stalled / …, message = detail) — the WHY the parent
+        // could never see across the iframe boundary. Infrastructure breadcrumbs
+        // only (capture stops once the kernel idles), never student-code output.
         let allowedKinds: Set<String> = [
             "preflight_fail", "watchdog_timeout", "editor_error",
             "submit_phase", "submit_error", "page_unresponsive",
+            "editor_ready", "kernel_ready", "sw_state",
+            "kernel_phase", "kernel_error",
+            // Non-blocking support warnings (notebook-preflight.js): the
+            // supported-browser-matrix banner and the low-memory device hint.
+            // Recorded so the admin browser-diagnostics surface gets a real
+            // below-matrix / low-memory rate (attributed by browser from the UA).
+            "browser_support", "device_warning",
         ]
         guard allowedKinds.contains(body.kind) else {
             throw AppError.badRequest(reason: "Unknown kind")
@@ -76,6 +105,7 @@ struct ClientDiagnosticsRoutes: RouteCollection {
         let trimmedSource = body.source.map { String($0.prefix(64)) }
         let trimmedMessage = body.message.map { String($0.prefix(1024)) }
         let trimmedStack = body.stack.map { String($0.prefix(4096)) }
+        let trimmedAppVersion = body.appVersion.map { String($0.prefix(32)) }
 
         // De-duplicate within an hour so reloads don't multiply rows.  The
         // source is part of the key so distinct error origins (onerror vs.
@@ -111,7 +141,8 @@ struct ClientDiagnosticsRoutes: RouteCollection {
             userAgent: trimmedAgent,
             message: trimmedMessage,
             stack: trimmedStack,
-            source: trimmedSource
+            source: trimmedSource,
+            appVersion: trimmedAppVersion
         )
         try await record.save(on: req.db)
         return .accepted
@@ -133,6 +164,10 @@ struct ClientDiagnosticBody: Content {
     var stack: String?
     /// Origin of the error: "onerror" | "unhandledrejection" | "kernel".
     var source: String?
+    /// ChickadeeVersion of the page build that emitted this report (from the
+    /// `app-version` meta tag). Lets a diagnostic be attributed to a build —
+    /// an old value flags a stale browser tab still on pre-deploy code.
+    var appVersion: String?
 }
 
 // MARK: - Rate limiter

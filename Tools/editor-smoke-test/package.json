@@ -1,0 +1,11 @@
+{
+  "name": "chickadee-editor-smoke-test",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Headless-browser smoke test: boots the JupyterLite editor against a running chickadee-server and asserts the Pyodide kernel comes up.",
+  "type": "module",
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "playwright": "^1.49.1"
+  }
+}
