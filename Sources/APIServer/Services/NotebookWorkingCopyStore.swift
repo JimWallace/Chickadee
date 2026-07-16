@@ -206,6 +206,38 @@ func ensureUserNotebookWorkingCopy(
     return processedData
 }
 
+/// Overwrites `userID`'s working copy with `starter` after applying the same
+/// per-student `{{name}}` personalization the first-open seeding path
+/// performs.  All three reset-notebook actions (student self-service and both
+/// instructor-driven ones) funnel through here: resetting a personalized
+/// assignment must land the student on their substituted starter, never the
+/// raw template (which would leave `name = {{name}}` cells that fail with
+/// NameError).  Substitution failures soft-fail to the raw starter, matching
+/// the seeding path.
+func overwriteUserNotebookWithPersonalizedStarter(
+    req: Request,
+    setup: APITestSetup,
+    setupID: String,
+    userID: UUID,
+    starter: Data
+) async throws -> Data {
+    let personalized = await applyNotebookSubstitutionsIfNeeded(
+        seedData: starter,
+        setup: setup,
+        userID: userID,
+        db: req.db,
+        supportFilesDirectory: req.application.testSetupsDirectory + "shared/\(setupID)/",
+        logger: req.logger
+    )
+    return try await ensureUserNotebookWorkingCopy(
+        req: req,
+        setupID: setupID,
+        userID: userID,
+        fallbackSetup: setup,
+        overwriteWith: personalized
+    )
+}
+
 /// Slice 1 + Slice 2: applies `{{name}}` substitutions to a notebook.
 /// Sources:
 ///   - `globalVariables` (Slice 1, literals)

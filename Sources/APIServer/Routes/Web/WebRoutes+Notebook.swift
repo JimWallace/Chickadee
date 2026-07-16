@@ -156,12 +156,12 @@ extension WebRoutes {
             throw Abort(.badRequest, reason: "This assignment has no starter notebook to reset to.")
         }
 
-        _ = try await ensureUserNotebookWorkingCopy(
+        _ = try await overwriteUserNotebookWithPersonalizedStarter(
             req: req,
+            setup: setup,
             setupID: setupID,
             userID: userID,
-            fallbackSetup: setup,
-            overwriteWith: starter
+            starter: starter
         )
 
         req.logger.info("student_self_notebook_reset setup=\(setupID) student=\(userID.uuidString)")

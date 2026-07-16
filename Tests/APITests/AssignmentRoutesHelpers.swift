@@ -62,10 +62,15 @@ func arLoginAsStudent(on app: Application) async throws -> String {
 // MARK: - Seeding helpers
 
 @discardableResult
-func arInsertSetup(id: String, on app: Application) async throws -> APITestSetup {
-    let manifest = """
-        {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
-        """
+func arInsertSetup(
+    id: String,
+    manifest: String? = nil,
+    on app: Application
+) async throws -> APITestSetup {
+    let manifest =
+        manifest ?? """
+            {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10,"makefile":null}
+            """
     let courseID = try await app.testCourseID(enrollmentMode: .auto)
     let setup = APITestSetup(
         id: id, manifest: manifest, zipPath: app.testSetupsDirectory + "\(id).zip", courseID: courseID)
