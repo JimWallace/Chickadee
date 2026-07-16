@@ -124,7 +124,7 @@ LEARN
     margin: 1rem 0;
 }
 .bs-footnote {
-    font-size: .85rem;
+    font-size: var(--text-base);
     margin-bottom: 0;
 }
 .bs-manual {
@@ -134,7 +134,7 @@ LEARN
 }
 .bs-manual-heading {
     margin: 0 0 .4rem;
-    font-size: 1rem;
+    font-size: var(--text-md);
 }
 .bs-manual-form {
     display: flex;
@@ -147,7 +147,7 @@ LEARN
     display: flex;
     flex-direction: column;
     gap: .25rem;
-    font-size: .85rem;
+    font-size: var(--text-base);
 }
 .bs-field input {
     width: 22rem;

@@ -217,6 +217,19 @@ async function main() {
   });
   const page = await context.newPage();
 
+  // Stray-tab guard. Notebook 7 opens each document in its own browser tab via
+  // window.open; embedded in our iframe that surfaces as a redundant second
+  // editor tab (a third Pyodide). With the fix — parent-side window.open
+  // suppression (notebook.js) + the server self-close page
+  // (JupyterLiteAppIndexMiddleware) — no such tab should ever open, so ANY new
+  // page in this context after the main one is a regression. Record + close it
+  // (so a stray second editor can't keep running and skew timings).
+  const strayTabs = [];
+  context.on("page", (p) => {
+    strayTabs.push(p.url());
+    p.close().catch(() => {});
+  });
+
   const blocked = [];
   page.on("requestfailed", (req) => {
     const why = req.failure()?.errorText || "";
@@ -254,10 +267,21 @@ async function main() {
     // the seed actually produced an authorized student on the real page.
     if (/\/login/.test(page.url())) return fail(`redirected to login — student not authorized (url=${page.url()})`);
 
-    // (1) The real notebook page must be cross-origin isolated.
+    // (1) Cross-origin isolation is now ENGINE-DEPENDENT. Chromium/Blink/Gecko
+    // get the isolated SharedArrayBuffer path; WebKit gets the NON-isolated
+    // comlink + service-worker path, because the SAB/`coincident` handshake
+    // deadlocks the kernel on WebKit (see EditorEngineDetection.swift). Assert
+    // the page is in the state its engine expects — both directions, so a
+    // silent isolation flip on either engine is caught.
+    const expectIsolated = browserName !== "webkit";
     const isolated = await page.evaluate(() => globalThis.crossOriginIsolated === true);
-    console.log(`crossOriginIsolated = ${isolated}`);
-    if (!isolated) return fail("the real notebook page is NOT cross-origin isolated (COEP missing on /testsetups/:id/notebook)");
+    console.log(`crossOriginIsolated = ${isolated} (expected ${expectIsolated} for ${browserName})`);
+    if (expectIsolated && !isolated) {
+      return fail("the real notebook page is NOT cross-origin isolated (COEP missing on /testsetups/:id/notebook)");
+    }
+    if (!expectIsolated && isolated) {
+      return fail("the WebKit notebook page IS cross-origin isolated — it must be served non-isolated so the kernel uses the comlink transport");
+    }
 
     // (2) Our app Web Workers must spawn from the real isolated page (the #986
     // regression: a require-corp page can't spawn a worker whose script lacks
@@ -382,6 +406,12 @@ async function main() {
     // loaded Pyodide, ran the test, and posted a correct outcome end-to-end.
     if (!/1\s*\/\s*1\s*passed/i.test(resultText)) {
       return fail(`grading did not pass cleanly (expected "1 / 1 passed"): ${resultText}`);
+    }
+
+    if (strayTabs.length) {
+      return fail(
+        `${strayTabs.length} stray editor tab(s) opened — Notebook 7's window.open was not suppressed: ${strayTabs.join(", ")}`
+      );
     }
 
     console.log(`E2E PASS — real notebook page isolated, workers spawned, kernel booted, submit graded 1/1 (engine=${browserName})`);

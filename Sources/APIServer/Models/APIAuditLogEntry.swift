@@ -101,6 +101,8 @@ enum AuditAction: String, Sendable, CaseIterable {
     case userProvisioned = "user.provisioned"
     case userRoleChanged = "user.role_changed"
     case userDeleted = "user.deleted"
+    case userDataExportRequested = "user.data_export_requested"
+    case userDataExportDownloaded = "user.data_export_downloaded"
 
     // Courses
     case courseCreated = "course.created"
@@ -126,9 +128,28 @@ enum AuditAction: String, Sendable, CaseIterable {
     case gradeOverrideSet = "grade_override.set"
     case gradeOverrideCleared = "grade_override.cleared"
 
+    // Secret reveal tokens
+    case secretRevealSpent = "secret_reveal.spent"
+    case secretRevealRegranted = "secret_reveal.regranted"
+    case secretRevealToggled = "secret_reveal.toggle_changed"
+
     // Runner / worker
     case runnerSecretRotated = "runner.secret_rotated"
     case runnerAutostartChanged = "runner.autostart_changed"
+
+    // BrightSpace / LEARN grade sync (actor-driven actions only — individual
+    // grade pushes are background events recorded in `brightspace_sync_log`)
+    case brightspaceAdminAuthorized = "brightspace.admin_authorized"
+    case brightspaceAdminCleared = "brightspace.admin_cleared"
+    case brightspaceAccountConnected = "brightspace.account_connected"
+    case brightspaceAccountDisconnected = "brightspace.account_disconnected"
+    case brightspaceSyncIdentitySet = "brightspace.sync_identity_set"
+    case brightspaceOrgUnitBound = "brightspace.org_unit_bound"
+    case brightspaceOrgUnitCleared = "brightspace.org_unit_cleared"
+    case brightspaceGradeItemMapped = "brightspace.grade_item_mapped"
+    case brightspaceAutoMapped = "brightspace.auto_mapped"
+    case brightspaceSyncNow = "brightspace.sync_now"
+    case brightspacePushAll = "brightspace.push_all"
 
     // MCP / agents
     case mcpAccountCreated = "mcp.account_created"
@@ -149,7 +170,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         switch self {
         case .loginSuccess, .loginFailure, .loginLocked, .logout, .sessionIdleTimeout:
             return .authentication
-        case .userRegistered, .userProvisioned, .userRoleChanged, .userDeleted:
+        case .userRegistered, .userProvisioned, .userRoleChanged, .userDeleted,
+            .userDataExportRequested, .userDataExportDownloaded:
             return .users
         case .courseCreated, .courseArchived, .courseUnarchived, .courseDeleted,
             .courseBundleImported, .courseBundleExported:
@@ -158,10 +180,16 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .enrollment
         case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent:
             return .submissions
-        case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared:
+        case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
+            .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled:
             return .grading
         case .runnerSecretRotated, .runnerAutostartChanged:
             return .runner
+        case .brightspaceAdminAuthorized, .brightspaceAdminCleared, .brightspaceAccountConnected,
+            .brightspaceAccountDisconnected, .brightspaceSyncIdentitySet, .brightspaceOrgUnitBound,
+            .brightspaceOrgUnitCleared, .brightspaceGradeItemMapped, .brightspaceAutoMapped,
+            .brightspaceSyncNow, .brightspacePushAll:
+            return .brightspace
         case .mcpAccountCreated, .mcpAccountDeleted, .mcpTokenMinted, .mcpToolCalled,
             .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled, .mcpClientRegistered,
             .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected, .adminMcpToolCalled:
@@ -183,6 +211,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .userProvisioned: return "Account provisioned (SSO)"
         case .userRoleChanged: return "Role changed"
         case .userDeleted: return "User deleted"
+        case .userDataExportRequested: return "Data export requested"
+        case .userDataExportDownloaded: return "Data export downloaded"
         case .courseCreated: return "Course created"
         case .courseArchived: return "Course archived"
         case .courseUnarchived: return "Course unarchived"
@@ -199,8 +229,22 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .extensionRevoked: return "Extension revoked"
         case .gradeOverrideSet: return "Grade override set"
         case .gradeOverrideCleared: return "Grade override cleared"
+        case .secretRevealSpent: return "Reveal token spent"
+        case .secretRevealRegranted: return "Reveal token re-granted"
+        case .secretRevealToggled: return "Reveal token setting changed"
         case .runnerSecretRotated: return "Runner secret rotated"
         case .runnerAutostartChanged: return "Runner autostart changed"
+        case .brightspaceAdminAuthorized: return "LEARN deployment key authorized"
+        case .brightspaceAdminCleared: return "LEARN deployment key cleared"
+        case .brightspaceAccountConnected: return "LEARN account connected"
+        case .brightspaceAccountDisconnected: return "LEARN account disconnected"
+        case .brightspaceSyncIdentitySet: return "LEARN sync identity set"
+        case .brightspaceOrgUnitBound: return "LEARN org unit linked"
+        case .brightspaceOrgUnitCleared: return "LEARN org unit unlinked"
+        case .brightspaceGradeItemMapped: return "LEARN grade item mapping changed"
+        case .brightspaceAutoMapped: return "LEARN grade items auto-mapped"
+        case .brightspaceSyncNow: return "LEARN manual sync"
+        case .brightspacePushAll: return "LEARN push all grades"
         case .mcpAccountCreated: return "MCP account created"
         case .mcpAccountDeleted: return "MCP account deleted"
         case .mcpTokenMinted: return "MCP token minted (admin)"
@@ -228,6 +272,7 @@ enum AuditCategory: String, Sendable, CaseIterable {
     case grading = "Grading"
     case runner = "Runner"
     case mcp = "MCP / agents"
+    case brightspace = "LEARN sync"
 }
 
 /// Resolves a stored (raw) action string to its display category + label,

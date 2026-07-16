@@ -177,11 +177,12 @@ import VaporTesting
             )
             let result = APIResult(
                 id: "res_ovr_sync",
-                submissionID: "sub_ovr_sync",
-                collectionJSON: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#
+                submissionID: "sub_ovr_sync"
             )
             result.brightspaceSyncPending = false
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(
+                json: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#,
+                on: app.db)
 
             try await app.asyncTest(
                 .POST,
@@ -256,10 +257,11 @@ import VaporTesting
             // Runner grade 25% (1/4) — should be replaced by the 90% override.
             let result = APIResult(
                 id: "res_ovr_roster",
-                submissionID: "sub_ovr_roster",
-                collectionJSON: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#
+                submissionID: "sub_ovr_roster"
             )
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(
+                json: #"{"earnedPoints":1,"totalPoints":4,"passCount":1,"totalTests":4}"#,
+                on: app.db)
             try await APIGradeOverride(
                 testSetupID: "ovr_roster_setup",
                 userID: try student.requireID(),
@@ -285,6 +287,110 @@ import VaporTesting
     }
 
     // MARK: - Grades CSV export
+
+    @Test func gradesCSVUsesBestGradeAcrossAllSources() async throws {
+        // Regression: when a browser result (100 %) and a worker result (lower %)
+        // both exist for the same submission, the CSV must export the higher grade.
+        // "Highest grade wins" — a worker regrading must never lower the student's
+        // exported mark.
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":\
+                [{"tier":"public","script":"t.sh","points":10}],"timeLimitSeconds":10}
+                """
+            let setup = APITestSetup(
+                id: "multi_src_setup",
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "multi_src_setup.zip",
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            _ = try await arInsertAssignment(
+                testSetupID: "multi_src_setup", title: "Multi-Source Lab", isOpen: true, on: app
+            )
+            let student = try await arInsertStudent(username: "multi_src_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            _ = try await arInsertSubmission(
+                id: "sub_multi_src", testSetupID: "multi_src_setup",
+                userID: try student.requireID(), on: app
+            )
+            // Browser result: 10/10 public tests → 100 %.
+            try await APIResult(
+                id: "res_multi_src_browser",
+                submissionID: "sub_multi_src",
+                source: "browser"
+            ).saveWithCollection(
+                json: #"{"earnedPoints":10,"totalPoints":10,"passCount":10,"totalTests":10}"#, on: app.db)
+            // Worker result: 9/10 (one secret test fails) → 90 %.
+            try await APIResult(
+                id: "res_multi_src_worker",
+                submissionID: "sub_multi_src",
+                source: "worker"
+            ).saveWithCollection(
+                json: #"{"earnedPoints":9,"totalPoints":10,"passCount":9,"totalTests":10}"#, on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/instructor/grades.csv",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(
+                        body.contains("10.0"),
+                        "Highest grade (browser 100 % → 10.0 pts) must win over the lower worker result"
+                    )
+                    #expect(
+                        !body.contains("9.0"),
+                        "Worker 90 % (9.0 pts) must not replace the higher browser grade"
+                    )
+                })
+        }
+    }
+
+    @Test func overrideWithoutSubmissionAppearsInGradesCSV() async throws {
+        // A student who never submitted but has a manual grade override must still
+        // appear in the CSV with the override points, not a blank cell.
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let manifest = """
+                {"schemaVersion":1,"requiredFiles":[],"testSuites":\
+                [{"tier":"public","script":"t.sh","points":10}],"timeLimitSeconds":10}
+                """
+            let setup = APITestSetup(
+                id: "ovr_nosub_setup",
+                manifest: manifest,
+                zipPath: app.testSetupsDirectory + "ovr_nosub_setup.zip",
+                courseID: courseID
+            )
+            try await setup.save(on: app.db)
+            _ = try await arInsertAssignment(
+                testSetupID: "ovr_nosub_setup", title: "No-Sub Lab", isOpen: true, on: app
+            )
+            let student = try await arInsertStudent(username: "ovr_nosub_student", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            // Deliberately no submission — instructor sets an 80% manual override.
+            try await APIGradeOverride(
+                testSetupID: "ovr_nosub_setup",
+                userID: try student.requireID(),
+                overridePercent: 80
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/instructor/grades.csv",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    #expect(
+                        body.contains("8.0"),
+                        "80% of 10 pts must export as 8.0 even when the student has no submission"
+                    )
+                })
+        }
+    }
 
     @Test func overrideAppliedToGradesCSVAsPoints() async throws {
         try await withAssignmentRoutesApp { app in
@@ -315,10 +421,11 @@ import VaporTesting
             )
             let result = APIResult(
                 id: "res_ovr_csv",
-                submissionID: "sub_ovr_csv",
-                collectionJSON: #"{"earnedPoints":4,"totalPoints":4,"passCount":4,"totalTests":4}"#
+                submissionID: "sub_ovr_csv"
             )
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(
+                json: #"{"earnedPoints":4,"totalPoints":4,"passCount":4,"totalTests":4}"#,
+                on: app.db)
             try await APIGradeOverride(
                 testSetupID: "ovr_csv_setup",
                 userID: try student.requireID(),

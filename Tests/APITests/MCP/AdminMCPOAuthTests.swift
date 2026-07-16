@@ -194,6 +194,8 @@ import VaporTesting
             try await seedClient(app)
             let cookie = try await loginUser(
                 username: "prof", password: "testpassword", role: "instructor", on: app)
+            // Content consent requires per-course staff now (#417); enrol prof.
+            try await enrollAsTestInstructor(username: "prof", on: app)
             let consentToken = try await mintConsentToken(
                 app, cookie: cookie, scope: "content:read content:write", resource: contentResource)
             let consentRes = try await submitConsent(app, token: consentToken)

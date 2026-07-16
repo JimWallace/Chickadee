@@ -77,19 +77,31 @@ extension OperationalDiagnosticsService {
     ) async {
         guard configuration.enabled else { return }
         do {
-            let row = RunnerSnapshot(
+            // Sampled, not per-check-in: one snapshot row per runner per
+            // sample interval, plus an immediate row on any load-shape
+            // change (see RunnerSnapshotSampleStore). The check-in log
+            // event below still fires every time.
+            let persistSnapshot = await snapshotSampler.shouldPersist(
                 runnerID: snapshot.workerID,
                 recordedAt: snapshot.lastActive,
                 activeJobs: snapshot.activeJobs,
-                maxJobs: snapshot.maxConcurrentJobs,
-                availableCapacity: max(0, snapshot.maxConcurrentJobs - snapshot.activeJobs),
-                hostname: snapshot.hostname.isEmpty ? nil : snapshot.hostname,
-                runnerVersion: snapshot.runnerVersion.isEmpty ? nil : snapshot.runnerVersion,
-                lastPollAt: snapshot.lastPollAt,
-                lastHeartbeatAt: snapshot.lastHeartbeatAt,
-                serverAssignedJobCountSinceStart: snapshot.serverAssignedJobCountSinceStart
+                maxJobs: snapshot.maxConcurrentJobs
             )
-            try await row.save(on: db)
+            if persistSnapshot {
+                let row = RunnerSnapshot(
+                    runnerID: snapshot.workerID,
+                    recordedAt: snapshot.lastActive,
+                    activeJobs: snapshot.activeJobs,
+                    maxJobs: snapshot.maxConcurrentJobs,
+                    availableCapacity: max(0, snapshot.maxConcurrentJobs - snapshot.activeJobs),
+                    hostname: snapshot.hostname.isEmpty ? nil : snapshot.hostname,
+                    runnerVersion: snapshot.runnerVersion.isEmpty ? nil : snapshot.runnerVersion,
+                    lastPollAt: snapshot.lastPollAt,
+                    lastHeartbeatAt: snapshot.lastHeartbeatAt,
+                    serverAssignedJobCountSinceStart: snapshot.serverAssignedJobCountSinceStart
+                )
+                try await row.save(on: db)
+            }
 
             let event: ObservabilityEvent = reason == .poll ? .runnerPolled : .runnerHeartbeat
             logger.info(

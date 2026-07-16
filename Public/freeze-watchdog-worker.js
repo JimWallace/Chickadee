@@ -38,6 +38,9 @@ var beaconUrl = null;
 var setupID = null;
 var csrfToken = '';
 var thresholdMs = 8000;
+// Page-build ChickadeeVersion, passed in via `init` (a worker has no DOM to read
+// the meta). Stamped on the beacon so a freeze is attributable to a build.
+var appVersion = '';
 var lastBeatMs = Date.now();
 var visible = true;
 var reportedForThisStall = false;
@@ -134,6 +137,7 @@ function beacon(stalledMs) {
     try {
         var body = { kind: 'page_unresponsive', message: 'stalled_ms=' + stalledMs };
         if (setupID) body.testSetupID = setupID;
+        if (appVersion) body.appVersion = appVersion;
         fetch(beaconUrl, {
             method: 'POST',
             credentials: 'same-origin',
@@ -155,6 +159,7 @@ self.onmessage = function (e) {
             beaconUrl = msg.beaconUrl || null;
             setupID = msg.setupID || null;
             csrfToken = msg.csrfToken || '';
+            appVersion = msg.appVersion || '';
             if (typeof msg.thresholdMs === 'number') thresholdMs = msg.thresholdMs;
             lastBeatMs = Date.now();
             if (!timer) timer = setInterval(check, 1000);

@@ -14,6 +14,9 @@ set -euo pipefail
 #   * No new native alert() in templates — use the inline .form-error pattern.
 #   * Every var(--x) resolves, and no var(--x, #hex) colour fallbacks (see
 #     scripts/check-css-vars.sh).
+#   * Colours route through the palette (hex only in --token declarations),
+#     and font-size / border-radius use the --text-* / --radius-* scales
+#     (see scripts/check-design-tokens.sh and docs/ui-design.md).
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -23,6 +26,9 @@ status=0
 
 # ── 1. CSS custom-property guard ────────────────────────────────────────────
 scripts/check-css-vars.sh || status=1
+
+# ── 1b. Design-token guard (palette-only hex, type + radius scales) ─────────
+scripts/check-design-tokens.sh || status=1
 
 # ── 2. Inline-style allowlist ───────────────────────────────────────────────
 # A style="" attribute is allowed only if every ;-separated declaration is
@@ -70,6 +76,35 @@ if [ "$alert_count" -gt "$ALERT_BASELINE" ]; then
   echo
 elif [ "$alert_count" -lt "$ALERT_BASELINE" ]; then
   echo "note: alert() count dropped to ${alert_count}; lower ALERT_BASELINE in scripts/check-styles.sh."
+fi
+
+# ── 3b. Inline <script> line-count ratchet (#1135) ───────────────────────────
+# JS inside a template <script> block is invisible to every tool — ESLint
+# can't parse Leaf-interpolated JS, CodeQL skips it, node --check can't run
+# it — and it's why the CSP still allows inline script.  New page behaviour
+# belongs in a lintable Public/*.js file (template carries data via data-*
+# attributes or a JSON island).  Baseline = total non-blank lines inside
+# <script> bodies across all templates; it may only go DOWN.  <script src=…>
+# includes and single-line <script>…</script> elements don't count.
+INLINE_SCRIPT_BASELINE=2481
+inline_script_count="$(
+  awk '
+    /<script[^>]*src=/ { next }
+    /<script>/ && /<\/script>/ { next }
+    /<script/ { inscript = 1; next }
+    /<\/script>/ { inscript = 0; next }
+    inscript && NF > 0 { n++ }
+    END { print n + 0 }
+  ' "${views[@]}"
+)"
+if [ "$inline_script_count" -gt "$INLINE_SCRIPT_BASELINE" ]; then
+  status=1
+  echo "ERROR: inline <script> grew (${inline_script_count} lines, baseline ${INLINE_SCRIPT_BASELINE})."
+  echo "       Put new page JS in a Public/*.js file (loaded with <script src>)"
+  echo "       so it is linted and testable; pass page data via data-* attributes"
+  echo "       or a JSON island.  See docs/ui-design.md."
+elif [ "$inline_script_count" -lt "$INLINE_SCRIPT_BASELINE" ]; then
+  echo "note: inline <script> lines dropped to ${inline_script_count}; lower INLINE_SCRIPT_BASELINE in scripts/check-styles.sh."
 fi
 
 # ── 4. No duplicated / shadowed selectors in page <style> blocks ─────────────

@@ -20,7 +20,9 @@
 // checks, and the enroll/roster UI), so applying this migration is observably
 // a no-op.
 
+import Core
 import Fluent
+import SQLKit
 import Vapor
 
 struct AddCourseEnrollmentRole: ChickadeeMigration {
@@ -38,31 +40,70 @@ struct AddCourseEnrollmentRole: ChickadeeMigration {
             .update()
     }
 
+    /// One enrollment still needing a role, read with only the columns the
+    /// backfill touches — never the full model (see `backfillRoles`).
+    private struct PendingEnrollment: Decodable {
+        let id: UUID
+        let userID: UUID
+        enum CodingKeys: String, CodingKey {
+            case id
+            case userID = "user_id"
+        }
+    }
+
     /// Seeds every still-unset enrollment role from the enrolled user's global
     /// role. Split out from `prepare` (which adds the column) so it can be
     /// exercised directly in tests without re-running the column add.
     /// Idempotent — only NULL roles are touched, so re-running is safe.
+    ///
+    /// Reads and writes `course_enrollments` with raw SQL over only
+    /// `id` / `user_id` / `role`, deliberately NOT a full-model
+    /// `APICourseEnrollment.query().all()`. A full-model query selects every
+    /// column the model *currently* declares, so any column added to
+    /// `course_enrollments` by a *later* migration makes this backfill fail on a
+    /// fresh database with "no such column" — which is exactly what the
+    /// roster-readiness columns did until they were reordered ahead of this
+    /// migration (#1077). Scoping the SQL to the three columns it needs removes
+    /// that coupling for good.
     func backfillRoles(on database: Database) async throws {
-        let enrollments = try await APICourseEnrollment.query(on: database).all()
+        guard let sql = database as? SQLDatabase else {
+            // Only the SQL drivers (SQLite / Postgres) are used. A non-SQL
+            // Fluent driver would no-op here, leaving roles to default to
+            // `.student` via the model accessor.
+            return
+        }
 
-        // Distinct users that still need a role, fetched in one IN-query
-        // rather than a lookup per enrollment row.
-        let pendingUserIDs = Set(enrollments.compactMap { $0.roleRaw == nil ? $0.userID : nil })
-        guard !pendingUserIDs.isEmpty else { return }
+        let pending = try await sql.select()
+            .column("id")
+            .column("user_id")
+            .from("course_enrollments")
+            .where("role", .is, SQLLiteral.null)
+            .all(decoding: PendingEnrollment.self)
+        guard !pending.isEmpty else { return }
 
-        let users = try await APIUser.query(on: database)
-            .filter(\.$id ~~ pendingUserIDs)
-            .all()
+        // Instructor-ness comes from each user's *global* role at backfill time.
+        // This migration runs before `CollapseUserRoles`, so on the DBs where it
+        // does real work a user could still carry the legacy `instructor` (or
+        // `admin`) role — matched here by its raw string, since those enum cases
+        // were retired. The user lookup stays a Fluent model query: it reads the
+        // `users` table, which no later migration extends, so it isn't exposed to
+        // the column-drift hazard the enrollment query above hardens against.
+        let userIDs = Set(pending.map(\.userID))
+        let users = try await APIUser.query(on: database).filter(\.$id ~~ userIDs).all()
+        let staffRoleStrings: Set<String> = ["instructor", UserRole.admin.rawValue]
         var isInstructorByUserID: [UUID: Bool] = [:]
         for user in users {
             guard let id = user.id else { continue }
-            isInstructorByUserID[id] = user.isInstructor
+            isInstructorByUserID[id] = staffRoleStrings.contains(user.role)
         }
 
-        for enrollment in enrollments where enrollment.roleRaw == nil {
-            let isInstructor = isInstructorByUserID[enrollment.userID] ?? false
-            enrollment.role = isInstructor ? .instructor : .student
-            try await enrollment.save(on: database)
+        for row in pending {
+            let isInstructor = isInstructorByUserID[row.userID] ?? false
+            let roleValue = (isInstructor ? CourseRole.instructor : CourseRole.student).rawValue
+            try await sql.update("course_enrollments")
+                .set("role", to: roleValue)
+                .where("id", .equal, row.id)
+                .run()
         }
     }
 }

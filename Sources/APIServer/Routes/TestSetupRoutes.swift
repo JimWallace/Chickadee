@@ -1,7 +1,8 @@
 // APIServer/Routes/TestSetupRoutes.swift
 //
 // Phase 2: test-setup management endpoints.
-// Phase 9: notebook cell filtering + download endpoint.
+// Phase 9: notebook download endpoint (the pure notebook-JSON helpers live
+// in Helpers/NotebookContentHelpers.swift as of #1119).
 //
 // POST /api/v1/testsetups           [instructor only]
 //   Multipart: field "manifest" (JSON text) + field "files" (zip binary).
@@ -30,224 +31,15 @@ import Fluent
 import Foundation
 import Vapor
 
-// MARK: - Notebook cell filtering / merging helpers (free functions)
-
-/// Tiers that students cannot see in the notebook or in downloads.
-let hiddenTiersForStudents: Set<String> = ["secret", "release"]
-
-// JupyterLite kernel identifiers used when normalizing notebook metadata.
-let jupyterLitePythonKernelName = "python"
-let jupyterLitePythonKernelDisplayName = "Python (Pyodide)"
-let jupyterLiteRKernelName = "webr"
-let jupyterLiteRKernelDisplayName = "R (WebR)"
-
-/// Extracts the joined source string for a notebook cell dictionary.
-func cellSource(_ cell: [String: Any]) -> String? {
-    if let arr = cell["source"] as? [String] { return arr.joined() }
-    if let str = cell["source"] as? String { return str }
-    return nil
-}
-
-/// Returns true when the cell's first non-empty line is a `# TEST:` comment
-/// whose `tier=` value is in `hiddenTiers`.
-func isHiddenTestCell(_ cell: [String: Any], hiddenTiers: Set<String>) -> Bool {
-    guard let source = cellSource(cell) else { return false }
-    let firstLine =
-        source
-        .split(separator: "\n", omittingEmptySubsequences: true)
-        .first.map(String.init) ?? ""
-    guard firstLine.range(of: #"^#\s*TEST:"#, options: .regularExpression) != nil
-    else { return false }
-    for token in firstLine.split(separator: " ") {
-        let kv = token.split(separator: "=", maxSplits: 1)
-        if kv.count == 2, kv[0] == "tier" {
-            return hiddenTiers.contains(String(kv[1]))
-        }
-    }
-    return false  // no explicit tier= found → default "public" → not hidden
-}
-
-/// Returns true when the cell's first non-empty line is ANY `# TEST:` comment,
-/// regardless of tier. Used to separate solution cells from test cells during merge.
-func isTestCell(_ cell: [String: Any]) -> Bool {
-    guard let source = cellSource(cell) else { return false }
-    let firstLine =
-        source
-        .split(separator: "\n", omittingEmptySubsequences: true)
-        .first.map(String.init) ?? ""
-    return firstLine.range(of: #"^#\s*TEST:"#, options: .regularExpression) != nil
-}
-
-/// Returns a copy of `data` (notebook JSON) with cells matching `hiddenTiers` removed.
-/// Returns the original data unchanged if parsing fails.
-func filterNotebook(_ data: Data, hiddenTiers: Set<String>) -> Data {
-    guard var nb = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-        let cells = nb["cells"] as? [[String: Any]]
-    else { return data }
-    nb["cells"] = cells.filter { !isHiddenTestCell($0, hiddenTiers: hiddenTiers) }
-    return (try? JSONSerialization.data(withJSONObject: nb)) ?? data
-}
-
-/// Merges a student's notebook with the instructor's canonical notebook.
-///
-/// Result cell list: student's non-test cells + all of the instructor's test cells.
-///
-/// This ensures the worker sees the student's solution code alongside all
-/// authoritative test cells, including those stripped from the student download.
-///
-/// Returns `studentData` unchanged if either notebook fails to parse.
-func mergeNotebook(student studentData: Data, instructor instructorData: Data) -> Data {
-    guard var studentNB = (try? JSONSerialization.jsonObject(with: studentData)) as? [String: Any],
-        let instructorNB = (try? JSONSerialization.jsonObject(with: instructorData)) as? [String: Any],
-        let studentCells = studentNB["cells"] as? [[String: Any]],
-        let instructorCells = instructorNB["cells"] as? [[String: Any]]
-    else { return studentData }
-
-    let solutionCells = studentCells.filter { !isTestCell($0) }
-    let testCells = instructorCells.filter { isTestCell($0) }
-
-    studentNB["cells"] = solutionCells + testCells
-    return (try? JSONSerialization.data(withJSONObject: studentNB)) ?? studentData
-}
-
-/// Normalizes notebook metadata so JupyterLite can attach the right browser kernel.
-///
-/// - Python notebooks (`python`/`python3` or missing kernelspec) →
-///   kernelspec.name = "python", display_name = "Python (Pyodide)".
-/// - R notebooks (`ir`, `r`) →
-///   kernelspec.name = "webr", display_name = "R (WebR)".
-/// - Any other explicit kernelspec → returned unchanged.
-/// - Returns original data unchanged if JSON parsing fails.
-func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
-    guard var notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    else { return data }
-
-    var metadata = notebook["metadata"] as? [String: Any] ?? [:]
-    let existingKernelSpec = metadata["kernelspec"] as? [String: Any]
-    let existingName = (existingKernelSpec?["name"] as? String)?.lowercased()
-
-    var kernelSpec = existingKernelSpec ?? [:]
-    var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
-
-    if let name = existingName, name == "ir" || name == "r" {
-        // R notebook (IRkernel) → normalize to the JupyterLite webR kernel.
-        kernelSpec["name"] = jupyterLiteRKernelName
-        kernelSpec["display_name"] = jupyterLiteRKernelDisplayName
-        metadata["kernelspec"] = kernelSpec
-        if (languageInfo["name"] as? String).map({ $0.isEmpty }) != false {
-            languageInfo["name"] = "r"
-        }
-        metadata["language_info"] = languageInfo
-    } else if let name = existingName, !name.isEmpty,
-        name != "python", name != "python3"
-    {
-        // Unknown non-Python, non-R kernel → leave unchanged.
-        return data
-    } else {
-        // Python kernel (or missing kernelspec) → normalize to Python (Pyodide).
-        kernelSpec["name"] = jupyterLitePythonKernelName
-        kernelSpec["display_name"] = jupyterLitePythonKernelDisplayName
-        metadata["kernelspec"] = kernelSpec
-        if (languageInfo["name"] as? String)?.isEmpty != false {
-            languageInfo["name"] = "python"
-        }
-        metadata["language_info"] = languageInfo
-    }
-
-    notebook["metadata"] = metadata
-    return (try? JSONSerialization.data(withJSONObject: notebook)) ?? data
-}
-
-/// Loads the notebook data for a test setup.
-/// Prefers the flat `.ipynb` file (Phase 8 editable path); falls back to zip extraction.
-///
-/// - Throws: `NotebookLookupError.notFound` when neither a flat file nor a zip
-///   entry is available. Callers can catch this specific type; Vapor's error
-///   middleware maps it to HTTP 404 automatically.
-/// A `Sendable` snapshot of the test-setup fields needed to resolve a notebook.
-/// Lets the (blocking) read run on the NIO thread pool without capturing the
-/// non-`Sendable` `APITestSetup` Fluent model in a `@Sendable` closure.
-struct NotebookSourceRef: Sendable {
-    let notebookPath: String?
-    let zipPath: String
-    let starterNotebook: String?
-    let setupID: String?
-
-    init(_ setup: APITestSetup) {
-        self.notebookPath = setup.notebookPath
-        self.zipPath = setup.zipPath
-        self.starterNotebook = setup.decodedManifest()?.starterNotebook
-        self.setupID = setup.id
-    }
-}
-
-func notebookData(for setup: APITestSetup) throws(NotebookLookupError) -> Data {
-    try notebookData(from: NotebookSourceRef(setup))
-}
-
-/// Primitive-driven variant of `notebookData(for:)`, safe to call from a
-/// `@Sendable` thread-pool closure. Behaviour is identical to the model-based
-/// overload.
-func notebookData(from source: NotebookSourceRef) throws(NotebookLookupError) -> Data {
-    if let path = source.notebookPath,
-        let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-        !data.isEmpty
-    {
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    let entries = listZipEntries(zipPath: source.zipPath)
-    let preferredEntryNames = notebookCandidateEntryNames(
-        starterNotebook: source.starterNotebook, entries: entries)
-    for entryName in preferredEntryNames {
-        guard let data = extractZipEntry(zipPath: source.zipPath, entryName: entryName),
-            !data.isEmpty
-        else { continue }
-        return normalizeNotebookForJupyterLite(data)
-    }
-
-    throw NotebookLookupError.notFound(setupID: source.setupID ?? "unknown")
-}
-
-private func notebookCandidateEntryNames(starterNotebook: String?, entries: [String]) -> [String] {
-    let manifestStarterName = starterNotebook?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    var candidates: [String] = []
-    var seen: Set<String> = []
-
-    func appendCandidate(_ entry: String?) {
-        guard let entry, !entry.isEmpty, !seen.contains(entry) else { return }
-        seen.insert(entry)
-        candidates.append(entry)
-    }
-
-    func appendMatchingEntries(named filename: String?) {
-        guard let filename, !filename.isEmpty else { return }
-        let exactMatches = entries.filter { $0 == filename }
-        if !exactMatches.isEmpty {
-            exactMatches.forEach(appendCandidate)
-            return
-        }
-        entries
-            .filter { ($0 as NSString).lastPathComponent == filename }
-            .forEach(appendCandidate)
-    }
-
-    appendMatchingEntries(named: manifestStarterName)
-    appendMatchingEntries(named: "assignment.ipynb")
-    entries
-        .filter { URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb" }
-        .forEach(appendCandidate)
-
-    return candidates
-}
-
 // MARK: - Route collection
 
 struct TestSetupRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let api = routes.grouped("api", "v1", "testsetups")
-        api.post(use: uploadTestSetup)
+        // Explicit cap sized to the zip-bomb guard (256 MB uncompressed,
+        // TestSetupZipHelpers): the 10 MB global default rejected legitimate
+        // dataset-heavy setups before validation ever ran (#1158).
+        api.on(.POST, body: .collect(maxSize: "300mb"), use: uploadTestSetup)
         api.group(":testSetupID") { group in
             group.get("download", use: downloadTestSetup)
             group.get("assignment", use: getAssignment)
@@ -262,9 +54,14 @@ struct TestSetupRoutes: RouteCollection {
     @Sendable
     func uploadTestSetup(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
-
         let upload = try req.content.decode(TestSetupUpload.self)
+
+        // Scope the create to the target course: only an instructor of that
+        // course (and not an archived one) may upload a setup into it. Replaces
+        // the old global `isInstructor` check, which trusted the client-supplied
+        // `courseID` and let any global instructor create a setup — carrying
+        // secret tests + solutions — in ANY course (#417 Slice D).
+        try await requireCourseWriteAccess(caller: caller, courseID: upload.courseID, atLeast: .instructor, db: req.db)
 
         // Validate manifest JSON and schema version.
         let manifestData = Data(upload.manifest.utf8)
@@ -300,14 +97,14 @@ struct TestSetupRoutes: RouteCollection {
         let zipPath = setupsDir + "\(setupID).zip"
 
         let zipBytes = upload.files
-        try zipBytes.write(to: URL(fileURLWithPath: zipPath))
+        try await req.fileio.writeFile(.init(data: zipBytes), at: zipPath)
 
         // Reject zip bombs before any DB row references this file.  The
         // upload sits in setupsDir until validation passes; on failure we
         // delete it so a malicious upload doesn't leave stale bytes on
-        // disk indefinitely.
+        // disk indefinitely.  (Subprocess — thread pool, #1158.)
         do {
-            try validateZipUploadSize(zipPath: zipPath)
+            try await runBlocking(on: req) { try validateZipUploadSize(zipPath: zipPath) }
         } catch let error as ZipUploadValidationError {
             try? FileManager.default.removeItem(atPath: zipPath)
             throw AppError.unprocessable(reason: String(describing: error))
@@ -329,7 +126,7 @@ struct TestSetupRoutes: RouteCollection {
         // instructor can edit it later without re-uploading the zip.
         if manifest.gradingMode == .browser {
             let notebookPath = setupsDir + "\(setupID).ipynb"
-            if let data = extractNotebookFromZip(zipPath: zipPath) {
+            if let data = try await runBlocking(on: req, { extractNotebookFromZip(zipPath: zipPath) }) {
                 let normalized = normalizeNotebookForJupyterLite(data)
                 try normalized.write(to: URL(fileURLWithPath: notebookPath))
                 setup.notebookPath = notebookPath
@@ -353,13 +150,23 @@ struct TestSetupRoutes: RouteCollection {
     @Sendable
     func downloadTestSetup(req: Request) async throws -> Response {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
 
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
+
+        // This streams the FULL setup zip — secret-tier test scripts and the
+        // reference solution — so scope it to the setup's own course rather than
+        // the old global `isInstructor` check, which let any instructor pull
+        // another course's secret tests + solution by id. Instructor-level read
+        // (admin bypass); the enrollment-gated student path is the separate
+        // /browser-runner download (#417 Slice D). Sibling reads getAssignment /
+        // downloadAssignment already scope via requireCourseEnrollment.
+        try await requireCourseRole(
+            caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
+
         return try await req.fileio.asyncStreamFile(at: setup.zipPath)
     }
 
@@ -374,9 +181,14 @@ struct TestSetupRoutes: RouteCollection {
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let raw = try notebookData(for: setup)
+        // Cached, single-flighted, resolved on the thread pool (#1156/#1171).
+        let raw = try await req.application.notebookBytesCache.notebookData(
+            for: NotebookSourceRef(setup))
+        // Staff (TA+ or admin) of this setup's course see unfiltered tiers;
+        // students get the hidden tiers stripped (#417 Slice G).
+        let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
         let data =
-            caller.isInstructor
+            isStaff
             ? raw
             : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
@@ -398,8 +210,11 @@ struct TestSetupRoutes: RouteCollection {
 
         try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
-        let raw = try notebookData(for: setup)
-        let filtered = caller.isInstructor ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
+        // Cached, single-flighted, resolved on the thread pool (#1156/#1171).
+        let raw = try await req.application.notebookBytesCache.notebookData(
+            for: NotebookSourceRef(setup))
+        let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
+        let filtered = isStaff ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
         // Determine a safe filename from the assignment title (if present).
         let assignment = try await APIAssignment.query(on: req.db)
@@ -454,22 +269,29 @@ struct TestSetupRoutes: RouteCollection {
 
         // Confirm the file is classified as a support file: must exist
         // in the zip, must not be in `testSuites`, must not be a
-        // canonical notebook name.
-        let allEntries = listZipEntries(zipPath: setup.zipPath)
+        // canonical notebook name. Cached (#1156) — this previously spawned
+        // a serialized `unzip` subprocess on the request thread per download.
+        let allEntries = await req.application.zipEntryListCache.entries(zipPath: setup.zipPath)
         guard allEntries.contains(filename) else { throw Abort(.notFound) }
 
-        let testScripts: Set<String> = {
-            guard let props = setup.decodedManifest()
-
-            else { return [] }
-            return Set(props.testSuites.map(\.script))
-        }()
+        let props = setup.decodedManifest()
+        let testScripts = Set(props?.testSuites.map(\.script) ?? [])
+        // Grader-only files (answer keys, reserved holdout sets) are bundled for
+        // the worker but never served to students — block them here alongside
+        // test scripts and the canonical notebooks. See docs/datasets.md.
+        let graderOnly = props?.graderOnlyFileSet ?? []
         let reservedNames: Set<String> = ["assignment.ipynb", "solution.ipynb"]
-        guard !testScripts.contains(filename), !reservedNames.contains(filename) else {
-            throw AppError.forbidden(action: "download '\(filename)' (not a support file)")
+        guard !testScripts.contains(filename), !reservedNames.contains(filename),
+            !graderOnly.contains(filename)
+        else {
+            throw AppError.forbidden(action: "download '\(filename)' (not a student-visible support file)")
         }
 
-        guard let bytes = extractZipEntry(zipPath: setup.zipPath, entryName: filename) else {
+        let zipPath = setup.zipPath
+        let extracted = try await runBlocking(on: req) {
+            extractZipEntry(zipPath: zipPath, entryName: filename)
+        }
+        guard let bytes = extracted else {
             throw Abort(.notFound)
         }
 
@@ -489,13 +311,18 @@ struct TestSetupRoutes: RouteCollection {
     @Sendable
     func saveAssignment(req: Request) async throws -> HTTPStatus {
         let caller = try req.auth.require(APIUser.self)
-        guard caller.isInstructor else { throw Abort(.forbidden) }
 
         guard let setupID = req.parameters.get("testSetupID"),
             let setup = try await APITestSetup.find(setupID, on: req.db)
         else {
             throw Abort(.notFound)
         }
+
+        // Overwriting the setup's notebook on disk is a per-course write: scope
+        // it to the setup's own course (and block archived). Replaces the old
+        // global `isInstructor` check, which let any global instructor overwrite
+        // any course's notebook by :testSetupID (#417 Slice D).
+        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
 
         // Collect the raw request body as Data.
         guard let bodyBuffer = req.body.data,
@@ -540,43 +367,4 @@ struct TestSetupUpload: Content {
     var files: Data
     /// UUID of the course this test setup belongs to.
     var courseID: UUID
-}
-
-// MARK: - Zip inspection helpers
-
-/// Returns true if the zip archive contains at least one `.ipynb` file.
-/// Uses `unzip -l` (list mode) so no files are extracted.
-func zipContainsNotebook(_ zipData: Data) -> Bool {
-    let tmp = FileManager.default.temporaryDirectory
-        .appendingPathComponent("chickadee_zip_check_\(UUID().uuidString).zip")
-    defer { try? FileManager.default.removeItem(at: tmp) }
-
-    guard (try? zipData.write(to: tmp)) != nil else { return false }
-
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-    proc.arguments = ["-l", tmp.path]
-    let pipe = Pipe()
-    proc.standardOutput = pipe
-    proc.standardError = Pipe()
-    guard (try? proc.run()) != nil else { return false }
-    let outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-    proc.waitUntilExit()
-    let output = String(data: outputData, encoding: .utf8) ?? ""
-    return output.contains(".ipynb")
-}
-
-/// Extracts `assignment.ipynb` from the zip at `zipPath` and returns its Data,
-/// or nil if the file is not present or unzip fails.
-func extractNotebookFromZip(zipPath: String) -> Data? {
-    let entries = listZipEntries(zipPath: zipPath)
-    let candidate =
-        entries.first {
-            ($0 as NSString).lastPathComponent == "assignment.ipynb"
-        }
-        ?? entries.first {
-            URL(fileURLWithPath: $0).pathExtension.lowercased() == "ipynb"
-        }
-    guard let candidate else { return nil }
-    return extractZipEntry(zipPath: zipPath, entryName: candidate)
 }

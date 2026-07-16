@@ -3,7 +3,7 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite struct NotebookExtractorTests {
+@Suite(.timeLimit(.minutes(3))) struct NotebookExtractorTests {
     private let extractor = NotebookExtractor()
 
     // MARK: - Helpers

@@ -52,7 +52,7 @@ Connected agents
 </section>
 <style>
 .agents-heading { margin-top: 0; }
-.agents-intro { color: var(--gray-600); font-size: .85rem; max-width: 60ch; }
+.agents-intro { color: var(--gray-600); font-size: var(--text-base); max-width: 60ch; }
 .agents-revoke-form { display: inline; }
 </style>
 #endexport

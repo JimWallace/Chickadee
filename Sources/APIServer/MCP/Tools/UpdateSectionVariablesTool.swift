@@ -43,10 +43,7 @@ struct UpdateSectionVariablesTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "sectionID": .object([
                 "type": .string("string"),
                 "description": .string("The section's id (from get_suite)."),
@@ -97,8 +94,8 @@ struct UpdateSectionVariablesTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
             "variables": .object(["type": .string("array")]),
             "expressions": .object(["type": .string("array")]),
         ]),
@@ -112,8 +109,8 @@ struct UpdateSectionVariablesTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         let actingUser = try await context.requireEligibleSubject(tool: Self.name)
 
@@ -127,7 +124,11 @@ struct UpdateSectionVariablesTool: ContentTool {
                     assignmentID: assignment.id,
                     testSetupID: assignment.testSetupID,
                     testSetupsDirectory: context.request.application.testSetupsDirectory),
-                on: context.db)
+                on: context.db,
+                // Content edits run on the (least-privilege) MCP pool; the
+                // acting-user seed bookkeeping runs on the owner pool, which is
+                // the only one granted `assignment_personalization_seeds`.
+                seedDB: context.mainDB)
         } catch let error as WebAssignmentError {
             throw MCPToolError.from(error, tool: Self.name)
         }

@@ -318,6 +318,48 @@ import VaporTesting
         }
     }
 
+    @Test func persistsAppVersionWhenProvided() async throws {
+        try await withApp(app) { _ in
+            // Every diagnostic stamps the page build's `app-version` so a report
+            // can be attributed to a build — an old value flags a stale browser
+            // tab still serving the pre-deploy bundle.
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_ver")
+            let body = #"""
+                {"kind":"kernel_error","testSetupID":"setup_ver","source":"recover_failed","appVersion":"0.4.530"}
+                """#
+            let res = try await postJSON(body, auth: auth, userAgent: "TestUA/9.0")
+            #expect(res.status == .accepted)
+
+            let rec = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(rec.source == "recover_failed")
+            #expect(rec.appVersion == "0.4.530")
+        }
+    }
+
+    @Test func appVersionIsOptionalAndTrimmed() async throws {
+        try await withApp(app) { _ in
+            let auth = try await loginAsStudent()
+            try await insertSetup(id: "setup_nover")
+            // Absent → nil (older clients that don't send it). Checked while it's
+            // the only row, so `first()` is unambiguous.
+            _ = try await postJSON(
+                #"{"kind":"editor_ready","testSetupID":"setup_nover","message":"elapsed_ms=1"}"#,
+                auth: auth)
+            let none = try #require(try await APIClientDiagnostic.query(on: app.db).first())
+            #expect(none.appVersion == nil)
+
+            // Over-long → trimmed to the 32-char column bound.
+            let longVersion = String(repeating: "v", count: 40)
+            _ = try await postJSON(
+                #"{"kind":"editor_ready","testSetupID":"setup_nover","source":"x","appVersion":"\#(longVersion)"}"#,
+                auth: auth)
+            let rows = try await APIClientDiagnostic.query(on: app.db).all()
+            let trimmed = try #require(rows.first { $0.appVersion != nil })
+            #expect(trimmed.appVersion?.count == 32)
+        }
+    }
+
     @Test func submitPhasesRecordEachPhaseOnceForTheFunnel() async throws {
         try await withApp(app) { _ in
             // The funnel relies on each distinct phase (source) being recorded —

@@ -59,11 +59,17 @@
             freezeWorker = new Worker('/freeze-watchdog-worker.js');
             let freezeCsrf = '';
             try { freezeCsrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
+            let freezeAppVersion = '';
+            try {
+                const vm = document.querySelector('meta[name="app-version"]');
+                freezeAppVersion = (vm && vm.content) ? String(vm.content).slice(0, 32) : '';
+            } catch (_) { /* no meta — fine */ }
             freezeWorker.postMessage({
                 type: 'init',
                 beaconUrl: '/api/v1/client-diagnostics',
                 setupID: setupID,
                 csrfToken: freezeCsrf,
+                appVersion: freezeAppVersion,
                 thresholdMs: 8000,
             });
             const sendFreezeBeat = () => {
@@ -229,12 +235,26 @@
             const d = e.data;
             if (!d || d.ck !== 'kernel-diag') return false;
             if (d.kind !== 'kernel_phase' && d.kind !== 'kernel_error') return false;
+            // The kernel reached idle — the editor is usable. Cancel the WebKit
+            // slow-boot notice if it is still pending.
+            if (d.kind === 'kernel_phase' && d.source === 'kernel_idle') {
+                markKernelEverReady();
+            }
             // Self-heal: a post-idle exec_hang means the kernel booted then wedged
             // on execute (the boot-failure watchdog doesn't cover it). Trigger the
             // one-shot work-preserving editor reload — independent of the telemetry
             // cap below, so a flood of breadcrumbs can't gate recovery.
             if (d.kind === 'kernel_error' && d.source === 'exec_hang') {
                 recoverHungKernelOnce();
+            }
+            // A fatal WASM/OOM crash (the kernel DIED — e.g. the upstream WebKit
+            // "Out of bounds memory access", or a genuine out-of-memory abort).
+            // The editor is now useless, so degrade gracefully: show the
+            // upload-fallback panel with a memory-specific message instead of
+            // leaving a silently-wedged cell. Independent of the telemetry cap so
+            // a breadcrumb flood can't gate it; showFailure() is idempotent.
+            if (d.kind === 'kernel_error' && d.source === 'wasm_crash' && failures.showFailure) {
+                failures.showFailure({ kind: 'wasm_crash', variant: 'memory', message: d.message });
             }
             if (kernelDiagForwarded >= KERNEL_DIAG_MAX) return false;
             kernelDiagForwarded += 1;
@@ -251,6 +271,13 @@
 
     if (failures && failures.reportEvent) {
         window.addEventListener('message', handleKernelDiagMessage);
+    }
+
+    // Server-driven supported-browser-matrix banner (SupportedBrowserMatrix),
+    // independent of the capability preflight: it self-guards on the #jl-frame
+    // data-browser-unsupported attribute, so it is a no-op on a supported browser.
+    if (failures && failures.showBrowserSupportWarning) {
+        failures.showBrowserSupportWarning();
     }
 
     const preflightPromise = failures
@@ -273,6 +300,12 @@
             setStatus('error', 'In-browser editor unavailable — upload your notebook below.');
             return;
         }
+        // Non-blocking proactive hint on low-RAM devices (Chromium-only signal).
+        // The editor still mounts — this just sets expectations before the kernel
+        // possibly runs out of memory mid-session.
+        if (result.lowMemory && failures && failures.showDeviceWarning) {
+            failures.showDeviceWarning({ deviceMemory: result.deviceMemory });
+        }
         mountEditor();
     });
 
@@ -287,12 +320,38 @@
     // CSP worker-src and COEP both allow — so older Safari / iPadOS boot isolated
     // with no fallback needed (guarded by SMOKE_SIMULATE_NO_WAITASYNC).
 
+    // Engine detection mirrors the server's EditorBrowserEngine: WebKit (Safari
+    // and every iOS browser — all WKWebView) runs the editor on the comlink +
+    // service-worker transport, so the JupyterLite service worker is REQUIRED and
+    // must NOT be unregistered. Blink/Gecko use the SharedArrayBuffer path (no SW).
+    function isWebKitEngine() {
+        try {
+            var ua = (navigator && navigator.userAgent) || '';
+            if (ua.indexOf('iPhone') !== -1 || ua.indexOf('iPad') !== -1
+                || ua.indexOf('iPod') !== -1) {
+                return true;
+            }
+            if (ua.indexOf('Chrome/') !== -1 || ua.indexOf('Chromium/') !== -1
+                || ua.indexOf('Edg/') !== -1 || ua.indexOf('Edge/') !== -1
+                || ua.indexOf('Firefox/') !== -1 || ua.indexOf('OPR/') !== -1
+                || ua.indexOf('Android') !== -1) {
+                return false;
+            }
+            return ua.indexOf('AppleWebKit/') !== -1 && ua.indexOf('Safari/') !== -1;
+        } catch (_) {
+            return false;
+        }
+    }
+
     // #1 — Remove a stale, now-redundant JupyterLite service worker. The
     // SAB-only architecture disabled the SW manager, but a SW registered by a
     // pre-SAB build stays registered and keeps controlling /jupyterlite/* — it
     // can serve stale/uncontrolled responses that break the kernel boot, and a
     // plain refresh never clears it. Drop any we find and reload once if one was
     // actually controlling this load.
+    //
+    // WebKit is exempt: there the SW is the kernel's sync transport, not stale
+    // cruft — see isWebKitEngine() and the mountEditor() call site.
     function cleanupRedundantServiceWorker() {
         if (typeof navigator === 'undefined' || !navigator.serviceWorker ||
             !navigator.serviceWorker.getRegistrations) return;
@@ -327,18 +386,59 @@
     }
 
     // Isolation/engine context appended to kernel beacons so the admin
-    // diagnostics can tell WHY a kernel struggled: coi=false → isolation not
-    // delivered (e.g. a stale SW); waitasync=false under coi=true → an engine on
-    // the blob: waitAsync-polyfill path (older Safari / iPadOS).
+    // diagnostics can tell WHY a kernel struggled. NOTE: coi=false is now the
+    // EXPECTED, healthy state on WebKit — Safari/iOS run the editor non-isolated
+    // on the comlink + service-worker transport (see isWebKitEngine), so any
+    // coi-based health alert must exclude byBrowser=webkit. On Chrome/Edge/Firefox
+    // coi=false still means isolation was not delivered (e.g. a stale SW);
+    // waitasync=false under coi=true → an engine on the blob: waitAsync-polyfill
+    // path (older Safari / iPadOS).
     function isolationBeaconSuffix() {
         var coi = (typeof crossOriginIsolated !== 'undefined') ? !!crossOriginIsolated : false;
         var wa  = (typeof Atomics !== 'undefined' && typeof Atomics.waitAsync === 'function');
         return 'coi=' + coi + ';waitasync=' + wa;
     }
 
+    // --- WebKit slow-boot notice -------------------------------------
+    //
+    // On WebKit (the comlink + service-worker path) some old engines — notably
+    // Safari 18.x and low-memory iPads — never finish booting the editor: the
+    // service worker won't take control and/or the JupyterLite 0.8 frontend
+    // can't initialise. After SLOW_BOOT_NOTICE_MS with no positive kernel-ready
+    // signal, reveal a polite, NON-blocking upload notice (showSlowEditorNotice)
+    // — the editor stays visible, so a merely-slow-but-healthy boot still works
+    // and this can never false-hide a working editor (the reason armEditorWatchdog
+    // is deliberately conservative). WebKit-only: never touches the
+    // Chrome/Edge/Firefox SharedArrayBuffer path.
+    var SLOW_BOOT_NOTICE_MS = 25000;
+    var kernelEverReady = false;
+    var slowBootNoticeTimer = null;
+    var slowBootNoticeArmed = false;
+
+    function markKernelEverReady() {
+        kernelEverReady = true;
+        if (slowBootNoticeTimer) {
+            clearTimeout(slowBootNoticeTimer);
+            slowBootNoticeTimer = null;
+        }
+    }
+
+    function armSlowBootNotice() {
+        if (slowBootNoticeArmed || !isWebKitEngine()) return;
+        slowBootNoticeArmed = true;
+        slowBootNoticeTimer = setTimeout(function () {
+            slowBootNoticeTimer = null;
+            if (kernelEverReady) return;   // booted in time — nothing to do
+            if (failures && failures.showSlowEditorNotice) {
+                failures.showSlowEditorNotice();
+            }
+        }, SLOW_BOOT_NOTICE_MS);
+    }
+
     // The kernel reached idle/busy — the success NUMERATOR (paired with
     // editor_ready, the shell denominator).
     function reportKernelReady(elapsedMs) {
+        markKernelEverReady();
         if (failures && failures.reportEvent) {
             failures.reportEvent({
                 kind: 'kernel_ready',
@@ -359,7 +459,16 @@
     function mountEditor() {
         // Drop any stale, now-redundant JupyterLite service worker before booting
         // (the SAB-only editor doesn't use it; a leftover one can break the boot).
-        cleanupRedundantServiceWorker();
+        // WebKit is the exception: there the editor runs on comlink + the service
+        // worker, so the SW is required and clearing it would break the kernel.
+        if (!isWebKitEngine()) {
+            cleanupRedundantServiceWorker();
+        }
+
+        // WebKit-only: if the comlink + service-worker editor never reaches a
+        // healthy kernel (old Safari / low-RAM iPad), surface the upload path
+        // after SLOW_BOOT_NOTICE_MS without hiding the still-loading editor.
+        armSlowBootNotice();
 
         // The template renders the same URL into the iframe's src, so the
         // editor is already loading by the time the preflight resolves.
@@ -429,6 +538,36 @@
             });
         }
 
+        // Notebook 7 opens each document in its OWN browser tab via window.open
+        // (its documented default). Embedded in our iframe that's a redundant
+        // stray tab — the iframe already shows the notebook, and on WebKit the
+        // second editor boots a third Pyodide that contends with the kernel. The
+        // iframe is same-origin, so neutralize its window.open for same-site
+        // JupyterLite document URLs; re-applied on every (re)load + tick since each
+        // navigation gets a fresh window. The server self-close page
+        // (JupyterLiteAppIndexMiddleware) is the backstop for an open() that races
+        // the patch.
+        function suppressStrayEditorTabs() {
+            let win;
+            try { win = frame.contentWindow; } catch (_) { return; }
+            if (!win || win._chickadeeOpenPatched) return;
+            let nativeOpen;
+            try { nativeOpen = win.open; } catch (_) { return; }
+            if (typeof nativeOpen !== 'function') return;
+            try {
+                win._chickadeeOpenPatched = true;
+                win.open = function (url) {
+                    try {
+                        const resolved = new win.URL(String(url == null ? '' : url), win.location.href);
+                        if (resolved.pathname.indexOf('/jupyterlite/') === 0) {
+                            return null;  // swallow Notebook 7's stray same-site document tab
+                        }
+                    } catch (_) { /* unparseable / relative-resolve failed — fall through */ }
+                    return nativeOpen.apply(win, arguments);
+                };
+            } catch (_) { /* frozen/cross-origin — rely on the server self-close backstop */ }
+        }
+
         frame.addEventListener('load', () => {
             // A document committed; any forced reset we were waiting on has
             // landed, so the locked-path enforcement may act again.
@@ -439,11 +578,13 @@
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
             attachNotebookActivityBridge();
+            suppressStrayEditorTabs();
         });
         setInterval(() => {
             applyLockedNotebookUI();
             enforceLockedNotebookPath();
             attachNotebookActivityBridge();
+            suppressStrayEditorTabs();
         }, 1500);
 
         armEditorWatchdog();
@@ -1465,6 +1606,17 @@
 
             const contents = app.serviceManager && app.serviceManager.contents;
 
+            // 0.8 @jupyterlite/contents.save() throws "Directory does not exist"
+            // unless the notebook's parent dir is a materialized *directory* entry
+            // in the IndexedDB Drive (0.7.x auto-created it; the server-side dir our
+            // contents route serves is NOT consulted by save()'s local
+            // this.get(dirname) check). Our working copies are nested under
+            // users/<uid>/<setup>/, which nothing creates client-side — so create
+            // each ancestor first, satisfying the guard for both the seed save below
+            // and the editor's own Ctrl-S. Frontend analog of the kernel-side
+            // os.chdir/makedirs fix (scripts/patch-pyodide-kernel.py).
+            await ensureDriveParentDirectories(contents, lockedNotebookPath);
+
             // Preservation logic: if the browser already has the notebook in
             // IndexedDB AND the server hasn't overwritten it since we last
             // saw it, keep the local version — that's the student's
@@ -1588,6 +1740,35 @@
         };
     }
 
+    // Ensure every ancestor directory of `notebookPath` exists as a directory
+    // entry in JupyterLite's IndexedDB contents Drive. Idempotent (skips dirs
+    // that already exist) and fail-safe (any error swallowed; a genuine failure
+    // surfaces on the seed save). Walks root→leaf so each newUntitled's parent is
+    // already materialized; uses newUntitled+rename because BrowserDrive has no
+    // public "create named directory" call and save(dir,{type:'directory'}) would
+    // hit the same parent-exists guard. 0.8 added that guard; harmless on 0.7.x.
+    async function ensureDriveParentDirectories(contents, notebookPath) {
+        if (!contents || typeof contents.get !== 'function' || !notebookPath) return;
+        const parts = String(notebookPath).split('/').slice(0, -1).filter(Boolean);  // strip filename
+        let prefix = '';
+        for (const name of parts) {
+            const parent = prefix;                      // '' = Drive root
+            prefix = prefix ? `${prefix}/${name}` : name;
+            try {
+                const existing = await contents.get(prefix, { content: false }).catch(() => null);
+                if (existing && existing.type === 'directory') continue;  // already present
+            } catch (_) { /* fall through to create */ }
+            try {
+                const tmp = (typeof contents.newUntitled === 'function')
+                    ? await contents.newUntitled({ path: parent, type: 'directory' })
+                    : null;
+                if (tmp && tmp.path !== prefix && typeof contents.rename === 'function') {
+                    await contents.rename(tmp.path, prefix);
+                }
+            } catch (_) { /* best-effort; the seed save reports a genuine failure */ }
+        }
+    }
+
     async function waitForJupyterApp(timeoutMs) {
         const started = Date.now();
         while (Date.now() - started < timeoutMs) {
@@ -1707,7 +1888,12 @@
             const style = doc.createElement('style');
             style.id = 'chickadee-notebook-lock-style';
             style.textContent = rules.join('\n');
-            doc.head.appendChild(style);
+            // doc.head can be null when the iframe document exists but <head>
+            // hasn't parsed yet — fall back to documentElement, else skip (this
+            // runs again on the next lifecycle tick). Guards CASE 4:
+            // "TypeError: Cannot read properties of null (reading 'appendChild')".
+            const styleParent = doc.head || doc.documentElement;
+            if (styleParent) styleParent.appendChild(style);
         }
 
         if (readOnly) {
@@ -2208,6 +2394,7 @@
             shouldForceReseed,
             reseedPlan,
             handleKernelDiagMessage,
+            ensureDriveParentDirectories,
         };
     }
 })();

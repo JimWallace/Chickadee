@@ -42,8 +42,10 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
 
     /// Optional automatic open date. nil = open as soon as published.
     /// When set and still in the future, students cannot access or submit
-    /// even if `isOpen` is true; the assignment becomes submittable on its
-    /// own once this time passes (gated live, no background job).
+    /// even if `isOpen` is true. Once the time arrives, a `.closed`/`.preview`
+    /// assignment is published by `openScheduledAssignment` — via the periodic
+    /// deadline sweep, the dashboard load, and the submission gate (the latter
+    /// two as lazy safety nets) — which consumes this field (sets it nil).
     @OptionalField(key: "starts_at")
     var startsAt: Date?
 
@@ -92,6 +94,20 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
     /// D2L BrightSpace grade item (grade object) ID for grade sync (instructor-entered).
     @OptionalField(key: "brightspace_grade_object_id")
     var brightspaceGradeObjectID: String?
+
+    /// When true, this assignment is *explicitly* excluded from BrightSpace grade
+    /// sync — distinct from "not yet mapped" (`brightspaceGradeObjectID == nil`),
+    /// which only means the instructor hasn't wired a grade item yet. The sweep
+    /// skips an excluded assignment without recording an error, and the mapping
+    /// (if any) is preserved so re-enabling restores it. nil/false = not excluded.
+    @OptionalField(key: "brightspace_sync_excluded")
+    var brightspaceSyncExcluded: Bool?
+
+    /// When true, students may spend their one secret-reveal token on this
+    /// assignment to see secret-tier test results itemized. nil/false = off
+    /// (the default): secret results stay aggregate-only for students.
+    @OptionalField(key: "secret_reveal_enabled")
+    var secretRevealEnabled: Bool?
 
     /// The course this assignment belongs to.
     @Field(key: "course_id")

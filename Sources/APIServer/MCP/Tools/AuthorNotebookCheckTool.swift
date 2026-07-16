@@ -148,10 +148,7 @@ struct AuthorNotebookCheckTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "id": .object([
                 "type": .string("string"),
                 "description": .string("Stable check id (unique; reusing an existing id replaces it)."),
@@ -170,16 +167,10 @@ struct AuthorNotebookCheckTool: ContentTool {
                 "type": .string("string"),
                 "description": .string("Display name shown in the results view; omit for an auto label."),
             ]),
-            "tier": .object([
-                "type": .string("string"),
-                "enum": .array([
-                    .string("public"), .string("release"), .string("secret"), .string("student"),
-                ]),
-                "description": .string("Visibility tier; default public."),
-            ]),
+            "tier": MCPSchema.tierEnum(description: "Visibility tier; default public."),
             "points": .object(["type": .string("integer"), "description": .string("Default 1.")]),
             "dependsOn": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Prerequisite script names or family:<id> tokens."),
             ]),
             "sectionID": .object([
@@ -209,7 +200,7 @@ struct AuthorNotebookCheckTool: ContentTool {
                 "type": .string("integer"), "description": .string("data_frame_shape: required column count."),
             ]),
             "expectedColumns": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("data_frame_columns: the expected column names."),
             ]),
             "columnMatch": .object([
@@ -241,7 +232,7 @@ struct AuthorNotebookCheckTool: ContentTool {
                     "data_frame_equality / series_equality: reset index before comparing (default true)."),
             ]),
             "expectedArray": .object([
-                "type": .string("array"), "items": .object(["type": .string("number")]),
+                "type": .string("array"), "items": MCPSchema.number,
                 "description": .string("numeric_array_close: the expected 1D numeric array."),
             ]),
             "minFigures": .object([
@@ -267,7 +258,7 @@ struct AuthorNotebookCheckTool: ContentTool {
                 "description": .string("variable_exists: required runtime type (e.g. \"int\", \"DataFrame\")."),
             ]),
             "requiredConstructs": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string(
                     "ast_structure: predicates like \"for_loop\", \"recursion\", \"import:math\", "
                         + "or negated (\"!for_loop\")."),
@@ -279,12 +270,12 @@ struct AuthorNotebookCheckTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "checkID": .object(["type": .string("string")]),
-            "kind": .object(["type": .string("string")]),
-            "created": .object(["type": .string("boolean")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "checkID": MCPSchema.string,
+            "kind": MCPSchema.string,
+            "created": MCPSchema.boolean,
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("checkID"), .string("kind"), .string("created"),
@@ -306,8 +297,8 @@ struct AuthorNotebookCheckTool: ContentTool {
         let tier = try Self.parseTier(input.tier)
         let columnMatch = try Self.parseColumnMatch(input.columnMatch)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         let existingIndex = payload.items.firstIndex { $0.kind == "check" && $0.check?.id == checkID }

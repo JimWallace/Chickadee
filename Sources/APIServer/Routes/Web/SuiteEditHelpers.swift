@@ -36,7 +36,12 @@ import Vapor
 /// Loads the (assignment, setup) pair from a `:assignmentID` path
 /// parameter.  Throws `.notFound` if either the assignment or its
 /// referenced test setup is missing.
-func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APITestSetup) {
+///
+/// Performs **no authorization** — private so unauthorized use is impossible
+/// outside this file. Handlers go through `loadAssignmentAndSetupForStaffRead`
+/// or `loadAssignmentAndSetupForWrite`, which scope the caller to the
+/// assignment's own course (#1103).
+private func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APITestSetup) {
     let idStr = try assignmentPublicIDParameter(from: req)
     guard
         let assignment = try await assignmentByPublicID(idStr, on: req.db),
@@ -51,6 +56,11 @@ func loadAssignmentAndSetup(_ req: Request) async throws -> (APIAssignment, APIT
 /// the raw path parameter afterwards can use `assignment.publicID`, which
 /// is always identical to it (`assignmentByPublicID` is an exact-match
 /// filter on a validated parameter).
+///
+/// Performs **no authorization** by itself. Callers must either go through
+/// `loadAssignmentForStaffRead` / `loadAssignmentForWrite`, or — like
+/// `resolveStudentAssignmentAction` and `moveToSection` — apply their own
+/// per-course gate immediately after loading (#1103).
 func loadAssignment(_ req: Request) async throws -> APIAssignment {
     let idStr = try assignmentPublicIDParameter(from: req)
     guard let assignment = try await assignmentByPublicID(idStr, on: req.db) else {
@@ -59,12 +69,87 @@ func loadAssignment(_ req: Request) async throws -> APIAssignment {
     return assignment
 }
 
+/// Read-authorizing sibling of `loadAssignmentAndSetup(_:)`. After loading,
+/// requires the caller hold at least a `.ta` role in the assignment's **own**
+/// course (`requireCourseRole`, admin bypass). Unlike the write loader there is
+/// no archived-course block, so archived courses stay readable for audits.
+///
+/// The editor read handlers (suite/scripts/files/achievements/datasets/
+/// global-variables/edit-page) use this so a staff member of course A can't
+/// fetch course B's reference solution or secret tests by guessing its 6-char
+/// assignment public ID — the same cross-course hole #417 Slice G closed on
+/// the API side (`downloadTestSetup`), missed on the web editor (#1103).
+func loadAssignmentAndSetupForStaffRead(_ req: Request) async throws -> (APIAssignment, APITestSetup) {
+    let (assignment, setup) = try await loadAssignmentAndSetup(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseRole(caller: caller, courseID: assignment.courseID, atLeast: .ta, db: req.db)
+    return (assignment, setup)
+}
+
+/// Read-authorizing sibling of `loadAssignment(_:)` — same `.ta` staff gate as
+/// `loadAssignmentAndSetupForStaffRead`, for read-only pages that never touch
+/// the test setup (per-assignment submissions list, per-student history). No
+/// archived-course block, so archived courses stay auditable (#1103).
+func loadAssignmentForStaffRead(_ req: Request) async throws -> APIAssignment {
+    let assignment = try await loadAssignment(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseRole(caller: caller, courseID: assignment.courseID, atLeast: .ta, db: req.db)
+    return assignment
+}
+
+/// Write-authorizing sibling of `loadAssignmentAndSetup(_:)`. After loading,
+/// authorizes the caller for a *write* to the assignment's **own** course via
+/// `requireCourseWriteAccess` (per-course role + admin bypass + archived-course
+/// block). Mutating editor handlers use this so a write is scoped to the
+/// resource's course rather than the caller's active course — closing both the
+/// archived-course and cross-course write paths the `/instructor` group
+/// middleware can't see (see docs/multi-course-roles.md).
+///
+/// Callers state their floor explicitly (#1113): the assignment **content**
+/// editor handlers (suite/scripts/sections/families/checks/global-inputs/
+/// datasets/achievements/notebook/solution/save-edit/retest-all) pass `.ta` —
+/// all of which a TA may do. The one structural caller, `cloneAssignment`
+/// (it creates a new assignment), passes `.instructor` (#417 Slice E).
+func loadAssignmentAndSetupForWrite(
+    _ req: Request, atLeast: CourseRole
+) async throws -> (APIAssignment, APITestSetup) {
+    let (assignment, setup) = try await loadAssignmentAndSetup(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseWriteAccess(
+        caller: caller, courseID: assignment.courseID, atLeast: atLeast, db: req.db)
+    return (assignment, setup)
+}
+
+/// Write-authorizing sibling of `loadAssignment(_:)`, for handlers that mutate
+/// per-course state but never touch the test setup. Same `requireCourseWriteAccess`
+/// gate as `loadAssignmentAndSetupForWrite`, scoping the write to the
+/// assignment's **own** course (#417, follow-up to Slice A).
+///
+/// Callers state their floor explicitly (#1113): per-student grading actions
+/// (retest/reset/grade-override — TA-allowed) pass `.ta`; assignment-lifecycle
+/// actions (open/close/status/delete/BrightSpace — instructor-only) pass
+/// `.instructor` (#417 Slice E).
+func loadAssignmentForWrite(
+    _ req: Request, atLeast: CourseRole
+) async throws -> APIAssignment {
+    let assignment = try await loadAssignment(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseWriteAccess(
+        caller: caller, courseID: assignment.courseID, atLeast: atLeast, db: req.db)
+    return assignment
+}
+
 /// Loads a draft test setup from the `?draftID=<id>` query parameter.
 /// The draft model is just an `APITestSetup` row that hasn't been
 /// linked to an `APIAssignment` yet — same row shape, no parent.
 /// Throws `.badRequest` if the parameter is missing/empty,
 /// `.notFound` if no row matches.
-func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
+///
+/// Performs **no authorization** — private, like `loadAssignmentAndSetup`.
+/// Handlers go through the read/write variants below, which both scope the
+/// caller to the draft's own course (#1103; supersedes the Bool
+/// `requireWrite:` flag whose `false` case skipped authorization entirely).
+private func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
     guard let draftID = try? req.query.get(String.self, at: "draftID"),
         !draftID.isEmpty
     else {
@@ -73,6 +158,29 @@ func loadDraftSetup(_ req: Request) async throws -> APITestSetup {
     guard let setup = try await APITestSetup.find(draftID, on: req.db) else {
         throw WebAssignmentError.notFound(resource: "Draft '\(draftID)'")
     }
+    return setup
+}
+
+/// Read-authorizing draft loader: the caller must hold at least a `.ta` role
+/// in the draft's own course (admin bypass; no archived block). Used by
+/// `getDraftSuite` / `downloadDraftSetupItem` so a staff member of another
+/// course can't read a draft's suite or support files by guessing its
+/// `draftID` (#1103).
+func loadDraftSetupForRead(_ req: Request) async throws -> APITestSetup {
+    let setup = try await loadDraftSetup(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseRole(caller: caller, courseID: setup.courseID, atLeast: .ta, db: req.db)
+    return setup
+}
+
+/// Write-authorizing draft loader (`requireCourseWriteAccess`): the draft
+/// suite/script/section edit handlers use this so an instructor can't mutate
+/// another course's draft — or one in an archived course — by guessing its
+/// `draftID` (#417 Slice D).
+func loadDraftSetupForWrite(_ req: Request) async throws -> APITestSetup {
+    let setup = try await loadDraftSetup(req)
+    let caller = try req.auth.require(APIUser.self)
+    try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
     return setup
 }
 

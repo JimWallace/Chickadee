@@ -21,19 +21,36 @@ func reapStuckAssignedSubmissions(
     now: Date = Date()
 ) async throws -> Int {
     let cutoff = now.addingTimeInterval(-maxAge)
-    let stuck = try await APISubmission.query(on: db)
-        .filter(\.$status == SubmissionStatus.assigned.rawValue)
-        .filter(\.$assignedAt <= cutoff)
+
+    func scoped() -> QueryBuilder<APISubmission> {
+        APISubmission.query(on: db)
+            .filter(\.$status == SubmissionStatus.assigned.rawValue)
+            .filter(\.$assignedAt <= cutoff)
+    }
+
+    // Read (id, worker) pairs first so the per-submission warning keeps naming
+    // the runner that dropped the job, then flip the whole set back to pending
+    // in ONE bulk UPDATE (same pattern as bulkFlipStudentSubmissionsToPending)
+    // instead of a save per row.  After a fleet-wide runner crash near a
+    // deadline every in-flight job ages out in the same sweep; the old
+    // per-row loop turned that into N sequential round-trips every 60 s.
+    // A row newly aging past the cutoff between the read and the UPDATE is
+    // flipped without its log line and gets logged by the next sweep — benign.
+    let stuck = try await scoped()
+        .field(\.$id)
+        .field(\.$workerID)
         .all()
+    guard !stuck.isEmpty else { return 0 }
+
+    try await scoped()
+        .set(\.$status, to: SubmissionStatus.pending.rawValue)
+        .set(\.$workerID, to: nil)
+        .set(\.$assignedAt, to: nil)
+        .update()
 
     for submission in stuck {
-        let previousWorker = submission.workerID ?? "unknown"
-        submission.setStatus(.pending)
-        submission.workerID = nil
-        submission.assignedAt = nil
-        try await submission.save(on: db)
         logger.warning(
-            "Reaped stuck submission \(submission.id ?? "<nil>") (was assigned to \(previousWorker)); returned to pending queue"
+            "Reaped stuck submission \(submission.id ?? "<nil>") (was assigned to \(submission.workerID ?? "unknown")); returned to pending queue"
         )
     }
     return stuck.count

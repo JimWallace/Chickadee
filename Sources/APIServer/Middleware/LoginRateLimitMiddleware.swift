@@ -15,19 +15,22 @@
 //      account in a soft lockout state.  Subsequent attempts return 423
 //      Locked until the window passes or a successful login (e.g. by an
 //      admin after manual reset) clears the failure record.  Enforced by
-//      the login handler via `LoginAttemptStore.isLocked` / `recordFailure`
+//      the login handler via `LoginAttemptService.isLocked` / `recordFailure`
 //      / `clearFailures`, because the username is only known after the
 //      request body has been decoded.
 //
-// Storage is in-memory (`LoginAttemptStore` actor) — the same pattern used
-// by `WorkerNonceStore`.  Restart clears all state, which is fine for these
-// time-bounded checks; clustered deployments would need a shared store, but
-// Chickadee's deployment model is single-process today.
+// Storage is the `login_attempts` table (#1154).  The counts must be shared
+// across server processes: with the old in-memory actor, N instances behind
+// a load balancer meant N× the configured per-IP rate and lockouts that only
+// counted the failures that happened to land on the same instance.  Login
+// traffic is low-frequency, so the two or three indexed queries per POST are
+// negligible.
 //
 // IP extraction honours `X-Forwarded-For` only when the operator has set
 // TRUST_X_FORWARDED_PROTO=true (the existing trust signal), so spoofing
 // behind an untrusted proxy can't bypass the limit.
 
+import Fluent
 import Foundation
 import Vapor
 
@@ -80,16 +83,23 @@ struct LoginRateLimitMiddleware: AsyncMiddleware {
             from: request,
             trustForwardedFor: configuration.trustForwardedFor
         )
-        let allowed = await request.application.loginAttemptStore.recordAndCheckIP(
+        let allowed = try await LoginAttemptService.recordAndCheckIP(
             ip: ip,
             now: Date(),
             windowSeconds: 60,
-            max: configuration.perMinute
+            max: configuration.perMinute,
+            on: request.db
         )
         if !allowed {
             request.logger.warning("Login rate limit exceeded for IP \(ip)")
             return try Self.tooManyRequestsResponse()
         }
+        await LoginAttemptService.purgeStaleIfDue(
+            application: request.application,
+            db: request.db,
+            lockoutWindowSeconds: configuration.lockoutWindowSeconds,
+            logger: request.logger
+        )
         return try await next.respond(to: request)
     }
 
@@ -122,90 +132,138 @@ func clientIPAddress(from request: Request, trustForwardedFor: Bool) -> String {
     return "unknown"
 }
 
-// MARK: - Attempt store
+// MARK: - Attempt service (database-backed)
 
-/// Tracks per-IP request timestamps and per-username failure timestamps for
-/// brute-force protection.  All state is in-memory and ephemeral.
-actor LoginAttemptStore {
-    private var ipTimestamps: [String: [Date]] = [:]
-    private var userFailures: [String: [Date]] = [:]
+/// Tracks per-IP request events and per-username failure events for
+/// brute-force protection, in the `login_attempts` table so the sliding
+/// windows are shared across server processes (#1154). Every query is
+/// covered by the (scope, attempt_key, occurred_at) index; per-key rows are
+/// pruned on each write so a key's row count is bounded by its own window.
+enum LoginAttemptService {
+    /// How often (at most) a request triggers the global stale-row sweep.
+    static let purgeInterval: TimeInterval = 600
 
     /// Records a request from `ip` and reports whether it should be allowed
     /// under a sliding-window cap of `max` per `windowSeconds`.  The request
     /// is counted regardless of the return value (rejected requests still
     /// count against the limit) so a misbehaving client can't game the cap
     /// by exceeding it.
-    func recordAndCheckIP(
+    static func recordAndCheckIP(
         ip: String,
         now: Date,
         windowSeconds: TimeInterval,
-        max: Int
-    ) -> Bool {
+        max: Int,
+        on db: Database
+    ) async throws -> Bool {
         let cutoff = now.addingTimeInterval(-windowSeconds)
-        var list = (ipTimestamps[ip] ?? []).filter { $0 > cutoff }
-        list.append(now)
-        ipTimestamps[ip] = list
-        return list.count <= max
+        try await LoginAttempt.query(on: db)
+            .filter(\.$scope == LoginAttempt.Scope.ip)
+            .filter(\.$attemptKey == ip)
+            .filter(\.$occurredAt <= cutoff)
+            .delete()
+        try await LoginAttempt(scope: LoginAttempt.Scope.ip, attemptKey: ip, occurredAt: now)
+            .create(on: db)
+        let count = try await LoginAttempt.query(on: db)
+            .filter(\.$scope == LoginAttempt.Scope.ip)
+            .filter(\.$attemptKey == ip)
+            .filter(\.$occurredAt > cutoff)
+            .count()
+        return count <= max
     }
 
     /// Returns true if the given username has accumulated `threshold` or
     /// more failed logins inside the trailing `windowSeconds`.
-    func isLocked(
+    static func isLocked(
         username: String,
         now: Date,
         windowSeconds: TimeInterval,
-        threshold: Int
-    ) -> Bool {
+        threshold: Int,
+        on db: Database
+    ) async throws -> Bool {
         let cutoff = now.addingTimeInterval(-windowSeconds)
-        let list = (userFailures[username] ?? []).filter { $0 > cutoff }
-        userFailures[username] = list
-        return list.count >= threshold
+        let count = try await LoginAttempt.query(on: db)
+            .filter(\.$scope == LoginAttempt.Scope.userFailure)
+            .filter(\.$attemptKey == username)
+            .filter(\.$occurredAt > cutoff)
+            .count()
+        return count >= threshold
     }
 
     /// Records a failed login attempt against `username`.  Failures older
     /// than `windowSeconds` are pruned at the same time.
-    func recordFailure(
+    static func recordFailure(
         username: String,
         now: Date,
-        windowSeconds: TimeInterval
-    ) {
+        windowSeconds: TimeInterval,
+        on db: Database
+    ) async throws {
         let cutoff = now.addingTimeInterval(-windowSeconds)
-        var list = (userFailures[username] ?? []).filter { $0 > cutoff }
-        list.append(now)
-        userFailures[username] = list
+        try await LoginAttempt.query(on: db)
+            .filter(\.$scope == LoginAttempt.Scope.userFailure)
+            .filter(\.$attemptKey == username)
+            .filter(\.$occurredAt <= cutoff)
+            .delete()
+        try await LoginAttempt(
+            scope: LoginAttempt.Scope.userFailure, attemptKey: username, occurredAt: now
+        ).create(on: db)
     }
 
     /// Clears all failure records for `username`.  Called after a successful
     /// login so the user isn't subsequently locked out by their own pre-
     /// success retries.
-    func clearFailures(username: String) {
-        userFailures[username] = nil
+    static func clearFailures(username: String, on db: Database) async throws {
+        try await LoginAttempt.query(on: db)
+            .filter(\.$scope == LoginAttempt.Scope.userFailure)
+            .filter(\.$attemptKey == username)
+            .delete()
+    }
+
+    /// Sweeps rows old enough to be outside every window (keys that never
+    /// came back and so were never pruned on-write). Throttled per process;
+    /// best-effort.
+    static func purgeStaleIfDue(
+        application: Application,
+        db: Database,
+        lockoutWindowSeconds: TimeInterval,
+        logger: Logger
+    ) async {
+        let due = await application.loginAttemptPurgeThrottle.shouldRun(
+            now: Date(), interval: purgeInterval)
+        guard due else { return }
+        let horizon = Date().addingTimeInterval(-Swift.max(lockoutWindowSeconds, 3600))
+        do {
+            try await LoginAttempt.query(on: db)
+                .filter(\.$occurredAt <= horizon)
+                .delete()
+        } catch {
+            logger.warning("login_attempt_purge_failed: \(String(describing: error))")
+        }
     }
 }
 
 // MARK: - Application storage
 
-struct LoginAttemptStoreKey: StorageKey {
-    typealias Value = LoginAttemptStore
-}
-
 struct LoginRateLimitConfigurationKey: StorageKey {
     typealias Value = LoginRateLimitConfiguration
 }
 
-extension Application {
-    var loginAttemptStore: LoginAttemptStore {
-        get {
-            if let existing = storage[LoginAttemptStoreKey.self] { return existing }
-            let created = LoginAttemptStore()
-            storage[LoginAttemptStoreKey.self] = created
-            return created
-        }
-        set { storage[LoginAttemptStoreKey.self] = newValue }
-    }
+struct LoginAttemptPurgeThrottleKey: StorageKey {
+    typealias Value = PurgeThrottle
+}
 
+extension Application {
     var loginRateLimitConfiguration: LoginRateLimitConfiguration {
         get { storage[LoginRateLimitConfigurationKey.self] ?? .default }
         set { storage[LoginRateLimitConfigurationKey.self] = newValue }
+    }
+
+    var loginAttemptPurgeThrottle: PurgeThrottle {
+        get {
+            if let existing = storage[LoginAttemptPurgeThrottleKey.self] { return existing }
+            let created = PurgeThrottle()
+            storage[LoginAttemptPurgeThrottleKey.self] = created
+            return created
+        }
+        set { storage[LoginAttemptPurgeThrottleKey.self] = newValue }
     }
 }

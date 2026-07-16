@@ -53,7 +53,7 @@
         }
         if (row.scope === 'classWide') {
             return conditionsText(row) + ' · by ' + n(row.classPercent)
-                + '% of class · +' + n(row.points) + ' pts';
+                + '% of class · +' + n(row.points) + (row.points === 1 ? ' pt' : ' pts');
         }
         return conditionsText(row);
     }
@@ -78,14 +78,14 @@
             });
 
         var state = [];
+        // Until the initial GET succeeds, saving is disabled: persisting the
+        // placeholder empty list would wipe every achievement on the server.
+        var loaded = false;
         var open = null;          // { index, detailRow } of the open editor, or null
         var lingeringClose = null; // finishNow() of an in-flight animated collapse
 
         function setStatus(text, kind) {
-            if (!status) return;
-            status.textContent = text || '';
-            status.style.color = kind === 'error'
-                ? 'var(--red)' : (kind === 'ok' ? 'var(--green)' : 'var(--gray-500)');
+            ChickadeeUI.setStatus(status, text, kind);
         }
 
         function render() {
@@ -109,6 +109,10 @@
 
         // PUT the whole list; refresh local state from the reconciled response.
         function persist() {
+            if (!loaded) {
+                return Promise.reject(new Error(
+                    'The achievements list never loaded — refresh the page before editing.'));
+            }
             return fetch(url, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf() },
@@ -306,9 +310,24 @@
         });
 
         fetch(url, { headers: { 'x-csrf-token': csrf() } })
-            .then(function (r) { return r.ok ? r.json() : { achievements: [] }; })
-            .then(function (body) { state = (body && body.achievements) || []; render(); })
-            .catch(function () { render(); });
+            .then(function (r) {
+                if (!r.ok) { throw new Error('HTTP ' + r.status); }
+                return r.json();
+            })
+            .then(function (body) {
+                state = (body && body.achievements) || [];
+                loaded = true;
+                render();
+            })
+            .catch(function (err) {
+                // A failed load used to render an empty table whose next Save
+                // PUT that emptiness wholesale, destroying every achievement.
+                render();
+                setStatus(
+                    'Could not load achievements ('
+                    + ((err && err.message) ? err.message : err)
+                    + ') — editing is disabled; refresh the page.', 'error');
+            });
     }
 
     if (document.readyState === 'loading') {

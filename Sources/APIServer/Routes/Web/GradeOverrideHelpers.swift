@@ -52,10 +52,8 @@ func gradeOverridePercent(
 /// exports such as the grades CSV and BrightSpace.  Nil when the manifest
 /// is missing/malformed or sums to zero.
 func gradeOverridePoints(percent: Int, setup: APITestSetup) -> Double? {
-    guard let props = setup.decodedManifest() else { return nil }
-    let total = props.testSuites.map(\.points).reduce(0, +)
-    guard total > 0 else { return nil }
-    return Double(percent) / 100.0 * Double(total)
+    guard let total = suiteTotalPoints(props: setup.decodedManifest()) else { return nil }
+    return Double(percent) / 100.0 * total
 }
 
 // MARK: - Mutating helpers (shared by every override-setting site)
@@ -78,27 +76,30 @@ func applyGradeOverride(
     grantedByUserID: UUID?,
     on db: Database
 ) async throws {
-    let existing = try await APIGradeOverride.query(on: db)
+    let row =
+        try await APIGradeOverride.query(on: db)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$userID == studentUserID)
         .first()
-    if let existing {
-        existing.overridePercent = percent
-        existing.note = note
-        existing.grantedByUserID = grantedByUserID
-        try await existing.save(on: db)
-    } else {
-        let row = APIGradeOverride(
+        ?? APIGradeOverride(
             testSetupID: testSetupID,
             userID: studentUserID,
             overridePercent: percent,
             note: note,
             grantedByUserID: grantedByUserID
         )
-        try await row.save(on: db)
-    }
-    try await flagGradeResultsPendingSync(
-        testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+    row.overridePercent = percent
+    row.note = note
+    row.grantedByUserID = grantedByUserID
+    try await row.save(on: db)
+    // Setting an override (re)establishes a grade — drop any queued removal for
+    // this (student, setup) so the sweep doesn't clear a grade we're pushing.
+    try await APIBrightSpaceGradeClear.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == studentUserID)
+        .delete()
+    try await flagOverrideOrResultsPendingSync(
+        override: row, testSetupID: testSetupID, studentUserID: studentUserID, on: db)
 }
 
 /// Clears any (setup, user) override and re-flags the student's results for
@@ -120,28 +121,87 @@ func clearGradeOverride(
         return false
     }
     try await existing.delete(on: db)
-    try await flagGradeResultsPendingSync(
+    // Clearing reverts to the runner-computed grade. For a student with
+    // submissions that re-flags their results; for a no-submission student
+    // there is no runner grade — so if Chickadee previously pushed a grade for
+    // them, queue a removal so the LEARN grade doesn't stay stale.
+    try await flagOverrideOrResultsPendingSync(
+        override: nil, testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+    try await enqueueGradeClearIfOrphaned(
         testSetupID: testSetupID, studentUserID: studentUserID, on: db)
     return true
 }
 
-/// Marks every result on one student's submissions for a test setup as pending
-/// BrightSpace sync, so the debounced sweep re-pushes the grade after an
-/// override is set or cleared.
-func flagGradeResultsPendingSync(
-    testSetupID: String, studentUserID: UUID, on db: Database
+/// Queues a BrightSpace grade removal for a (student, setup) that has lost its
+/// only Chickadee grade source — no student submissions remain — but ONLY when
+/// Chickadee has actually pushed a grade for it (a `success` row in the sync
+/// log). That gate is what keeps Chickadee from ever clearing a grade an
+/// instructor entered by hand in LEARN. A no-op when the student still has
+/// submissions (their runner grade is re-pushed instead) or nothing was synced.
+func enqueueGradeClearIfOrphaned(
+    testSetupID: String,
+    studentUserID: UUID,
+    on db: Database
 ) async throws {
-    let submissionIDs = try await APISubmission.query(on: db)
+    let hasSubmissions =
+        try await APISubmission.query(on: db)
         .filter(\.$userID == studentUserID)
         .filter(\.$testSetupID == testSetupID)
         .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-        .compactMap(\.id)
-    guard !submissionIDs.isEmpty else { return }
-    let results = try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ submissionIDs)
-        .all()
+        .first() != nil
+    guard !hasSubmissions else { return }
+
+    let chickadeePushed =
+        try await APIBrightSpaceSyncLog.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == studentUserID)
+        .filter(\.$status == APIBrightSpaceSyncLog.Status.success.rawValue)
+        .first() != nil
+    guard chickadeePushed else { return }
+
     let now = Date()
+    if let existing = try await APIBrightSpaceGradeClear.query(on: db)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$userID == studentUserID)
+        .first()
+    {
+        existing.brightspaceSyncPending = true
+        if existing.brightspacePendingSince == nil { existing.brightspacePendingSince = now }
+        existing.brightspaceSyncError = nil
+        try await existing.save(on: db)
+    } else {
+        let row = APIBrightSpaceGradeClear(testSetupID: testSetupID, userID: studentUserID)
+        row.brightspacePendingSince = now
+        try await row.save(on: db)
+    }
+}
+
+/// Marks every result on one student's submissions for a test setup as pending
+/// BrightSpace sync, so the debounced sweep re-pushes the grade after an
+/// override is set or cleared.  When the student has NO submissions there is no
+/// result row to flag, so the supplied override row carries the pending flag
+/// itself — the sweep scans both (see `sweepBrightSpaceGradeSync`).  `override`
+/// is nil on the clear path (the row was deleted), in which case a
+/// no-submission student is a no-op (nothing to push, nothing to revert).
+func flagOverrideOrResultsPendingSync(
+    override: APIGradeOverride?,
+    testSetupID: String,
+    studentUserID: UUID,
+    on db: Database
+) async throws {
+    let now = Date()
+    let results = try await gradeResultsForStudent(
+        testSetupID: testSetupID, studentUserID: studentUserID, on: db)
+    guard !results.isEmpty else {
+        // No submissions: the override row is the only thing to push.
+        guard let override else { return }
+        override.brightspaceSyncPending = true
+        if override.brightspacePendingSince == nil {
+            override.brightspacePendingSince = now
+        }
+        try await override.save(on: db)
+        return
+    }
     for result in results {
         result.brightspaceSyncPending = true
         if result.brightspacePendingSince == nil {
@@ -149,4 +209,20 @@ func flagGradeResultsPendingSync(
         }
         try await result.save(on: db)
     }
+}
+
+/// Every result on one student's student-submissions for a test setup.
+private func gradeResultsForStudent(
+    testSetupID: String, studentUserID: UUID, on db: Database
+) async throws -> [APIResult] {
+    let submissionIDs = try await APISubmission.query(on: db)
+        .filter(\.$userID == studentUserID)
+        .filter(\.$testSetupID == testSetupID)
+        .filter(\.$kind == APISubmission.Kind.student)
+        .all()
+        .compactMap(\.id)
+    guard !submissionIDs.isEmpty else { return [] }
+    return try await APIResult.query(on: db)
+        .filter(\.$submissionID ~~ submissionIDs)
+        .all()
 }

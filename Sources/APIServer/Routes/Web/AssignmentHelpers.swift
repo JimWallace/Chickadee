@@ -46,11 +46,18 @@ func parseDueDate(_ raw: String?) -> Date? {
     let iso = ISO8601DateFormatter()
     if let d = iso.date(from: raw) { return d }
 
-    let fmt = DateFormatter()
-    fmt.locale = Locale(identifier: "en_US_POSIX")
-    fmt.timeZone = TimeZone(identifier: "America/Toronto")
-    fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
-    return fmt.date(from: raw)
+    // Accept both `datetime-local` shapes (with and without seconds) — this
+    // is the ONE parser for instructor-entered local datetimes; the
+    // extension-grant form used to carry its own copy, the v0.4.82
+    // five-drifted-display-sites bug class (#1118).
+    for pattern in ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss"] {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone(identifier: "America/Toronto")
+        fmt.dateFormat = pattern
+        if let d = fmt.date(from: raw) { return d }
+    }
+    return nil
 }
 
 func waterlooDateTimeFormatter() -> DateFormatter {

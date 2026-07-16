@@ -50,6 +50,43 @@ import VaporTesting
         }
     }
 
+    /// Regression for the Lab 6 incident: a `.preview` assignment whose
+    /// scheduled open date has arrived (validation passed) must be published by
+    /// the dashboard load itself — the lazy safety net under the periodic
+    /// sweep. Pre-fix, a dead sweep meant the lab stayed staff-only preview
+    /// forever and every dashboard load just observed the stuck state.
+    @Test func indexLazilyOpensScheduledAssignment() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_sched_open", on: app)
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_sched_open", title: "Scheduled Lab", isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400), on: app)
+            assignment.visibility = .preview
+            assignment.startsAt = Date().addingTimeInterval(-60)
+            assignment.validationStatus = "passed"
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    // The dashboard load repaired the missed scheduled open, so
+                    // the student sees the lab on this very render.
+                    #expect(res.body.string.contains("Scheduled Lab"))
+                })
+
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.visibility == .open, "Dashboard load publishes a due scheduled assignment")
+            #expect(reloaded.startsAt == nil, "Open date is consumed once it fires")
+        }
+    }
+
     @Test func indexShowsOpenAssignmentForStudent() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
@@ -549,8 +586,8 @@ import VaporTesting
                         html.contains("not enrolled in any courses"),
                         "The dashboard should show the empty not-enrolled state")
                     #expect(
-                        !html.contains(#"href="/instructor""#),
-                        "The course-scoped Instructor tab must not render for an unenrolled admin")
+                        !html.contains(#"value="/instructor""#),
+                        "The Instructor nav entry must not render for an unenrolled admin")
                     #expect(
                         html.contains(#"href="/admin""#),
                         "The admin keeps their deployment-wide Admin tab")
@@ -559,8 +596,8 @@ import VaporTesting
     }
 
     /// The other side of the unenrolled-admin fix: an instructor enrolled in a
-    /// course still gets the course-scoped tab, labelled with the active course
-    /// code.
+    /// single course gets a direct Instructor link (the one-course case renders
+    /// a single "Instructor" entry rather than the multi-course strip).
     @Test func enrolledInstructorSeesCourseScopedInstructorTab() async throws {
         try await withWebRoutesApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
@@ -575,11 +612,34 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(
-                        html.contains(#"href="/instructor""#),
-                        "An enrolled instructor must still see the Instructor tab")
+                        html.contains(#"value="/instructor""#),
+                        "An enrolled instructor must still see the Instructor entry")
                     #expect(
-                        html.contains(">CS101</a>"),
-                        "The Instructor tab is labelled with the active course code")
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link, not a per-course strip")
+                })
+        }
+    }
+
+    /// The nav (Instructor link + course tabs) must persist on pages whose
+    /// handler only builds a course-free `req.currentUserContext` — the bug the
+    /// `NavCourseContextMiddleware` fixes.  `/account` is such a page; an
+    /// enrolled instructor must still see the Instructor link there.
+    @Test func instructorNavPersistsOnCourseFreePage() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsInstructor(on: app)
+            let instructor = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
+            try await wrEnrollUser(instructor, on: app)
+
+            try await app.asyncTest(
+                .GET, "/account",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(
+                        res.body.string.contains(#"value="/instructor""#),
+                        "The Instructor nav link must persist on a course-free page like /account")
                 })
         }
     }
@@ -608,11 +668,11 @@ import VaporTesting
                     #expect(res.status == .ok)
                     let html = res.body.string
                     #expect(
-                        html.contains(#"href="/instructor""#),
-                        "A per-course instructor (global student) must see the Instructor tab")
+                        html.contains(#"value="/instructor""#),
+                        "A per-course instructor (global student) must see the Instructor entry")
                     #expect(
-                        html.contains(">CS301</a>"),
-                        "The Instructor tab is labelled with the active course code")
+                        html.contains(">Instructor</button>"),
+                        "The single-course Instructor entry is one direct link")
                 })
         }
     }

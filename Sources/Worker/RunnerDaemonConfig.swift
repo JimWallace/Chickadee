@@ -26,6 +26,11 @@ struct RunnerDaemonConfig: Sendable, Equatable {
     /// a cryptic ENOSPC. Override via `RUNNER_MIN_FREE_DISK_MB`; set to 0
     /// to disable the precheck.
     let minFreeDiskMB: Int
+    /// Time limit (seconds) for the optional pre-test `make` step. The step
+    /// runs after the student submission is merged into the workspace, so it
+    /// must be bounded like any other student-influenced subprocess (#1107).
+    /// Override via `RUNNER_MAKE_TIMEOUT_SECONDS`.
+    let makeTimeoutSeconds: Int
 
     /// Built-in defaults — match the historical fallback values that
     /// `runnerEnvironmentBool` / `runnerEnvironmentInt` used when no
@@ -39,7 +44,8 @@ struct RunnerDaemonConfig: Sendable, Equatable {
         heartbeatRetryMaxAttempts: 4,
         resultUploadRetryMaxAttempts: 8,
         downloadRetryMaxAttempts: 6,
-        minFreeDiskMB: 128
+        minFreeDiskMB: 128,
+        makeTimeoutSeconds: 120
     )
 
     /// Reads every runner-config env var once.  Falls back to the
@@ -61,7 +67,9 @@ struct RunnerDaemonConfig: Sendable, Equatable {
                 env["RUNNER_RESULT_UPLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.resultUploadRetryMaxAttempts),
             downloadRetryMaxAttempts: parseInt(
                 env["RUNNER_DOWNLOAD_RETRY_MAX_ATTEMPTS"], default: defaults.downloadRetryMaxAttempts),
-            minFreeDiskMB: parseInt(env["RUNNER_MIN_FREE_DISK_MB"], default: defaults.minFreeDiskMB)
+            minFreeDiskMB: parseInt(env["RUNNER_MIN_FREE_DISK_MB"], default: defaults.minFreeDiskMB),
+            makeTimeoutSeconds: parseInt(
+                env["RUNNER_MAKE_TIMEOUT_SECONDS"], default: defaults.makeTimeoutSeconds)
         )
     }
 }

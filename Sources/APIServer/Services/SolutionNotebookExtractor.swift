@@ -2,11 +2,15 @@
 //
 // Slice 5 of #461 — walks a solution notebook's code cells and writes
 // a flat `solution.py` file that personalization expressions can
-// `import`.  Mirrors the Worker's `NotebookExtractor` in spirit but
-// scoped to the server-side authoring path (no IPython-magic stripping,
-// no `if __name__ == "__main__"` wrapping — we want the function
-// definitions and module-level constants exactly as the instructor
-// wrote them so expressions can call them).
+// `import`.  Built on the SAME `RunnerCore.extractPython` the native
+// worker and the (wasm) browser runner use to load a notebook for
+// grading, so the module expressions import and the module the grader
+// runs are one implementation and cannot drift.  That shared extractor
+// also loads each cell under its own `try/except` and quarantines
+// side-effecting statements into `if __name__ == "__main__":`, so a
+// broken demo/example cell (a JSON-ism like `null`, a failing
+// module-level `assert`) is skipped without taking the instructor's
+// helper functions down with it.
 //
 // Lives parallel to `extractSupportFilesToSharedDirectory` in
 // `TestSetupZipHelpers.swift`: called after every test-setup save so
@@ -19,29 +23,51 @@ import Foundation
 
 enum SolutionNotebookExtractor {
 
-    /// Concatenates the `source` of every `code` cell in the supplied
-    /// notebook JSON into a single Python file.  Markdown / raw cells
-    /// are skipped.  Returns nil when the input isn't a valid notebook.
+    /// Renders the supplied solution notebook's `code` cells into a single,
+    /// importable Python module.  Markdown / raw cells are skipped.  Returns nil
+    /// when the input isn't a valid notebook or has no code cells.
+    ///
+    /// Built on the shared `RunnerCore.extractPython` — the SAME extractor the
+    /// native worker and the (wasm) browser runner use to load a notebook for
+    /// grading.  Two properties matter here:
+    ///
+    /// 1. **One implementation, no drift.**  The `solution.py` that
+    ///    personalization expressions import is produced by the very code path
+    ///    that grades the reference solution, so a generated expected value
+    ///    (`solution.<fn>(...)`) can't silently diverge from what the grader
+    ///    actually runs.
+    /// 2. **Resilient per-cell load.**  Each cell loads under its own
+    ///    `try/except`, and side-effecting / control-flow statements are
+    ///    quarantined into `if __name__ == "__main__":`.  A broken demo or
+    ///    example cell — a JSON-ism like a bare `null`, a failing module-level
+    ///    `assert`, a `Patient(...)` call referencing data that isn't there —
+    ///    is skipped WITHOUT taking the instructor's helper functions down with
+    ///    it.  The previous naive concat let any such cell abort `import
+    ///    solution` entirely; the evaluator's import guard then swallowed the
+    ///    error, surfacing as a baffling `name 'solution' is not defined` at the
+    ///    first `solution.<fn>` reference instead of a localized failure.
     static func extractCodeToPython(notebookData: Data) -> String? {
         guard let cells = NotebookCellSources.cells(from: notebookData) else { return nil }
 
-        var lines: [String] = [
-            "# Auto-generated from solution.ipynb by Chickadee.",
-            "# Used by personalization expressions to import the instructor's",
-            "# canonical helpers (e.g. `solution.caesar_encode(...)`).",
-            "# Regenerated on every test-setup save; do not edit by hand.",
-            "",
-        ]
-
-        // Concatenate cells with a blank line between them so module
-        // top-level statements don't accidentally merge into a single
-        // line.  `codeCellSources` already trims each cell's whitespace
-        // and skips empty cells.
-        for trimmed in NotebookCellSources.codeCellSources(cells) {
-            lines.append(trimmed)
-            lines.append("")
+        let inputCells = cells.map { cell in
+            NotebookCell(
+                cellType: (cell["cell_type"] as? String) ?? "",
+                source: NotebookCellSources.cellSource(cell))
         }
-        return lines.joined(separator: "\n")
+        let extracted = extractPython(cells: inputCells, filename: "solution.ipynb")
+        guard extracted.codeCellCount > 0 else { return nil }
+
+        let header = """
+            # Auto-generated from solution.ipynb by Chickadee.
+            # Imported by personalization expressions to call the instructor's
+            # canonical helpers (e.g. `solution.classify_bmi(...)`) — one source
+            # of truth, so a generated expected value can't drift from the
+            # reference solution.  Regenerated on every solution save; do not
+            # edit by hand.  Each cell loads resiliently, so one broken demo or
+            # example cell can't stop the helper functions from importing.
+
+            """
+        return header + extracted.executableModule
     }
 
     /// Writes `solution.py` into `sharedDirectory` from
@@ -58,11 +84,33 @@ enum SolutionNotebookExtractor {
         notebookData: Data,
         sharedDirectory: String
     ) -> Bool {
+        writeSolutionPy(notebookData: notebookData, sharedDirectory: sharedDirectory, overwrite: false)
+    }
+
+    /// Like `writeSolutionPyIfNeeded`, but `overwrite: true` refreshes an
+    /// existing `solution.py`.  Used by the solution-save path so the
+    /// server-side `shared/{setupID}/solution.py` the personalization
+    /// evaluator imports stays in lockstep with the instructor's reference
+    /// solution — the keystone that lets a Global Input expression compute an
+    /// expected value as `solution.<fn>(...)` instead of a parallel answer key
+    /// that can drift.  `solution.py` lives ONLY in the shared directory; it is
+    /// never written into the test-setup zip, so it never reaches the worker,
+    /// the browser, or a student support-file download (mirroring the reserved
+    /// treatment of `solution.ipynb`).
+    ///
+    /// With `overwrite: false` an existing `solution.py` is left alone so an
+    /// instructor-uploaded support file still wins.
+    @discardableResult
+    static func writeSolutionPy(
+        notebookData: Data,
+        sharedDirectory: String,
+        overwrite: Bool
+    ) -> Bool {
         let fm = FileManager.default
         let target = (sharedDirectory as NSString).appendingPathComponent("solution.py")
 
-        // Don't overwrite an instructor-uploaded solution.py.
-        if fm.fileExists(atPath: target) { return false }
+        // Don't clobber an instructor-uploaded solution.py unless asked to.
+        if fm.fileExists(atPath: target) && !overwrite { return false }
 
         guard let py = extractCodeToPython(notebookData: notebookData) else { return false }
         // Skip when the notebook had no executable cells — writing an

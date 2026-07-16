@@ -20,7 +20,7 @@ import Testing
 // ONE grading target (the student or canonical submission) and zero template
 // notebooks that could confuse grading scripts.
 
-@Suite final class RunnerWorkDirTests {
+@Suite(.timeLimit(.minutes(3))) final class RunnerWorkDirTests {
 
     private let workDir: URL
     private let fm = FileManager.default

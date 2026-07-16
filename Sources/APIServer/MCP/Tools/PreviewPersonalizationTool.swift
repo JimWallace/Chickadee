@@ -60,10 +60,7 @@ struct PreviewPersonalizationTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "seedHex": .object([
                 "type": .string("string"),
                 "description": .string("Optional hex seed to preview a specific student."),
@@ -75,31 +72,31 @@ struct PreviewPersonalizationTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "seedHex": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "seedHex": MCPSchema.string,
             "values": .object([
                 "type": .string("array"),
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "name": .object(["type": .string("string")]),
-                        "value": .object(["type": .string("string")]),
+                        "name": MCPSchema.string,
+                        "value": MCPSchema.string,
                     ]),
                     "required": .array([.string("name"), .string("value")]),
                 ]),
             ]),
             "evaluatedExpressionNames": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
-            "evaluationError": .object(["type": .string("string")]),
+            "evaluationError": MCPSchema.string,
             "placeholders": .object([
                 "type": .string("object"),
                 "properties": .object([
                     "used": .object([
-                        "type": .string("array"), "items": .object(["type": .string("string")]),
+                        "type": .string("array"), "items": MCPSchema.string,
                     ]),
                     "unresolved": .object([
-                        "type": .string("array"), "items": .object(["type": .string("string")]),
+                        "type": .string("array"), "items": MCPSchema.string,
                     ]),
                 ]),
                 "required": .array([.string("used"), .string("unresolved")]),
@@ -160,8 +157,12 @@ struct PreviewPersonalizationTool: ContentTool {
         guard manifest.hasExpressions else { return nil }
         let actingUser = try await context.requireEligibleSubject(tool: Self.name)
         guard let userID = actingUser.id, let assignmentID = assignment.id else { return nil }
+        // Acting-user seed bookkeeping runs on the owner pool, not the
+        // least-privilege `.mcp` pool: `assignment_personalization_seeds` is
+        // denied to the `chickadee_mcp` role. The notebook/expression content
+        // this previews is still read through the `.mcp`-backed paths.
         return try await AssignmentSeedStore.ensureSeed(
-            userID: userID, assignmentID: assignmentID, on: context.db)
+            userID: userID, assignmentID: assignmentID, on: context.mainDB)
     }
 
     private static func placeholderAudit(

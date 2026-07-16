@@ -174,7 +174,7 @@ extension OperationalDiagnosticsService {
         logger: Logger
     ) async {
         guard configuration.enabled else { return }
-        guard shouldCaptureRequest(path: metric.path) else { return }
+        guard shouldCaptureRequest(path: metric.path, statusCode: metric.statusCode) else { return }
 
         do {
             try await metric.save(on: db)
@@ -201,8 +201,21 @@ extension OperationalDiagnosticsService {
             ])
     }
 
-    private func shouldCaptureRequest(path: String) -> Bool {
-        configuration.verboseRequestTiming || shouldAlwaysLogRequest(path: path)
+    private func shouldCaptureRequest(path: String, statusCode: Int) -> Bool {
+        if configuration.verboseRequestTiming { return true }
+        // Runner check-in noise: an idle poll (204, no job) and a healthy
+        // heartbeat arrive at up-to-1/s per runner. Persisting a metric row
+        // for each would be a DB INSERT per poll — the write amplification
+        // the 2026-07 audit flagged on this exact path. Real dispatches
+        // (200), result writebacks, and any error status still record.
+        if isIdleWorkerCheckIn(path: path, statusCode: statusCode) { return false }
+        return shouldAlwaysLogRequest(path: path)
+    }
+
+    private func isIdleWorkerCheckIn(path: String, statusCode: Int) -> Bool {
+        if path == "/api/v1/worker/request" { return statusCode == 204 }
+        if path == "/api/v1/worker/heartbeat" { return statusCode < 400 }
+        return false
     }
 
     private func shouldAlwaysLogRequest(path: String) -> Bool {

@@ -14,14 +14,22 @@ struct ServerHealthAlertConfiguration: Sendable {
     let errorRateThreshold: Double
     let errorRateWindowSize: Int
     let errorRateMinimumSamples: Int
-    /// Editor kernel-hang spike rule: fire when at least `editorHangThreshold`
-    /// distinct post-idle `exec_hang` reports land within the last
-    /// `editorHangWindowMinutes`. This is the recurrence tripwire for the
-    /// SAB/Atomics kernel deadlock — the boot funnel and watchdog can't see a
-    /// kernel that booted then wedged, so without this a regression is invisible
-    /// until students complain in the lab.
-    let editorHangThreshold: Int
-    let editorHangWindowMinutes: Int
+    /// Editor kernel-UNRECOVERABLE rule: fire when at least
+    /// `editorUnrecoverableThreshold` distinct `recover_failed` reports land
+    /// within the last `editorUnrecoverableWindowMinutes`. `recover_failed`
+    /// means a student's kernel hung, the editor auto-rebooted it, and it hung
+    /// AGAIN — the student genuinely cannot proceed. Plain post-idle `exec_hang`s
+    /// that auto-recover are deliberately NOT alerted on (they stay in
+    /// client-diagnostics telemetry for analysis); this rule pages only on the
+    /// students who are actually stuck.
+    let editorUnrecoverableThreshold: Int
+    let editorUnrecoverableWindowMinutes: Int
+    /// BrightSpace-sync-failing rule: fire when at least
+    /// `brightspaceSyncFailureThreshold` grade-push errors land in the
+    /// `brightspace_sync_log` within the last `brightspaceSyncFailureWindowMinutes`
+    /// — grades have stopped flowing to LEARN and need a human to look.
+    let brightspaceSyncFailureThreshold: Int
+    let brightspaceSyncFailureWindowMinutes: Int
     let webhookURLFromEnvironment: String?
 
     static let `default` = ServerHealthAlertConfiguration(
@@ -34,8 +42,10 @@ struct ServerHealthAlertConfiguration: Sendable {
         errorRateThreshold: 0.30,
         errorRateWindowSize: 50,
         errorRateMinimumSamples: 10,
-        editorHangThreshold: 3,
-        editorHangWindowMinutes: 60,
+        editorUnrecoverableThreshold: 2,
+        editorUnrecoverableWindowMinutes: 60,
+        brightspaceSyncFailureThreshold: 3,
+        brightspaceSyncFailureWindowMinutes: 60,
         webhookURLFromEnvironment: nil
     )
 
@@ -50,8 +60,13 @@ struct ServerHealthAlertConfiguration: Sendable {
             errorRateThreshold: environmentDouble("ALERT_ERROR_RATE_THRESHOLD") ?? 0.30,
             errorRateWindowSize: environmentInt("ALERT_ERROR_RATE_WINDOW") ?? 50,
             errorRateMinimumSamples: environmentInt("ALERT_ERROR_RATE_MIN_SAMPLES") ?? 10,
-            editorHangThreshold: environmentInt("ALERT_EDITOR_HANG_THRESHOLD") ?? 3,
-            editorHangWindowMinutes: environmentInt("ALERT_EDITOR_HANG_WINDOW_MINUTES") ?? 60,
+            editorUnrecoverableThreshold: environmentInt("ALERT_EDITOR_UNRECOVERABLE_THRESHOLD")
+                ?? environmentInt("ALERT_EDITOR_HANG_THRESHOLD") ?? 2,
+            editorUnrecoverableWindowMinutes: environmentInt("ALERT_EDITOR_UNRECOVERABLE_WINDOW_MINUTES")
+                ?? environmentInt("ALERT_EDITOR_HANG_WINDOW_MINUTES") ?? 60,
+            brightspaceSyncFailureThreshold: environmentInt("ALERT_BRIGHTSPACE_SYNC_FAILURE_THRESHOLD") ?? 3,
+            brightspaceSyncFailureWindowMinutes: environmentInt(
+                "ALERT_BRIGHTSPACE_SYNC_FAILURE_WINDOW_MINUTES") ?? 60,
             webhookURLFromEnvironment: trimmedEnv("ALERT_WEBHOOK_URL")
         )
     }

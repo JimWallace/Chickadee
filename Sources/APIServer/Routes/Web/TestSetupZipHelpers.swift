@@ -435,13 +435,6 @@ func extractSupportFilesToSharedDirectory(
     let sharedDir = testSetupsDirectory + "shared/\(setupID)/"
     let fm = FileManager.default
     do {
-        // Always remove the stale shared dir before re-extracting so a support
-        // file removed on edit doesn't linger (and so student symlinks to it
-        // become visibly broken rather than silently stale).
-        if fm.fileExists(atPath: sharedDir) {
-            try fm.removeItem(atPath: sharedDir)
-        }
-
         // Slice 5 of #461: also extract solution.ipynb's code cells
         // into `solution.py` so personalization expressions can `import
         // solution` and call the canonical helpers (e.g.
@@ -450,8 +443,33 @@ func extractSupportFilesToSharedDirectory(
         // checks for existence first).
         let solutionData = extractZipEntry(zipPath: zipPath, entryName: "solution.ipynb")
 
+        // Preserve a solution-save-generated `solution.py` across the wipe.
+        // It is written by the solution-save path (enqueueRunnerValidationSubmission)
+        // and lives ONLY in the shared dir — never in the zip — so removing the
+        // dir would otherwise drop it until the next solution save, breaking
+        // `import solution` in expressions on the next edit. Skip preserving when
+        // the zip itself carries the solution: `solution.ipynb` regenerates
+        // `solution.py` below, and an instructor-uploaded `solution.py` support
+        // file is in `supportNames` and re-copied — either way the zip stays
+        // authoritative.
+        let solutionPyPath = sharedDir + "solution.py"
+        let zipCarriesSolution = solutionData != nil || allEntries.contains("solution.py")
+        let preservedSolutionPy: String?
+        if !zipCarriesSolution && fm.fileExists(atPath: solutionPyPath) {
+            preservedSolutionPy = try? String(contentsOfFile: solutionPyPath, encoding: .utf8)
+        } else {
+            preservedSolutionPy = nil
+        }
+
+        // Always remove the stale shared dir before re-extracting so a support
+        // file removed on edit doesn't linger (and so student symlinks to it
+        // become visibly broken rather than silently stale).
+        if fm.fileExists(atPath: sharedDir) {
+            try fm.removeItem(atPath: sharedDir)
+        }
+
         // Skip the dir creation when nothing's going to land in it.
-        guard !supportNames.isEmpty || solutionData != nil else { return }
+        guard !supportNames.isEmpty || solutionData != nil || preservedSolutionPy != nil else { return }
         try fm.createDirectory(atPath: sharedDir, withIntermediateDirectories: true)
         for name in supportNames {
             guard let data = extractZipEntry(zipPath: zipPath, entryName: name) else { continue }
@@ -467,10 +485,16 @@ func extractSupportFilesToSharedDirectory(
                 notebookData: solutionData,
                 sharedDirectory: sharedDir
             )
+        } else if let preservedSolutionPy {
+            // Restore the server-side-only solution.py the wipe removed.
+            try preservedSolutionPy.write(toFile: solutionPyPath, atomically: true, encoding: .utf8)
         }
     } catch {
-        // Non-fatal: support files are a convenience; log and continue.
-        // (Structured logging not available in a free function; print suffices here.)
-        print("[chickadee] Warning: failed to extract support files for \(setupID): \(error)")
+        // Non-fatal: support files are a convenience; log and continue.  A
+        // label-constructed Logger routes through the bootstrapped logging
+        // system, so this lands with the app's structured logs instead of
+        // bypassing them via print (#1127).
+        Logger(label: "codes.vapor.application")
+            .warning("Failed to extract support files for \(setupID): \(error)")
     }
 }

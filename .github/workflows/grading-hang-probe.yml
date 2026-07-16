@@ -9,9 +9,12 @@ name: Browser grading-hang probe
 # flake usually slips through; this probe loops it to surface the rate and, on a
 # hang, prints the grading submit-phase breadcrumbs (grading_init_start/done,
 # pyodide_loaded, env_configured, suite_started/done) that localize WHERE it
-# wedged. A reproduced hang is the SIGNAL; the job is green only when every
-# iteration grades cleanly — i.e. it doubles as the regression guard a fix must
-# turn green.
+# wedged. A reproduced hang is the SIGNAL. Thresholds (docs/ci-flakiness.md,
+# Family 2): chromium is green only at hangs=0 everywhere; webkit tolerates
+# hangs<=1 on pull_request runs (with a loud warning — the known ambient
+# exec-hang under CI load must not fail unrelated PRs) while dispatch and
+# scheduled runs keep the hard zero, so the probe stays the regression guard
+# a real fix must turn green.
 #
 # Intentionally NOT required in branch protection: a reproduced hang must not
 # block unrelated PRs. Runs on PRs touching the grading / editor / isolation
@@ -67,31 +70,11 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - uses: ./.github/actions/restore-git-mtimes
-
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      # Read-only restore of the shared build cache (same key as the Swift Tests
-      # `build` job); on a hit, building the server product is near-no-op.
-      - name: Restore build artifacts
-        uses: actions/cache/restore@v5
+      # Shared scaffold: mtime normalisation, build-cache restore, server
+      # build, Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Build chickadee-server
-        run: swift build --product chickadee-server
-
-      - name: Install Node, Playwright and the ${{ matrix.browser }} engine
-        working-directory: Tools/editor-smoke-test
-        run: |
-          set -eux
-          apt-get update -qq
-          apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
-          npm ci
-          npx playwright install --with-deps ${{ matrix.browser }}
+          browser: ${{ matrix.browser }}
 
       # Skip the non-selected engine on a single-engine workflow_dispatch; always
       # run both on a pull_request (inputs are empty there).
@@ -106,6 +89,7 @@ jobs:
           SMOKE_CHECK: notebook-page-check.mjs
           SMOKE_SUBMIT_MS: ${{ github.event.inputs.submit_ms || '300000' }}
           ITER: ${{ github.event.inputs.iterations || '12' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -uo pipefail
           runs="$ITER"
@@ -126,6 +110,21 @@ jobs:
             echo "::endgroup::"
           done
           echo "GRADING-HANG PROBE RESULT — hangs=${hangs}/${runs} engine=${SMOKE_BROWSER}"
-          # Green only when every grade completed. A reproduced hang fails the job
-          # (the signal); a fix must drive this to 0/N.
-          [ "$hangs" -eq 0 ]
+          # Gate policy (docs/ci-flakiness.md, Family 2): chromium is hard-zero
+          # everywhere. webkit carries a known, tracked ambient exec-hang rate
+          # under CI load (docs/exec-hang-investigation.md), so on PR runs a
+          # SINGLE webkit hang warns loudly instead of failing an unrelated PR.
+          # workflow_dispatch / scheduled runs keep the hard zero — the probe
+          # remains the regression guard a real fix must turn green, and the
+          # ambient rate stays visible there rather than silently tolerated.
+          allowed=0
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$SMOKE_BROWSER" = "webkit" ]; then
+            allowed=1
+          fi
+          if [ "$hangs" -gt "$allowed" ]; then
+            echo "::error::grading hangs=${hangs}/${runs} on ${SMOKE_BROWSER} exceeds allowed=${allowed} for event=${EVENT_NAME}"
+            exit 1
+          fi
+          if [ "$hangs" -gt 0 ]; then
+            echo "::warning::AMBIENT FLAKE TOLERATED on PR run: hangs=${hangs}/${runs} on ${SMOKE_BROWSER} (allowed<=${allowed}). The webkit exec-hang is real and tracked — docs/ci-flakiness.md Family 2, docs/exec-hang-investigation.md. Do not treat this warning as noise: if you see it often, the ambient rate is rising."
+          fi

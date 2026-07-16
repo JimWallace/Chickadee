@@ -86,6 +86,63 @@ import Vapor
         }
     }
 
+    /// Regression: an MCP content edit must re-enqueue validation even though
+    /// the request carries no session `APIUser` (bearer auth only). Pre-fix,
+    /// `scheduleValidationAfterSuiteEdit` fell back to `req.auth.require(...)`,
+    /// threw 401 inside its swallow-all catch, and the edit silently kept the
+    /// assignment's stale validationStatus with no validation enqueued.
+    @Test func enqueuesValidationWithoutSessionUser() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let tester = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "tester").first())
+
+            // An active compatible runner, so the availability pre-check passes
+            // and the flow reaches the enqueue (where the 401 used to fire).
+            let profile = RunnerProfile()
+            profile.runnerID = "runner-mcp-validation"
+            profile.displayName = "Runner MCP Validation"
+            profile.platform = "linux"
+            profile.architecture = "x86_64"
+            profile.languageVersionsJSON = "[]"
+            profile.capabilitiesJSON = "[]"
+            profile.lastRegisteredAt = Date()
+            profile.lastSeenAt = Date().addingTimeInterval(3600)
+            profile.isActive = true
+            try await profile.save(on: app.db)
+
+            // A prior (complete) validation submission provides the solution
+            // notebook `scheduleValidationAfterSuiteEdit` re-validates with.
+            try await makeTestSubmission(
+                on: app, id: "sub_nb_prior_validation", setupID: "setup_nb",
+                userID: tester.requireID(), kind: APISubmission.Kind.validation,
+                filename: "solution.ipynb")
+            assignment.validationSubmissionID = "sub_nb_prior_validation"
+            try await assignment.save(on: app.db)
+
+            let output = try await UpdateNotebookTool().execute(
+                UpdateNotebookTool.Input(
+                    assignmentPublicID: assignment.publicID, notebook: try json(twoCellNotebook)),
+                context(app))
+
+            #expect(output.validationStatus == "pending")
+
+            let enqueued = try await APISubmission.query(on: app.db)
+                .filter(\.$testSetupID == "setup_nb")
+                .filter(\.$kind == APISubmission.Kind.validation)
+                .filter(\.$status == "pending")
+                .first()
+            let pending = try #require(
+                enqueued, "The notebook edit must enqueue a fresh validation submission")
+            #expect(pending.userID == tester.id, "The validation is attributed to the acting subject")
+
+            let after = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(after.validationStatus == "pending")
+            #expect(after.validationSubmissionID == pending.id)
+        }
+    }
+
     @Test func rejectsNonObjectNotebook() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

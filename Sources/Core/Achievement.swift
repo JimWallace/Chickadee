@@ -329,8 +329,10 @@ public enum RecordDimension: String, Codable, Sendable {
     /// Earliest submission of any kind — the "Pathfinder" record (awarded at
     /// submission time, not on reaching 100%).
     case firstToSubmit
-    /// Fastest execution time.
+    /// Fastest execution time at 100%.
     case fastest
-    /// Shortest solution.
+    /// Fewest attempts to reach 100% — the "Minimalist" record.  The raw value
+    /// is a legacy name (it never measured solution length); it stays
+    /// `shortest` because manifests already persist it.
     case shortest
 }

@@ -6,6 +6,2000 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.618] - 2026-07-16
+
+### Added
+
+- **Personal-data export (#557).** Any signed-in user can request a copy of
+  the personal information Chickadee holds about them — profile, course
+  enrollments, submissions (including the uploaded files), grading results,
+  grading adjustments, and audit-log activity — from the account page,
+  delivered as a single zip with a README manifest (FIPPA / PIPEDA subject
+  access). Generation runs asynchronously; results are tier-filtered to
+  exactly what the user can already see; requests are limited to one per day
+  per user; both the request and the download are audit-logged; generated
+  archives are deleted after three days.
+
+
+## [0.4.617] - 2026-07-16
+
+### Fixed
+
+- **Reset-notebook now personalizes the restored starter.** All three
+  reset-notebook actions (student self-service, and the two instructor-driven
+  resets on the per-assignment roster and the course-student page) overwrote
+  the working copy with the raw starter template, skipping the `{{name}}`
+  personalization substitution that first-open seeding applies. On a
+  personalized assignment a reset left the student staring at
+  `patients = {{patients}}` and a `NameError`, with no self-service way back.
+  The three paths now funnel through one helper that substitutes global/section
+  variables and per-student expressions before writing, exactly like first
+  open.
+
+
+## [0.4.616] - 2026-07-13
+
+### Added
+
+- **Secret reveal tokens.** Each student gets one token per assignment they can
+  permanently spend (with a confirmation step) to reveal secret-tier test
+  results — itemized rows with status, output, and hints, exactly like public
+  tests — across all their past and future submissions on that assignment.
+  Off by default; instructors enable it per assignment from the edit page's
+  new "Student Options" block or the `update_assignment` MCP tool
+  (`secretRevealEnabled`), and course staff can re-grant a spent token from
+  the assignment submissions roster. Display-only — grades already span every
+  tier, so nothing about grading, CSV export, or BrightSpace sync changes.
+  Spends, re-grants, and toggle changes are audit-logged.
+
+
+## [0.4.615] - 2026-07-13
+
+### Changed
+
+- **JupyterLite bumped to 0.8.1 (was 0.8.0); Pyodide re-vendored at 314.0.1
+  (was 314.0.0).** The point releases carry two fixes that map onto observed
+  editor failure classes: JupyterLite 0.8.1 makes kernel shutdown actually
+  complete (0.8.0's shutdown could hang, restart detection was timer-based, and
+  a failed restart left the session dirty — so a student's Kernel → Restart on a
+  wedged cell could silently no-op, and the not-shut-down kernel left the old
+  ~hundreds-of-MB Pyodide worker alive alongside the new one, feeding the
+  Safari/low-RAM `wasm_crash` class), and Pyodide 314.0.1 fixes
+  `PyodideFuture.then()/finally_()` hanging on cancelled futures plus per-cell
+  proxy/buffer memory leaks, alongside string/proxy conversion speedups. All
+  359 package files are byte-identical to 314.0.0 (sha-verified against the
+  official lock); only the core runtime changed. The re-vendor also dropped
+  ~45 MB of files in `Public/pyodide` that its own `pyodide-lock.json` never
+  referenced — stale prior-version wheels left behind by an earlier vendor
+  pass (`scipy-1.17.0` beside the referenced `1.17.1`, `pytest-8.3.5` beside
+  `9.0.2`, old `coverage`/`pluggy`/`iniconfig`/`pycparser`/`tblib`) plus
+  Pyodide's self-test fixtures (`test_*` wheels/zips) — none of which the
+  kernel or micropip could ever load. The chdir `exec_hang` wheel
+  patch, nb_mypy-disabled activation block, and the vendored extras
+  (`comm`/`astor`/`mypy_extensions`/`nb_mypy`) all re-applied and re-verified
+  (`check-pyodide-parity.sh`, `check-kernel-deps-vendored.py`,
+  `verify-jupyterlite.sh`).
+
+
+## [0.4.614] - 2026-07-13
+
+### Fixed
+
+- **Per-student pattern-family validation messages name the full supported
+  set.** The validator's error for a per-student `$name` / `expectedVarRef`
+  on an unsupported kind still claimed only `boundary_equality` and
+  `approximate_equality` were allowed; `unordered_equality` gained the
+  personalization preamble but the messages (and docs) were never updated.
+  The messages now derive from a single description constant kept next to
+  the `kindSupportsPerStudentRefs` allowlist, and the design doc / CLAUDE.md
+  status notes for #814 were refreshed (both previously-listed follow-ups —
+  `expectedVarRef` on the `get_suite` DTO and the `preview_personalization`
+  test-script audit — had already shipped).
+
+### Changed
+
+- **Type-check expression rendering deduplicated (#497).** The
+  byte-for-byte duplicate type-name → check-expression mappings in the
+  pattern-family `.returnTypeCheck` renderer and the notebook-check
+  `.variableExists` renderer are now one shared
+  `pythonTypeCheckExpression(typeName:valueExpr:)` helper in
+  `PythonScriptHelpers.swift`, alongside the helpers extracted in
+  v0.4.170. Generated script bytes are unchanged, so `spec_hash` and
+  `TestSetupCache` keys are stable. This was the last tracked item on
+  #497.
+
+
+## [0.4.613] - 2026-07-11
+
+### Fixed
+
+- **Runtime-state notebook checks now see the notebook as executed.** The
+  notebook extractor's import quarantine (#371) moves side-effecting top-level
+  statements — including any assignment whose right side calls a function, like
+  `df = pd.read_csv(...)`, and every plotting call — into an
+  `if __name__ == "__main__":` block that never runs when the check harness
+  *imports* the student module. The runtime-state checks (`variable_exists`,
+  `data_frame_shape`/`columns`/`equality`, `series_equality`,
+  `numeric_array_close`, `figure_count`) therefore could never pass on a real
+  data-analysis notebook — the instructor's own reference solution failed
+  validation (the HLTH 230 Assignment 4 failure). `test_runtime` gains
+  `student_main_state()`, which executes the student module once with
+  `run_name="__main__"` (the per-cell try/except wrappers still isolate broken
+  cells) and caches the resulting namespace; the runtime-state check renderers
+  now read that as-executed state instead of the import-mode module. Imports
+  stay quarantined everywhere else, so pattern-family function grading is
+  unchanged. All three `test_runtime.py` copies (worker embed, browser embed,
+  canonical) stay in sync under the existing drift guards.
+
+### Added
+
+- **`set_dataset` MCP tool — the first authoring surface for per-student
+  datasets.** The Phase 1 datasets backend (docs/datasets.md: deterministic
+  per-seed row samples delivered under the same filename to the editor, the
+  worker, and browser grading) shipped with a `PUT /instructor/:id/datasets`
+  endpoint but no caller — neither the web editor nor MCP could set a spec.
+  Agents can now mark a bundled support file as a per-student dataset
+  (`set_dataset` with a `sampleSize`, `remove:true` to clear), and
+  `get_support_files` reports the mark (`isDataset` / `datasetSampleSize`).
+  Mirrors the web endpoint's validation and, like it, neither closes the
+  assignment nor triggers a regrade.
+
+
+## [0.4.612] - 2026-07-10
+
+### Fixed
+
+- **MCP content edits re-enqueue validation again.** `finalizeContentEdit` now
+  passes the acting subject's user id into `scheduleValidationAfterSuiteEdit`;
+  previously the helper fell back to the session user, threw 401 inside its
+  swallow-all catch on bearer-authenticated MCP requests, and every MCP
+  notebook/suite edit silently skipped re-validation (the tool response
+  reported the stale `validationStatus`).
+- **`get_validation_result` works under the least-privilege MCP role.**
+  `deploy/sql/mcp-least-privilege-role.sql` now grants `chickadee_mcp` SELECT
+  on the `result_collections` side table (with a validation-only RLS policy)
+  — the table #1176 moved the collection blob into, after the grants file was
+  written, so every call failed with an opaque `-32603` on deployments using
+  the role. Operators must re-run section 4 of that file. A new
+  grant-sync test fails the build if a table the MCP read path touches is
+  ever missing a grant again.
+- **Opaque MCP tool failures are now diagnosable.** Both MCP dispatchers log
+  the underlying error before answering a bare `-32603` internal error, and
+  `get_validation_result` maps database failures to a structured
+  `executionFailed` result so the agent sees the reason.
+- **Scheduled assignment opens are hardened (the Lab 6 incident).** A
+  `.preview`/`.closed` assignment whose open date has arrived is now also
+  published lazily by the dashboard load and the submission gate — the same
+  safety-net treatment deadline *closes* have always had — so a stalled
+  periodic sweep can no longer leave a lab staff-only past its open time.
+  When the sweep refuses to open an overdue-scheduled assignment because
+  validation has not passed, it now logs a warning every tick instead of
+  skipping silently.
+
+
+## [0.4.611] - 2026-07-10
+
+### Added
+
+- **Actor-driven LEARN sync actions now appear in the admin audit log.** A new
+  "LEARN sync" audit category records who did what on the grade-sync surface:
+  deployment key authorized/cleared (admin), instructor LEARN account
+  connected/disconnected, course sync identity designated, org unit
+  bound/cleared, grade-item mapping changes (including "Do not sync"),
+  auto-map runs, manual "Sync now", and per-assignment "Push all". Individual
+  grade pushes remain in `brightspace_sync_log` — the audit log covers only
+  the human actions around them.
+
+
+## [0.4.610] - 2026-07-05
+
+### Fixed
+
+- **Achievement `testPass` refs now match real runner outcomes.** Refs are
+  authored as script filenames, but runners stamp `testName` as the display
+  name (else the filename stem), so a per-contract badge could never fire.
+  Matching now resolves filenames, stems, and display names via a
+  manifest-derived alias map, refs are validated against the suite on save
+  (unknown refs and duplicate achievement ids are rejected), and badges
+  mixing a dynamic signal (attempts/time/jump) with `testPass` are now
+  satisfiable on the submission page.
+- **Browser-graded assignments now award class records.** Pathfinder
+  (first-to-submit) and the 100% records (Trailblazer / fastest /
+  fewest-attempts) were only awarded on the zip-upload and worker-report
+  paths; the notebook `browser-result`, `runner-submit`, and
+  `browser-failover` routes now award them too.
+- **Web suite-editor script add/delete no longer wipes achievements.** The
+  two manifest-rebuild helpers dropped `achievements`,
+  `disabledBuiltInAwardIDs`, and `builtInAchievementsSeeded`, silently
+  resetting a curated list to the built-in defaults.
+- **Clearing built-in achievements now sticks at award time.** A curated
+  (seeded) manifest with no per-submission badges or records suppressed the
+  registry fallback in the editor's GET view only; evaluation now honors it
+  too.
+- **Class goals are validated to the shapes the sweep evaluates.** ClassWide
+  achievements accept at most one `grade ≥ X` condition (richer shapes were
+  saved and then silently mis-evaluated as grade-only, mis-computing bonus
+  points); the sweep skips-and-logs unevaluable goals from hand-authored
+  manifests instead of mis-grading them.
+- **Class-goal numerator counts only enrolled students.** Staff test
+  submissions and dropped students no longer inflate `studentsMeeting`
+  (the denominator already excluded them), which could grant unearned bonus
+  points to the grades CSV and BrightSpace.
+- **Manifest-authored class records now display.** Custom-ID records (and
+  renamed built-ins) were awarded in the database but invisible — display
+  resolution now checks the manifest before the registry on the submission
+  page, dashboard, and per-student history.
+- **Achievements editor no longer risks wiping the list after a failed
+  load.** A failed initial GET rendered an empty table whose next save PUT
+  that emptiness wholesale; editing is now disabled with an error banner
+  until the list loads. Also fixed "+1 pts" pluralization.
+- **`shortest` record dimension documented correctly.** It ranks by fewest
+  attempts to reach 100% (matching the built-in Minimalist's copy), not
+  solution length; the Core doc comment and MCP schema now say so.
+
+
+## [0.4.609] - 2026-07-03
+
+### Changed
+
+- **The result collection blob moved to a side table (#1173).** Every full
+  `results`-row load — the preferred-result maps behind the dashboard and
+  per-student history, submission detail, sweeps, bundle export — previously
+  dragged the serialized `TestOutcomeCollection` (up to the 6 MB budget per
+  row) whether or not it was read, and the blob dominated the table's
+  on-disk footprint. It now lives in `result_collections(result_id,
+  collection_json)`: hot result rows are blob-free by construction, and the
+  few readers that need the collection (result JSON endpoint past its ETag
+  check, submission detail render, validation results, bundle export) fetch
+  exactly the blobs they display. Writes stay atomic — the result row and
+  its blob persist in one transaction, and deletes cascade. The migration
+  backfills existing blobs in bounded chunks entirely inside the database,
+  then drops the old column.
+
+
+## [0.4.608] - 2026-07-03
+
+### Changed
+
+- **Postgres job claims use `FOR UPDATE SKIP LOCKED` (#1172).** Since the
+  claim became an atomic compare-and-set (#1153), the in-process
+  `WorkerClaimQueue` only existed to keep concurrent polls from thrashing
+  SQLite's write lock — on Postgres that serialization was pure overhead.
+  The Postgres claim now runs in a short transaction that row-locks the
+  already-evaluated candidate with `SELECT … FOR UPDATE SKIP LOCKED` before
+  stamping it, so concurrent claims from any number of runners and server
+  processes proceed in parallel; a contended row is skipped instantly
+  instead of queued behind the winner. Candidate ordering (fresh student
+  work before retests, validation last) and the requirement-compatibility
+  walk are unchanged, and the SQLite path (actor + compare-and-set) is
+  untouched.
+
+
+## [0.4.607] - 2026-07-03
+
+### Changed
+
+- **Canonical notebook bytes are cached (#1171).** Every assignment open,
+  browser-result ingest, and `.ipynb` submission merge previously
+  re-resolved the instructor's canonical notebook — a file read or a
+  serialized `unzip` subprocess per request. A bounded LRU cache (64
+  entries / 128 MB, validated against the backing file's size + mtime,
+  single-flighted per setup) now serves repeat opens, so a class opening
+  one assignment shares a single resolution. Instructor edits invalidate
+  naturally: notebook saves rewrite the flat file and suite edits repack
+  the zip, refreshing the mtime either way.
+
+
+## [0.4.606] - 2026-07-03
+
+### Changed
+
+- **Background query cleanups from the 2026-07 audit (#1160).** The
+  class-goal achievement sweep resolves the enrolled-student denominator
+  with one course-scoped query pair per tick instead of a roster query per
+  assignment, and reads grades through the blob-free summary loader; the
+  job-claim path fingerprints an edited setup zip by streaming it in 1 MiB
+  chunks on the thread pool instead of reading the whole archive into heap
+  (digest unchanged, so runner download caches carry over); and the
+  deployment-wide enrollment fetches behind the grades CSV student list and
+  the roster-counts map are now filtered database-side / scopeable by
+  course.
+
+
+## [0.4.605] - 2026-07-03
+
+### Changed
+
+- **Fluent connection-pool size is now explicit and configurable (#1159).**
+  The pool was never configured, riding the driver default of one connection
+  per event loop — the documented `ConnectionPoolTimeoutError` incident
+  class, where one long-held admin query starved every other query on its
+  loop. Postgres now defaults to 4 connections per event loop (SQLite stays
+  at 1 — its writes serialize anyway), overridable via
+  `DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP`, logged in the startup summary,
+  and documented in the deploy README alongside the `max_connections`
+  budgeting guidance.
+
+
+## [0.4.604] - 2026-07-03
+
+### Fixed
+
+- **Course-bundle import can now import Chickadee's own exports, and
+  test-setup uploads match the documented size envelope (#1158).** Bundle
+  import was capped by the global 10 MB body limit while exports routinely
+  run to hundreds of MB — a bundle the export page produced could not be
+  re-imported. The import route now accepts up to 2 GB and writes the upload
+  once (the old ByteBuffer → bytes → Data chain held three full copies in
+  heap). Test-setup uploads get an explicit 300 MB cap matching the 256 MB
+  uncompressed zip guard, so dataset-heavy setups no longer bounce before
+  validation runs.
+
+### Changed
+
+- **Large artifact downloads stream instead of buffering (#1158).** The
+  course-bundle export, submission downloads, and the solution-notebook
+  downloads now use `asyncStreamFile` (the export's temp zip is cleaned up
+  after the stream completes); the export's staging copies and the upload
+  path's zip subprocesses run on the blocking thread pool.
+
+
+## [0.4.603] - 2026-07-03
+
+### Changed
+
+- **Grade queries stopped dragging the results blob, and result size is now
+  bounded (#1157).** The grades CSV export, instructor roster, per-student
+  drilldowns, and BrightSpace grade sync previously loaded full result rows —
+  `collection_json` included — just to read four denormalized grade columns
+  (hundreds of MB of heap for one large-course CSV export). A blob-free
+  projected loader now feeds every grade fold, with a legacy fallback for
+  pre-backfill rows so the two paths can never disagree. Separately, a
+  serialized-size budget (6 MB) now applies to every result collection at
+  report time: the worker truncates verbose `longResult`s/`compilerOutput`
+  across the collection before posting (statuses, short results, and grades
+  untouched; a visible warning is appended), the server applies the same
+  guard against older runners, and the result-ingest body limit rose to
+  32 MB — an oversized report is truncated loudly instead of rejected with
+  the submission stuck unresolved.
+
+
+## [0.4.602] - 2026-07-03
+
+### Changed
+
+- **Notebook-open path no longer blocks server threads (#1156).** Every
+  notebook page/source request previously ran synchronous file reads/writes,
+  the support-file symlink pass, dataset materialization, and (on first open
+  of a personalized assignment) an unbounded `python3` subprocess directly on
+  Vapor's small cooperative thread pool — a lab section opening an assignment
+  stalled unrelated requests. The filesystem work now runs on the blocking
+  thread pool; concurrent personalization interpreters are capped by a
+  counting semaphore (≈ CPU count, excess evaluations queue without holding
+  a thread); zip entry listings are single-flighted and computed off the
+  cooperative pool (concurrent misses on one zip share one subprocess);
+  student notebook/support-file downloads and the JupyterLite contents
+  endpoint offload their reads and extractions the same way, and the
+  support-file download reuses the entry-list cache instead of spawning a
+  fresh `unzip` per request.
+
+
+## [0.4.601] - 2026-07-03
+
+### Fixed
+
+- **Periodic sweeps now run on exactly one server process (#1155).** Every
+  sweep — session/activity/audit/OAuth reapers, stuck-submission reaper,
+  deadline sweep, achievement sweep, health alerts, BrightSpace grade sync,
+  LEARN roster/section syncs — previously started on every instance, so a
+  multi-process deployment pushed grades to LEARN from N processes at once
+  and fired duplicate health alerts. Each `PeriodicSweepMonitor` tick now
+  claims/renews a per-sweep leader lease (`sweep_leases` table, atomic
+  conditional UPDATE) and only the holder runs the sweep body; a crashed
+  leader's sweeps fail over to another instance within roughly one missed
+  cycle (TTL = 2× interval, min 2 min). Single-process deployments always
+  hold the lease at the cost of one small query pair per tick.
+
+
+## [0.4.600] - 2026-07-03
+
+### Security
+
+- **Replay protection and login rate-limits now hold across server processes
+  (#1154).** Worker-HMAC nonces move from a per-process in-memory store to a
+  `worker_nonces` table where first-seen is an atomic PRIMARY KEY insert — a
+  signed request captured on one instance can no longer be replayed against
+  another within the TTL window. Login brute-force state (per-IP window,
+  per-username lockout) moves to a `login_attempts` table, so N instances
+  behind a load balancer no longer multiply the configured rate cap by N or
+  count lockout failures per-instance. Both tables self-clean (per-key prune
+  on write plus throttled sweeps). This also removes the old nonce store's
+  full-dictionary rebuild on every worker request.
+
+
+## [0.4.599] - 2026-07-03
+
+### Changed
+
+- **Worker claim critical section shrunk to a compare-and-set (#1153).**
+  Candidate collection, per-candidate assignment-requirement queries, and
+  compatibility evaluation now run outside the globally-serialized
+  `WorkerClaimQueue` section (previously they all held it, plus an open write
+  transaction — so requirement-heavy queues multiplied the serialized section
+  exactly at deadline crunch). The claim itself is an atomic
+  `UPDATE … WHERE status = 'pending'`; a candidate another runner claimed
+  since the scan matches zero rows and the walk moves to the next candidate.
+  This also makes the claim genuinely race-safe on Postgres (single-statement
+  CAS rather than read-then-write in a read-committed transaction); retiring
+  the in-process queue on Postgres in favour of `FOR UPDATE SKIP LOCKED`
+  remains a documented follow-up.
+
+
+## [0.4.598] - 2026-07-03
+
+### Changed
+
+- **Idle worker polls no longer write to the database (#1152).** Every
+  `POST /worker/request` previously cost a `RunnerProfile` UPDATE, a
+  `RunnerSnapshot` INSERT, and a globally-serialized claim transaction with
+  2–3 SELECTs — at up to one poll per second per runner, even with an empty
+  queue. The profile's `lastSeenAt` now persists at most once per 60 s when
+  nothing else changed (capability changes, display-name changes, and
+  reactivation still write immediately); runner snapshots are sampled — one
+  row per runner per 30 s, with an immediate row on any activeJobs/maxJobs
+  change so load spikes keep full resolution; and an indexed existence probe
+  short-circuits the claim path before the serialized transaction when no
+  pending submission exists.
+
+
+## [0.4.597] - 2026-07-03
+
+### Changed
+
+- **Perf quick wins from the 2026-07 server audit (#1151).** The submission
+  status endpoint (the 2 s student poll) grants owners access without the
+  course-staff lookup, saving two DB queries per poll; the stuck-submission
+  reaper flips aged-out jobs back to pending in one bulk `UPDATE` instead of a
+  save per row; the retention report counts submissions with a grouped
+  `COUNT(*)` instead of materializing every row; and
+  `GET /api/v1/submissions/:id/results` now emits an `ETag` (keyed on result +
+  visible tiers) and answers matching `If-None-Match` with 304 so repeat views
+  skip the collection decode.
+
+### Fixed
+
+- **`RequestTimingMiddleware` is now actually registered.** It shipped in
+  v0.4.573 but was never added to the middleware chain, so the
+  `request_metrics` table behind the admin dashboard and the
+  `get_request_metrics` diagnostic tool had been silently empty. Idle runner
+  check-ins (204 polls, healthy heartbeats) are excluded from persistence so
+  the hot worker-poll path doesn't gain a per-poll INSERT.
+
+
+## [0.4.596] - 2026-07-02
+
+### Fixed
+
+- **Bounded daemon shutdown in WorkerDaemonTests (the residual worker-tests
+  wedge).** Twelve tests cancelled the daemon task then awaited
+  `task.value`/`task.result` unbounded; `Task.value` is not
+  cancellation-responsive, so a daemon wedged in a non-cancellable wait rode
+  the job to the CI 20-minute kill even though the `.timeLimit` trait had
+  already attributed the failure (observed 2026-07-02,
+  `workerDaemonContinuesToNextJobAfterProcessingFailure`). A shared
+  `awaitCancelledDaemon` helper now polls completion with a 30 s deadline
+  and fails the single test instead, still surfacing non-cancellation
+  shutdown errors.
+
+### Changed
+
+- **Exec-hang probe forensics (`editor-exec-check.mjs`).** Hang iterations
+  now capture the failing-resource URLs behind console errors, every >=400
+  response and failed request, and the cell prompt/focus state; green
+  iterations report their 4xx/console-error base rate so noise can't
+  masquerade as a hang correlate. A second-press discriminator separates a
+  new `lostDispatch` class (first Shift+Enter lost to a post-idle focus
+  race, kernel healthy — student-facing) from the sustained-busy deadlock
+  the probe hunts; only the deadlock class fails the leg.
+
+
+## [0.4.595] - 2026-07-02
+
+### Changed
+
+- **CI pipeline follow-ups (docs/ci-flakiness.md).** The five browser
+  probe/smoke workflows and visual-regression now share one
+  `browser-probe-setup` composite action (mtime normalisation, build-cache
+  restore, server build, Node + Playwright install) with the Playwright
+  engine download cached — ending the 7× copy-paste and the per-run engine
+  re-download. `swift-tests.yml` gained a `swift-tests-gate` aggregator job
+  (mark it — not the individual jobs — required in branch protection).
+  JupyterLite and CodeQL runs now skip their heavy steps on PRs that touch
+  nothing relevant (fail-safe change detection; the jobs still report
+  success, so they remain safe as required checks) and cancel superseded PR
+  runs. Six long-running jobs that inherited the 6-hour default gained
+  explicit `timeout-minutes`. A weekly `flake-telemetry` workflow tallies
+  the tolerated-flake warnings from the probes into a tracking issue so the
+  webkit ambient rate stays measured.
+
+### Fixed
+
+- **Bounded subprocess pipe reads in `PersonalizationEvaluator` and
+  `MimeTypeDetector`.** Both read their child's pipes only after
+  `waitUntilExit()`, which deadlocks once the child fills a 64 KiB pipe
+  buffer (for personalization: a long expression output became a spurious
+  timeout with a blocked server thread). Pipes are now drained before the
+  wait — concurrently and deadline-bounded for the evaluator — with SIGKILL
+  escalation if an expression's interpreter ignores SIGTERM. Evaluations
+  also no longer sleep out the full 5 s timeout budget before returning
+  (the timeout task is cancelled once the child exits).
+
+
+## [0.4.594] - 2026-07-02
+
+### Fixed
+
+- **Fork-safe Linux script launch — root cause of the #1139 CI flake and a
+  latent production grading hang.** `executeLinuxScriptProcess` used to call
+  `setenv()` and bridge Swift Strings in the forked child before `execvp`;
+  in a multithreaded process the child can inherit a glibc lock (environ,
+  malloc arena) captured mid-acquire with no thread left to release it, and
+  deadlock before exec. Under parallel CI load this reproduced 8 times in
+  200 launches; it presented as `WorkerTests.stdoutIsCaptured()` failing
+  after exactly the script time limit, or the whole job wedging to the
+  20-minute kill when the deadlock landed before `setsid()` and the
+  timeout's group-kill missed (the final blocking `waitpid` then hung
+  forever). The child now runs only async-signal-safe calls — argv/envp/cwd
+  are materialized as C buffers pre-fork and handed to `execve()` — plus:
+  `setsid()` first so the group-kill always lands, a bounded post-kill reap
+  instead of the unbounded `waitpid`, `FD_CLOEXEC` on capture pipes
+  (Foundation's `Pipe` does not set it) so concurrent spawns can't hold the
+  write end open and starve EOF, and a bounded poll-based final drain
+  replacing the blocking `readDataToEndOfFile()`. Fixed logic: 0 hangs in
+  3000 stress iterations.
+
+### Security
+
+- **Student scripts no longer inherit the worker's full environment on
+  Linux.** The old fork child applied the allowlisted env via `setenv()` on
+  top of the *inherited* parent environment, so non-allowlisted worker vars
+  — the shape `RUNNER_SHARED_SECRET` arrives in — leaked into every test
+  script on Linux despite the allowlist design. `execve()` with a
+  parent-built envp replaces the environment outright, matching the macOS
+  path's semantics; a canary regression test now pins this.
+
+### Changed
+
+- **CI flake containment (docs/ci-flakiness.md).** Subprocess-spawning
+  WorkerTests suites carry `.timeLimit(.minutes(3))` so a stall fails with a
+  named test instead of holding the job to its 20-minute kill; a
+  `/rerun-failed` PR comment now re-runs only the failed jobs (new
+  `rerun-failed.yml`) instead of forcing a full-pipeline re-roll via empty
+  commit; the webkit grading-hang probe tolerates `hangs<=1/12` on PR runs
+  with a loud warning (hard zero kept on dispatch/scheduled runs and on
+  chromium); the required editor-smoke gate retries its webkit legs once,
+  loudly, for the known ambient exec-hang class.
+
+
+## [0.4.593] - 2026-07-02
+
+### Fixed
+
+- **TAs can reach the Instructor tab.** Clicking the Instructor nav button
+  POSTs to `/courses/:id/activate` with `next=/instructor`; the
+  dead-end guard there gated the redirect on `role >= .instructor`, so a
+  TA — who the `/instructor` area gate (`ActiveCourseStaffMiddleware`) admits
+  at `role >= .ta` — was silently bounced to the home page with no error
+  instead of landing on the instructor view. The guard now matches the area
+  gate's `.ta` threshold.
+
+
+## [0.4.592] - 2026-07-02
+
+### Changed
+
+- **Admin "Active Users" card shows the window total, not the peak.** The card
+  headline now sums the active-user count across every bucket in the selected
+  24h/7d/30d window instead of taking the single busiest bucket. The sparkline
+  bars are unchanged (still scaled to the busiest bucket).
+
+
+## [0.4.591] - 2026-07-02
+
+### Added
+
+- **Accessibility ratchet (#1137).** The visual-regression CI job now also
+  runs an axe-core scan (`Tools/visual-regression/a11y.mjs`) over the six
+  key pages in both colour schemes. Critical/serious violations fail CI
+  outright; moderate/minor are a shrink-only count ratchet against
+  `a11y-baseline.json`. Guards the post-phase-8 AODA work against
+  regression — a new template with a missing label or scheme-specific
+  contrast bug now fails on its introducing PR.
+
+
+## [0.4.590] - 2026-07-02
+
+### Added
+
+- **Visual regression harness (#1136).** `Tools/visual-regression/` boots the
+  real server, seeds a course/assignment/student over the HTTP API, and
+  screenshots six key pages in both light and dark mode, diffing against
+  committed baselines (anti-aliasing-aware, 0.1% pixel budget, dynamic
+  regions masked). Runs in CI on UI-touching PRs (`visual-regression.yml`,
+  not a required check); intentional look changes regenerate baselines with
+  `run-visual.sh --update` in the same PR, making the visual diff part of
+  review. Closes the "guards can't prove it looks right" gap — the #1133
+  dark-mode banner bugs would have failed this job on their introducing PR.
+
+
+## [0.4.589] - 2026-07-02
+
+### Added
+
+- **Inline `<script>` ratchet (#1135).** Total non-blank JS lines inside
+  template `<script>` blocks (2,481 today) may only shrink —
+  `check-styles.sh` fails CI if the count grows. Inline template JS is
+  invisible to ESLint/CodeQL/tests and keeps the CSP permissive; new page
+  behaviour goes in `Public/*.js`, with the template passing data via
+  `data-*` attributes or a JSON island (pattern documented in
+  `docs/ui-design.md`).
+
+
+## [0.4.588] - 2026-07-02
+
+### Added
+
+- **ESLint gate for first-party frontend JS (#1134).** `eslint:recommended`
+  (zero-warnings, `scripts/eslint.sh`) now covers `Public/*.js` and the
+  frontend test suite, wired into the CI `browser-runner-tests` job. The
+  initial pass fixed the real findings it surfaced: four same-scope `var`
+  redeclarations in the suite editor's drag-and-drop code, five pieces of
+  dead code left behind by earlier refactors, and a handful of unused
+  parameters. Vendored trees (`Public/pyodide`, `Public/jupyterlite`,
+  `Public/vendor`) are excluded; config and shared globals live in
+  `eslint.config.mjs`.
+
+
+## [0.4.587] - 2026-07-02
+
+### Changed
+
+- **UI design tokens + enforcement.** The stylesheet now carries named type
+  (`--text-2xs`…`--text-2xl`) and radius (`--radius-sm|md|lg|full`) scales, and
+  every `font-size` / `border-radius` in `styles.css` and page `<style>` blocks
+  routes through them — collapsing 26 accumulated font sizes and 18 radii onto
+  8 + 4 steps (all shifts ≤ ~1px). Raw colour literals (`#hex`, `rgb(a)`,
+  `hsl(a)`) are now allowed only as palette `--token:` declarations; the
+  off-palette stragglers (nav teals and white-alpha foregrounds,
+  primary-button hover, Bootstrap-green flash banners that ignored dark mode,
+  raw-rgba MCP banners and roster flags) were folded into the palette, and the
+  previously *unstyled* `.flash` banner markup on the BrightSpace admin page
+  got a real global component (`.flash-success/-error/-neutral` with
+  dark-mode-aware semantic tokens). Pop-out menus, dropdowns, and floating
+  panels share one `--shadow-pop` elevation token (now actually visible in
+  dark mode), and spacing sits on a shrink-only 26-step lattice (converged
+  from 33; oddballs like `.375rem`/`.28rem` folded onto neighbours). All of it
+  is locked in by a new `scripts/check-design-tokens.sh` guard wired into
+  `check-styles.sh` (CI `format-lint`), and the principles are written down in
+  `docs/ui-design.md`.
+
+
+## [0.4.586] - 2026-07-02
+
+### Changed
+
+- **`BrightSpaceGradeSyncService.swift` split along its seams (#1116).** The
+  1050-line file is now grade selection (pure, separately testable), grade
+  clears, and the sweep — with the sweep's 5–7-parameter free-function
+  threading replaced by a `GradeSyncSweep` struct holding the invariant
+  dependencies. The hand-rolled 60s monitor is replaced by the shared
+  `PeriodicSweepMonitor` (matching its two sibling sweeps), and the two
+  batch loaders no longer duplicate the chunked-IN loading. No behavior
+  change.
+
+### Changed
+
+- **Assignment display-order rule and section-grouping fold deduplicated
+  (#1118).** The dashboard sort comparator existed ×3 (student dashboard,
+  per-student submissions page, grades CSV) and the section-grouping loop ×3
+  — both now live once in `AssignmentListDisplayHelpers.swift`, alongside a
+  shared per-assignment submission-history row builder used by both
+  drilldown pages. The runner poll and heartbeat handlers share one
+  `recordRunnerCheckIn` path, the preferred-results loader delegates to the
+  all-results loader (one chunked-IN implementation), and `parseDueDate`
+  accepts the seconds-bearing `datetime-local` variant. No behavior change.
+
+### Removed
+
+- **The orphaned `/testsetups/new` raw-zip upload pair is gone (#1119).**
+  Nothing had linked to it since the draft-based new-assignment flow shipped
+  (reachable only by direct URL), and it had drifted behind its API twin's
+  hardening — no zip-bomb guard, no dependency-graph validation, no
+  grading-mode checks. Programmatic uploads go through the hardened
+  `POST /api/v1/testsetups`. While here, the pure notebook-JSON helpers
+  (`filterNotebook` / `mergeNotebook` / `normalizeNotebookForJupyterLite` /
+  `notebookData(for:)` / zip probes) moved out of `TestSetupRoutes.swift`
+  into `Helpers/NotebookContentHelpers.swift`.
+
+### Changed
+
+- **`WebRoutes.index` decomposed (#1120).** The 445-line student dashboard
+  handler's two heavy phases — the per-student grade-data load and the
+  per-setup row build — moved to `WebRoutes+IndexRows.swift` as
+  `loadStudentDashboardGradeData` and `buildTestSetupRow` (with typed
+  `DashboardGradeData` / `IndexRowContext` carriers), leaving the handler as
+  state dispatch plus the load/sort/group pipeline. The SwiftLint
+  function-length suppression on `index` is gone. No behavior change.
+
+### Changed
+
+- **MCP boilerplate deduplicated (#1121).** The surface-agnostic halves of MCP
+  dispatch — tools/list entry encoding, spec pagination, the tools/call result
+  envelopes, and initialize version negotiation — now live once in
+  `MCPDispatchShared.swift`, shared by the content and admin dispatchers (a
+  protocol-version bump or error-envelope change is a one-place edit). The
+  hand-written JSON-schema literals that repeated across the tool catalog
+  (`assignmentPublicID` ×29, bare-typed output properties ×212, the tier enum
+  ×7, `courseCode` ×5) are now `MCPSchema` constants/builders, and a new
+  `MCPOutputSchemaSyncTests` guards output-schema/`Output`-struct drift
+  (structural check over the whole catalog + representative-instance key sync
+  for the drift-prone write tools). The cross-cutting single-field manifest
+  helpers moved out of `CourseSectionTools`/`SetTimeLimitTool` into
+  `Helpers/ManifestFieldEdits.swift`, expressed as `mutateManifest` closures.
+
+### Changed
+
+- **`MCPOAuthRoutes.swift` split along its endpoint seams (#1122).** The
+  ~950-line OAuth 2.1 authorization-server file is now the route table plus
+  one file per concern: the authorize/consent flow, dynamic client
+  registration, the token endpoint (code exchange + refresh rotation), the
+  discovery/metadata surface, and the wire DTOs. No behavior change; the
+  endpoint set, error bodies, and token semantics are byte-identical.
+
+### Changed
+
+- **`applyPatternFamilies` decomposed (#1123).** Generated scripts are now
+  rendered exactly once per apply (`renderFamilyArtifacts`) and both the zip
+  write and the manifest rebuild consume the same artifacts — previously each
+  family was rendered twice, so a renderer that ever became non-deterministic
+  would silently desync zip bytes from manifest entries. The duplicate
+  `familyID → sectionID` map is built once; the legacy ordering
+  reconstruction, the section-contiguity validator (now unit-tested), the
+  `family:<id>` reference validation, and the raw-script variable re-inline
+  are free functions; and the drifted phase markers are renumbered. No
+  behavior change.
+
+### Changed
+
+- **Worker target hygiene (#1124).** The `chickadee-runner` target no longer
+  links Vapor (it never imported it — the dependency predated `RunnerCore`);
+  per-student `_ck_inputs.py` and personalized-file materialization moved
+  into `prepareJobWorkspace` so every workspace-mutation step lives in one
+  place; and the `TestProperties` dual-encode back-compat comment now names
+  its exit criterion (remove in the v0.7.0 cleanup). New
+  `RunnerSanitizedProjectionTests` pin what `runnerSanitized()` strips.
+
+### Fixed
+
+- **Docs drift corrected (#1125).** CLAUDE.md now describes the post-#417
+  two-level role model (deployment `user`/`admin` + per-course
+  `student`/`ta`/`instructor`), the real counts (~276 Swift test files, 40 MCP
+  tools, 8 pattern kinds), and gains a themed digest for v0.4.351–v0.4.583
+  (the #417 series, the LEARN sync arc, datasets, zero-downtime deploys).
+  `docs/multi-course-roles.md` is updated to shipped reality (TA rung, global
+  roles physically removed) and finally defines the "Slice A–G2" vocabulary
+  ~20 code comments cite. `docs/mcp-authoring-roadmap.md` gains the missing
+  `set_time_limit` row plus a sync test that fails the build when a registered
+  tool has no row. `docs/audit-2026-06.md` carries a "status as of v0.4.582 —
+  read as history" note.
+
+### Changed
+
+- **Frontend JS consolidation finished (#1126).** `chickadee-ui.js` now owns
+  the shared `setStatus`, `extractErrorMessage` (unifying the two divergent
+  copies — one parsed JSON, one scraped the error page — that flowed through
+  the same renderer ctx slot), and a `fetchJSON` wrapper that replaces the
+  repeated `if (!r.ok) return r.text()…` boilerplate (×5 in suite-table.js
+  alone). The two inputs editors' shared mechanics (value classification,
+  literal parsing, row validation, payload build, debounced auto-save) moved
+  to a new `inputs-editor-core.js`; the editors keep only their class names
+  and endpoints. Dead `suite-list.js` is deleted (only its upload
+  classification survived — folded into `suite-table.js`), and the pure
+  helpers now have `.mjs` unit tests (`suite-table.test.mjs`,
+  `inputs-editor-core.test.mjs`).
+
+### Changed
+
+- **Roles naming cleanup (#1127).** The `/instructor` area gate is renamed
+  `ActiveCourseStaffMiddleware` (it has admitted TAs since the #417 Slice-E
+  rung — it is a staff gate), and the nav context properties follow:
+  `isStaffInActiveCourse`, `staffCourses`, `isStaffAnywhere`, `showStaffTabs`,
+  `primaryStaffCourse`. The one-line `requireCourseInstructor` alias was
+  inlined into its last caller and deleted. `instructorBulkEnrollCSV`'s manual
+  archived-course guard is gone — `requireCourseWriteAccess` is the single
+  statement of that rule. Also: the support-file extraction warning goes
+  through the logging system instead of `print`, and `resolveCourseAndStudent`
+  no longer filters on a `student.id ?? UUID()` sentinel.
+
+### Changed
+
+- **`submissionPage` fetches the test setup once (#1128).** The student
+  result page's helpers — manifest display data, class-goal bonus,
+  individual-badge evaluation, built-in badges, class-goal views — each
+  re-fetched the same `APITestSetup` row and re-decoded its manifest
+  (~4–5 fetches per render of the hottest student-facing page). The handler
+  now loads `(setup, props)` once and passes them down; `classGoalBonusPoints`,
+  `suiteTotalPoints`, `earnedIndividualBadges`, and `loadClassGoalViews` take
+  the decoded manifest, and the BrightSpace grade selection shares one fetch
+  between its denominator and bonus reads. No behavior change.
+
+### Changed
+
+- **Small hygiene (#1129).** The one `Issue.record`-to-skip anti-pattern in
+  the test corpus is now a silent guard (missing zip/unzip is
+  platform-expected, not a failure), and `CHICKADEE_DEPLOY_STATE_DIR` — the
+  last env var read outside `AppConfig` after the v0.4.169 centralization —
+  now flows through `appConfig.diagnostics.deployStateDirectory` and appears
+  in the redacted startup summary.
+
+
+## [0.4.585] - 2026-07-01
+
+### Security
+
+- **Instructor-editor read endpoints now authorize against the resource's own
+  course (#1103).** The suite/scripts/files/achievements/datasets/
+  global-variables/edit-page reads — and the draft suite/support-file reads —
+  used loaders that performed no per-course check, so an active TA of one
+  course could fetch another course's reference solution and secret tests by
+  guessing its 6-char assignment ID (the web-editor twin of the hole #417
+  Slice G closed on the API side). All read handlers now require at least a
+  `.ta` role in the owning course (admin bypass, archived courses stay
+  readable); the unauthorized loaders are private so unauthorized use is
+  impossible outside the helper file. The per-assignment submissions and
+  per-student history pages get the same gate.
+
+### Security
+
+- **Dataset file specs are validated as bare filenames (#1104).** A dataset
+  spec's `file` was only checked for non-emptiness, then joined onto directory
+  paths at read time (`DatasetResolver`) and at delivery time on both the
+  server and the worker — so a spec like `../../.worker-secret` could read any
+  server-readable file and deliver it through the browser seed endpoint, and a
+  path-carrying personalized-file key could write outside the grading
+  workspace. `PUT /datasets` now rejects any name with path components and
+  requires it to exist among the setup zip's bundled files; the resolver, the
+  JupyterLite working-copy writer, and the worker's personalized-file writer
+  all guard independently via the new shared `FilenameSafety.bareFilename`.
+
+### Fixed
+
+- **BrightSpace grade clears now transmit the DELETE they sign (#1105).** The
+  Valence transport dispatched only PUT/GET, so `clearGrade` signed a DELETE
+  but sent a GET — D2L verifies the verb inside the signature, so every real
+  grade removal 403'd terminally and silently. The transport now switches on
+  the method (PUT/POST/DELETE/GET), "Sync now" re-queues errored clear rows
+  (previously unrecoverable — no reaper touches `brightspace_grade_clears`),
+  and a transport-level test stubs `app.client` to pin wire-verb ↔ signature
+  agreement for PUT/GET/DELETE.
+
+### Fixed
+
+- **Worker no longer leaks the per-job test-setup scratch copy on prepare
+  failures (#1106).** The scratch directory returned by `TestSetupCache.acquire`
+  was only cleaned up by a `defer` registered after the whole prepare phase
+  returned, so any throw in submission download / staging / normalization (a
+  routine event for invalid uploads) / `make` / helper writes leaked a fully
+  prepared `chickadee_ts_*` directory in /tmp per failed job — a disk-fill
+  vector. The prepare phase now removes the scratch copy itself before
+  rethrowing; pinned by a daemon-level regression test.
+
+### Fixed
+
+- **Worker `make` step is now time-bounded (#1107).** The optional pre-test
+  `make` ran with a synchronous `waitUntilExit()` on the daemon actor and no
+  time limit — and since it runs after the student submission is merged into
+  the workspace, a submission with a hung `make` pinned a cooperative-pool
+  thread and a job slot forever. `make` now runs through the same bounded
+  process machinery as test scripts (timeout + kill + capped output capture +
+  allowlisted environment); a hung build maps to `buildStatus: failed` with
+  the captured output in `compilerOutput`. Limit is 120s by default,
+  configurable via `RUNNER_MAKE_TIMEOUT_SECONDS`.
+
+### Fixed
+
+- **"Highest grade wins" is now one shared fold, and the per-student
+  drilldown uses it (#1111).** The policy existed as one helper plus three
+  inline copies (student dashboard, grades CSV, BrightSpace sync), and the
+  per-student drilldown pages still showed the *worker-preferred* grade — so
+  a submission with a 100 % browser result later regraded 80 % by the worker
+  showed 100 % on the roster but 80 % on the page the instructor opened from
+  that roster row. Policy (pure `bestGradePercent` / `bestGradeResult` folds)
+  is now split from I/O (the chunked grouped loader) in one file; all four
+  surfaces and the three drilldown sites go through it. Badges still use the
+  worker-preferred result.
+
+### Added
+
+- **Route-walking authorization matrix test (#1112).** The web-side sibling of
+  `MCPAuthorizationCoverageTests`: walks the live route table, substitutes
+  fixture IDs into every parameterized `/instructor` and `/courses` route, and
+  asserts each denies (401/403/404) both a student of the owning course and
+  staff of a different course. Route enumeration makes it self-updating — a
+  new route with an unknown parameter fails with instructions to extend the
+  fixture map, and a new resource route that forgets its per-course gate fails
+  with the route named (the class of miss that produced #1103).
+
+### Changed
+
+- **One course write-access policy, explicit role floors (#1113).** The web
+  `requireCourseWriteAccess` and MCP `authorizeCourseWriteAccess` were
+  hand-maintained twins of the same policy (admin bypass → role floor →
+  archived block). The policy now lives once in the throwless
+  `evaluateCourseWrite(…) -> CourseWriteDenial?`; the two wrappers only map
+  the denial to their surface's error type. `authorizeCourseAccess` returns
+  the resolved acting user so MCP write authorization no longer re-resolves
+  the token subject per call. All `atLeast:` role-floor defaults are removed
+  — every call site states its floor explicitly (content/grading = `.ta`,
+  lifecycle/structure = `.instructor`); the convention is recorded in
+  `docs/multi-course-roles.md`. No behavioural change to any route or tool.
+
+### Fixed
+
+- **The per-instructor LEARN Connection panel is back (#1114).** The runbook's
+  documented flow — "Connect my LEARN account", "Use my account for this
+  course", "Disconnect", "Link course", and the connection test — lost its UI
+  in an earlier LEARN-tab rework, leaving five working handlers with no entry
+  point and half the view context computed but never rendered. The panel is
+  restored on the LEARN tab; the view context is grouped into nested
+  `account` / `syncIdentity` panels (killing the duplicated 26-field empty
+  variant), and the dead log/summary/readiness-rollup aggregation that no
+  template consumed is dropped from the page load.
+
+### Changed
+
+- **MCP close-on-edit contract is now a guarded chokepoint (#1115).**
+  `update_solution` no longer hand-rolls the "close if open" rule (it now
+  closes via the shared `closeOpenAssignmentForContentEdit`, remaining the one
+  documented exemption from `finalizeContentEdit` — it enqueues its own
+  validation carrying the new solution, and a solution-only edit never changes
+  the manifest, so the manifest-gated regrade is deliberately skipped,
+  matching the web save). New `MCPContentEditCoverageTests` classifies every
+  `content:write` tool (content-edit vs non-closing, each with a
+  justification) and fails the build for any new write tool that isn't
+  classified. The agent-facing instructions now state explicitly that
+  `update_global_inputs` / `update_section_variables` neither close nor
+  regrade (matching the web Global Inputs panel), closing the ambiguity where
+  those tools appeared in neither contract list.
+
+### Fixed
+
+- **One BrightSpace classlist identity index (#1117).** Grade push, section
+  sync, and the roster reconciler each reduced the LEARN classlist their own
+  way, and the normalization had already drifted: section sync lowercased but
+  didn't trim, so a classlist username with stray whitespace matched for
+  grade push but silently failed section sync. The new
+  `BrightSpaceIdentityIndex` is the single reduction (one trim+lowercase
+  normalization, one username-first/student-number-second precedence) consumed
+  by all three sweeps and the reconciler. Also folded in: the manual
+  "Sync now"/"Push all" re-queue triple-write is one `requeueForImmediateSync`
+  helper; the sweep takes `bypassDebounce:` instead of callers fabricating a
+  future timestamp; the manual sweep logs failures instead of swallowing them;
+  and the Valence client's four copy-pasted response-body reads are one
+  `ClientResponse.bodyString(max:)`.
+
+
+## [0.4.584] - 2026-07-01
+
+### Fixed
+
+- **Blue-green deploys now refresh the Compose runner.** The zero-downtime swap
+  (`bluegreen-deploy.sh`) only replaces the server color containers, so the
+  Compose `runner` was left grading on whatever image it last started with — its
+  `runnerVersion` drifted behind the server release after release. The deployer
+  daemon (`chickadee-deployer.sh`) now pulls the just-deployed image and recreates
+  the runner (`docker compose up -d --no-deps <runner>`) after a verified-healthy
+  swap, so the runner stays in lockstep with the server. The step is best-effort
+  (a runner hiccup is logged to `history.jsonl` but never rolls back the deploy)
+  and can be disabled with `CHICKADEE_REFRESH_RUNNER=0`. Manual
+  `bluegreen-deploy.sh deploy` users should run the same `docker compose pull
+  runner && docker compose up -d --no-deps runner` afterward (now documented in
+  `docs/zero-downtime-deploy.md`).
+
+
+## [0.4.583] - 2026-07-01
+
+### Changed
+
+- **Top-nav dropdown menus.** Nav items that carry more than one option now
+  open a click-to-open dropdown instead of a separate strip. An instructor who
+  teaches more than one course gets a single **Instructor** menu that lists each
+  course (picking one switches the active course and lands on its instructor
+  view), replacing the second course-tab row. The username and **Log out** entries
+  are bundled into one account menu that shows the person's name and drops down
+  to **Account** and **Log out**. Single-course instructors keep their direct
+  Instructor link; the student course-tab strip is unchanged. Menus close on an
+  outside click or Escape and are keyboard/`aria`-annotated.
+
+
+## [0.4.582] - 2026-07-01
+
+### Removed
+
+- **Retired the deprecated global `student` / `instructor` user roles (#417).**
+  The deployment role enum is now `user` / `admin` / `mcp` only; teaching
+  authority lives entirely on the per-course enrollment (`CourseRole`). The
+  transitional `APIUser.isInstructor` shim and the `RoleMiddleware(.instructor)`
+  tier are gone — the `CourseAccessHelpers` per-course chokepoints
+  (`requireCourseRole`, `isCourseStaff`, `isStaffAnywhere`) are the sole
+  authority. MCP consent/eligibility (`ToolContext.requireEligibleSubject`,
+  the OAuth content surface's `permits`) now key off `isStaffAnywhere`, and
+  auto-enrollment (`saveSeededEnrollment`) seeds a per-course instructor only
+  for admins; every other account auto-enrolls as a student and the roster
+  grants staff explicitly. Production DBs that still carry the legacy role
+  strings decode them as ordinary non-admin users, and the `CollapseUserRoles`
+  migration rewrites them to `user`.
+
+
+## [0.4.581] - 2026-07-01
+
+### Changed
+
+- **MCP authoring enforces the per-course TA vs instructor line (#417).** The MCP
+  write tools now mirror the web floors: content-editing tools (scripts, suites,
+  pattern families, notebook checks, solution, notebook, inputs, achievements,
+  time limit, suite sections, delete/move suite items) require the per-course
+  `.ta` role, while course lifecycle/structure tools (create/clone assignment,
+  `update_assignment` title/due/open state, `set_grading_mode`, assignment
+  ordering, and course-section create/rename/delete/reorder/assign) require
+  `.instructor`. Previously every MCP write funneled through a single
+  enrollment+archived gate with no per-course role check, so an agent acting for
+  a TA had the same authority as one acting for an instructor. `authorizeCourseWriteAccess`
+  gains an `atLeast:` floor (default `.ta`); admins still bypass.
+
+
+## [0.4.580] - 2026-07-01
+
+### Testing
+
+- Added regression tests for the student "deny" surface (#417): a non-staff
+  student listing `GET /api/v1/submissions` is scoped to their own submissions
+  and never sees another student's (with and without a `testSetupID` filter),
+  and a per-course student is refused the instructor area entirely (assignment
+  content edit and retest both 403). Closes the two coverage gaps a test audit
+  flagged; no behaviour change.
+
+
+## [0.4.579] - 2026-07-01
+
+### Changed
+
+- **Deployment role collapsed to `user` | `admin` (#417 Slice G2).** With teaching
+  authority fully per-course (`CourseRole` on the enrollment), the global
+  `student` / `instructor` roles no longer carry meaning. A new `CollapseUserRoles`
+  migration rewrites every such row to `user` (it runs *after*
+  `AddCourseEnrollmentRole`, which already seeded each enrollment's per-course
+  role from the then-current global role, so no authority is lost). New accounts
+  are provisioned `user` (or `admin` for the first-registered / SSO-allowlisted
+  operator); `student` / `instructor` are dropped from `autoAssignableRoles` so an
+  SSO claim can't re-mint them; and the admin **Users** page role control is now a
+  `user` / `admin` toggle (with `mcp` service accounts shown read-only so they
+  can't be flipped to a human role by mistake).
+- **Roster-student queries key off the per-course role.** Every "students in this
+  course" query (dashboard cards, submissions denominators, grade CSV, LEARN
+  reconcile, roster counts) now counts `.student`-role *enrollments* instead of
+  the retired global `role == "student"` — behaviour-preserving against existing
+  data (the enrollment role was seeded from the global role) and correct going
+  forward (a student who is a TA in another course is counted only where they're
+  a student). Shared helper `studentUserIDsInCourse(_:on:)` in `CourseRosterCounts`.
+- **MCP eligibility keys off course staff.** The MCP tool-eligibility and OAuth
+  consent gates now admit course staff (`isStaffAnywhere`) rather than the retired
+  global instructor role, so an instructor whose deployment role is now `user`
+  keeps MCP access. (A transition-only `isInstructor` term remains alongside it
+  until the test corpus is migrated off the legacy role strings.)
+
+### Notes
+
+- The `UserRole.student` / `.instructor` enum cases are retained as
+  deprecated, decode-only vocabulary so historical rows and the large test corpus
+  that still writes those strings keep resolving; a follow-up removes them once
+  those are migrated. `CollapseUserRoles.revert` is a deliberate no-op (the
+  student/instructor split isn't reconstructible from `user`, and nothing reads
+  the global role for teaching authority any more).
+
+
+## [0.4.578] - 2026-07-01
+
+### Changed
+
+- **Per-course staff view/access gates (#417 Slice G, part 1).** The view- and
+  access-shaping checks that used to key on the deployment-global
+  `APIUser.isInstructor` now resolve staff status **per course** — a viewer sees
+  instructor-level detail only for the courses they actually staff (per-course
+  role ≥ `.ta`, or admin), not deployment-wide. Two new resolvers in
+  `CourseAccessHelpers` back this: `isCourseStaff(_:inCourse:db:)` for gates that
+  know their resource's course, and `isStaffAnywhere(_:db:)` for the few
+  deployment-wide surfaces (MCP eligibility + OAuth content-scope consent, the
+  JupyterLite virtual filesystem, the user-file namespace, the new-setup form)
+  where no single course is in scope. Converted gates include: tier visibility
+  (`visibleTiers` / `itemizedTiers` / `releaseOutputVisible` now take an
+  `isStaff` bool computed against the submission's course), the submission
+  view/download/results/query paths, the reference-solution and notebook-source
+  endpoints, the closed-assignment gate, the assignment-open deadline gate, the
+  student dashboard, and the vanity-URL enrollment gate. This closes a
+  cross-course read gap — a global instructor could previously see any course's
+  submissions, secret tests, and solutions by URL — and prepares the ground for
+  collapsing the global role (part 2). No enum or migration changes yet; the
+  global `UserRole` still has its `student` / `instructor` cases.
+
+
+## [0.4.577] - 2026-07-01
+
+### Added
+
+- **Self-serve instructor staff invites (#417 Slice F).** A per-course
+  instructor can now add a co-instructor or TA to their own course directly
+  from the Students tab — an **Add staff** disclosure takes a username or email
+  and a role (TA / Instructor). If the identifier matches an existing account
+  it is enrolled (or promoted) at that role; if no account exists yet, an
+  SSO-style placeholder is minted (no local password) and adopted by username
+  on the person's first login. Unlike the CSV bulk-enroll path — which records
+  a pre-enrollment that seeds to `student` at login — a staff invite
+  materializes the enrollment immediately so the chosen staff role sticks
+  (`POST /courses/:courseID/staff`, `instructorInviteStaff`).
+
+### Changed
+
+- **TAs are read-only on the roster (#417 Slice F).** The Students tab now gates
+  every mutating control — the per-row role dropdown, the unenroll / register
+  buttons, the enrolment-mode selector, "Enrol from CSV", and the new "Add
+  staff" form — on a `canManageRoster` flag (per-course instructor or admin), in
+  both the server-rendered page and the poll-driven JS repaint. A TA still
+  reaches the instructor area and sees the roster, but can no longer see
+  controls whose `POST` the server already refused with a 403. Staff invites use
+  the `.instructor` write floor (enrollment management stays instructor-only),
+  not the `.ta` content floor.
+
+
+## [0.4.576] - 2026-07-01
+
+### Added
+
+- **TA per-course role (#417 Slice E).** `CourseRole` gains a `ta` rung between
+  `student` and `instructor`. A TA may enter the instructor area and do the
+  teaching work — view all students' submissions, retest, and edit assignments,
+  tests, suites, pattern families, notebook checks, global/section inputs,
+  datasets, achievements, the starter notebook and reference solution — but
+  **cannot** manage enrollment, set deadlines/extensions, archive, delete
+  assignments/setups, clone, create new assignments, or change course staff
+  (those stay `instructor`-only). Authority is purely per-course: a TA whose
+  deployment role is `student` still gets full TA access in the courses they
+  assist. Mechanically, `ActiveCourseInstructorMiddleware` now admits
+  `role >= .ta` into the `/instructor` area, the content-editor write loader
+  (`loadAssignmentAndSetupForWrite`) defaults to a `.ta` floor while the
+  assignment-lifecycle loader (`loadAssignmentForWrite`) stays `.instructor`
+  (the per-student grading actions pass `.ta`), the per-student-page handlers
+  gate on a per-course staff check instead of the old global `isInstructor`,
+  and the nav lights the Instructor surface for staff. The roster role dropdowns
+  (admin course page + instructor Students tab) offer **Student / TA /
+  Instructor**, and the last-instructor guard still blocks demoting a course's
+  only instructor (now including demotion to TA).
+
+### Notes
+
+- A handful of borderline actions were kept at the stricter `instructor` floor
+  (open/close/status, reorder, BrightSpace grade-item config, REST
+  test-setup upload + notebook-save, new-assignment drafts); these can be
+  relaxed to `.ta` later if desired. The MCP surface remains enrollment-gated
+  (it does not yet read the per-course role), so TA-vs-instructor distinctions
+  there are a separate follow-up.
+
+
+## [0.4.575] - 2026-06-30
+
+### Security
+
+- **Block MCP content writes to archived courses (#417 Slice D-MCP).** Slice C
+  added the archived-course write block to a single MCP tool
+  (`set_assignment_course_section`); this extends it across **every** MCP
+  content-write tool. A new `ToolContext.authorizeCourseWriteAccess` chokepoint
+  (per-course access + archived block, admin-exempt) backs write-only resolvers
+  — `authorizedAssignment[AndSetup]ForWrite`, `resolveCourseIDForWrite`, and the
+  now-write-gated `resolveCourseSectionForEdit` — so suite/script/family/check
+  edits, notebook + solution updates, grading-mode/time-limit/achievements/
+  global-input/section-variable changes, assignment create/clone/update,
+  reorders, and course-section CRUD all reject a write driven by id into an
+  archived (read-only) course. Critically, the **read** tools (`get_suite`,
+  `get_notebook`, `get_achievements`, `get_global_inputs`, `get_support_files`,
+  `preview_personalization`, `list_course_sections`) keep using the read
+  resolvers, so archived courses stay readable for audits/lookups — the naive
+  "add the block to the shared resolver" approach would have 403'd those reads.
+  Clone blocks on the **destination** course only, so reviving an archived
+  course's content into a live course still works. Admins remain exempt.
+
+
+## [0.4.574] - 2026-06-30
+
+### Security
+
+- **Close the remaining per-course write gaps: assignment lifecycle, setup
+  upload/notebook, submissions, drafts (#417 Slice D).** Slices A & C scoped the
+  assignment-editor and per-student mutations to the resource's own course;
+  this slice finishes the web sweep. The assignment lifecycle mutations
+  (`open`/`close`/`status`/`delete`), drag-`reorder`, unpublished-setup delete,
+  and the `:assignmentID` BrightSpace grade-push backfill now authorize via
+  `requireCourseWriteAccess`, so a per-course instructor can't drive them
+  cross-course or against an archived course by URL. The high-value
+  `POST /api/v1/testsetups` (upload) and `PUT /api/v1/testsetups/:id/assignment`
+  (notebook save) drop their global `isInstructor` check for the per-course
+  gate — closing a hole where any global instructor could create a setup
+  (carrying secret tests + solutions) in **any** course via a client-supplied
+  `courseID`, or overwrite any course's notebook by id. Submission intake
+  (`POST /api/v1/submissions[/file]`) is scoped to the setup's course via
+  `requireCourseEnrollment`, and the new-assignment draft editor — the primary
+  `POST /instructor/new/draft` endpoint **and** the suite/script/section
+  sub-edits — authorizes the draft's own course (so a draft can't be rewritten
+  cross-course by `draftID`). Also closes one adjacent cross-course **read**
+  leak on the most sensitive artifact: `GET /api/v1/testsetups/:id/download`
+  streamed the full setup zip (secret-tier tests + reference solution) on a bare
+  global-`isInstructor` check, letting any instructor pull another course's
+  secrets by id — now `requireCourseInstructor` on the setup's own course (the
+  enrollment-gated student fetch is the separate `/browser-runner` route).
+  Admins remain exempt; the student/browser read paths are untouched.
+
+
+## [0.4.573] - 2026-06-30
+
+### Changed
+
+- **LEARN grade-item mapping: "Do not sync" is now an option in the assessment
+  dropdown** rather than a separate button. Selecting it from the grade-item
+  combobox excludes the assignment from LEARN grade sync (and clears any
+  mapping); picking a real grade item again re-enables it. Functionally
+  unchanged — the sweep still skips excluded assignments — just folded into the
+  one control instead of an extra button.
+
+
+## [0.4.572] - 2026-06-30
+
+### Changed
+
+- **Instructor LEARN tab: "Sync now" is now a hard reset and lives up top.**
+  The button moved next to "Export Grades CSV" and now also re-queues every
+  previously-errored grade push (the old separate "Retry failed" button, which
+  is gone) before sweeping — so terminal failures the auto-reaper leaves alone
+  get retried with one click.
+- **LEARN grade-item mapping gained a "Do not sync" option.** An instructor can
+  now explicitly exclude an assignment's grades from LEARN, distinct from simply
+  leaving it unmapped; the sweep skips excluded assignments and the row shows a
+  "Do not sync" pill with an "Enable sync" action to undo it.
+- **Per-assignment Synced/Failed counts now count distinct students by their
+  most recent attempt** instead of summing every historical result row, so the
+  numbers reflect how many students are currently delivered to LEARN and how
+  many need a fix.
+- **LEARN Class Roster polish.** The Match and Delete actions are now icon
+  buttons matching the rest of the UI, and the Issue column reads a simple
+  "Couldn't match to LEARN".
+
+
+## [0.4.571] - 2026-06-30
+
+### Changed
+
+- **CI test logs are no longer drowned in migration spam.** The API test suite
+  builds ~1,100 throwaway `Application`s, each running 50+ FluentKit migrations
+  that logged two info lines apiece — >120k lines that buried real test failures
+  (pinning down the last regression's 22 failures meant downloading 24 MB of
+  logs). The per-test migration burst is now quieted to `warning`
+  (`configureTestDatabase`; override with `TEST_LOG_LEVEL=info`), while the test
+  body keeps its normal level so warning/error-inspecting tests are unaffected.
+  Also documented the `AssignmentSeedStore.ensureSeed` no-enclosing-transaction
+  invariant that keeps its insert-then-refetch race recovery safe on Postgres.
+
+### Fixed
+
+- **De-flaked `runnerLoadPointsSumConcurrentRunners`.** It placed two runner
+  snapshots 10 s apart and assumed they shared a 5-minute load bucket, but the
+  buckets are epoch-aligned (`floor(epochSeconds / 300)`), so ~3 % of wall-clock
+  runs split them into separate buckets and the test failed
+  (`points.count 3 != 2`). The snapshots are now anchored to the bucket
+  containing `now`, making the grouping deterministic regardless of clock phase.
+
+
+## [0.4.570] - 2026-06-29
+
+### Fixed
+
+- **Blue-green deploys now reclaim disk from superseded images.** Every cutover
+  pulls a fresh multi-GB image, but `scripts/bluegreen-deploy.sh` never pruned
+  the ones it replaced, so the data disk eventually filled and Postgres PANICked
+  on its next write (`could not write lock file "postmaster.pid": No space left
+  on device`), taking the whole site down with a 500/502. The deploy now runs
+  `docker image prune -f` before each pull. Only dangling images are removed, so
+  the active color and the kept-for-rollback previous color are never touched.
+
+### Fixed
+
+- **BrightSpace grade sync no longer fails every result-driven push.** The
+  v0.4.567 "highest grade wins" refactor (#1085) left `bestGradeForStudent`
+  requiring a manifest suite-total with no fallback and reconstructing points
+  from an integer percent, so every worker/browser-result push threw
+  `missingPoints` (and lost precision, e.g. 6/7 → 8.6 instead of 8.57) — turning
+  the whole `BrightSpaceGradeSyncTests` suite red. The sweep now selects the best
+  result across all sources (browser or worker — a higher browser grade is never
+  displaced by a lower worker re-grade) and pushes its exact points, falling back
+  to the result's own recorded total when the manifest carries no per-suite
+  points.
+
+
+## [0.4.569] - 2026-06-29
+
+### Fixed
+
+- **LEARN page Delete button matches the rest of the UI.** The Class Roster "Delete" button on `/instructor/brightspace` used a one-off solid-red `.btn-danger` style that stood out from every other action button. It now uses the shared `btn action-btn action-danger` class — the same subtle danger styling used across the instructor pages — and the page-local override (which also hardcoded a `#fff` colour) is removed.
+
+
+## [0.4.568] - 2026-06-29
+
+### Features
+
+- **LEARN section sync (backend).** Chickadee can now import D2L group memberships and store which lab section each student belongs to. `APICourse.brightspaceSectionCategoryID` designates which D2L group category acts as the sections source; a new periodic sweep (`LearnSectionSyncService`) fetches group memberships every 10 minutes and writes `APICourseEnrollment.brightspaceSection` (e.g. "Lab 3") for each matched student. Two new `BrightSpaceAPIClient` methods — `fetchGroupCategories` and `fetchGroups` — implement the D2L Valence `lp/groupcategories/` endpoints with full bookmark-paged enumeration and clock-skew retry. UI wiring is deferred to a follow-up.
+
+
+## [0.4.567] - 2026-06-29
+
+### Bug fixes
+
+- **Grades CSV now exports the highest grade across all result sources.**
+  Previously the export picked the worker-preferred result per submission and
+  used its raw `earnedPoints`, so a browser run at 100 % could be displaced by
+  a later worker re-grade at a lower percentage (because the worker backstop
+  runs secret tests the browser runner does not).  The export now loads every
+  result for every submission (browser and worker alike), takes the highest
+  `gradePercentValue`, and converts it to points via the manifest total so the
+  CSV column is on a stable scale.  Students who already saw 100 % in Chickadee
+  will continue to receive 100 % in the exported CSV regardless of subsequent
+  worker re-grades.
+
+### Testing
+
+- **Grade override CSV coverage.** Added a test verifying that a per-student
+  grade override exports correctly to the grades CSV even when the student has
+  no submission — confirming the override-without-submission path writes the
+  correct points rather than leaving the cell blank.
+- **Best-grade-wins coverage.** Added a test with one submission that has both
+  a browser result (100 %) and a worker result (90 %), asserting the CSV exports
+  10.0 points (not 9.0) and that the worker result does not displace the higher
+  browser grade.
+
+
+## [0.4.566] - 2026-06-29
+
+### Changed
+
+- **`AddCourseEnrollmentRole`'s backfill no longer queries the full enrollment
+  model.** It now reads and writes `course_enrollments` with raw SQL over only
+  the `id` / `user_id` / `role` columns it touches, instead of a full-model
+  `APICourseEnrollment.query().all()`. A full-model query selects every column
+  the model *currently* declares, so any column added to `course_enrollments`
+  by a later migration would make this backfill fail on a fresh database with
+  "no such column" (the roster-readiness columns did exactly that until they
+  were reordered ahead of this migration). Behaviour is unchanged — only
+  NULL roles are seeded, from each user's global role. No effect on existing
+  databases (this migration is already applied there).
+
+
+## [0.4.565] - 2026-06-29
+
+### Added
+
+- **LEARN roster sync readiness.** Chickadee now proactively tracks, per
+  student per course, whether it can deliver that student's grade to the LEARN
+  gradebook. A background sweep (every 10 minutes, built on the shared
+  `PeriodicSweepMonitor`) reconciles each BrightSpace-linked course's roster
+  against its LEARN classlist and persists a status on the enrollment —
+  **confirmed** (matched, we can push), **unconfirmed** (not yet checked), or
+  **unreachable** (not on the classlist, or no identity to match on, with the
+  reason). The instructor LEARN tab gains a **roster-readiness panel** with the
+  confirmed/unconfirmed/unreachable counts, the last-checked time, the list of
+  unreachable students, and a **Reconcile now** button for an on-demand
+  re-check. This is a signal layer only — an unreachable student's grade still
+  queues and is never lost; the panel just surfaces that we can't deliver it
+  yet, before term-end. It reuses the existing `LearnRosterReconciler`
+  classification and replaces the LEARN tab's old log-heuristic "unmapped
+  students" section.
+
+
+## [0.4.564] - 2026-06-29
+
+### Added
+
+- **Per-assignment grade-sync counts on the instructor LEARN tab.** Each
+  assignment in the grade-item mapping table now shows a student rollup —
+  how many grades are synced (✓), pending a push (⏳), or errored (✗) — so an
+  instructor can see "Lab 1: 28 synced / 2 pending / 1 errored" at a glance
+  instead of only the single most recent log line. The counts span both result
+  rows and override-only rows (no-submission students whose grade rides on the
+  override), so override-only grades are reflected too.
+
+
+## [0.4.563] - 2026-06-28
+
+### Added
+
+- **BrightSpace grade sync now removes a grade when its Chickadee source is
+  removed.** When an instructor clears a grade override on a student with no
+  submissions, the grade is now removed from the LEARN gradebook on the next
+  sync — but **only if Chickadee actually pushed that grade** (there's a
+  `success` row in the sync log), so a grade an instructor entered by hand in
+  LEARN is never touched. Removals run through a small
+  `brightspace_grade_clears` queue and a D2L grade-value `DELETE`; a push queued
+  for the same student/assignment always wins over a removal, and a removal is
+  skipped if the student's grade source has reappeared (they submitted, or a new
+  override was set) before it runs.
+
+
+## [0.4.562] - 2026-06-28
+
+### Added
+
+- **BrightSpace grade sync auto-retries transient failures.** A push that fails
+  on a transient D2L/transport hiccup (HTTP 408/425/429/5xx or a network error)
+  now stays queued and is re-attempted on the next sweep automatically; only
+  terminal failures (a 4xx, a missing student account, no parseable grade) clear
+  the flag and wait for a manual "Retry failed". Previously every failure waited
+  for a manual retry.
+- **Health alert when grade sync starts failing.** A new `brightspaceSyncFailing`
+  alert fires when at least `ALERT_BRIGHTSPACE_SYNC_FAILURE_THRESHOLD` (default 3)
+  grade pushes fail within `ALERT_BRIGHTSPACE_SYNC_FAILURE_WINDOW_MINUTES`
+  (default 60), surfacing the latest D2L error — so an operator knows grades
+  stopped flowing without watching the dashboard.
+
+### Fixed
+
+- **Pushed grades are rounded to 2 decimals** so a scaled value lands as `8.57`
+  in the LEARN gradebook instead of `8.571428571…`.
+
+
+## [0.4.561] - 2026-06-28
+
+### Security
+
+- **Block writes to archived courses: per-student instructor actions, clone, and
+  `set_assignment_course_section` (#417, follow-up to Slice A).** Slice A wired
+  the assignment *editor* mutations through `requireCourseWriteAccess` but
+  explicitly deferred the per-student dashboard actions (retest, retest-all,
+  notebook reset, grade-override save/delete), their per-course-student-page
+  twins (plus deadline extensions), the assignment **clone** endpoint, and the
+  MCP `set_assignment_course_section` tool because they resolve their course
+  differently. Those handlers now authorize against the *assignment's own*
+  course, so a per-course instructor can no longer retest/override/reset/clone
+  into an **archived** course — or drive any of those against a *different*
+  course by URL — which the active-course group middleware can't see. Admins
+  remain exempt; read paths (history, audits) stay readable on archived courses.
+
+
+## [0.4.560] - 2026-06-28
+
+### Fixed
+
+- **BrightSpace grade sync scales to the grade item's own max.** Chickadee
+  previously pushed raw suite points and assumed the LEARN grade item's Max
+  Points equaled the assignment's suite total — so an assignment graded out of
+  more points than its grade item (with "Can Exceed" off) was rejected by D2L
+  with an opaque empty-body `400`. The sweep now fetches the grade item's max
+  at push time and pushes `percentage × maxPoints`, so a 100% always lands as
+  full marks regardless of how the two totals compare. When the item's max is
+  unknown or already matches, the pushed value is unchanged.
+
+### Added
+
+- **Grade-item type is surfaced and enforced in BrightSpace sync.** The
+  instructor grade-item dropdown now shows each item's D2L type and flags
+  non-Numeric items as unsupported, and the sync refuses to push points to a
+  non-Numeric item with a clear message instead of a bare D2L `400`. Grade-push
+  failures now record the item's name, max points, and the attempted value in
+  the sync-activity log so a rejected push is self-explanatory.
+
+
+## [0.4.559] - 2026-06-28
+
+### Added
+
+- **Auto-deploy daemon (`deploy/chickadee-deployer.sh` + systemd unit).** Phase 2
+  of zero-downtime deploys: a small host-side shell daemon polls GitHub Releases
+  and blue-green-deploys each new version automatically via
+  `scripts/bluegreen-deploy.sh`. Non-major bumps ship on their own; **major bumps
+  are held for human approval** (configurable `DEPLOY_GATE_LEVEL=major|minor`).
+  Each deploy is preceded by a `snapshot.sh` safety net and followed by a short
+  public-health verification that auto-rolls-back if the new release degrades
+  after the cutover. It never forces a swap (relies on the symlink guard, so a
+  not-yet-converted volume fails safe), and writes `status.json` / `history.jsonl`
+  to the shared state dir — and reads pause/resume/approve/rollback commands from
+  `command.json` — for the planned admin-MCP oversight surface (Phase 3). The app
+  container never touches Docker; the daemon is the sole holder of docker/nginx
+  privileges. See `docs/zero-downtime-deploy.md`.
+
+### Added
+
+- **Deploy oversight on the admin MCP surface (Phase 3).** Two read-only admin
+  diagnostic tools — `get_deploy_status` (the auto-deploy daemon's current state:
+  live version, latest release seen, paused flag, pending-major-approval) and
+  `get_deploy_history` (recent deploy / gate / rollback events) — let an
+  operator or agent see deploy state remotely. They read the daemon's
+  `status.json` / `history.jsonl` from `Application.deployStateDirectory`
+  (`CHICKADEE_DEPLOY_STATE_DIR`, default `/deploy-state`), which the blue-green
+  script now mounts into the container **read-only** — so the app can see deploy
+  state but physically cannot write `command.json`, and can never move traffic.
+  Deploy *control* (pause/approve/rollback) stays a host-side action, preserving
+  the admin surface's read-only-by-construction guarantee. See
+  `docs/zero-downtime-deploy.md`.
+
+
+## [0.4.558] - 2026-06-28
+
+### Fixed
+
+- **A solution notebook's broken demo cell no longer silently breaks
+  `solution.py` for personalization.** The server-side `solution.py` that
+  per-student expressions import (`solution.<fn>(...)`) was a naive
+  concatenation of the solution notebook's code cells, so a single cell that
+  errored at import — e.g. a copy-pasted JSON-ism like a bare `null` in a
+  module-level list literal, or a failing example-test `assert` — aborted
+  `import solution` for the whole module. The personalization evaluator's import
+  guard then swallowed it, and every `solution.<fn>` reference surfaced as a
+  baffling `name 'solution' is not defined`. `SolutionNotebookExtractor` now
+  renders `solution.py` through the shared `RunnerCore.extractPython` — the same
+  resilient extractor the native worker and browser runner use to grade — so
+  each cell loads under its own `try/except`, side-effecting statements are
+  quarantined into `if __name__ == "__main__":`, and a broken demo cell is
+  skipped without taking the helper functions down with it. Using one extractor
+  for both paths also means the imported solution and the graded solution can't
+  diverge.
+
+
+## [0.4.557] - 2026-06-28
+
+### Added
+
+- **Blue-green deploy script (`scripts/bluegreen-deploy.sh`).** Phase 1 of
+  zero-downtime deploys: brings a new image up as an idle "color" container
+  beside the live one, health-checks it on its own port, flips the host nginx
+  upstream to it, drains, then stops the old color — the live service is never
+  stopped before the new one is proven healthy. Runs alongside the existing
+  compose stack (no `docker-compose.yml` changes); resolves the server
+  environment from compose so there is no config duplication. Ships with
+  `deploy/nginx-chickadee-upstream.conf` (the rewritable upstream include) and a
+  full design + runbook in `docs/zero-downtime-deploy.md`, which also lays out the
+  planned host deployer daemon (automatic CD gated on GitHub-release SemVer) and
+  the admin MCP oversight surface.
+
+### Changed
+
+- **Docker deploys symlink static assets instead of copying them on every boot.**
+  The container entrypoint previously `rm -rf`'d and re-copied `Public/`,
+  `Resources/`, and `docs/` (~586 MB, most of it the vendored Pyodide) from the
+  image into the data volume on every start — the single biggest contributor to
+  the visible service gap on redeploy. It now symlinks those read-only asset
+  trees at the image copies, so the link refresh is effectively free and a
+  redeploy still picks up fresh templates/assets instantly. Because each symlink
+  resolves inside its own container, two image versions can share the data volume
+  safely — a prerequisite for the planned zero-downtime blue-green deploys. The
+  stale real copies are reclaimed automatically on first boot of the new image.
+
+
+## [0.4.556] - 2026-06-28
+
+### Added
+
+- **Admins can set per-course roles from the course page (#417).** The admin
+  course page (`/admin/courses/:id`) now shows each roster member's
+  *per-course* role and lets an admin switch it between student and instructor
+  inline — the admin-side counterpart of the instructor roster dropdown, so an
+  admin can assign a course's staff without first making it their active course.
+
+### Changed
+
+- **Courses can no longer be orphaned of their last instructor (#417).** A new
+  `ensureNotLastInstructor` guard blocks a non-admin from unenrolling or
+  demoting a course's only instructor; transfer the instructor role first.
+  Admins are exempt (they can always re-grant).
+
+
+## [0.4.555] - 2026-06-28
+
+### Security
+
+- **Archived courses are now read-only on the server, not just in the UI
+  (#417).** A new `requireCourseWriteAccess` helper blocks non-admin writes to
+  an archived course, and the assignment-editor mutations
+  (`saveEditedAssignment`, `PUT /suite`, script/section/global-variable/
+  achievement edits, `create-solution`) plus the per-course enrollment
+  mutations now authorize against the **resource's own course** instead of
+  trusting only the active-course group middleware. This closes a gap where a
+  per-course instructor could edit (or mutate enrollment on) an *archived* —
+  or a different — course's content by URL. Admins remain exempt (they own
+  unarchiving); read access to archived courses is unchanged for grade audits.
+
+
+## [0.4.554] - 2026-06-28
+
+### Fixed
+
+- **The Instructor nav link no longer disappears on the Admin (and other)
+  pages.** Pages whose handlers build only a course-free user context — the
+  admin panel, the account page, and many others — were dropping the nav's
+  Instructor link and course tabs. A new `NavCourseContextMiddleware` resolves
+  the course-aware nav context once per authenticated web request (cached, so it
+  shares the existing active-course resolution), so the Instructor link and
+  course tabs now render on every page.
+
+
+## [0.4.553] - 2026-06-28
+
+### Fixed
+
+- **LEARN grade push now includes the mandatory comment fields.** D2L's
+  `IncomingGradeValueNumeric` requires `Comments` and `PrivateComments`
+  RichText blocks; omitting them rejected every push with HTTP 400 "Comments
+  and PrivateComments are mandatory". `BrightSpaceAPIClient.pushGrade` now
+  sends empty `Text` RichText for both, so grades actually write to LEARN.
+- **LEARN unmapped-students panel no longer misflags username matches.** The
+  instructor sync panel decided a student was unmapped purely on an empty
+  student/org-defined ID, which wrongly listed students who match LEARN by
+  username (and whose resolved D2L id is already cached). It now treats a
+  student as unmapped only when they have neither a student number nor an
+  already-resolved LEARN id.
+
+
+## [0.4.552] - 2026-06-28
+
+### Added
+
+- **Grade pending students and push to BrightSpace.** Instructors can now
+  register a pending (pre-enrolled, never-logged-in) student into a real
+  account from the **Students** tab — supplying their SSO identity — so they
+  appear on assignment rosters and can be assigned a grade override. The real
+  student's first SSO login adopts that account (by `externalSubject`, or by
+  username when no subject was supplied), so no duplicate account is created.
+
+### Fixed
+
+- **BrightSpace grade sync now pushes override-only grades.** An instructor
+  grade override on a student with no submissions previously stored and
+  displayed the grade but never reached BrightSpace, because the sync sweep
+  was driven solely by submission result rows. The override row now carries its
+  own pending flag and the sweep pushes it (`override% × suite total points`).
+  The manual **Push all** / **Retry failed** buttons cover these override-only
+  grades too. Clearing an override on a no-submission student leaves the
+  already-pushed grade as-is.
+
+
+## [0.4.551] - 2026-06-28
+
+### Changed
+
+- **Instructor nav is always reachable, and every course is one click away.**
+  The nav bar's Instructor entry now shows whenever you instruct *any* enrolled
+  course, not only when your currently active course happens to be one you teach.
+  Instruct exactly one course and you get a single direct "Instructor" link;
+  instruct several and a per-course Instructor strip appears, each chip jumping
+  straight into that course's instructor dashboard. The existing course strip
+  continues to give every enrolled student direct access to each of their
+  courses. Course selection still flows through `POST /courses/:id/activate`,
+  which now accepts an optional `next` destination (validated as a safe local
+  path) and falls back to the home dashboard rather than dropping a non-instructor
+  into a 403.
+
+
+## [0.4.550] - 2026-06-27
+
+### Fixed
+
+- **Submission page no longer shows an empty "Class goals" heading.** The
+  class-goals section on the student submission view is now gated on an explicit
+  Swift-computed `hasClassGoals` flag rather than `!classGoals.isEmpty` in Leaf,
+  so an assignment with no class-goal achievements never renders a bare "Class
+  goals" heading with no goals beneath it.
+
+
+## [0.4.549] - 2026-06-27
+
+### Security
+
+- **Grader-only support-file names no longer leak in the browser manifest.**
+  Enforcement (#1055) withholds the *contents* of `TestProperties.graderOnlyFiles`
+  (option B — `docs/datasets.md`) from every student download path, but the
+  browser-runner manifest endpoint (`GET /api/v1/browser-runner/testsetups/:id/manifest`)
+  still served `test.properties.json` verbatim — so the `graderOnlyFiles` array
+  named the reserved holdout / answer-key files to the student's browser. The
+  endpoint now blanks that array before serving (`manifestWithGraderOnlyFilesStripped`);
+  a strict no-op for assignments with no grader-only files (the array is returned
+  byte-for-byte), and every other manifest field is preserved.
+
+
+## [0.4.548] - 2026-06-26
+
+### Security
+
+- **Grader-only support files are now withheld from students (enforcement +
+  authoring).** The `TestProperties.graderOnlyFiles` marker (option B in
+  `docs/datasets.md`) was a foundation-only field — nothing consulted it, so a
+  support file bundled for the grader (e.g. an answer-key helper like a
+  `dbgen.py`, or a reserved holdout test set) was still downloadable by any
+  enrolled student via the support-file endpoint, symlinked into the in-browser
+  editor, and streamed in full to a browser-graded student. Enforcement now
+  unions `graderOnlyFiles` into the student-facing filters at all three points:
+  the student support-file download (`TestSetupRoutes.downloadSupportFile`
+  blocks it), the editor symlink pass (`NotebookWorkingCopyStore` skips it), and
+  the browser-runner zip download (`BrowserRunnerRoutes.downloadTestSetup`
+  streams a copy with the entries removed). The trusted native-worker download
+  is unchanged (it needs the file), and the file still extracts into the
+  server-side `shared/` dir so personalization expressions can import it.
+  `author_script` gains a `graderOnly` flag for support files to set/clear the
+  mark; it requires worker grading (a browser-graded assignment can't keep a
+  file from the student).
+
+### Added
+
+- **Reference solution is now importable in personalization expressions
+  (`shared/solution.py` kept in sync).** Saving an assignment's reference
+  solution now (re)writes a server-side `shared/{setupID}/solution.py` from the
+  solution notebook's code cells, so a Global Input expression can compute an
+  expected value as `solution.<fn>(...)` — a single source of truth — instead of
+  a hand-maintained answer key that can silently drift from the solution. The
+  file lives **only** in the shared directory: it is never written into the
+  test-setup zip, so it never reaches the worker, the browser runner, or a
+  student support-file download (the same treatment `solution.ipynb` already
+  gets). The shared-directory rebuild that runs on every suite edit now
+  preserves this file across its wipe when the zip does not itself carry the
+  solution, so `import solution` keeps working after an edit. Previously this
+  worked only for setups whose uploaded zip happened to contain `solution.ipynb`
+  (draft-/MCP-created assignments never do), leaving the feature dormant for
+  them.
+
+
+## [0.4.547] - 2026-06-26
+
+### Fixed
+
+- **Opening a notebook no longer spawns a stray extra editor tab.** Notebook 7 opens each document in its own browser tab via `window.open`; embedded in Chickadee's iframe that surfaced as a redundant second editor — a third Pyodide, and on WebKit contention with the kernel already running in the iframe. v0.4.543 stopped that tab from 404ing but left it booting a full second editor. Now `notebook.js` suppresses the stray same-site `window.open` at the source (the iframe is same-origin), and `JupyterLiteAppIndexMiddleware` returns a tiny self-closing page — instead of a second editor — as the server-side backstop. An editor-smoke popup guard asserts no stray tab opens in Chromium + WebKit.
+
+
+## [0.4.546] - 2026-06-26
+
+### Fixed
+
+- **Editor kernel-diagnostics collector is now cache-busted, so collector changes
+  actually reach returning students.** `jl-kernel-diagnostics.js` was injected
+  into the editor documents as a bare `<script src="/jl-kernel-diagnostics.js">`
+  with no version query, so a browser that had cached an older copy kept running
+  it after a deploy — the editor page cache-busts itself, but this separately
+  referenced script did not. The result: collector changes (e.g. the v0.4.544
+  CASE 2 `bootContext` fields) silently failed to reach returning students until
+  the browser cache TTL expired. The injected tag now carries a `?v=<hash>`
+  derived from the collector's own bytes (`scripts/patch-jupyterlite-diagnostics.py`),
+  so a deploy that changes the script forces a fresh fetch while an unchanged
+  script keeps a stable, cacheable URL. `verify-jupyterlite.sh` now asserts the
+  tag's hash matches the current script, so a stale tag fails the build instead
+  of silently serving an old collector.
+
+
+## [0.4.545] - 2026-06-26
+
+### Fixed
+
+- **Browser grading now fails over to the server when the in-browser runtime can't start, instead of recording a 0%.** When the grading-worker Pyodide can't initialize at all — e.g. the Pyodide 3.14 WebKit `call_indirect to a null table entry` trap that bricks grading on some Safari/iOS builds — the shared RunnerCore wasm was catching each rejected run and returning an exit-2 `error` outcome, so `executeSuites` completed with an all-`error` collection that got posted as a real **0%** submission and the existing `/submissions/browser-failover` server backstop never fired. `runScripts` now probes the grading runtime (`executor.ensureReady()`) before the suite loop and throws on a hard init failure, so the submit path fails the grade over to native server-side grading on the validated suite rather than stamping the student a 0. A per-script error after a healthy init is unchanged.
+
+### Added
+
+- **Supported-browser warning (LEARN-aligned).** A simplified take on D2L Brightspace's browser-support matrix: Chickadee now warns students whose browser is below the supported line — **Safari 26+, Chrome 140+, Edge 140+, Firefox 143+** — with a dismissible, non-blocking banner on the notebook page, instead of letting an old browser fail silently. The warning never blocks: an unsupported browser still submits and grades server-side (the browser-grading failover) and via `.ipynb` upload. Detection is conservative — only a confidently-below-floor browser is flagged; an unknown/unparseable User-Agent is left alone. The version floors live in one place (`SupportedBrowserMatrix`) and are bumped as the supported line moves. A `browser_support` telemetry beacon records the real below-matrix rate (attributed by browser from the User-Agent) so the line can be tuned with data. (Also fixes a latent drop: the existing low-memory `device_warning` beacon was missing from the client-diagnostics allowlist and was being 400'd.)
+
+
+## [0.4.544] - 2026-06-26
+
+### Added
+
+- **Editor kernel boot diagnostics now capture the *why* of a stalled/unknown
+  kernel (CASE 2 instrumentation).** The in-iframe collector
+  (`jl-kernel-diagnostics.js`) appends a PII-safe environment snapshot
+  (`bootContext()`: `crossOriginIsolated`/`SharedArrayBuffer`,
+  `navigator.deviceMemory`/`hardwareConcurrency`, service-worker control, whether
+  the JupyterLite shell rendered, the captured boot-error count + last error
+  source, and the furthest boot phase reached) to the `kernel_unknown` and
+  `boot_stalled` watchdog beacons. Previously these carried only a bare
+  `"kernel status unknown"`, localizing *where* a boot stalled but never *why*.
+  Capability/device-class signals only — never student code, output, grades, or
+  identity — and emitted strictly during the pre-idle boot window.
+- **Transient vs. terminal kernel boots are now distinguishable.** A
+  `kernel_idle` that follows a previously-reported unhealthy streak is tagged
+  `recovered=1;unhealthy_ms=…`, so a slow-but-healthy boot (the watchdog crying
+  wolf) can be subtracted from genuine terminal stalls — the `kernel_unknown`
+  count was previously indistinguishable between the two. The `kernel_unknown`
+  beacon is now also once-guarded so the varying context string can't bypass the
+  dedup and emit one per poll.
+
+
+## [0.4.543] - 2026-06-26
+
+### Fixed
+
+- **Opening a notebook no longer 404s in a stray new tab.** JupyterLite
+  (Notebook 7) opens documents at canonical URLs like
+  `/jupyterlite/notebooks?path=…` with no `/index.html`, assuming the host
+  rewrites an app directory to its index (a real Jupyter server, or an nginx
+  `try_files`). Chickadee's static file serving didn't, so those URLs 404'd —
+  most visibly when the editor opened a notebook in a new browser tab (all
+  engines). A new `JupyterLiteAppIndexMiddleware` redirects the JupyterLite app
+  directories (`lab`, `notebooks`, `tree`, `edit`, `consoles`, `repl`) to their
+  `index.html`, preserving the query string. The in-iframe editor was unaffected
+  either way (it already loads `…/index.html`).
+
+
+## [0.4.542] - 2026-06-26
+
+### Fixed
+
+- **Older browsers that can't run the in-browser editor now get a clear path
+  instead of an endless spinner.** Some old engines — notably Safari 18.x and
+  low-memory iPads — never finish booting the WebKit comlink + service-worker
+  editor (the service worker won't take control and/or the JupyterLite 0.8
+  frontend can't initialise). On WebKit, if the kernel hasn't come up within
+  25 s, the notebook page now reveals a polite, **non-blocking** notice plus the
+  `.ipynb`-upload fallback — *without* hiding the editor, so a merely-slow-but-
+  healthy boot still works (it can never hide a working editor). It suggests a
+  laptop/desktop or a more recent browser, and beacons `slow_boot_notice` for
+  calibration. Chrome/Edge/Firefox (the SharedArrayBuffer path) are unaffected.
+
+
+## [0.4.541] - 2026-06-25
+
+### Fixed
+
+- **In-browser notebook editor no longer freezes on Safari/WebKit.** The
+  JupyterLite Pyodide kernel uses `coincident` (a synchronous `SharedArrayBuffer`
+  + `Atomics.wait` handshake) whenever the editor iframe is cross-origin isolated,
+  and that handshake deadlocks on WebKit — the kernel boots to idle, then wedges
+  on the first cell with no console error (reproduced on Safari 18.2 / Intel).
+  WebKit requests (Safari, and every iOS browser — all WKWebView) now get the
+  editor served **non-isolated**, so the kernel picks the async `comlink`
+  transport, with the JupyterLite service worker re-enabled to carry synchronous
+  stdin/Drive. Chrome, Edge and Firefox are unchanged and keep the faster
+  `SharedArrayBuffer` path. Gated by a single User-Agent classifier
+  (`EditorBrowserEngine`) on both the server (isolation headers + service-worker
+  config) and the client (`notebook.js` keeps the now-required service worker).
+- **Notebook editor no longer throws a `TypeError` applying the locked-UI style.**
+  `applyLockedNotebookUI` appended a `<style>` to the iframe's `document.head`
+  without guarding against a null `head` (which happens when the document exists
+  but `<head>` hasn't parsed yet), throwing "Cannot read properties of null
+  (reading 'appendChild')". It now falls back to `documentElement` and skips
+  cleanly if neither is ready.
+
+
+## [0.4.540] - 2026-06-25
+
+### Fixed
+
+- **In-browser notebook save on JupyterLite 0.8 ("Directory does not exist").**
+  0.8's `@jupyterlite/contents` `save()` requires the notebook's parent directory
+  to already be a materialized directory entry in the browser Drive (0.7.x
+  auto-created intermediate dirs). Chickadee working copies are nested under
+  `users/<uid>/<setup>/`, which nothing created client-side, so the first save —
+  and the editor's own Ctrl-S — threw `Directory does not exist` and students
+  could lose work. The notebook page now creates the ancestor directories in the
+  Drive before seeding (`ensureDriveParentDirectories`), and a new
+  `JupyterLiteConfigFlagMiddleware` injects the `exposeAppInBrowser` PageConfig
+  flag into the served `jupyter-lite.json` configs so the in-iframe app/contents
+  manager is reachable to do it (the flag is injected at serve time rather than
+  baked into the verified, rebuilt-and-diffed bundle). No bundle rebuild required.
+
+
+## [0.4.539] - 2026-06-25
+
+### Changed
+
+- **Editor kernel alerting now targets the genuinely-stuck student.** The
+  `editorKernelHang` health-alert rule is replaced by `editorKernelUnrecoverable`,
+  which fires on `recover_failed` reports — a student whose kernel hung, was
+  auto-rebooted by the editor, and hung *again* — instead of on every post-idle
+  `exec_hang` (the vast majority of which auto-recover and never actually block
+  the student). `exec_hang`s are still collected in `client_diagnostics` /
+  `get_browser_diagnostics` for analysis; they just no longer page the operator.
+  Default threshold is 2 in 60 min, tunable via `ALERT_EDITOR_UNRECOVERABLE_THRESHOLD`
+  / `ALERT_EDITOR_UNRECOVERABLE_WINDOW_MINUTES` (the former `ALERT_EDITOR_HANG_*`
+  names still work).
+
+### Added
+
+- **Browser diagnostics carry the page-build version.** Every client diagnostic
+  (editor errors, kernel breadcrumbs including `exec_hang` / `recover_failed`, the
+  submit funnel, and the freeze beacon) now records the `app_version` of the page
+  build that emitted it, surfaced as a `byAppVersion` breakdown in
+  `get_browser_diagnostics`. A failure concentrated on an *old* version is a
+  stale-tab / cached-bundle symptom (that browser never re-fetched the fixed
+  bundle); one on the *current* build means a deployed fix is incomplete — turning
+  "is this hang old cached code or a live bug?" from a guess into data.
+
+
+## [0.4.538] - 2026-06-25
+
+### Fixed
+
+- **Editor bundle updates now reach students on the next page load instead of
+  waiting on browser cache heuristics.** The vendored JupyterLite/Pyodide bundle
+  assets with stable filenames (the patched kernel wheel, `all.json`,
+  `jupyter-lite.json`, the Pyodide runtime, fonts) were served with an ETag but
+  no `Cache-Control`, so browsers cached them *heuristically* and could reuse a
+  stale copy for hours without revalidating — which is why the `exec_hang` wheel
+  fix (#1029) took hours to reach already-loaded students and needed a hard
+  refresh. These now carry explicit `Cache-Control: no-cache` (revalidate to a
+  cheap bodyless 304 when unchanged), so a deploy propagates deterministically.
+  Content-hashed chunks (the bulk of the bundle) keep immutable caching, so this
+  adds a revalidation round-trip only for the handful of stable-name assets — all
+  on the session-lookup-free fast path. `EditorAssetFastPathMiddleware` stamps the
+  `build/`/`extensions/`/`pyodide/` trees it serves; the new
+  `BundleAssetCacheMiddleware` covers the slow-path `jupyter-lite.json` and the
+  lab/notebooks/repl entry HTML.
+
+
+## [0.4.537] - 2026-06-25
+
+### Security
+
+- **MCP personalization seed bookkeeping moved to the owner pool.** The MCP
+  content tools `update_global_inputs`, `update_section_variables`, and
+  `preview_personalization` ensure the acting account's own per-assignment seed
+  (`assignment_personalization_seeds`) as a side effect. That bookkeeping now
+  runs on the main (owner) database pool via `ToolContext.mainDB` / an explicit
+  `seedDB` parameter, instead of the least-privilege `.mcp` pool — mirroring the
+  MCP audit row and the content-edit re-grade. All real content reads/writes
+  stay on the `.mcp` pool, so the student-data wall holds. This removes the need
+  for the temporary `GRANT SELECT, INSERT ON assignment_personalization_seeds TO
+  chickadee_mcp` stopgap; after deploying, revoke it with `REVOKE SELECT, INSERT
+  ON assignment_personalization_seeds FROM chickadee_mcp;` (see
+  `deploy/sql/mcp-least-privilege-role.sql`).
+
+
+## [0.4.536] - 2026-06-25
+
+### Added
+
+- **Device-memory resilience for the in-browser notebook editor.** Two
+  complementary safeguards for low-memory / Safari devices, where the Pyodide
+  kernel can exhaust WebAssembly memory:
+  - **Proactive warning** — on a low-RAM device (`navigator.deviceMemory` ≤ 2 GB,
+    where the browser exposes it; Chromium does, Safari/Firefox omit it for
+    privacy), a non-blocking, dismissible banner suggests switching to a
+    laptop/desktop. The editor still loads normally.
+  - **Reactive recovery** — a fatal kernel crash (the upstream WebKit "Out of
+    bounds memory access", or a genuine WASM out-of-memory abort) is now caught
+    mid-session by the in-iframe collector and degrades gracefully to the
+    existing `.ipynb`-upload fallback with a memory-specific message, instead of
+    leaving a silently-wedged cell.
+  Both paths emit a diagnostic (`device_warning` / `wasm_crash`) so the
+  instructor dashboard surfaces the real low-memory-device and kernel-crash
+  rates. No always-on editor behaviour changes on healthy devices.
+
+
+## [0.4.535] - 2026-06-25
+
+### Changed
+
+- **Editor exec-probe now classifies the upstream WebKit WASM crash separately
+  from a real deadlock.** The `editor-exec-probe` diagnostic (WebKit leg) was
+  intermittently red on a fatal Safari WASM crash — `RuntimeError: Out of bounds
+  memory access (evaluating '__pyproxy_apply')` — which is an upstream WebKit
+  engine bug ([WebKit #286266](https://bugs.webkit.org/show_bug.cgi?id=286266)),
+  not a Chickadee regression and not fixable in our JS. The probe now (1)
+  relaunches a **fresh browser per iteration** so a single WebKit process can't
+  accumulate WASM/TextDecoder state across back-to-back kernel boots and inflate
+  the crash rate above a real one-kernel-per-session student, and (2) tags a hang
+  caused by the WebKit crash as `webkitWasmCrash` and reports it without failing
+  the leg — only a genuine our-code post-idle `exec_hang` deadlock fails the
+  probe. Production telemetry corroborates that real Safari students rarely hit
+  the crash (the editor kernel-boot funnel is ~92% healthy on Safari/macOS).
+
+
 ## [0.4.534] - 2026-06-25
 
 ### Fixed

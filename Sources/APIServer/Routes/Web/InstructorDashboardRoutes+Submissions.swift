@@ -19,7 +19,7 @@ extension InstructorDashboardRoutes {
 
     @Sendable
     func assignmentSubmissionsPage(req: Request) async throws -> View {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForStaffRead(req)
         let assignmentIDRaw = assignment.publicID
 
         // Canonical roster size: role=="student" enrolled users + pre-enrollments.
@@ -35,7 +35,9 @@ extension InstructorDashboardRoutes {
             req: req, assignment: assignment, studentIDs: studentIDs)
         let submissionsByStudentID = submissionsGroupedByStudentID(submissions)
         let submissionIDs = submissions.compactMap(\.id)
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // Best grade percentage per submission across ALL result sources
+        // (browser and worker alike) — "highest grade wins".
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissionIDs, on: req.db)
 
         // Instructor grade overrides for this assignment, indexed by student.
@@ -46,13 +48,26 @@ extension InstructorDashboardRoutes {
             overrideByStudentID[key.userID] = pct
         }
 
+        // Reveal-token spends, fetched only when the assignment's toggle is
+        // on — with it off the affordance is hidden and the page renders
+        // identically to the pre-feature layout.
+        let secretRevealEnabled = assignment.secretRevealEnabled == true
+        var spentRevealUserIDs: Set<UUID> = []
+        if secretRevealEnabled {
+            spentRevealUserIDs = try await SecretRevealStore.spentUserIDs(
+                assignmentID: assignment.requireID(), on: req.db)
+        }
+
+        let lookups = StudentRowLookups(
+            submissionsByStudentID: submissionsByStudentID,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
+            overrideByStudentID: overrideByStudentID,
+            spentRevealUserIDs: spentRevealUserIDs)
         let fmt = waterlooDateTimeFormatter()
         let rows = students.compactMap { student -> AssignmentStudentRow? in
             buildAssignmentStudentRow(
                 student: student,
-                submissionsByStudentID: submissionsByStudentID,
-                preferredResultBySubmissionID: preferredResultBySubmissionID,
-                overrideByStudentID: overrideByStudentID,
+                lookups: lookups,
                 assignmentIDRaw: assignmentIDRaw,
                 fmt: fmt
             )
@@ -72,7 +87,8 @@ extension InstructorDashboardRoutes {
                 assignmentID: assignmentIDRaw,
                 assignmentTitle: assignment.title,
                 metrics: metrics,
-                rows: rows
+                rows: rows,
+                secretRevealEnabled: secretRevealEnabled
             )
         )
     }
@@ -82,14 +98,12 @@ extension InstructorDashboardRoutes {
     private func loadAssignmentSubmissionsStudents(
         req: Request, assignment: APIAssignment
     ) async throws -> [APIUser] {
-        let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == assignment.courseID)
-            .all()
-            .map(\.userID)
-        guard !enrolledUserIDs.isEmpty else { return [] }
+        // Roster = `.student`-role enrollments (#417 Slice G2); TA/instructor
+        // enrollments don't count toward the submitted-student denominators.
+        let studentUserIDs = try await studentUserIDsInCourse(assignment.courseID, on: req.db)
+        guard !studentUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
-            .filter(\.$role == UserRole.student.rawValue)
-            .filter(\.$id ~~ enrolledUserIDs)
+            .filter(\.$id ~~ Array(studentUserIDs))
             .sort(\.$username, .ascending)
             .all()
     }
@@ -117,23 +131,29 @@ extension InstructorDashboardRoutes {
         return submissionsByStudentID
     }
 
+    /// Per-assignment lookup tables shared by every roster row build, bundled
+    /// so `buildAssignmentStudentRow` stays within the parameter-count limit.
+    private struct StudentRowLookups {
+        let submissionsByStudentID: [UUID: [APISubmission]]
+        let bestPercentBySubmissionID: [String: Int]
+        let overrideByStudentID: [UUID: Int]
+        let spentRevealUserIDs: Set<UUID>
+    }
+
     private func buildAssignmentStudentRow(
         student: APIUser,
-        submissionsByStudentID: [UUID: [APISubmission]],
-        preferredResultBySubmissionID: [String: APIResult],
-        overrideByStudentID: [UUID: Int],
+        lookups: StudentRowLookups,
         assignmentIDRaw: String,
         fmt: DateFormatter
     ) -> AssignmentStudentRow? {
         guard let studentID = student.id else { return nil }
-        let history = submissionsByStudentID[studentID] ?? []
+        let history = lookups.submissionsByStudentID[studentID] ?? []
         let latest = history.first
         let runnerBestGradePercent: Int? = {
             var best = -1
             for submission in history {
                 guard let subID = submission.id,
-                    let result = preferredResultBySubmissionID[subID],
-                    let pct = result.gradePercentValue
+                    let pct = lookups.bestPercentBySubmissionID[subID]
                 else {
                     continue
                 }
@@ -143,7 +163,7 @@ extension InstructorDashboardRoutes {
         }()
         // An instructor override is the student's effective grade — it feeds
         // both the displayed grade and the median metric.
-        let override = overrideByStudentID[studentID]
+        let override = lookups.overrideByStudentID[studentID]
         let bestGradePercent = override ?? runnerBestGradePercent
         let inferredName =
             splitHumanName(student.displayName)
@@ -164,7 +184,8 @@ extension InstructorDashboardRoutes {
             latestSubmittedAtEpoch: latest?.submittedAt.map { Int($0.timeIntervalSince1970) } ?? 0,
             additionalSubmissionCount: max(history.count - 1, 0),
             fullHistoryURL: "/instructor/\(assignmentIDRaw)/students/\(studentID.uuidString)/history",
-            bestGradePercent: bestGradePercent
+            bestGradePercent: bestGradePercent,
+            secretRevealSpent: lookups.spentRevealUserIDs.contains(studentID)
         )
     }
 

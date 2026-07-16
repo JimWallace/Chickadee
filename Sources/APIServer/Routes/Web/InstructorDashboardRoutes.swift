@@ -53,7 +53,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.get("brightspace", "grade-objects", use: brightspaceGradeObjects)
         r.post("brightspace", "auto-map", use: brightspaceAutoMap)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
-        r.post("brightspace", "retry-failed", use: brightspaceRetryFailed)
+        r.post("brightspace", "reconcile-now", use: brightspaceReconcileNow)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)
@@ -64,6 +64,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post(
             ":assignmentID", "students", ":studentID", "grade-override", "delete",
             use: deleteStudentGradeOverride)
+        r.post(
+            ":assignmentID", "students", ":studentID", "regrant-reveal-token",
+            use: regrantSecretRevealToken)
         // Draft-assignment authoring (create page, save, publish, draft
         // suite / family / check / script / suite-section CRUD) lives on
         // `DraftAssignmentRoutes` (registered in routes.swift).
@@ -72,6 +75,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         // `CourseAdminRoutes` (registered in routes.swift).
         r.get(":assignmentID", "edit", use: editPage)
         r.post(":assignmentID", "brightspace", use: saveBrightSpaceGradeObjectID)
+        r.post(":assignmentID", "secret-reveal", use: saveSecretRevealSetting)
         r.post(":assignmentID", "brightspace", "push-all", use: brightspacePushAllForAssignment)
         r.post(":assignmentID", "status", use: updateStatus)
         r.post(":assignmentID", "open", use: openAssignment)
@@ -184,7 +188,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func openAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         do {
             try await AssignmentAuthoringService.setOpenState(assignment, open: true, on: req.db)
         } catch AssignmentAuthoringError.validationNotPassed {
@@ -202,6 +206,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         struct ReorderBody: Content {
             var assignmentIDs: [String]
         }
+        let caller = try req.auth.require(APIUser.self)
         let body = try req.content.decode(ReorderBody.self)
         let orderedIDs = Array(NSOrderedSet(array: body.assignmentIDs).compactMap { $0 as? String })
         guard !orderedIDs.isEmpty else { return .ok }
@@ -223,6 +228,15 @@ struct InstructorDashboardRoutes: RouteCollection {
             )
         }
 
+        // Reordering writes sortOrder, so it's a per-course write: authorize the
+        // caller for every distinct course the payload touches. Without this an
+        // instructor could reorder another course's (or an archived course's)
+        // assignments by submitting their IDs — the active-course group gate
+        // never sees the target courses here (#417 Slice D).
+        for courseID in Set(assignments.map(\.courseID)) {
+            try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .instructor, db: req.db)
+        }
+
         for (index, rawID) in orderedIDs.enumerated() {
             guard let assignment = byID[rawID] else { continue }
             assignment.sortOrder = index + 1
@@ -239,7 +253,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             var status: String
         }
 
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
 
         let body = try req.content.decode(StatusBody.self)
         guard let visibility = AssignmentVisibility(rawValue: body.status) else {
@@ -262,7 +276,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func closeAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
         return req.redirect(to: "/instructor")
     }
@@ -277,7 +291,14 @@ struct InstructorDashboardRoutes: RouteCollection {
     /// re-validate before opening.
     @Sendable
     func cloneAssignment(req: Request) async throws -> Response {
-        let (source, sourceSetup) = try await loadAssignmentAndSetup(req)
+        // Write-scoped to the source's own course: cloning creates a new
+        // assignment in that course, so a clone of an archived course's
+        // assignment is a write to an archived course and is blocked for
+        // non-admins (#417, follow-up to Slice A — "clone reads from a
+        // possibly-archived source").
+        // Cloning creates a *new* assignment (course structure), so it's
+        // instructor-only — unlike the content edits this loader defaults to .ta.
+        let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .instructor)
         let cloned = try await AssignmentAuthoringService.cloneAssignment(
             source: source,
             sourceSetup: sourceSetup,
@@ -293,7 +314,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func saveBrightSpaceGradeObjectID(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         struct BSBody: Content {
             var gradeObjectID: String?
             /// "brightspace" → return to the BrightSpace tab (mapping table);
@@ -302,19 +323,68 @@ struct InstructorDashboardRoutes: RouteCollection {
         }
         let body = try req.content.decode(BSBody.self)
         let raw = (body.gradeObjectID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
+        let mapping: String
+        if raw == BrightspaceSync.doNotSyncToken {
+            // The instructor picked the "Do not sync" option in the grade-item
+            // dropdown — exclude this assignment from LEARN. The sweep then skips
+            // it; the dropdown shows "Do not sync" until a real item is chosen.
+            assignment.brightspaceSyncExcluded = true
+            assignment.brightspaceGradeObjectID = nil
+            mapping = "do_not_sync"
+        } else {
+            assignment.brightspaceSyncExcluded = false
+            assignment.brightspaceGradeObjectID = raw.isEmpty ? nil : raw
+            mapping = raw.isEmpty ? "cleared" : raw
+        }
         try await assignment.save(on: req.db)
+        await AuditLogger.record(
+            action: .brightspaceGradeItemMapped,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: ["assignment": assignment.publicID, "grade_item": mapping],
+            on: req
+        )
         if body.returnTo == "brightspace" {
             return req.redirect(to: "/instructor/brightspace")
         }
         return req.redirect(to: "/instructor/\(assignment.publicID)/edit?notice=BrightSpace+grade+item+ID+saved")
     }
 
+    // MARK: - POST /instructor/:assignmentID/secret-reveal
+
+    /// Saves the per-assignment secret-reveal toggle. A dedicated lightweight
+    /// endpoint rather than a field on the main Save form: `saveEditedAssignment`
+    /// closes the assignment and re-enqueues validation on every save, which
+    /// would make a mid-semester toggle flip needlessly destructive. Display
+    /// policy only — no manifest change, no regrade, no close.
+    @Sendable
+    func saveSecretRevealSetting(req: Request) async throws -> Response {
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
+        struct ToggleBody: Content {
+            // Checkbox: "on" when checked, absent from the body when not —
+            // decode as optional and treat absence as false, so unchecking
+            // actually turns the toggle off.
+            var enabled: String?
+        }
+        let enabled = ((try? req.content.decode(ToggleBody.self))?.enabled) != nil
+        try await AssignmentAuthoringService.updateMetadata(
+            assignment, secretRevealEnabled: enabled, on: req.db)
+        await AuditLogger.record(
+            action: .secretRevealToggled,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: ["assignment": assignment.publicID, "enabled": String(enabled)],
+            on: req
+        )
+        return req.redirect(
+            to: "/instructor/\(assignment.publicID)/edit?notice=Secret+reveal+token+setting+saved")
+    }
+
     // MARK: - POST /instructor/:assignmentID/delete
 
     @Sendable
     func deleteAssignment(req: Request) async throws -> Response {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         let setupID = assignment.testSetupID
 
         // Delete related submissions and their result rows for this setup.
@@ -349,10 +419,15 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func deleteUnpublishedSetup(req: Request) async throws -> Response {
+        let caller = try req.auth.require(APIUser.self)
         let setupID = req.parameters.get("setupID") ?? ""
         guard let setup = try await APITestSetup.find(setupID, on: req.db) else {
             throw WebAssignmentError.notFound(resource: "Test setup '\(setupID)'")
         }
+        // Scope the delete to the setup's own course (the :setupID param-taking
+        // route is otherwise drivable cross-course / against an archived course;
+        // the active-course group gate can't see the setup's course) (#417 Slice D).
+        try await requireCourseWriteAccess(caller: caller, courseID: setup.courseID, atLeast: .instructor, db: req.db)
         // Only allow deleting setups that have no associated assignment.
         let hasAssignment =
             try await APIAssignment.query(on: req.db)
@@ -377,7 +452,7 @@ struct InstructorDashboardRoutes: RouteCollection {
 
     @Sendable
     func editPage(req: Request) async throws -> View {
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForStaffRead(req)
         let idStr = assignment.publicID
 
         struct EditQuery: Content {
@@ -446,6 +521,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             achievementSignalOptions: AchievementSignalPresentation.all,
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
+            secretRevealEnabled: assignment.secretRevealEnabled == true,
             notice: q?.notice,
             error: q?.error
         )

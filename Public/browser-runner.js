@@ -63,6 +63,12 @@
                 message: parts.join(';'),
             };
             if (setupID) body.testSetupID = setupID;
+            // Page-build version (the `app-version` meta), so submit breadcrumbs
+            // are attributable to a build like the editor diagnostics. Best-effort.
+            try {
+                const m = document.querySelector('meta[name="app-version"]');
+                if (m && m.content) body.appVersion = String(m.content).slice(0, 32);
+            } catch (_) { /* meta absent — fine */ }
             let csrf = '';
             try { csrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : ''; } catch (_) { /* no token */ }
             fetch('/api/v1/client-diagnostics', {
@@ -244,6 +250,14 @@
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;
             }
+            // Per-student dataset slices (Phase 1 datasets): overwrite the full-source
+            // support file from the zip with the student's personal slice so test
+            // scripts see only their rows. No-op when the response has no personalizedFiles.
+            if (parsed && parsed.personalizedFiles && typeof parsed.personalizedFiles === 'object') {
+                for (const [filename, content] of Object.entries(parsed.personalizedFiles)) {
+                    files[filename] = content;
+                }
+            }
         } catch (_) {
             assignmentSeed = null;  // grade without a seed rather than failing the run
             personalizedInputs = null;
@@ -326,6 +340,28 @@
             // stdout/stderr), which RunnerCore interprets byte-for-byte the way
             // the worker does. No grading logic or interpretation remains in JS.
             if (options.reportPhase) options.reportPhase('suite_started', 'tests=' + suites.length);
+
+            // Probe the grading runtime BEFORE the shared executeSuites loop. If
+            // Pyodide can't initialize at all — e.g. the Pyodide-3.14 WebKit
+            // `call_indirect to a null table entry` trap that bricks grading on
+            // some Safari/iOS builds — abort the whole grade by THROWING here, so
+            // submitBrowserNotebook's catch (notebook.js) fails the submission
+            // over to server-side grading (/submissions/browser-failover → the
+            // native worker backstop). Without this probe the failure is invisible
+            // to the caller: the shared RunnerCore wasm catches each rejected
+            // run() and returns an exit-2 `error` ScriptOutput
+            // (wasm/Sources/RunnerWasm/main.swift, "browser executor: script run
+            // rejected"), so executeSuites COMPLETES with an all-`error`
+            // collection that runAndSubmit then posts as a real 0% result — the
+            // failover never fires and the student is recorded a 0. A per-script
+            // error after a HEALTHY init still flows through as a normal error
+            // outcome, unchanged — only a substrate that can't start fails over.
+            try {
+                await executor.ensureReady();
+            } catch (e) {
+                throw new Error('Browser grading runtime failed to initialize: ' + toMessage(e));
+            }
+
             const outcomes = await globalThis.runnerExecuteSuites(
                 suites, timeLimitSeconds, 1, scriptExists, runScript);
             if (options.reportPhase) options.reportPhase('suite_done', 'n=' + outcomes.length);
@@ -438,6 +474,13 @@
         async run(name, limitSeconds) {
             await this._ensureReady();
             return runRawScript(this.py, this.runnerCore, this.workDir, name, limitSeconds);
+        }
+
+        // Eagerly initialize the runtime so a hard init failure (Pyodide can't
+        // load / env-config throws) surfaces as a thrown error the caller can
+        // fail over on, rather than only surfacing lazily inside the first run().
+        ensureReady() {
+            return this._ensureReady();
         }
 
         async dispose() {
@@ -682,6 +725,14 @@
                 executionTimeMs: Date.now() - startMs,
                 timedOut: false,
             };
+        }
+
+        // Eagerly spawn + init the grading worker so a wedged or trapping Pyodide
+        // init rejects HERE (for the caller to fail over) instead of being
+        // swallowed into per-script `error` outcomes by the wasm run() catch.
+        // Idempotent: shares the cached _ensureWorker() init the run() path uses.
+        ensureReady() {
+            return this._ensureWorker();
         }
 
         async dispose() {
@@ -1437,6 +1488,31 @@ def load_student_module():
     if not _loaded_student_order:
         return None
     return modules.get(_loaded_student_order[0])
+
+
+_student_main_state = None
+
+
+def student_main_state():
+    # The student notebook AS EXECUTED — runs quarantined top-level code once
+    # with run_name="__main__" and caches the namespace; falls back to the
+    # import-mode module when no student file exists or the run fails.
+    global _student_main_state
+    if _student_main_state is not None:
+        return _student_main_state
+    import runpy
+    import types
+
+    files = _ordered_student_files()
+    if not files:
+        return load_student_module()
+    try:
+        namespace = runpy.run_path(str(files[0]), run_name="__main__")
+        _student_main_state = types.SimpleNamespace(**namespace)
+    except Exception:
+        print(traceback.format_exc(), file=sys.stderr)
+        return load_student_module()
+    return _student_main_state
 
 
 def student_source_raw() -> str:

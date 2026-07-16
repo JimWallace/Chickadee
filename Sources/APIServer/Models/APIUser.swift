@@ -15,11 +15,18 @@ import Vapor
 /// The `role` DB column stays a plain string (no migration); this enum is
 /// the authoritative vocabulary for it.
 enum UserRole: String, Sendable {
-    case student
-    case instructor
+    /// The deployment-global role of an ordinary human account (#417). Teaching
+    /// authority is per-course now (`CourseRole` on the enrollment), so the
+    /// deployment role only distinguishes an ordinary `user` from an `admin`
+    /// operator (and the non-human `mcp` service account). The retired global
+    /// `student` / `instructor` roles were folded into `user` by the
+    /// `CollapseUserRoles` migration and are no longer part of the vocabulary; a
+    /// row that still carries one of those legacy strings simply decodes to
+    /// `nil` (`roleValue`), which reads as a non-admin, non-agent user.
+    case user
     case admin
     /// MCP service accounts (admin-provisioned, non-loginable agents).
-    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    /// `mcp` is its own role — it does NOT imply admin.
     case mcp
 }
 
@@ -151,25 +158,24 @@ extension APIUser {
     }
 
     var isAdmin: Bool { roleValue == .admin }
-    var isInstructor: Bool { roleValue == .instructor || roleValue == .admin }
 
     /// True for MCP service accounts (admin-provisioned, non-loginable agents).
-    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    /// `mcp` is its own role — it does NOT imply admin.
     var isMCPAgent: Bool { roleValue == .mcp }
 
     /// Roles that may be assigned automatically at first login (local
     /// registration or SSO mapping).  `mcp` is intentionally excluded: MCP
-    /// service accounts are created only by an admin, so no auto-provisioning
-    /// path can mint an agent identity.
+    /// service accounts are created only by an admin. The retired `student` /
+    /// `instructor` roles are excluded too (#417 Slice G2), so an SSO claim can
+    /// never re-mint them — a first login maps to `user` (or `admin`).
     static let autoAssignableRoles: Set<String> = [
-        UserRole.student.rawValue,
-        UserRole.instructor.rawValue,
+        UserRole.user.rawValue,
         UserRole.admin.rawValue,
     ]
 
     /// Drops a proposed auto-assigned role that isn't in `autoAssignableRoles`
-    /// (notably `mcp`), returning nil so the caller falls back to `student`.
-    /// Defence in depth for the first-login paths.
+    /// (notably `mcp` and the retired `student`/`instructor`), returning nil so
+    /// the caller falls back to `user`. Defence in depth for the first-login paths.
     static func sanitizedAutoAssignedRole(_ proposed: String?) -> String? {
         proposed.flatMap { autoAssignableRoles.contains($0) ? $0 : nil }
     }
@@ -218,20 +224,50 @@ struct UserSessionAuthenticator: AsyncSessionAuthenticator {
 
 // MARK: - Request helper
 
+/// Per-request cache of the course-aware nav context.  `NavCourseContextMiddleware`
+/// populates it once for every authenticated web request so the shared nav
+/// (Instructor link + course tabs) renders on *every* page — including the
+/// course-free ones (admin, account, …) whose handlers only ever build a
+/// `req.currentUserContext`.
+private struct CourseAwareUserContextStorageKey: StorageKey {
+    typealias Value = CurrentUserContext
+}
+
+/// Per-request cache of the resolved active-course state, so the several
+/// callers in one request (the nav middleware, `ActiveCourseStaffMiddleware`,
+/// and the page handler) share a single DB resolution rather than each
+/// re-querying — and so the auto-enroll/session side effects run once.
+private struct ResolvedCourseStateStorageKey: StorageKey {
+    typealias Value = ResolvedCourseState
+}
+
 extension Request {
     /// Returns a Leaf-encodable snapshot of the current user for view contexts.
-    /// Does not include course information; use `courseAwareUserContext()` for pages with tabs.
+    ///
+    /// Prefers the course-aware context resolved once per request by
+    /// `NavCourseContextMiddleware`, so the nav's Instructor link and course
+    /// tabs appear on every rendered page — not just the course-scoped ones.
+    /// Falls back to a course-free snapshot when no middleware has populated the
+    /// cache (e.g. the MCP OAuth consent flow or any non-web request), which
+    /// keeps the historical behaviour for those callers.
     var currentUserContext: CurrentUserContext? {
+        if let cached = storage[CourseAwareUserContextStorageKey.self] { return cached }
         guard let user = auth.get(APIUser.self) else { return nil }
         return CurrentUserContext(user: user)
     }
 
     /// Builds a `CurrentUserContext` populated with course information from the DB.
     /// Call this from any route that needs course tabs or active-course filtering.
+    /// The result is cached on the request so `currentUserContext` and any later
+    /// caller reuse it without re-querying.
     func courseAwareUserContext() async throws -> CurrentUserContext? {
+        if let cached = storage[CourseAwareUserContextStorageKey.self] { return cached }
         guard let user = auth.get(APIUser.self) else { return nil }
         let state = try await resolveActiveCourse(for: user)
-        return CurrentUserContext(user: user, activeCourse: state.active, enrolledCourses: state.all)
+        let context = CurrentUserContext(
+            user: user, activeCourse: state.active, enrolledCourses: state.all)
+        storage[CourseAwareUserContextStorageKey.self] = context
+        return context
     }
 
     private static let activeCourseSessionKey = "activeCourseID"
@@ -239,7 +275,16 @@ extension Request {
     /// Resolves the active course for `user`, consulting the session and DB.
     /// Auto-enrolls the user in every course with enrollmentMode == .auto.
     /// Returns `activeCourseUUID == nil` when the user is not enrolled anywhere.
+    /// Cached per request (the underlying work, including its side effects, runs
+    /// once); see `computeActiveCourse` for the resolution itself.
     func resolveActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
+        if let cached = storage[ResolvedCourseStateStorageKey.self] { return cached }
+        let state = try await computeActiveCourse(for: user)
+        storage[ResolvedCourseStateStorageKey.self] = state
+        return state
+    }
+
+    private func computeActiveCourse(for user: APIUser) async throws -> ResolvedCourseState {
         guard let userID = user.id else {
             return ResolvedCourseState(active: nil, all: [], activeCourseUUID: nil)
         }
@@ -340,23 +385,36 @@ struct CurrentUserContext: Encodable {
     let email: String?
     let role: String
     let isAdmin: Bool
-    let isInstructor: Bool
     /// The course the user is currently viewing (nil if no course info was resolved).
     let activeCourse: CourseContext?
     /// All courses the user is enrolled in (empty if no course info was resolved).
     let enrolledCourses: [CourseContext]
     /// True when the user is enrolled in more than one course (tab strip should show).
     let showCourseTabs: Bool
-    /// True when the user acts as an instructor *in the active course*: that
-    /// course's per-course role is `.instructor`, or the user is a global
-    /// instructor/admin (the transitional fallback, kept until the global role
-    /// is shrunk in Phase 5). The nav's Instructor tab keys off this instead
-    /// of the bare global `isInstructor`, so once per-course roles are
-    /// authorable (Phase 4) switching the active course switches the same
-    /// account between instructor and student views. Behaviour-neutral today:
-    /// every enrollment's role mirrors the global role, so this equals the
-    /// previous `isInstructor && activeCourse != nil`.
-    let isInstructorInActiveCourse: Bool
+    /// True when the user is *staff* (TA or instructor, or an admin) in the
+    /// active course. The nav's Instructor tab keys off this; the finer
+    /// per-action floor (`ta` vs `instructor`) is enforced server-side (#417
+    /// Slice E). Renamed from `isInstructorInActiveCourse` in #1127 — the old
+    /// name predated the TA rung and had come to mean "staff".
+    let isStaffInActiveCourse: Bool
+    /// Every enrolled course where the user is staff (role ≥ `.ta`), plus
+    /// *all* enrolled courses for an admin (who instructs the whole
+    /// deployment). Drives the nav's Instructor surface so staff always have
+    /// a direct link into each course they teach, regardless of which course
+    /// is currently active. Inherits the code-sorted order of
+    /// `enrolledCourses`.
+    let staffCourses: [CourseContext]
+    /// True when `staffCourses` is non-empty — the user is staff in at least
+    /// one enrolled course. The nav's Instructor entry shows whenever this is
+    /// true, not only when the *active* course happens to be one they teach.
+    let isStaffAnywhere: Bool
+    /// True when the user is staff in more than one course, so the nav should
+    /// render the per-course Instructor strip (mirrors `showCourseTabs`).
+    let showStaffTabs: Bool
+    /// The single course this user staffs, when there is exactly one — the
+    /// nav renders one direct "Instructor" link for it instead of a strip.
+    /// nil when they staff zero or many courses.
+    let primaryStaffCourse: CourseContext?
 
     init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
@@ -375,11 +433,22 @@ struct CurrentUserContext: Encodable {
         self.email = email
         self.role = user.role
         self.isAdmin = user.isAdmin
-        self.isInstructor = user.isInstructor
         self.activeCourse = activeCourse
         self.enrolledCourses = enrolledCourses
         self.showCourseTabs = enrolledCourses.count > 1
-        self.isInstructorInActiveCourse =
-            activeCourse != nil && (activeCourse?.role == .instructor || user.isAdmin)
+        // Staff (TA or instructor) in the active course see the Instructor
+        // surface; the finer per-action floor is enforced server-side (#417
+        // Slice E).
+        self.isStaffInActiveCourse =
+            activeCourse != nil && ((activeCourse?.role ?? .student) >= .ta || user.isAdmin)
+        // An admin instructs the whole deployment, so every enrollment counts;
+        // everyone else, every course where they are staff (TA or instructor).
+        // Order follows `enrolledCourses` (code-sorted).
+        let staffCourses =
+            user.isAdmin ? enrolledCourses : enrolledCourses.filter { $0.role >= .ta }
+        self.staffCourses = staffCourses
+        self.isStaffAnywhere = !staffCourses.isEmpty
+        self.showStaffTabs = staffCourses.count > 1
+        self.primaryStaffCourse = staffCourses.count == 1 ? staffCourses[0] : nil
     }
 }

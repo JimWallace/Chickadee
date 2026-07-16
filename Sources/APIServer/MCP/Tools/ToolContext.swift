@@ -6,6 +6,7 @@
 // bearer middleware in PR B; ungated PR-A callers receive the full content
 // scope set).
 
+import Core
 import Fluent
 import Vapor
 
@@ -40,6 +41,20 @@ struct ToolContext {
     var db: any Database {
         request.application.usesDedicatedMCPDatabase ? request.db(.mcp) : request.db
     }
+
+    /// The privileged (owner) database pool — always the shared default pool,
+    /// never the least-privilege `.mcp` pool. Use this for acting-user
+    /// bookkeeping that is a *side effect* of an MCP call but is NOT
+    /// agent-facing content access — e.g. ensuring the acting account's own
+    /// per-assignment personalization seed (`assignment_personalization_seeds`,
+    /// a table the `chickadee_mcp` role is deliberately denied). This mirrors
+    /// the content-edit re-grade in `ContentEditClose.swift`, which likewise
+    /// runs its student-row regrade on `request.db`. All *content* reads and
+    /// writes stay on `db` (the `.mcp` pool when configured) so the
+    /// student-data wall holds. With no dedicated MCP pool configured this is
+    /// the same connection as `db`, so behaviour is unchanged.
+    var mainDB: any Database { request.db }
+
     var logger: Logger { request.logger }
 
     /// Resolves the token subject and confirms it may use the MCP interface at
@@ -56,7 +71,15 @@ struct ToolContext {
         else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Unknown token subject.")
         }
-        guard user.isInstructor || user.isMCPAgent else {
+        // MCP eligibility is coarse: course staff (TA+ in any course) or an
+        // `mcp` service account — never a plain student. Per-course access is
+        // enforced separately (and per-course) by `authorizeCourseAccess`, so
+        // this gate never widens what a caller can actually touch (#417).
+        var eligible = user.isMCPAgent
+        if !eligible {
+            eligible = try await isStaffAnywhere(user, db: db)
+        }
+        guard eligible else {
             throw MCPToolError.notAuthorized(
                 tool: tool, detail: "Students may not use the MCP interface.")
         }
@@ -70,8 +93,11 @@ struct ToolContext {
     /// further than the courses its human is enrolled in (the dashboard tab
     /// strip): enrolling widens an agent's reach, and unenrolling revokes it on
     /// the next call, since the enrollment row is re-checked per request.
-    /// Throws `MCPToolError.notAuthorized` otherwise.
-    func authorizeCourseAccess(_ courseID: UUID, tool: String) async throws {
+    /// Throws `MCPToolError.notAuthorized` otherwise. Returns the resolved
+    /// acting user so downstream policy checks and attribution don't have to
+    /// re-resolve the subject (#1113).
+    @discardableResult
+    func authorizeCourseAccess(_ courseID: UUID, tool: String) async throws -> APIUser {
         let user = try await requireEligibleSubject(tool: tool)
         guard let userID = user.id else {
             throw MCPToolError.notAuthorized(tool: tool, detail: "Token subject is not a valid user.")
@@ -81,6 +107,7 @@ struct ToolContext {
                 tool: tool,
                 detail: "The MCP account is not enrolled in the target course.")
         }
+        return user
     }
 
     // MARK: - Assignment resolution
@@ -106,14 +133,87 @@ struct ToolContext {
         return assignment
     }
 
+    /// Authorizes a *write* to `courseID`: the acting subject must pass
+    /// `authorizeCourseAccess` (MCP-eligible + enrolled, admin included), hold a
+    /// per-course role of at least `atLeast`, AND the course must not be archived
+    /// (admins exempt from both role and archive checks). Content-editing tools
+    /// pass the `.ta` floor, course-lifecycle/structure tools pass `.instructor`
+    /// (explicitly — no default, #1113), so an agent acting for a TA can author
+    /// content but not run the course, exactly matching the web (#417). The
+    /// policy itself is the shared `evaluateCourseWrite` core — one
+    /// implementation for the web and MCP surfaces — this wrapper only maps the
+    /// denial to `MCPToolError`. The single chokepoint every MCP write resolver
+    /// funnels through; the *read* resolvers stay on `authorizeCourseAccess`
+    /// (enrollment only) so archived courses remain readable (#417 Slice D-MCP).
+    func authorizeCourseWriteAccess(
+        _ courseID: UUID, tool: String, atLeast minimum: CourseRole
+    ) async throws {
+        let user = try await authorizeCourseAccess(courseID, tool: tool)
+        switch try await evaluateCourseWrite(user: user, courseID: courseID, atLeast: minimum, db: db) {
+        case nil:
+            return
+        case .notEnrolled:
+            throw MCPToolError.notAuthorized(
+                tool: tool, detail: "The MCP account is not enrolled in the target course.")
+        case .roleTooLow(let held, let required):
+            throw MCPToolError.notAuthorized(
+                tool: tool,
+                detail:
+                    "This action requires the \(required.rawValue) role in the course; the MCP account holds \(held.rawValue)."
+            )
+        case .courseMissing:
+            throw MCPToolError.invalidArguments(
+                tool: tool, detail: "The target course could not be found.")
+        case .archived:
+            throw MCPToolError.notAuthorized(
+                tool: tool, detail: "This course is archived and is read-only.")
+        }
+    }
+
+    /// Like `authorizedAssignment`, but authorizes a *write* to the assignment's
+    /// own course (`authorizeCourseWriteAccess`: per-course access + archived
+    /// block, admin-exempt). Archived courses are already hidden from the MCP
+    /// listing/resource surface, so this closes the by-public-ID write path an
+    /// agent could still reach with a remembered id (#417 Slice C/D-MCP).
+    func authorizedAssignmentForWrite(
+        publicID: String, tool: String, atLeast minimum: CourseRole
+    ) async throws -> APIAssignment {
+        let assignment = try await requireAssignment(publicID: publicID, tool: tool)
+        try await authorizeCourseWriteAccess(assignment.courseID, tool: tool, atLeast: minimum)
+        return assignment
+    }
+
     /// Resolves and authorizes the assignment, then loads its test setup,
     /// throwing the standard `invalidArguments` error if the setup is missing.
+    /// READ entry point — the archived block is NOT applied, so the read tools
+    /// (`get_suite`, `get_notebook`, `get_achievements`, `get_global_inputs`,
+    /// `get_support_files`, `preview_personalization`) that route through it keep
+    /// working on archived courses. Mutating tools use
+    /// `authorizedAssignmentAndSetupForWrite`.
     func authorizedAssignmentAndSetup(
         publicID: String, tool: String
     ) async throws
         -> (assignment: APIAssignment, setup: APITestSetup)
     {
         let assignment = try await authorizedAssignment(publicID: publicID, tool: tool)
+        guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
+            throw MCPToolError.invalidArguments(
+                tool: tool, detail: "The assignment's test setup could not be found.")
+        }
+        return (assignment, setup)
+    }
+
+    /// Write variant of `authorizedAssignmentAndSetup`: authorizes a write to the
+    /// assignment's own course (archived block) before loading the setup. Every
+    /// content-mutating suite/manifest/notebook tool resolves through this so an
+    /// agent can't edit an archived course's content by id (#417 Slice D-MCP).
+    func authorizedAssignmentAndSetupForWrite(
+        publicID: String, tool: String, atLeast minimum: CourseRole
+    ) async throws
+        -> (assignment: APIAssignment, setup: APITestSetup)
+    {
+        let assignment = try await authorizedAssignmentForWrite(
+            publicID: publicID, tool: tool, atLeast: minimum)
         guard let setup = try await APITestSetup.find(assignment.testSetupID, on: db) else {
             throw MCPToolError.invalidArguments(
                 tool: tool, detail: "The assignment's test setup could not be found.")

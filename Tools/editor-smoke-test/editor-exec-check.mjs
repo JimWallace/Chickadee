@@ -18,6 +18,28 @@
 // data-status, and console errors, so a hung run is diagnostic rather than a
 // black box.
 //
+// THREE failure classes, classified and counted separately:
+//   - deadlock      — our-code post-idle exec_hang (the bug this probe hunts);
+//                     FAILS the leg (exit 1).
+//   - webkitWasmCrash — the upstream WebKit/Safari WASM engine crash
+//                     ("Out of bounds memory access" in __pyproxy_apply, WebKit
+//                     bug #286266). NOT a Chickadee regression and not fixable in
+//                     our JS; reported but does NOT fail the leg, so WebKit's own
+//                     bug can't flake this diagnostic.
+//   - lostDispatch  — the first Shift+Enter never started the cell (indicator
+//                     stays idle, no busy phase, no exec_hang beacon) but a
+//                     SECOND press runs it promptly: the kernel was healthy and
+//                     the keypress was lost (focus race around the post-idle
+//                     window). A different bug class than the sustained-busy
+//                     hang — reported loudly but does NOT fail the leg, so the
+//                     deadlock signal stays clean (2026-07-02 chromium repro:
+//                     hangs=1/8 with indicator=idle exec_hang=none).
+// Each iteration uses a FRESH browser: one WebKit process accumulates WASM /
+// TextDecoder state across back-to-back kernel boots, inflating the WebKit crash
+// rate well above a real student (one kernel per session). Fresh-per-run makes the
+// measured rate a true single-session figure — production telemetry corroborates
+// that real Safari students rarely hit it.
+//
 // DIAGNOSTIC harness — run via the `editor-exec-probe` workflow, deliberately NOT
 // wired into the required editor-smoke gate while we hunt the root cause, so an
 // intermittent hang can't flake the merge gate. Seeds through the real HTTP API
@@ -53,6 +75,15 @@ const IDLE_WAIT_MS = 90_000;
 // so polling for the latter detects execution, never the source.
 const EXEC_TOKEN = "CKEXEC=42";
 const NB_CELL_SOURCE = 'print("CKEXEC=%d" % (6 * 7))\n';
+
+// The fatal upstream WebKit/Safari WASM crash (WebKit bug #286266): Pyodide's
+// kernel dies mid-execute with "RuntimeError: Out of bounds memory access
+// (evaluating '__pyproxy_apply(...)')" (and the sibling "RangeError: Bad value").
+// It's a Safari WASM-engine defect, NOT a Chickadee regression and NOT fixable in
+// our JS — zero non-WebKit occurrences are reported upstream. We classify a hang
+// caused by it separately from a real (our-code) post-idle deadlock so the probe
+// stays honest: a pure-WebKit-crash run is reported but does NOT fail the leg.
+const WASM_CRASH_RE = /out of bounds memory access|Pyodide has suffered a fatal error|__pyproxy_apply|RangeError: Bad value/i;
 
 const STAMP = Date.now().toString(36);
 const INSTRUCTOR = { username: `xq_instr_${STAMP}`, password: "instructor-pw-123" };
@@ -178,10 +209,35 @@ async function probeOnce(browser, storageState, notebookURL) {
   });
   const page = await context.newPage();
   const errors = [];
-  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 200)); });
+  // Console "Failed to load resource" messages don't carry the URL in their
+  // text (the 2026-07-02 chromium hang printed four bare 403s — evidence
+  // wasted); attach the location URL so a failing resource is identifiable.
+  page.on("console", (m) => {
+    if (m.type() !== "error") return;
+    const loc = m.location();
+    const url = loc && loc.url ? ` [${loc.url}]` : "";
+    errors.push((m.text() + url).slice(0, 300));
+  });
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
+  // Network-level forensics, independent of what the console reports: every
+  // >=400 response and every outright-failed request, for ALL iterations —
+  // printing them only on hangs made ambient 4xx noise look hang-correlated.
+  const badResponses = [];
+  page.on("response", (res) => {
+    if (res.status() >= 400) {
+      badResponses.push(`${res.status()} ${res.request().method()} ${res.url()}`.slice(0, 220));
+    }
+  });
+  page.on("requestfailed", (req) => {
+    const why = (req.failure() && req.failure().errorText) || "";
+    badResponses.push(`FAIL ${req.method()} ${req.url()} ${why}`.slice(0, 220));
+  });
 
-  const result = { hung: true, ms: 0, status: null, note: "", diag: [], errors };
+  const result = {
+    hung: true, wasmCrash: false, lostDispatch: false, dialogStole: false,
+    bootStall: false, dialogText: "", ms: 0, status: null,
+    note: "", diag: [], errors, badResponses, cellState: "",
+  };
   const readDiag = () => page.evaluate(() => window.__ckKernelDiag || []).catch(() => []);
   try {
     await page.goto(notebookURL, { waitUntil: "domcontentloaded", timeout: PAGE_LOAD_MS });
@@ -209,7 +265,16 @@ async function probeOnce(browser, storageState, notebookURL) {
       if (diag.some((d) => d.kind === "kernel_phase" && d.source === "kernel_idle")) { sawIdle = true; break; }
       await page.waitForTimeout(500);
     }
-    if (!sawIdle) { result.note = "kernel never reported idle"; result.diag = await readDiag(); return result; }
+    if (!sawIdle) {
+      // Kernel never reached idle within the window — a BOOT-stall, a distinct
+      // phenomenon from a post-idle exec hang (matches production's boot→idle
+      // funnel drop). Classified separately so the deadlock bucket means only
+      // "reached idle, then the execute wedged."
+      result.note = "kernel never reported idle";
+      result.bootStall = true;
+      result.diag = await readDiag();
+      return result;
+    }
 
     if (EXEC_DELAY_MS > 0) await page.waitForTimeout(EXEC_DELAY_MS);
 
@@ -225,15 +290,80 @@ async function probeOnce(browser, storageState, notebookURL) {
     while (Date.now() - start < EXEC_BUDGET_MS) {
       const body = await jlFrame.evaluate(() => (document.body && document.body.innerText) || "").catch(() => "");
       if (body.includes(EXEC_TOKEN)) { ran = true; break; }
+      // Bail early on the upstream WebKit WASM crash rather than waiting out the
+      // full budget — the kernel is dead, the token will never appear.
+      if ((result.errors || []).some((e) => WASM_CRASH_RE.test(e))) { result.wasmCrash = true; break; }
       await page.waitForTimeout(500);
     }
     result.ms = Date.now() - start;
     result.hung = !ran;
+    if (!result.wasmCrash) result.wasmCrash = (result.errors || []).some((e) => WASM_CRASH_RE.test(e));
     result.status = await jlFrame.evaluate(() => {
       const ind = document.querySelector(".jp-Notebook-ExecutionIndicator[data-status]");
       return ind ? ind.getAttribute("data-status") : null;
     }).catch(() => null);
     result.diag = await readDiag();
+
+    if (result.hung && !result.wasmCrash) {
+      // Cell + focus state at the moment the budget expired: prompt "[*]"
+      // means the execute was dispatched and is stuck (the sustained-busy
+      // class); "[ ]" with an idle indicator means it was never dispatched.
+      result.cellState = await jlFrame.evaluate(() => {
+        const cell = document.querySelector(".jp-Notebook .jp-CodeCell");
+        const prompt = cell ? ((cell.querySelector(".jp-InputPrompt") || {}).textContent || "").trim() : "no-cell";
+        const out = cell ? ((cell.querySelector(".jp-OutputArea") || {}).innerText || "").trim().slice(0, 60) : "";
+        const activeEl = document.activeElement;
+        const active = activeEl ? String(activeEl.className || activeEl.tagName).slice(0, 60) : "none";
+        return `prompt="${prompt}" docFocus=${document.hasFocus()} active="${active}" out="${out}"`;
+      }).catch(() => "unavailable");
+
+      // A modal JupyterLab dialog (`.jp-Dialog`) intercepts keyboard focus, so
+      // Shift+Enter never reaches the cell — the cell prompt stays "[ ]" and the
+      // active element is a `jp-Dialog-button` (observed 2026-07-02 chromium:
+      // the folder-creation 403s / insertWidget error surface an error dialog).
+      // This is a distinct, student-facing bug ("I pressed run and nothing
+      // happened") from a wedged kernel; capture WHICH dialog and dismiss it so
+      // the second-press discriminator can confirm the kernel underneath is
+      // healthy.
+      result.dialogText = await jlFrame.evaluate(() => {
+        const dialog = document.querySelector(".jp-Dialog");
+        if (!dialog) return "";
+        const header = (dialog.querySelector(".jp-Dialog-header") || {}).textContent || "";
+        const body = (dialog.querySelector(".jp-Dialog-body") || {}).textContent || "";
+        return (header + " | " + body).trim().slice(0, 200);
+      }).catch(() => "");
+      if (result.dialogText) {
+        // Dismiss the dialog (Escape, then reject-button fallback) before the
+        // retry so the keypress can reach the cell.
+        await jlFrame.evaluate(() => {
+          const btn = document.querySelector(".jp-Dialog-button.jp-mod-reject")
+            || document.querySelector(".jp-Dialog-button");
+          if (btn) btn.click();
+        }).catch(() => {});
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(500);
+      }
+
+      // Discriminator: lost keypress / dialog-steal vs wedged kernel. If a
+      // second Shift+Enter (after any dialog is dismissed) runs the cell
+      // promptly, the kernel was healthy the whole time and the FIRST dispatch
+      // never landed — a focus problem, not a deadlock.
+      try {
+        const cellAgain = jlFrame.locator(".jp-Notebook .jp-CodeCell .cm-content").first();
+        await cellAgain.click({ timeout: 5_000 });
+        await cellAgain.press("Shift+Enter");
+        const retryStart = Date.now();
+        while (Date.now() - retryStart < 15_000) {
+          const body = await jlFrame.evaluate(() => (document.body && document.body.innerText) || "").catch(() => "");
+          if (body.includes(EXEC_TOKEN)) {
+            if (result.dialogText) result.dialogStole = true;
+            else result.lostDispatch = true;
+            break;
+          }
+          await page.waitForTimeout(500);
+        }
+      } catch { /* second press unavailable — leave classification as deadlock */ }
+    }
   } catch (e) {
     result.note = `exception: ${(e && e.message) || e}`;
   } finally {
@@ -254,30 +384,111 @@ async function main() {
     browserName === "chromium"
       ? { headless: true, args: ["--no-sandbox"], chromiumSandbox: false }
       : { headless: true };
-  const browser = await browserType.launch(launchOptions);
 
   let hangs = 0;
+  let wasmCrashes = 0;
+  let deadlocks = 0;
+  let lostDispatches = 0;
+  let dialogSteals = 0;
+  let bootStalls = 0;
   const latencies = [];
   for (let i = 0; i < ITER; i++) {
-    const r = await probeOnce(browser, seeded.storageState, notebookURL);
+    // Fresh browser per iteration. A single WebKit process accumulates WASM /
+    // TextDecoder state across back-to-back Pyodide boots, which inflates the
+    // upstream WebKit crash rate far above a real student's one-kernel-per-
+    // session experience. Relaunching isolates each run so the measured rate
+    // reflects a single session (chromium is unaffected either way).
+    const browser = await browserType.launch(launchOptions);
+    let r;
+    try { r = await probeOnce(browser, seeded.storageState, notebookURL); }
+    finally { await browser.close().catch(() => {}); }
     if (r.hung) {
       hangs++;
+      if (r.wasmCrash) wasmCrashes++;
+      else if (r.bootStall) bootStalls++;
+      else if (r.dialogStole) dialogSteals++;
+      else if (r.lostDispatch) lostDispatches++;
+      else deadlocks++;
       const exec = (r.diag || []).find((d) => d.source === "exec_hang");
+      const tag = r.wasmCrash
+        ? "WEBKIT-WASM-CRASH (upstream #286266)"
+        : r.bootStall
+          ? "BOOT-STALL (kernel never reached idle — a boot failure, not a post-idle hang)"
+          : r.dialogStole
+            ? "DIALOG-STEAL (modal dialog swallowed the keypress; cell ran after dismiss)"
+            : r.lostDispatch
+              ? "LOST-DISPATCH (second press ran — kernel healthy, first keypress lost)"
+              : "HANG";
       console.log(
-        `  iter ${i + 1}/${ITER}: HANG${r.note ? " (" + r.note + ")" : ""} — ` +
+        `  iter ${i + 1}/${ITER}: ${tag}${r.note ? " (" + r.note + ")" : ""} — ` +
           `indicator=${r.status} waited=${r.ms}ms exec_hang=${exec ? exec.message : "none"}`
       );
+      if (r.cellState) console.log(`    cell: ${r.cellState}`);
+      if (r.dialogText) console.log(`    dialog: ${r.dialogText}`);
       if (r.errors && r.errors.length) console.log(`    console: ${r.errors.slice(0, 4).join(" | ")}`);
+      if (r.badResponses && r.badResponses.length) {
+        console.log(`    http: ${r.badResponses.slice(0, 6).join(" | ")}`);
+      }
     } else {
       latencies.push(r.ms);
-      console.log(`  iter ${i + 1}/${ITER}: ok — ran in ${r.ms}ms (indicator=${r.status})`);
+      // Compact per-iteration noise summary even on green runs: without the
+      // base rate, ambient 4xx noise printed only on hangs looks correlated.
+      console.log(
+        `  iter ${i + 1}/${ITER}: ok — ran in ${r.ms}ms ` +
+          `(indicator=${r.status}, net4xx=${(r.badResponses || []).length}, consoleErr=${(r.errors || []).length})`
+      );
+    }
+    // Identify the ambient noise once per run (it is constant per engine:
+    // chromium 11x4xx/6err, webkit 4x4xx/6err on 2026-07-02): the deduped
+    // URL set turns "net4xx=11" from a count into a diagnosis.
+    if (i === 0) {
+      const uniqueBad = [...new Set(r.badResponses || [])];
+      const uniqueErr = [...new Set(r.errors || [])];
+      if (uniqueBad.length) console.log(`  ambient http (iter 1): ${uniqueBad.join(" | ")}`);
+      if (uniqueErr.length) console.log(`  ambient console (iter 1): ${uniqueErr.join(" | ")}`);
     }
   }
-  await browser.close();
 
   const avg = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : 0;
-  console.log(`EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ok=${ITER - hangs} avgRunMs=${avg}`);
-  process.exit(hangs > 0 ? 1 : 0);
+  console.log(
+    `EXEC PROBE RESULT — engine=${browserName} hangs=${hangs}/${ITER} ` +
+      `(deadlock=${deadlocks}, bootStall=${bootStalls}, dialogSteal=${dialogSteals}, ` +
+      `lostDispatch=${lostDispatches}, webkitWasmCrash=${wasmCrashes}) ok=${ITER - hangs} avgRunMs=${avg}`
+  );
+  if (bootStalls > 0) {
+    console.log(
+      `NOTE: ${bootStalls}/${ITER} run(s) never reached kernel_idle (boot-stall) — a boot-funnel ` +
+        `failure distinct from the post-idle exec hang this probe hunts, matching production's ` +
+        `boot→idle drop. Reported separately so the deadlock count means only post-idle wedges.`
+    );
+  }
+  if (dialogSteals > 0) {
+    console.log(
+      `NOTE: ${dialogSteals}/${ITER} run(s) had a modal dialog swallow the first Shift+Enter ` +
+        `(the cell ran after the dialog was dismissed — kernel healthy). Student-facing: an ` +
+        `error/confirm dialog over the editor makes the first run do nothing. See the per-iter ` +
+        `"dialog:" line for which dialog; likely tied to the folder-creation 403s / insertWidget error.`
+    );
+  }
+  if (lostDispatches > 0) {
+    console.log(
+      `NOTE: ${lostDispatches}/${ITER} run(s) lost the first Shift+Enter (a second press ran fine — ` +
+        `kernel healthy). This is a post-idle focus race, not the sustained-busy exec_hang; it is ` +
+        `student-facing ("I pressed run and nothing happened") and tracked separately so the ` +
+        `deadlock signal stays clean.`
+    );
+  }
+  if (wasmCrashes > 0) {
+    console.log(
+      `NOTE: ${wasmCrashes}/${ITER} run(s) hit the upstream WebKit/Safari WASM crash ` +
+        `(WebKit bug #286266: "Out of bounds memory access" in __pyproxy_apply) — not a Chickadee ` +
+        `regression, not fixable in our JS. Fresh-browser-per-run, so this is the true single-session rate.`
+    );
+  }
+  // Fail the leg ONLY for a real (our-code) post-idle deadlock; an upstream
+  // WebKit WASM crash or a lost first keypress (kernel healthy, different bug
+  // class) is reported but must not flake this diagnostic.
+  process.exit(deadlocks > 0 ? 1 : 0);
 }
 
 main();

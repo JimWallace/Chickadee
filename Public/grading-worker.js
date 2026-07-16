@@ -129,7 +129,7 @@ self.onmessage = async function (e) {
 // stderr }.  No timeout here — the main thread races + terminates.  The exec
 // snippet, stdout/stderr capture, and exit-code derivation are byte-identical to
 // browser-runner.js's runPyScriptRaw (drift-guarded).
-async function runPyScript(py, scriptName, timeLimitSeconds) {
+async function runPyScript(py, scriptName, _timeLimitSeconds) {
     var src = null;
     try { src = py.FS.readFile(_workDir + '/' + scriptName, { encoding: 'utf8' }); }
     catch (e) { src = null; }

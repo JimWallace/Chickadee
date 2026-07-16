@@ -45,7 +45,12 @@ enum AdminMCPServerInstructions {
         number. tools/list only shows the tools your grant's scope covers.
 
         What's available, by area:
-        - Deployment: get_deployment_info (version + capability surface).
+        - Deployment: get_deployment_info (version + capability surface); \
+        get_deploy_status (the zero-downtime auto-deploy daemon's current state — \
+        live version, latest release seen, paused flag, pending major approval) \
+        and get_deploy_history (recent deploy / rollback events). Both are \
+        read-only views of the daemon's status files; deploy control \
+        (pause/approve/rollback) is a host-side action, not exposed here.
         - Runners: list_runners (the fleet) and get_runner_detail (one runner's \
         capability profile + aggregate per-stage timing + cache-hit rate + \
         recent snapshots — never the per-job rows).

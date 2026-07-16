@@ -66,4 +66,38 @@ import VaporTesting
                 })
         }
     }
+
+    /// An assignment with no class-goal achievements must not render the
+    /// "Class goals" header on the submission page — the section is gated on a
+    /// non-empty goal list. (The default manifest carries only individual /
+    /// record built-ins, never a class goal.)
+    @Test func submissionPageHidesClassGoalsHeaderWhenNone() async throws {
+        try await withWebRoutesApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let student = try await wrStudentUser(on: app)
+            try await wrEnrollUser(student, on: app)
+            try await wrInsertSetup(id: "nocg_setup", on: app)
+            _ = try await wrInsertAssignment(
+                testSetupID: "nocg_setup", title: "No Goals", isOpen: true, on: app)
+            _ = try await wrInsertSubmission(
+                id: "nocg_sub", testSetupID: "nocg_setup", userID: try student.requireID(), on: app)
+            _ = try await wrInsertResult(
+                submissionID: "nocg_sub", outcomes: [wrMakeOutcome(name: "t1", status: .pass)], on: app)
+
+            try await app.asyncTest(
+                .GET, "/submissions/nocg_sub",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = res.body.string
+                    // The "Class goals" heading text appears only inside the
+                    // rendered <h2>; the section's opening tag only when the
+                    // block renders. (The `.class-goals-block` CSS selector
+                    // lives in an always-present <style> block, so we must not
+                    // assert on the bare class name.)
+                    #expect(!body.contains("Class goals"))
+                    #expect(!body.contains(#"<section class="class-goals-block">"#))
+                })
+        }
+    }
 }

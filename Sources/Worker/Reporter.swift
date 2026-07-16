@@ -51,6 +51,18 @@ struct Reporter: Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Total-size budget (#1157): per-stream capture is already capped at
+        // 1 MB, but a many-test suite with verbose failures could exceed the
+        // server's ingest limit and the whole report was rejected — the
+        // submission never resolved. Truncate longResults across the
+        // collection instead (statuses and aggregates untouched); the
+        // collection carries a visible warning when anything was cut.
+        var report = report
+        let (bounded, didTruncate) = report.collection.truncatingOversizedOutput()
+        if didTruncate {
+            report = WorkerExecutionReport(collection: bounded, diagnostics: report.diagnostics)
+        }
+
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         do { request.httpBody = try encoder.encode(report) } catch { throw .transportError(error) }

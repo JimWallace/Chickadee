@@ -19,6 +19,11 @@
 //                               lookup.  Whitelist-only: the auth-guarded
 //                               /jupyterlite/…/files/users/ paths are not
 //                               listed and still ride the full chain below.
+//   RequestTimingMiddleware — records request_metrics rows (admin dashboard
+//                               + get_request_metrics MCP tool). Below the
+//                               asset fast path, above sessions so timings
+//                               include the session/auth cost. Idle runner
+//                               check-ins are excluded from persistence.
 //   sessions.middleware
 //   UserSessionAuthenticator
 //   SessionIdleTimeoutMiddleware — runs before UserActivityMiddleware
@@ -103,6 +108,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
         EditorAssetFastPathMiddleware(
             publicDirectory: app.directory.publicDirectory,
             crossOriginIsolation: true))
+    // Request timing feeds the request_metrics table behind the admin
+    // dashboard and the get_request_metrics diagnostic tool.  It sits below
+    // the editor-asset fast path (a JupyterLite boot's asset storm never
+    // reaches it) and above the session chain so measured durations include
+    // the real per-request session/auth cost.  recordRequestMetric gates
+    // persistence to /api/*, /submissions/*, /testsetups/* (everything under
+    // VERBOSE_REQUEST_TIMING) and skips idle runner check-ins, so hot-path
+    // worker polls don't turn into per-poll INSERTs.  (Shipped in v0.4.573
+    // but never registered — the metrics pipeline had been silently empty.)
+    app.middleware.use(RequestTimingMiddleware())
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {
@@ -173,6 +188,14 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // existing Cache-Control.
     app.middleware.use(StaticAssetCacheMiddleware())
     app.middleware.use(RunnerWasmCacheMiddleware())
+    // Cache discipline for the editor bundle assets that ride the SLOW path
+    // (FileMiddleware) rather than EditorAssetFastPathMiddleware — notably
+    // /jupyterlite/jupyter-lite.json and the lab/notebooks/repl entry HTML, whose
+    // stable filenames hide mutable content. Stamps `no-cache` so a deploy
+    // propagates on the next load; immutable only for content-hashed chunks. The
+    // fast path stamps the build/extensions/pyodide trees itself (it
+    // short-circuits before this runs); this covers what falls through to it.
+    app.middleware.use(BundleAssetCacheMiddleware())
     // Cross-origin isolation for the notebook editor (unconditional). This
     // middleware runs BEFORE FileMiddleware so it can decorate the SLOW-PATH
     // /jupyterlite/* responses FileMiddleware serves (the editor HTML documents —
@@ -180,6 +203,21 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
     // path above isolates the vendored asset trees it serves itself, and
     // COEPMiddleware (after FileMiddleware) covers the dynamic notebook page.
     app.middleware.use(NotebookAssetIsolationMiddleware(enabled: true))
+    // Inject the `exposeAppInBrowser` PageConfig flag into the served JupyterLite
+    // jupyter-lite.json configs (kept OUT of the verified bundle — see the
+    // middleware). Runs just before FileMiddleware so it intercepts the static
+    // config fetch; the cache + isolation middlewares above still decorate its
+    // response on the way back.
+    app.middleware.use(
+        JupyterLiteConfigFlagMiddleware(publicDirectory: app.directory.publicDirectory))
+    // JupyterLite (Notebook 7) opens documents at canonical URLs like
+    // `/jupyterlite/notebooks?path=…` with no `/index.html` — it assumes the host
+    // rewrites an app directory to its index (a real Jupyter server / nginx
+    // try_files). Our static FileMiddleware doesn't, so those URLs 404 (e.g. a
+    // notebook opened in a new tab). Redirect the app dirs to their index.html,
+    // preserving the query, so the app loads. Runs just before FileMiddleware,
+    // which would otherwise 404 the bare directory.
+    app.middleware.use(JupyterLiteAppIndexMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(COEPMiddleware(isolateNotebook: true))
 }

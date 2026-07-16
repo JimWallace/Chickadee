@@ -165,10 +165,7 @@ struct CreatePatternFamilyTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "id": .object([
                 "type": .string("string"),
                 "description": .string("New family id (unique; must not already exist)."),
@@ -190,16 +187,11 @@ struct CreatePatternFamilyTool: ContentTool {
                 "description": .string("Student function the family calls (omit for variable_equality)."),
             ]),
             "paramNames": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Parameter names, in order (drives arg-count validation)."),
             ]),
-            "defaultTier": .object([
-                "type": .string("string"),
-                "enum": .array([
-                    .string("public"), .string("release"), .string("secret"), .string("student"),
-                ]),
-            ]),
-            "defaultPoints": .object(["type": .string("integer")]),
+            "defaultTier": MCPSchema.tierEnum(),
+            "defaultPoints": MCPSchema.integer,
             "defaultHint": .object([
                 "type": .string("string"),
                 "description": .string(
@@ -221,7 +213,7 @@ struct CreatePatternFamilyTool: ContentTool {
                 "description": .string("Existing section id to group under; omit for ungrouped."),
             ]),
             "dependsOn": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string("Prerequisite script names or family:<id> tokens."),
             ]),
             "variables": .object([
@@ -230,7 +222,7 @@ struct CreatePatternFamilyTool: ContentTool {
                 "items": .object([
                     "type": .string("object"),
                     "properties": .object([
-                        "name": .object(["type": .string("string")]),
+                        "name": MCPSchema.string,
                         "value": .object(["description": .string("Any JSON value.")]),
                     ]),
                     "required": .array([.string("name"), .string("value")]),
@@ -247,7 +239,7 @@ struct CreatePatternFamilyTool: ContentTool {
                             "type": .string("string"),
                             "description": .string("Unique case key (also part of the generated filename)."),
                         ]),
-                        "label": .object(["type": .string("string")]),
+                        "label": MCPSchema.string,
                         "args": .object([
                             "type": .string("array"),
                             "description": .string("Args in parameter order (raw JSON values)."),
@@ -272,21 +264,15 @@ struct CreatePatternFamilyTool: ContentTool {
                             "description": .string(
                                 "Per-case \"💡 Hint\" shown when this case fails (overrides defaultHint)."),
                         ]),
-                        "points": .object(["type": .string("integer")]),
-                        "tier": .object([
-                            "type": .string("string"),
-                            "enum": .array([
-                                .string("public"), .string("release"), .string("secret"),
-                                .string("student"),
-                            ]),
-                        ]),
+                        "points": MCPSchema.integer,
+                        "tier": MCPSchema.tierEnum(),
                         "timeLimitSeconds": .object([
                             "type": .string("integer"),
                             "description": .string(
                                 "Per-case execution time limit (seconds, 1–600), overriding the family "
                                     + "default. Omit / 0 for no per-case override."),
                         ]),
-                        "enabled": .object(["type": .string("boolean")]),
+                        "enabled": MCPSchema.boolean,
                     ]),
                     "required": .array([.string("key")]),
                     "additionalProperties": .bool(false),
@@ -302,14 +288,14 @@ struct CreatePatternFamilyTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "familyID": .object(["type": .string("string")]),
-            "kind": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "familyID": MCPSchema.string,
+            "kind": MCPSchema.string,
             "caseKeys": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("familyID"), .string("kind"), .string("caseKeys"),
@@ -334,8 +320,8 @@ struct CreatePatternFamilyTool: ContentTool {
         }
         try Self.assertUniqueCaseKeys(input.cases, tool: Self.name)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         var payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         guard

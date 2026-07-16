@@ -4,7 +4,7 @@ import Testing
 
 @testable import chickadee_runner
 
-@Suite final class SubmissionNormalizerTests {
+@Suite(.timeLimit(.minutes(3))) final class SubmissionNormalizerTests {
     private var rootDir: URL!
     private var submissionDir: URL!
     private var workspaceDir: URL!

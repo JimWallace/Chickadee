@@ -15,13 +15,15 @@ extension InstructorDashboardRoutes {
 
     @Sendable
     func studentSubmissionHistoryPage(req: Request) async throws -> View {
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForStaffRead(req)
         let assignmentIDRaw = assignment.publicID
         guard
             let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw),
             let student = try await APIUser.find(studentID, on: req.db),
-            student.roleValue == .student
+            // Student-ness is per-course now (#417 Slice G2): the target must
+            // hold a `.student` enrollment in this assignment's course.
+            try await courseRole(of: studentID, inCourse: assignment.courseID, db: req.db) == .student
         else {
             throw WebAssignmentError.notFound(resource: "Assignment or student")
         }
@@ -33,31 +35,20 @@ extension InstructorDashboardRoutes {
             .sort(\.$submittedAt, .descending)
             .all()
         let submissionIDs = submissions.compactMap(\.id)
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // "Highest grade wins" across ALL result sources — the same fold the
+        // roster the instructor clicked through from uses, so the two pages
+        // can't show different numbers for the same submission (#1111; this
+        // page used to show the worker-preferred grade instead).
+        let bestPercentBySubmissionID = try await bestGradePercentBySubmissionID(
             for: submissionIDs,
             on: req.db
         )
 
         let fmt = waterlooDateTimeFormatter()
-
-        let rows = submissions.map { submission -> AssignmentSubmissionHistoryRow in
-            let subID = submission.id ?? ""
-            let gradeText: String
-            if let result = preferredResultBySubmissionID[subID],
-                let pct = result.gradePercentValue
-            {
-                gradeText = "\(pct)%"
-            } else {
-                gradeText = "—"
-            }
-            return AssignmentSubmissionHistoryRow(
-                submissionID: subID,
-                attemptNumber: submission.attemptNumber ?? 1,
-                status: submission.status,
-                submittedAt: submission.submittedAt.map { fmt.string(from: $0) } ?? "—",
-                gradeText: gradeText
-            )
-        }
+        let rows = assignmentSubmissionHistoryRows(
+            submissions: submissions,
+            bestPercentBySubmissionID: bestPercentBySubmissionID,
+            fmt: fmt)
 
         return try await req.view.render(
             "assignment-student-history",
@@ -81,7 +72,7 @@ extension InstructorDashboardRoutes {
         }
 
         let user = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
         guard
             let submissionID = req.parameters.get("submissionID"),
@@ -129,7 +120,7 @@ extension InstructorDashboardRoutes {
     @Sendable
     func retestAllSubmissions(req: Request) async throws -> Response {
         let user = try req.auth.require(APIUser.self)
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
 
         let count = try await retestAllSubmissionsForSetup(
@@ -191,7 +182,7 @@ extension InstructorDashboardRoutes {
         }
 
         let user = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
         guard let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw)
@@ -221,12 +212,12 @@ extension InstructorDashboardRoutes {
             )
         }
 
-        _ = try await ensureUserNotebookWorkingCopy(
+        _ = try await overwriteUserNotebookWithPersonalizedStarter(
             req: req,
+            setup: setup,
             setupID: setup.id ?? assignment.testSetupID,
             userID: studentID,
-            fallbackSetup: setup,
-            overwriteWith: starter
+            starter: starter
         )
 
         req.logger.info(
@@ -262,7 +253,7 @@ extension InstructorDashboardRoutes {
         }
 
         let actor = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
         let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
         guard let studentUUID = student.id else {
@@ -313,7 +304,7 @@ extension InstructorDashboardRoutes {
         struct DeleteBody: Content { var returnTo: String? }
 
         _ = try req.auth.require(APIUser.self)
-        let assignment = try await loadAssignment(req)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
         let assignmentIDRaw = assignment.publicID
         let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
         guard let studentUUID = student.id else {
@@ -342,6 +333,46 @@ extension InstructorDashboardRoutes {
         return req.redirect(to: redirectPath)
     }
 
+    // MARK: - POST /instructor/:assignmentID/students/:studentID/regrant-reveal-token
+
+    /// Staff re-grant of a student's secret-reveal token: deletes the spend
+    /// row, so secret results are hidden again for the student until they
+    /// spend the (restored) token. TA+ — a grading-support action, same rung
+    /// as reset-notebook and grade overrides.
+    @Sendable
+    func regrantSecretRevealToken(req: Request) async throws -> Response {
+        struct RegrantBody: Content { var returnTo: String? }
+
+        _ = try req.auth.require(APIUser.self)
+        let assignment = try await loadAssignmentForWrite(req, atLeast: .ta)
+        let assignmentIDRaw = assignment.publicID
+        let student = try await resolveEnrolledStudent(req: req, assignment: assignment)
+        guard let studentUUID = student.id else {
+            throw WebAssignmentError.notFound(resource: "Student")
+        }
+
+        if try await SecretRevealStore.regrantToken(
+            userID: studentUUID, assignmentID: assignment.requireID(), on: req.db)
+        {
+            await AuditLogger.record(
+                action: .secretRevealRegranted,
+                targetType: .assignment,
+                targetID: assignment.id?.uuidString,
+                metadata: [
+                    "assignment": assignmentIDRaw,
+                    "student_username": student.username,
+                ],
+                on: req
+            )
+        }
+
+        let body = try? req.content.decode(RegrantBody.self)
+        let fallbackPath = "/instructor/\(assignmentIDRaw)/submissions"
+        let redirectPath = sanitizedAssignmentReturnPath(
+            body?.returnTo, assignmentIDRaw: assignmentIDRaw, fallbackPath: fallbackPath)
+        return req.redirect(to: redirectPath)
+    }
+
     /// Resolves the `:studentID` UUID parameter to a `role == "student"` user
     /// enrolled in the assignment's course.  Throws `notFound` when the
     /// parameter is missing/invalid, the user doesn't exist or isn't a
@@ -352,17 +383,17 @@ extension InstructorDashboardRoutes {
     ) async throws -> APIUser {
         guard let studentIDRaw = req.parameters.get("studentID"),
             let studentID = UUID(uuidString: studentIDRaw),
-            let student = try await APIUser.find(studentID, on: req.db),
-            student.roleValue == .student
+            let student = try await APIUser.find(studentID, on: req.db)
         else {
             throw WebAssignmentError.notFound(resource: "Student")
         }
-        let isEnrolled =
-            try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == assignment.courseID)
-            .filter(\.$userID == studentID)
-            .count() > 0
-        guard isEnrolled else {
+        // Student-ness is per-course now (#417 Slice G2): require a `.student`
+        // enrollment in the assignment's course. This subsumes the old
+        // global-role check *and* the separate enrollment query — a non-enrolled
+        // user has no per-course role, so `courseRole` returns nil.
+        guard
+            try await courseRole(of: studentID, inCourse: assignment.courseID, db: req.db) == .student
+        else {
             throw WebAssignmentError.notFound(resource: "Enrolled student")
         }
         return student

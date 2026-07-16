@@ -31,6 +31,18 @@ down the rest of the module). At grading time the module is imported, so
 `__name__` is the module name, **not** `"__main__"`, and the quarantined code
 never runs.
 
+**Scope of the quarantine (updated):** the quarantine governs what a plain
+*import* of the student module sees — which is what pattern families,
+`require_function`, `function_exists`, and the personalization `solution.py`
+import use. The **runtime-state notebook checks** (`variable_exists`,
+`data_frame_shape`/`columns`/`equality`, `series_equality`,
+`numeric_array_close`, `figure_count`) instead read
+`test_runtime.student_main_state()`, which executes the notebook once with
+`run_name="__main__"` — quarantined statements included, per-cell resilience
+preserved — so `df = pd.read_csv(...)` and plotting calls ARE visible to those
+checks. The rules below still apply to function-based grading and to
+`solution.py` imports.
+
 Concretely, this does **not** define `seed` for the grader:
 
 ```python

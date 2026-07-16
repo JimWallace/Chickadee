@@ -32,10 +32,11 @@ struct AssignmentSubmissionsSparklineTests {
             // 3/4 → 75% → lands in the 70–79% grade bin.
             let result = APIResult(
                 id: "res_spark",
-                submissionID: "sub_spark",
-                collectionJSON: #"{"earnedPoints":3,"totalPoints":4,"passCount":3,"totalTests":4}"#
+                submissionID: "sub_spark"
             )
-            try await result.save(on: app.db)
+            try await result.saveWithCollection(
+                json: #"{"earnedPoints":3,"totalPoints":4,"passCount":3,"totalTests":4}"#,
+                on: app.db)
 
             try await app.asyncTest(
                 .GET, "/instructor/\(assignment.publicID)/submissions",

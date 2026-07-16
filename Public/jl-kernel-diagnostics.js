@@ -16,11 +16,18 @@
 //   • kernel_phase breadcrumbs (boot_start → app_ready → kernel_starting →
 //     kernel_idle) — the boot funnel; the drop-off point shows WHERE a boot
 //     stalls. `kernel_idle` is the reliable "the kernel actually came up"
-//     signal the parent-side probe could never get.
+//     signal the parent-side probe could never get. A `kernel_idle` that follows
+//     a previously-reported unhealthy streak carries `recovered=1;unhealthy_ms=…`
+//     so a transient slow boot can be told apart from a terminal stall (CASE 2):
+//     terminal kernel_unknown = (kernel_unknown count) − (recovered=1 idles).
 //   • kernel_error — the actual failure: a CSP worker block (the data:-worker
 //     case), an IndexedDB / Drive exception, a blocked/404 asset, a dead/unknown
 //     kernel, a boot-stall watchdog, or a post-idle execution hang
-//     (source `exec_hang`) — the WHY.
+//     (source `exec_hang`) — the WHY. The boot-window watchdog beacons
+//     (kernel_unknown / boot_stalled) additionally append a PII-safe environment
+//     snapshot (`bootContext()`: coi/sab/deviceMemory/cores/SW-control/shell/
+//     error-trail/last-phase) so a single stalled-kernel row is self-diagnostic
+//     instead of a bare "kernel status unknown" with no root cause.
 //
 // Boot-window error capture (CSP / resource / unhandledrejection / dead-unknown /
 // boot-stall) stops the instant the kernel reaches idle, so it never records
@@ -49,6 +56,7 @@
     var errorCount = 0;
     var done = false;                 // true once idle/stalled — stops the boot-window capture
     var lastPhase = 'boot_start';
+    var lastErrorSource = '';         // most recent captured error source — fed to bootContext()
 
     // Always posts to window.parent: in the editor that is the notebook page
     // (which forwards it); loaded top-level (the editor-smoke REPL) parent is
@@ -76,6 +84,7 @@
             if (seenErrors[key]) return;
             seenErrors[key] = true;
             errorCount += 1;
+            lastErrorSource = source;
             post('kernel_error', source, message);
         } catch (_) { /* never throw */ }
     }
@@ -116,6 +125,38 @@
                 reportError('unhandledrejection', (reason && reason.message) || String(reason || 'unhandledrejection'));
             } catch (_) { /* ignore */ }
         });
+    } catch (_) { /* ignore */ }
+
+    // ---- fatal WASM / OOM crash (the kernel DIED) ----------------------
+    //
+    // The fatal upstream WebKit/Safari WASM crash (WebKit #286266 — "Out of
+    // bounds memory access" in __pyproxy_apply) and genuine WASM OOM aborts kill
+    // the kernel mid-execute, which is AFTER the boot window — so the done-gated
+    // reportError() above deliberately ignores them. A dead kernel always
+    // matters, so capture the fatal-crash signature separately: NOT done-gated,
+    // one-shot, forwarded as a distinct `wasm_crash` source the parent turns into
+    // a memory-specific recovery notice (instead of a silently wedged cell).
+    var WASM_CRASH_RE = /out of bounds memory access|Pyodide has suffered a fatal error|__pyproxy_apply|RangeError: Bad value|abort\(.*[Oo]ut of memory|abort\(OOM\)|memory access out of bounds/;
+    var wasmCrashReported = false;
+    function reportWasmCrashIfMatch(message) {
+        try {
+            if (wasmCrashReported) return;
+            var msg = String(message || '');
+            if (!WASM_CRASH_RE.test(msg)) return;
+            wasmCrashReported = true;
+            post('kernel_error', 'wasm_crash', msg);
+        } catch (_) { /* never throw */ }
+    }
+    try {
+        window.addEventListener('unhandledrejection', function (e) {
+            try {
+                var reason = e && e.reason;
+                reportWasmCrashIfMatch((reason && reason.message) || String(reason || ''));
+            } catch (_) { /* ignore */ }
+        });
+        window.addEventListener('error', function (e) {
+            try { if (e && e.message) reportWasmCrashIfMatch(e.message); } catch (_) { /* ignore */ }
+        }, true);
     } catch (_) { /* ignore */ }
 
     // ---- boot-phase detection (the WHERE) ------------------------------
@@ -159,6 +200,43 @@
             }
         } catch (_) { /* fall through */ }
         return null;
+    }
+
+    // Environment / capability snapshot for the WHY of a stalled or unknown
+    // kernel. Appended ONLY to the boot-window watchdog beacons (kernel_unknown /
+    // boot_stalled), which fire BEFORE idle — so, like the rest of the boot-window
+    // capture, this reads no student content. It records device-class and
+    // platform-capability signals (the same class of data the server already
+    // derives from the User-Agent) plus the in-iframe error trail — never code,
+    // output, grades, or identity:
+    //   coi/sab  — crossOriginIsolated + SharedArrayBuffer (which kernel transport
+    //              path: COI threads vs. comlink/SW fallback; the WebKit split)
+    //   mem/cpu  — navigator.deviceMemory / hardwareConcurrency (the low-RAM /
+    //              old-iPad terminal-stall hypothesis)
+    //   swctl    — is a service worker controlling the document (asset serving)
+    //   shell    — did the JupyterLite shell render at all (app vs. kernel stall)
+    //   errs     — how many boot errors were captured before the watchdog fired
+    //   lasterr  — the last captured error source (did a csp_violation /
+    //              resource_error / wasm crash precede the stall?)
+    //   phase    — the furthest boot phase reached
+    // Fully guarded: a missing navigator / global yields a fallback token (`na` /
+    // `false`), never a throw — the diagnostics must never break the editor.
+    function bootContext() {
+        var parts = [];
+        try {
+            var win = (typeof window !== 'undefined') ? window : {};
+            var nav = win.navigator || {};
+            parts.push('coi=' + (win.crossOriginIsolated === true));
+            parts.push('sab=' + (typeof win.SharedArrayBuffer !== 'undefined'));
+            parts.push('mem=' + (nav.deviceMemory != null ? nav.deviceMemory : 'na'));
+            parts.push('cpu=' + (nav.hardwareConcurrency != null ? nav.hardwareConcurrency : 'na'));
+            parts.push('swctl=' + !!(nav.serviceWorker && nav.serviceWorker.controller));
+            parts.push('shell=' + shellReady());
+            parts.push('errs=' + errorCount);
+            parts.push('lasterr=' + (lastErrorSource || 'none'));
+            parts.push('phase=' + lastPhase);
+        } catch (_) { /* never throw — return whatever was gathered */ }
+        return parts.join(';');
     }
 
     // Decide whether a dead/unknown kernel status has persisted long enough to
@@ -211,8 +289,25 @@
         return { execBusySince: 0, hang: false };
     }
 
+    // Compose the kernel_idle phase message. PURE (mirrors trackUnhealthy /
+    // trackExecHang). A boot that first emitted a sustained kernel_unknown/dead and
+    // THEN reached idle is tagged `recovered=1;unhealthy_ms=…` — this is the seam
+    // that separates a transient CASE-2 blip (the watchdog cried wolf on a slow but
+    // ultimately-healthy boot) from a terminal stall. Without the tag the two were
+    // indistinguishable in the kernel_unknown count.
+    //   elapsedMs         — total boot time boot_start → idle
+    //   unhealthyReported — did this boot already beacon a kernel_unknown/dead?
+    //   unhealthyMs       — how long that reported unhealthy streak lasted
+    function idleMessage(elapsedMs, unhealthyReported, unhealthyMs) {
+        var m = 'elapsed_ms=' + elapsedMs;
+        if (unhealthyReported) m += ';recovered=1;unhealthy_ms=' + unhealthyMs;
+        return m;
+    }
+
     var startedAt = Date.now();
     var unhealthySince = 0;   // ms timestamp the current dead/unknown streak began; 0 = healthy
+    var unhealthyReported = false;  // true once a sustained kernel_unknown/dead was beaconed
+    var unhealthyReportedSince = 0; // streak start of that reported run (for recovered=1 / unhealthy_ms)
     var execBusySince = 0;        // ms timestamp the current post-idle busy run began; 0 = idle
     var execHangReported = false; // de-dupe: one exec_hang per page
     var execWatchStartedAt = 0;
@@ -256,8 +351,12 @@
                 }
                 if (status === 'idle' || status === 'busy') {
                     // SUCCESS — the missing signal. elapsed_ms is the total kernel
-                    // boot time (boot_start → idle).
-                    reportPhase('kernel_idle', 'elapsed_ms=' + (Date.now() - startedAt));
+                    // boot time (boot_start → idle). A boot that recovered from a
+                    // previously-reported unhealthy streak is tagged recovered=1 so
+                    // a transient CASE-2 blip isn't counted as a terminal failure.
+                    reportPhase('kernel_idle', idleMessage(
+                        Date.now() - startedAt, unhealthyReported,
+                        unhealthyReportedSince ? Date.now() - unhealthyReportedSince : 0));
                     done = true;
                     // Boot capture stops here; hand off to the post-idle hang
                     // watcher (status-only, PII-safe) so the blind spot after idle
@@ -272,14 +371,21 @@
             // resets the clock and never reports.
             var tracked = trackUnhealthy(status, unhealthySince, Date.now());
             unhealthySince = tracked.unhealthySince;
-            if (tracked.report) {
-                reportError('kernel_' + status, 'kernel status ' + status);
-                // keep watching — a recovery may still reach idle
+            if (tracked.report && !unhealthyReported) {
+                unhealthyReported = true;
+                unhealthyReportedSince = tracked.unhealthySince;   // streak start
+                // The WHY: kernel state + environment/capabilities + the error
+                // trail that preceded the stall, captured once at first report.
+                // Once-guarded (not just dedup'd) so the varying context can't
+                // bypass the seenErrors key and beacon a kernel_unknown per poll.
+                reportError('kernel_' + status, 'kernel status ' + status + ';' + bootContext());
+                // keep watching — a recovery may still reach idle (tags recovered=1)
             }
         } catch (_) { /* ignore */ }
         if (Date.now() - startedAt >= KERNEL_BOOT_DEADLINE_MS) {
             reportError('boot_stalled',
-                'last_phase=' + lastPhase + ';elapsed_ms=' + (Date.now() - startedAt));
+                'last_phase=' + lastPhase + ';elapsed_ms=' + (Date.now() - startedAt)
+                    + ';' + bootContext());
             done = true;     // stop; the funnel drop-off + captured errors tell the story
             return;
         }
@@ -296,6 +402,7 @@
             kernelStatus: kernelStatus, reportPhase: reportPhase,
             reportError: reportError, trackUnhealthy: trackUnhealthy,
             trackExecHang: trackExecHang, executionStatusRaw: executionStatusRaw,
+            bootContext: bootContext, idleMessage: idleMessage,
         };
     } catch (_) { /* ignore */ }
 })();

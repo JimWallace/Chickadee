@@ -6,9 +6,9 @@
 // attacker could flood the oauth_clients table; the limiter plus the
 // MCPConfig.maxRegisteredClients backstop bound that.
 //
-// Reuses the app's LoginAttemptStore actor with a namespaced key ("mcp-oauth:")
-// so the bookkeeping is shared and ephemeral, matching the /login limiter.
-// POST-only; other methods pass through.
+// Reuses the login_attempts-backed LoginAttemptService with a namespaced key
+// ("mcp-oauth:") so the bookkeeping is shared — across processes too, #1154 —
+// matching the /login limiter. POST-only; other methods pass through.
 
 import Foundation
 import Vapor
@@ -20,11 +20,12 @@ struct MCPOAuthRateLimitMiddleware: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
         guard request.method == .POST else { return try await next.respond(to: request) }
         let ip = clientIPAddress(from: request, trustForwardedFor: trustForwardedFor)
-        let allowed = await request.application.loginAttemptStore.recordAndCheckIP(
+        let allowed = try await LoginAttemptService.recordAndCheckIP(
             ip: "mcp-oauth:\(ip)",
             now: Date(),
             windowSeconds: 60,
-            max: perMinute
+            max: perMinute,
+            on: request.db
         )
         guard allowed else {
             request.logger.warning("MCP OAuth rate limit exceeded for IP \(ip)")

@@ -45,8 +45,14 @@ func evaluateHealthRules(
             configuration: configuration,
             now: now
         )) ?? .ok
-    results[.editorKernelHang] =
-        (try? await evaluateEditorKernelHang(
+    results[.editorKernelUnrecoverable] =
+        (try? await evaluateEditorKernelUnrecoverable(
+            on: application,
+            configuration: configuration,
+            now: now
+        )) ?? .ok
+    results[.brightspaceSyncFailing] =
+        (try? await evaluateBrightspaceSyncFailing(
             on: application,
             configuration: configuration,
             now: now
@@ -214,48 +220,51 @@ private func evaluateErrorRateSpike(
     )
 }
 
-/// Decides the editor-kernel-hang rule purely from a count, so the firing
-/// threshold is table-testable without a database. Fire when at least
-/// `threshold` post-idle `exec_hang` reports landed inside the window — a
-/// recurrence of the SAB/Atomics kernel deadlock that the boot funnel and
-/// watchdog cannot see (the kernel booted to idle, then wedged on execute).
-func decideEditorKernelHang(
-    hangCount: Int,
+/// Decides the editor-kernel-UNRECOVERABLE rule purely from a count, so the
+/// firing threshold is table-testable without a database. Fire when at least
+/// `threshold` `recover_failed` reports landed inside the window — a student
+/// whose kernel hung, was auto-rebooted by the editor, and hung AGAIN, so they
+/// genuinely cannot proceed. Plain post-idle `exec_hang`s that auto-recover are
+/// NOT counted here — this rule pages only on the students who are actually stuck.
+func decideEditorKernelUnrecoverable(
+    failedCount: Int,
     threshold: Int,
     windowMinutes: Int
 ) -> RuleEvaluation {
-    guard threshold > 0, hangCount >= threshold else { return .ok }
+    guard threshold > 0, failedCount >= threshold else { return .ok }
     return RuleEvaluation(
         isFiring: true,
         summary:
-            "\(hangCount) editor kernel hang(s) reported in the last \(windowMinutes)m "
-            + "(post-idle exec_hang; threshold \(threshold))",
+            "\(failedCount) student(s) could not recover after an editor kernel reboot "
+            + "in the last \(windowMinutes)m (recover_failed; threshold \(threshold))",
         details: [
-            "exec_hang_count": String(hangCount),
+            "recover_failed_count": String(failedCount),
             "window_minutes": String(windowMinutes),
             "threshold": String(threshold),
         ]
     )
 }
 
-private func evaluateEditorKernelHang(
+private func evaluateEditorKernelUnrecoverable(
     on application: Application,
     configuration: ServerHealthAlertConfiguration,
     now: Date
 ) async throws -> RuleEvaluation {
-    let windowStart = now.addingTimeInterval(-Double(configuration.editorHangWindowMinutes) * 60)
-    // exec_hang rides the free-form `source` on the `kernel_error` kind
-    // (jl-kernel-diagnostics.js → ClientDiagnosticsRoutes). One row per distinct
-    // student-page that hit a sustained post-idle busy hang.
-    let hangCount = try await APIClientDiagnostic.query(on: application.db)
+    let windowStart = now.addingTimeInterval(-Double(configuration.editorUnrecoverableWindowMinutes) * 60)
+    // recover_failed rides the free-form `source` on the `kernel_error` kind
+    // (notebook.js recoverHungKernelOnce → ClientDiagnosticsRoutes): the editor
+    // auto-rebooted a hung kernel and it hung AGAIN. One row per distinct
+    // student-page that could not recover — the genuinely-stuck students. Plain
+    // `exec_hang`s (which usually auto-recover) are intentionally not counted.
+    let failedCount = try await APIClientDiagnostic.query(on: application.db)
         .filter(\.$kind == "kernel_error")
-        .filter(\.$source == "exec_hang")
+        .filter(\.$source == "recover_failed")
         .filter(\.$createdAt >= windowStart)
         .count()
-    return decideEditorKernelHang(
-        hangCount: hangCount,
-        threshold: configuration.editorHangThreshold,
-        windowMinutes: configuration.editorHangWindowMinutes
+    return decideEditorKernelUnrecoverable(
+        failedCount: failedCount,
+        threshold: configuration.editorUnrecoverableThreshold,
+        windowMinutes: configuration.editorUnrecoverableWindowMinutes
     )
 }
 
@@ -282,6 +291,53 @@ enum JobFailureClassification {
             return false
         }
     }
+}
+
+/// Decides the BrightSpace-sync-failing rule purely from a recent error count,
+/// so the firing threshold is table-testable without a database. Fire when at
+/// least `threshold` grade-push errors landed inside the window — grades have
+/// stopped reaching LEARN. `lastDetail` (the most recent D2L error) is surfaced
+/// as context when present.
+func decideBrightspaceSyncFailing(
+    errorCount: Int,
+    threshold: Int,
+    windowMinutes: Int,
+    lastDetail: String?
+) -> RuleEvaluation {
+    guard threshold > 0, errorCount >= threshold else { return .ok }
+    var details: [String: String] = [
+        "error_count": String(errorCount),
+        "window_minutes": String(windowMinutes),
+        "threshold": String(threshold),
+    ]
+    if let lastDetail, !lastDetail.isEmpty { details["last_error"] = lastDetail }
+    let suffix = (lastDetail?.isEmpty == false) ? " (latest: \(lastDetail ?? ""))" : ""
+    return RuleEvaluation(
+        isFiring: true,
+        summary:
+            "\(errorCount) BrightSpace grade push(es) failed in the last \(windowMinutes)m "
+            + "(threshold \(threshold))\(suffix)",
+        details: details
+    )
+}
+
+private func evaluateBrightspaceSyncFailing(
+    on application: Application,
+    configuration: ServerHealthAlertConfiguration,
+    now: Date
+) async throws -> RuleEvaluation {
+    let windowStart = now.addingTimeInterval(-Double(configuration.brightspaceSyncFailureWindowMinutes) * 60)
+    let errored = try await APIBrightSpaceSyncLog.query(on: application.db)
+        .filter(\.$status == APIBrightSpaceSyncLog.Status.error.rawValue)
+        .filter(\.$attemptedAt >= windowStart)
+        .sort(\.$attemptedAt, .descending)
+        .all()
+    return decideBrightspaceSyncFailing(
+        errorCount: errored.count,
+        threshold: configuration.brightspaceSyncFailureThreshold,
+        windowMinutes: configuration.brightspaceSyncFailureWindowMinutes,
+        lastDetail: errored.first?.detail
+    )
 }
 
 private func evaluateDatabaseUnreachable(on application: Application) async -> RuleEvaluation {

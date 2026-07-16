@@ -1,0 +1,71 @@
+name: Rerun failed jobs
+
+# Comment `/rerun-failed` on a PR to re-run ONLY the failed jobs of that PR's
+# latest workflow runs. This is the re-kick that agents (and anyone without
+# the Actions UI) previously lacked: their only lever was pushing an empty
+# commit, which re-runs the ENTIRE pipeline and re-rolls every flaky die at
+# once (docs/ci-flakiness.md, structural problem 1). Re-running only the
+# failed jobs re-rolls one die and reuses every green result.
+#
+# Restricted to comments from OWNER / MEMBER / COLLABORATOR associations. The
+# job never checks out or executes PR code — it only calls the Actions API —
+# so an issue_comment trigger with a write token is safe here.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  issues: write
+  pull-requests: read
+
+jobs:
+  rerun:
+    if: >-
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/rerun-failed') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Acknowledge the command immediately — the reruns themselves are
+      # asynchronous, so the reaction is the only prompt feedback.
+      - name: React to the command comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          gh api -X POST "repos/${REPO}/issues/comments/${COMMENT_ID}/reactions" \
+            -f content=rocket >/dev/null || true
+
+      - name: Rerun failed jobs for the PR head SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          head_sha="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq .head.sha)"
+          echo "PR #${PR_NUMBER} head: ${head_sha}"
+          # Completed-but-red runs on the current head only. A `cancelled`
+          # conclusion is included: the 20-minute job-timeout wedge surfaces
+          # as cancelled (docs/ci-flakiness.md, Family 1 shape b).
+          run_ids="$(gh api "repos/${REPO}/actions/runs?head_sha=${head_sha}&per_page=100" \
+            --jq '.workflow_runs[] | select(.status == "completed" and (.conclusion == "failure" or .conclusion == "cancelled")) | .id')"
+          if [ -z "${run_ids}" ]; then
+            echo "No failed completed runs for ${head_sha} — nothing to re-run."
+            exit 0
+          fi
+          for run_id in ${run_ids}; do
+            echo "Re-running failed jobs of run ${run_id}"
+            if ! gh api -X POST "repos/${REPO}/actions/runs/${run_id}/rerun-failed-jobs" >/dev/null; then
+              # Cancelled runs sometimes reject rerun-failed-jobs; fall back to
+              # re-running that one workflow (still far cheaper than a new SHA,
+              # which would re-run every workflow).
+              echo "::warning::rerun-failed-jobs rejected for run ${run_id}; falling back to full rerun of that workflow"
+              gh api -X POST "repos/${REPO}/actions/runs/${run_id}/rerun" >/dev/null \
+                || echo "::warning::could not re-run ${run_id} (already queued or in progress?)"
+            fi
+          done

@@ -22,13 +22,17 @@ func builtInBadgesForSubmission(
     classAchievements: [APIClassAchievement],
     setup: APITestSetup?
 ) -> [AchievementBadge] {
-    let disabled = setup.map { BuiltInAchievements.disabled(in: $0) } ?? []
+    let props = setup?.decodedManifest()
+    let disabled = Set(props?.disabledBuiltInAwardIDs ?? [])
     return AchievementBadge.forSubmission(
         badgeContext,
-        achievements: BuiltInAchievements.manifestPerSubmission(in: setup),
+        achievements: BuiltInAchievements.manifestPerSubmission(props: props),
         disabled: disabled)
         + classAchievements.compactMap {
-            AchievementBadge.forClassAchievement($0.achievementID, disabled: disabled)
+            AchievementBadge.forClassAchievement(
+                $0.achievementID,
+                manifestAchievements: props?.achievements ?? [],
+                disabled: disabled)
         }
 }
 
@@ -142,31 +146,12 @@ extension WebRoutes {
         )
 
         // Award Pathfinder to the first STUDENT in the class who submits.
-        // Pre-v0.4.127 this gated on `classCount == 1` over student-kind
-        // submissions, with no role check on the submitter — so an admin
-        // or instructor testing the assignment would lock in this
-        // immutable badge before any real student had a chance.  The fix
-        // checks the submitter's role and uses the existence of a
-        // pathfinder row directly (the unique constraint on
-        // (test_setup_id, achievement_id) makes this the natural query).
-        if user.roleValue == .student, let uid = user.id {
-            // First-to-submit records (Pathfinder) — the manifest's authored
-            // ones, or the registry default, minus any the instructor disabled.
-            let records = BuiltInAchievements.classRecordsForAward(
-                in: setup, disabled: BuiltInAchievements.disabled(in: setup))
-            for record in records where record.recordDimension == .firstToSubmit {
-                let exists =
-                    try await APIClassAchievement.query(on: req.db)
-                    .filter(\.$testSetupID == setupID)
-                    .filter(\.$achievementID == record.id)
-                    .first() != nil
-                if !exists {
-                    try? await APIClassAchievement(
-                        testSetupID: setupID, achievementID: record.id,
-                        userID: uid, submissionID: subID
-                    ).save(on: req.db)
-                }
-            }
+        // The shared helper carries the v0.4.127 role gate (an admin/TA/
+        // instructor testing the assignment must not lock in the immutable
+        // badge) and is the same code path the notebook submission routes use.
+        if let uid = user.id {
+            try await awardFirstToSubmitRecords(
+                setup: setup, userID: uid, submissionID: subID, on: req.db)
         }
 
         await ensureLocalRunnerForSubmissionIfNeeded(req: req)
@@ -256,88 +241,75 @@ extension WebRoutes {
             throw Abort(.notFound)
         }
 
-        // Students may only view their own submissions.
-        if !user.isInstructor {
-            guard submission.userID == user.id else {
-                throw Abort(.forbidden)
-            }
+        // Per-course staff (TA+ or admin) see instructor-level detail for this
+        // submission's course; everyone else may view only their own
+        // submission (#417 Slice G — was the global `user.isInstructor`).
+        let isStaff = try await isSubmissionStaff(user, submission: submission, on: req.db)
+        guard isStaff || submission.userID == user.id else {
+            throw Abort(.forbidden)
         }
 
-        // Fetch the assignment for deadline-based output gating.
+        // Fetch the assignment for deadline-based output gating, and the test
+        // setup + decoded manifest ONCE — the page's helpers (manifest display
+        // data, class-goal bonus, badges, class-goal views) all read them, and
+        // each used to re-fetch and re-decode independently (#1128).
         let submissionAssignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
+        let setup = try await APITestSetup.find(submission.testSetupID, on: req.db)
+        let setupProps = setup?.decodedManifest()
         // Students see public + release rows itemized (release output is gated
-        // on the deadline); secret is never itemized.  The grade itself spans
-        // every tier — see `processDisplayResult` — so it is stable across the
-        // deadline and matches the dashboard.
+        // on the deadline); secret is itemized only after the student spends
+        // their secret-reveal token (toggle + spend row, see
+        // `SecretRevealState`).  The grade itself spans every tier — see
+        // `processDisplayResult` — so it is stable across the deadline and
+        // matches the dashboard.
         //
         // Release *output* is gated on the *effective* deadline — the later of
         // the assignment due date and the viewer's own per-student extension —
         // so a student with an active extension keeps the hidden release output
         // redacted until their extended window closes.  A non-instructor may
         // only view their own submission (guarded above), so `user` is the
-        // submission owner; instructors see release output regardless.
-        let itemized = itemizedTiers(for: user)
+        // submission owner (which is why resolving the reveal state by viewer
+        // ID is correct); instructors see release output regardless.
+        let reveal = try await SecretRevealState.resolve(
+            assignment: submissionAssignment, userID: user.id, isStaff: isStaff, on: req.db)
+        let itemized = itemizedTiers(isStaff: isStaff, secretRevealed: reveal.revealed)
         let releaseDeadline = try await releaseVisibilityDeadline(
             for: submissionAssignment, user: user, on: req.db)
-        let releaseOutput = releaseOutputVisible(for: user, effectiveDueAt: releaseDeadline)
+        let releaseOutput = releaseOutputVisible(isStaff: isStaff, effectiveDueAt: releaseDeadline)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let displayResult = try await loadPreferredDisplayResult(subID: subID, on: req.db)
+        let (displayResult, displayCollection) = try await loadDisplayResultAndCollection(
+            subID: subID, decoder: decoder, on: req.db)
         let priorAttempt = try await loadPriorAttemptDelta(
             submission: submission, decoder: decoder, on: req.db)
-        let manifestDisplay = try await loadManifestDisplayData(
-            testSetupID: submission.testSetupID, on: req.db)
+        let manifestDisplay = manifestDisplayData(from: setupProps)
 
         var processed = ProcessedCollection.empty
         if let result = displayResult {
             processed = processDisplayResult(
                 result: result,
+                collection: displayCollection,
                 viewer: SubmissionViewer(
-                    user: user, itemizedTiers: itemized, releaseOutputVisible: releaseOutput),
+                    user: user, isStaff: isStaff, itemizedTiers: itemized,
+                    releaseOutputVisible: releaseOutput,
+                    secretRevealed: reveal.revealed),
                 submission: submission,
                 priorAttempt: priorAttempt,
-                manifestDisplay: manifestDisplay,
-                decoder: decoder
+                manifestDisplay: manifestDisplay
             )
         }
 
-        // Class-goal bonus: extra credit on the autograded grade, capped at 100%
-        // (no-op unless the assignment has a points-rewarded class goal).
-        if processed.totalPoints > 0 {
-            let bonus = try await classGoalBonusPoints(
-                testSetupID: submission.testSetupID, on: req.db)
-            if bonus > 0 {
-                let bonused = earnedWithClassGoalBonus(
-                    earned: processed.rawEarnedPoints,
-                    total: Double(processed.totalPoints),
-                    bonus: bonus)
-                processed.gradePercent = Int(
-                    (bonused / Double(processed.totalPoints) * 100).rounded())
-                processed.earnedPoints = formatPoints(bonused)
-            }
-        }
+        try await applyClassGoalBonus(
+            to: &processed, setupProps: setupProps,
+            testSetupID: submission.testSetupID, on: req.db)
 
-        // Append class-wide achievement badges held by this specific submission.
-        let classAchievements = try await APIClassAchievement.query(on: req.db)
-            .filter(\.$submissionID == subID)
-            .all()
-        // Authorable individual badges (threshold / test), earned per-student
-        // from this submission's result (evaluated over all tiers so a
-        // secret-test badge works without revealing the test).
-        let individualBadges = try await earnedIndividualBadgesForDisplay(
-            displayResult: displayResult, submission: submission,
-            gradePercent: processed.gradePercent, decoder: decoder, on: req.db)
-        let setupForBadges = try await APITestSetup.find(submission.testSetupID, on: req.db)
-        let badges =
-            builtInBadgesForSubmission(
-                badgeContext: processed.badgeContext,
-                classAchievements: classAchievements,
-                setup: setupForBadges)
-            + individualBadges
+        let badges = try await submissionBadges(
+            req: req, subID: subID, displayCollection: displayCollection,
+            setupProps: setupProps, setup: setup, processed: processed)
 
         let sectionedOutcomes = buildSectionedOutcomes(
             outcomes: processed.outcomes,
@@ -364,7 +336,7 @@ extension WebRoutes {
         }
 
         let classGoals = try await loadClassGoalViews(
-            testSetupID: submission.testSetupID, on: req.db)
+            testSetupID: submission.testSetupID, props: setupProps, on: req.db)
 
         let ctx = buildSubmissionContext(
             subID: subID,
@@ -375,7 +347,11 @@ extension WebRoutes {
                 badges: badges,
                 currentUser: req.currentUserContext,
                 overrideGradePercent: overrideGradePercent,
-                classGoals: classGoals
+                classGoals: classGoals,
+                secretReveal: SecretRevealBanner(
+                    available: reveal.enabled && !reveal.spent && !isStaff
+                        && hasSecretTierTests(setupProps),
+                    active: reveal.revealed)
             ),
             delta: DeltaBanner(hasDelta: hasDelta, headerText: deltaHeaderText)
         )
@@ -383,6 +359,53 @@ extension WebRoutes {
     }
 
     // MARK: - submissionPage helpers
+
+    /// Class-goal bonus: extra credit on the autograded grade, capped at 100%
+    /// (no-op unless the assignment has a points-rewarded class goal).
+    private func applyClassGoalBonus(
+        to processed: inout ProcessedCollection,
+        setupProps: TestProperties?,
+        testSetupID: String,
+        on db: Database
+    ) async throws {
+        guard processed.totalPoints > 0 else { return }
+        let bonus = try await classGoalBonusPoints(
+            testSetupID: testSetupID, props: setupProps, on: db)
+        guard bonus > 0 else { return }
+        let bonused = earnedWithClassGoalBonus(
+            earned: processed.rawEarnedPoints,
+            total: Double(processed.totalPoints),
+            bonus: bonus)
+        processed.gradePercent = Int(
+            (bonused / Double(processed.totalPoints) * 100).rounded())
+        processed.earnedPoints = formatPoints(bonused)
+    }
+
+    /// Assembles the badge strip for one submission: class-wide achievement
+    /// badges held by this specific submission, built-in badges, and
+    /// authorable individual badges (threshold / test) earned per-student from
+    /// this submission's result — the latter evaluated over all tiers so a
+    /// secret-test badge works without revealing the test.
+    private func submissionBadges(
+        req: Request,
+        subID: String,
+        displayCollection: TestOutcomeCollection?,
+        setupProps: TestProperties?,
+        setup: APITestSetup?,
+        processed: ProcessedCollection
+    ) async throws -> [AchievementBadge] {
+        let classAchievements = try await APIClassAchievement.query(on: req.db)
+            .filter(\.$submissionID == subID)
+            .all()
+        let individualBadges = earnedIndividualBadgesForDisplay(
+            collection: displayCollection, props: setupProps,
+            gradePercent: processed.gradePercent)
+        return builtInBadgesForSubmission(
+            badgeContext: processed.badgeContext,
+            classAchievements: classAchievements,
+            setup: setup)
+            + individualBadges
+    }
 
     /// Selects the result row to render on the submission page: the worker
     /// result is preferred (official grade); the browser result is the
@@ -397,6 +420,22 @@ extension WebRoutes {
         let workerResult = allResults.first { ($0.source ?? "worker") == "worker" }
         let browserResult = allResults.first { $0.source == "browser" }
         return workerResult ?? browserResult
+    }
+
+    /// The preferred display result plus its collection, fetched from the
+    /// result_collections side table and decoded ONCE (#1173) — the presenter
+    /// and the individual-badge evaluation share the decoded value.
+    private func loadDisplayResultAndCollection(
+        subID: String, decoder: JSONDecoder, on db: Database
+    ) async throws -> (APIResult?, TestOutcomeCollection?) {
+        guard let result = try await loadPreferredDisplayResult(subID: subID, on: db) else {
+            return (nil, nil)
+        }
+        guard let json = try await result.loadCollectionJSON(on: db) else {
+            return (result, nil)
+        }
+        let collection = try? decoder.decode(TestOutcomeCollection.self, from: Data(json.utf8))
+        return (result, collection)
     }
 
     /// Fetches the immediately-prior attempt for per-test delta display and the
@@ -425,8 +464,9 @@ extension WebRoutes {
             .all()
         let priorResult = priorResults.first { ($0.source ?? "worker") == "worker" } ?? priorResults.first
         guard let priorResult,
-            let data = priorResult.collectionJSON.data(using: .utf8),
-            let priorCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
+            let priorJSON = try await priorResult.loadCollectionJSON(on: db),
+            let priorCollection = try? decoder.decode(
+                TestOutcomeCollection.self, from: Data(priorJSON.utf8))
         else {
             return .empty
         }
@@ -444,7 +484,7 @@ extension WebRoutes {
         return PriorAttemptDelta(outcomeMap: outcomeMap, gradePercent: gradePercent)
     }
 
-    /// Reads the manifest from `APITestSetup` and extracts:
+    /// Extracts from the page's already-decoded manifest (#1128):
     /// - a script/stem→displayName map so the page shows friendly names for
     ///   worker results that already use the display name directly, older
     ///   worker results where testName is the filename stem, and browser
@@ -453,17 +493,12 @@ extension WebRoutes {
     ///   page can build a parallel `sectionIDPerOutcome` array.  We can't do
     ///   a name-keyed lookup because two families in different sections may
     ///   legally share case labels (v0.4.105 bug).
-    private func loadManifestDisplayData(
-        testSetupID: String, on db: Database
-    ) async throws -> ManifestDisplayData {
+    private func manifestDisplayData(from props: TestProperties?) -> ManifestDisplayData {
         var displayNameMap: [String: String] = [:]
         var hintByFilename: [String: String] = [:]
         var sections: [TestSuiteSection] = []
         var entries: [TestSuiteEntry] = []
-        if let setup = try? await APITestSetup.find(testSetupID, on: db),
-            let manifestData = setup.manifest.data(using: .utf8),
-            let props = decodeManifest(from: manifestData)
-        {
+        if let props {
             sections = props.sections
             entries = props.testSuites
             for entry in props.testSuites {
@@ -480,7 +515,8 @@ extension WebRoutes {
         }
         return ManifestDisplayData(
             displayNameMap: displayNameMap, hintByFilename: hintByFilename,
-            sections: sections, entries: entries)
+            sections: sections, entries: entries,
+            testNameAliases: props?.testNameAliases() ?? [:])
     }
 }
 

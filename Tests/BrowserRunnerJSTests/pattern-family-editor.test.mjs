@@ -56,7 +56,6 @@ function extractSnippet(name) {
   // JSON literals).  Substitute realistic placeholders.
   const fnLit = JSON.stringify('f');
   const argsLit = JSON.stringify('[]');
-  // eslint-disable-next-line no-new-func
   const lines = new Function('fnLit', 'argsLit', `return ${arrMatch[1]};`)(fnLit, argsLit);
   assert.ok(Array.isArray(lines), `evaluated array literal for '${name}' is not an array`);
   return lines.join('\n');

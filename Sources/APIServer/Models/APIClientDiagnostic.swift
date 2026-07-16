@@ -54,6 +54,15 @@ final class APIClientDiagnostic: Model, Content, @unchecked Sendable {
     @OptionalField(key: "source")
     var source: String?
 
+    /// ChickadeeVersion of the page build that emitted this report (from the
+    /// `app-version` meta tag the page carries). Lets a diagnostic be attributed
+    /// to a build: an OLD value means a stale browser tab still running
+    /// pre-deploy code — and serving its cached editor bundle/wheel — so a
+    /// recurring failure on an old appVersion is a stale-cache symptom, not a
+    /// live regression. nil for clients that predate this field.
+    @OptionalField(key: "app_version")
+    var appVersion: String?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -67,7 +76,8 @@ final class APIClientDiagnostic: Model, Content, @unchecked Sendable {
         userAgent: String?,
         message: String? = nil,
         stack: String? = nil,
-        source: String? = nil
+        source: String? = nil,
+        appVersion: String? = nil
     ) {
         self.userID = userID
         self.testSetupID = testSetupID
@@ -77,5 +87,6 @@ final class APIClientDiagnostic: Model, Content, @unchecked Sendable {
         self.message = message
         self.stack = stack
         self.source = source
+        self.appVersion = appVersion
     }
 }

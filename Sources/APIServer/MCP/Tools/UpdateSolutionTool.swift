@@ -54,10 +54,7 @@ struct UpdateSolutionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "notebook": .object([
                 "type": .string("object"),
                 "description": .string(
@@ -71,10 +68,10 @@ struct UpdateSolutionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "cellCount": .object(["type": .string("integer")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "cellCount": MCPSchema.integer,
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("cellCount"), .string("assignmentClosed"),
@@ -87,8 +84,8 @@ struct UpdateSolutionTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         try validateNotebookShape(input.notebook, tool: Self.name)
 
-        let assignment = try await context.authorizedAssignment(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let assignment = try await context.authorizedAssignmentForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
         // The bearer context has no `Request.auth` APIUser; resolve the subject
         // so the validation submission is attributed to the acting account.
         let subject = try await context.requireEligibleSubject(tool: Self.name)
@@ -115,14 +112,15 @@ struct UpdateSolutionTool: ContentTool {
                 tool: Self.name, detail: "Could not store the solution for validation: \(error)")
         }
 
-        // Close a currently-open assignment (matching the web Save button) so
-        // students can't submit against the not-yet-revalidated solution/suite;
-        // folded into the same save as the validation-status flip. A staff-only
-        // Preview assignment is left as-is (already hidden from students).
-        let closed = assignment.visibility == .open
-        if closed {
-            assignment.visibility = .closed
-        }
+        // Close a currently-open assignment through the shared content-edit
+        // rule (#1115 — this used to be a hand-rolled copy of it) so students
+        // can't submit against the not-yet-revalidated solution/suite. This
+        // tool deliberately does NOT go through `finalizeContentEdit`: it has
+        // already enqueued its own validation carrying the NEW solution above
+        // (scheduleValidationAfterSuiteEdit would re-run against the old one),
+        // and a solution-only edit never changes the test manifest, so the
+        // manifest-gated regrade would be a no-op (matching the web save path).
+        let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
         assignment.validationSubmissionID = validationSubmissionID
         assignment.validationStatus = "pending"
         try await assignment.save(on: context.db)

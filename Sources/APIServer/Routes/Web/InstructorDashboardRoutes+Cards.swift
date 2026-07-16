@@ -26,20 +26,8 @@ extension InstructorDashboardRoutes {
         let setups = try await loadCourseSetups(req: req, activeCourseUUID: activeCourseUUID)
         let setupIDs = setups.compactMap(\.id)
 
-        let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
-            .filter(\.$course.$id == activeCourseUUID)
-            .all()
-            .map(\.userID)
-        let studentIDs: Set<UUID>
-        if enrolledUserIDs.isEmpty {
-            studentIDs = []
-        } else {
-            let students = try await APIUser.query(on: req.db)
-                .filter(\.$role == UserRole.student.rawValue)
-                .filter(\.$id ~~ enrolledUserIDs)
-                .all()
-            studentIDs = Set(students.compactMap(\.id))
-        }
+        // Students are `.student`-role enrollments now (#417 Slice G2).
+        let studentIDs = try await studentUserIDsInCourse(activeCourseUUID, on: req.db)
 
         return try await req.application.diagnostics.instructorCardSeries(
             setupIDs: setupIDs, studentIDs: studentIDs, on: req.db)

@@ -207,6 +207,35 @@ let testRuntimePy = """
         return modules.get(_loaded_student_order[0])
 
 
+    _student_main_state = None
+
+
+    def student_main_state():
+        # The student notebook AS EXECUTED — top-level side effects included.
+        # The extractor quarantines side-effecting top-level statements into
+        # `if __name__ == "__main__":` so imports stay safe (issue #371);
+        # runtime-state checks call this to run the student file once with
+        # run_name="__main__" (per-cell try/except still isolates broken
+        # cells) and inspect the resulting namespace. Falls back to the
+        # import-mode module when no student file exists or the run fails.
+        global _student_main_state
+        if _student_main_state is not None:
+            return _student_main_state
+        import runpy
+        import types
+
+        files = _ordered_student_files()
+        if not files:
+            return load_student_module()
+        try:
+            namespace = runpy.run_path(str(files[0]), run_name="__main__")
+            _student_main_state = types.SimpleNamespace(**namespace)
+        except Exception:
+            print(traceback.format_exc(), file=sys.stderr)
+            return load_student_module()
+        return _student_main_state
+
+
     def student_source_raw() -> str:
         # The full introspectable student source, exactly as the extractor wrote
         # it (every cell, including any that do not parse). Written to a sidecar

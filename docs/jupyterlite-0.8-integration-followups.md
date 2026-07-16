@@ -1,50 +1,33 @@
-# JupyterLite 0.8 integration — robustness follow-ups (agent handoff)
+# JupyterLite 0.8 integration — robustness follow-ups
 
-**For:** an agent picking up the work of *fully* integrating JupyterLite 0.8 /
-Pyodide 314 / Python 3.14 into Chickadee.
-
----
-
-## ⚠️ START HERE — rebase on `main` first
-
-This branch (`claude/magical-cori-lkj21x`, PR #1028) **predates the production
-`exec_hang` fix.** That fix shipped on `main` as **v0.4.526** (#1029) — a
-kernel-startup `os.chdir` wrapper (`scripts/patch-pyodide-kernel.py`) that
-creates the notebook's Drive folder before chdir'ing into it. **Rebase this
-branch on `main` to pick it up.** It's not 0.8-specific and applies unchanged on
-0.8 (the root cause — a `FileNotFoundError` from chdir'ing into an unmounted
-Drive folder — is identical across 0.7.6 and 0.8). Full record:
-`docs/exec-hang-investigation.md`.
-
-Two consequences:
-- **0.8 does not need to fix the hang** — the chdir fix already does, on either
-  version. 0.8's *only* remaining value is the newer runtime (Python 3.14).
-- On 0.8, once the chdir fix creates the folder, JupyterLite populates it with
-  the Drive's **support files** too (verified on main: a no-service-worker kernel
-  reads a seeded support file). So the "support files visible to the kernel" item
-  below is **resolved by the rebase**, not separate work.
-
-## Status of 0.8 on this branch
-
-**0.8 is NOT merged** — it's a deferred, documented reference (PR #1028, draft).
-Production runs **0.7.6 + the chdir fix** (`main`). 0.8 was investigated, doesn't
-fix the hang (the chdir fix does), **and regresses browser grading** (below), so
-it was held. Two integration fixes are already in
-(`Tools/jupyterlite/jupyter-lite.json` + the built bundle), required just to
-reach a running kernel on 0.8:
-
-1. **`contentsAllJsonFile: "all.json"`** — 0.8 gates server-side contents
-   discovery on this PageConfig option; without it the editor can't find the
-   per-student notebook ("Could not find content").
-2. **`pyodideUrl: /pyodide/pyodide.mjs`** (ESM, not the UMD `pyodide.js`) — 0.8's
-   kernel worker (`coincident`) loads Pyodide via ESM `import()`; the UMD build
-   yields `loadPyodide: undefined`.
+> **Status (2026-07): 0.8 is MERGED and in production.** The upgrade to
+> JupyterLite 0.8.0 / Pyodide 314 / Python 3.14 shipped in **v0.4.530**
+> (2026-06-25); the 0.8.1 / Pyodide 314.0.1 point release followed in July
+> 2026. Much of this document was written as a pre-merge handoff (PR #1028)
+> and is kept for the record; sections below are annotated where the work has
+> since landed. What remains genuinely open:
+>
+> - **The custom Chickadee labextension** to fully retire the `jupyterapp`
+>   cross-frame poke (see "To fully retire the `jupyterapp` poke" below).
+> - **The ambient WebKit grading/exec hang** — contained, not eliminated: the
+>   grading-hang probe tolerates ≤1/12 on WebKit PR runs, browser grading
+>   fails over to server-side grading on a bricked runtime, and the
+>   editor-smoke gate retries WebKit legs once (see `docs/ci-flakiness.md`).
+>
+> The two 0.8 integration requirements described below
+> (`contentsAllJsonFile: "all.json"`, ESM `pyodideUrl`) are live in
+> `Tools/jupyterlite/jupyter-lite.json`. The chdir `exec_hang` fix (v0.4.526)
+> is carried in the patched kernel wheel on every rebuild
+> (`scripts/patch-pyodide-kernel.py`).
 
 ---
 
-## 🔴 The blocker: browser grading regresses on Pyodide 314
+## The 0.8.0-era blocker: browser grading regressed on Pyodide 314
 
-This is the **main reason 0.8 isn't adopted** and the first thing to solve.
+*(Historical — resolved by containment, not root-cause: bounded/instrumented
+grading-worker init (v0.4.527), server-side grading failover when the browser
+runtime can't start, and probe-level tolerance for the ambient WebKit hang
+class. The description below is the original pre-merge finding.)*
 
 Browser grading (`grading-worker.js` / `browser-runner.js`, a **separate** Pyodide
 from the editor kernel) is **intermittently broken on 0.8**: in repeated local
@@ -63,6 +46,11 @@ race), not the loader. Reproduce with `notebook-page-check.mjs` (give it the ful
 grade). This must be reliable before 0.8 can pass `editor-smoke-gate` and merge.
 
 ## Validate the rest of the notebook lifecycle on 0.8
+
+*(Historical — this walk happened post-merge: save "Directory does not exist"
+fixed in v0.4.540, reset-notebook IndexedDB eviction in v0.4.534, save flushes
+moved onto the command bridge in v0.4.533, plus the lifecycle/bridge/reset CI
+probes.)*
 
 The harness only exercised *open → idle → execute* (+ the grading flake above).
 Walk the rest on the 0.8 bundle and fix any 0.8 drift:
@@ -95,9 +83,14 @@ inject extra wheels; `check-pyodide-parity.sh` asserts they're present. After th
   `jupyter-lite.json` (`build-and-verify` enforces they match — keep in sync on
   any re-vendor).
 - Re-vendoring order: `setup-jupyterlite.sh` → `build-jupyterlite.sh` →
-  `setup-vendor.sh`. The Pyodide version is **derived from the kernel** (314.0.0);
-  don't hardcode it.
-- `Public/pyodide` is ~510 MB on 314 (down from ~1.4 GB on 0.28); checked in.
+  `setup-vendor.sh`. The Pyodide version is **derived from the kernel** (314.0.1
+  as of the 0.8.1 bump); don't hardcode it.
+- `Public/pyodide` is ~465 MB on 314 (down from ~1.4 GB on 0.28); checked in.
+  Since the 314.0.1 bump the tree carries exactly what `pyodide-lock.json`
+  references (plus the core runtime and the Chickadee extras): stale
+  prior-version wheels from an earlier vendor pass and Pyodide's self-test
+  fixtures (`test_*` wheels/zips — absent from the lock, never loadable) were
+  dropped (~45 MB).
 
 ## Robustness upgrade — the iframe command bridge
 

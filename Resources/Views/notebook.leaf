@@ -11,13 +11,38 @@ Notebook
 .main { max-width: 100%; padding: 0 1rem; margin: .5rem auto 0; }
 
 /* Closed-assignment "view only" notice + fallback/small-screen text. */
-.nb-closed-notice { color: var(--gray-600); font-size: .9rem; }
+.nb-closed-notice { color: var(--gray-600); font-size: var(--text-base); }
 .nb-notice-title { margin: .2rem 0 .5rem; }
 .nb-notice-text { margin: 0; color: var(--gray-700); }
 .nb-fallback-title { margin: .2rem 0; }
 .nb-fallback-text { margin: .4rem 0; }
 .nb-fallback-diagnostic { margin-top: .6rem; }
 .nb-fallback-pre { white-space: pre-wrap; font-size: .85em; margin: .4rem 0; }
+
+/* Proactive low-memory hint (revealed by notebook-preflight.js on a low-RAM
+   device). Non-blocking and dismissible — the editor still loads beneath it. */
+.nb-device-warning {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin: .4rem 0;
+    padding: .5rem .75rem;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius-md);
+    color: var(--gray-700);
+    font-size: var(--text-base);
+}
+.nb-device-warning-text { flex: 1; }
+.nb-device-warning-dismiss {
+    border: 0;
+    background: transparent;
+    color: var(--gray-700);
+    font-size: var(--text-xl);
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 .25rem;
+}
 
 /* The JupyterLite editor needs room and a pointer; it is unusable on a phone.
    Below 640px we hide the editor surface and show a notice instead.  Tablets
@@ -27,6 +52,8 @@ Notebook
     .notebook-header,
     #jl-frame,
     #nb-fallback,
+    #nb-device-warning,
+    #nb-browser-support-warning,
     #nb-results,
     #browser-runner-status { display: none; }
     .nb-smallscreen-notice {
@@ -35,7 +62,7 @@ Notebook
         max-width: 32rem;
         padding: 1.25rem 1.5rem;
         border: 1px solid var(--gray-200);
-        border-radius: .5rem;
+        border-radius: var(--radius-lg);
         background: var(--surface);
     }
 }
@@ -57,6 +84,24 @@ Notebook
         </div>
     </div>
 </div>
+<div id="nb-browser-support-warning" class="nb-device-warning" role="note" hidden>
+    <span class="nb-device-warning-text">
+        Your browser may not be fully supported. Chickadee works best on the same
+        browsers as LEARN &mdash; Safari&nbsp;26+, Chrome&nbsp;140+, Edge&nbsp;140+,
+        or Firefox&nbsp;143+. You can keep working: if in-browser testing
+        doesn&rsquo;t run, your submission is still graded on our servers, and you
+        can always submit by uploading your <code>.ipynb</code> file.
+    </span>
+    <button type="button" id="nb-browser-support-dismiss" class="nb-device-warning-dismiss" aria-label="Dismiss this notice">&times;</button>
+</div>
+<div id="nb-device-warning" class="nb-device-warning" role="note" hidden>
+    <span class="nb-device-warning-text">
+        This device may be low on memory for the in-browser editor. If the
+        notebook gets slow or the Python kernel stops, try a laptop or desktop
+        in Chrome or Firefox.
+    </span>
+    <button type="button" id="nb-device-warning-dismiss" class="nb-device-warning-dismiss" aria-label="Dismiss this notice">&times;</button>
+</div>
 <div class="nb-smallscreen-notice" role="note">
     <h2 class="nb-notice-title">Open on a larger screen</h2>
     <p class="nb-notice-text">
@@ -77,6 +122,7 @@ Notebook
     title="Notebook editor"
     data-setup-id="#(testSetupID)"
     data-grading-mode="#(gradingMode)"
+    data-browser-unsupported="#(browserUnsupported)"
     data-notebook-url="#(notebookURL)"
     data-editor-url="#(jupyterLiteEditorURL)"
     data-working-copy-mtime="#(workingCopyMtime)"
