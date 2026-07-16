@@ -402,12 +402,12 @@ extension StudentCourseRoutes {
             )
         }
 
-        _ = try await ensureUserNotebookWorkingCopy(
+        _ = try await overwriteUserNotebookWithPersonalizedStarter(
             req: req,
+            setup: setup,
             setupID: setup.id ?? assignment.testSetupID,
             userID: action.studentID,
-            fallbackSetup: setup,
-            overwriteWith: starter
+            starter: starter
         )
 
         req.logger.info(

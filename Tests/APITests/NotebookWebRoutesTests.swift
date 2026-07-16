@@ -188,6 +188,14 @@ import VaporTesting
         """
     }
 
+    /// Single-code-cell notebook — personalization substitution only rewrites
+    /// code cells, so `{{name}}` fixtures need this shape.
+    private func notebookJSON(code: String) -> String {
+        """
+        {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","execution_count":null,"metadata":{},"outputs":[],"source":[\(code.debugDescription)]}]}
+        """
+    }
+
     private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) throws {
         guard FileManager.default.fileExists(atPath: "/usr/bin/env") else {
             throw IssueRecorded("env not available")
@@ -591,6 +599,59 @@ import VaporTesting
 
             let restored = try String(contentsOf: URL(fileURLWithPath: copyPath), encoding: .utf8)
             #expect(restored.contains(starterMarker))
+            #expect(restored.contains("Broken edits") == false)
+        }
+    }
+
+    @Test func resetOwnNotebookAppliesPersonalizationSubstitutions() async throws {
+        try await withApp(app) { _ in
+            // Regression: a self-reset on a personalized assignment must hand
+            // back the *substituted* starter, exactly like first-open seeding.
+            // The reset used to write the raw template, so the student's first
+            // cell became `patients = {{patients}}` — a NameError with no
+            // self-service way back to their data.
+            let cookie = try await loginAsStudent()
+            let user = try await studentUser()
+            try await enroll(user)
+            let userID = try user.requireID()
+
+            let setupID = "setup_nb_self_reset_personalized"
+            let manifest = """
+                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null,"globalVariables":[{"name":"patients","value":[{"name":"Maria","age":42}]}]}
+                """
+            _ = try await insertSetup(
+                id: setupID,
+                notebookJSON: notebookJSON(code: "patients = {{patients}}"),
+                manifest: manifest
+            )
+            _ = try await insertAssignment(testSetupID: setupID, title: "Personalized Reset Lab", isOpen: true)
+
+            // Simulate the student having clobbered their own working copy.
+            let copyPath = workingCopyPath(setupID: setupID, userID: userID)
+            try FileManager.default.createDirectory(
+                atPath: (copyPath as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true)
+            try Data(notebookJSON(markdown: "Broken edits").utf8)
+                .write(to: URL(fileURLWithPath: copyPath))
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            let restored = try String(contentsOf: URL(fileURLWithPath: copyPath), encoding: .utf8)
+            #expect(
+                restored.contains("{{patients}}") == false,
+                "Reset must substitute the {{patients}} placeholder — the raw template leaves the student with a NameError."
+            )
+            #expect(restored.contains("Maria"), "Reset working copy must carry the substituted value.")
             #expect(restored.contains("Broken edits") == false)
         }
     }
