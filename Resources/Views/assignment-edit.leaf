@@ -43,6 +43,18 @@
                            value="#(assignmentName)"
                            placeholder="e.g. Lab 2 - Linked Lists">
                 </label>
+                #if(brightspaceSyncEnabled):
+                <div class="form-label field-gap">
+                    LEARN Assessment
+                    <div class="bs-assess-row">
+                        <datalist id="edit-bs-grade-objects"></datalist>
+                        <input type="hidden" name="gradeObjectID" id="edit-bs-grade-id">
+                        <input class="form-input" type="text" id="edit-bs-grade-name" list="edit-bs-grade-objects"
+                               data-raw-id="#(brightspaceGradeObjectID)"
+                               placeholder="Search assessments…" autocomplete="off">
+                    </div>
+                </div>
+                #endif
                 <label class="form-label field-gap">
                     Open Date (optional)
                     <input class="form-input" type="datetime-local" name="startsAt" id="startsAt" value="#(startsAt)">
@@ -133,6 +145,26 @@
     </div>
 </form>
 
+<!-- ── Student Options ─────────────────────────────────────────────────
+     Per-assignment student-facing policy toggles.  Lives OUTSIDE the
+     multipart Save & Validate form (nested forms are stripped by the
+     browser) and persists via its own lightweight endpoint so a
+     mid-semester flip doesn't close/re-validate the assignment. -->
+<section class="editor-block">
+    <div class="editor-block-head">
+        <h2>Student Options</h2>
+    </div>
+    <form method="post" action="/instructor/#(assignmentID)/secret-reveal">
+        #csrfFormField()
+        <label class="form-label">
+            <input type="checkbox" name="enabled" #if(secretRevealEnabled):checked#endif>
+            Allow each student to spend their one reveal token to see this assignment&rsquo;s secret test results
+        </label>
+        <p class="field-note text-muted">Spending is permanent for the student (staff can re-grant from the submissions page). Revealed secret tests show like public ones — names, output, and hints. Grades are unaffected.</p>
+        <button class="btn action-btn" type="submit">Save</button>
+    </form>
+</section>
+
 <!-- ── Global Inputs (Slice 1 of #461) ─────────────────────────────────
      Assignment-scope named values, inlined at save time everywhere they
      can be referenced: pattern-family case args (`$name`), prepended to
@@ -185,32 +217,6 @@
         </tbody>
     </table>
 </section>
-
-#if(brightspaceSyncEnabled):
-<!-- ── BrightSpace grade sync ─────────────────────────── -->
-<div class="editor-block">
-    <details>
-        <summary class="bs-summary">LEARN Grade Sync</summary>
-        <div class="bs-body">
-            <form method="post" action="/instructor/#(assignmentID)/brightspace">
-                #csrfFormField()
-                <label class="form-label field-gap">
-                    LEARN Grade Item ID
-                    <input class="form-input input-block" type="text" name="gradeObjectID"
-                           value="#(brightspaceGradeObjectID)"
-                           placeholder="e.g. 78901">
-                </label>
-                <p class="card-meta bs-note">
-                    Enter the D2L grade item (grade object) ID for this assignment.
-                    Find it in LEARN → Grades → hover the column → Properties → Grade Object ID in the URL.
-                    Leave blank to disable sync for this assignment.
-                </p>
-                <button class="btn btn-primary" type="submit">Save grade item ID</button>
-            </form>
-        </div>
-    </details>
-</div>
-#endif
 
 <!-- Test Suite editor lives OUTSIDE the Save & Validate multipart form
      so its nested per-op <form> elements (Add Section, rename section,
@@ -478,7 +484,6 @@
      body is relocated into the shell panel by the renderer's mount(). -->
 #extend("_family-editor-body")
 
-<script src="/suite-list.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -577,6 +582,7 @@
      `+ Add Input` rows AND `=`-prefixed per-student expression rows.
      The per-section create toolbar (+ Add Script, + Add Family, etc.)
      stays inline below because it's not section-input logic. -->
+<script src="/inputs-editor-core.js?v=#appVersion()"></script>
 <script src="/section-inputs-editor.js?v=#appVersion()"></script>
 <script>
 (function () {
@@ -747,9 +753,7 @@ function checkUWDates(dateTimeValue, warningEl) {
     var status  = document.getElementById('support-file-upload-status');
 
     function setStatus(msg, isError) {
-        if (!status) return;
-        status.textContent = msg;
-        status.style.color = isError ? 'var(--red)' : 'var(--gray-500)';
+        ChickadeeUI.setStatus(status, msg, isError ? 'error' : undefined);
     }
 
     function readAsText(file) {
@@ -830,5 +834,51 @@ function checkUWDates(dateTimeValue, warningEl) {
 })();
 </script>
 
+<style>
+.bs-assess-row { display: flex; gap: .4rem; align-items: center; }
+.bs-assess-row input[type="text"] { flex: 1; }
+</style>
+<script>
+(function () {
+    'use strict';
+    var nameInput = document.getElementById('edit-bs-grade-name');
+    var idInput = document.getElementById('edit-bs-grade-id');
+    var datalist = document.getElementById('edit-bs-grade-objects');
+    if (!nameInput || !idInput || !datalist) return;
+
+    var rawId = nameInput.dataset.rawId || '';
+    idInput.value = rawId;
+
+    fetch('/instructor/brightspace/grade-objects', {
+        headers: { 'Accept': 'application/json' }, cache: 'no-store'
+    }).then(function (res) { return res.ok ? res.json() : []; })
+    .then(function (items) {
+        if (!Array.isArray(items)) return;
+        var byId = {};
+        var byName = {};
+        items.forEach(function (it) {
+            var label = it.name;
+            if (it.gradeType && it.gradeType !== 'Numeric') label += ' — ' + it.gradeType + ' (not supported)';
+            byId[String(it.id)] = label;
+            byName[label] = String(it.id);
+            var opt = document.createElement('option');
+            opt.value = label;
+            opt.dataset.id = String(it.id);
+            datalist.appendChild(opt);
+        });
+        if (rawId && byId[rawId]) nameInput.value = byId[rawId];
+        nameInput.addEventListener('change', function () {
+            var val = nameInput.value.trim();
+            idInput.value = byName[val] || val;
+        });
+        nameInput.addEventListener('input', function () {
+            var val = nameInput.value.trim();
+            if (byName[val]) idInput.value = byName[val];
+        });
+    }).catch(function () {
+        nameInput.addEventListener('change', function () { idInput.value = nameInput.value.trim(); });
+    });
+})();
+</script>
 #endexport
 #endextend

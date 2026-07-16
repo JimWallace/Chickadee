@@ -490,8 +490,11 @@ func extractSupportFilesToSharedDirectory(
             try preservedSolutionPy.write(toFile: solutionPyPath, atomically: true, encoding: .utf8)
         }
     } catch {
-        // Non-fatal: support files are a convenience; log and continue.
-        // (Structured logging not available in a free function; print suffices here.)
-        print("[chickadee] Warning: failed to extract support files for \(setupID): \(error)")
+        // Non-fatal: support files are a convenience; log and continue.  A
+        // label-constructed Logger routes through the bootstrapped logging
+        // system, so this lands with the app's structured logs instead of
+        // bypassing them via print (#1127).
+        Logger(label: "codes.vapor.application")
+            .warning("Failed to extract support files for \(setupID): \(error)")
     }
 }

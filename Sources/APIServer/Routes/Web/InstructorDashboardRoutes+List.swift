@@ -115,13 +115,13 @@ extension InstructorDashboardRoutes {
             )
         )
 
-        // The "Y students enrolled" denominator still keys off the global role
-        // (instructor/admin test accounts excluded). Switching it to the
-        // per-course role is a follow-up once mixed roles are in real use.
+        // The "Y students enrolled" denominator counts per-course students only
+        // (TA/instructor/admin test accounts excluded), keyed off the enrollment
+        // role now that the global student role is retired (#417 Slice G2).
         let activeStudentIDs = Set(
             enrolledUsers
-                .filter { $0.roleValue == .student }
                 .compactMap(\.id)
+                .filter { rolesByUserID[$0] == .student }
         )
         // Pending pre-enrollments are CSV-uploaded students who haven't
         // logged in yet — count them toward the "Y students enrolled"
@@ -168,7 +168,8 @@ extension InstructorDashboardRoutes {
                 activeCourseUUID: activeCourseUUID
             )
         )
-        let activeStudentCount = enrolledUsers.filter { $0.roleValue == .student }.count
+        let activeStudentCount =
+            enrolledUsers.compactMap(\.id).filter { rolesByUserID[$0] == .student }.count
         return (rows, activeStudentCount + pendingPreEnrollments.count)
     }
 
@@ -234,7 +235,8 @@ extension InstructorDashboardRoutes {
                     urlToken: token
                 ),
                 unenrollURL: "/courses/\(activeCourseUUID.uuidString)/unenroll/\(id.uuidString)",
-                isPending: false
+                isPending: false,
+                registerURL: ""
             )
         }
     }
@@ -254,7 +256,9 @@ extension InstructorDashboardRoutes {
                 lastSeenAtISO: nil,
                 submissionsURL: "#",
                 unenrollURL: "/courses/\(activeCourseUUID.uuidString)/pre-unenroll/\(preID.uuidString)",
-                isPending: true
+                isPending: true,
+                registerURL:
+                    "/courses/\(activeCourseUUID.uuidString)/pre-enroll/\(preID.uuidString)/register"
             )
         }
     }

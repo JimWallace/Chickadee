@@ -195,6 +195,29 @@ struct BadgeContext {
     let executionTimeMs: Int
     /// Grade percent of the immediately preceding attempt; nil on the first attempt.
     let priorGradePercent: Int?
+    /// Per-test outcomes, when the evaluation site has them (the submission
+    /// page does; the blob-free dashboard rows don't).  Lets a badge mixing a
+    /// dynamic signal with `testPass` be satisfiable (audit A14) instead of
+    /// its testPass leg being vacuously false.
+    let outcomes: [TestOutcome]
+    /// Manifest-derived alias map for `testPass` ref resolution (audit A1).
+    let testNameAliases: [String: Set<String>]
+
+    init(
+        attemptNumber: Int,
+        gradePercent: Int,
+        executionTimeMs: Int,
+        priorGradePercent: Int?,
+        outcomes: [TestOutcome] = [],
+        testNameAliases: [String: Set<String>] = [:]
+    ) {
+        self.attemptNumber = attemptNumber
+        self.gradePercent = gradePercent
+        self.executionTimeMs = executionTimeMs
+        self.priorGradePercent = priorGradePercent
+        self.outcomes = outcomes
+        self.testNameAliases = testNameAliases
+    }
 }
 
 struct AchievementBadge: Encodable {
@@ -239,18 +262,31 @@ struct AchievementBadge: Encodable {
             gradePercent: ctx.gradePercent,
             attemptNumber: ctx.attemptNumber,
             executionTimeMs: ctx.executionTimeMs,
-            priorGradePercent: ctx.priorGradePercent)
+            priorGradePercent: ctx.priorGradePercent,
+            outcomes: ctx.outcomes,
+            testNameAliases: ctx.testNameAliases)
         return
             source
             .filter { $0.isPerSubmissionBadge && $0.isSatisfied(by: signals) }
             .map(AchievementBadge.init(from:))
     }
 
-    /// Maps a class-achievement ID string to its badge, returning nil for unknown IDs.
+    /// Maps a class-achievement ID string to its badge.  Manifest-authored
+    /// records resolve first — a custom-ID record or a renamed built-in
+    /// displays the instructor's own name/detail (audit A6: these used to be
+    /// awarded but permanently invisible) — with the registry as the fallback
+    /// for un-seeded manifests.  Returns nil for IDs neither source knows.
     static func forClassAchievement(
-        _ achievementID: String, disabled: Set<String> = []
+        _ achievementID: String,
+        manifestAchievements: [Achievement] = [],
+        disabled: Set<String> = []
     ) -> AchievementBadge? {
         guard !disabled.contains(achievementID) else { return nil }
+        if let authored = manifestAchievements.first(where: {
+            $0.id == achievementID && $0.isClassRecord
+        }) {
+            return AchievementBadge(from: authored)
+        }
         return BuiltInAchievements.classRecords
             .first { $0.id == achievementID }
             .map(AchievementBadge.init(from:))
@@ -352,6 +388,18 @@ struct SubmissionContext: Encodable {
     /// as an "Achievements" section.  Empty when the assignment has no class
     /// goals (or the sweep hasn't produced a snapshot yet).
     let classGoals: [ClassGoalView]
+    /// True iff `classGoals` is non-empty.  The template gates the "Class goals"
+    /// heading on this explicit Swift-computed flag rather than
+    /// `!classGoals.isEmpty` in Leaf, so an empty goal list never leaks a bare
+    /// heading regardless of how the Leaf encoder represents an empty array.
+    let hasClassGoals: Bool
+    /// True when this viewer may spend their secret-reveal token here:
+    /// toggle on, manifest has secret tests, viewer is the (non-staff)
+    /// owner, token not yet spent.  Renders the offer box + POST form.
+    let secretRevealAvailable: Bool
+    /// True when the reveal is active (toggle on + token spent): secret
+    /// rows are itemized and the "revealed" info banner shows.
+    let secretRevealActive: Bool
 }
 
 /// One class-goal achievement's display state for the submission page.

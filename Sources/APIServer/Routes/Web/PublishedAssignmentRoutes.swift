@@ -68,6 +68,10 @@ struct PublishedAssignmentRoutes: RouteCollection {
         r.get(":assignmentID", "global-variables", use: getGlobalVariables)
         r.put(":assignmentID", "global-variables", use: putGlobalVariables)
 
+        // Per-student dataset specs (Phase 1 datasets).
+        r.get(":assignmentID", "datasets", use: getDatasets)
+        r.put(":assignmentID", "datasets", use: putDatasets)
+
         // Unified Achievements table — the whole typed achievement list (class
         // goals, badges, built-in awards).  Display-only; no retest/validation.
         r.get(":assignmentID", "achievements", use: getAchievements)

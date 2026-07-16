@@ -34,7 +34,7 @@ extension PublishedAssignmentRoutes {
     func createSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try req.content.decode(Body.self)
         try await createSuiteSectionCore(setup: setup, name: body.name, on: req.db)
         return redirectToEdit(req: req)
@@ -46,7 +46,7 @@ extension PublishedAssignmentRoutes {
     func renameSuiteSection(req: Request) async throws -> Response {
         struct Body: Content { var name: String }
 
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
@@ -59,7 +59,7 @@ extension PublishedAssignmentRoutes {
 
     @Sendable
     func deleteSuiteSection(req: Request) async throws -> Response {
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
@@ -86,7 +86,7 @@ extension PublishedAssignmentRoutes {
             var expressions: [PersonalizationExpression]?
         }
 
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         guard let sectionID = req.parameters.get("sectionID"), !sectionID.isEmpty else {
             throw WebAssignmentError.notFound(resource: "Section")
         }
@@ -119,7 +119,7 @@ extension PublishedAssignmentRoutes {
     func reorderSuiteSections(req: Request) async throws -> HTTPStatus {
         struct Body: Content { var sectionIDs: [String] }
 
-        let (_, setup) = try await loadAssignmentAndSetup(req)
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
         let body = try req.content.decode(Body.self)
         try await reorderSuiteSectionsCore(setup: setup, sectionIDs: body.sectionIDs, on: req.db)
         return .ok

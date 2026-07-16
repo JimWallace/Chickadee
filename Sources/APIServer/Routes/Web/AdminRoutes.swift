@@ -45,6 +45,7 @@ struct AdminRoutes: RouteCollection {
         admin.post("courses", ":courseID", "enrollment-mode", use: setEnrollmentMode)
         admin.post("courses", ":courseID", "enroll-csv", use: adminBulkEnrollCSV)
         admin.post("courses", ":courseID", "unenroll", ":userID", use: unenrollUserFromCourse)
+        admin.post("courses", ":courseID", "role", ":userID", use: adminSetEnrollmentRole)
         admin.get("users", ":userID", use: userDetail)
         admin.post("users", ":userID", "delete", use: deleteUser)
         admin.post("users", ":userID", "enroll", use: adminEnrollUser)
@@ -340,13 +341,13 @@ struct AdminRoutes: RouteCollection {
         }
 
         let body = try req.content.decode(RoleBody.self)
-        guard
-            [UserRole.student.rawValue, UserRole.instructor.rawValue, UserRole.admin.rawValue]
-                .contains(body.role)
-        else {
+        // The deployment role is user|admin now (#417 Slice G2); `mcp` is set only
+        // at agent provisioning, never toggled here, and the retired
+        // student/instructor roles are no longer assignable.
+        guard [UserRole.user.rawValue, UserRole.admin.rawValue].contains(body.role) else {
             throw AppError.invalidParameter(
                 name: "role",
-                reason: "must be student, instructor, or admin (got '\(body.role)')")
+                reason: "must be user or admin (got '\(body.role)')")
         }
 
         let previousRole = user.role

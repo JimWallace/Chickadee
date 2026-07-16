@@ -223,7 +223,7 @@ Admin
 #courses-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
-    font-size: .75rem;
+    font-size: var(--text-xs);
 }
 #workers-table th[data-sort-key].sort-asc::after,
 #courses-table th[data-sort-key].sort-asc::after {
@@ -631,7 +631,7 @@ tr.runner-row-offline {
 
     // Active Users card: sparkline + click-cycle 24h/7d/30d.
     // Reuses the GET /admin/activity endpoint (24h/1w/1m windows). The card's
-    // headline is the peak distinct active users in a single bucket; the spark
+    // headline is the total active users summed across the buckets; the spark
     // shows the per-bucket trend. The 24h view is server-rendered into the card
     // so there's no fetch-on-load flash; clicking the card cycles the window.
     var activitySpark = document.getElementById('activity-card-spark');
@@ -657,7 +657,7 @@ tr.runner-row-offline {
                     + '<span class="spark-fill' + (count > 0 ? '' : ' spark-fill-empty')
                     + '" style="--bar-h:' + pct.toFixed(1) + '%"></span></div>';
             }).join('');
-            if (activityValue) activityValue.textContent = String(max);
+            if (activityValue) activityValue.textContent = String(buckets.reduce(function (s, b) { return s + (Number(b.count) || 0); }, 0));
         }
 
         function activityBucketsFromDOM() {

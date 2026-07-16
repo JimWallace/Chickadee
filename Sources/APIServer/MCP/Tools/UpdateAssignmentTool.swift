@@ -18,10 +18,12 @@ struct UpdateAssignmentTool: ContentTool {
         let startsAt: String?
         let isOpen: Bool?
         let visibility: String?
+        let secretRevealEnabled: Bool?
 
         init(
             assignmentPublicID: String, title: String? = nil, dueAt: String? = nil,
-            startsAt: String? = nil, isOpen: Bool? = nil, visibility: String? = nil
+            startsAt: String? = nil, isOpen: Bool? = nil, visibility: String? = nil,
+            secretRevealEnabled: Bool? = nil
         ) {
             self.assignmentPublicID = assignmentPublicID
             self.title = title
@@ -29,6 +31,7 @@ struct UpdateAssignmentTool: ContentTool {
             self.startsAt = startsAt
             self.isOpen = isOpen
             self.visibility = visibility
+            self.secretRevealEnabled = secretRevealEnabled
         }
     }
 
@@ -42,6 +45,8 @@ struct UpdateAssignmentTool: ContentTool {
         let dueAt: String?
         let startsAt: String?
         let validationStatus: String?
+        /// Whether students may spend their one secret-reveal token here.
+        let secretRevealEnabled: Bool
     }
 
     static let name = "update_assignment"
@@ -55,15 +60,16 @@ struct UpdateAssignmentTool: ContentTool {
         + "visibility is the three-state form of isOpen and wins if both are given: \"preview\" is a "
         + "staff-only state where course staff see and use the assignment exactly like open while "
         + "students see it as closed. Switching to preview is a pure visibility change (no validation, "
-        + "no close); only opening to students is refused until validation passes. Does not change "
+        + "no close); only opening to students is refused until validation passes. "
+        + "secretRevealEnabled (true/false) controls the secret-reveal token: when true, each student "
+        + "may permanently spend their one token on this assignment to see secret-tier test results "
+        + "(itemized like public tests) on all of their submissions; false (the default) keeps secret "
+        + "results hidden. Display-only — grades are unaffected. Does not change "
         + "test content, so it never triggers a regrade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "title": .object([
                 "type": .string("string"),
                 "description": .string("New display title (non-empty)."),
@@ -92,6 +98,14 @@ struct UpdateAssignmentTool: ContentTool {
                     "Three-state visibility. \"preview\" is a staff-only beta state. Wins over "
                         + "isOpen if both are given. open → preview is refused (close first)."),
             ]),
+            "secretRevealEnabled": .object([
+                "type": .string("boolean"),
+                "description": .string(
+                    "true to let each student spend their one secret-reveal token on this "
+                        + "assignment (permanently revealing secret-tier test results across all "
+                        + "their submissions); false (the default) keeps secret results hidden. "
+                        + "Display-only — grades are unaffected."),
+            ]),
         ]),
         "required": .array([.string("assignmentPublicID")]),
         "additionalProperties": .bool(false),
@@ -99,21 +113,22 @@ struct UpdateAssignmentTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "publicID": .object(["type": .string("string")]),
-            "title": .object(["type": .string("string")]),
-            "slug": .object(["type": .string("string")]),
-            "isOpen": .object(["type": .string("boolean")]),
+            "publicID": MCPSchema.string,
+            "title": MCPSchema.string,
+            "slug": MCPSchema.string,
+            "isOpen": MCPSchema.boolean,
             "visibility": .object([
                 "type": .string("string"),
                 "enum": .array([.string("closed"), .string("preview"), .string("open")]),
             ]),
-            "dueAt": .object(["type": .string("string")]),
-            "startsAt": .object(["type": .string("string")]),
-            "validationStatus": .object(["type": .string("string")]),
+            "dueAt": MCPSchema.string,
+            "startsAt": MCPSchema.string,
+            "validationStatus": MCPSchema.string,
+            "secretRevealEnabled": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("isOpen"),
-            .string("visibility"),
+            .string("visibility"), .string("secretRevealEnabled"),
         ]),
     ])
     static let annotations: MCPToolAnnotations? = MCPToolAnnotations(
@@ -128,20 +143,25 @@ struct UpdateAssignmentTool: ContentTool {
         guard
             newTitle != nil || input.isOpen != nil || visibilityUpdate != nil
                 || dueUpdate != .unchanged || startsUpdate != .unchanged
+                || input.secretRevealEnabled != nil
         else {
             throw MCPToolError.invalidArguments(
-                tool: Self.name, detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility.")
+                tool: Self.name,
+                detail: "Specify at least one of: title, dueAt, startsAt, isOpen, visibility, "
+                    + "secretRevealEnabled.")
         }
 
-        let assignment = try await context.authorizedAssignment(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        // Title / due date / open state are lifecycle — instructor-level (#417).
+        let assignment = try await context.authorizedAssignmentForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
         do {
             // Title/date metadata first. The legacy `isOpen` is applied here only
             // when `visibility` was not given (visibility is the richer form and
             // wins).
             try await AssignmentAuthoringService.updateMetadata(
                 assignment, title: newTitle, dueAt: dueUpdate, startsAt: startsUpdate,
-                open: visibilityUpdate == nil ? input.isOpen : nil, on: context.db)
+                open: visibilityUpdate == nil ? input.isOpen : nil,
+                secretRevealEnabled: input.secretRevealEnabled, on: context.db)
             if let visibilityUpdate {
                 try await AssignmentAuthoringService.setVisibility(
                     assignment, visibilityUpdate, on: context.db)
@@ -161,7 +181,8 @@ struct UpdateAssignmentTool: ContentTool {
             visibility: assignment.visibility.rawValue,
             dueAt: assignment.dueAt.map { formatter.string(from: $0) },
             startsAt: assignment.startsAt.map { formatter.string(from: $0) },
-            validationStatus: assignment.validationStatus
+            validationStatus: assignment.validationStatus,
+            secretRevealEnabled: assignment.secretRevealEnabled == true
         )
     }
 

@@ -4,6 +4,7 @@
 // load/sort/render helpers.  Split out of
 // InstructorDashboardRoutes+Submissions.swift — no behaviour changes.
 
+import Core
 import Fluent
 import Foundation
 import Vapor
@@ -37,15 +38,21 @@ extension InstructorDashboardRoutes {
         let setupByID = try await setupByIDFuture
         let submissions = try await submissionsFuture
 
-        let sortedAssignments = sortedGradesCSVAssignments(assignments, setupByID: setupByID)
+        let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupByID)
         let submissionIDs = submissions.map(\.id)
 
         // Serial follow-on: needs submission IDs from phase 2.
-        let preferredResultBySubmissionID = try await preferredResultsBySubmissionID(
+        // Load every result for every submission (not just the worker-preferred one)
+        // so that "highest grade wins" — a 100 % browser run is never displaced by
+        // a later worker regrading at a lower percentage.  The best percentage is
+        // then converted to points using the manifest total so the CSV column is
+        // anchored to a stable scale regardless of which tier mix each result used.
+        let allResultsBySubmission = try await gradeSummariesBySubmissionID(
             for: submissionIDs, on: req.db)
-        var bestPointsByUserAndSetup = bestPointsByUserAndSetup(
+        var bestPointsByUserAndSetup = bestGradePointsByUserAndSetup(
             submissions: submissions,
-            preferredResultBySubmissionID: preferredResultBySubmissionID
+            allResultsBySubmission: allResultsBySubmission,
+            setupByID: setupByID
         )
 
         // Instructor grade overrides replace the runner-computed points. They
@@ -67,9 +74,11 @@ extension InstructorDashboardRoutes {
         // submission on a setup with class goals.  Overrides are authoritative,
         // so a key an override already set is left untouched.
         for setupID in setupIDs {
-            let bonus = try await classGoalBonusPoints(testSetupID: setupID, on: req.db)
-            guard bonus > 0, let setup = setupByID[setupID],
-                let total = suiteTotalPoints(setup: setup)
+            guard let setup = setupByID[setupID] else { continue }
+            let props = setup.decodedManifest()
+            let bonus = try await classGoalBonusPoints(
+                testSetupID: setupID, props: props, on: req.db)
+            guard bonus > 0, let total = suiteTotalPoints(props: props)
             else { continue }
             let suffix = "::\(setupID)"
             for (mapKey, points) in bestPointsByUserAndSetup
@@ -102,21 +111,31 @@ extension InstructorDashboardRoutes {
         req: Request, activeCourseUUID: UUID?
     ) async throws -> [APIUser] {
         if let activeCourseUUID {
-            let enrolledUserIDs = try await APICourseEnrollment.query(on: req.db)
-                .filter(\.$course.$id == activeCourseUUID)
-                .all()
-                .map { $0.userID }
-            guard !enrolledUserIDs.isEmpty else { return [] }
-            // Filter to the enrolled IDs in SQL instead of fetching every
-            // student in the system and filtering in memory.
+            // Students are `.student`-role enrollments now (#417 Slice G2).
+            let studentUserIDs = try await studentUserIDsInCourse(activeCourseUUID, on: req.db)
+            guard !studentUserIDs.isEmpty else { return [] }
             return try await APIUser.query(on: req.db)
-                .filter(\.$role == UserRole.student.rawValue)
-                .filter(\.$id ~~ enrolledUserIDs)
+                .filter(\.$id ~~ Array(studentUserIDs))
                 .sort(\.$username, .ascending)
                 .all()
         }
+        // No active course: every student across the deployment — the union of
+        // all `.student`-role enrollments (#417 Slice G2; the global role no
+        // longer distinguishes students). Filtered DB-side (#1160): the
+        // unscoped fetch grows with every past term. NULL role means
+        // pre-migration student (the computed `role` accessor's default), so
+        // the predicate must keep NULL rows.
+        let studentEnrollments = try await APICourseEnrollment.query(on: req.db)
+            .group(.or) { or in
+                or.filter(\.$roleRaw == CourseRole.student.rawValue)
+                or.filter(\.$roleRaw == .null)
+            }
+            .field(\.$userID)
+            .all()
+        let studentUserIDs = Set(studentEnrollments.map(\.userID))
+        guard !studentUserIDs.isEmpty else { return [] }
         return try await APIUser.query(on: req.db)
-            .filter(\.$role == UserRole.student.rawValue)
+            .filter(\.$id ~~ Array(studentUserIDs))
             .sort(\.$username, .ascending)
             .all()
     }
@@ -147,23 +166,6 @@ extension InstructorDashboardRoutes {
             })
     }
 
-    private func sortedGradesCSVAssignments(
-        _ assignments: [APIAssignment],
-        setupByID: [String: APITestSetup]
-    ) -> [APIAssignment] {
-        assignments.sorted { lhs, rhs in
-            switch (lhs.sortOrder, rhs.sortOrder) {
-            case (let l?, let r?) where l != r:
-                return l < r
-            default:
-                let lhsCreated = setupByID[lhs.testSetupID]?.createdAt ?? .distantPast
-                let rhsCreated = setupByID[rhs.testSetupID]?.createdAt ?? .distantPast
-                if lhsCreated != rhsCreated { return lhsCreated > rhsCreated }
-                return lhs.testSetupID < rhs.testSetupID
-            }
-        }
-    }
-
     private func loadGradesCSVSubmissions(
         req: Request,
         setupIDs: Set<String>,
@@ -183,24 +185,42 @@ extension InstructorDashboardRoutes {
         }
     }
 
-    private func bestPointsByUserAndSetup(
+    // The grouped result loader moved to the shared helper file
+    // (`allResultsBySubmissionID`, BestGradePercentBySubmissionID.swift) so
+    // this file and the highest-grade fold can't drift apart (#1111).
+
+    /// Returns the best earned points per (user, setup), where "best" is the
+    /// highest grade percentage achieved across ALL results for ALL submissions
+    /// (browser and worker alike), converted to points via the manifest total.
+    ///
+    /// Using percentage × manifest-total rather than raw earnedPoints means the
+    /// CSV column is on a stable scale: the instructor knows exactly what LEARN
+    /// max to enter (the manifest total), and a 100 % browser result is never
+    /// overwritten by a lower-percentage worker result from a later regrading.
+    private func bestGradePointsByUserAndSetup(
         submissions: [(id: String, userID: UUID, setupID: String)],
-        preferredResultBySubmissionID: [String: APIResult]
+        allResultsBySubmission: [String: [GradeResultSummary]],
+        setupByID: [String: APITestSetup]
     ) -> [String: Double] {
-        var bestPointsByUserAndSetup: [String: Double] = [:]
+        // Step 1: highest grade percentage across ALL results for ALL
+        // submissions — the shared "highest grade wins" fold (#1111).
+        var bestPctByKey: [String: Int] = [:]
         for submission in submissions {
-            guard let result = preferredResultBySubmissionID[submission.id],
-                let points = result.gradePointsValue
-            else {
-                continue
-            }
             let key = "\(submission.userID.uuidString.lowercased())::\(submission.setupID)"
-            let prior = bestPointsByUserAndSetup[key] ?? -1
-            if points > prior {
-                bestPointsByUserAndSetup[key] = points
-            }
+            guard let pct = bestGradePercent(of: allResultsBySubmission[submission.id] ?? [])
+            else { continue }
+            if pct > (bestPctByKey[key] ?? -1) { bestPctByKey[key] = pct }
         }
-        return bestPointsByUserAndSetup
+        // Step 2: convert best percentage → points anchored to the manifest total.
+        var best: [String: Double] = [:]
+        for (key, pct) in bestPctByKey {
+            guard let setupID = key.components(separatedBy: "::").last,
+                let setup = setupByID[setupID],
+                let total = suiteTotalPoints(props: setup.decodedManifest())
+            else { continue }
+            best[key] = Double(pct) / 100.0 * total
+        }
+        return best
     }
 
     private func renderGradesCSV(

@@ -40,7 +40,10 @@ struct UpdateAchievementsTool: ContentTool {
         + "badge), classWide (a collaborative class goal — set classPercent 0–100 and points ≥ 0), or "
         + "record (a single-holder competitive title — set recordDimension). Conditions are typed "
         + "predicates over a submission's signals (grade/gradeJumpPercent 0–100, attempts, "
-        + "executionTimeMs, testPass with a testRef filename) combined with `match` (all/any). Use "
+        + "executionTimeMs, testPass with a testRef naming a suite test) combined with `match` "
+        + "(all/any). testRefs are validated against the suite; ids must be unique. A classWide goal "
+        + "accepts at most one condition and it must be 'grade atLeast X' (the class sweep evaluates "
+        + "only that shape). Use "
         + "get_achievements first to read the current list (which includes the built-in defaults until "
         + "you first save). Saving marks the built-ins curated, so removed built-ins stay removed. "
         + "Achievements are server-evaluated and display-only: this does NOT re-validate, re-grade "
@@ -48,10 +51,7 @@ struct UpdateAchievementsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "achievements": .object([
                 "type": .string("array"),
                 "description": .string(
@@ -65,7 +65,7 @@ struct UpdateAchievementsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "achievements": .object([
                 "type": .string("array"),
                 "items": achievementRowSchema,
@@ -78,8 +78,8 @@ struct UpdateAchievementsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         let rows: [AchievementRow]
         do {

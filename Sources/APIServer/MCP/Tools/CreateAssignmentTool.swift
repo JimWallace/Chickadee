@@ -66,12 +66,12 @@ struct CreateAssignmentTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "publicID": .object(["type": .string("string")]),
-            "title": .object(["type": .string("string")]),
-            "slug": .object(["type": .string("string")]),
-            "courseCode": .object(["type": .string("string")]),
-            "cellCount": .object(["type": .string("integer")]),
-            "isOpen": .object(["type": .string("boolean")]),
+            "publicID": MCPSchema.string,
+            "title": MCPSchema.string,
+            "slug": MCPSchema.string,
+            "courseCode": MCPSchema.string,
+            "cellCount": MCPSchema.integer,
+            "isOpen": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
@@ -97,7 +97,8 @@ struct CreateAssignmentTool: ContentTool {
                 tool: Self.name, detail: "No course found with code \"\(code)\".")
         }
         let courseID = try course.requireID()
-        try await context.authorizeCourseAccess(courseID, tool: Self.name)
+        // Creating an assignment is instructor-level (#417); archived is blocked too.
+        try await context.authorizeCourseWriteAccess(courseID, tool: Self.name, atLeast: .instructor)
 
         let data: Data
         do {

@@ -19,6 +19,11 @@
 //                               lookup.  Whitelist-only: the auth-guarded
 //                               /jupyterlite/…/files/users/ paths are not
 //                               listed and still ride the full chain below.
+//   RequestTimingMiddleware — records request_metrics rows (admin dashboard
+//                               + get_request_metrics MCP tool). Below the
+//                               asset fast path, above sessions so timings
+//                               include the session/auth cost. Idle runner
+//                               check-ins are excluded from persistence.
 //   sessions.middleware
 //   UserSessionAuthenticator
 //   SessionIdleTimeoutMiddleware — runs before UserActivityMiddleware
@@ -103,6 +108,16 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
         EditorAssetFastPathMiddleware(
             publicDirectory: app.directory.publicDirectory,
             crossOriginIsolation: true))
+    // Request timing feeds the request_metrics table behind the admin
+    // dashboard and the get_request_metrics diagnostic tool.  It sits below
+    // the editor-asset fast path (a JupyterLite boot's asset storm never
+    // reaches it) and above the session chain so measured durations include
+    // the real per-request session/auth cost.  recordRequestMetric gates
+    // persistence to /api/*, /submissions/*, /testsetups/* (everything under
+    // VERBOSE_REQUEST_TIMING) and skips idle runner check-ins, so hot-path
+    // worker polls don't turn into per-poll INSERTs.  (Shipped in v0.4.573
+    // but never registered — the metrics pipeline had been silently empty.)
+    app.middleware.use(RequestTimingMiddleware())
     app.middleware.use(app.sessions.middleware)
     app.middleware.use(UserSessionAuthenticator())
     if securityConfiguration.sessionIdleTimeoutSeconds > 0 {

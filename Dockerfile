@@ -107,8 +107,9 @@ COPY --from=binaries /out/chickadee-server  ./chickadee-server
 COPY --from=binaries /out/chickadee-runner  ./chickadee-runner
 
 # Static assets — the server reads these from its working directory at runtime.
-# The entrypoint script syncs them to the data volume (/data) on each startup,
-# so updates to templates or JupyterLite are always picked up on redeploy.
+# The entrypoint script symlinks them from the data volume (/data) to these
+# image copies on each startup, so updates to templates or JupyterLite are
+# picked up on redeploy without re-copying ~586 MB into the volume every boot.
 COPY Public     ./Public
 COPY Resources  ./Resources
 # Authoring guides served as MCP resources (see MCPResourceProvider).

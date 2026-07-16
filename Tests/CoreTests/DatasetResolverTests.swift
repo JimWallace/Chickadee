@@ -87,6 +87,26 @@ import Testing
         }
     }
 
+    @Test func pathCarryingSpecIsSkippedNotRead() throws {
+        // #1104 — a spec whose file carries path components must never be
+        // joined onto the source directory (it could read any server-readable
+        // file, e.g. ../../.worker-secret). It is skipped like a missing file.
+        try withTempDir { dir in
+            let outside = dir + "/outside-secret.txt"
+            try "hunter2".write(toFile: outside, atomically: true, encoding: .utf8)
+            let inner = dir + "/pool"
+            try FileManager.default.createDirectory(atPath: inner, withIntermediateDirectories: true)
+            let manifest = TestProperties(datasets: [
+                DatasetSpec(file: "../outside-secret.txt", sampleSize: 5),
+                DatasetSpec(file: "/etc/hostname", sampleSize: 5),
+                DatasetSpec(file: "..", sampleSize: 5),
+            ])
+            #expect(
+                DatasetResolver.resolve(manifest: manifest, seedHex: seed, sourceDirectory: inner)
+                    == nil)
+        }
+    }
+
     @Test func resolvesMultipleDatasetsIndependently() throws {
         try withTempDir { dir in
             try indexedCSV(80).write(toFile: dir + "/a.csv", atomically: true, encoding: .utf8)

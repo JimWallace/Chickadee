@@ -162,6 +162,11 @@ extension AdminRoutes {
         req.application.brightSpaceSyncConfig = config
         req.application.brightSpaceClient = candidate
         req.logger.info("BrightSpace authorized by \(user.username) as \(identity)")
+        await AuditLogger.record(
+            action: .brightspaceAdminAuthorized,
+            metadata: ["identity": identity, "source": "valence_callback"],
+            on: req
+        )
 
         req.session.data["bs_flash_success"] = "BrightSpace authorized as \(identity)."
         let response = req.redirect(to: "/admin/brightspace")
@@ -175,16 +180,24 @@ extension AdminRoutes {
     func brightspaceClearAuthorization(req: Request) async throws -> Response {
         try await BrightSpaceCredentialStore.clearGlobal(on: req.db)
         // Fall back to an env-provided user key if one exists; otherwise disable.
+        let revertedTo: String
         if let envConfig = req.application.appConfig.brightspace {
             req.application.brightSpaceSyncConfig = envConfig
             req.application.brightSpaceClient = BrightSpaceAPIClient(config: envConfig)
+            revertedTo = "env"
             req.session.data["bs_flash_success"] =
                 "Authorization cleared — reverted to the BRIGHTSPACE_USER_KEY from env."
         } else {
             req.application.brightSpaceSyncConfig = nil
             req.application.brightSpaceClient = nil
+            revertedTo = "disabled"
             req.session.data["bs_flash_success"] = "Authorization cleared — grade sync is now disabled."
         }
+        await AuditLogger.record(
+            action: .brightspaceAdminCleared,
+            metadata: ["reverted_to": revertedTo],
+            on: req
+        )
         return req.redirect(to: "/admin/brightspace")
     }
 
@@ -242,6 +255,11 @@ extension AdminRoutes {
         req.application.brightSpaceSyncConfig = config
         req.application.brightSpaceClient = candidate
         req.logger.info("BrightSpace credentials set manually by \(user.username) as \(identity)")
+        await AuditLogger.record(
+            action: .brightspaceAdminAuthorized,
+            metadata: ["identity": identity, "source": "manual"],
+            on: req
+        )
 
         req.session.data["bs_flash_success"] = "BrightSpace credentials saved — connected as \(identity)."
         return req.redirect(to: "/admin/brightspace")

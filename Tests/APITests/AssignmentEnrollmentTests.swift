@@ -34,7 +34,10 @@ import VaporTesting
     private func enroll(user: APIUser, in course: APICourse) async throws {
         // Seed the per-course role from the global role so a global-instructor
         // caller becomes a per-course instructor (Phase 5: authority is per-course).
-        let role: CourseRole = user.isInstructor ? .instructor : .student
+        // The global `instructor` UserRole case is gone (#417 Slice G2); a legacy
+        // `"instructor"` role string or an admin seeds to instructor.
+        let role: CourseRole =
+            (user.role == "instructor") || user.isAdmin ? .instructor : .student
         let enrollment = APICourseEnrollment(
             userID: try user.requireID(), courseID: try course.requireID(), role: role)
         try await enrollment.save(on: app.db)
@@ -540,6 +543,90 @@ import VaporTesting
                 .count()
             #expect(remaining == 1)
 
+        }
+    }
+
+    @Test func registerPreEnrollment_materializesUserAndEnrolls() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_REG1")
+            let courseID = try course.requireID()
+
+            let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_register")
+            try await pending.save(on: app.db)
+            let preID = try pending.requireID().uuidString
+
+            let cookie = try await loginInstructor("csv_reg_instructor1", in: course)
+            let (token, newCookie) = try await csrfFields(for: "/enroll", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID.uuidString)/pre-enroll/\(preID)/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(
+                        [
+                            "_csrf": token,
+                            "displayName": "Reggie Test",
+                            "externalSubject": "duo-sub-123",
+                            "studentID": "20260001",
+                        ], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            // Pre-enrollment is gone.
+            let remaining = try await APIPreEnrollment.query(on: app.db)
+                .filter(\.$id == pending.requireID())
+                .count()
+            #expect(remaining == 0)
+
+            // A real student user now exists, carrying the supplied SSO identity.
+            let user = try #require(
+                try await APIUser.query(on: app.db)
+                    .filter(\.$username == "csv_pre_register").first())
+            #expect(user.role == UserRole.user.rawValue)
+            #expect(user.authProvider == "duo-oidc")
+            #expect(user.externalSubject == "duo-sub-123")
+            #expect(user.displayName == "Reggie Test")
+            #expect(user.studentID == "20260001")
+
+            // And they're enrolled in the course.
+            let enrollment = try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$course.$id == courseID)
+                .filter(\.$userID == user.requireID())
+                .count()
+            #expect(enrollment == 1)
+        }
+    }
+
+    @Test func registerPreEnrollment_studentForbidden() async throws {
+        try await withApp(app) { _ in
+            let course = try await makeCourse(code: "CSV_REG2")
+            let courseID = try course.requireID()
+
+            let pending = APIPreEnrollment(courseID: courseID, username: "csv_pre_regforbidden")
+            try await pending.save(on: app.db)
+            let preID = try pending.requireID().uuidString
+
+            let cookie = try await loginUser(
+                username: "csv_reg_student2", password: "pw", role: "student", on: app)
+            let (token, newCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .POST, "/courses/\(courseID.uuidString)/pre-enroll/\(preID)/register",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: newCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+            // Pending row untouched.
+            let remaining = try await APIPreEnrollment.query(on: app.db)
+                .filter(\.$id == pending.requireID())
+                .count()
+            #expect(remaining == 1)
         }
     }
 

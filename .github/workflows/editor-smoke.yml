@@ -125,39 +125,13 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      # Normalise source mtimes to commit times so a restored .build/ stays
-      # valid for unchanged files and only new commits recompile.
-      - uses: ./.github/actions/restore-git-mtimes
-
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      # Read-only restore of the shared build cache produced by the Swift Tests
-      # `build` job (same exact key).  EXACT-MATCH ONLY: a `restore-keys` prefix
-      # fallback would incrementally build the server over a mismatched tree,
-      # which is unsound for the same mangled-symbol reason documented in
-      # swift-tests.yml's `build` job.  On a hit, building the server product is
-      # a near-no-op; on a miss we build it cold.
-      - name: Restore build artifacts
-        uses: actions/cache/restore@v5
+      # Shared scaffold: mtime normalisation, exact-match build-cache restore,
+      # server build, Node + Playwright install (engine download cached). See
+      # .github/actions/browser-probe-setup/action.yml for the cache-soundness
+      # notes that used to live inline here.
+      - uses: ./.github/actions/browser-probe-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Build chickadee-server
-        run: swift build --product chickadee-server
-
-      - name: Install Node, Playwright and the ${{ matrix.browser }} engine
-        working-directory: Tools/editor-smoke-test
-        run: |
-          set -eux
-          # Node + curl from the noble base (curl backs the readiness poll).
-          apt-get update -qq
-          apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
-          npm ci
-          # --with-deps installs the engine's system libraries via apt.
-          npx playwright install --with-deps ${{ matrix.browser }}
+          browser: ${{ matrix.browser }}
 
       # selftest.sh drives the editor THREE ways against this one build, in the
       # matrix engine (Chromium / WebKit):
@@ -168,8 +142,28 @@ jobs:
       #   • no SW and no SAB — must FAIL (proves the freeze detector works).
       # Running it under WebKit too is what would have caught the Safari-class
       # editor regressions in CI rather than in front of a student.
+      # webkit only: one bounded, loudly-logged retry. The webkit engine
+      # carries a known ambient exec-hang rate under CI load (~1 failure in 25
+      # gate runs — docs/ci-flakiness.md Family 3), and this job feeds the
+      # REQUIRED editor-smoke-gate, so a single ambient hang should not block
+      # an unrelated merge. Chromium stays strict: a chromium failure is
+      # treated as real, first time. The retry is logged as a ::warning so the
+      # flake rate stays visible in the annotations rather than hidden.
       - name: Run editor smoke selftest (${{ matrix.browser }}; both sync paths + freeze detector)
-        run: SMOKE_BROWSER=${{ matrix.browser }} Tools/editor-smoke-test/selftest.sh
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh; then
+            exit 0
+          fi
+          rc=$?
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit selftest failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Family 3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" Tools/editor-smoke-test/selftest.sh
 
       # Full authenticated end-to-end against the REAL student notebook page:
       # seed a browser-graded assignment over the HTTP API, log in as a student,
@@ -179,15 +173,33 @@ jobs:
       # real Submit grades. This drives the actual page (not /jupyterlite/repl) —
       # the gap that hid the grading-worker COEP block (#986).
       - name: Run authenticated notebook-page e2e (${{ matrix.browser }})
-        run: SMOKE_BROWSER=${{ matrix.browser }} SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.browser }}
+        run: |
+          set -uo pipefail
+          if SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh; then
+            exit 0
+          fi
+          rc=$?
+          if [ "$ENGINE" != "webkit" ]; then
+            exit "$rc"
+          fi
+          echo "::warning::FLAKE RETRY: webkit notebook-page e2e failed (rc=${rc}) — known exec-hang class (docs/ci-flakiness.md Families 2+3). Retrying once; a second failure fails the gate."
+          SMOKE_BROWSER="$ENGINE" SMOKE_CHECK=notebook-page-check.mjs Tools/editor-smoke-test/run-smoke.sh
 
   # Always-running required status. Green when the smoke passed OR was skipped
   # (no editor-relevant changes), red only when the smoke actually failed — so
   # this one check can be marked required without blocking unrelated PRs. Mark
   # THIS job ("editor-smoke-gate") required in branch protection.
+  # `!cancelled()` is run-scoped: a superseded run (concurrency cancel from a
+  # newer push, or a rerun of an older head entering the shared group) skips
+  # the gate instead of reporting its cancelled smoke jobs as a failure. A
+  # smoke job killed by its own timeout-minutes still fails the gate — the
+  # run survives in that case, so the gate runs and sees result=cancelled.
   editor-smoke-gate:
     needs: [changes, smoke]
-    if: always()
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Gate on editor smoke result

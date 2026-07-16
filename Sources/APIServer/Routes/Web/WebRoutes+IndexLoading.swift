@@ -50,7 +50,11 @@ extension WebRoutes {
         allAssignments: [APIAssignment],
         db: any Database
     ) async throws -> Set<String> {
-        guard !user.isInstructor, let userID = user.id, !allAssignments.isEmpty else { return [] }
+        guard let userID = user.id, let courseID = allAssignments.first?.courseID else { return [] }
+        // Staff (TA+ or admin) of the course already see every setup, so they
+        // need no per-student engagement set (#417 Slice G — was the global
+        // `user.isInstructor`).
+        if try await isCourseStaff(user, inCourse: courseID, db: db) { return [] }
         let allSetupIDs = Set(allAssignments.map(\.testSetupID))
         let setupIDByAssignmentID = setupIDByAssignmentID(allAssignments)
 
@@ -71,6 +75,71 @@ extension WebRoutes {
             }
         }
         return opened
+    }
+
+    /// The setups the viewer's dashboard lists.  Staff see every setup in the
+    /// active course.  Enrolled students see every published assignment in the
+    /// course: open ones, and ones that were published and have since closed
+    /// at their deadline — kept on the list (read-only) so recent labs never
+    /// silently disappear (preview / scheduled / unpublished drafts stay
+    /// hidden; see `assignmentVisibleToStudentByState`) — plus anything an
+    /// active per-student extension reveals and anything they previously
+    /// engaged with (covers no-deadline assignments the by-state rule can't
+    /// classify).  Empty when nothing is visible.
+    static func loadDashboardSetups(
+        activeCourseUUID: UUID,
+        isActiveCourseStaff: Bool,
+        allAssignments: [APIAssignment],
+        extensionDueAtBySetupID: [String: Date],
+        previouslyOpenedSetupIDs: Set<String>,
+        db: any Database
+    ) async throws -> [APITestSetup] {
+        if isActiveCourseStaff {
+            return try await APITestSetup.query(on: db)
+                .filter(\.$courseID == activeCourseUUID)
+                .sort(\.$createdAt, .descending)
+                .all()
+        }
+        let now = Date()
+        var visibleSetupIDs = Set(
+            allAssignments
+                .filter { assignmentVisibleToStudentByState($0, now: now) }
+                .map(\.testSetupID))
+        // An active per-student extension also reveals an assignment that was
+        // closed before its deadline (which the by-state rule leaves hidden
+        // for everyone else) to the one student who was granted more time.
+        for (setupID, extendedDueAt) in extensionDueAtBySetupID
+        where studentHasActiveExtension(extensionDueAt: extendedDueAt, now: now) {
+            visibleSetupIDs.insert(setupID)
+        }
+        visibleSetupIDs.formUnion(previouslyOpenedSetupIDs)
+        guard !visibleSetupIDs.isEmpty else { return [] }
+        return try await APITestSetup.query(on: db)
+            .filter(\.$id ~~ visibleSetupIDs)
+            .sort(\.$createdAt, .descending)
+            .all()
+    }
+
+    /// Notebook presence per setup — drives the Edit button.  The zip-derived
+    /// answer costs an `unzip` subprocess per setup, so it is resolved through
+    /// ZipEntryListCache (keyed by zip mtime + size) instead of being
+    /// recomputed on every dashboard view.
+    static func loadHasNotebookBySetupID(
+        setups: [APITestSetup], application: Application
+    ) async -> [String: Bool] {
+        var hasNotebookBySetupID: [String: Bool] = [:]
+        for setup in setups {
+            let setupID = setup.id ?? ""
+            if let path = setup.notebookPath, !path.isEmpty,
+                FileManager.default.fileExists(atPath: path)
+            {
+                hasNotebookBySetupID[setupID] = true
+            } else {
+                hasNotebookBySetupID[setupID] = await application.zipEntryListCache
+                    .zipContainsNotebook(zipPath: setup.zipPath)
+            }
+        }
+        return hasNotebookBySetupID
     }
 
     /// Sections for the active course, used to group the dashboard rows.

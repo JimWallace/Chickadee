@@ -39,6 +39,10 @@ import VaporTesting
                 id: "badge_eval_setup", manifest: manifest,
                 zipPath: app.testSetupsDirectory + "badge_eval_setup.zip", courseID: courseID)
             try await setup.save(on: app.db)
+            // The page fetches the setup + decodes the manifest once and hands
+            // the decoded props to the evaluator (#1128).
+            let loaded = try #require(try await APITestSetup.find("badge_eval_setup", on: app.db))
+            let decodedProps = try #require(loaded.decodedManifest())
 
             let passing = TestOutcome(
                 testName: "secrettest_rec.py", testClass: nil, tier: .secret, status: .pass,
@@ -47,8 +51,8 @@ import VaporTesting
 
             // 90% + the secret test passing → both badges (the secret test is
             // readable here even though the student never sees it).
-            let both = try await earnedIndividualBadges(
-                testSetupID: "badge_eval_setup", gradePercent: 90, outcomes: [passing], on: app.db)
+            let both = earnedIndividualBadges(
+                props: decodedProps, gradePercent: 90, outcomes: [passing])
             #expect(Set(both.map(\.label)) == ["🌟 Sharpshooter", "🌀 Recursion Master"])
 
             // 70% + the test failing → neither.
@@ -56,8 +60,8 @@ import VaporTesting
                 testName: "secrettest_rec.py", testClass: nil, tier: .secret, status: .fail,
                 shortResult: "failed", longResult: nil, executionTimeMs: 1, memoryUsageBytes: nil,
                 attemptNumber: 1, isFirstPassSuccess: false)
-            let none = try await earnedIndividualBadges(
-                testSetupID: "badge_eval_setup", gradePercent: 70, outcomes: [failing], on: app.db)
+            let none = earnedIndividualBadges(
+                props: decodedProps, gradePercent: 70, outcomes: [failing])
             #expect(none.isEmpty)
         }
     }

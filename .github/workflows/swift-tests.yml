@@ -306,6 +306,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Lint first-party frontend JS
+        run: scripts/eslint.sh
+
       - name: Run browser runner execution tests
         run: node --test Tests/BrowserRunnerJSTests/*.mjs
 
@@ -362,3 +365,45 @@ jobs:
           else
             swift test --filter WorkerTests
           fi
+
+  # Single aggregate status for branch protection (the editor-smoke-gate
+  # pattern): require THIS job instead of the individual jobs, so a job
+  # rename or matrix change can't silently detach a required check. Every
+  # job above always runs (no internal skips), so anything short of
+  # `success` fails the gate.
+  #
+  # `!cancelled()` is run-scoped: when this whole run is superseded
+  # (concurrency cancel — e.g. a newer push, or a rerun of an older head
+  # entering the shared group), the gate SKIPS instead of reporting a
+  # spurious failure for the cancelled jobs. A single job killed by its
+  # own timeout-minutes also reads "cancelled", but the run survives, so
+  # the gate still runs and still fails — that detection is load-bearing
+  # (2026-07-02: it caught the WorkerDaemonTests 20-minute wedge).
+  swift-tests-gate:
+    needs:
+      - format-lint
+      - build
+      - core-tests
+      - api-tests
+      - api-tests-postgres
+      - browser-runner-tests
+      - worker-tests
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gate on Swift test job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          echo "${NEEDS_JSON}"
+          failed="$(echo "${NEEDS_JSON}" | python3 -c '
+          import json, sys
+          needs = json.load(sys.stdin)
+          print(" ".join(sorted(name for name, need in needs.items() if need["result"] != "success")))
+          ')"
+          if [ -n "${failed}" ]; then
+            echo "::error::jobs not successful: ${failed}"
+            exit 1
+          fi
+          echo "All Swift test jobs green."

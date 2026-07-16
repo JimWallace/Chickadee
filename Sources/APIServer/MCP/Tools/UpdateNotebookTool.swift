@@ -46,10 +46,7 @@ struct UpdateNotebookTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "notebook": .object([
                 "type": .string("object"),
                 "description": .string(
@@ -63,10 +60,10 @@ struct UpdateNotebookTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "cellCount": .object(["type": .string("integer")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "cellCount": MCPSchema.integer,
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("cellCount"), .string("assignmentClosed"),
@@ -79,8 +76,8 @@ struct UpdateNotebookTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         try validateNotebookShape(input.notebook, tool: Self.name)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         let data: Data
         do {

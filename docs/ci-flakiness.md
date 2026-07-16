@@ -1,0 +1,293 @@
+# CI flakiness — state of knowledge (2026-07-02, updated after the #1139 fix)
+
+Handoff document for the flakiness work. The first snapshot (earlier on
+2026-07-02) was written while landing PRs #1138–#1142; the headline then:
+**on an afternoon of loaded runners, an average PR had roughly a coin-flip
+chance of at least one flaky-job failure per full CI run**, and the only
+re-kick available to a bot (a new commit SHA) re-rolled *every* die at once.
+
+This revision records the root cause and fix for Family 1 (the biggest
+term), the containment shipped for Families 2–3, and the rerun ergonomics.
+
+The four runs of PR #1138 remain the cleanest dataset because the tree was
+**byte-identical across all four** (empty-commit re-kicks):
+
+| Run | Head | Failing job | Failure shape |
+|-----|------|-------------|---------------|
+| 1 | `39985db` | `grading-probe (webkit)` | `hangs=1/12` — one grading iteration hung; iterations 10–12 passed (run 28586988643) |
+| 2 | `d1f71d7` | `worker-tests` | `stdoutIsCaptured()` expectation failed **after 60.313 s** (run 28588059980) |
+| 3 | `a8c8670` | `smoke (webkit)` → `editor-smoke-gate` | selftest: `post-idle execute passed? 0 (want 1)` — the exec-hang class (run 28588705591) |
+| 4 | `38a5a60` | `worker-tests` | suite entered `WorkerTests` and hung until the 20-minute `timeout-minutes` kill (`cancelled`, run 28589351648) |
+
+Three distinct flake families, none related to the diff (JS-only; each
+failing job passed on other runs of the same tree).
+
+---
+
+## Family 1 — `WorkerTests.stdoutIsCaptured()` stall (issue #1139) — ROOT-CAUSED & FIXED
+
+**Root cause.** A fork-safety bug in the worker's Linux script launcher
+(`Sources/Worker/ScriptRunner.swift`, `executeLinuxScriptProcess`) — i.e. in
+the **production grading path**, merely *exercised* by the tests. The forked
+child called `setenv()` in a loop and bridged Swift Strings
+(`chdir(workDir.path)`, Dictionary iteration) between `fork()` and `execvp`.
+`fork()` in a multithreaded process snapshots glibc's locks (the environ
+lock, malloc arenas) in whatever state other threads held them, with **no
+thread left in the child to release them** — so if any thread held one of
+those locks at the fork instant, the child deadlocked before exec. The
+worker/test process is exactly that multithreaded (Swift concurrency pool,
+Dispatch pipe readers, Swift Testing's parallel scheduler, several tests
+that legitimately mutate env under `withEnvLock`), and the probability of a
+collision scales with runner load — matching the observed load correlation.
+
+Historical note: the Linux path originally built envp in the parent and
+`execvpe`'d (CHANGELOG, v0.4.x env-passthrough work; the stale comment in
+`SandboxedScriptRunner.swift` still said so). A later refactor regressed it
+to setenv-in-child + `execvp`.
+
+**Why the two observed shapes both follow:**
+
+- *60 s expectation failure* — child deadlocks **after** `setsid()` (e.g.
+  in the setenv loop). The parent's deadline fires at the script time limit
+  (the test passed 60 s), the group-kill lands, the child is reaped with no
+  output: `stdoutIsCaptured()` fails at ~60.3 s with empty stdout, and
+  `runScriptRobustly`'s launch-flake retry correctly declines to mask it
+  (`timedOut == true`).
+- *20-minute job wedge* — child deadlocks **before** `setsid()` (e.g. in
+  the `chdir` String bridging). `kill(-pid, …)` targets a process group
+  that does not exist (ESRCH), both kill stages miss, and the *unbounded
+  blocking* `waitpid(pid, &status, 0)` that followed pinned the wait thread
+  forever; the test never completed and the job burned to its
+  `timeout-minutes` kill.
+
+**Reproduction (2026-07-02, this container, 4 cores).** A standalone
+`swiftc` harness embedding the old vs. new child logic, with 3 threads
+hammering setenv/getenv/unsetenv and 2 threads churning malloc while 4
+threads fork+exec `/bin/sh -c 'echo hello world'` in a loop:
+
+| Child logic | Iterations | Deadlocks |
+|-------------|-----------|-----------|
+| old (setenv/String-bridging in child) | 200 | **8 (4 %)** |
+| fixed (async-signal-safe only) | 3000 | **0** |
+
+**The fix (same PR as this doc revision):**
+
+1. **Materialize everything pre-fork.** argv, envp (`KEY=VALUE` C-string
+   vector), the workdir path, and the four raw pipe descriptors are built
+   before `fork()`; the child calls only async-signal-safe functions
+   (`setsid`/`close`/`dup2`/`chdir`/`sigprocmask`/`execve`/`_exit`).
+2. **`setsid()` first** in the child, so the parent's timeout group-kill can
+   always reach it no matter where a later step fails.
+3. **Bounded post-kill reap** in `linuxWaitForChild` — SIGTERM/SIGKILL go to
+   both the group and the pid, and the final reap is a WNOHANG poll with a
+   5 s cap, never an unbounded blocking `waitpid`.
+4. **`FD_CLOEXEC` on capture pipes** (Foundation's `Pipe` does not set it —
+   verified on Swift 6.3/glibc 2.39): a concurrently spawned subprocess can
+   no longer inherit a duplicate of the write end across its exec and starve
+   the read side of EOF.
+5. **Bounded final drain** (`poll` + `read` with a 2 s grace) replacing the
+   blocking `readDataToEndOfFile()` that could pin a cooperative-pool thread.
+
+**Security side-fix.** The old child applied the allowlisted env *on top of
+the inherited full parent environment* — so on Linux (production!),
+non-allowlisted worker env vars, including the shape `RUNNER_SHARED_SECRET`
+arrives in, leaked into every student script, silently defeating the
+allowlist in `mergedScriptEnvironment`. `execve` with the parent-built envp
+replaces the environment outright (matching macOS `proc.environment`
+semantics). Regression test: `scriptDoesNotInheritNonAllowlistedParentEnv`.
+
+**Residual hygiene.** Subprocess-spawning WorkerTests suites now carry
+`.timeLimit(.minutes(3))` so any future stall fails as a *named test* in
+3 minutes instead of a silent 20-minute job burn. (Job-level
+`timeout-minutes: 20` stays — it is sized for the cache-miss path where the
+test job compiles from scratch.)
+
+## Family 2 — webkit grading hang (`grading-probe (webkit)`, `hangs=N/12`) — CONTAINED, root cause open
+
+**Symptom.** The grading-hang probe (`grading-hang-probe.yml`) boots the
+real server + notebook page 12 times per engine and counts grading hangs;
+webkit intermittently reports `hangs=1/12`. Chromium passes 12/12 in the
+same runs. Failures observed on unrelated branches 2026-06-26 (×3) and
+2026-07-02 — a low, persistent background rate that predates that week.
+
+**Context.** The probe *exists* to monitor a real historical bug — see
+`docs/exec-hang-investigation.md` and the boot-funnel telemetry work. The
+hang still exists at low frequency on webkit under CI load.
+
+**Gate policy (decided & shipped).** Chromium: hard zero everywhere.
+Webkit: `hangs<=1/12` tolerated on `pull_request` runs with a loud
+`::warning` annotation; `workflow_dispatch`/scheduled runs keep the hard
+zero, so the probe remains the regression guard a real fix must turn green
+and the ambient rate stays measured rather than silently absorbed.
+
+**Root cause** remains the exec-hang investigation's to close — continue
+from the probe's `grading breadcrumbs:` per-phase timings on a hung
+iteration.
+
+## Family 3 — webkit editor smoke, post-idle execute (`smoke (webkit)`) — CONTAINED, same root cause as Family 2
+
+**Symptom.** The editor-smoke selftest's post-idle probe fails:
+`post-idle execute passed? 0 (want 1)` — kernel never runs the expression.
+~1 failure in 25 gate runs, and `smoke` feeds `editor-smoke-gate`, the
+**required** check — so this family, though rarest, hard-blocked merges.
+
+**Containment (shipped).** The webkit legs of the `smoke` job (selftest and
+notebook-page e2e) get exactly one retry, logged with a `::warning` so the
+flake rate stays visible in annotations. Chromium legs stay strict — a
+chromium failure is treated as real, first time.
+
+---
+
+## Structural problems → current state
+
+1. **A bot's only re-kick was a new SHA.** Fixed: comment `/rerun-failed`
+   on a PR (`rerun-failed.yml`, OWNER/MEMBER/COLLABORATOR only) re-runs
+   only the failed/cancelled runs for the current head SHA via
+   `rerun-failed-jobs`. An empty-commit push re-rolls every flaky die and
+   invalidates the shared build cache key for nothing; the comment re-rolls
+   one die and reuses every green result.
+2. **Compounding probability.** A UI-touching PR rolled at least three dice
+   per run (worker-tests, grading-probe webkit, smoke webkit). Family 1's
+   fix removes the biggest term; the webkit tolerances remove most of the
+   rest. Expected composite failure rate on a loaded afternoon drops from
+   ~50 % to the residual chromium/webkit-double-hang rates.
+3. **Silent-stall failure shapes burned the most wall-clock.** Fixed at
+   three layers: bounded waits in the runner itself, `.timeLimit` on the
+   stall-capable suites, and (unchanged) the job-level `timeout-minutes`
+   backstop.
+
+## Remaining attack order
+
+1. **Exec-hang root cause** (Families 2+3 share it) — continue from
+   `docs/exec-hang-investigation.md` with the probe breadcrumbs. The
+   dispatch/scheduled hard-zero runs of `grading-hang-probe.yml` are the
+   fix's acceptance test.
+
+   *2026-07-02 evening findings (probe forensics upgraded in the same
+   change as this note):*
+   - Production telemetry (admin `get_browser_diagnostics`, 96 h window)
+     shows the **sustained-busy `exec_hang` is still real for students on
+     current builds**: 19 hangs / 465 `kernel_idle` boots (~4 %), 19
+     self-heal attempts, 2 `recover_failed`. The v0.4.526 chdir fix killed
+     the 100 % class; this ~4 % residue is a distinct bug.
+   - The **CI probe hang is a different shape**: the 2026-07-02 chromium
+     repro (`hangs=1/8`) showed `indicator=idle` for the full budget and
+     `exec_hang=none` — the cell likely never *started*, i.e. the
+     Shift+Enter dispatch was lost (post-idle focus race), not a wedged
+     kernel. `editor-exec-check.mjs` now classifies this (`lostDispatch`)
+     via a second-press discriminator, captures console-error URLs +
+     all ≥400 responses + failed requests (the four bare 403s in that repro
+     were unidentifiable), reports per-iteration noise base rates on green
+     runs too, and dumps the cell prompt/focus state on every hang.
+   - **Open lead:** `unhandledrejection: Cannot read properties of null
+     (reading 'insertWidget')` fires on essentially every production boot
+     (499 events / ~500 boots in 96 h; vendored `jlab_core` bundle, source
+     maps checked in). Probably a benign JupyterLab race in the SW-free
+     config, but it is exactly the kind of degraded widget state that
+     could eat a keypress — worth tracing via the source map before
+     trusting it. Confirmed present on every CI boot too (both engines),
+     alongside a `updateRenderOption` null error.
+   - **First instrumented 45-iteration webkit dispatch:** the constant
+     4xx noise is identified — `POST /api/v1/client-diagnostics` 403 plus
+     403s on JupyterLite contents-API *folder-creation* attempts
+     (`Untitled Folder/all.json`, `users/all.json`,
+     `Untitled Folder1/all.json`): the editor's file browser appears to
+     try to materialize the missing `users/<uid>/<setup>` path over HTTP
+     and is refused on every boot. The one red iteration was a
+     **boot-stall** (kernel never idle in 90 s), matching production's
+     ~7 % boot→no-idle funnel drop — a distinct phenomenon, not a
+     post-idle hang.
+   - **CONFIRMED (three-run delay experiment, 2026-07-02 evening): the
+     webkit slow-execute mode is a fixed-endpoint post-idle background
+     task, not load jitter.** Pressing run at `kernel_idle`+0 ms: 13/45
+     iterations wait 16.2–18.2 s; at +1,500 ms: 12/45 wait 15.7–16.7 s
+     (the band shifts DOWN by the delay — fixed endpoint, not fixed
+     cost); at +25,000 ms: **0/28 slow, every iteration ~510 ms**
+     (p ≈ 4×10⁻⁵ by chance). Something occupies the webkit kernel for
+     ~17–18 s after idle; a cell executed inside that window queues
+     behind it; its far tail is the ambient CI hang and, on slow student
+     hardware, plausibly the residual ~4 % production `exec_hang` (the
+     45 s telemetry threshold would classify a long-enough wait as a
+     hang, and the self-heal reload would "fix" it). It is NOT nb_mypy
+     (disabled — see `scripts/patch-pyodide-kernel.py`; CLAUDE.md was
+     stale on this and has been corrected). Chromium completes the same
+     work fast enough to never lose the race (0 slow in 75+ iterations).
+     **Next step:** identify the task — timestamp post-idle kernel/editor
+     activity (kernel-wheel patch instrumentation or a performance-trace
+     capture in the probe) and inspect what JupyterLite schedules after
+     `kernel_idle` in the SW-free config.
+   - **Cumulative webkit classification, 135 instrumented iterations:**
+     0 post-idle deadlocks, 0 lost dispatches, 1 boot-stall, 3 upstream
+     WebKit WASM crashes (bug #286266, classified separately, non-
+     failing). The "ambient webkit exec-hang" decomposes into the wasm
+     crash + boot-stalls + the fixed-endpoint blocker's tail, with
+     nothing left over so far.
+   - **NEW class — DIALOG-STEAL (2026-07-02 chromium, forensic capture).**
+     A chromium exec-probe "hang" turned out to be a modal JupyterLab
+     dialog: `cell: prompt="[ ]:" active="jp-Dialog-button jp-mod-accept
+     jp-mod-styled"` — the cell never dispatched because a `.jp-Dialog`
+     had keyboard focus and swallowed the Shift+Enter (the second press
+     hit the dialog too, so it wasn't lost-dispatch either). This is a
+     distinct, student-facing bug: an error/confirm dialog over the
+     editor makes the first run silently do nothing. Very likely tied to
+     the every-boot folder-creation 403s + the `insertWidget` /
+     `updateRenderOption` null errors — the editor fails to set up its
+     working folder and surfaces a dialog. The probe now detects a
+     `.jp-Dialog` at hang time, captures its header/body text, dismisses
+     it, and re-presses to confirm the kernel underneath is healthy;
+     classified as `dialogSteal` (reported, non-failing). **Next step:**
+     read the captured `dialog:` text from the next probe run to identify
+     which dialog, then fix the folder-setup path that raises it.
+   - **Probe classes are now fully separated (post-boot-stall-split).**
+     The probe distinguishes five outcomes so each maps to one
+     phenomenon: `deadlock` (reached idle, execute wedged — the only
+     leg-failing class), `bootStall` (never reached idle), `dialogSteal`
+     (modal dialog ate the keypress), `lostDispatch` (keypress lost, no
+     dialog), and `webkitWasmCrash` (upstream #286266). Boot-stalls and
+     dialog-steals used to be miscounted as deadlocks; a 30-iteration
+     chromium run's lone failure was a boot-stall (`iter 5/30 ... kernel
+     never reported idle, waited=0ms`), now labelled as such.
+   - **Grading-hang probe: chromium also hangs (`1/12`, 2026-07-02).**
+     Not webkit-only. The grading path (a SECOND Pyodide in
+     grading-worker.js) intermittently never completes on chromium too;
+     the breadcrumb trail on the failing iteration is the lead. The gate
+     correctly held chromium to zero (webkit's PR tolerance does not
+     apply), so this failed the non-required probe — signal, not a
+     blocker.
+
+4. **Residual WorkerDaemonTests wedge (2026-07-02 evening).** With the
+   fork bug fixed, worker-tests wedged once more via a different path:
+   `workerDaemonContinuesToNextJobAfterProcessingFailure` failed its
+   10 s wait, then the bare `try await task.value` after `task.cancel()`
+   suspended forever (`Task.value` is not cancellation-responsive) — the
+   `.timeLimit` trait *attributed* the failure but cannot interrupt a
+   non-cancellable wait, so the job still rode to the 20-minute kill.
+   All 12 cancel-then-await sites now go through a bounded
+   `awaitCancelledDaemon` helper (30 s deadline). The underlying
+   question — *what* in `daemon.run()` ignored cancellation under load —
+   is the remaining daemon-side item; suspects are the artifact-download
+   path and any wait not routed through cancellable primitives.
+2. **Watch the tolerated-webkit warning rate.** The `::warning`
+   annotations from the probe and the smoke retries are the flake-rate
+   telemetry now; if they show up more than occasionally, the ambient rate
+   is rising and the tolerance should be revisited (in either direction).
+3. **Other blocking subprocess reads** — swept in the follow-up PR. The
+   two read-after-wait sites are fixed: `MimeTypeDetector` drains before
+   waiting, and `PersonalizationEvaluator` drains both pipes concurrently
+   with a deadline before waiting (plus SIGKILL escalation when an
+   expression's interpreter ignores SIGTERM, and no more full-timeout
+   sleep on the return path). `Core/ZipArchiver`, `TestSetupZipHelpers`,
+   and `NotebookContentHelpers` already read before waiting (the safe
+   order); their pipes still aren't CLOEXEC — a cosmetic residual to fold
+   in when those files are next touched.
+
+## Evidence index
+
+- Issue #1139 — `stdoutIsCaptured` flake, with the four-run table.
+- PR #1138 — the four byte-identical runs (28586988643, 28588059980,
+  28588705591, 28589351648).
+- Stress repro (this doc, Family 1) — old 8/200 vs fixed 0/3000.
+- `docs/exec-hang-investigation.md` — the webkit exec-hang root-cause work.
+- `grading-hang-probe.yml` run history — background failure rate on
+  unrelated branches (2026-06-26 ×3).
+- `editor-smoke.yml` run history — 24/25 green over the trailing window.

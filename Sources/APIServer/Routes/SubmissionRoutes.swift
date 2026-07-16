@@ -20,11 +20,16 @@ struct SubmissionRoutes: RouteCollection {
 
     @Sendable
     func createSubmission(req: Request) async throws -> SubmissionCreatedResponse {
+        let caller = try req.auth.require(APIUser.self)
         let body = try req.content.decode(CreateSubmissionBody.self)
 
-        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
+        // Scope intake to the setup's own course: the caller must be enrolled in
+        // the course that owns the setup, so a submission can't be enqueued
+        // against another course's setup by ID (#417 Slice D).
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let submissionsDir = req.application.submissionsDirectory
         let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
@@ -63,15 +68,18 @@ struct SubmissionRoutes: RouteCollection {
 
     @Sendable
     func createSubmissionFile(req: Request) async throws -> SubmissionCreatedResponse {
+        let caller = try req.auth.require(APIUser.self)
         let body = try req.content.decode(SubmitFileBody.self)
         let submittedFilename = submissionFilenameForStorage(
             uploadedName: body.filename,
             fallback: "submission.bin"
         )
 
-        guard try await APITestSetup.find(body.testSetupID, on: req.db) != nil else {
+        guard let setup = try await APITestSetup.find(body.testSetupID, on: req.db) else {
             throw AppError.invalidParameter(name: "testSetupID", reason: "no test setup with that ID")
         }
+        // Scope intake to the setup's own course (see createSubmission) (#417 Slice D).
+        try await requireCourseEnrollment(caller: caller, courseID: setup.courseID, db: req.db)
 
         let submissionsDir = req.application.submissionsDirectory
         let subID = "sub_\(UUID().uuidString.lowercased().prefix(8))"
@@ -83,21 +91,24 @@ struct SubmissionRoutes: RouteCollection {
         // For .ipynb submissions, merge the instructor's hidden test cells back in
         // before saving, so the worker grades with the full authoritative test suite.
         let fileData: Data
-        if submittedFilename.hasSuffix(".ipynb"),
-            let setup2 = try await APITestSetup.find(body.testSetupID, on: req.db)
-        {
+        if submittedFilename.hasSuffix(".ipynb") {
             // The instructor-notebook disk read and the JSON merge are both
             // blocking work; run them on the NIO thread pool so a deadline-spike
             // of concurrent .ipynb submissions doesn't serialize on the
             // cooperative executor.
-            let source = NotebookSourceRef(setup2)
+            let source = NotebookSourceRef(setup)
             let studentBytes = body.file
-            fileData = try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
-                guard let instructorData = try? notebookData(from: source) else {
-                    return studentBytes  // no instructor notebook → submit as-is
-                }
-                return mergeNotebook(student: studentBytes, instructor: instructorData)
-            }.get()
+            // Cached (#1171): a deadline spike of .ipynb submissions shares one
+            // notebook resolution instead of one unzip per upload.
+            let instructorData = try? await req.application.notebookBytesCache.notebookData(
+                for: source)
+            if let instructorData {
+                fileData = try await req.application.threadPool.runIfActive(eventLoop: req.eventLoop) {
+                    mergeNotebook(student: studentBytes, instructor: instructorData)
+                }.get()
+            } else {
+                fileData = studentBytes  // no instructor notebook → submit as-is
+            }
         } else {
             fileData = body.file  // .py or other files — no merge needed
         }
@@ -140,14 +151,23 @@ struct SubmissionDownloadRoute: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        if !caller.isInstructor && submission.userID != caller.id {
+        // Course staff (TA+ or admin) may download any submission in their
+        // course; everyone else only their own (#417 Slice G).
+        let isStaff = try await isSubmissionStaff(caller, submission: submission, on: req.db)
+        if !isStaff && submission.userID != caller.id {
             throw Abort(.forbidden)
         }
         let downloadName =
             submission.filename
             ?? URL(fileURLWithPath: submission.zipPath).lastPathComponent
-        let data = try Data(contentsOf: URL(fileURLWithPath: submission.zipPath))
-        return buildFileResponse(data: data, filename: downloadName)
+        // Stream from disk (#1158): the old Data(contentsOf:) buffered the
+        // whole artifact per request — the sibling test-setup download has
+        // streamed for a long time.
+        let response = try await req.fileio.asyncStreamFile(at: submission.zipPath)
+        response.headers.replaceOrAdd(
+            name: .contentDisposition,
+            value: "attachment; filename=\"\(downloadName)\"")
+        return response
     }
 }
 

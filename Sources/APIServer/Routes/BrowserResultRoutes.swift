@@ -56,7 +56,17 @@ struct BrowserResultRoutes: RouteCollection {
             guard let data = body.collection.data(using: .utf8) else {
                 throw AppError.invalidParameter(name: "collection", reason: "not valid UTF-8")
             }
-            collection = try decoder.decode(TestOutcomeCollection.self, from: data)
+            let decoded = try decoder.decode(TestOutcomeCollection.self, from: data)
+            // Same serialized-size budget as the worker path (#1157) — keeps
+            // the unbounded blob out of the results table regardless of which
+            // grader produced it.
+            let (bounded, didTruncate) = decoded.truncatingOversizedOutput()
+            if didTruncate {
+                req.logger.warning(
+                    "result_collection_truncated submission=\(bounded.submissionID) source=browser"
+                )
+            }
+            collection = bounded
         } catch let e as DecodingError {
             throw AppError.unprocessable(reason: "Invalid TestOutcomeCollection: \(e)")
         }
@@ -72,7 +82,10 @@ struct BrowserResultRoutes: RouteCollection {
         let nbPath = subsDir + "\(subID).ipynb"
         let instructorData: Data
         do {
-            instructorData = try notebookData(for: setup)
+            // Cached (#1171): this runs per browser-graded submission, and the
+            // uncached path is a serialized unzip subprocess per call.
+            instructorData = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             req.logger.warning(
                 "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
@@ -98,6 +111,14 @@ struct BrowserResultRoutes: RouteCollection {
         try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
         let attemptNumber = submission.attemptNumber ?? 1
 
+        // First-to-submit records (Pathfinder): notebook submissions are the
+        // dominant flow, but only the zip-upload handler used to award this —
+        // browser-graded assignments never had a Pathfinder (audit A2).
+        if let userID = caller.id {
+            try await awardFirstToSubmitRecords(
+                setup: setup, userID: userID, submissionID: subID, on: req.db)
+        }
+
         // Persist the browser result, tagged source="browser".  The browser
         // builds its collection before it knows the server-authoritative attempt
         // number, so it always stamps attemptNumber=1 (and isFirstPassSuccess for
@@ -114,17 +135,39 @@ struct BrowserResultRoutes: RouteCollection {
         let browserResult = APIResult(
             id: "res_\(UUID().uuidString.lowercased().prefix(8))",
             submissionID: subID,
-            collectionJSON: collectionJSON,
             source: "browser"
         )
         // Same transient-SQLite-lock guard as the submission insert above: this
         // second write can also lose a race with a concurrent commit (session
         // write / background monitor) and surface as a 500 otherwise.
+        // saveWithCollection is itself transactional (row + blob together).
         try await withTransientDatabaseLockRetry(on: req.db) {
-            try await browserResult.save(on: req.db)
+            try await browserResult.saveWithCollection(json: collectionJSON, on: req.db)
         }
 
         req.logger.info("Browser result stored for \(subID)")
+
+        // Class records (Trailblazer / fastest / fewest-attempts) on a 100%
+        // browser grade.  These were only awarded in the worker report handler,
+        // so browser-graded assignments never awarded any record unless a
+        // retest or the failover backstop happened to route through a worker
+        // (audit A2).  Same rounded-percent gate and student-role guard as
+        // `ResultRoutes`; the reconciled collection carries the
+        // server-authoritative attempt number.
+        if reconciled.buildStatus == .passed,
+            let userID = caller.id,
+            gradePercent(from: reconciled) == 100
+        {
+            try await awardClassBadgesFor100Percent(
+                testSetupID: body.testSetupID,
+                userID: userID,
+                submissionID: subID,
+                executionTimeMs: reconciled.executionTimeMs,
+                attemptNumber: attemptNumber,
+                disabled: BuiltInAchievements.disabled(in: setup),
+                on: req.db
+            )
+        }
 
         // Update the student's server-side working copy with what they just
         // submitted. Without this, the working copy stays as the blank starter
@@ -175,7 +218,10 @@ struct BrowserResultRoutes: RouteCollection {
         // Always merge with canonical instructor notebook so hidden tests are present.
         let instructorData: Data
         do {
-            instructorData = try notebookData(for: setup)
+            // Cached (#1171): this runs per browser-graded submission, and the
+            // uncached path is a serialized unzip subprocess per call.
+            instructorData = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             req.logger.warning(
                 "Could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
@@ -197,6 +243,13 @@ struct BrowserResultRoutes: RouteCollection {
             kind: APISubmission.Kind.student
         )
         try await saveSubmissionWithNextAttemptNumber(submission, userID: caller.id, on: req.db)
+
+        // First-to-submit records (Pathfinder) — same as the zip-upload and
+        // browser-result paths (audit A2).
+        if let userID = caller.id {
+            try await awardFirstToSubmitRecords(
+                setup: setup, userID: userID, submissionID: subID, on: req.db)
+        }
 
         // For browser-mode test setups the client-side WASM runner picks up the job;
         // waking the local native runner would waste resources and claim nothing
@@ -287,7 +340,8 @@ struct BrowserResultRoutes: RouteCollection {
         let studentData = Data(body.notebook.utf8)
         let instructorData: Data
         do {
-            instructorData = try notebookData(for: setup)
+            instructorData = try await req.application.notebookBytesCache.notebookData(
+                for: NotebookSourceRef(setup))
         } catch {
             req.logger.warning(
                 "Browser failover: could not load instructor notebook for \(setup.id ?? "?"): \(error) — hidden test cells will not be injected"
@@ -308,6 +362,12 @@ struct BrowserResultRoutes: RouteCollection {
             kind: APISubmission.Kind.student
         )
         try await saveSubmissionWithNextAttemptNumber(submission, userID: userID, on: req.db)
+
+        // A failover row IS the student's real submission for this attempt —
+        // if they're the first in the class to submit, the frozen browser run
+        // must not cost them the record (audit A2).
+        try await awardFirstToSubmitRecords(
+            setup: setup, userID: userID, submissionID: subID, on: req.db)
 
         req.logger.warning(
             "Browser grading failed/froze for setup \(body.testSetupID); enqueued worker backstop grade \(subID)"

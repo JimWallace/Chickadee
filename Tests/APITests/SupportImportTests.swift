@@ -129,6 +129,42 @@ import Testing
         #expect(result["x"] == "10")
     }
 
+    @Test func evaluator_resilientToBrokenDemoCellInSolution() async throws {
+        // Regression (HLTH-230 A3): a solution notebook whose demo/example cell
+        // errors at import — here a JSON-ism `null` in a module-level list
+        // literal (copy-pasted JSON) — must NOT take the instructor's helper
+        // functions down with it. A naive concat aborted `import solution` for
+        // the whole module; the evaluator's import guard then swallowed it and
+        // every `solution.<fn>` surfaced as a baffling
+        // `name 'solution' is not defined`. The resilient per-cell load skips
+        // only the broken cell, so the helpers flanking it still resolve.
+        let nb: [String: Any] = [
+            "cells": [
+                ["cell_type": "code", "source": "def triple(x):\n    return x * 3\n"],
+                ["cell_type": "code", "source": "patients = [{\"unit\": null}]\n"],
+                ["cell_type": "code", "source": "def quad(x):\n    return x * 4\n"],
+            ],
+            "metadata": [:], "nbformat": 4, "nbformat_minor": 5,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: nb)
+        #expect(
+            SolutionNotebookExtractor.writeSolutionPy(
+                notebookData: data, sharedDirectory: tempDir.path + "/", overwrite: true))
+
+        let result = try await PersonalizationEvaluator.evaluate(
+            seedHex: "0004",
+            staticVariables: [],
+            expressions: [
+                PersonalizationExpression(name: "a", expression: "solution.triple(seed)"),
+                PersonalizationExpression(name: "b", expression: "solution.quad(seed)"),
+            ],
+            supportFilesDirectory: tempDir.path
+        )
+        // seed = 4 → triple 12, quad 16; the broken middle cell is skipped.
+        #expect(result["a"] == "12")
+        #expect(result["b"] == "16")
+    }
+
     @Test func extractor_skipsEmptyNotebook() throws {
         let nb: [String: Any] = [
             "cells": [["cell_type": "markdown", "source": "Just text"]],

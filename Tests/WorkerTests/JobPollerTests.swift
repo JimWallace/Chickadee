@@ -14,7 +14,7 @@ import FoundationNetworking
 /// `JobPollerError.unexpectedResponse` is deliberately not covered here — it
 /// only fires when `URLSession` returns a non-HTTP `URLResponse`, which the
 /// HTTP-only URLProtocol pipeline doesn't produce.
-@Suite(.serialized) struct JobPollerTests {
+@Suite(.serialized, .timeLimit(.minutes(3))) struct JobPollerTests {
 
     private let apiBaseURL = testURL("https://server.test")
 

@@ -4,7 +4,7 @@
 //   Phase 1 — the `course_enrollments.role` column, its typed accessor, and the
 //     behaviour-preserving backfill from each enrolled user's global role.
 //   Phase 2 — the read path: `enrolledCoursesWithRoles` and the nav predicate
-//     `isInstructorInActiveCourse`.
+//     `isStaffInActiveCourse`.
 //   Phase 3 — the auth chokepoint: `CourseRole` ordering and
 //     `requireCourseRole(atLeast:)`.
 //   Phase 4a — `saveSeededEnrollment`: new enrollments seed their role from the
@@ -24,9 +24,11 @@ import Vapor
 
     @Test func courseRoleRawValuesRoundTrip() {
         #expect(CourseRole.student.rawValue == "student")
+        #expect(CourseRole.ta.rawValue == "ta")
         #expect(CourseRole.instructor.rawValue == "instructor")
         #expect(CourseRole(rawValue: "instructor") == .instructor)
-        #expect(CourseRole(rawValue: "ta") == nil)  // not a rung yet
+        #expect(CourseRole(rawValue: "ta") == .ta)  // the TA rung (#417 Slice E)
+        #expect(CourseRole(rawValue: "wizard") == nil)
     }
 
     @Test func roleAccessorDefaultsToStudentForMissingOrUnknownRaw() {
@@ -118,11 +120,11 @@ import Vapor
 
     // MARK: - Read path (Phase 2)
 
-    /// `isInstructorInActiveCourse` (which the nav keys off) is driven by the
+    /// `isStaffInActiveCourse` (which the nav keys off) is driven by the
     /// active course's per-course role, with a transitional fallback to the
     /// global role.
     @Test func instructorInActiveCourseReflectsPerCourseRole() {
-        func context(globalRole: UserRole, active: CourseContext?) -> CurrentUserContext {
+        func context(globalRole: LegacyGlobalRole, active: CourseContext?) -> CurrentUserContext {
             let user = APIUser(username: "u", passwordHash: "x", role: globalRole.rawValue)
             return CurrentUserContext(
                 user: user, activeCourse: active, enrolledCourses: active.map { [$0] } ?? [])
@@ -132,16 +134,16 @@ import Vapor
         }
 
         // No active course → never instructor-in-course, whatever the global role.
-        #expect(context(globalRole: .instructor, active: nil).isInstructorInActiveCourse == false)
+        #expect(context(globalRole: .instructor, active: nil).isStaffInActiveCourse == false)
         // Global student, per-course student → no instructor surfaces.
-        #expect(context(globalRole: .student, active: course(.student)).isInstructorInActiveCourse == false)
+        #expect(context(globalRole: .student, active: course(.student)).isStaffInActiveCourse == false)
         // The Phase 2 point: a global *student* with a per-course instructor role → yes.
-        #expect(context(globalRole: .student, active: course(.instructor)).isInstructorInActiveCourse == true)
+        #expect(context(globalRole: .student, active: course(.instructor)).isStaffInActiveCourse == true)
         // Phase 5: authority is purely per-course — a global instructor whose
         // per-course role is student does NOT get the instructor tab here.
-        #expect(context(globalRole: .instructor, active: course(.student)).isInstructorInActiveCourse == false)
+        #expect(context(globalRole: .instructor, active: course(.student)).isStaffInActiveCourse == false)
         // Admin keeps deployment-wide instructor surfaces.
-        #expect(context(globalRole: .admin, active: course(.student)).isInstructorInActiveCourse == true)
+        #expect(context(globalRole: .admin, active: course(.student)).isStaffInActiveCourse == true)
     }
 
     /// `enrolledCoursesWithRoles` returns each enrolled (non-archived) course
@@ -187,6 +189,13 @@ import Vapor
         #expect(CourseRole.instructor >= .instructor)
         #expect(CourseRole.student >= .student)
         #expect(!(CourseRole.instructor < CourseRole.student))
+        // TA sits strictly between student and instructor (#417 Slice E).
+        #expect(CourseRole.student < CourseRole.ta)
+        #expect(CourseRole.ta < CourseRole.instructor)
+        #expect(CourseRole.ta >= .ta)
+        #expect(CourseRole.instructor >= .ta)
+        #expect(!(CourseRole.ta >= .instructor))  // a TA is NOT an instructor
+        #expect(CourseRole.ta >= .student)  // ...but outranks a student
     }
 
     /// `requireCourseRole` authorizes by the *per-course* role: a global student
@@ -246,10 +255,12 @@ import Vapor
 
     // MARK: - Enrollment seeding (Phase 4a)
 
-    /// New enrollments seed their per-course role from the user's global role,
-    /// so moving authorization onto the per-course role doesn't drop anyone's
-    /// access. Exercises both the `for:` overload and the userID overload.
-    @Test func saveSeededEnrollmentSeedsRoleFromGlobalRole() async throws {
+    /// New enrollments seed their per-course role from the user's *deployment*
+    /// role: an admin becomes a per-course instructor, everyone else a student.
+    /// Teaching authority is per-course now (#417 Slice G2) — a plain user (or a
+    /// legacy global-`instructor` role string) auto-enrolls as a student, and
+    /// the roster grants staff explicitly. Exercises both overloads.
+    @Test func saveSeededEnrollmentSeedsRoleFromDeploymentRole() async throws {
         let app = try await Application.make(.testing)
         try await withApp(app) { app in
             try await configureTestDatabase(app)
@@ -258,24 +269,149 @@ import Vapor
             try await course.save(on: app.db)
             let courseID = try course.requireID()
 
-            let instructor = makeUser(role: .instructor)
+            // A user still carrying the retired `instructor` role string is NOT
+            // an admin, so it no longer auto-seeds staff.
+            let legacyInstructor = makeUser(role: .instructor)
             let admin = makeUser(role: .admin)
             let student = makeUser(role: .student)
-            for user in [instructor, admin, student] { try await user.save(on: app.db) }
+            for user in [legacyInstructor, admin, student] { try await user.save(on: app.db) }
 
-            try await saveSeededEnrollment(for: instructor, courseID: courseID, on: app.db)
+            try await saveSeededEnrollment(for: legacyInstructor, courseID: courseID, on: app.db)
             try await saveSeededEnrollment(userID: try admin.requireID(), courseID: courseID, on: app.db)
             try await saveSeededEnrollment(userID: try student.requireID(), courseID: courseID, on: app.db)
 
-            #expect(try await courseRole(of: instructor, on: app.db) == .instructor)
-            #expect(try await courseRole(of: admin, on: app.db) == .instructor, "admin implies instructor")
+            #expect(
+                try await courseRole(of: legacyInstructor, on: app.db) == .student,
+                "a legacy global-instructor string no longer auto-seeds staff — the roster grants it")
+            #expect(try await courseRole(of: admin, on: app.db) == .instructor, "admin seeds to instructor")
             #expect(try await courseRole(of: student, on: app.db) == .student)
+        }
+    }
+
+    // MARK: - Write access / archived-course block (Slice A of #417)
+
+    /// `requireCourseWriteAccess` layers the archived-course read-only rule on
+    /// top of `requireCourseRole`: a per-course instructor may write to an
+    /// active course but not an archived one; a per-course student is forbidden
+    /// regardless; and an admin bypasses both the role check and the archived
+    /// block (admins administer the deployment and own unarchiving). The
+    /// instructor and student are enrolled with the same role in *both* courses,
+    /// so archival is the only variable across the two.
+    @Test func requireCourseWriteAccessBlocksArchivedAndEnforcesRole() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            let active = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
+            let archived = APICourse(code: "CS999", name: "Retired", enrollmentMode: .closed)
+            archived.isArchived = true
+            for course in [active, archived] { try await course.save(on: app.db) }
+            let activeID = try active.requireID()
+            let archivedID = try archived.requireID()
+
+            // All non-admins are global students — authority is per-course.
+            let instructor = makeUser(role: .student)
+            let student = makeUser(role: .student)
+            let admin = makeUser(role: .admin)  // not enrolled anywhere
+            for user in [instructor, student, admin] { try await user.save(on: app.db) }
+
+            for courseID in [activeID, archivedID] {
+                try await APICourseEnrollment(
+                    userID: try instructor.requireID(), courseID: courseID, role: .instructor
+                ).save(on: app.db)
+                try await APICourseEnrollment(
+                    userID: try student.requireID(), courseID: courseID, role: .student
+                ).save(on: app.db)
+            }
+
+            // Per-course instructor: may write to the active course…
+            try await requireCourseWriteAccess(caller: instructor, courseID: activeID, atLeast: .instructor, db: app.db)
+            // …but not the archived one (read-only for instructors/TAs).
+            await #expect(throws: Abort.self) {
+                try await requireCourseWriteAccess(
+                    caller: instructor, courseID: archivedID, atLeast: .instructor, db: app.db)
+            }
+
+            // Per-course student: forbidden on the active course (role too low),
+            // and on the archived one.
+            await #expect(throws: Abort.self) {
+                try await requireCourseWriteAccess(
+                    caller: student, courseID: activeID, atLeast: .instructor, db: app.db)
+            }
+            await #expect(throws: Abort.self) {
+                try await requireCourseWriteAccess(
+                    caller: student, courseID: archivedID, atLeast: .instructor, db: app.db)
+            }
+
+            // Admin bypasses both the role check and the archived block.
+            try await requireCourseWriteAccess(caller: admin, courseID: activeID, atLeast: .instructor, db: app.db)
+            try await requireCourseWriteAccess(caller: admin, courseID: archivedID, atLeast: .instructor, db: app.db)
+        }
+    }
+
+    // MARK: - Last-instructor guard (Slice B of #417)
+
+    /// `ensureNotLastInstructor` stops a non-admin from removing or demoting a
+    /// course's only instructor (which would orphan it), while admins — who can
+    /// always re-grant — are exempt. Once a second instructor exists, either can
+    /// be removed.
+    @Test func ensureNotLastInstructorGuardsCourseFromOrphaning() async throws {
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            try await configureTestDatabase(app)
+
+            let course = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
+            try await course.save(on: app.db)
+            let courseID = try course.requireID()
+
+            let inst1 = makeUser(role: .student)  // per-course instructor below
+            let inst2 = makeUser(role: .student)
+            let admin = makeUser(role: .admin)
+            for user in [inst1, inst2, admin] { try await user.save(on: app.db) }
+            try await APICourseEnrollment(
+                userID: try inst1.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
+
+            // Only one instructor: a non-admin cannot remove them…
+            await #expect(throws: Abort.self) {
+                try await ensureNotLastInstructor(
+                    caller: inst1, courseID: courseID, removing: try inst1.requireID(), db: app.db)
+            }
+            // …but an admin can (they can re-grant).
+            try await ensureNotLastInstructor(
+                caller: admin, courseID: courseID, removing: try inst1.requireID(), db: app.db)
+
+            // With a second instructor, a non-admin may remove either one.
+            try await APICourseEnrollment(
+                userID: try inst2.requireID(), courseID: courseID, role: .instructor
+            ).save(on: app.db)
+            try await ensureNotLastInstructor(
+                caller: inst1, courseID: courseID, removing: try inst1.requireID(), db: app.db)
+            try await ensureNotLastInstructor(
+                caller: inst1, courseID: courseID, removing: try inst2.requireID(), db: app.db)
         }
     }
 
     // MARK: - Helpers
 
-    private func makeUser(role: UserRole) -> APIUser {
+    /// Test-only stand-in for the retired global `student` / `instructor`
+    /// roles. The deployment role enum collapsed to `user` / `admin` / `mcp`
+    /// (#417 Slice G2), but these role-model tests still construct users
+    /// carrying the legacy role strings a pre-collapse production row would
+    /// have (the backfill reads them). `.rawValue` is faithful, so behaviour is
+    /// identical to the old `UserRole` cases.
+    private enum LegacyGlobalRole {
+        case student, instructor, admin
+        var rawValue: String {
+            switch self {
+            case .student: return "student"
+            case .instructor: return "instructor"
+            case .admin: return UserRole.admin.rawValue
+            }
+        }
+    }
+
+    private func makeUser(role: LegacyGlobalRole) -> APIUser {
         APIUser(
             username: "\(role.rawValue)_\(UUID().uuidString.prefix(8))",
             passwordHash: "x",

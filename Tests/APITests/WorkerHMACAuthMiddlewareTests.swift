@@ -12,6 +12,17 @@ import VaporTesting
     private func makeApp() async throws -> Application {
         let app = try await Application.make(.testing)
         app.routes.defaultMaxBodySize = "10mb"
+        // Replay nonces persist to the database as of #1154, so the stub app
+        // needs one (accessing request.db with no default database configured
+        // is a process-killing fatalError on Linux, not a catchable throw).
+        do {
+            try configureDatabase(app, settings: .sqliteInMemory())
+            app.migrations.add(CreateWorkerNonces())
+            try await app.autoMigrate()
+        } catch {
+            try? await app.asyncShutdown()
+            throw error
+        }
         app.workerSecretStore = WorkerSecretStore(initialOverride: sharedSecret)
         let middleware = WorkerHMACAuthMiddleware(maxClockSkewSeconds: 60, nonceTTLSeconds: 300)
         app.grouped(middleware).post("internal", "worker", "ping") { _ in

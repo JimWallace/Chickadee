@@ -45,6 +45,29 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "role")
     var roleRaw: String?
 
+    /// LEARN grade-sync readiness for this (student, course): whether the
+    /// roster-readiness sweep has confirmed we can deliver this student's grade
+    /// to the course's LEARN classlist. Stored as `LearnSyncReadiness.rawValue`;
+    /// NULL (a pre-existing row never swept) reads as `.unconfirmed`. Read it
+    /// through the typed `learnSyncReadiness` accessor, never this raw column.
+    @OptionalField(key: "brightspace_sync_status")
+    var brightspaceSyncStatusRaw: String?
+
+    /// When the readiness sweep last classified this enrollment. Nil = never.
+    @OptionalField(key: "brightspace_checked_at")
+    var brightspaceCheckedAt: Date?
+
+    /// Human-readable reason for a non-`confirmed` status (e.g. "not on the
+    /// LEARN classlist" / "no student ID to match on"). Nil when confirmed.
+    @OptionalField(key: "brightspace_sync_detail")
+    var brightspaceSyncDetail: String?
+
+    /// The LEARN group name this student belongs to in the course's configured
+    /// section category (e.g. "Lab 3"). Populated by the periodic section-sync
+    /// sweep. Nil until the sweep has run or the student isn't in any group.
+    @OptionalField(key: "brightspace_section")
+    var brightspaceSection: String?
+
     init() {}
 
     init(id: UUID? = nil, userID: UUID, courseID: UUID, role: CourseRole = .student) {
@@ -52,6 +75,30 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
         self.userID = userID
         self.$course.id = courseID
         self.roleRaw = role.rawValue
+    }
+}
+
+// MARK: - LEARN grade-sync readiness
+
+/// Whether Chickadee has verified it can deliver this student's grade to the
+/// course's LEARN gradebook. A *signal* layer, independent of the grade-push
+/// path — an `unreachable` student's grade still queues and is never lost; the
+/// status just tells the instructor we can't deliver it yet.
+enum LearnSyncReadiness: String, Codable, Sendable {
+    /// Default on enroll — not yet checked against the LEARN classlist.
+    case unconfirmed
+    /// Matched to a LEARN classlist identity — we can push this student's grade.
+    case confirmed
+    /// Checked, but we can't deliver: not on the classlist, or no key to match.
+    case unreachable
+}
+
+extension APICourseEnrollment {
+    /// The enrollment's typed LEARN sync readiness. A missing / unrecognised
+    /// stored value reads as `.unconfirmed` (a row the sweep hasn't reached).
+    var learnSyncReadiness: LearnSyncReadiness {
+        get { brightspaceSyncStatusRaw.flatMap(LearnSyncReadiness.init(rawValue:)) ?? .unconfirmed }
+        set { brightspaceSyncStatusRaw = newValue.rawValue }
     }
 }
 

@@ -292,7 +292,7 @@ actor WorkerDaemon {
                         return classifyHTTPRetry(statusCode: statusCode, body: body)
                     case .downloadFailed(let failedURL):
                         return .terminal("Failed to download \(failedURL.absoluteString)")
-                    case .makeFailed, .insufficientDiskSpace:
+                    case .makeFailed, .makeTimedOut, .insufficientDiskSpace, .unsafePersonalizedFilename:
                         return .terminal(String(describing: workerError))
                     }
                 }
@@ -342,15 +342,55 @@ actor WorkerDaemon {
     // `extractZipArchive(zipPath:into:)` from the `Core` library, which
     // shares the same lock + EFAULT-retry as the server-side zip helpers.
 
-    func runMake(in directory: URL, target: String?) throws {
+    /// Runs the optional pre-test `make` step through the same bounded
+    /// process machinery as test scripts (#1107). The step executes AFTER the
+    /// student submission is merged into the workspace, so a submission with
+    /// a hung `make` used to block a cooperative-pool thread and a job slot
+    /// forever (`waitUntilExit()` on the actor, no time limit, no kill) — the
+    /// exact starvation `ScriptRunner` was hardened against for test scripts.
+    /// Now it gets the timeout + process kill + capped output capture for
+    /// free, a timeout maps to `buildStatus: failed`, and the captured
+    /// output rides the error into `compilerOutput` so the instructor can
+    /// see why the build failed. Like test scripts, `make` inherits only the
+    /// allowlisted environment (no worker secrets).
+    func runMake(in directory: URL, target: String?) async throws {
+        let timeLimitSeconds = max(1, config.makeTimeoutSeconds)
+        let arguments = target.map { [$0] } ?? []
+        #if os(Linux)
+        let launch = LinuxProcessLaunchConfiguration(
+            executablePath: "/usr/bin/make",
+            arguments: arguments,
+            env: mergedScriptEnvironment(overrides: [:])
+        )
+        let output = await executeLinuxScriptProcess(
+            launch,
+            workDir: directory,
+            timeLimitSeconds: timeLimitSeconds,
+            launchErrorPrefix: "Failed to launch make"
+        )
+        #else
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/make")
-        proc.arguments = target.map { [$0] } ?? []
+        proc.arguments = arguments
         proc.currentDirectoryURL = directory
-        try proc.run()
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else {
-            throw WorkerDaemonError.makeFailed(target)
+        proc.environment = mergedScriptEnvironment(overrides: [:])
+        let output = await executeScriptProcess(
+            proc,
+            timeLimitSeconds: timeLimitSeconds,
+            launchErrorPrefix: "Failed to launch make",
+            usesSeparateProcessGroup: false,
+            usesExternalTimeout: false
+        )
+        #endif
+        if output.timedOut {
+            throw WorkerDaemonError.makeTimedOut(target: target, limitSeconds: timeLimitSeconds)
+        }
+        guard output.exitCode == 0 else {
+            let detail = [output.stderr, output.stdout]
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            throw WorkerDaemonError.makeFailed(
+                target: target, detail: detail.isEmpty ? nil : detail)
         }
     }
 

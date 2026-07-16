@@ -13,9 +13,11 @@ struct RoleMiddleware: AsyncMiddleware {
 
     enum Required {
         case authenticated  // any logged-in user
-        case instructor  // instructor or admin
         case admin  // admin only
     }
+    // Note: there is no `.instructor` tier — teaching authority is per-course
+    // (`ActiveCourseStaffMiddleware` + the per-course `requireCourseRole`
+    // chokepoints), not a deployment-global role (#417).
 
     let required: Required
 
@@ -31,8 +33,6 @@ struct RoleMiddleware: AsyncMiddleware {
         switch required {
         case .authenticated:
             break
-        case .instructor:
-            guard user.isInstructor else { throw Abort(.forbidden) }
         case .admin:
             guard user.isAdmin else { throw Abort(.forbidden) }
         }

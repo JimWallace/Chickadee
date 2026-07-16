@@ -111,7 +111,7 @@ extension PublishedAssignmentRoutes {
             throw WebAssignmentError.internalFailure(reason: "Authenticated user has no ID")
         }
 
-        let (assignment, setup) = try await loadAssignmentAndSetup(req)
+        let (assignment, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
 
         let sourceData =
             (try? notebookData(for: setup))

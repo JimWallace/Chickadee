@@ -146,6 +146,33 @@ import Vapor
         }
     }
 
+    /// Archived courses are read-only for instructors (#417, follow-up to Slice
+    /// A): the by-public-ID move is blocked even for the course's own instructor,
+    /// and the assignment stays ungrouped because the rejected write never ran.
+    /// Archived courses are already hidden from the MCP listing surface, so this
+    /// closes the remaining remembered-id write path.
+    @Test func setAssignmentSectionBlockedOnArchivedCourse() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let fx = try await fixture(on: app)
+            let courseID = try fx.course.requireID()
+            let section = try await makeSection(
+                on: app, name: "Labs", mode: "worker", order: 1, courseID: courseID)
+            fx.course.isArchived = true
+            try await fx.course.save(on: app.db)
+
+            await #expect(throws: MCPToolError.self) {
+                _ = try await SetAssignmentCourseSectionTool().execute(
+                    .init(
+                        assignmentPublicID: fx.assignment.publicID,
+                        courseSectionID: try section.requireID().uuidString), context(app))
+            }
+            // The blocked write didn't persist: the assignment is still ungrouped.
+            let reloaded = try #require(try await APIAssignment.find(fx.assignment.id, on: app.db))
+            #expect(reloaded.sectionID == nil)
+        }
+    }
+
     @Test func setAssignmentSectionRejectsForeignSection() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in

@@ -28,8 +28,15 @@ struct DatabaseSettings: Sendable {
     /// in-process boundary. nil → the MCP path shares the main pool.
     let postgresMCPUsername: String?
     let postgresMCPPassword: String?
+    /// Fluent connection-pool size per event loop (#1159 — the pool was
+    /// never configured, riding the driver default of 1/loop; the
+    /// MetricsCardCache header documents the ConnectionPoolTimeoutError
+    /// incident that caused). nil → per-backend default at configure time
+    /// (1 for SQLite, whose writes serialize anyway; 4 for Postgres).
+    let maxConnectionsPerEventLoop: Int?
 
     static func fromEnvironment(defaultSQLitePath: String) throws -> Self {
+        let poolSize = try parsedPoolSize()
         let backend: DatabaseBackend
         if let configuredBackend = trimmedEnv("DATABASE_BACKEND")?.lowercased() {
             guard let parsed = DatabaseBackend(rawValue: configuredBackend) else {
@@ -44,7 +51,9 @@ struct DatabaseSettings: Sendable {
 
         switch backend {
         case .sqlite:
-            return .sqlite(path: trimmedEnv("SQLITE_PATH") ?? defaultSQLitePath)
+            return .sqlite(
+                path: trimmedEnv("SQLITE_PATH") ?? defaultSQLitePath,
+                maxConnectionsPerEventLoop: poolSize)
         case .postgres:
             let host = trimmedEnv("DATABASE_HOST")
             let database = trimmedEnv("DATABASE_NAME")
@@ -72,12 +81,23 @@ struct DatabaseSettings: Sendable {
                 username: username,
                 password: password,
                 mcpUsername: trimmedEnv("MCP_DATABASE_USER"),
-                mcpPassword: trimmedEnv("MCP_DATABASE_PASSWORD")
+                mcpPassword: trimmedEnv("MCP_DATABASE_PASSWORD"),
+                maxConnectionsPerEventLoop: poolSize
             )
         }
     }
 
-    static func sqlite(path: String) -> Self {
+    private static func parsedPoolSize() throws -> Int? {
+        guard let raw = trimmedEnv("DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP") else { return nil }
+        guard let value = Int(raw), value > 0 else {
+            throw DatabaseConfigurationError.invalidSettings(
+                "DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP must be a positive integer"
+            )
+        }
+        return value
+    }
+
+    static func sqlite(path: String, maxConnectionsPerEventLoop: Int? = nil) -> Self {
         .init(
             backend: .sqlite,
             sqlitePath: path,
@@ -89,7 +109,8 @@ struct DatabaseSettings: Sendable {
             postgresPassword: nil,
             postgresSearchPath: nil,
             postgresMCPUsername: nil,
-            postgresMCPPassword: nil
+            postgresMCPPassword: nil,
+            maxConnectionsPerEventLoop: maxConnectionsPerEventLoop
         )
     }
 
@@ -105,7 +126,8 @@ struct DatabaseSettings: Sendable {
             postgresPassword: nil,
             postgresSearchPath: nil,
             postgresMCPUsername: nil,
-            postgresMCPPassword: nil
+            postgresMCPPassword: nil,
+            maxConnectionsPerEventLoop: nil
         )
     }
 
@@ -117,7 +139,8 @@ struct DatabaseSettings: Sendable {
         password: String,
         searchPath: [String]? = nil,
         mcpUsername: String? = nil,
-        mcpPassword: String? = nil
+        mcpPassword: String? = nil,
+        maxConnectionsPerEventLoop: Int? = nil
     ) -> Self {
         .init(
             backend: .postgres,
@@ -130,7 +153,8 @@ struct DatabaseSettings: Sendable {
             postgresPassword: password,
             postgresSearchPath: searchPath,
             postgresMCPUsername: mcpUsername,
-            postgresMCPPassword: mcpPassword
+            postgresMCPPassword: mcpPassword,
+            maxConnectionsPerEventLoop: maxConnectionsPerEventLoop
         )
     }
 }
@@ -175,7 +199,12 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             storage: settings.sqliteStorage,
             enableForeignKeys: true
         )
-        app.databases.use(.sqlite(sqliteConfig), as: .chickadee, isDefault: true)
+        // Default 1/loop: SQLite serializes writes anyway, and the in-memory
+        // test storage must stay on the driver default. Raising it only helps
+        // concurrent WAL reads and only when explicitly configured (#1159).
+        app.databases.use(
+            .sqlite(sqliteConfig, maxConnectionsPerEventLoop: settings.maxConnectionsPerEventLoop ?? 1),
+            as: .chickadee, isDefault: true)
 
         if case .file = settings.sqliteStorage, let sql = app.db as? SQLDatabase {
             _ = try sql.raw("PRAGMA journal_mode = WAL").all().wait()
@@ -209,11 +238,17 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
         if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
             configuration.searchPath = searchPath
         }
+        // Default 4/loop on Postgres (#1159): the driver default of 1/loop is
+        // the documented ConnectionPoolTimeoutError incident class — one
+        // long-held connection per event loop starves every other query on
+        // that loop. Override via DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP.
+        let poolSize = settings.maxConnectionsPerEventLoop ?? 4
         app.databases.use(
-            .postgres(configuration: configuration),
+            .postgres(configuration: configuration, maxConnectionsPerEventLoop: poolSize),
             as: .chickadee,
             isDefault: true
         )
+        app.logger.info("Postgres pool: \(poolSize) connections per event loop")
 
         // Optional: a second pool for the MCP path backed by a least-privilege
         // role (no access to student tables). Same host/database/search_path,
@@ -232,7 +267,9 @@ func configureDatabase(_ app: Application, settings: DatabaseSettings) throws {
             if let searchPath = settings.postgresSearchPath, !searchPath.isEmpty {
                 mcpConfiguration.searchPath = searchPath
             }
-            app.databases.use(.postgres(configuration: mcpConfiguration), as: .mcp)
+            app.databases.use(
+                .postgres(configuration: mcpConfiguration, maxConnectionsPerEventLoop: poolSize),
+                as: .mcp)
             app.usesDedicatedMCPDatabase = true
             app.logger.info("MCP database: dedicated least-privilege role \(mcpUsername) in use")
         }
@@ -260,6 +297,9 @@ func registerMigrations(on app: Application) {
     // Same ordering constraint as AddBrightSpaceOrgUnitName: a courses column
     // that must exist before AddCourseArchivedAt queries the APICourse model.
     app.migrations.add(AddCourseBrightSpaceSyncUserID())
+    // Same ordering constraint: brightspace_section_category_id must exist
+    // before AddCourseArchivedAt (or any migration) queries the APICourse model.
+    app.migrations.add(AddCourseBrightSpaceSectionCategoryID())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
@@ -335,10 +375,71 @@ func registerMigrations(on app: Application) {
     // stale browser tab / cached bundle, not a live regression).
     app.migrations.add(AddClientDiagnosticAppVersion())
 
+    // Per-(student, course) LEARN sync readiness on course_enrollments:
+    // unconfirmed (default) → confirmed / unreachable, maintained by the
+    // roster-readiness sweep. MUST run before AddCourseEnrollmentRole: that
+    // migration's backfill does a full-model `APICourseEnrollment.query().all()`,
+    // which on a fresh DB selects every column the model declares — including
+    // these — so the columns have to exist by the time it runs.
+    app.migrations.add(AddEnrollmentBrightSpaceSyncStatus())
+    // Same ordering constraint: brightspace_section must exist before
+    // AddCourseEnrollmentRole queries the full APICourseEnrollment model.
+    app.migrations.add(AddEnrollmentBrightSpaceSection())
+
     // Per-course role on each enrollment (Phase 1 of
     // docs/multi-course-roles.md). Behaviour-preserving: backfills role from
     // each user's current global role; nothing reads it yet. Runs after
     // CreateCourseEnrollments (the table) and CreateUsers (the backfill reads
     // users).
     app.migrations.add(AddCourseEnrollmentRole())
+
+    // BrightSpace grade-sync bookkeeping on grade_overrides, mirroring the
+    // columns on results. Lets an override on a student with no submissions
+    // (e.g. a manually-registered pre-enrolled student) enqueue a grade push.
+    app.migrations.add(AddGradeOverrideBrightSpaceSync())
+
+    // Queue of pending BrightSpace grade removals (override cleared on a
+    // no-submission student Chickadee had pushed a grade for). FK to
+    // test_setups + users.
+    app.migrations.add(CreateBrightSpaceGradeClears())
+
+    // Explicit "do not sync this assignment to LEARN" flag on assignments,
+    // distinct from an unmapped grade item. Column-only; no migration
+    // full-queries APIAssignment, so ordering is unconstrained.
+    app.migrations.add(AddAssignmentBrightSpaceSyncExcluded())
+
+    // Collapse the deployment-global role to user|admin (#417 Slice G2):
+    // rewrite every legacy student/instructor row to `user`. MUST run after
+    // AddCourseEnrollmentRole, which has already seeded each enrollment's
+    // per-course role from the user's then-current global role — so normalising
+    // the now-meaningless global label here loses no teaching authority.
+    app.migrations.add(CollapseUserRoles())
+
+    // Multi-process security state (#1154): worker-HMAC replay nonces and
+    // login rate-limit/lockout events move from process-local memory to the
+    // database so their guarantees hold behind a load balancer. New tables,
+    // no ordering constraints.
+    app.migrations.add(CreateWorkerNonces())
+    app.migrations.add(CreateLoginAttempts())
+
+    // Leader leases so each periodic sweep runs on exactly one process
+    // (#1155). New table, no ordering constraints.
+    app.migrations.add(CreateSweepLeases())
+
+    // Relocates results.collection_json to the result_collections side table
+    // (#1173) so hot result-row queries never carry the blob. MUST run after
+    // AddResultGradeColumns — its backfill reads the column this migration
+    // drops.
+    app.migrations.add(CreateResultCollections())
+
+    // Secret reveal tokens: per-assignment instructor toggle plus one
+    // spent-token row per (student, assignment). Column-only + new table;
+    // no migration full-queries APIAssignment, so ordering is unconstrained.
+    app.migrations.add(AddAssignmentSecretRevealEnabled())
+    app.migrations.add(CreateSecretRevealUnlocks())
+
+    // Personal-data export tracking (#557): one row per user, doubling as
+    // the one-export-per-day rate-limit ledger. FK to users; no ordering
+    // constraints beyond CreateUsers.
+    app.migrations.add(CreateDataExports())
 }

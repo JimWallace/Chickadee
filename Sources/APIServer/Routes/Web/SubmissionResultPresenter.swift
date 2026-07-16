@@ -102,33 +102,36 @@ extension WebRoutes {
     // MARK: - Result presentation
 
     // Internal (was private): called from `submissionPage` in WebRoutes+Submission.swift.
-    /// Decodes the chosen result's `TestOutcomeCollection`, computes the
-    /// all-tier grade (so the number matches the dashboard and is stable across
-    /// the deadline), and renders each *itemized* outcome into an `OutcomeRow`.
-    /// Students see public + release rows; release output is redacted until the
-    /// deadline.  Secret never appears as a row — for non-instructors it is
-    /// surfaced as an aggregate pass/fail `TierSummary` instead.
+    /// Renders the chosen result's already-decoded `TestOutcomeCollection`
+    /// (the caller fetches the blob from the result_collections side table,
+    /// #1173): computes the all-tier grade (so the number matches the
+    /// dashboard and is stable across the deadline), and renders each
+    /// *itemized* outcome into an `OutcomeRow`. Students see public + release
+    /// rows; release output is redacted until the deadline. Secret appears as
+    /// rows only for staff or a student with a spent secret-reveal token —
+    /// otherwise it is surfaced as an aggregate pass/fail `TierSummary`.
     func processDisplayResult(
         result: APIResult,
+        collection maybeCollection: TestOutcomeCollection?,
         viewer: SubmissionViewer,
         submission: APISubmission,
         priorAttempt: PriorAttemptDelta,
-        manifestDisplay: ManifestDisplayData,
-        decoder: JSONDecoder
+        manifestDisplay: ManifestDisplayData
     ) -> ProcessedCollection {
         var processed = ProcessedCollection.empty
         processed.resultSource = result.source ?? "worker"
-        guard let data = result.collectionJSON.data(using: .utf8),
-            let collection = try? decoder.decode(TestOutcomeCollection.self, from: data)
-        else {
+        guard let collection = maybeCollection else {
             return processed
         }
 
-        // Secret tests count toward the grade but are never itemized for
-        // students; they are bucketed into per-section aggregate pass/fail
-        // summaries by `buildSectionedOutcomes`.  Kept in collection order so
-        // the section correlation lines up with the secret manifest entries.
-        if !viewer.user.isInstructor {
+        // Secret tests count toward the grade but are not itemized for
+        // students (unless they spent their secret-reveal token); they are
+        // bucketed into per-section aggregate pass/fail summaries by
+        // `buildSectionedOutcomes`.  Kept in collection order so the section
+        // correlation lines up with the secret manifest entries.  When
+        // revealed, secret outcomes flow through the itemized rows below
+        // instead, and this stays empty — so the aggregate never doubles up.
+        if !viewer.isStaff && !viewer.secretRevealed {
             processed.secretOutcomes = collection.outcomes.filter { $0.tier == .secret }
         }
 
@@ -151,7 +154,9 @@ extension WebRoutes {
             attemptNumber: submission.attemptNumber ?? 1,
             gradePercent: processed.gradePercent,
             executionTimeMs: collection.executionTimeMs,
-            priorGradePercent: priorAttempt.gradePercent
+            priorGradePercent: priorAttempt.gradePercent,
+            outcomes: collection.outcomes,
+            testNameAliases: manifestDisplay.testNameAliases
         )
         let weighted = collection.totalPoints != collection.totalTests
         let itemized = collection.filtering(tiers: viewer.itemizedTiers)
@@ -333,6 +338,7 @@ extension WebRoutes {
         decorations: SubmissionDecorations,
         delta: DeltaBanner
     ) -> SubmissionContext {
+        let secretReveal = decorations.secretReveal
         let overrideGradePercent = decorations.overrideGradePercent
         let badges = decorations.badges
         let currentUser = decorations.currentUser
@@ -373,18 +379,22 @@ extension WebRoutes {
             deltaHeaderText: delta.headerText,
             badges: badges,
             currentUser: currentUser,
-            classGoals: decorations.classGoals
+            classGoals: decorations.classGoals,
+            hasClassGoals: !decorations.classGoals.isEmpty,
+            secretRevealAvailable: secretReveal.available,
+            secretRevealActive: secretReveal.active
         )
     }
 }
 
 /// Loads an assignment's class-goal achievements joined with their latest
 /// `APIAchievementResult` snapshot, for the student-facing "Achievements"
-/// section.  Returns `[]` when the manifest carries no class goals.
-func loadClassGoalViews(testSetupID: String, on db: Database) async throws -> [ClassGoalView] {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db),
-        let props = try? JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
-    else { return [] }
+/// section.  Returns `[]` when the manifest carries no class goals.  Takes the
+/// caller's already-decoded manifest (#1128) instead of re-fetching the setup.
+func loadClassGoalViews(
+    testSetupID: String, props: TestProperties?, on db: Database
+) async throws -> [ClassGoalView] {
+    guard let props else { return [] }
     let goals = props.achievements.filter { $0.isClassGoal }
     guard !goals.isEmpty else { return [] }
 
@@ -399,7 +409,7 @@ func loadClassGoalViews(testSetupID: String, on db: Database) async throws -> [C
         let progress = row?.progress ?? 0
         let rewardLabel: String
         if goal.reward.type == .points, let points = goal.reward.points {
-            rewardLabel = "+\(points) pts"
+            rewardLabel = "+\(points) \(points == 1 ? "pt" : "pts")"
         } else {
             rewardLabel = goal.reward.label
         }
@@ -519,6 +529,23 @@ struct ManifestDisplayData {
     let hintByFilename: [String: String]
     let sections: [TestSuiteSection]
     let entries: [TestSuiteEntry]
+    /// Manifest-derived alias map for achievement `testPass` matching (audit
+    /// A1): outcome test name → every name that suite entry answers to.
+    let testNameAliases: [String: Set<String>]
+
+    init(
+        displayNameMap: [String: String],
+        hintByFilename: [String: String],
+        sections: [TestSuiteSection],
+        entries: [TestSuiteEntry],
+        testNameAliases: [String: Set<String>] = [:]
+    ) {
+        self.displayNameMap = displayNameMap
+        self.hintByFilename = hintByFilename
+        self.sections = sections
+        self.entries = entries
+        self.testNameAliases = testNameAliases
+    }
 }
 
 // Internal (was private): constructed by `submissionPage` in
@@ -527,12 +554,22 @@ struct ManifestDisplayData {
 /// output is shown.  The grade spans every tier regardless of these.
 struct SubmissionViewer {
     let user: APIUser
+    /// Whether the viewer is course staff (TA+ or admin) for this submission's
+    /// course — gates secret-tier bucketing and instructor-level detail (#417
+    /// Slice G, per-course; was the global `user.isInstructor`).
+    let isStaff: Bool
     /// Tiers rendered as individual rows (public + release for students; all
-    /// tiers for instructors).  Secret is never itemized for students.
+    /// tiers for instructors).  Secret is itemized for students only when
+    /// `secretRevealed`.
     let itemizedTiers: Set<String>
     /// Whether release-tier output is shown (true after the deadline / for
     /// instructors).  Release rows are listed by name either way.
     let releaseOutputVisible: Bool
+    /// True when this student has spent their secret-reveal token on an
+    /// assignment whose reveal option is enabled — secret rows are then
+    /// itemized like public rows instead of aggregated.  Always false for
+    /// staff (they itemize secret regardless).
+    let secretRevealed: Bool
 }
 
 // Internal (was private): constructed by `submissionPage` in
@@ -542,6 +579,16 @@ struct SubmissionViewer {
 struct DeltaBanner {
     let hasDelta: Bool
     let headerText: String?
+}
+
+// Internal: constructed by `submissionPage` in WebRoutes+Submission.swift.
+/// Secret-reveal display state for the submission page.  `available` renders
+/// the "spend your reveal token" offer box; `active` renders the "secret
+/// tests revealed" info banner (and secret rows itemize via the viewer's
+/// tier set).  Both are always false for staff.
+struct SecretRevealBanner {
+    let available: Bool
+    let active: Bool
 }
 
 // Internal (was private): constructed by `submissionPage` in
@@ -556,4 +603,6 @@ struct SubmissionDecorations {
     let overrideGradePercent: Int?
     /// Class-goal progress views for the "Achievements" section.
     let classGoals: [ClassGoalView]
+    /// Secret-reveal offer/active state for the reveal-token UI.
+    let secretReveal: SecretRevealBanner
 }

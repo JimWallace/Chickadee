@@ -12,6 +12,20 @@ needed, but the architecture has been redesigned from scratch.
 
 ---
 
+## Shell Snippets (maintainer environment)
+
+The maintainer runs **zsh with `interactive_comments` off**. When giving shell
+commands meant to be pasted into a terminal — in chat or in `docs/` runbooks:
+
+- **No inline `#` comments on a command line** — zsh parses `#` as a normal
+  argument, so `cmd value  # note` fails with "too many arguments".
+- **No apostrophes in explanatory text inside a code block** — an unmatched `'`
+  drops zsh into a `quote>` continuation prompt and nothing runs.
+- **One plain command per line.** Keep all explanation in prose *outside* the
+  code block; never rely on `#` to annotate inside it.
+
+---
+
 ## Architecture Overview
 
 Swift targets share a clean dependency boundary:
@@ -78,8 +92,19 @@ namespaces). Enable with `--sandbox` on the runner.
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
-**Three user roles.** `student`, `instructor`, `admin`. Role is stored on
-`APIUser` and enforced via `RoleMiddleware`. Admin implies instructor.
+**Roles are two-level: a deployment role plus a per-course role (#417).**
+The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
+(plus the non-human `mcp` service-account role) — the legacy global
+`student`/`instructor` roles were retired by the #417 multi-course-roles
+series (`CollapseUserRoles` migration). Teaching authority is **per-course**:
+each enrollment row carries a `CourseRole` (`student` < `ta` < `instructor`),
+so one account can be an instructor in one course and a student in another.
+TAs author content and grade but cannot manage enrollment/deadlines/
+archival/staff. Enforcement chokepoints: `requireCourseRole(atLeast:)` /
+`evaluateCourseWrite` in `CourseAccessHelpers.swift` (web + MCP share the
+policy); the `/instructor` area gate is `ActiveCourseStaffMiddleware`
+(staff in the *active* course), with per-resource gates on every
+parameterized route. See `docs/multi-course-roles.md`.
 
 **Auth is pluggable.** `AUTH_MODE` env var selects `.local` (username/password),
 `.sso` (OIDC/OAuth), or `.dual` (both active simultaneously). `APIUser` carries
@@ -334,13 +359,23 @@ All JSON endpoints use `application/json`. The test setup upload is multipart.
 
 ## Auth & Roles
 
-Three roles in ascending order of privilege: `student` < `instructor` < `admin`.
+Deployment roles: `user` < `admin` (plus the non-login `mcp` service role).
+Per-course roles on the enrollment row: `student` < `ta` < `instructor`
+(#417 — there is no global student/instructor anymore).
 
 - **Unauthenticated:** login, register, runner endpoints (HMAC-signed separately)
-- **Authenticated (any role):** web UI, submission queries, result views,
-  JupyterLite content routes, notebook download
-- **Instructor+:** assignment CRUD, submission intake, test setup management
-- **Admin:** admin panel, worker secret/autostart management, runner dashboard
+- **Authenticated (any user):** web UI, submission queries, result views,
+  JupyterLite content routes, notebook download — visibility scoped to
+  enrolled courses
+- **Course staff (per-course `ta`+):** assignment content editing, grading
+  actions (retest/reset/grade-override), all-tier/result visibility for that
+  course
+- **Per-course `instructor`:** everything a TA can do, plus enrollment/roster/
+  staff management, assignment lifecycle (create/delete/open/close/deadlines),
+  course sections, archival, BrightSpace binding
+- **Admin:** admin panel, course creation, worker secret/autostart management,
+  runner dashboard (admins bypass per-course role checks, but MCP agents
+  acting for them stay enrollment-scoped)
 
 Session auth uses Vapor's `SessionAuthenticator`. Sessions are persisted
 via the Fluent driver (v0.4.46), so they survive restarts and work across
@@ -376,7 +411,7 @@ aren't leaked to `cdn.jsdelivr.net` and `esm.sh` on every page load
 (FIPPA / PIPEDA concern surfaced in the v0.4.171 audit).
 
 ```
-Public/pyodide/              — the ONE canonical Pyodide distribution (~1.4 GB)
+Public/pyodide/              — the ONE canonical Pyodide distribution (~465 MB)
 Public/vendor/jszip.min.js   — jszip browser-runner uses for zip extraction
 Public/vendor/codemirror.js  — bundled CodeMirror 6 ESM
 ```
@@ -413,26 +448,24 @@ version — the guard against repeating #574.  jszip is fetched by
 every contributor and CI runner sees the same bytes without a build-time
 network fetch.
 
-**Extra packages + nb_mypy.** Pure-Python packages not in the upstream Pyodide
-distribution are declared in `Tools/vendor/pyodide-extra-packages.json` (pinned
-URL + sha256) and injected into the one lock by `scripts/add-pyodide-extras.py`
-(run from `setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're
-present so a re-vendor can't silently drop them.  This is how `nb_mypy` (+
-`astor`) gets into the editor.  nb_mypy type-checking is **on by default** but
-**loaded lazily, off the kernel-boot critical path**: the kernel wheel's
-`__init__.py` is patched (deterministically, `ZIP_STORED`, by
-`scripts/patch-pyodide-kernel.py` from `setup-jupyterlite.sh`) to schedule a
-background task that — once the kernel is up — `loadPackage`s nb_mypy from the
-vended Pyodide lock and runs `%load_ext nb_mypy; %nb_mypy On`.  nb_mypy is
-deliberately **not** in `loadPyodideOptions.packages`: a package named there is
-loaded by `loadPyodide()` itself, so any failure (bad PEP 503 lock key, dropped
-wheel, ABI mismatch) would reject the boot and brick the whole editor.  The
-background load is wrapped in a fail-safe try/except so a missing/incompatible
-nb_mypy degrades to "no type warnings", never a dead kernel.  Patching a bundled
-wheel means a sha cascade (wheel → `all.json` digest → `pipliteUrls` sha);
-`verify-jupyterlite.sh` asserts that chain is consistent so a mismatch (which
-would make piplite reject the kernel) is a build failure, not a browser
-surprise.
+**Extra packages + nb_mypy (currently DISABLED).** Pure-Python packages not
+in the upstream Pyodide distribution are declared in
+`Tools/vendor/pyodide-extra-packages.json` (pinned URL + sha256) and injected
+into the one lock by `scripts/add-pyodide-extras.py` (run from
+`setup-vendor.sh`); `check-pyodide-parity.sh` then asserts they're present so
+a re-vendor can't silently drop them.  This is how the `nb_mypy` (+ `astor`)
+wheels get into the editor bundle — but **nb_mypy type-checking is disabled**
+(see the `scripts/patch-pyodide-kernel.py` docstring): its IPython
+`pre_run_cell` hook ran a synchronous compiled-WASM mypy on every cell
+execute, on the kernel's single thread, and wedged the first cell in the real
+editor.  The wheels stay vended (harmless, unloaded) and the patch keeps an
+empty activation block so re-enabling is a one-line change; revisit
+type-checking only as a feature that never runs on the cell-execute path.
+The same kernel-wheel patch is what carries the v0.4.526 chdir fix; patching
+a bundled wheel means a sha cascade (wheel → `all.json` digest →
+`pipliteUrls` sha); `verify-jupyterlite.sh` asserts that chain is consistent
+so a mismatch (which would make piplite reject the kernel) is a build
+failure, not a browser surprise.
 
 ---
 
@@ -490,21 +523,37 @@ the `format-lint` CI job) — keep them green:
   and adapts to dark mode. (`scripts/check-css-vars.sh` enforces both.)
 - **No native `alert()` in templates** — surface errors with the inline
   `.form-error` banner pattern. The guard ratchets a baseline down only.
+- **Design tokens are mandatory** (`scripts/check-design-tokens.sh`): raw
+  colour literals (`#hex`/`rgb(a)`/`hsl(a)`) may appear only as `--token:`
+  declarations in `styles.css` (palette + dark-mode mirror); every
+  `font-size` uses the `--text-*` type scale (em/`inherit` allowed for
+  relative sizing); every `border-radius` uses the `--radius-*` scale
+  (`0`/`50%`/multi-corner allowed); every rem component of
+  `padding`/`margin`/`gap` sits on the shrink-only spacing lattice
+  (`SPACING_STEPS`); pop-out shadows use `--shadow-pop`. Pick the nearest
+  step — never introduce a new literal. Full principles, the token tables,
+  and the component vocabulary live in [docs/ui-design.md](docs/ui-design.md).
 
-Run `scripts/check-styles.sh` locally before pushing UI changes.
+Run `scripts/check-styles.sh` locally before pushing UI changes (it runs the
+css-vars + design-token guards too — same as the CI `format-lint` job).
 
 ---
 
 ## Testing Conventions
 
-- **Framework: Swift Testing only.** All ~107 test files are on Swift
-  Testing as of the migration completion (PRs #597–#608). `scripts/no-new-xctest.sh`
+- **Framework: Swift Testing only.** All ~276 Swift test files (plus a
+  dozen `.mjs` frontend tests) are on Swift Testing as of the migration
+  completion (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`.
 - **Approved Swift Testing vocabulary.** `@Suite`, `@Test`, `#expect`,
-  `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`, and
-  `@Test(arguments:)`. Avoid `CustomExecutionTrait`, hand-rolled trait
-  types, and anything still labelled experimental in the Swift Testing
-  source — the API is still evolving.
+  `#require`, `.serialized`, `.tags(...)`, `.disabled(if:)`,
+  `@Test(arguments:)`, and `.timeLimit(.minutes(n))` (put it on any suite
+  that spawns subprocesses or awaits daemons/network, so a stall fails
+  with a named test instead of holding the CI job to its 20-minute kill —
+  see the #1139 postmortem in `docs/ci-flakiness.md`). Avoid
+  `CustomExecutionTrait`, hand-rolled trait types, and anything still
+  labelled experimental in the Swift Testing source — the API is still
+  evolving.
 - **Struct vs class suites.**
   - **`@Suite struct Foo`** — default. Per-test instance is cheap.
   - **`@Suite final class Foo`** with `init()` / `deinit` — when the
@@ -923,8 +972,10 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   generated script is byte-identical across students (cache + `spec_hash`
   unchanged); only the resolved-values map differs.  Authorable via the browser
   editor (type `$name` in an arg/Expected cell) and MCP (`update_pattern_family`
-  `expectedVarRef`); `preview_personalization` audits the refs.  Restricted to
-  `boundary_equality` families for now.  Doc:
+  `expectedVarRef`); `preview_personalization` audits the refs.  Supported in
+  the equality kinds (`boundary_equality`, `approximate_equality`,
+  `unordered_equality` — the `kindSupportsPerStudentRefs` allowlist in
+  `PatternFamilyValidator.swift`).  Doc:
   `docs/personalization-pattern-families.md`.
 
 - **Notebook checks, BrightSpace grade sync, AppScan/security hardening,
@@ -944,7 +995,9 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   output-contract case, and `@unchecked Sendable` justification comments.
 
 - **MCP authoring-surface expansion (v0.4.328+).**  The agent tool catalog grew
-  from twelve to thirty-four content tools (`MCPToolCatalog.live`): `get_server_info`
+  from twelve to thirty-four content tools in this window — it stands at
+  **40** today (`MCPToolCatalog.live` in `MCPServerRegistration.swift` is the
+  source of truth): `get_server_info`
   (version/capability probe), `get_solution` / `update_solution` (read + replace
   the reference solution, re-validating), `author_script` (create/replace a
   hand-written test or support file through the same `applySuiteEdit` path the
@@ -976,7 +1029,7 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   (`closeOpenAssignmentForContentEdit`).
 
 - **MCP section / check / grading-mode round (v0.4.353+).**  The catalog reached
-  thirty-four tools: test-suite section management (`create_suite_section` /
+  thirty-four tools at this point (40 today): test-suite section management (`create_suite_section` /
   `rename_suite_section` / `delete_suite_section`, plus `move_suite_item` to place a
   script/family/check into a section); course-section management
   (`list_course_sections`, `create_course_section`, `rename_course_section`,
@@ -998,6 +1051,40 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   `set_assignment_section`→`set_assignment_course_section`, so the two "section"
   families read unambiguously — a breaking change to the not-yet-public MCP
   surface.)
+
+### v0.4.351 – v0.4.583 highlights (themed digest)
+
+Per-version detail in `CHANGELOG.md`; the arcs a fresh session should know:
+
+- **#417 multi-course roles (Slices A–G2, complete).**  Teaching authority
+  moved from the global role to a per-course `CourseRole` on the enrollment
+  row: `ta` rung added (Slice E), per-course write gates on every mutating
+  route and MCP tool (Slices C/D/D-MCP), self-serve staff invites (F),
+  per-course staff view gates (G), deployment role collapsed to
+  `user`/`admin` and the legacy global roles physically removed (G2 +
+  cleanup).  See the Roles decision above and `docs/multi-course-roles.md`.
+- **BrightSpace / LEARN sync arc.**  Per-instructor Valence identity
+  (connect / designate / bind-org-unit on the LEARN tab), assignment→
+  grade-item mapping with auto-map and a "Do not sync" option, debounced
+  grade push with retry classification + a grade-sync health alert, grade
+  scaling to the item's own max with 2-decimal rounding, grade *clears* when
+  a Chickadee source disappears, LEARN roster-readiness reconciliation
+  (per-student deliverability), and D2L group→section sync.  Runbook:
+  `docs/brightspace-setup.md`; awaiting UW IST prod credentials.
+- **Per-student datasets (#1083, `docs/datasets.md`).**  A `DatasetSpec` marks
+  a bundled support file as per-student; the server materializes a
+  deterministic per-seed slice delivered under the same filename to grading
+  and the editor.
+- **Zero-downtime deploys.**  Blue-green cutover (`scripts/bluegreen-deploy.sh`),
+  the `chickadee-deployer` daemon (auto-deploys green merges, SemVer-gated,
+  snapshot + rollback), deploy oversight on the admin MCP surface, and image
+  garbage collection.  `docs/zero-downtime-deploy.md`.
+- **Notebook editor kernel-boot reliability.**  Boot-funnel telemetry,
+  watchdog threshold tuning against real-user data, the exec-hang root cause
+  fixed (`docs/exec-hang-investigation.md`), service-worker-free JupyterLite
+  configuration hardened.
+- **Ops/scale.**  Runner disk-fill guard, test corpus at ~2,400 tests / ~276
+  files, Swift 6.3, top-nav dropdown rework (#1102).
 
 **Near-term roadmap:**
 
@@ -1023,11 +1110,11 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
   (Render tests catch this — they prove templates *resolve*; they don't
   exercise page JS, so a JS-driven widget still wants a manual check.)
 - **Feature backlog:** continued personalization / notebook-check
-  expansion (e.g. per-student refs in pattern kinds beyond
-  `boundary_equality`); pattern kinds beyond the seven shipped
+  expansion (e.g. per-student refs in pattern kinds beyond the three
+  equality kinds); pattern kinds beyond the eight shipped
   (`boundaryEquality` / `approximateEquality` / `variableEquality` /
   `returnTypeCheck` / `exceptionExpected` / `performanceThreshold` /
-  `stdoutEquality`); multi-provider SSO testing beyond UWaterloo DUO;
+  `stdoutEquality` / `unorderedEquality`); multi-provider SSO testing beyond UWaterloo DUO;
   refresh-token handling; gamification expansion (leaderboards, more
   badges beyond First-Try Perfect).
 
@@ -1057,5 +1144,6 @@ The per-version detail again lives in `CHANGELOG.md`; grouped by subsystem:
 - `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; why the server runs `python3` today, the trilemma, and the direction to move eval to the runner/browser per-language
 - `docs/mcp-validation-access.md` — planned MCP read tool for validation-run results only (per-test outcomes, never student data)
 - `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)
+- `docs/ci-flakiness.md` — CI flake families, evidence, and attack order (2026-07 snapshot; start here before chasing a red check on an unrelated PR)
 - `reference/` — original Java source for behavioural reference only
 - `CHANGELOG.md` — release history

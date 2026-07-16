@@ -39,10 +39,7 @@ struct SetGradingModeTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "gradingMode": .object([
                 "type": .string("string"),
                 "enum": .array([.string("browser"), .string("worker")]),
@@ -55,8 +52,8 @@ struct SetGradingModeTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "gradingMode": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "gradingMode": MCPSchema.string,
         ]),
         "required": .array([.string("assignmentPublicID"), .string("gradingMode")]),
     ])
@@ -70,8 +67,9 @@ struct SetGradingModeTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "gradingMode must be \"browser\" or \"worker\".")
         }
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        // Grading mode (worker vs browser) is a lifecycle setting — instructor-level (#417).
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
         let effective = try await setManifestGradingMode(setup: setup, to: mode, on: context.db)
         return Output(assignmentPublicID: assignment.publicID, gradingMode: effective)
     }

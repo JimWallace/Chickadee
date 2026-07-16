@@ -21,6 +21,10 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    # Generous — the nightly is a deliberate cold build of everything with
+    # coverage instrumentation — but far below the 6-hour default a hung
+    # step would otherwise burn.
+    timeout-minutes: 180
     container:
       image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
       credentials:
