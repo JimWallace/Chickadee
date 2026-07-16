@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!--
+  Chickadee maintenance / upstream-down page.
+
+  Served by nginx via `error_page 502 503 504` when the Vapor server is
+  unreachable (e.g. during a restart or update). It must be COMPLETELY
+  self-contained — no external CSS, JS, fonts, or images — because the only
+  thing guaranteed to be running when this renders is nginx itself. The bird
+  is an inline SVG and the palette mirrors Public/styles.css so it matches
+  the rest of the app (including dark mode).
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <!-- Ask clients/proxies not to cache the maintenance page so the real
+         site returns the moment the server is back. -->
+    <meta http-equiv="refresh" content="15">
+    <title>Chickadee — Be right back</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --health-teal-dark: #005963;
+            --health-teal:      #0098A5;
+            --health-teal-light:#97DFEF;
+            --uw-gold:          #FFCC33;
+            --surface:          #FFFFFF;
+            --bg:               #F8FAFC;
+            --text:             #1F2937;
+            --text-muted:       #4B5563;
+            --border:           #E5E7EB;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --health-teal-dark: #00C4D3;
+                --health-teal:      #00D4E8;
+                --surface:          #111827;
+                --bg:               #0B1220;
+                --text:             #E5E7EB;
+                --text-muted:       #CBD5E1;
+                --border:           #1F2937;
+            }
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            line-height: 1.5;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 3rem 2.5rem;
+            max-width: 30rem;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .08);
+        }
+        .bird {
+            width: 96px;
+            height: 96px;
+            margin: 0 auto 1.25rem;
+            display: block;
+        }
+        h1 {
+            margin: 0 0 .5rem;
+            font-size: 1.5rem;
+            color: var(--health-teal-dark);
+        }
+        p {
+            margin: 0 auto;
+            max-width: 24rem;
+            color: var(--text-muted);
+        }
+        .hint {
+            margin-top: 1.5rem;
+            font-size: .9rem;
+            color: var(--text-muted);
+        }
+        .spinner {
+            margin: 1.75rem auto 0;
+            width: 1.75rem;
+            height: 1.75rem;
+            border: 3px solid var(--border);
+            border-top-color: var(--health-teal);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) {
+            .spinner { animation: none; }
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <!-- Stylized chickadee: dark cap & bib, white cheek, soft grey body. -->
+        <svg class="bird" viewBox="0 0 120 120" role="img" aria-label="Chickadee" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="60" cy="60" r="58" fill="var(--health-teal-light)" opacity="0.25"/>
+            <!-- body -->
+            <ellipse cx="56" cy="68" rx="34" ry="30" fill="#9CA3AF"/>
+            <!-- belly -->
+            <ellipse cx="50" cy="74" rx="22" ry="22" fill="#F3F4F6"/>
+            <!-- wing -->
+            <path d="M62 52 q28 6 26 34 q-18 6 -30 -10 z" fill="#6B7280"/>
+            <!-- head cap -->
+            <path d="M30 44 a30 30 0 0 1 56 4 q-28 -14 -56 -4 z" fill="#1F2937"/>
+            <!-- cheek -->
+            <path d="M30 46 q26 -8 50 0 q-6 14 -24 14 q-18 0 -26 -14 z" fill="#FFFFFF"/>
+            <!-- bib -->
+            <path d="M40 58 q16 12 32 0 q-4 14 -16 14 q-12 0 -16 -14 z" fill="#1F2937"/>
+            <!-- eye -->
+            <circle cx="44" cy="48" r="4.5" fill="#111827"/>
+            <circle cx="45.5" cy="46.5" r="1.4" fill="#FFFFFF"/>
+            <!-- beak -->
+            <path d="M26 50 l-12 4 l12 5 z" fill="var(--uw-gold)"/>
+        </svg>
+        <h1>We&rsquo;ll be right back</h1>
+        <p>Chickadee is briefly offline, most likely for a quick update or restart. Your work and submissions are safe.</p>
+        <div class="spinner" aria-hidden="true"></div>
+        <p class="hint">This page refreshes automatically. If it persists, contact your course staff.</p>
+    </main>
+</body>
+</html>
