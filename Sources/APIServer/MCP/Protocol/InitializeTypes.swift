@@ -150,7 +150,17 @@ enum MCPServerInstructions {
         evaluated against the student's `seed`). They inline into generated/raw tests and substitute \
         into the starter notebook's `{{name}}` placeholders. Read with get_global_inputs, replace \
         with update_global_inputs. Sections can also carry their own scoped variables/expressions \
-        (same shape); get_suite returns them per section and update_section_variables replaces them.
+        (same shape); get_suite returns them per section and update_section_variables replaces them. \
+        Expression scope: besides `seed` and the declared variables, the solution's code cells are \
+        auto-extracted into a `solution` module and every uploaded `.py` support file is auto-imported \
+        under its module name. When an expression needs a transform the solution already implements — \
+        e.g. encoding a value the student will later invert — CALL it \
+        (`solution.composite(fortune, 1 + seed % 25, 2 + seed % 5)`) rather than re-implementing it \
+        inline. An inline re-implementation can drift from the graded code on edge cases and silently \
+        mis-grade some seeds; keep one source of truth and reuse it. The `solution` auto-import is \
+        best-effort — skipped when the solution uses `{{ }}` placeholders (which break its import); for \
+        those, share the function via an uploaded `.py` support module that both the solution and the \
+        expression import.
         - Achievements — instructor-authored awards shown to students, separate from grading. Each is a \
         scope (an `individual` per-student badge, a `classWide` collaborative goal, or a single-holder \
         competitive `record`), a list of conditions over a submission's signals (grade, attempts, \
