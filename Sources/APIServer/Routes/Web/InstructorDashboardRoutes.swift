@@ -522,6 +522,7 @@ struct InstructorDashboardRoutes: RouteCollection {
             brightspaceSyncEnabled: req.application.brightSpaceAppCredentials != nil,
             brightspaceGradeObjectID: assignment.brightspaceGradeObjectID,
             secretRevealEnabled: assignment.secretRevealEnabled == true,
+            timeLimitSeconds: manifest?.timeLimitSeconds ?? 10,
             notice: q?.notice,
             error: q?.error
         )

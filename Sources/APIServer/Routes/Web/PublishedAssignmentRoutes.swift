@@ -57,6 +57,10 @@ struct PublishedAssignmentRoutes: RouteCollection {
         r.get(":assignmentID", "suite", use: getSuite)
         r.put(":assignmentID", "suite", use: putSuite)
 
+        // Assignment-wide default per-test time limit — web twin of the
+        // `set_time_limit` MCP tool (no close / re-validate / retest).
+        r.put(":assignmentID", "time-limit", use: putTimeLimit)
+
         // Suite-section CRUD — per-op, form-POST + redirect.
         r.post(":assignmentID", "suite-sections", use: createSuiteSection)
         r.post(":assignmentID", "suite-sections", "reorder", use: reorderSuiteSections)

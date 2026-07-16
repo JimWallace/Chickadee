@@ -205,7 +205,14 @@
                     // Instructor hint (PR4a/PR4c). Carried on every item and
                     // re-emitted in buildPayload so a reorder/family-save push
                     // never wipes it (the server takes hint from the DTO).
-                    hint: s.hint == null ? '' : String(s.hint)
+                    hint: s.hint == null ? '' : String(s.hint),
+                    // Per-test time-limit override (#979). Same carry-and-
+                    // re-emit contract as hint: the server takes the DTO value
+                    // unconditionally, so dropping it here would wipe an
+                    // override on the next reorder. null = inherit the
+                    // assignment default.
+                    timeLimitSeconds: s.timeLimitSeconds != null
+                        ? Math.max(1, parseInt(s.timeLimitSeconds) || 0) : null
                 };
             });
         }
@@ -721,7 +728,9 @@
                         dependsOn:   (item.dependsOn || []).slice(),
                         // Always send the current hint so reorders preserve it
                         // (the server takes hint from the DTO unconditionally).
-                        hint:        (item.hint && item.hint.trim()) ? item.hint.trim() : null
+                        hint:        (item.hint && item.hint.trim()) ? item.hint.trim() : null,
+                        // Same contract for the per-test time-limit override.
+                        timeLimitSeconds: item.timeLimitSeconds != null ? item.timeLimitSeconds : null
                     };
                     // Only send the body when a fresh edit staged it; omitting
                     // it leaves the existing file untouched (a reorder/retier
@@ -1523,7 +1532,9 @@
         /// PR4c: persist a hand-written script (create or content/hint edit)
         /// through the single `PUT /suite` write path, replacing the legacy
         /// `POST /scripts` / `PUT /scripts/:name` endpoints in the script
-        /// editor. `spec` = { filename, content, hint, tier?, points?, isTest? }.
+        /// editor. `spec` = { filename, content, hint, timeLimitSeconds?,
+        /// tier?, points?, isTest? } (timeLimitSeconds: int, or null to
+        /// inherit the assignment default; omit the key to leave unchanged).
         /// The body rides on a transient `_content` that buildPayload emits and
         /// the post-push re-seed drops; `hint` persists via the DTO. New scripts
         /// land in the clicked section; an existing script keeps its tier /
@@ -1539,6 +1550,9 @@
             if (existing) {
                 if (spec.content != null) existing._content = spec.content;
                 existing.hint = spec.hint || '';
+                if (spec.timeLimitSeconds !== undefined) {
+                    existing.timeLimitSeconds = spec.timeLimitSeconds;
+                }
                 if (spec.tier) existing.tier = spec.tier;
                 if (spec.points != null) existing.points = Math.max(0, parseInt(spec.points) || 0);
             } else {
@@ -1554,6 +1568,7 @@
                     dependsOn: [],
                     sectionID: targetSid,
                     hint: spec.hint || '',
+                    timeLimitSeconds: spec.timeLimitSeconds != null ? spec.timeLimitSeconds : null,
                     _content: spec.content != null ? spec.content : ''
                 });
             }
@@ -1567,6 +1582,53 @@
                 })
                 .catch(function (err) { items = snapshot; renderTree(); throw err; });
         }
+
+        // ── Assignment-wide default per-test time limit (#979) ──
+        //
+        // Saved through its own endpoint (PUT /instructor/:id/time-limit)
+        // rather than PUT /suite, so changing it never closes, re-validates,
+        // or retests the assignment (parity with the set_time_limit MCP
+        // tool). The input only exists on the edit page; the URL is built
+        // from config.assignmentID, so the draft page (no assignmentID, no
+        // input) is a double no-op.
+        (function wireDefaultTimeLimit() {
+            var assignmentID = config.assignmentID;
+            if (!assignmentID) return;
+            var input  = document.getElementById('suite-default-time-limit');
+            var status = document.getElementById('suite-default-limit-status');
+            if (!input) return;
+            var putTimeLimitURL =
+                '/instructor/' + encodeURIComponent(assignmentID) + '/time-limit';
+            var lastSaved = input.value;
+            var timer = null;
+            function save() {
+                var raw = input.value.trim();
+                var seconds = parseInt(raw, 10);
+                if (raw === '' || isNaN(seconds) || seconds < 1 || seconds > 600) {
+                    global.ChickadeeUI.setStatus(status, '1–600 s', 'error');
+                    return;
+                }
+                if (String(seconds) === lastSaved) {
+                    global.ChickadeeUI.setStatus(status, '');
+                    return;
+                }
+                global.ChickadeeUI.fetchJSON(putTimeLimitURL, {
+                    method: 'PUT', csrfToken: csrfToken, body: { seconds: seconds }
+                }).then(function (payload) {
+                    lastSaved = String((payload && payload.seconds) || seconds);
+                    input.value = lastSaved;
+                    global.ChickadeeUI.setStatus(status, 'Saved', 'ok');
+                }).catch(function (err) {
+                    global.ChickadeeUI.setStatus(status,
+                        'Save failed: ' + ((err && err.message) || err), 'error');
+                });
+            }
+            input.addEventListener('input', function () {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(save, 600);
+            });
+            input.addEventListener('change', save);
+        })();
 
         // Reload on bfcache restore so the page always reflects server state.
         window.addEventListener('pageshow', function (e) {

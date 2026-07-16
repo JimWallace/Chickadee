@@ -86,6 +86,7 @@ import {
     var applyBtn = null;
     var cmMount = null;
     var hintInput = null;
+    var timeLimitInput = null;
 
     var view = null;
     var mode = 'create';      // 'create' | 'edit' | 'uploadEdit'
@@ -146,12 +147,24 @@ import {
             cmMount = el('div', { id: 'cm-editor-mount' }, 'min-height:240px;border:1px solid var(--border);border-radius:.3rem;overflow:auto;font-size:.875rem');
             bodyEl.appendChild(cmMount);
 
-            // Hint (shown to students on failure) — visible in all modes.
-            var hintLabel = el('label', null, 'font-size:.8rem;display:flex;flex-direction:column;gap:.2rem');
+            // Hint (shown to students on failure) + per-test time limit —
+            // visible in all modes, side by side on one row.
+            var metaRow = el('div', null, 'display:flex;align-items:flex-end;gap:.6rem;flex-wrap:wrap');
+            var hintLabel = el('label', null, 'font-size:.8rem;display:flex;flex-direction:column;gap:.2rem;flex:1;min-width:16rem');
             hintLabel.appendChild(document.createTextNode('Hint (optional — shown to students when this test fails)'));
             hintInput = el('input', { type: 'text', 'class': 'form-input', placeholder: 'e.g. Re-read the function’s docstring for the expected return type.' }, 'padding:.25rem .5rem;font-size:.85rem');
             hintLabel.appendChild(hintInput);
-            bodyEl.appendChild(hintLabel);
+            metaRow.appendChild(hintLabel);
+            var limitLabel = el('label', null, 'font-size:.8rem;display:flex;flex-direction:column;gap:.2rem;width:11rem');
+            limitLabel.appendChild(document.createTextNode('Time limit (s, blank = default)'));
+            timeLimitInput = el('input', {
+                type: 'number', 'class': 'form-input', min: '1', max: '600',
+                placeholder: 'assignment default',
+                title: 'Seconds this one test may run before it is killed and recorded as a timeout. Blank inherits the assignment default.'
+            }, 'padding:.25rem .5rem;font-size:.85rem');
+            limitLabel.appendChild(timeLimitInput);
+            metaRow.appendChild(limitLabel);
+            bodyEl.appendChild(metaRow);
 
             // Keep the filename extension in sync with the chosen template lang.
             templateSel.addEventListener('change', function () {
@@ -189,6 +202,7 @@ import {
             if (newControls) newControls.style.display = 'flex';
             if (nameInput) { nameInput.value = ''; }
             if (hintInput) hintInput.value = '';
+            if (timeLimitInput) timeLimitInput.value = '';
             freshView('', '');
             setTimeout(function () { if (nameInput) nameInput.focus(); }, 0);
         },
@@ -201,6 +215,7 @@ import {
                 currentFilename = item.name;
                 if (newControls) newControls.style.display = 'none';
                 if (hintInput) hintInput.value = '';
+                if (timeLimitInput) timeLimitInput.value = '';
                 freshView(item.content || '', item.name || '');
                 return;
             }
@@ -209,6 +224,9 @@ import {
             currentFilename = item.script || item.id || '';
             if (newControls) newControls.style.display = 'none';
             if (hintInput) hintInput.value = item.hint || '';
+            if (timeLimitInput) {
+                timeLimitInput.value = item.timeLimitSeconds != null ? String(item.timeLimitSeconds) : '';
+            }
             freshView('Loading…', currentFilename);
             var urlFn = cfg().scriptContentURL;
             if (typeof urlFn === 'function') {
@@ -222,17 +240,26 @@ import {
         readSpec: function () {
             var content = docText();
             var hint = hintInput ? hintInput.value.trim() : '';
+            // Blank inherits the assignment default (null); out-of-range
+            // values are rejected here so the server never sees them.
+            var timeLimitSeconds = null;
+            if (timeLimitInput && timeLimitInput.value.trim() !== '') {
+                timeLimitSeconds = parseInt(timeLimitInput.value, 10);
+                if (isNaN(timeLimitSeconds) || timeLimitSeconds < 1 || timeLimitSeconds > 600) {
+                    throw new Error('Time limit must be between 1 and 600 seconds (or blank for the assignment default).');
+                }
+            }
             if (mode === 'uploadEdit') {
                 return { uploadEdit: true, name: uploadEditName, content: content };
             }
             if (mode === 'edit') {
                 if (!currentFilename) throw new Error('No script selected.');
-                return { filename: currentFilename, content: content, hint: hint };
+                return { filename: currentFilename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds };
             }
             // create
             var filename = (nameInput.value || '').trim();
             if (!filename) throw new Error('Enter a filename first.');
-            return { filename: filename, content: content, hint: hint, tier: 'public', points: 1, isTest: true };
+            return { filename: filename, content: content, hint: hint, timeLimitSeconds: timeLimitSeconds, tier: 'public', points: 1, isTest: true };
         },
 
         persistAndSync: function (spec) {

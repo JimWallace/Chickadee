@@ -847,4 +847,131 @@ import VaporTesting
 
         }
     }
+
+    // MARK: - PUT /suite per-test time-limit override (#979)
+
+    @Test func put_roundTripsPerTestTimeLimitOverride() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment(withScripts: [
+                ("publictest_slow.py", "passed('slow')\n")
+            ])
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            let body = #"""
+                {"items":[
+                    {"kind":"script","script":{"script":"publictest_slow.py","tier":"public","points":1,"displayName":null,"dependsOn":[],"timeLimitSeconds":42}}
+                ]}
+                """#
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/suite",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in #expect(res.status == .ok, "\(res.body.string)") })
+
+            // Persisted onto the manifest entry…
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            let entry = try #require(props.testSuites.first { $0.script == "publictest_slow.py" })
+            #expect(entry.timeLimitSeconds == 42)
+
+            // …and echoed back on GET so the editor round-trips it.
+            try await app.asyncTest(
+                .GET, "/instructor/\(id)/suite",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.body.string.contains("\"timeLimitSeconds\":42"))
+                })
+        }
+    }
+
+    // MARK: - PUT /time-limit (assignment-wide default, #979)
+
+    @Test func putTimeLimit_setsManifestDefaultWithoutClosingAssignment() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/time-limit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"seconds":5}"#)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "\(res.body.string)")
+                    #expect(res.body.string.contains("\"seconds\":5"))
+                })
+
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            #expect(props.timeLimitSeconds == 5)
+            // Grading-environment knob (set_time_limit parity): the change
+            // must not close the assignment the way content edits do.
+            #expect(assignment.visibility == .open)
+        }
+    }
+
+    @Test(arguments: [0, 601]) func putTimeLimit_rejectsOutOfRange(seconds: Int) async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
+            let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
+
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/time-limit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"seconds":\#(seconds)}"#)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest, "expected 400 for \(seconds)s, got \(res.status)")
+                })
+
+            // Manifest default is untouched (fixture default is 10).
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$publicID == id).first())
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try JSONDecoder().decode(TestProperties.self, from: Data(setup.manifest.utf8))
+            #expect(props.timeLimitSeconds == 10)
+        }
+    }
+
+    @Test func putTimeLimit_studentForbidden() async throws {
+        try await withApp(app) { _ in
+            let id = try await makeAssignment()
+            let studentCookie = try await loginUser(username: "stu", password: "pw", role: "student", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/", cookie: studentCookie, on: app)
+            try await app.asyncTest(
+                .PUT, "/instructor/\(id)/time-limit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: "x-csrf-token", value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"seconds":5}"#)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .forbidden || res.status == .seeOther || res.status == .notFound,
+                        "Expected forbidden/redirect for student PUT, got \(res.status)")
+                })
+        }
+    }
 }
