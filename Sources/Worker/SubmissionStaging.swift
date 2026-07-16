@@ -184,18 +184,27 @@ func testSetupCacheKey(for job: Job) -> String {
 enum WorkerDaemonError: Error, LocalizedError {
     case downloadFailed(URL)
     case httpDownloadFailure(statusCode: Int, body: String)
-    case makeFailed(String?)
+    case makeFailed(target: String?, detail: String?)
+    case makeTimedOut(target: String?, limitSeconds: Int)
     case insufficientDiskSpace(path: String, freeMB: Int, requiredMB: Int)
+    case unsafePersonalizedFilename(String)
 
     var errorDescription: String? {
         switch self {
         case .downloadFailed(let url): return "Failed to download \(url)"
         case .httpDownloadFailure(let statusCode, let body):
             return "HTTP \(statusCode) while downloading artifacts: \(body)"
-        case .makeFailed(let target): return "make \(target ?? "") failed"
+        case .makeFailed(let target, let detail):
+            let heading = "make \(target ?? "") failed"
+            guard let detail, !detail.isEmpty else { return heading }
+            return "\(heading)\n\(detail)"
+        case .makeTimedOut(let target, let limitSeconds):
+            return "make \(target ?? "") exceeded the \(limitSeconds)s build time limit and was killed"
         case .insufficientDiskSpace(let path, let freeMB, let requiredMB):
             return
                 "Runner workspace at \(path) has \(freeMB) MB free; need at least \(requiredMB) MB before accepting a job"
+        case .unsafePersonalizedFilename(let name):
+            return "Personalized file name '\(name)' is not a bare filename; refusing to write it"
         }
     }
 }

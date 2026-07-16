@@ -34,10 +34,20 @@ struct SubmissionQueryRoutes: RouteCollection {
             .filter(\.$kind == APISubmission.Kind.student)
             .sort(\.$submittedAt, .descending)
 
+        // A non-admin sees others' submissions only for a test setup whose
+        // course they staff; otherwise (including with no setup filter) they see
+        // only their own (#417 Slice G — was the global `caller.isInstructor`).
+        // Admins administer the whole deployment, so they list every submission
+        // even with no setup filter (there's no single course to staff-check).
+        var callerIsCourseStaff = caller.isAdmin
         if let testSetupID = req.query[String.self, at: "testSetupID"] {
             query = query.filter(\.$testSetupID == testSetupID)
+            if let setup = try await APITestSetup.find(testSetupID, on: req.db) {
+                callerIsCourseStaff = try await isCourseStaff(
+                    caller, inCourse: setup.courseID, db: req.db)
+            }
         }
-        if !caller.isInstructor {
+        if !callerIsCourseStaff {
             query = query.filter(\.$userID == caller.id)
         }
 
@@ -58,8 +68,14 @@ struct SubmissionQueryRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        guard canViewSubmission(caller: caller, submission: submission) else {
-            throw Abort(.forbidden)
+        // Owner-first: this endpoint is polled every 2 s by every student
+        // waiting on a grade, and only needs a view decision (no tier
+        // filtering, unlike getResults). The owner check is free; the staff
+        // check costs a setup lookup + an enrollment-role query per poll.
+        if submission.userID != caller.id {
+            guard try await isSubmissionStaff(caller, submission: submission, on: req.db) else {
+                throw Abort(.forbidden)
+            }
         }
         return SubmissionStatusResponse(submission: submission)
     }
@@ -75,7 +91,8 @@ struct SubmissionQueryRoutes: RouteCollection {
         else {
             throw Abort(.notFound)
         }
-        guard canViewSubmission(caller: caller, submission: submission) else {
+        let access = try await submissionAccess(caller: caller, submission: submission, on: req.db)
+        guard access.canView else {
             throw Abort(.forbidden)
         }
 
@@ -88,34 +105,67 @@ struct SubmissionQueryRoutes: RouteCollection {
             throw AppError.notFound(resource: "Results for submission '\(subID)' (none available yet)")
         }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard
-            let data = result.collectionJSON.data(using: .utf8),
-            let fullCollection = try? decoder.decode(TestOutcomeCollection.self, from: data)
-        else {
-            throw AppError.internalFailure(reason: "Stored result is corrupt")
-        }
-
-        // `fullCollection` carries the real grade across every tier.  The caller
-        // may only *inspect* certain outcomes: secret never, release after the
-        // deadline (instructors see all tiers).  Release is gated on the
-        // *effective* deadline — the later of the assignment due date and the
-        // caller's own per-student extension — so an accommodated student does
-        // not get release output revealed while their extended window is still
-        // open.  A non-instructor caller can only reach their own submission
-        // (`canViewSubmission`), so the caller is the submission owner; for
-        // instructors the deadline is unused (they see every tier).
+        // Visibility inputs are resolved before touching the stored blob so
+        // the ETag can short-circuit the decode/filter/encode below.  Release
+        // is gated on the *effective* deadline — the later of the assignment
+        // due date and the caller's own per-student extension — so an
+        // accommodated student does not get release output revealed while
+        // their extended window is still open.  A non-instructor caller can
+        // only reach their own submission (`canViewSubmission`), so the caller
+        // is the submission owner; for instructors the deadline is unused
+        // (they see every tier).
         let assignment = try await APIAssignment.query(on: req.db)
             .filter(\.$testSetupID == submission.testSetupID)
             .first()
         let releaseDeadline = try await releaseVisibilityDeadline(
             for: assignment, user: caller, on: req.db)
-        let visible = fullCollection.filtering(
-            tiers: visibleTiers(for: caller, effectiveDueAt: releaseDeadline))
+        let reveal = try await SecretRevealState.resolve(
+            assignment: assignment, userID: caller.id, isStaff: access.isStaff, on: req.db)
+        let callerVisibleTiers = visibleTiers(
+            isStaff: access.isStaff, effectiveDueAt: releaseDeadline,
+            secretRevealed: reveal.revealed)
+
+        // A stored result is immutable, so the response bytes are fully
+        // determined by (result row, visible tier set, ?tiers= slice).  The
+        // tier set is part of the key because it changes when the release
+        // deadline passes or a secret-reveal token is spent / re-granted /
+        // toggled — the same result id must then produce a fresh response.
+        // Repeat views (the common case: a student re-opening their grade)
+        // get a 304 without decoding the collection blob.
+        let requestedTiersParam = req.query[String.self, at: "tiers"]
+        let etagKey = [
+            result.id ?? "",
+            callerVisibleTiers.sorted().joined(separator: ","),
+            requestedTiersParam ?? "*",
+        ].joined(separator: "|")
+        let etag = "\"\(sha256HexDigest(Data(etagKey.utf8)).prefix(32))\""
+        if req.headers[.ifNoneMatch].contains(where: { header in
+            header.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                .contains(etag)
+        }) {
+            return Response(status: .notModified, headers: ["ETag": etag])
+        }
+
+        // The blob lives in the result_collections side table (#1173) and is
+        // fetched only past the ETag short-circuit — a 304 never touches it.
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard
+            let collectionJSON = try await result.loadCollectionJSON(on: req.db),
+            let fullCollection = try? decoder.decode(
+                TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
+        else {
+            throw AppError.internalFailure(reason: "Stored result is corrupt")
+        }
+
+        // `fullCollection` carries the real grade across every tier.  The
+        // caller may only *inspect* certain outcomes: secret only with a
+        // spent reveal token, release after the deadline (instructors see
+        // all tiers).
+        let visible = fullCollection.filtering(tiers: callerVisibleTiers)
 
         let responseCollection: TestOutcomeCollection
-        if let tiersParam = req.query[String.self, at: "tiers"] {
+        if let tiersParam = requestedTiersParam {
             // Explicit tier slice (?tiers=public,release): return a
             // self-consistent sub-collection — aggregates recomputed over the
             // requested ∩ visible tiers.
@@ -137,15 +187,23 @@ struct SubmissionQueryRoutes: RouteCollection {
 
         return Response(
             status: .ok,
-            headers: ["Content-Type": "application/json"],
+            headers: ["Content-Type": "application/json", "ETag": etag],
             body: .init(data: responseData)
         )
     }
 }
 
-private func canViewSubmission(caller: APIUser, submission: APISubmission) -> Bool {
-    if caller.isInstructor { return true }
-    return submission.userID == caller.id
+/// Per-course view authorization for a single submission (#417 Slice G).
+/// Returns whether `caller` may view it and whether they view it as course
+/// staff — the owner always may (`isStaff == false`), and a staff member (TA+
+/// or admin) of the submission's course sees it with instructor-level tier
+/// visibility. Resolving the course once lets the caller reuse `isStaff` for
+/// tier filtering without a second lookup.
+private func submissionAccess(
+    caller: APIUser, submission: APISubmission, on db: Database
+) async throws -> (canView: Bool, isStaff: Bool) {
+    let isStaff = try await isSubmissionStaff(caller, submission: submission, on: db)
+    return (isStaff || submission.userID == caller.id, isStaff)
 }
 
 // MARK: - Response types

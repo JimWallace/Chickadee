@@ -99,3 +99,140 @@ SAB-only config left unmounted, so a `FileNotFoundError` died unhandled in the
 WebLoop and wedged the cell. Creating the folder first fixes the hang and lets
 JupyterLite deliver the support files. Shipped v0.4.526; #989 introduced it,
 #999 spread it.
+
+---
+
+# SECOND, DISTINCT ISSUE (2026-07-02) — the "~17 s slow first execute" is a premature-idle boot race, NOT the chdir hang
+
+**Status: ROOT-CAUSED, fix pending a product decision.** The chdir bug above
+is fixed. This is a *separate* phenomenon surfaced by the instrumented
+`editor-exec-check.mjs` probe (see `docs/ci-flakiness.md`): on WebKit, ~30 % of
+fresh kernels take **~16–18 s** before the first cell execute completes (the
+other ~70 % and all of Chromium: ~505 ms). Its tail past the 45 s telemetry
+threshold is the likely source of production's residual ~4 % `exec_hang`.
+
+## Root cause — "idle" is reported before the kernel can execute
+
+The DOM execution indicator (which `jl-kernel-diagnostics.js` reads to emit the
+`kernel_idle` breadcrumb, and which the probe waits on) flips to idle off the
+**`kernel_info_request` reply** — and in the vended pyodide-kernel driver
+(`Public/jupyterlite/extensions/@jupyterlite/pyodide-kernel-extension/static/362.*.js`)
+`kernelInfoRequest()` returns a **static object that does NOT `await this.ready`**.
+So `kernel_info` is answered (busy → idle) while `initialize()` is still running.
+
+`executeRequest()`, by contrast, **does** `await this.ready`. `ready` resolves
+only after `initialize()` finishes, and `initKernel` inside it runs, sequentially:
+
+```js
+for (e of ["ipykernel","comm","pyodide-kernel","jedi","ipython"])
+    install.push(`await piplite.install('${e}', keep_going=True)`);
+install.push("import pyodide_kernel");   // full IPython InteractiveShell init
+await this._pyodide.runPythonAsync(install.join("\n"));
+```
+
+So a first execute dispatched **before** `ready` resolves blocks on it for the
+remainder of boot — a near-fixed wall-clock offset after the premature idle.
+This explains every observed fact:
+
+- **Fixed endpoint ~17 s after idle:** `initialize()` starts at boot and takes a
+  near-fixed time; the `kernel_info` idle fires at a near-fixed early point;
+  `ready` therefore resolves a fixed offset later. The delay experiment
+  confirmed it: press at idle+0 ms → wait ~17 s; idle+1500 ms → wait ~15.7 s
+  (band shifts down by the delay); idle+25 000 ms → 0/28 slow (`ready` long
+  since resolved).
+- **WebKit-specific ~17 s:** the dominant cost inside `initialize()` — compiling
+  `pyodide.asm.wasm` and unpacking + importing the large pure-Python trees of
+  **jedi + parso + ipython** into the Emscripten FS — is much slower on WebKit's
+  WASM/JIT, and under SAB-only isolation every mounted-Drive FS touch is an
+  `Atomics.wait` main-thread round-trip WebKit handles far worse than Chromium.
+- **~30 % intermittent:** it is a race between `initialize()` completing and the
+  first execute dispatching, with WebKit's WASM compile-cache hit/miss across
+  fresh contexts driving the split (Chromium's reliable WASM caching → always
+  fast).
+
+Ruled out (evidence in the 2026-07-02 code map): our kernel patch (injects only
+the synchronous `os.chdir` wrapper, schedules nothing), nb_mypy (disabled),
+matplotlib inline (env-var only, no import at boot), and any completer warmup
+(no `complete_request` is ever sent — inline providers default to `{}`, no
+continuous hinting, notebook.js sends no kernel messages). The heavy boot item
+is **jedi**, installed at boot solely to back tab-completion.
+
+## Fix options (the product decision)
+
+**UPDATE 2026-07-02 — option 1 was TRIED and is INSUFFICIENT.** Dropping jedi
+from the boot-install list (PR #1149) and re-running the WebKit delay=0 probe:
+the slow mode **persisted at ~13–14 s** (5/8 slow + one 60 s hard hang), vs.
+~16–18 s before. So jedi was only ~2–4 s of the tail; the **bulk is the
+`pyodide.asm.wasm` compile + the `ipython`/`ipykernel`/`comm`/`pyodide-kernel`
+install+import** under WebKit's WASM/JIT + SAB FS costs — none of which we can
+remove (IPython *is* the kernel). Conclusion: **the boot tail cannot be
+meaningfully shrunk by swapping or dropping the completion engine.** A lighter
+completer (jedi → e.g. Zuban) does not help — and does not even fit: it is a
+Rust LSP, not a Pyodide-importable package, and completion is not the
+bottleneck. The jedi drop was reverted (a feature loss with no fix).
+
+The remaining viable direction is **option 3** — do not try to speed boot;
+stop *presenting* a still-booting kernel as ready, and move the unavoidable
+wait to before the student's first run.
+
+1. ~~Drop / defer jedi from the boot path.~~ **Tried; insufficient (see above).**
+   Reverted.
+2. **Preload the boot packages via `loadPyodideOptions.packages`** so they load
+   in parallel at `loadPyodide()` time instead of sequential `piplite.install`.
+   May shave some time by parallelizing, but the dominant cost is WASM compile +
+   import, not install ordering, so likely a partial win at best. **Risk:** a
+   package named there that fails to load rejects the whole boot (this is
+   exactly why nb_mypy was NOT put there) — must be rock-solid.
+3. **Honest readiness signaling — TRIED (gate `kernelInfoRequest` on
+   `this.ready`), and INERT to execution readiness.** PR #1149 made
+   `kernelInfoRequest` also `await this.ready`. Result (WebKit delay=0 probe,
+   2026-07-03): `editor-smoke` stayed **green** (safe — the delayed
+   `kernel_info` did NOT break the connection handshake / no "Kernel Unknown"),
+   but the probe still measured ~15 s first executes (`avgRunMs=13970`, majority
+   slow). The execution indicator the probe *and a student's cell-run* depend on
+   is driven by the kernel's `execution_state` messages, **not** the
+   `kernel_info` reply — so gating `kernel_info` does not change when a run can
+   dispatch. It *may* still change JupyterLab's kernel-**status** display
+   ("Starting" vs "Idle"), an unverified UX nicety, but it is not a fix for the
+   execute-blocking path. **Reverted.**
+
+### Where this leaves us — THREE levers tried, none fix it
+
+- **Drop jedi** — jedi wasn't the cost (~2–4 s of the tail); reverted.
+- **Gate `kernel_info` on `this.ready`** — safe (editor-smoke green) but INERT to
+  the execution-readiness path the probe/student depend on (still ~15 s);
+  reverted.
+- **Prebuilt Pyodide snapshot (#1150)** — spiked in Node and found **blocked +
+  low-ceiling**: `makeMemorySnapshot()` works on bare Pyodide (~30 MB) but
+  **fails once IPython is imported** (`Unexpected hiwire entry` — the experimental
+  API can't serialize the JS refs the imports create without custom serializers).
+  And even if unblocked, a snapshot skips Python init/import but **not** WASM
+  compilation — and the Node breakdown (compile+init ≈ 2.4 s vs import ≈ 0.4 s)
+  shows boot is **compile-dominated**, which is exactly WebKit's slow part and
+  exactly what a snapshot doesn't help. Downgraded to a research project.
+
+**Root conclusion.** The WebKit slow-first-execute is dominated by
+`pyodide.asm.wasm` **compilation** under WebKit's weak compiled-module caching —
+a browser-engine limitation, not something patchable in the kernel. No in-app
+lever found so far meaningfully shrinks it. Realistic paths: (a) a plain
+"kernel is still starting" affordance in our own `notebook.js` so the wait reads
+as progress not a hang (UX only, doesn't speed boot); (b) track upstream WebKit
+WASM-compile/caching and Pyodide module-size improvements; (c) revisit snapshots
+if pyodide-kernel ships first-class snapshot support (serializers handled).
+Details + the Node prototype findings in issue #1150.
+
+All three need a focused browser-verify loop (the probe is the acceptance test —
+delay=0 webkit slow-rate must drop toward zero); none should be shipped to the
+vended kernel bundle unverified, since a bad edit bricks editor boot for every
+student.
+
+## One-line summary (second issue)
+
+The execution indicator reports "idle" off the `kernel_info` reply, which isn't
+gated on `this.ready`, while the kernel is still installing/importing
+ipython/ipykernel/etc.; a cell run in that window blocks on `await this.ready`
+for the ~13–17 s remainder of boot (WebKit-slow, cache-intermittent).
+**Dropping jedi was tried and did NOT fix it** (jedi was only ~2–4 s of the
+tail; the bulk is the WASM compile + IPython import, which can't be removed),
+so the fix is NOT to shrink boot but to **stop presenting a still-booting
+kernel as ready** and move the wait ahead of the student's first run (option 3).

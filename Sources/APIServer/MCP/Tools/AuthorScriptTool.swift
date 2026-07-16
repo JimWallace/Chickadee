@@ -109,10 +109,7 @@ struct AuthorScriptTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "filename": .object([
                 "type": .string("string"),
                 "description": .string(
@@ -135,16 +132,10 @@ struct AuthorScriptTool: ContentTool {
                         + "cloud-metadata address; redirects are not followed; capped at 8 MB; body must "
                         + "be UTF-8 text). Provide this OR content, not both."),
             ]),
-            "tier": .object([
-                "type": .string("string"),
-                "enum": .array([
-                    .string("public"), .string("release"), .string("secret"),
-                    .string("student"), .string("support"),
-                ]),
-                "description": .string(
-                    "Graded tier, or \"support\" for a non-graded helper file. "
-                        + "Omit to keep an existing file's kind; new files default to public."),
-            ]),
+            "tier": MCPSchema.tierEnum(
+                TestTierValues.withSupport,
+                description: "Graded tier, or \"support\" for a non-graded helper file. "
+                    + "Omit to keep an existing file's kind; new files default to public."),
             "points": .object([
                 "type": .string("integer"),
                 "description": .string("Marks for a test tier (ignored for support). Defaults to 1 on create."),
@@ -154,7 +145,7 @@ struct AuthorScriptTool: ContentTool {
                 "description": .string("Friendly name shown in the suite and results (test tiers only)."),
             ]),
             "dependsOn": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
                 "description": .string(
                     "Prerequisite script filenames or family:<id> tokens (test tiers only)."),
             ]),
@@ -191,13 +182,13 @@ struct AuthorScriptTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "filename": .object(["type": .string("string")]),
-            "tier": .object(["type": .string("string")]),
-            "isTest": .object(["type": .string("boolean")]),
-            "created": .object(["type": .string("boolean")]),
-            "validationStatus": .object(["type": .string("string")]),
-            "assignmentClosed": .object(["type": .string("boolean")]),
+            "assignmentPublicID": MCPSchema.string,
+            "filename": MCPSchema.string,
+            "tier": MCPSchema.string,
+            "isTest": MCPSchema.boolean,
+            "created": MCPSchema.boolean,
+            "validationStatus": MCPSchema.string,
+            "assignmentClosed": MCPSchema.boolean,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("filename"), .string("tier"),
@@ -253,8 +244,8 @@ struct AuthorScriptTool: ContentTool {
         // outbound request for a call we are about to refuse.
         let source = try Self.resolveContentSource(input)
 
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         // Never clobber a pattern-family / notebook-check generated script —
         // those are owned by the family/check, mirroring the web 409.

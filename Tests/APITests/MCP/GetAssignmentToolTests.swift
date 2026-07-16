@@ -34,6 +34,26 @@ import Vapor
             #expect(output.isOpen == false)
             // The default fixture manifest is browser-graded.
             #expect(output.gradingMode == "browser")
+            #expect(output.secretRevealEnabled == false, "off by default")
+        }
+    }
+
+    @Test func reportsSecretRevealEnabled() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
+            let courseID = try course.requireID()
+            let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
+            try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: courseID)
+            try await makeTestSetup(on: app, id: "setup_sr", courseID: courseID)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "setup_sr", courseID: courseID, title: "Tasks")
+            assignment.secretRevealEnabled = true
+            try await assignment.save(on: app.db)
+
+            let output = try await GetAssignmentTool().execute(
+                GetAssignmentTool.Input(assignmentPublicID: assignment.publicID), context(app))
+            #expect(output.secretRevealEnabled)
         }
     }
 

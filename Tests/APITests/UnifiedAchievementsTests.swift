@@ -44,9 +44,11 @@ import VaporTesting
                     "Mastery", scope: "classWide",
                     conditions: [cond("grade", "atLeast", 80)], classPercent: 75, points: 5),
                 row("Sharpshooter", scope: "individual", conditions: [cond("grade", "atLeast", 90)]),
+                // The ref must resolve against the fixture suite (test.sh) —
+                // save-time validation rejects unknown testPass refs now.
                 row(
                     "Recursion", scope: "individual",
-                    conditions: [cond("testPass", "atLeast", 1, testRef: "secrettest_rec.py")]),
+                    conditions: [cond("testPass", "atLeast", 1, testRef: "test.sh")]),
                 row("Speedy", scope: "record", recordDimension: "fastest"),
                 row(
                     "Lightning", scope: "individual",
@@ -81,7 +83,7 @@ import VaporTesting
                 props.achievements.contains { a in
                     a.name == "Recursion"
                         && a.conditions.contains {
-                            $0.signal == .testPass && $0.target?.ref == "secrettest_rec.py"
+                            $0.signal == .testPass && $0.target?.ref == "test.sh"
                         }
                 })
             #expect(props.achievements.contains { $0.isClassRecord && $0.recordDimension == .fastest })

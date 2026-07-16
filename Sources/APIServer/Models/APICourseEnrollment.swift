@@ -62,6 +62,12 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_sync_detail")
     var brightspaceSyncDetail: String?
 
+    /// The LEARN group name this student belongs to in the course's configured
+    /// section category (e.g. "Lab 3"). Populated by the periodic section-sync
+    /// sweep. Nil until the sweep has run or the student isn't in any group.
+    @OptionalField(key: "brightspace_section")
+    var brightspaceSection: String?
+
     init() {}
 
     init(id: UUID? = nil, userID: UUID, courseID: UUID, role: CourseRole = .student) {

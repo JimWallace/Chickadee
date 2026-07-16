@@ -2,7 +2,7 @@
   "jupyter-config-data": {
     "appName": "JupyterLite",
     "appUrl": "./lab",
-    "appVersion": "0.8.0-chickadee.1",
+    "appVersion": "0.8.1-chickadee.1",
     "baseUrl": "./",
     "contentsAllJsonFile": "all.json",
     "defaultKernelName": "python",
@@ -13,7 +13,7 @@
     "federated_extensions": [
       {
         "extension": "./extension",
-        "load": "static/remoteEntry.c6732262d69c5d22.js",
+        "load": "static/remoteEntry.af5d2dda3bb046a0.js",
         "name": "@jupyterlite/pyodide-kernel-extension"
       },
       {
@@ -402,8 +402,7 @@
       "@jupyterlite/pyodide-kernel-extension:kernel": {
         "disablePyPIFallback": true,
         "pipliteUrls": [
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=783d01f64a330ecbbd82318ba2fde8842bc8eece502b821b8c0f57cacdde5cdc",
-          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=611c0c4db8d18b0fa3f4b261507f5fa190cfb9f34c3a8fabdc35e0558c8acaee"
+          "./extensions/@jupyterlite/pyodide-kernel-extension/static/pypi/all.json?sha256=e30b96ab0418c9595ea142c52f23aa5abc04e4c97e5113099ae17a8dd9af2343"
         ],
         "pyodideUrl": "/pyodide/pyodide.mjs"
       }

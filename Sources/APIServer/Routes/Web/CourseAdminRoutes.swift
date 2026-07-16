@@ -28,6 +28,8 @@ struct CourseAdminRoutes: RouteCollection {
             use: instructorRegisterPreEnrollment)
         // Set a roster member's per-course role (Phase 4b).
         routes.post("courses", ":courseID", "role", ":userID", use: instructorSetEnrollmentRole)
+        // Self-serve staff invite: add a co-instructor / TA by username or email (#417 Slice F).
+        routes.post("courses", ":courseID", "staff", use: instructorInviteStaff)
 
         let r = routes.grouped("instructor")
         r.get("enroll-csv", use: enrollCSVForm)

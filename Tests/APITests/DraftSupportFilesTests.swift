@@ -65,6 +65,7 @@ import VaporTesting
             let payload = "name,age\nAlice,30\nBob,25\n"
             let draftID = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: payload))
             let cookie = try await loginUser(username: "dsft_inst1", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dsft_inst1", on: app)
             let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -84,6 +85,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let draftID = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: "x"))
             let cookie = try await loginUser(username: "dsft_inst2", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dsft_inst2", on: app)
             let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -102,6 +104,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let draftID = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: "x"))
             let cookie = try await loginUser(username: "dsft_inst3", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dsft_inst3", on: app)
             let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -120,6 +123,7 @@ import VaporTesting
         try await withApp(app) { _ in
             _ = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: "x"))
             let cookie = try await loginUser(username: "dsft_inst4", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dsft_inst4", on: app)
             let (_, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             try await app.asyncTest(
@@ -140,6 +144,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let draftID = try await makeDraft()
             let cookie = try await loginUser(username: "dsft_inst5", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dsft_inst5", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
 
             // Upload via the existing draft-scripts endpoint with tier=support.

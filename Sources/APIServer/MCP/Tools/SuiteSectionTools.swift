@@ -48,10 +48,7 @@ struct CreateSuiteSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "name": .object([
                 "type": .string("string"),
                 "description": .string("Display name for the new section (non-empty)."),
@@ -63,9 +60,9 @@ struct CreateSuiteSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "name": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "name": MCPSchema.string,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("sectionID"), .string("name"),
@@ -81,8 +78,8 @@ struct CreateSuiteSectionTool: ContentTool {
         guard !name.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "Section name must not be empty.")
         }
-        let resolved = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let resolved = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
         let newID = UUID().uuidString
         do {
             try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
@@ -120,10 +117,7 @@ struct RenameSuiteSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "sectionID": .object([
                 "type": .string("string"),
                 "description": .string("The section's id (from get_suite)."),
@@ -141,9 +135,9 @@ struct RenameSuiteSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "name": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "name": MCPSchema.string,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("sectionID"), .string("name"),
@@ -161,8 +155,8 @@ struct RenameSuiteSectionTool: ContentTool {
         guard !input.sectionID.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
         }
-        let resolved = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let resolved = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
         do {
             try await mutateManifest(setup: resolved.setup, on: context.db) { dict in
                 guard var sections = dict["sections"] as? [[String: Any]],
@@ -208,10 +202,7 @@ struct DeleteSuiteSectionTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "sectionID": .object([
                 "type": .string("string"),
                 "description": .string("The section's id (from get_suite)."),
@@ -223,10 +214,10 @@ struct DeleteSuiteSectionTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
-            "sectionID": .object(["type": .string("string")]),
-            "removed": .object(["type": .string("boolean")]),
-            "ungroupedItemCount": .object(["type": .string("integer")]),
+            "assignmentPublicID": MCPSchema.string,
+            "sectionID": MCPSchema.string,
+            "removed": MCPSchema.boolean,
+            "ungroupedItemCount": MCPSchema.integer,
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("sectionID"), .string("removed"),
@@ -241,8 +232,8 @@ struct DeleteSuiteSectionTool: ContentTool {
         guard !input.sectionID.isEmpty else {
             throw MCPToolError.invalidArguments(tool: Self.name, detail: "sectionID must not be empty.")
         }
-        let resolved = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let resolved = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
         // Captured inside the mutation closure so the response reflects what
         // actually changed.
         var removed = false

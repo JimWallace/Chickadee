@@ -30,11 +30,15 @@ func renderDataFrameShape(_ check: NotebookCheck, specHash: String) -> String {
         # Test: \(label)
         # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=data_frame_shape spec_hash=\(specHash) — edit the check, not this file.
 
+        import test_runtime as _tr
+
         variable_name = \(variableLiteral)
         expected_shape = (\(expectedRows), \(expectedCols))
 
+        # Runtime-state check: read the notebook AS EXECUTED (a DataFrame is
+        # built by function calls, which the extractor quarantines at import).
         _MISSING = object()
-        actual = getattr(student_module, variable_name, _MISSING)
+        actual = getattr(_tr.student_main_state(), variable_name, _MISSING)
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined in the student notebook.\\n"
@@ -125,11 +129,15 @@ func renderDataFrameColumns(_ check: NotebookCheck, specHash: String) -> String 
         # Test: \(label)
         # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=data_frame_columns spec_hash=\(specHash) — edit the check, not this file.
 
+        import test_runtime as _tr
+
         variable_name = \(variableLiteral)
         expected_columns = \(expectedLiteral)
 
+        # Runtime-state check: read the notebook AS EXECUTED (a DataFrame is
+        # built by function calls, which the extractor quarantines at import).
         _MISSING = object()
-        actual = getattr(student_module, variable_name, _MISSING)
+        actual = getattr(_tr.student_main_state(), variable_name, _MISSING)
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined in the student notebook.\\n"
@@ -199,6 +207,7 @@ func renderDataFrameEquality(_ check: NotebookCheck, specHash: String) -> String
         # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=data_frame_equality spec_hash=\(specHash) — edit the check, not this file.
 
         import pandas as pd
+        import test_runtime as _tr
 
         variable_name = \(variableLiteral)
 
@@ -207,8 +216,10 @@ func renderDataFrameEquality(_ check: NotebookCheck, specHash: String) -> String
         except Exception as ex:
             errored(f"Could not load expected DataFrame from \(csvFilename): {ex}")
 
+        # Runtime-state check: read the notebook AS EXECUTED (a DataFrame is
+        # built by function calls, which the extractor quarantines at import).
         _MISSING = object()
-        actual = getattr(student_module, variable_name, _MISSING)
+        actual = getattr(_tr.student_main_state(), variable_name, _MISSING)
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined in the student notebook.\\n"
@@ -289,6 +300,7 @@ func renderSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
         # Generated from notebook check "\(escapeForPythonStringLiteral(check.id))" kind=series_equality spec_hash=\(specHash) — edit the check, not this file.
 
         import pandas as pd
+        import test_runtime as _tr
 
         variable_name = \(variableLiteral)
 
@@ -303,8 +315,10 @@ func renderSeriesEquality(_ check: NotebookCheck, specHash: String) -> String {
         except Exception as ex:
             errored(f"Could not load expected Series from \(csvFilename): {ex}")
 
+        # Runtime-state check: read the notebook AS EXECUTED (a Series is
+        # built by function calls, which the extractor quarantines at import).
         _MISSING = object()
-        actual = getattr(student_module, variable_name, _MISSING)
+        actual = getattr(_tr.student_main_state(), variable_name, _MISSING)
         if actual is _MISSING:
             failed(
                 f"Variable `{variable_name}` is not defined in the student notebook.\\n"

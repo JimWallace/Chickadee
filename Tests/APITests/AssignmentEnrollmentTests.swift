@@ -34,7 +34,10 @@ import VaporTesting
     private func enroll(user: APIUser, in course: APICourse) async throws {
         // Seed the per-course role from the global role so a global-instructor
         // caller becomes a per-course instructor (Phase 5: authority is per-course).
-        let role: CourseRole = user.isInstructor ? .instructor : .student
+        // The global `instructor` UserRole case is gone (#417 Slice G2); a legacy
+        // `"instructor"` role string or an admin seeds to instructor.
+        let role: CourseRole =
+            (user.role == "instructor") || user.isAdmin ? .instructor : .student
         let enrollment = APICourseEnrollment(
             userID: try user.requireID(), courseID: try course.requireID(), role: role)
         try await enrollment.save(on: app.db)
@@ -581,7 +584,7 @@ import VaporTesting
             let user = try #require(
                 try await APIUser.query(on: app.db)
                     .filter(\.$username == "csv_pre_register").first())
-            #expect(user.role == UserRole.student.rawValue)
+            #expect(user.role == UserRole.user.rawValue)
             #expect(user.authProvider == "duo-oidc")
             #expect(user.externalSubject == "duo-sub-123")
             #expect(user.displayName == "Reggie Test")

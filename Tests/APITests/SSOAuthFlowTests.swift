@@ -436,10 +436,11 @@ import VaporTesting
                 let user = try #require(fetchedUser)
                 #expect(user.authProvider == "duo-oidc")
                 #expect(user.username == "jdoe")
-                // Phase 5: SSO no longer maps to instructor — a new SSO user who
-                // isn't an admin defaults to student (per-course roles are seeded
-                // by enrollment / assigned by an admin from the roster).
-                #expect(user.role == "student")
+                // SSO no longer maps to instructor, and roles collapsed to
+                // user|admin (#417 Slice G2): a new SSO user who isn't an admin
+                // defaults to `user` (per-course roles are seeded by enrollment /
+                // assigned by an admin from the roster).
+                #expect(user.role == "user")
 
                 let recordedBodies = await provider.endpoint.recordedBodies()
                 #expect(recordedBodies.count == 3)

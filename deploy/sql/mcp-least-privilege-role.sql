@@ -47,7 +47,14 @@ GRANT SELECT ON users, course_enrollments TO chickadee_mcp;
 --    MCP query forgot the in-app kind filter, the database returns no student
 --    rows. The table owner (the main app role) bypasses RLS, so the web app and
 --    worker are unaffected.
-GRANT SELECT ON submissions, results TO chickadee_mcp;
+--
+--    result_collections (added by #1176, v0.4.587) holds the serialized
+--    TestOutcomeCollection blob that used to live on results.collection_json;
+--    get_validation_result reads it via loadCollectionJSON. Deployments that
+--    applied this file before v0.4.611 must re-run this section: without the
+--    grant, every get_validation_result call fails with "permission denied for
+--    table result_collections".
+GRANT SELECT ON submissions, results, result_collections TO chickadee_mcp;
 
 ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS mcp_validation_submissions ON submissions;
@@ -62,6 +69,16 @@ CREATE POLICY mcp_validation_results ON results
     USING (EXISTS (
         SELECT 1 FROM submissions s
         WHERE s.id = results.submission_id AND s.kind = 'validation'
+    ));
+
+ALTER TABLE result_collections ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS mcp_validation_result_collections ON result_collections;
+CREATE POLICY mcp_validation_result_collections ON result_collections
+    FOR SELECT TO chickadee_mcp
+    USING (EXISTS (
+        SELECT 1 FROM results r
+        JOIN submissions s ON s.id = r.submission_id
+        WHERE r.id = result_collections.result_id AND s.kind = 'validation'
     ));
 
 -- 5. Everything else is DENIED by omission — no GRANT is issued, so the role

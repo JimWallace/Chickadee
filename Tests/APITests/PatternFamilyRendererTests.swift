@@ -537,7 +537,7 @@ import Vapor
 
     @Test func validation_rejectsPerStudentRefOnUnsupportedKind() throws {
         // performance_threshold has no personalization preamble, so a per-student
-        // arg ref is still rejected (boundary + approximate are the supported set).
+        // arg ref is still rejected (the equality kinds are the supported set).
         let c = PatternCase(
             key: "01", label: "X", args: [.null], expected: .double(100.0),
             argVarRefs: ["patients"])
@@ -548,7 +548,10 @@ import Vapor
             try validatePatternFamilies(
                 [family], testSuites: [], perStudentExpressionNames: ["patients"])
         } throws: { error in
-            #expect("\(error)".contains("only supported in boundary_equality and approximate_equality"))
+            #expect(
+                "\(error)".contains(
+                    "only supported in boundary_equality, approximate_equality, and unordered_equality"
+                ))
             return true
         }
     }

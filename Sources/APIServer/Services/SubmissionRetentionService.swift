@@ -21,6 +21,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 
 enum SubmissionRetentionService {
 
@@ -53,11 +54,40 @@ enum SubmissionRetentionService {
         let setupIDs = Array(courseBySetup.keys)
         guard !setupIDs.isEmpty else { return [:] }
 
+        // Grouped COUNT(*) instead of materializing one row per submission —
+        // this backs /admin/retention across ALL archived courses at once,
+        // and submissions is the largest unbounded-growth table (2026-07
+        // audit; same pattern as loadUniqueSubmittersBySetup).
+        var counts: [UUID: Int] = [:]
+        if let sql = db as? SQLDatabase {
+            struct SetupCountRow: Decodable {
+                let testSetupID: String
+                let total: Int
+                enum CodingKeys: String, CodingKey {
+                    case testSetupID = "test_setup_id"
+                    case total
+                }
+            }
+            let rows = try await sql.select()
+                .column("test_setup_id")
+                .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+                .from("submissions")
+                .where("test_setup_id", .in, setupIDs)
+                .groupBy("test_setup_id")
+                .all(decoding: SetupCountRow.self)
+            for row in rows {
+                if let courseID = courseBySetup[row.testSetupID] {
+                    counts[courseID, default: 0] += row.total
+                }
+            }
+            return counts
+        }
+
+        // Non-SQL fallback (not hit by the sqlite/postgres drivers in use).
         let submissions = try await APISubmission.query(on: db)
             .filter(\.$testSetupID ~~ setupIDs)
             .field(\.$testSetupID)
             .all()
-        var counts: [UUID: Int] = [:]
         for submission in submissions {
             if let courseID = courseBySetup[submission.testSetupID] {
                 counts[courseID, default: 0] += 1

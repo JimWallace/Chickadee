@@ -136,6 +136,41 @@ import VaporTesting
         }
     }
 
+    /// Regression for the Lab 6 incident: the periodic sweep is the only thing
+    /// that publishes a scheduled assignment, so if it silently isn't running
+    /// (dead task, lease wedged), a `.preview` lab never opens and students are
+    /// locked out with no error anywhere. The submission gate now repairs the
+    /// state lazily — the mirror of the lazy deadline close it has always done —
+    /// so a student following a direct link gets in once the open date arrives.
+    @Test func submissionGateLazilyOpensScheduledAssignment() async throws {
+        try await withAssignmentRoutesApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            _ = try await arInsertSetup(id: "setup_lazy_open", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_lazy_open", title: "Lazy open",
+                isOpen: false,
+                dueAt: Date().addingTimeInterval(86_400),
+                startsAt: Date().addingTimeInterval(-60),
+                validationStatus: "passed", on: app
+            )
+            assignment.visibility = .preview
+            try await assignment.save(on: app.db)
+
+            let student = try await arInsertStudent(username: "lazy_open_student", on: app)
+            try await makeTestEnrollment(on: app, userID: student.requireID(), courseID: courseID)
+
+            // No periodic sweep runs in tests — the gate itself must open it.
+            let req = Request(application: app, on: app.eventLoopGroup.any())
+            let gated = try await requireOpenStudentAssignment(
+                for: "setup_lazy_open", user: student, on: req)
+            #expect(gated != nil, "The gate must let the student in once the open date has arrived")
+
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.visibility == .open, "The gate lazily publishes the scheduled assignment")
+            #expect(reloaded.startsAt == nil, "Open date is consumed once it fires")
+        }
+    }
+
     @Test func openSweepDoesNotReopenAfterScheduleConsumed() async throws {
         try await withAssignmentRoutesApp { app in
             // Mirrors the state after auto-open + a manual close: isOpen false,

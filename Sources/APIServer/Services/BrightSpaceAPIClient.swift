@@ -69,6 +69,8 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
     case orgUnitLookupFailed(orgUnitID: String, status: Int)
     case gradeObjectsFetchFailed(orgUnitID: String, status: Int)
     case classlistFetchFailed(orgUnitID: String, status: Int)
+    case groupCategoriesFetchFailed(orgUnitID: String, status: Int)
+    case groupsFetchFailed(orgUnitID: String, categoryID: String, status: Int)
 
     var description: String {
         switch self {
@@ -90,6 +92,10 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
             return "BrightSpace grade-objects fetch for org unit '\(id)' failed (HTTP \(s))"
         case .classlistFetchFailed(let id, let s):
             return "BrightSpace classlist fetch for org unit '\(id)' failed (HTTP \(s))"
+        case .groupCategoriesFetchFailed(let id, let s):
+            return "BrightSpace group-categories fetch for org unit '\(id)' failed (HTTP \(s))"
+        case .groupsFetchFailed(let id, let cat, let s):
+            return "BrightSpace groups fetch for org unit '\(id)' category '\(cat)' failed (HTTP \(s))"
         }
     }
 
@@ -162,6 +168,23 @@ private struct GradeObjectJSON: Decodable {
     }
 }
 
+/// A D2L group category (e.g. "Lab Sections"), which contains a set of groups
+/// (e.g. "Lab 1", "Lab 2", …). One category per course is designated as the
+/// section source via `APICourse.brightspaceSectionCategoryID`.
+struct BrightSpaceGroupCategory: Content, Sendable {
+    let categoryID: String
+    let name: String
+}
+
+/// One group within a D2L group category, together with the D2L internal user
+/// IDs of its current members.
+struct BrightSpaceGroup: Content, Sendable {
+    let groupID: String
+    let name: String
+    /// D2L internal user IDs (`Identifier`) of enrolled members.
+    let enrollments: [String]
+}
+
 /// One member of a course's LEARN classlist, reduced to the identity fields
 /// Chickadee can match a roster entry against.  `orgDefinedID` is the student
 /// number (matches `APIUser.studentID`); `username` is the D2L login name.
@@ -232,6 +255,32 @@ protocol BrightSpaceGrading: Sendable {
     func clearGrade(
         orgUnitID: String, gradeObjectID: String, bsUserID: String, on application: Application
     ) async throws
+
+    /// Lists the group categories defined for the org unit (e.g. "Lab Sections",
+    /// "Tutorial Groups"). Used to let the operator configure which category
+    /// maps to Chickadee sections via `APICourse.brightspaceSectionCategoryID`.
+    func fetchGroupCategories(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceGroupCategory]
+
+    /// Lists the groups within a category, including each group's member
+    /// D2L user IDs. Used by the section-sync sweep to populate
+    /// `APICourseEnrollment.brightspaceSection`.
+    func fetchGroups(
+        orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup]
+}
+
+// Default no-op implementations so existing conformers (test fakes) don't
+// need to implement these methods.
+extension BrightSpaceGrading {
+    func fetchGroupCategories(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceGroupCategory] { [] }
+
+    func fetchGroups(
+        orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup] { [] }
 }
 
 // MARK: - Client
@@ -281,9 +330,10 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
 
     // MARK: - Request transport (signing + clock-skew retry)
 
-    /// Signs `rawURL` for `method` ("GET"/"PUT") and sends it. If D2L rejects the
-    /// request with a "Timestamp out of range" 403, learns the clock skew from
-    /// the response body and retries exactly once with a corrected timestamp.
+    /// Signs `rawURL` for `method` ("GET"/"PUT"/"DELETE") and sends it. If D2L
+    /// rejects the request with a "Timestamp out of range" 403, learns the clock
+    /// skew from the response body and retries exactly once with a corrected
+    /// timestamp.
     private func sendSigned(
         method: String,
         rawURL: String,
@@ -292,19 +342,24 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
     ) async throws -> ClientResponse {
         func attempt() async throws -> ClientResponse {
             let uri = URI(string: signed(url: rawURL, method: method))
-            if method.uppercased() == "PUT" {
+            // The wire verb MUST match the verb inside the Valence signature —
+            // D2L verifies the method as part of the signature, so a mismatch
+            // is a guaranteed 403 (#1105: clearGrade signed a DELETE that was
+            // transmitted as a GET, so grade removal could never work).
+            switch method.uppercased() {
+            case "PUT":
                 return try await app.client.put(uri) { req in try beforeSend?(&req) }
+            case "POST":
+                return try await app.client.post(uri) { req in try beforeSend?(&req) }
+            case "DELETE":
+                return try await app.client.delete(uri) { req in try beforeSend?(&req) }
+            default:
+                return try await app.client.get(uri) { req in try beforeSend?(&req) }
             }
-            return try await app.client.get(uri) { req in try beforeSend?(&req) }
         }
         let response = try await attempt()
         guard response.status == .forbidden else { return response }
-        // Peek the body non-destructively (a copied ByteBuffer has its own reader
-        // index) so a genuine permission 403 is still returned intact to the caller.
-        var bodyBuf = response.body
-        let len = bodyBuf?.readableBytes ?? 0
-        let bodyText = (len > 0 ? bodyBuf?.readString(length: len) : nil) ?? ""
-        guard let serverTime = valenceServerTimeFromTimestampError(body: bodyText) else {
+        guard let serverTime = valenceServerTimeFromTimestampError(body: response.bodyString()) else {
             return response
         }
         serverSkewSeconds = serverTime - Int(Date().timeIntervalSince1970)
@@ -422,10 +477,8 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         }
 
         guard (200...299).contains(response.status.code) else {
-            var bodyBuf = response.body
-            let bodyLen = bodyBuf?.readableBytes ?? 0
-            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
-            throw BrightSpaceSyncError.gradePushFailed(status: Int(response.status.code), body: bodyText)
+            throw BrightSpaceSyncError.gradePushFailed(
+                status: Int(response.status.code), body: response.bodyString())
         }
     }
 
@@ -442,10 +495,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let response = try await sendSigned(method: "DELETE", rawURL: rawURL, on: application)
         let code = Int(response.status.code)
         guard (200...299).contains(code) || code == 404 else {
-            var bodyBuf = response.body
-            let bodyLen = bodyBuf?.readableBytes ?? 0
-            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
-            throw BrightSpaceSyncError.gradePushFailed(status: code, body: bodyText)
+            throw BrightSpaceSyncError.gradePushFailed(status: code, body: response.bodyString())
         }
     }
 
@@ -495,11 +545,8 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/users/whoami"
         let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
         guard response.status == .ok else {
-            var bodyBuf = response.body
-            let bodyLen = bodyBuf?.readableBytes ?? 0
-            let bodyText = bodyBuf?.readString(length: bodyLen) ?? ""
             throw BrightSpaceSyncError.whoamiFailed(
-                status: Int(response.status.code), body: String(bodyText.prefix(500)))
+                status: Int(response.status.code), body: response.bodyString(max: 500))
         }
         struct WhoAmIResponse: Decodable {
             let identifier: String
@@ -637,6 +684,72 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
                 orgDefinedID: $0.orgDefinedId, username: $0.username, userID: $0.identifier)
         }
     }
+
+    // MARK: - Group categories and groups (section sync)
+
+    /// Lists the D2L group categories for the org unit. The instructor selects
+    /// one category to act as the "sections" source for the course.
+    func fetchGroupCategories(
+        orgUnitID: String, on application: Application
+    ) async throws -> [BrightSpaceGroupCategory] {
+        guard !orgUnitID.isEmpty else { return [] }
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
+        let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
+        let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/\(encoded)/groupcategories/"
+        struct CategoryResponse: Decodable {
+            let groupCategoryId: Int
+            let name: String
+            enum CodingKeys: String, CodingKey {
+                case groupCategoryId = "GroupCategoryId"
+                case name = "Name"
+            }
+        }
+        let items: [CategoryResponse] = try await fetchAllPages(
+            firstRawURL: rawURL, on: application
+        ) { status in
+            .groupCategoriesFetchFailed(orgUnitID: orgUnitID, status: status)
+        }
+        return items.map {
+            BrightSpaceGroupCategory(categoryID: String($0.groupCategoryId), name: $0.name)
+        }
+    }
+
+    /// Lists the groups within a category and the D2L user IDs of their members.
+    func fetchGroups(
+        orgUnitID: String, categoryID: String, on application: Application
+    ) async throws -> [BrightSpaceGroup] {
+        guard !orgUnitID.isEmpty, !categoryID.isEmpty else { return [] }
+        let lpVersion = await apiVersion(
+            "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
+        let encodedOrg =
+            orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
+        let encodedCat =
+            categoryID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? categoryID
+        let rawURL =
+            "\(config.baseURL)/d2l/api/lp/\(lpVersion)/\(encodedOrg)/groupcategories/\(encodedCat)/groups/"
+        struct GroupResponse: Decodable {
+            let groupId: Int
+            let name: String
+            let enrollments: [Int]
+            enum CodingKeys: String, CodingKey {
+                case groupId = "GroupId"
+                case name = "Name"
+                case enrollments = "Enrollments"
+            }
+        }
+        let items: [GroupResponse] = try await fetchAllPages(
+            firstRawURL: rawURL, on: application
+        ) { status in
+            .groupsFetchFailed(orgUnitID: orgUnitID, categoryID: categoryID, status: status)
+        }
+        return items.map {
+            BrightSpaceGroup(
+                groupID: String($0.groupId),
+                name: $0.name,
+                enrollments: $0.enrollments.map(String.init))
+        }
+    }
 }
 
 // MARK: - Application storage
@@ -649,5 +762,20 @@ extension Application {
     var brightSpaceClient: BrightSpaceAPIClient? {
         get { storage[BrightSpaceAPIClientKey.self] }
         set { storage[BrightSpaceAPIClientKey.self] = newValue }
+    }
+}
+
+// MARK: - Response-body helper
+
+extension ClientResponse {
+    /// Reads the response body as UTF-8 text without consuming it (a copied
+    /// ByteBuffer has its own reader index, so the caller can still hand the
+    /// response on intact). Capped at `max` characters; "" when bodyless.
+    /// The one body-read dance for the Valence client's error paths (#1117).
+    func bodyString(max: Int = 4096) -> String {
+        var buffer = body
+        let length = buffer?.readableBytes ?? 0
+        let text = (length > 0 ? buffer?.readString(length: length) : nil) ?? ""
+        return String(text.prefix(max))
     }
 }

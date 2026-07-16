@@ -59,6 +59,9 @@ struct AnyDiagnosticTool: Sendable {
     let invoke: @Sendable (_ arguments: JSONValue, _ context: AdminToolContext) async throws -> JSONValue
 }
 
+// The shared tools/list entry encoding reads these fields (#1121).
+extension AnyDiagnosticTool: MCPListableTool {}
+
 extension DiagnosticTool {
     /// Erases this tool for storage in the registry.
     func erased() -> AnyDiagnosticTool {

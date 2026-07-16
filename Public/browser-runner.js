@@ -250,6 +250,14 @@
             if (parsed && parsed.personalizedInputs && typeof parsed.personalizedInputs === 'object') {
                 personalizedInputs = parsed.personalizedInputs;
             }
+            // Per-student dataset slices (Phase 1 datasets): overwrite the full-source
+            // support file from the zip with the student's personal slice so test
+            // scripts see only their rows. No-op when the response has no personalizedFiles.
+            if (parsed && parsed.personalizedFiles && typeof parsed.personalizedFiles === 'object') {
+                for (const [filename, content] of Object.entries(parsed.personalizedFiles)) {
+                    files[filename] = content;
+                }
+            }
         } catch (_) {
             assignmentSeed = null;  // grade without a seed rather than failing the run
             personalizedInputs = null;
@@ -1480,6 +1488,31 @@ def load_student_module():
     if not _loaded_student_order:
         return None
     return modules.get(_loaded_student_order[0])
+
+
+_student_main_state = None
+
+
+def student_main_state():
+    # The student notebook AS EXECUTED — runs quarantined top-level code once
+    # with run_name="__main__" and caches the namespace; falls back to the
+    # import-mode module when no student file exists or the run fails.
+    global _student_main_state
+    if _student_main_state is not None:
+        return _student_main_state
+    import runpy
+    import types
+
+    files = _ordered_student_files()
+    if not files:
+        return load_student_module()
+    try:
+        namespace = runpy.run_path(str(files[0]), run_name="__main__")
+        _student_main_state = types.SimpleNamespace(**namespace)
+    except Exception:
+        print(traceback.format_exc(), file=sys.stderr)
+        return load_student_module()
+    return _student_main_state
 
 
 def student_source_raw() -> str:

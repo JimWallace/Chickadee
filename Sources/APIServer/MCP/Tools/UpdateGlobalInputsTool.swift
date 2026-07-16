@@ -46,10 +46,7 @@ struct UpdateGlobalInputsTool: ContentTool {
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object([
-                "type": .string("string"),
-                "description": .string("The assignment's 6-character public ID."),
-            ]),
+            "assignmentPublicID": MCPSchema.assignmentPublicID,
             "variables": .object([
                 "type": .string("array"),
                 "description": .string("Replacement literal values; send [] to clear."),
@@ -94,11 +91,11 @@ struct UpdateGlobalInputsTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "assignmentPublicID": .object(["type": .string("string")]),
+            "assignmentPublicID": MCPSchema.string,
             "variables": .object(["type": .string("array")]),
             "expressions": .object(["type": .string("array")]),
             "warnings": .object([
-                "type": .string("array"), "items": .object(["type": .string("string")]),
+                "type": .string("array"), "items": MCPSchema.string,
             ]),
         ]),
         "required": .array([
@@ -110,8 +107,8 @@ struct UpdateGlobalInputsTool: ContentTool {
     static let requiredScopes: Set<ContentScope> = [.write]
 
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
-        let (assignment, setup) = try await context.authorizedAssignmentAndSetup(
-            publicID: input.assignmentPublicID, tool: Self.name)
+        let (assignment, setup) = try await context.authorizedAssignmentAndSetupForWrite(
+            publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
 
         // The save-time expression eval runs against the acting account's own
         // seed — same as the instructor's seed on the web path.

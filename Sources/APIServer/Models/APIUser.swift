@@ -15,11 +15,18 @@ import Vapor
 /// The `role` DB column stays a plain string (no migration); this enum is
 /// the authoritative vocabulary for it.
 enum UserRole: String, Sendable {
-    case student
-    case instructor
+    /// The deployment-global role of an ordinary human account (#417). Teaching
+    /// authority is per-course now (`CourseRole` on the enrollment), so the
+    /// deployment role only distinguishes an ordinary `user` from an `admin`
+    /// operator (and the non-human `mcp` service account). The retired global
+    /// `student` / `instructor` roles were folded into `user` by the
+    /// `CollapseUserRoles` migration and are no longer part of the vocabulary; a
+    /// row that still carries one of those legacy strings simply decodes to
+    /// `nil` (`roleValue`), which reads as a non-admin, non-agent user.
+    case user
     case admin
     /// MCP service accounts (admin-provisioned, non-loginable agents).
-    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    /// `mcp` is its own role — it does NOT imply admin.
     case mcp
 }
 
@@ -151,25 +158,24 @@ extension APIUser {
     }
 
     var isAdmin: Bool { roleValue == .admin }
-    var isInstructor: Bool { roleValue == .instructor || roleValue == .admin }
 
     /// True for MCP service accounts (admin-provisioned, non-loginable agents).
-    /// `mcp` is its own role — it does NOT imply instructor/admin.
+    /// `mcp` is its own role — it does NOT imply admin.
     var isMCPAgent: Bool { roleValue == .mcp }
 
     /// Roles that may be assigned automatically at first login (local
     /// registration or SSO mapping).  `mcp` is intentionally excluded: MCP
-    /// service accounts are created only by an admin, so no auto-provisioning
-    /// path can mint an agent identity.
+    /// service accounts are created only by an admin. The retired `student` /
+    /// `instructor` roles are excluded too (#417 Slice G2), so an SSO claim can
+    /// never re-mint them — a first login maps to `user` (or `admin`).
     static let autoAssignableRoles: Set<String> = [
-        UserRole.student.rawValue,
-        UserRole.instructor.rawValue,
+        UserRole.user.rawValue,
         UserRole.admin.rawValue,
     ]
 
     /// Drops a proposed auto-assigned role that isn't in `autoAssignableRoles`
-    /// (notably `mcp`), returning nil so the caller falls back to `student`.
-    /// Defence in depth for the first-login paths.
+    /// (notably `mcp` and the retired `student`/`instructor`), returning nil so
+    /// the caller falls back to `user`. Defence in depth for the first-login paths.
     static func sanitizedAutoAssignedRole(_ proposed: String?) -> String? {
         proposed.flatMap { autoAssignableRoles.contains($0) ? $0 : nil }
     }
@@ -228,7 +234,7 @@ private struct CourseAwareUserContextStorageKey: StorageKey {
 }
 
 /// Per-request cache of the resolved active-course state, so the several
-/// callers in one request (the nav middleware, `ActiveCourseInstructorMiddleware`,
+/// callers in one request (the nav middleware, `ActiveCourseStaffMiddleware`,
 /// and the page handler) share a single DB resolution rather than each
 /// re-querying — and so the auto-enroll/session side effects run once.
 private struct ResolvedCourseStateStorageKey: StorageKey {
@@ -379,41 +385,36 @@ struct CurrentUserContext: Encodable {
     let email: String?
     let role: String
     let isAdmin: Bool
-    let isInstructor: Bool
     /// The course the user is currently viewing (nil if no course info was resolved).
     let activeCourse: CourseContext?
     /// All courses the user is enrolled in (empty if no course info was resolved).
     let enrolledCourses: [CourseContext]
     /// True when the user is enrolled in more than one course (tab strip should show).
     let showCourseTabs: Bool
-    /// True when the user acts as an instructor *in the active course*: that
-    /// course's per-course role is `.instructor`, or the user is a global
-    /// instructor/admin (the transitional fallback, kept until the global role
-    /// is shrunk in Phase 5). The nav's Instructor tab keys off this instead
-    /// of the bare global `isInstructor`, so once per-course roles are
-    /// authorable (Phase 4) switching the active course switches the same
-    /// account between instructor and student views. Behaviour-neutral today:
-    /// every enrollment's role mirrors the global role, so this equals the
-    /// previous `isInstructor && activeCourse != nil`.
-    let isInstructorInActiveCourse: Bool
-    /// Every enrolled course the user can act on as an instructor: those whose
-    /// per-course role is `.instructor`, plus *all* enrolled courses for an
-    /// admin (who instructs the whole deployment). Drives the nav's Instructor
-    /// surface so an instructor always has a direct link into each course they
-    /// teach, regardless of which course is currently active. Inherits the
-    /// code-sorted order of `enrolledCourses`.
-    let instructorCourses: [CourseContext]
-    /// True when `instructorCourses` is non-empty — the user instructs at least
+    /// True when the user is *staff* (TA or instructor, or an admin) in the
+    /// active course. The nav's Instructor tab keys off this; the finer
+    /// per-action floor (`ta` vs `instructor`) is enforced server-side (#417
+    /// Slice E). Renamed from `isInstructorInActiveCourse` in #1127 — the old
+    /// name predated the TA rung and had come to mean "staff".
+    let isStaffInActiveCourse: Bool
+    /// Every enrolled course where the user is staff (role ≥ `.ta`), plus
+    /// *all* enrolled courses for an admin (who instructs the whole
+    /// deployment). Drives the nav's Instructor surface so staff always have
+    /// a direct link into each course they teach, regardless of which course
+    /// is currently active. Inherits the code-sorted order of
+    /// `enrolledCourses`.
+    let staffCourses: [CourseContext]
+    /// True when `staffCourses` is non-empty — the user is staff in at least
     /// one enrolled course. The nav's Instructor entry shows whenever this is
     /// true, not only when the *active* course happens to be one they teach.
-    let isInstructorAnywhere: Bool
-    /// True when the user instructs more than one course, so the nav should
+    let isStaffAnywhere: Bool
+    /// True when the user is staff in more than one course, so the nav should
     /// render the per-course Instructor strip (mirrors `showCourseTabs`).
-    let showInstructorTabs: Bool
-    /// The single course this user instructs, when there is exactly one — the
-    /// nav renders one direct "Instructor" link for it instead of a strip. nil
-    /// when they instruct zero or many courses.
-    let primaryInstructorCourse: CourseContext?
+    let showStaffTabs: Bool
+    /// The single course this user staffs, when there is exactly one — the
+    /// nav renders one direct "Instructor" link for it instead of a strip.
+    /// nil when they staff zero or many courses.
+    let primaryStaffCourse: CourseContext?
 
     init(user: APIUser, activeCourse: CourseContext? = nil, enrolledCourses: [CourseContext] = []) {
         let normalizedPreferredName = user.preferredName?
@@ -432,20 +433,22 @@ struct CurrentUserContext: Encodable {
         self.email = email
         self.role = user.role
         self.isAdmin = user.isAdmin
-        self.isInstructor = user.isInstructor
         self.activeCourse = activeCourse
         self.enrolledCourses = enrolledCourses
         self.showCourseTabs = enrolledCourses.count > 1
-        self.isInstructorInActiveCourse =
-            activeCourse != nil && (activeCourse?.role == .instructor || user.isAdmin)
+        // Staff (TA or instructor) in the active course see the Instructor
+        // surface; the finer per-action floor is enforced server-side (#417
+        // Slice E).
+        self.isStaffInActiveCourse =
+            activeCourse != nil && ((activeCourse?.role ?? .student) >= .ta || user.isAdmin)
         // An admin instructs the whole deployment, so every enrollment counts;
-        // everyone else, only their `.instructor` enrollments. Order follows
-        // `enrolledCourses` (code-sorted).
-        let instructorCourses =
-            user.isAdmin ? enrolledCourses : enrolledCourses.filter { $0.role == .instructor }
-        self.instructorCourses = instructorCourses
-        self.isInstructorAnywhere = !instructorCourses.isEmpty
-        self.showInstructorTabs = instructorCourses.count > 1
-        self.primaryInstructorCourse = instructorCourses.count == 1 ? instructorCourses[0] : nil
+        // everyone else, every course where they are staff (TA or instructor).
+        // Order follows `enrolledCourses` (code-sorted).
+        let staffCourses =
+            user.isAdmin ? enrolledCourses : enrolledCourses.filter { $0.role >= .ta }
+        self.staffCourses = staffCourses
+        self.isStaffAnywhere = !staffCourses.isEmpty
+        self.showStaffTabs = staffCourses.count > 1
+        self.primaryStaffCourse = staffCourses.count == 1 ? staffCourses[0] : nil
     }
 }

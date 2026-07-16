@@ -32,33 +32,65 @@
     </a>
 
     #if(currentUser):
-        #if(currentUser.primaryInstructorCourse):
+        #if(currentUser.primaryStaffCourse):
             <!-- Exactly one instructor course: a single direct link, POSTed
                  through /activate so it works even when a different course is
                  currently active (it switches active to the taught course,
                  then lands on the instructor view). -->
-            <form method="post" action="/courses/#(currentUser.primaryInstructorCourse.id)/activate" class="inline-form">
+            <form method="post" action="/courses/#(currentUser.primaryStaffCourse.id)/activate" class="inline-form">
                 #csrfFormField()
                 <input type="hidden" name="next" value="/instructor">
                 <button class="btn-link nav-link" type="submit">Instructor</button>
             </form>
+        #elseif(currentUser.showStaffTabs):
+            <!-- More than one taught course: an Instructor menu whose items each
+                 POST to /activate with next=/instructor, so picking a course both
+                 switches the active course and lands on its instructor view. -->
+            <div class="nav-dropdown" data-nav-dropdown>
+                <button type="button" class="nav-link nav-dropdown-toggle"
+                        aria-haspopup="true" aria-expanded="false">
+                    <span>Instructor</span>
+                    <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="nav-dropdown-menu" role="menu">
+                    #for(course in currentUser.staffCourses):
+                    <form method="post" action="/courses/#(course.id)/activate" class="contents-form">
+                        #csrfFormField()
+                        <input type="hidden" name="next" value="/instructor">
+                        <button type="submit" role="menuitem"
+                                class="nav-dropdown-item #if(course.isActive):nav-dropdown-item-active#endif">
+                            #(course.code) — #(course.name)
+                        </button>
+                    </form>
+                    #endfor
+                </div>
+            </div>
         #endif
         #if(currentUser.isAdmin):
             <a class="nav-link" href="/admin">Admin</a>
         #endif
-        <a class="nav-link nav-username" href="/account" aria-label="My account">
-            #if(currentUser.preferredName):
-                #(currentUser.preferredName)
-            #elseif(currentUser.displayName):
-                #(currentUser.displayName)
-            #else:
-                #(currentUser.username)
-            #endif
-        </a>
-        <form method="post" action="/logout" class="inline-form">
-            #csrfFormField()
-            <button class="btn-link nav-link" type="submit">Log out</button>
-        </form>
+        <div class="nav-dropdown nav-user" data-nav-dropdown>
+            <button type="button" class="nav-link nav-username nav-dropdown-toggle"
+                    aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+                <span>
+                    #if(currentUser.preferredName):
+                        #(currentUser.preferredName)
+                    #elseif(currentUser.displayName):
+                        #(currentUser.displayName)
+                    #else:
+                        #(currentUser.username)
+                    #endif
+                </span>
+                <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="nav-dropdown-menu" role="menu">
+                <a class="nav-dropdown-item" href="/account" role="menuitem">Account</a>
+                <form method="post" action="/logout" class="contents-form">
+                    #csrfFormField()
+                    <button class="nav-dropdown-item" type="submit" role="menuitem">Log out</button>
+                </form>
+            </div>
+        </div>
     #else:
         <a class="nav-link" href="/login">Log in</a>
     #endif
@@ -72,24 +104,6 @@
         <button type="submit"
                 class="course-tab #if(course.isActive):course-tab-active#endif"
                 aria-current="#if(course.isActive):page#else:false#endif">
-            #(course.code)
-        </button>
-    </form>
-    #endfor
-</nav>
-#endif
-#if(currentUser && currentUser.showInstructorTabs):
-<!-- More than one taught course: a dedicated strip of direct links into each
-     course's instructor view.  Each chip POSTs to /activate with next=/instructor
-     so it both switches the active course and lands on its instructor dashboard. -->
-<nav class="course-tabs course-tabs-instructor" aria-label="Instructor courses">
-    <span class="course-tabs-label">Instructor</span>
-    #for(course in currentUser.instructorCourses):
-    <form method="post" action="/courses/#(course.id)/activate" class="contents-form">
-        #csrfFormField()
-        <input type="hidden" name="next" value="/instructor">
-        <button type="submit"
-                class="course-tab #if(course.isActive):course-tab-active#endif">
             #(course.code)
         </button>
     </form>

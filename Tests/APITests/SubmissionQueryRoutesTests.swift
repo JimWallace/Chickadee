@@ -79,10 +79,9 @@ import VaporTesting
         let json = try #require(String(data: encoder.encode(collection), encoding: .utf8))
         let result = APIResult(
             id: "res_\(UUID().uuidString.lowercased().prefix(8))",
-            submissionID: submissionID,
-            collectionJSON: json
+            submissionID: submissionID
         )
-        try await result.save(on: app.db)
+        try await result.saveWithCollection(json: json, on: app.db)
     }
 
     private func makeCollection(
@@ -172,6 +171,47 @@ import VaporTesting
                     #expect(body.submissions.count == 2)
                 })
 
+        }
+    }
+
+    /// A non-staff student listing submissions sees ONLY their own — never
+    /// another student's — both with no filter and with a `testSetupID` filter
+    /// for a course they don't staff (#417; the list scopes non-staff callers to
+    /// `userID == caller.id`).
+    @Test func listSubmissionsScopesStudentToOwnSubmissions() async throws {
+        try await withApp(app) { _ in
+            let cookieA = try await loginAsStudent(username: "stu_scope_a")
+            let studentA = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "stu_scope_a").first())
+            let studentB = try await makeTestUser(on: app, username: "stu_scope_b", role: "student")
+
+            try await insertSubmission(
+                id: "sub_scope_a", testSetupID: "setup_scope", userID: try studentA.requireID())
+            try await insertSubmission(
+                id: "sub_scope_b", testSetupID: "setup_scope", userID: try studentB.requireID())
+
+            // No filter: student A sees only their own submission.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookieA) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.count == 1)
+                    #expect(body.submissions.first?.submissionID == "sub_scope_a")
+                    #expect(body.submissions.contains { $0.submissionID == "sub_scope_b" } == false)
+                })
+
+            // Even filtering by a setup they don't staff, a student never sees
+            // another student's submission for it.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions?testSetupID=setup_scope",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookieA) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionListResponse.self)
+                    #expect(body.submissions.map(\.submissionID) == ["sub_scope_a"])
+                })
         }
     }
 
@@ -795,6 +835,9 @@ import VaporTesting
         try await withApp(app) { _ in
             let setupID = "setup_instr_all"
             let cookie = try await loginAsInstructor()
+            // All-tier visibility is per-course staff now (#417 Slice G); enrol
+            // the instructor in the setup's course (shared TEST101).
+            try await enrollAsTestInstructor(username: "instructor_tier", on: app)
             try await ensureAssignment(
                 setupID: setupID,
                 dueAt: Date().addingTimeInterval(3600))  // future deadline
@@ -902,6 +945,155 @@ import VaporTesting
                     #expect(body.failCount == 0)
                 })
 
+        }
+    }
+
+    // MARK: - GET /api/v1/submissions/:id — owner fast path (2026-07 audit)
+
+    /// The status endpoint is the 2 s student poll; the owner check must
+    /// grant access without requiring course-staff authority.
+    @Test func getSubmissionOwnerCanPollOwnSubmission() async throws {
+        try await withApp(app) { _ in
+            let username = "student_owner_poll"
+            let cookie = try await loginAsStudent(username: username)
+            let owner = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            try await insertSubmission(
+                id: "sub_owner_poll", testSetupID: "setup_owner_poll", userID: owner.id)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_owner_poll",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let body = try res.content.decode(SubmissionStatusResponse.self)
+                    #expect(body.submissionID == "sub_owner_poll")
+                })
+        }
+    }
+
+    /// A non-owner without course-staff authority still falls through to the
+    /// staff check and is rejected — the owner fast path must not widen access.
+    @Test func getSubmissionForbiddenForNonOwnerNonStaff() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent(username: "student_poll_intruder")
+            let other = try await makeTestUser(
+                on: app, username: "student_poll_victim", role: "student")
+            try await insertSubmission(
+                id: "sub_poll_other", testSetupID: "setup_poll_other",
+                userID: try other.requireID())
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_poll_other",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+        }
+    }
+
+    // MARK: - GET /api/v1/submissions/:id/results — ETag (2026-07 audit)
+
+    /// Results are immutable, so a repeat view with the returned ETag gets a
+    /// 304 without the server re-decoding the stored collection.
+    @Test func getResultsEmitsETagAndReturns304OnMatch() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            try await insertSubmission(id: "sub_etag1", testSetupID: "setup_etag1")
+            let collection = makeCollection(
+                submissionID: "sub_etag1",
+                outcomes: [makeOutcome(name: "test_a")]
+            )
+            try await insertResult(submissionID: "sub_etag1", collection: collection)
+
+            var etag = ""
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag1/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    etag = try #require(res.headers.first(name: .eTag))
+                    #expect(etag.hasPrefix("\"") && etag.hasSuffix("\""))
+                })
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag1/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    req.headers.add(name: .ifNoneMatch, value: etag)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notModified)
+                    #expect(res.body.readableBytes == 0)
+                    #expect(res.headers.first(name: .eTag) == etag)
+                })
+
+            // A non-matching validator still gets the full representation.
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag1/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    req.headers.add(name: .ifNoneMatch, value: "\"deadbeef\"")
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                })
+        }
+    }
+
+    /// The ETag embeds the caller's visible tier set, so a validator cached
+    /// before the release deadline must NOT produce a 304 after the deadline
+    /// passes — a stale 304 would hide the newly-released outcomes.
+    @Test func getResultsStaleETagRefreshesWhenReleaseBecomesVisible() async throws {
+        try await withApp(app) { _ in
+            let setupID = "setup_etag_deadline"
+            let username = "student_etag_dl"
+            let cookie = try await loginAsStudent(username: username)
+            let student = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == username).first())
+            let assignment = try await ensureAssignment(
+                setupID: setupID,
+                dueAt: Date().addingTimeInterval(3600))
+            try await insertSubmission(
+                id: "sub_etag_dl", testSetupID: setupID, userID: student.id)
+            let collection = makeCollection(
+                submissionID: "sub_etag_dl",
+                outcomes: [
+                    makeOutcome(name: "test_pub", tier: .pub, status: .pass),
+                    makeOutcome(name: "test_release", tier: .release, status: .fail),
+                ]
+            )
+            try await insertResult(submissionID: "sub_etag_dl", collection: collection)
+
+            var preDeadlineETag = ""
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag_dl/results",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    preDeadlineETag = try #require(res.headers.first(name: .eTag))
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.contains { $0.tier == .release } == false)
+                })
+
+            // Deadline passes: the pre-deadline validator must miss, and the
+            // fresh response must include the release outcome.
+            assignment.dueAt = Date().addingTimeInterval(-3600)
+            try await assignment.save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/api/v1/submissions/sub_etag_dl/results",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                    req.headers.add(name: .ifNoneMatch, value: preDeadlineETag)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let freshETag = try #require(res.headers.first(name: .eTag))
+                    #expect(freshETag != preDeadlineETag)
+                    let body = try self.decodeCollection(from: res.body)
+                    #expect(body.outcomes.contains { $0.tier == .release })
+                })
         }
     }
 }

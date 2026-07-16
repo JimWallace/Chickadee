@@ -29,6 +29,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(
         PeriodicSweepLifecycleHandler { $0.auditLogReaperMonitor(maxAge: auditLogMaxAge) }
     )
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.dataExportReaperMonitor })
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // One-time best-effort cleanup of pre-v0.4 notebook working-copy
@@ -69,8 +70,9 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
             app.logger.info(
                 "BrightSpace configured but not authorized — authorize at /admin/brightspace")
         }
-        app.lifecycle.use(BrightSpaceGradeSyncLifecycleHandler())
+        app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.brightSpaceGradeSyncMonitor })
         app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnRosterReadinessMonitor })
+        app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.learnSectionSyncMonitor })
     }
 
     if appConfig.auth.mode != .local {

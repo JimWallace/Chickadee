@@ -5,14 +5,17 @@ Submission #(submissionID)
 #export("content"):
 <style>
 .class-goals-block { margin: 1rem 0; }
-.class-goals-heading { font-size: 1.1rem; margin: 0 0 0.5rem; }
+.class-goals-heading { font-size: var(--text-lg); margin: 0 0 0.5rem; }
 .class-goal { margin: 0.5rem 0; }
 .class-goal-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
 .class-goal-name { font-weight: 600; }
 .class-goal-reward { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .class-goal-progress { width: 100%; height: 0.6rem; }
-.class-goal-status { font-size: 0.85rem; margin-top: 0.15rem; }
-.class-goal-detail { font-size: 0.85rem; margin: 0.15rem 0 0; }
+.class-goal-status { font-size: var(--text-base); margin-top: 0.15rem; }
+.class-goal-detail { font-size: var(--text-base); margin: 0.15rem 0 0; }
+.reveal-token-banner { margin: 1rem 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); font-size: var(--text-base); }
+.reveal-token-offer { margin: 1rem 0; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); }
+.reveal-token-text { margin: 0 0 .5rem; font-size: var(--text-base); }
 </style>
 <div id="submission-root"
      data-submission-id="#(submissionID)"
@@ -96,6 +99,22 @@ Submission #(submissionID)
 </div>
 
 #else:
+#if(secretRevealActive):
+<div class="reveal-token-banner">
+    🔓 <strong>Secret tests revealed</strong> — you used your reveal token for this assignment, so hidden-test details are shown on all of your submissions.
+</div>
+#endif
+#if(secretRevealAvailable):
+<div class="reveal-token-offer">
+    <p class="reveal-token-text">You have <strong>one reveal token</strong> for this assignment. Spending it permanently shows the secret (hidden) test results — names, output, and hints — on all of your past and future submissions here.</p>
+    <form method="post" action="/testsetups/#(testSetupID)/reveal-secret"
+          onsubmit="return confirm('Use your one reveal token for this assignment? This permanently reveals the secret test results for all of your submissions on this assignment and cannot be undone.')">
+        #csrfFormField()
+        <input type="hidden" name="submissionID" value="#(submissionID)">
+        <button class="btn action-btn" type="submit">Reveal secret tests</button>
+    </form>
+</div>
+#endif
 #for(sec in sectionedOutcomes):
 <section class="submission-section-block">
     #if(sec.sectionName):

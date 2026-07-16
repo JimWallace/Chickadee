@@ -24,7 +24,7 @@ function defaultClassifyStub(name, source) {
   const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
   const byExt = { py: 'python', sh: 'sh', bash: 'bash', zsh: 'zsh', rb: 'ruby', pl: 'perl', js: 'node', php: 'php', r: 'rscript' };
   if (byExt[ext]) return byExt[ext];
-  const first = String(source || '').replace(/^[﻿\s]+/, '').split('\n', 1)[0] || '';
+  const first = String(source || '').replace(/^[\uFEFF\s]+/, '').split('\n', 1)[0] || '';
   if (first.startsWith('#!')) {
     const lo = first.toLowerCase();
     if (lo.includes('python')) return 'python';
@@ -852,7 +852,7 @@ test('timeouts and unsupported script types are surfaced in outcomes', async () 
     zipFiles: {
       'test_slow.py': '# slow\n',
       'test_shell.sh': 'echo hi\n',
-      'test_r.R': 'print(\"hi\")\n',
+      'test_r.R': 'print("hi")\n',
     },
     manifest: {
       gradingMode: 'browser',

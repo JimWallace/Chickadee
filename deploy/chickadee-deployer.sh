@@ -31,6 +31,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEPLOY_SCRIPT="${CHICKADEE_DEPLOY_SCRIPT:-$REPO_ROOT/scripts/bluegreen-deploy.sh}"
 SNAPSHOT_SCRIPT="${CHICKADEE_SNAPSHOT_SCRIPT:-$REPO_ROOT/scripts/snapshot.sh}"
 
+# Compose stack the runner service lives in. bluegreen-deploy.sh only swaps the
+# SERVER color containers; the Compose runner is left untouched, so we refresh it
+# here after a healthy swap (see refresh_runner). Same names bluegreen-deploy.sh
+# uses, so an operator override applies to both scripts.
+COMPOSE_DIR="${CHICKADEE_COMPOSE_DIR:-$REPO_ROOT}"
+COMPOSE_FILE="${CHICKADEE_COMPOSE_FILE:-$COMPOSE_DIR/docker-compose.yml}"
+
 STATE_DIR="${CHICKADEE_STATE_DIR:-/var/lib/chickadee-deploy}"
 PUBLIC_HEALTH_URL="${CHICKADEE_PUBLIC_HEALTH_URL:-https://chickadee.uwaterloo.ca/health}"
 
@@ -39,6 +46,8 @@ DEPLOY_GATE_LEVEL="${CHICKADEE_DEPLOY_GATE_LEVEL:-major}"     # major | minor
 SNAPSHOT_BEFORE_DEPLOY="${CHICKADEE_SNAPSHOT_BEFORE_DEPLOY:-1}"
 SNAPSHOT_REQUIRED="${CHICKADEE_SNAPSHOT_REQUIRED:-0}"
 POST_DEPLOY_VERIFY_SECS="${CHICKADEE_POST_DEPLOY_VERIFY_SECS:-30}"
+REFRESH_RUNNER="${CHICKADEE_REFRESH_RUNNER:-1}"
+RUNNER_SERVICE="${CHICKADEE_RUNNER_SERVICE:-runner}"
 
 STATUS_FILE="$STATE_DIR/status.json"
 HISTORY_FILE="$STATE_DIR/history.jsonl"
@@ -165,6 +174,47 @@ verify_post_deploy() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Refresh the Compose runner onto the just-deployed image.
+#
+# bluegreen-deploy.sh only swaps the SERVER color containers; by design it leaves
+# the Compose `runner` (and `db`) untouched. That is right for the stateful db,
+# but it strands the runner on whatever image it was last `compose up`'d with —
+# so it keeps grading on a stale build (a lagging runnerVersion on /admin/runners)
+# while the server advances release after release.
+#
+# The runner has no inbound traffic — it polls — so it needs a rolling restart,
+# not a blue-green cutover, and it should stay in lockstep with the server (they
+# share the Job / TestProperties / result schemas). We pull the same :latest the
+# swap just deployed and recreate only the runner (--no-deps leaves the fallback
+# server + db alone). A job interrupted by the brief restart is re-queued by the
+# server's StuckSubmissionReaperMonitor, and the fresh runner reconnects within a
+# poll interval.
+#
+# Best-effort: the server is already live and serving, so a runner-refresh hiccup
+# is logged but never fails or rolls back the deploy.
+# ---------------------------------------------------------------------------
+refresh_runner() {  # $1 = version tag (history label only)
+  local ver="$1"
+  [ "$REFRESH_RUNNER" = "1" ] || return 0
+
+  if [ ! -f "$COMPOSE_FILE" ]; then
+    log "runner refresh skipped: no compose file at $COMPOSE_FILE"
+    append_history "$ver" runner-refresh skipped "no compose file at $COMPOSE_FILE"
+    return 0
+  fi
+
+  log "refreshing Compose runner '$RUNNER_SERVICE' onto the new image..."
+  if docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_FILE" pull "$RUNNER_SERVICE" >/dev/null 2>&1 \
+     && docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_FILE" up -d --no-deps "$RUNNER_SERVICE" >/dev/null 2>&1; then
+    append_history "$ver" runner-refresh ok "runner '$RUNNER_SERVICE' recreated on new image"
+    log "runner refresh complete."
+  else
+    append_history "$ver" runner-refresh failed "compose pull/up failed; runner may be stale"
+    log "WARN: runner refresh failed; server is live but the runner may be on a stale image."
+  fi
+}
+
 do_deploy() {  # $1 = version tag
   local ver="$1"
   LATEST_SEEN="$ver"
@@ -198,6 +248,7 @@ do_deploy() {  # $1 = version tag
       DEPLOYED_VERSION="${running:-$(strip_v "$ver")}"
       printf '%s\n' "$DEPLOYED_VERSION" > "$DEPLOYED_VERSION_FILE"
       append_history "$ver" deploy success "running=$DEPLOYED_VERSION"
+      refresh_runner "$ver"
       write_status idle "deployed $DEPLOYED_VERSION (release $ver)"
       log "deploy complete; running version now $DEPLOYED_VERSION (target release $ver)"
       return 0

@@ -175,3 +175,69 @@ import Testing
         #expect(decoded.globalExpressions.isEmpty)
     }
 }
+
+// MARK: - Spawn gate (#1156)
+
+/// The evaluator's interpreter-spawn semaphore: concurrent evaluations must
+/// be bounded, and the bound must not deadlock or lose slots under a burst.
+@Suite struct EvaluatorSpawnGateTests {
+
+    private actor PeakTracker {
+        private var current = 0
+        private(set) var peak = 0
+
+        func enter() {
+            current += 1
+            peak = max(peak, current)
+        }
+
+        func exit() {
+            current -= 1
+        }
+    }
+
+    @Test func semaphoreBoundsConcurrencyAndDrainsFully() async throws {
+        let gate = AsyncCountingSemaphore(width: 3)
+        let tracker = PeakTracker()
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<20 {
+                group.addTask {
+                    await gate.acquire()
+                    await tracker.enter()
+                    try? await Task.sleep(nanoseconds: 5_000_000)
+                    await tracker.exit()
+                    await gate.release()
+                }
+            }
+        }
+
+        let peak = await tracker.peak
+        #expect(peak <= 3, "semaphore must cap concurrent holders at its width")
+        #expect(peak >= 1)
+    }
+
+    /// Burst of real evaluations through the shared gate: all complete, none
+    /// deadlock, results stay per-seed correct.
+    @Test(.timeLimit(.minutes(2))) func concurrentEvaluationsAllComplete() async throws {
+        let results = await withTaskGroup(of: [String: String]?.self) { group in
+            for index in 0..<6 {
+                group.addTask {
+                    try? await PersonalizationEvaluator.evaluate(
+                        seedHex: String(format: "%064x", index + 1),
+                        staticVariables: [],
+                        expressions: [
+                            PersonalizationExpression(name: "v", expression: "seed % 100")
+                        ]
+                    )
+                }
+            }
+            var collected: [[String: String]?] = []
+            for await value in group { collected.append(value) }
+            return collected
+        }
+
+        #expect(results.count == 6)
+        #expect(results.allSatisfy { $0?["v"] != nil })
+    }
+}

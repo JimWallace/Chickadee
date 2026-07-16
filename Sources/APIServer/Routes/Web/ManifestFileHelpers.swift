@@ -100,7 +100,11 @@ func updateManifestAddingScript(
         notebookChecks: props.notebookChecks,
         sections: props.sections,
         globalVariables: props.globalVariables,
-        globalExpressions: props.globalExpressions
+        globalExpressions: props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
+        datasets: props.datasets
     )
 }
 
@@ -145,7 +149,11 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         notebookChecks: props.notebookChecks,
         sections: props.sections,
         globalVariables: props.globalVariables,
-        globalExpressions: props.globalExpressions
+        globalExpressions: props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
+        datasets: props.datasets
     )
 }
 
@@ -162,7 +170,8 @@ func makeWorkerManifestJSON(
     globalExpressions: [PersonalizationExpression] = [],
     achievements: [Achievement] = [],
     disabledBuiltInAwardIDs: [String] = [],
-    builtInAchievementsSeeded: Bool = false
+    builtInAchievementsSeeded: Bool = false,
+    datasets: [DatasetSpec] = []
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -202,6 +211,9 @@ func makeWorkerManifestJSON(
     // Slice 2 — assignment-scope expressions (notebook only). Each
     // entry is `{ name, expression }`.
     try spliceEncodedArray(into: &manifest, key: "globalExpressions", values: globalExpressions)
+    // Phase 1 dataset specs (authoring-side only; `runnerSanitized()` strips them
+    // before sending to the runner so older workers aren't affected).
+    try spliceEncodedArray(into: &manifest, key: "datasets", values: datasets)
     // Display/award-only fields (server-side; `runnerSanitized()` strips them).
     // Spliced here so a suite rebuild doesn't wipe authored achievements or the
     // instructor's built-in-award toggles — `makeWorkerManifestJSON` builds a

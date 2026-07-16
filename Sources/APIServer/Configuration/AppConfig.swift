@@ -68,7 +68,10 @@ struct AppConfig: Sendable {
     /// replaced with `[redacted]`. Use the grep guardrail in CI to keep this
     /// honest.
     func logSummary(to logger: Logger) {
-        logger.info("AppConfig loaded — auth=\(auth.mode.rawValue), database=\(database.backend.rawValue)")
+        let poolDescription = database.maxConnectionsPerEventLoop.map(String.init) ?? "default"
+        logger.info(
+            "AppConfig loaded — auth=\(auth.mode.rawValue), database=\(database.backend.rawValue), dbPoolPerLoop=\(poolDescription)"
+        )
         if security.publicBaseURL != nil || security.enforceHTTPS {
             logger.info(
                 "security: publicBaseURL=\(security.publicBaseURL?.absoluteString ?? "(unset)"), enforceHTTPS=\(security.enforceHTTPS), trustForwardedProto=\(security.trustForwardedProto), sessionCookieSecure=\(security.sessionCookieSecure)"
@@ -110,7 +113,7 @@ struct AppConfig: Sendable {
             )
         }
         logger.info(
-            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots/audit/submissions)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d/\(diagnostics.auditLogRetentionDays)d/\(diagnostics.submissionRetentionDays)d"
+            "diagnostics: enabled=\(diagnostics.enabled), verbose=\(diagnostics.verboseRequestTiming), retention(jobs/snapshots/audit/submissions)=\(diagnostics.jobMetricRetentionDays)d/\(diagnostics.runnerSnapshotRetentionDays)d/\(diagnostics.auditLogRetentionDays)d/\(diagnostics.submissionRetentionDays)d, deployStateDir=\(diagnostics.deployStateDirectory)"
         )
         if alerts.enabled {
             logger.info(
@@ -211,7 +214,8 @@ extension AppConfig {
                 recentMetricsWindowHours: 24,
                 pruneIntervalHours: 24,
                 auditLogRetentionDays: 90,
-                submissionRetentionDays: 365
+                submissionRetentionDays: 365,
+                deployStateDirectory: "/deploy-state"
             ),
             alerts: .default,
             outboundProxy: nil,

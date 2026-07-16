@@ -33,7 +33,7 @@ extension DraftAssignmentRoutes {
 
     @Sendable
     func getDraftSuite(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
+        let setup = try await loadDraftSetupForRead(req)
         let payload = buildSuitePayload(fromManifest: setup.manifest, zipPath: setup.zipPath)
         return try await payload.encodeResponse(for: req)
     }
@@ -46,7 +46,7 @@ extension DraftAssignmentRoutes {
 
     @Sendable
     func putDraftSuite(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
+        let setup = try await loadDraftSetupForWrite(req)
 
         let body: SuitePayload
         do { body = try req.content.decode(SuitePayload.self) } catch {
@@ -70,7 +70,7 @@ extension DraftAssignmentRoutes {
 
     @Sendable
     func createDraftScript(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
+        let setup = try await loadDraftSetupForWrite(req)
         let body = try req.content.decode(CreateScriptBody.self)
         let result = try await createScriptInSetup(setup: setup, body: body, on: req.db)
 
@@ -97,7 +97,7 @@ extension DraftAssignmentRoutes {
 
     @Sendable
     func deleteDraftScript(req: Request) async throws -> HTTPStatus {
-        let setup = try await loadDraftSetup(req)
+        let setup = try await loadDraftSetupForWrite(req)
         let filename = try safeScriptFilename(from: req)
         try await deleteScriptFromSetup(setup: setup, filename: filename, on: req.db)
         return .noContent
@@ -113,7 +113,7 @@ extension DraftAssignmentRoutes {
 
     @Sendable
     func downloadDraftSetupItem(req: Request) async throws -> Response {
-        let setup = try await loadDraftSetup(req)
+        let setup = try await loadDraftSetupForRead(req)
 
         struct FileQuery: Content { let name: String }
         let q = try req.query.decode(FileQuery.self)

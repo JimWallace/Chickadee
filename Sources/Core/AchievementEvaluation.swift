@@ -16,19 +16,29 @@ public struct AchievementSignals: Sendable {
     /// Grade percent of the immediately preceding attempt; nil on the first.
     public var priorGradePercent: Int?
     public var outcomes: [TestOutcome]
+    /// Alias map for `testPass` refs: for each outcome `testName` (as stamped
+    /// by the runner — display name, else filename stem), every name that
+    /// outcome answers to (its script filename, stem, and display name).
+    /// Derive it from the manifest via `TestProperties.testNameAliases()`.
+    /// Without it, a ref still matches an outcome's `testName` directly or by
+    /// its own extension-stripped stem, so filename-authored refs resolve for
+    /// scripts that have no display name even at alias-less call sites.
+    public var testNameAliases: [String: Set<String>]
 
     public init(
         gradePercent: Int,
         attemptNumber: Int? = nil,
         executionTimeMs: Int? = nil,
         priorGradePercent: Int? = nil,
-        outcomes: [TestOutcome] = []
+        outcomes: [TestOutcome] = [],
+        testNameAliases: [String: Set<String>] = [:]
     ) {
         self.gradePercent = gradePercent
         self.attemptNumber = attemptNumber
         self.executionTimeMs = executionTimeMs
         self.priorGradePercent = priorGradePercent
         self.outcomes = outcomes
+        self.testNameAliases = testNameAliases
     }
 }
 
@@ -49,7 +59,17 @@ extension AchievementCondition {
             return compare(Double(signals.gradePercent - prior))
         case .testPass:
             guard let ref = target?.ref else { return false }
-            return signals.outcomes.contains { $0.testName == ref && $0.status == .pass }
+            // Refs are authored as script filenames (the documented contract)
+            // but runner outcomes carry the display name, else the filename
+            // stem (`runnerOutcomeTestName`) — so match the ref against the
+            // outcome name, the ref's own stem, and the manifest-derived
+            // aliases (filename / stem / display name) for that outcome.
+            return signals.outcomes.contains { outcome in
+                guard outcome.status == .pass else { return false }
+                if outcome.testName == ref { return true }
+                if runnerScriptStem(ref) == outcome.testName { return true }
+                return signals.testNameAliases[outcome.testName]?.contains(ref) ?? false
+            }
         }
     }
 
@@ -115,5 +135,45 @@ extension Achievement {
     /// against.  nil when the achievement has no grade condition.
     public var gradeThresholdFraction: Double? {
         conditions.first { $0.signal == .grade }.map { $0.value / 100 }
+    }
+
+    /// Whether the class-goal sweep can evaluate this achievement's conditions
+    /// as authored.  The sweep counts students by their best whole-assignment
+    /// grade, so it supports exactly: no conditions (grade must be 100%), or a
+    /// single `grade` condition with the `atLeast` comparator.  Anything richer
+    /// (other signals, `atMost`/`equals`, multiple conditions) would be
+    /// silently mis-evaluated — authoring rejects those shapes for classWide
+    /// scope, and the sweep skips (and logs) any that reach it from a
+    /// hand-authored manifest.
+    public var isSweepEvaluableClassGoal: Bool {
+        guard isClassGoal else { return false }
+        if conditions.isEmpty { return true }
+        guard conditions.count == 1, let condition = conditions.first else { return false }
+        return condition.signal == .grade && condition.comparator == .atLeast
+    }
+}
+
+extension TestProperties {
+    /// Alias map for achievement `testPass` matching: for every suite entry
+    /// (hand-written or generated), keys the runner-stamped outcome name
+    /// (`runnerOutcomeTestName` — display name, else filename stem) to the full
+    /// set of names that entry answers to: its script filename, the filename's
+    /// stem, and its display name.  Feed to `AchievementSignals` so a ref
+    /// authored as any of those forms resolves against real runner outcomes.
+    public func testNameAliases() -> [String: Set<String>] {
+        var map: [String: Set<String>] = [:]
+        for entry in testSuites {
+            let outcomeName = runnerOutcomeTestName(displayName: entry.name, script: entry.script)
+            var names: Set<String> = [entry.script, runnerScriptStem(entry.script), outcomeName]
+            if let display = entry.name { names.insert(display) }
+            map[outcomeName, default: []].formUnion(names)
+        }
+        return map
+    }
+
+    /// Every name a `testPass` ref may legally use for this suite — the union
+    /// of `testNameAliases()` values.  Used by author-time validation.
+    public var allTestRefNames: Set<String> {
+        testNameAliases().values.reduce(into: Set<String>()) { $0.formUnion($1) }
     }
 }

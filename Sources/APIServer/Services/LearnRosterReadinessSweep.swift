@@ -44,7 +44,7 @@ func reconcileCourseReadiness(
     guard let courseID = course.id else { return RosterReadinessOutcome() }
 
     let classlist = try await client.fetchClasslist(orgUnitID: orgUnitID, on: application)
-    let learnIdentities = LearnRosterReconciler.identitySet(from: classlist)
+    let learnIdentities = BrightSpaceIdentityIndex(classlist: classlist)
 
     let enrollments = try await APICourseEnrollment.query(on: db)
         .filter(\.$course.$id == courseID)
@@ -53,9 +53,10 @@ func reconcileCourseReadiness(
     guard !studentEnrollments.isEmpty else { return RosterReadinessOutcome() }
 
     let userIDs = studentEnrollments.map(\.userID)
+    // `userIDs` already come from `.student`-role enrollments (#417 Slice G2),
+    // so no global-role filter is needed — teaching staff are excluded upstream.
     let users = try await APIUser.query(on: db)
         .filter(\.$id ~~ userIDs)
-        .filter(\.$role == UserRole.student.rawValue)
         .all()
     var userByID: [UUID: APIUser] = [:]
     for user in users {
@@ -94,7 +95,7 @@ func reconcileCourseReadiness(
 /// Maps the pure reconciler's classification onto the persisted readiness +
 /// a human-readable reason for the instructor.
 private func readinessFor(
-    studentID: String, username: String, learnIdentities: Set<String>
+    studentID: String, username: String, learnIdentities: BrightSpaceIdentityIndex
 ) -> (LearnSyncReadiness, String?) {
     switch LearnRosterReconciler.classify(
         candidateKeys: [studentID, username],

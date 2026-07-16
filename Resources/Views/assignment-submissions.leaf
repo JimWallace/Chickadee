@@ -36,7 +36,7 @@
         <tr>
             <td>#(row.surname)</td>
             <td>#(row.givenNames)</td>
-            <td class="col-hide-phone"><strong>#(row.studentID)</strong></td>
+            <td class="col-hide-phone"><strong>#(row.studentID)</strong>#if(secretRevealEnabled):#if(row.secretRevealSpent): <span title="Student spent their secret-reveal token — secret test results are visible to them">🔓</span>#endif#endif</td>
             <td>#(row.gradeText)#if(row.gradeIsOverridden):<span class="grade-override-tag" title="Grade manually overridden by an instructor">overridden</span>#endif</td>
             <td class="col-hide-phone" data-ts="#(row.latestSubmittedAtEpoch)">
                 #if(row.submissionCount > 0):
@@ -95,6 +95,16 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                         </button>
                     </form>
+                    #if(secretRevealEnabled):#if(row.secretRevealSpent):
+                    <form method="post" action="/instructor/#(assignmentID)/students/#(row.studentUUID)/regrant-reveal-token" onsubmit="return confirm('Re-grant this student’s secret-reveal token? Secret test results will be hidden from them again until they spend it.')" class="form-flush">
+                        #csrfFormField()
+                        <input type="hidden" name="returnTo" value="/instructor/#(assignmentID)/submissions">
+                        <button class="btn action-btn action-btn-tight" type="submit"
+                                aria-label="Re-grant secret-reveal token" title="Re-grant secret-reveal token (student spent theirs)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                        </button>
+                    </form>
+                    #endif#endif
                 </div>
             </td>
         </tr>
@@ -126,7 +136,7 @@
 #assignment-submissions-table th[data-sort-key]::after {
     content: "  ⇅";
     color: var(--gray-500);
-    font-size: .75rem;
+    font-size: var(--text-xs);
 }
 #assignment-submissions-table th[data-sort-key].sort-asc::after {
     content: "  ↑";

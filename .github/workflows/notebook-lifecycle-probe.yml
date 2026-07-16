@@ -53,29 +53,11 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - uses: ./.github/actions/restore-git-mtimes
-
-      - name: Resolve toolchain cache key
-        id: toolchain
-        run: echo "key=$(swift --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore build artifacts
-        uses: actions/cache/restore@v5
+      # Shared scaffold: mtime normalisation, build-cache restore, server
+      # build, Node + Playwright install (engine download cached).
+      - uses: ./.github/actions/browser-probe-setup
         with:
-          path: .build
-          key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
-
-      - name: Build chickadee-server
-        run: swift build --product chickadee-server
-
-      - name: Install Node, Playwright and the ${{ matrix.browser }} engine
-        working-directory: Tools/editor-smoke-test
-        run: |
-          set -eux
-          apt-get update -qq
-          apt-get install -y --no-install-recommends nodejs npm curl ca-certificates
-          npm ci
-          npx playwright install --with-deps ${{ matrix.browser }}
+          browser: ${{ matrix.browser }}
 
       - name: Drive notebook lifecycle (${{ matrix.browser }})
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.browser == 'both' || github.event.inputs.browser == matrix.browser }}

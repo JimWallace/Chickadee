@@ -40,6 +40,7 @@ func routes(_ app: Application) throws {
     try auth.register(collection: WebRoutes())
     try auth.register(collection: EnrollmentRoutes())
     try auth.register(collection: AccountRoutes())
+    try auth.register(collection: AccountExportRoutes())
     try auth.register(collection: SubmissionDownloadRoute())
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())
@@ -57,7 +58,7 @@ func routes(_ app: Application) throws {
     // Per-course instructor authority (Phase 4b): admits admins, or a user who
     // is an instructor in their active course — not the bare global role.
     let instructor = app.grouped(
-        sessionAuth, ActiveCourseInstructorMiddleware(), NavCourseContextMiddleware(), csrf)
+        sessionAuth, ActiveCourseStaffMiddleware(), NavCourseContextMiddleware(), csrf)
     try instructor.register(collection: InstructorDashboardRoutes())
     try instructor.register(collection: DraftAssignmentRoutes())
     try instructor.register(collection: PublishedAssignmentRoutes())

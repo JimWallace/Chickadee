@@ -69,13 +69,13 @@ struct CloneAssignmentTool: ContentTool {
     static let outputSchema: JSONValue? = .object([
         "type": .string("object"),
         "properties": .object([
-            "publicID": .object(["type": .string("string")]),
-            "title": .object(["type": .string("string")]),
-            "slug": .object(["type": .string("string")]),
-            "courseCode": .object(["type": .string("string")]),
-            "sourceAssignmentPublicID": .object(["type": .string("string")]),
-            "isOpen": .object(["type": .string("boolean")]),
-            "validationStatus": .object(["type": .string("string")]),
+            "publicID": MCPSchema.string,
+            "title": MCPSchema.string,
+            "slug": MCPSchema.string,
+            "courseCode": MCPSchema.string,
+            "sourceAssignmentPublicID": MCPSchema.string,
+            "isOpen": MCPSchema.boolean,
+            "validationStatus": MCPSchema.string,
         ]),
         "required": .array([
             .string("publicID"), .string("title"), .string("slug"), .string("courseCode"),
@@ -113,11 +113,17 @@ struct CloneAssignmentTool: ContentTool {
                     tool: Self.name, detail: "No course found with code \"\(code)\".")
             }
             targetCourseID = try target.requireID()
-            // Must be authorized for the destination course too.
-            try await context.authorizeCourseAccess(targetCourseID, tool: Self.name)
         } else {
             targetCourseID = source.courseID
         }
+        // The clone WRITES a new assignment into the target course, so block an
+        // archived destination (covers both the explicit-target and
+        // default-to-source branches). The source stays read-authorized above —
+        // reviving an archived course's content into a live course is fine; only
+        // the destination is write-gated (#417 Slice D-MCP).
+        // Creating an assignment (clone) into the destination is instructor-level (#417).
+        try await context.authorizeCourseWriteAccess(
+            targetCourseID, tool: Self.name, atLeast: .instructor)
 
         let cloned: AuthoredAssignment
         do {

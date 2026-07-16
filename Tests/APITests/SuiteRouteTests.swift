@@ -88,6 +88,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             try await app.asyncTest(
                 .GET, "/instructor/\(id)/suite",
                 beforeRequest: { req in
@@ -108,6 +109,7 @@ import VaporTesting
                 ("publictest_second.py", "passed('2')\n"),
             ])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             try await app.asyncTest(
                 .GET, "/instructor/\(id)/suite",
                 beforeRequest: { req in
@@ -133,6 +135,7 @@ import VaporTesting
                 ("publictest_b.py", "passed('b')\n"),
             ])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             let body = #"""
@@ -177,6 +180,7 @@ import VaporTesting
                 ("publictest_existing.py", "passed('existing body')\n")
             ])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             // Keep the existing script (no content → preserved) and add a
@@ -222,6 +226,7 @@ import VaporTesting
                 ("publictest_a.py", "passed('original body')\n")
             ])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             let body = #"""
@@ -264,6 +269,7 @@ import VaporTesting
                 ("publictest_a.py", "passed('body a')\n")
             ])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             let withHint = #"""
@@ -322,6 +328,7 @@ import VaporTesting
                 ("publictest_followup.py", "passed('ok')\n")
             ])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             // Add a family + a raw script that depends on it.
@@ -385,6 +392,7 @@ import VaporTesting
                 ("publictest_followup.py", "passed('ok')\n")
             ])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             // Add + then remove a family, with a script that had depended on it.
@@ -440,6 +448,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
             let body = #"""
                 {"items":[
@@ -489,6 +498,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             let body = #"""
@@ -546,6 +556,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
             let body = #"""
                 {"items":[
@@ -591,6 +602,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
             let body = #"""
                 {"items":[
@@ -632,6 +644,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             // Step 1: install a notebook check through PUT /suite (the
@@ -717,6 +730,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             // Install a check through PUT /suite (PUT /checks retired v0.4.227).
@@ -773,6 +787,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let id = try await makeAssignment(withScripts: [])
             let cookie = try await loginUser(username: "inst", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("inst", on: app)
             let (csrf, sessionCookie) = try await csrfPair(for: id, cookie: cookie)
 
             let installBody = #"""

@@ -87,16 +87,16 @@ struct AuthRoutes: RouteCollection {
 
         let body = try req.content.decode(LoginBody.self)
         let rateConfig = req.application.loginRateLimitConfiguration
-        let attemptStore = req.application.loginAttemptStore
         let usernameKey = body.username.lowercased()
         let now = Date()
 
         if rateConfig.enabled {
-            let locked = await attemptStore.isLocked(
+            let locked = try await LoginAttemptService.isLocked(
                 username: usernameKey,
                 now: now,
                 windowSeconds: rateConfig.lockoutWindowSeconds,
-                threshold: rateConfig.lockoutThreshold
+                threshold: rateConfig.lockoutThreshold,
+                on: req.db
             )
             if locked {
                 req.logger.warning("Login locked for user '\(usernameKey)' (too many failures)")
@@ -119,10 +119,11 @@ struct AuthRoutes: RouteCollection {
             )
         else {
             if rateConfig.enabled {
-                await attemptStore.recordFailure(
+                try await LoginAttemptService.recordFailure(
                     username: usernameKey,
                     now: now,
-                    windowSeconds: rateConfig.lockoutWindowSeconds
+                    windowSeconds: rateConfig.lockoutWindowSeconds,
+                    on: req.db
                 )
             }
             await AuditLogger.record(
@@ -136,7 +137,7 @@ struct AuthRoutes: RouteCollection {
         }
 
         if rateConfig.enabled {
-            await attemptStore.clearFailures(username: usernameKey)
+            try await LoginAttemptService.clearFailures(username: usernameKey, on: req.db)
         }
         user.lastLoginAt = now
         user.lastSeenAt = now
@@ -207,7 +208,7 @@ struct AuthRoutes: RouteCollection {
         // Note: two truly-simultaneous first registrations could both see count == 0.
         // This is acceptable for a single-server classroom deployment.
         let totalUsers = try await APIUser.query(on: req.db).count()
-        let role = totalUsers == 0 ? UserRole.admin.rawValue : UserRole.student.rawValue
+        let role = totalUsers == 0 ? UserRole.admin.rawValue : UserRole.user.rawValue
 
         let hash = try await req.password.async.hash(body.password)
         let user = APIUser(username: body.username, passwordHash: hash, role: role)

@@ -24,7 +24,13 @@ struct CourseBundleRoutes: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
         let admin = routes.grouped("admin")
         admin.get("courses", ":courseID", "export", use: exportCourse)
-        admin.post("courses", "import", use: importCourse)
+        admin.on(
+            .POST, "courses", "import",
+            // A real bundle is testsetup zips + every submission for the
+            // course; the 10 MB default made importing Chickadee's own
+            // exports impossible (#1158).
+            body: .collect(maxSize: "2gb"),
+            use: importCourse)
     }
 
     // MARK: - GET /admin/courses/:courseID/export
@@ -49,8 +55,26 @@ struct CourseBundleRoutes: RouteCollection {
         defer {
             try? FileManager.default.removeItem(at: stagingDir)
         }
-        try writeExportStaging(
-            stagingDir: stagingDir, manifest: manifest, data: data, logger: req.logger)
+        // Staging copies every setup zip + submission file — synchronous bulk
+        // file I/O, so run it on the thread pool (#1158). Primitives only in
+        // the closure: Fluent models aren't Sendable.
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let manifestData = try encoder.encode(manifest)
+        let setupCopies = data.testSetups.compactMap { setup in
+            setup.id.map { (id: $0, zipPath: setup.zipPath) }
+        }
+        let submissionPaths = data.submissions.map(\.zipPath)
+        let logger = req.logger
+        try await runBlocking(on: req) {
+            try writeExportStaging(
+                stagingDir: stagingDir,
+                manifestData: manifestData,
+                setupCopies: setupCopies,
+                submissionPaths: submissionPaths,
+                logger: logger)
+        }
 
         let dateStr = ISO8601DateFormatter().string(from: Date()).prefix(10)
         let safeCourseCode = course.code.replacingOccurrences(of: "/", with: "-")
@@ -58,10 +82,10 @@ struct CourseBundleRoutes: RouteCollection {
         let bundleZipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent(bundleName).path
 
-        defer {
-            try? FileManager.default.removeItem(atPath: bundleZipPath)
-        }
-
+        // No defer here: the response body streams AFTER this handler
+        // returns, so the temp zip must outlive the handler. streamExportZip
+        // deletes it in the stream's onCompleted hook; the catch below covers
+        // the paths where no stream ever starts.
         try await createZipArchive(sourceDir: stagingDir, outputPath: bundleZipPath)
 
         await AuditLogger.record(
@@ -71,7 +95,13 @@ struct CourseBundleRoutes: RouteCollection {
             metadata: ["course_code": course.code],
             on: req
         )
-        return try streamExportZip(bundleZipPath: bundleZipPath, bundleName: bundleName)
+        do {
+            return try await streamExportZip(
+                req: req, bundleZipPath: bundleZipPath, bundleName: bundleName)
+        } catch {
+            try? FileManager.default.removeItem(atPath: bundleZipPath)
+            throw error
+        }
     }
 
     // ── 1. Load all course data ────────────────────────────────────────
@@ -135,6 +165,10 @@ struct CourseBundleRoutes: RouteCollection {
                 .filter(\.$submissionID ~~ subIDs)
                 .all()
         }
+        // The bundle carries the full collection blob per result (#1173:
+        // it lives in the result_collections side table, not on the row).
+        let resultCollectionJSONByID = try await collectionJSONByResultID(
+            for: results.compactMap(\.id), on: db)
 
         return ExportData(
             testSetups: testSetups,
@@ -143,7 +177,8 @@ struct CourseBundleRoutes: RouteCollection {
             enrolledUserIDs: enrolledUserIDs,
             allUsers: Array(allUsers),
             submissions: submissions,
-            results: results
+            results: results,
+            resultCollectionJSONByID: resultCollectionJSONByID
         )
     }
 
@@ -261,10 +296,13 @@ struct CourseBundleRoutes: RouteCollection {
         }
 
         let bundledResults = data.results.compactMap { r -> BundledResult? in
-            guard let subBid = bundleIDs.subBundleIDByID[r.submissionID] else { return nil }
+            guard let subBid = bundleIDs.subBundleIDByID[r.submissionID],
+                let rid = r.id,
+                let collectionJSON = data.resultCollectionJSONByID[rid]
+            else { return nil }
             return BundledResult(
                 submissionBundleID: subBid,
-                collectionJSON: r.collectionJSON,
+                collectionJSON: collectionJSON,
                 source: r.source ?? "worker",
                 receivedAt: r.receivedAt
             )
@@ -289,65 +327,66 @@ struct CourseBundleRoutes: RouteCollection {
 
     // ── 4. Write staging directory ─────────────────────────────────────
 
-    private func writeExportStaging(
-        stagingDir: URL,
-        manifest: CourseBundleManifest,
-        data: ExportData,
-        logger: Logger
-    ) throws {
-        try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(
-            at: stagingDir.appendingPathComponent("testsetups"), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(
-            at: stagingDir.appendingPathComponent("submissions"), withIntermediateDirectories: true)
+    // ── 6. Stream the ZIP to the browser ──────────────────────────────
 
-        // Write bundle.json
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let manifestData = try encoder.encode(manifest)
-        try manifestData.write(to: stagingDir.appendingPathComponent("bundle.json"))
-
-        // Copy test setup zips
-        for setup in data.testSetups {
-            guard let sid = setup.id else { continue }
-            let src = URL(fileURLWithPath: setup.zipPath)
-            let dst = stagingDir.appendingPathComponent("testsetups/\(sid).zip")
-            if FileManager.default.fileExists(atPath: src.path) {
-                try FileManager.default.copyItem(at: src, to: dst)
-            } else {
-                logger.warning("Export: test setup zip missing at \(src.path), skipping")
-            }
+    private func streamExportZip(
+        req: Request, bundleZipPath: String, bundleName: String
+    ) async throws -> Response {
+        // Stream instead of buffering: a bundle holds every submission for
+        // the course and routinely runs to hundreds of MB — the old
+        // Data(contentsOf:) held all of it in heap per download (#1158).
+        // The file is opened lazily when the body streams (after the handler
+        // has returned), so the temp zip is deleted in onCompleted, not in a
+        // handler defer — a defer fires before the first byte is read.
+        let response = try await req.fileio.asyncStreamFile(at: bundleZipPath) { _ in
+            try? FileManager.default.removeItem(atPath: bundleZipPath)
         }
+        response.headers.replaceOrAdd(name: .contentType, value: "application/zip")
+        response.headers.replaceOrAdd(
+            name: .contentDisposition,
+            value: "attachment; filename=\"\(bundleName)\"")
+        return response
+    }
+}
 
-        // Copy submission files
-        for sub in data.submissions {
-            let src = URL(fileURLWithPath: sub.zipPath)
-            let onDiskName = src.lastPathComponent
-            let dst = stagingDir.appendingPathComponent("submissions/\(onDiskName)")
-            if FileManager.default.fileExists(atPath: src.path) {
-                try FileManager.default.copyItem(at: src, to: dst)
-            } else {
-                logger.warning("Export: submission file missing at \(src.path), skipping")
-            }
+// ── 4. Write staging directory ─────────────────────────────────────
+//
+// Free function over primitives so the export handler can run it on the
+// thread pool without capturing non-Sendable Fluent models (#1158).
+private func writeExportStaging(
+    stagingDir: URL,
+    manifestData: Data,
+    setupCopies: [(id: String, zipPath: String)],
+    submissionPaths: [String],
+    logger: Logger
+) throws {
+    try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+        at: stagingDir.appendingPathComponent("testsetups"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+        at: stagingDir.appendingPathComponent("submissions"), withIntermediateDirectories: true)
+
+    try manifestData.write(to: stagingDir.appendingPathComponent("bundle.json"))
+
+    for setup in setupCopies {
+        let src = URL(fileURLWithPath: setup.zipPath)
+        let dst = stagingDir.appendingPathComponent("testsetups/\(setup.id).zip")
+        if FileManager.default.fileExists(atPath: src.path) {
+            try FileManager.default.copyItem(at: src, to: dst)
+        } else {
+            logger.warning("Export: test setup zip missing at \(src.path), skipping")
         }
     }
 
-    // ── 6. Stream the ZIP to the browser ──────────────────────────────
-
-    private func streamExportZip(bundleZipPath: String, bundleName: String) throws -> Response {
-        guard let zipData = try? Data(contentsOf: URL(fileURLWithPath: bundleZipPath)) else {
-            throw AppError.internalFailure(reason: "Failed to read bundle ZIP")
+    for zipPath in submissionPaths {
+        let src = URL(fileURLWithPath: zipPath)
+        let onDiskName = src.lastPathComponent
+        let dst = stagingDir.appendingPathComponent("submissions/\(onDiskName)")
+        if FileManager.default.fileExists(atPath: src.path) {
+            try FileManager.default.copyItem(at: src, to: dst)
+        } else {
+            logger.warning("Export: submission file missing at \(src.path), skipping")
         }
-
-        var headers = HTTPHeaders()
-        headers.add(name: .contentType, value: "application/zip")
-        headers.add(
-            name: .contentDisposition,
-            value: "attachment; filename=\"\(bundleName)\"")
-        headers.add(name: .contentLength, value: "\(zipData.count)")
-
-        return Response(status: .ok, headers: headers, body: .init(data: zipData))
     }
 }
 
@@ -362,6 +401,8 @@ private struct ExportData {
     let allUsers: [APIUser]
     let submissions: [APISubmission]
     let results: [APIResult]
+    /// Collection blob per result id, batch-fetched from the side table.
+    let resultCollectionJSONByID: [String: String]
 }
 
 /// Maps from live DB ids to in-bundle synthetic identifiers used for cross-references.
