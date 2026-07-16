@@ -620,6 +620,46 @@ Full details, plus how to enable the optional merge queue, are in
 
 ---
 
+## Deployment & CI/CD (production)
+
+**Prod is full CI/CD with zero-downtime deploys — a green merge to `main`
+reaches production on its own.** The pipeline:
+
+1. Merge to `main` → `auto-release.yml` tags `vX.Y.Z` and `docker-build.yml`
+   publishes `ghcr.io/jimwallace/chickadee:latest` (the build does **not**
+   publish a per-release `:X.Y.Z` image tag — only `:latest` and
+   `:sha-<commit>`, because auto-release pushes the tag with `GITHUB_TOKEN`,
+   which by design can't trigger the tag build).
+2. A host-side daemon, **`chickadee-deployer`** (systemd;
+   `deploy/chickadee-deployer.sh`), polls GitHub Releases and **blue-green-deploys
+   each new release automatically** via `scripts/bluegreen-deploy.sh`: a new
+   "color" container boots beside the live one, is health-gated, then the host
+   nginx upstream is flipped to it (zero dropped requests), the old color is
+   drained and kept for instant rollback. Non-major bumps deploy unattended;
+   **major bumps are held for human approval** (SemVer gate). Each deploy is
+   snapshotted first and auto-rolls-back if the new version degrades after cutover.
+
+**Implication for working here:** once a change is merged and CI is green, you
+can **rely on it being deployed to prod** within ~10–15 min (image build + the
+daemon's poll). No SSH, no manual deploy step.
+
+**Verify a fix is live via the admin diagnostics MCP** (`Chickadee_Admin`,
+read-only): `get_deployment_info` (the running version — confirms your release
+shipped), `get_deploy_status` / `get_deploy_history` (the daemon's state + recent
+deploy/rollback events), and `list_runners` / `get_health_alerts` / `query_logs`
+/ `get_browser_diagnostics` to confirm the fix's *behaviour*. If a brand-new
+admin tool isn't visible, reconnect the MCP client to pick up the new catalog.
+
+**Deploy control is host-side, by design.** The admin-MCP deploy tools are
+strictly read-only; pause / approve-a-major / rollback are operator actions on
+the host (`systemctl`, or writing `command.json` in the deploy state dir). The
+app container never holds the Docker socket.
+
+Full design, runbook, and host steps:
+[docs/zero-downtime-deploy.md](docs/zero-downtime-deploy.md).
+
+---
+
 ## Current State
 
 All phases through 8 are complete:
@@ -1136,6 +1176,7 @@ Per-version detail in `CHANGELOG.md`; the arcs a fresh session should know:
 - `docs/architecture.md` — system architecture: targets, grading pipeline, auth, sandboxing, deployment
 - `docs/brightspace-setup.md` — BrightSpace grade-sync operator runbook: Valence credential handshake (`scripts/brightspace-valence-auth.py`), env wiring, org-unit/grade-item binding, end-to-end testing against `learntest`
 - `docs/operational-diagnostics.md` — observability tables, structured log events, metrics endpoint, ops runbook
+- `docs/zero-downtime-deploy.md` — production CI/CD: blue-green swap (`scripts/bluegreen-deploy.sh`), the `chickadee-deployer` auto-deploy daemon (GitHub-release SemVer gate, snapshot, auto-rollback), and the read-only admin-MCP deploy-oversight tools
 - `docs/runner-capability-profiles.md` — runner capability matching, assignment requirements, rollout rules
 - `docs/runner-wasm-migration.md` — plan to share one Swift grading core (RunnerCore) between the worker + browser runner via SwiftWasm; staging, the ScriptExecutor protocol, type-hoist
 - `docs/personalization-phase1.md` — per-(student, assignment) seed contract (`CHICKADEE_ASSIGNMENT_SEED`), worked hand-written example
