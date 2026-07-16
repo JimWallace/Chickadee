@@ -29,6 +29,7 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(
         PeriodicSweepLifecycleHandler { $0.auditLogReaperMonitor(maxAge: auditLogMaxAge) }
     )
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.dataExportReaperMonitor })
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // One-time best-effort cleanup of pre-v0.4 notebook working-copy

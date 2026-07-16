@@ -437,4 +437,9 @@ func registerMigrations(on app: Application) {
     // no migration full-queries APIAssignment, so ordering is unconstrained.
     app.migrations.add(AddAssignmentSecretRevealEnabled())
     app.migrations.add(CreateSecretRevealUnlocks())
+
+    // Personal-data export tracking (#557): one row per user, doubling as
+    // the one-export-per-day rate-limit ledger. FK to users; no ordering
+    // constraints beyond CreateUsers.
+    app.migrations.add(CreateDataExports())
 }

@@ -40,6 +40,7 @@ func routes(_ app: Application) throws {
     try auth.register(collection: WebRoutes())
     try auth.register(collection: EnrollmentRoutes())
     try auth.register(collection: AccountRoutes())
+    try auth.register(collection: AccountExportRoutes())
     try auth.register(collection: SubmissionDownloadRoute())
     try auth.register(collection: SubmissionQueryRoutes())
     try auth.register(collection: BrowserResultRoutes())
