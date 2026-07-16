@@ -410,7 +410,11 @@
     // and this can never false-hide a working editor (the reason armEditorWatchdog
     // is deliberately conservative). WebKit-only: never touches the
     // Chrome/Edge/Firefox SharedArrayBuffer path.
-    var SLOW_BOOT_NOTICE_MS = 25000;
+    // 35s (raised from 25s): production telemetry showed WebKit boots recovering
+    // as late as ~37s, so a 25s notice was firing on boots that then loaded fine.
+    // Non-blocking, so a slightly later notice only delays the *offer* of the
+    // upload fallback for the genuinely-stuck; the editor stays visible throughout.
+    var SLOW_BOOT_NOTICE_MS = 35000;
     var kernelEverReady = false;
     var slowBootNoticeTimer = null;
     var slowBootNoticeArmed = false;
