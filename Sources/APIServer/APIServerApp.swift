@@ -150,6 +150,9 @@ struct TestSetupsDirectoryKey: StorageKey {
 struct SubmissionsDirectoryKey: StorageKey {
     typealias Value = String
 }
+struct DataExportsDirectoryKey: StorageKey {
+    typealias Value = String
+}
 struct DeployStateDirectoryKey: StorageKey {
     typealias Value = String
 }
@@ -211,6 +214,13 @@ extension Application {
     var submissionsDirectory: String {
         get { storage[SubmissionsDirectoryKey.self] ?? "submissions/" }
         set { storage[SubmissionsDirectoryKey.self] = newValue }
+    }
+    /// Where generated personal-data export zips live (#557).  Contents are
+    /// bundled user PII: never served statically, only streamed through the
+    /// owner-gated download route, and reaped by `DataExportRetentionService`.
+    var dataExportsDirectory: String {
+        get { storage[DataExportsDirectoryKey.self] ?? "data-exports/" }
+        set { storage[DataExportsDirectoryKey.self] = newValue }
     }
     /// Directory holding the auto-deploy daemon's IPC files (status.json,
     /// history.jsonl), mounted read-only into the container. Read by the

@@ -101,6 +101,8 @@ enum AuditAction: String, Sendable, CaseIterable {
     case userProvisioned = "user.provisioned"
     case userRoleChanged = "user.role_changed"
     case userDeleted = "user.deleted"
+    case userDataExportRequested = "user.data_export_requested"
+    case userDataExportDownloaded = "user.data_export_downloaded"
 
     // Courses
     case courseCreated = "course.created"
@@ -168,7 +170,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         switch self {
         case .loginSuccess, .loginFailure, .loginLocked, .logout, .sessionIdleTimeout:
             return .authentication
-        case .userRegistered, .userProvisioned, .userRoleChanged, .userDeleted:
+        case .userRegistered, .userProvisioned, .userRoleChanged, .userDeleted,
+            .userDataExportRequested, .userDataExportDownloaded:
             return .users
         case .courseCreated, .courseArchived, .courseUnarchived, .courseDeleted,
             .courseBundleImported, .courseBundleExported:
@@ -208,6 +211,8 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .userProvisioned: return "Account provisioned (SSO)"
         case .userRoleChanged: return "Role changed"
         case .userDeleted: return "User deleted"
+        case .userDataExportRequested: return "Data export requested"
+        case .userDataExportDownloaded: return "Data export downloaded"
         case .courseCreated: return "Course created"
         case .courseArchived: return "Course archived"
         case .courseUnarchived: return "Course unarchived"
