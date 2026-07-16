@@ -234,6 +234,19 @@
     <div class="editor-block-head">
         <h2>Test Suite</h2>
         <div class="toolbar toolbar--end">
+            <!-- Assignment-wide default per-test time limit (#979).  Saved
+                 live via PUT /instructor/:id/time-limit (the web twin of the
+                 set_time_limit MCP tool) — no close, no re-validation, no
+                 retest.  Individual tests override it in the test editor. -->
+            <label class="suite-default-limit-label" for="suite-default-time-limit">
+                Default time limit
+                <input class="form-input input-compact suite-default-limit-input"
+                       type="number" min="1" max="600" step="1"
+                       id="suite-default-time-limit" value="#(timeLimitSeconds)"
+                       title="Seconds each test may run before it is killed and recorded as a timeout. Individual tests can override this in the test editor.">
+                s
+                <span id="suite-default-limit-status" class="upload-status-inline"></span>
+            </label>
             <!-- Add Section — form POST + full page reload.  Mirrors the
                  dashboard pattern (Resources/Views/assignments.leaf:29-51)
                  so section CRUD doesn't ride the fragile whole-state
@@ -837,6 +850,8 @@ function checkUWDates(dateTimeValue, warningEl) {
 <style>
 .bs-assess-row { display: flex; gap: .4rem; align-items: center; }
 .bs-assess-row input[type="text"] { flex: 1; }
+.suite-default-limit-label { display: inline-flex; align-items: center; gap: .3rem; font-size: var(--text-sm); color: var(--gray-500); }
+.suite-default-limit-input { width: 4.5rem; }
 </style>
 <script>
 (function () {

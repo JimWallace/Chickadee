@@ -65,6 +65,12 @@ struct TestSuiteSectionDTO: Content {
     var name: String
 }
 
+/// Request and response body for `PUT /instructor/:assignmentID/time-limit`
+/// (the assignment-wide default per-test execution limit, in seconds).
+struct TimeLimitPayload: Content {
+    var seconds: Int
+}
+
 struct SuitePayload: Content {
     var items: [SuiteItemDTO]
     /// Ordered list of sections.  Clients predating v0.4.96 may omit

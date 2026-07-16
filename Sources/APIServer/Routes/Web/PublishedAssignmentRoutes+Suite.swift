@@ -72,6 +72,38 @@ extension PublishedAssignmentRoutes {
         return try await payload.encodeResponse(for: req)
     }
 
+    // MARK: - PUT /instructor/:assignmentID/time-limit
+
+    /// Sets the assignment-wide default per-test execution time limit — the
+    /// web twin of the `set_time_limit` MCP tool, sharing its manifest helper
+    /// and accepted range. Like that tool this is a grading-environment knob,
+    /// not a change to what the tests check, so it deliberately does NOT
+    /// close the assignment, re-run validation, or retest submissions
+    /// (contrast `putSuite`). Per-test overrides ride the suite payload's
+    /// `timeLimitSeconds` entry field instead.
+    @Sendable
+    func putTimeLimit(req: Request) async throws -> Response {
+        let (_, setup) = try await loadAssignmentAndSetupForWrite(req, atLeast: .ta)
+
+        let body: TimeLimitPayload
+        do { body = try req.content.decode(TimeLimitPayload.self) } catch {
+            throw WebAssignmentError.invalidParameter(
+                name: "request body",
+                reason: "Invalid time-limit payload: \(error.localizedDescription)")
+        }
+        guard mcpTimeLimitRange.contains(body.seconds) else {
+            throw WebAssignmentError.invalidParameter(
+                name: "seconds",
+                reason:
+                    "seconds must be an integer between \(mcpTimeLimitRange.lowerBound) and "
+                    + "\(mcpTimeLimitRange.upperBound) (got \(body.seconds)).")
+        }
+
+        let effective = try await setManifestTimeLimitSeconds(
+            setup: setup, to: body.seconds, on: req.db)
+        return try await TimeLimitPayload(seconds: effective).encodeResponse(for: req)
+    }
+
 }
 
 // MARK: - Reconstitution (file-scope so other routes can reuse it)
