@@ -401,13 +401,18 @@ extension InstructorDashboardRoutes {
         if let courseUUID = courseState.activeCourseUUID {
             try await requeueErroredGradePushes(req: req, courseUUID: courseUUID)
         }
-        await runImmediateBrightspaceSweep(req: req)
+        // The requeue above is fast local writes; the sweep itself is one
+        // sequential D2L PUT per student, so it runs detached instead of
+        // holding this request open (a large class risks a proxy timeout).
+        launchBackgroundBrightspaceSweep(req.application)
         await AuditLogger.record(
             action: .brightspaceSyncNow,
             targetType: .course,
             targetID: courseState.activeCourseUUID?.uuidString,
             on: req
         )
+        req.session.data["bs_flash_success"] =
+            "Grade sync started — pending grades are pushing to LEARN in the background."
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -521,7 +526,9 @@ extension InstructorDashboardRoutes {
             .filter(\.$testSetupID == assignment.testSetupID)
             .all()
         try await requeueForImmediateSync(overrides, on: req.db)
-        await runImmediateBrightspaceSweep(req: req)
+        // Requeues above are fast local writes; the per-student D2L pushes run
+        // detached so a large class can't hold this request to a proxy timeout.
+        launchBackgroundBrightspaceSweep(req.application)
         await AuditLogger.record(
             action: .brightspacePushAll,
             targetType: .assignment,
@@ -533,6 +540,8 @@ extension InstructorDashboardRoutes {
             ],
             on: req
         )
+        req.session.data["bs_flash_success"] =
+            "Queued every grade for “\(assignment.title)” — they're pushing to LEARN in the background."
         return req.redirect(to: "/instructor/brightspace")
     }
 
@@ -560,27 +569,38 @@ extension InstructorDashboardRoutes {
         return Array(Set(setupIDs))
     }
 
-    /// Runs a grade-sync sweep immediately, bypassing the debounce window so
-    /// a manual "Sync now" click pushes everything currently pending.  No-op
-    /// when BrightSpace isn't configured.
-    private func runImmediateBrightspaceSweep(req: Request) async {
-        guard let app = req.application.brightSpaceAppCredentials else { return }
-        let debounce = req.application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
-        // Bypass the debounce so every pending row pushes immediately. Each
-        // course resolves its designated identity (or the fallback). Failures
-        // are recorded per-row by the sweep itself; a sweep-level throw is
-        // logged (it used to be silently swallowed, #1117).
-        do {
-            _ = try await sweepBrightSpaceGradeSync(
-                on: req.db,
-                debounceSecs: debounce,
-                resolveClient: { course in try await req.application.brightSpaceClient(forCourse: course) },
-                logger: req.logger,
-                application: req.application,
-                bypassDebounce: true
-            )
-        } catch {
-            req.logger.warning("Manual BrightSpace sweep failed: \(error)")
+    /// Kicks off a grade-sync sweep in a detached background task and returns
+    /// immediately, so a manual "Sync now" / "Push all" click never holds the
+    /// HTTP request open for the duration of every D2L push — a large class is
+    /// dozens of sequential round-trips, which would otherwise risk a
+    /// reverse-proxy timeout and leave the instructor staring at a spinner.
+    /// The rows are already flagged pending by the caller (a fast local
+    /// write), so even if this task dies the 60-second periodic monitor picks
+    /// them up. Uses `application.db` (NOT `req.db`, which is request-scoped)
+    /// since the task outlives the request, and bypasses the debounce so every
+    /// pending row pushes immediately. Failures are recorded per-row by the
+    /// sweep itself; a sweep-level throw is logged (it used to be silently
+    /// swallowed, #1117). No-op when BrightSpace isn't configured.
+    private func launchBackgroundBrightspaceSweep(_ application: Application) {
+        guard let app = application.brightSpaceAppCredentials else { return }
+        let debounce = application.brightSpaceSyncConfig?.debounceSecs ?? app.debounceSecs
+        Task {
+            // Each course resolves its designated identity (or the fallback).
+            do {
+                _ = try await sweepBrightSpaceGradeSync(
+                    on: application.db,
+                    debounceSecs: debounce,
+                    resolveClient: { course in
+                        try await application.brightSpaceClient(forCourse: course)
+                    },
+                    logger: application.logger,
+                    application: application,
+                    bypassDebounce: true
+                )
+            } catch {
+                application.logger.warning(
+                    "BrightSpace background sweep failed: \(error)")
+            }
         }
     }
 
