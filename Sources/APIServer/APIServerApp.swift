@@ -130,7 +130,8 @@ private func resolveAppConfig(
                 diagnostics: preloaded.diagnostics,
                 alerts: preloaded.alerts,
                 outboundProxy: preloaded.outboundProxy,
-                mcp: preloaded.mcp
+                mcp: preloaded.mcp,
+                uwDates: preloaded.uwDates
             )
         } ?? preloaded
     }

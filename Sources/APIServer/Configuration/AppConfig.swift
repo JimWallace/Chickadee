@@ -27,6 +27,9 @@ struct AppConfig: Sendable {
     let alerts: ServerHealthAlertConfiguration
     let outboundProxy: OutboundProxyConfig?
     let mcp: MCPConfig
+    /// UWaterloo important-dates due-date warnings — an optional institutional
+    /// integration, on by default (#278). See UWDatesConfig.
+    let uwDates: UWDatesConfig
 
     /// Loads the entire config tree from `Environment.get(...)`.
     ///
@@ -59,7 +62,8 @@ struct AppConfig: Sendable {
             diagnostics: DiagnosticsConfiguration.fromEnvironment(),
             alerts: ServerHealthAlertConfiguration.fromEnvironment(),
             outboundProxy: OutboundProxyConfig.fromEnvironment(),
-            mcp: MCPConfig.fromEnvironment(workDir: workDir)
+            mcp: MCPConfig.fromEnvironment(workDir: workDir),
+            uwDates: UWDatesConfig.fromEnvironment()
         )
     }
 
@@ -102,6 +106,9 @@ struct AppConfig: Sendable {
         }
         if scanMode.enabled {
             logger.warning("SCAN_MODE=true — destructive POST endpoints are returning 503.")
+        }
+        if !uwDates.enabled {
+            logger.info("uwDates: disabled — /api/v1/uw-dates not registered")
         }
         if let bs = brightspace {
             logger.info(
@@ -185,7 +192,8 @@ extension AppConfig {
     static func testDefaults(
         authMode: AuthMode = .local,
         database: DatabaseSettings = .sqliteInMemory(),
-        mcp: MCPConfig = .default
+        mcp: MCPConfig = .default,
+        uwDates: UWDatesConfig = .default
     ) -> AppConfig {
         let auth = AuthConfig(
             mode: authMode,
@@ -219,7 +227,8 @@ extension AppConfig {
             ),
             alerts: .default,
             outboundProxy: nil,
-            mcp: mcp
+            mcp: mcp,
+            uwDates: uwDates
         )
     }
 }

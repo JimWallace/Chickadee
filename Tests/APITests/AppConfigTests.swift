@@ -22,6 +22,7 @@ import Vapor
         #expect(cfg.workers.publicBaseURL == nil)
         #expect(cfg.brightspace == nil)
         #expect(cfg.scanMode.enabled == false)
+        #expect(cfg.uwDates.enabled == true)
         #expect(cfg.oidc.callbackPath == "/auth/sso/callback")
         #expect(cfg.oidc.usernameClaim == "preferred_username")
         #expect(cfg.oidc.emailClaim == "email")
@@ -44,6 +45,7 @@ import Vapor
             "LOGIN_RATE_LIMIT_PER_MIN": "20",
             "LOGIN_LOCKOUT_THRESHOLD": "8",
             "JOB_METRIC_RETENTION_DAYS": "7",
+            "UW_IMPORTANT_DATES_ENABLED": "false",
             // Clear DB-backend overrides so the assertion-of-default branch
             // (`.sqlite`) isn't accidentally redirected to postgres by an
             // earlier test's leaked env.
@@ -68,6 +70,7 @@ import Vapor
             #expect(cfg.lockout.perMinute == 20)
             #expect(cfg.lockout.lockoutThreshold == 8)
             #expect(cfg.diagnostics.jobMetricRetentionDays == 7)
+            #expect(cfg.uwDates.enabled == false)
         }
     }
 
@@ -135,7 +138,8 @@ import Vapor
             diagnostics: seed.diagnostics,
             alerts: seed.alerts,
             outboundProxy: seed.outboundProxy,
-            mcp: seed.mcp
+            mcp: seed.mcp,
+            uwDates: seed.uwDates
         )
         app.preloadedAppConfig = seed
         // Smoke: configure() picks up the preloaded config without env reads.
@@ -171,7 +175,8 @@ import Vapor
             diagnostics: AppConfig.testDefaults().diagnostics,
             alerts: .default,
             outboundProxy: nil,
-            mcp: .default
+            mcp: .default,
+            uwDates: .default
         )
         let captured = CapturedLogger()
         cfg.logSummary(to: captured.logger)
