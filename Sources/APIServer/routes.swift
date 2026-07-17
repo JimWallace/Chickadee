@@ -66,7 +66,12 @@ func routes(_ app: Application) throws {
     try instructor.register(collection: StudentCourseRoutes())
     // Worker job polling is instructor-tier: only the server operator runs workers.
     try instructor.register(collection: SubmissionRoutes())
-    try instructor.register(collection: UWDatesRoute())
+    // Optional UWaterloo-only integration (#278): when disabled the route is
+    // simply absent (404) and the assignment editors' due-date warning fetch
+    // treats the non-OK response as "no warnings".
+    if app.appConfig.uwDates.enabled {
+        try instructor.register(collection: UWDatesRoute())
+    }
     // MCP "Connected agents" management page (instructor sees own grants; admin all).
     try instructor.register(collection: MCPAgentsRoutes())
 

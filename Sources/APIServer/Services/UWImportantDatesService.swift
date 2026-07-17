@@ -3,6 +3,12 @@
 // Fetches and caches the University of Waterloo important dates iCalendar feed.
 // Results are cached for 24 hours to avoid hammering the UW server on every
 // instructor due-date change.
+//
+// The hardcoded feed URL and the UW/Ontario-flavoured relevance keywords are
+// intentional (#278): this is an optional institutional integration, not a
+// general calendar feature. Deployments outside UWaterloo turn it off with
+// UW_IMPORTANT_DATES_ENABLED=false (see UWDatesConfig), which unregisters
+// the /api/v1/uw-dates route that fronts this cache.
 
 import Foundation
 import Vapor

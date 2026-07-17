@@ -3,6 +3,11 @@
 // GET /api/v1/uw-dates
 // Returns upcoming UWaterloo important dates as JSON for client-side due-date warnings.
 // Registered under the instructor middleware group (only instructors set due dates).
+//
+// This is a deliberately UW-only institutional integration (#278) — not a
+// generalized "important dates" feature. Registration is gated by
+// UW_IMPORTANT_DATES_ENABLED (default on; see UWDatesConfig), so non-UW
+// deployments disable it with one env var and the endpoint 404s.
 
 import Vapor
 
