@@ -325,6 +325,9 @@ extension PublishedAssignmentRoutes {
             requirements: requirementSpec
         )
         guard hasEligibleRunner else {
+            req.logger.warning(
+                "Validation pre-check found no compatible active runner; marking assignment \(assignment.publicID) no-runner"
+            )
             assignment.validationStatus = "no-runner"
             assignment.validationSubmissionID = nil
             try await assignment.save(on: req.db)
