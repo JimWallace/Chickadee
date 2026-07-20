@@ -278,6 +278,9 @@ func scheduleValidationAfterSuiteEdit(
             requirements: requirementSpec
         )
         guard hasRunner else {
+            req.logger.warning(
+                "Validation pre-check found no compatible active runner; marking assignment \(assignment.publicID) no-runner"
+            )
             assignment.validationStatus = "no-runner"
             try await assignment.save(on: req.db)
             return
@@ -517,10 +520,28 @@ func ensureValidationRunnerAvailability(req: Request) async {
     try? await Task.sleep(nanoseconds: 1_000_000_000)
 }
 
+/// Active window for the validation pre-check's DB-backed runner-liveness
+/// probe (`RunnerProfile.lastSeenAt` → `isActive`).
+///
+/// Must out-wait *persisted*-freshness lag, not true freshness: an unchanged
+/// runner check-in only persists `lastSeenAt` once per
+/// `RunnerProfileService.lastSeenPersistInterval` (60 s — the 2026-07
+/// poll-write audit), and a live runner can go ~30 s between check-ins
+/// (heartbeat cadence), so a perfectly healthy runner's stored timestamp
+/// runs up to ~90 s behind the clock. The pre-debounce window here (20 s)
+/// sat inside that lag: for most of every debounce cycle the whole fleet
+/// looked stale, so a metadata-only assignment save (e.g. a due-date edit)
+/// spuriously landed on `validationStatus = "no-runner"` — and flipped every
+/// live `RunnerProfile` inactive — while healthy runners were polling.
+/// Debounce + 60 s = 120 s, matching the diagnostics surface's
+/// `RUNNER_ACTIVE_WINDOW_SECONDS` default.
+let validationRunnerActiveWindowSeconds: TimeInterval =
+    RunnerProfileService.lastSeenPersistInterval + 60
+
 func hasCompatibleValidationRunner(
     req: Request,
     requirements: AssignmentRequirementSpec?,
-    activeWindowSeconds: TimeInterval = 20
+    activeWindowSeconds: TimeInterval = validationRunnerActiveWindowSeconds
 ) async throws -> Bool {
     try await req.application.runnerProfiles.refreshActiveFlags(
         activeWindowSeconds: activeWindowSeconds,
@@ -543,7 +564,7 @@ func hasCompatibleValidationRunner(
 func ensureCompatibleValidationRunnerAvailability(
     req: Request,
     requirements: AssignmentRequirementSpec?,
-    activeWindowSeconds: TimeInterval = 20,
+    activeWindowSeconds: TimeInterval = validationRunnerActiveWindowSeconds,
     attempts: Int = 3
 ) async throws -> Bool {
     if try await hasCompatibleValidationRunner(
