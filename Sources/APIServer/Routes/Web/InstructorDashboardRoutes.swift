@@ -159,6 +159,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         let sortedRows = sortAssignmentRows(unsortedRows, setupIndexByID: setupIndexByID)
 
         let allSections = try await loadCourseSections(req: req, activeCourseUUID: courseState.activeCourseUUID)
+        let allContentItems = try await loadCourseContentItems(
+            req: req, activeCourseUUID: courseState.activeCourseUUID)
+        let (contentRowsBySectionID, ungroupedContentRows) = bucketContentItems(allContentItems)
         let sectionByPublicID: [String: UUID] = Dictionary(
             allAssignments.compactMap { a -> (String, UUID)? in
                 guard let sid = a.sectionID else { return nil }
@@ -169,16 +172,23 @@ struct InstructorDashboardRoutes: RouteCollection {
         let (sectionContexts, ungroupedRows) = groupRowsBySection(
             sortedRows: sortedRows,
             allSections: allSections,
-            sectionByPublicID: sectionByPublicID
+            sectionByPublicID: sectionByPublicID,
+            contentRowsBySectionID: contentRowsBySectionID
         )
 
+        let hasSections = !allSections.isEmpty
+        let hasUngrouped = !ungroupedRows.isEmpty
+        let hasUngroupedContent = !ungroupedContentRows.isEmpty
         let ctx = AssignmentsContext(
             currentUser: userContext,
             activeInstructorTab: "overview",
             sections: sectionContexts,
             ungroupedRows: ungroupedRows,
-            hasSections: !allSections.isEmpty,
-            hasUngrouped: !ungroupedRows.isEmpty,
+            ungroupedContentItems: ungroupedContentRows,
+            hasSections: hasSections,
+            hasUngrouped: hasUngrouped,
+            showUngroupedBlock: hasUngrouped || hasUngroupedContent || !hasSections,
+            showEmptyMessage: !hasSections && !hasUngrouped && !hasUngroupedContent,
             enrolledStudentCount: roster.enrolledStudentCount
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)

@@ -442,4 +442,10 @@ func registerMigrations(on app: Application) {
     // the one-export-per-day rate-limit ledger. FK to users; no ordering
     // constraints beyond CreateUsers.
     app.migrations.add(CreateDataExports())
+
+    // Ungraded course content items (reference material shown inside a course
+    // section alongside assignments). New table; FKs reference `courses` and
+    // `course_sections`, both created by CreateCourses above, so no additional
+    // ordering constraint.
+    app.migrations.add(CreateCourseContentItems())
 }

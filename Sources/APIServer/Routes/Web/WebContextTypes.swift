@@ -76,15 +76,58 @@ struct LatestSubmissionItem: Encodable {
     let submittedAtText: String
 }
 
-/// One rendered group of assignment rows on the student dashboard.  A named
-/// section renders an `<h2>` heading; the trailing "ungrouped" bucket carries
-/// `name == nil` so it renders no heading.  Folding both kinds into one list
-/// lets `index.leaf` render every group with a single shared `#extend`'d row
-/// partial (LeafKit 1.x raises a false "cyclically referenced" error if the
-/// same partial is extended from more than one site in a template, so the
-/// single-loop shape is load-bearing, not just tidier).
+/// One ungraded content item (reference material) rendered inside a section on
+/// the dashboards.  Shared by the student view (published items only) and the
+/// instructor view (all items; `isPublished == false` shows a "Hidden" marker).
+/// Ungraded, so it carries none of `TestSetupRow`'s grade / history / badge
+/// fields — just a title, a kind label, and its links.
+struct ContentItemRow: Encodable {
+    let id: String
+    let title: String
+    let kind: String  // raw ContentItemKind
+    let kindLabel: String  // human-facing label, e.g. "Notebook"
+    let itemDescription: String?
+    let links: [ContentLink]
+    let updatedLabel: String?
+    /// False → a draft item hidden from students (surfaced only on the
+    /// instructor dashboard as a "Hidden" marker).
+    let isPublished: Bool
+
+    init(from item: APICourseContentItem) {
+        self.id = item.id?.uuidString ?? ""
+        self.title = item.title
+        self.kind = item.kind.rawValue
+        self.kindLabel = ContentItemRow.label(for: item.kind)
+        self.itemDescription = item.itemDescription
+        self.links = item.links
+        self.updatedLabel = item.updatedLabel
+        self.isPublished = item.isPublished
+    }
+
+    static func label(for kind: ContentItemKind) -> String {
+        switch kind {
+        case .link: return "Link"
+        case .notebook: return "Notebook"
+        case .document: return "Document"
+        case .slides: return "Slides"
+        case .outline: return "Outline"
+        case .heading: return "Heading"
+        }
+    }
+}
+
+/// One rendered group on the student dashboard.  A named section renders an
+/// `<h2>` heading; the trailing "ungrouped" bucket carries `name == nil` so it
+/// renders no heading.  Each group carries its own ungraded `contentItems` lane
+/// (rendered above the assignments) plus the graded `setups`.  Folding groups
+/// into one list lets `index.leaf` render every group with a single shared
+/// `#extend`'d assignment-row partial (LeafKit 1.x raises a false "cyclically
+/// referenced" error if the same partial is extended from more than one site in
+/// a template, so the single-loop shape is load-bearing, not just tidier — the
+/// content-item lane is inlined markup for the same reason).
 struct IndexDisplayGroup: Encodable {
     let name: String?  // nil → ungrouped bucket (no heading)
+    let contentItems: [ContentItemRow]
     let setups: [TestSetupRow]
 }
 

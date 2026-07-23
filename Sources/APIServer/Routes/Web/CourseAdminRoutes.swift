@@ -38,5 +38,11 @@ struct CourseAdminRoutes: RouteCollection {
         r.post("sections", ":sectionID", "rename", use: renameSection)
         r.post("sections", ":sectionID", "delete", use: deleteSection)
         r.post(":assignmentID", "section", use: moveToSection)
+        // Ungraded course content items (reference material) inside a section.
+        r.post("content-items", use: createContentItem)
+        r.post("content-items", "reorder", use: reorderContentItems)
+        r.post("content-items", ":id", "edit", use: updateContentItem)
+        r.post("content-items", ":id", "delete", use: deleteContentItem)
+        r.post("content-items", ":id", "section", use: moveContentItemToSection)
     }
 }

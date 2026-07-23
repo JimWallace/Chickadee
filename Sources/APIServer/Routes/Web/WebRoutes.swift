@@ -120,6 +120,11 @@ struct WebRoutes: RouteCollection {
             user: user, allAssignments: allAssignments, db: req.db)
         async let sectionsFetch = Self.loadCourseSections(
             activeCourseUUID: courseState.activeCourseUUID, db: req.db)
+        // Ungraded content items grouped alongside assignments. Staff see
+        // drafts; students see only published items.
+        async let contentItemsFetch = Self.loadCourseContentItems(
+            activeCourseUUID: courseState.activeCourseUUID,
+            includeUnpublished: isActiveCourseStaff, db: req.db)
 
         let extensionDueAtBySetupID = try await extensionsFetch
         let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
@@ -177,17 +182,47 @@ struct WebRoutes: RouteCollection {
             uniquingKeysWith: { first, _ in first }
         )
 
-        // Ordered display groups (shared fold, #1118): named sections with
-        // visible items first, then a trailing unnamed bucket for ungrouped.
-        let grouped = groupRowsBySection(
-            rows: rows, sections: allSections, includeEmptySections: false,
-            sectionIDForRow: { sectionBySetupID[$0.id] },
-            makeSection: { section, sectionRows in
-                IndexDisplayGroup(name: section.name, setups: sectionRows)
-            })
-        var displayGroups = grouped.sections
-        if !grouped.ungrouped.isEmpty {
-            displayGroups.append(IndexDisplayGroup(name: nil, setups: grouped.ungrouped))
+        // Bucket both lanes — graded assignment rows and ungraded content items
+        // — by section, then assemble the ordered display groups. Done inline
+        // (rather than via the shared `groupRowsBySection` fold) because a group
+        // now carries two row types and a section with content items but no
+        // visible assignments must still render — the fold's
+        // `includeEmptySections: false` would drop it.
+        var setupRowsBySectionID: [UUID: [TestSetupRow]] = [:]
+        var ungroupedSetupRows: [TestSetupRow] = []
+        for row in rows {
+            if let sid = sectionBySetupID[row.id] {
+                setupRowsBySectionID[sid, default: []].append(row)
+            } else {
+                ungroupedSetupRows.append(row)
+            }
+        }
+        let contentItems = try await contentItemsFetch
+        var contentRowsBySectionID: [UUID: [ContentItemRow]] = [:]
+        var ungroupedContentRows: [ContentItemRow] = []
+        for item in contentItems {
+            let contentRow = ContentItemRow(from: item)
+            if let sid = item.sectionID {
+                contentRowsBySectionID[sid, default: []].append(contentRow)
+            } else {
+                ungroupedContentRows.append(contentRow)
+            }
+        }
+        var displayGroups: [IndexDisplayGroup] = []
+        for section in allSections {
+            guard let sid = section.id else { continue }
+            let sectionSetups = setupRowsBySectionID[sid] ?? []
+            let sectionContent = contentRowsBySectionID[sid] ?? []
+            // Drop only sections with nothing to show in either lane.
+            if sectionSetups.isEmpty, sectionContent.isEmpty { continue }
+            displayGroups.append(
+                IndexDisplayGroup(
+                    name: section.name, contentItems: sectionContent, setups: sectionSetups))
+        }
+        if !ungroupedSetupRows.isEmpty || !ungroupedContentRows.isEmpty {
+            displayGroups.append(
+                IndexDisplayGroup(
+                    name: nil, contentItems: ungroupedContentRows, setups: ungroupedSetupRows))
         }
 
         return try await req.view.render(

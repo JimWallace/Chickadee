@@ -206,6 +206,11 @@ extension CourseBundleRoutes {
             let sectionIDMap = try await importBundledSections(
                 manifest: manifest, courseID: t.courseID, db: db)
 
+            // 6e-bis. Create ungraded content items, re-linked to the sections
+            // recreated above (depends only on sectionIDMap).
+            try await importBundledContentItems(
+                manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID, db: db)
+
             // 6f. Create test setups → setupIDMap[bundleID] = new live ID
             let setupIDMap = try await importBundledTestSetups(
                 manifest: manifest, extractDir: extractDir, setupsDir: setupsDir,
@@ -410,6 +415,32 @@ private func importBundledSections(
         sectionIDMap[bundledSection.bundleID] = try newSection.requireID()
     }
     return sectionIDMap
+}
+
+/// Recreates the bundle's ungraded content items in the new course, re-linking
+/// each to its recreated section via `sectionIDMap` (a `sectionBundleID` with no
+/// mapping — including nil — lands the item ungrouped). Bundles exported before
+/// content items were carried have no `contentItems` array and import nothing.
+private func importBundledContentItems(
+    manifest: CourseBundleManifest,
+    sectionIDMap: [String: UUID],
+    courseID: UUID,
+    db: Database
+) async throws {
+    for item in manifest.contentItems ?? [] {
+        let newItem = APICourseContentItem(
+            courseID: courseID,
+            sectionID: item.sectionBundleID.flatMap { sectionIDMap[$0] },
+            sortOrder: item.sortOrder,
+            title: item.title,
+            kind: ContentItemKind(rawValue: item.kind) ?? .link,
+            itemDescription: item.description,
+            links: item.links,
+            updatedLabel: item.updatedLabel,
+            isPublished: item.isPublished
+        )
+        try await newItem.save(on: db)
+    }
 }
 
 private func importBundledAssignments(

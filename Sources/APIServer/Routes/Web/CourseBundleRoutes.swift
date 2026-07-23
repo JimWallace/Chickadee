@@ -120,6 +120,11 @@ struct CourseBundleRoutes: RouteCollection {
             .sort(\.$sortOrder)
             .all()
 
+        let contentItems = try await APICourseContentItem.query(on: db)
+            .filter(\.$courseID == courseUUID)
+            .sort(\.$sortOrder)
+            .all()
+
         let enrollments = try await APICourseEnrollment.query(on: db)
             .filter(\.$course.$id == courseUUID)
             .all()
@@ -174,6 +179,7 @@ struct CourseBundleRoutes: RouteCollection {
             testSetups: testSetups,
             assignments: assignments,
             sections: sections,
+            contentItems: contentItems,
             enrolledUserIDs: enrolledUserIDs,
             allUsers: Array(allUsers),
             submissions: submissions,
@@ -261,6 +267,19 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
+        let bundledContentItems = data.contentItems.map { item -> BundledContentItem in
+            BundledContentItem(
+                sectionBundleID: item.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] },
+                title: item.title,
+                kind: item.kind.rawValue,
+                description: item.itemDescription,
+                links: item.links,
+                updatedLabel: item.updatedLabel,
+                isPublished: item.isPublished,
+                sortOrder: item.sortOrder
+            )
+        }
+
         let bundledAssignments = data.assignments.compactMap { a -> BundledAssignment? in
             guard let aid = a.id, let bid = bundleIDs.assignBundleIDByID[aid],
                 let setupBid = bundleIDs.setupBundleIDByID[a.testSetupID]
@@ -318,6 +337,7 @@ struct CourseBundleRoutes: RouteCollection {
             users: bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
             sections: bundledSections,
+            contentItems: bundledContentItems,
             assignments: bundledAssignments,
             testSetups: bundledSetups,
             submissions: bundledSubmissions,
@@ -397,6 +417,7 @@ private struct ExportData {
     let testSetups: [APITestSetup]
     let assignments: [APIAssignment]
     let sections: [APICourseSection]
+    let contentItems: [APICourseContentItem]
     let enrolledUserIDs: [UUID]
     let allUsers: [APIUser]
     let submissions: [APISubmission]

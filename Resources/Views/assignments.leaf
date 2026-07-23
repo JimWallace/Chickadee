@@ -69,7 +69,7 @@
     </details>
 </div>
 
-#if(!hasSections && !hasUngrouped):
+#if(showEmptyMessage):
 <p class="empty">No assignments yet. <a href="/instructor/new">Create one to get started.</a></p>
 #else:
 
@@ -108,6 +108,133 @@
             <button class="btn-link section-edit-cancel icon-btn-text" type="button"
                     aria-label="Cancel" title="Cancel">✕</button>
         </div>
+    </div>
+
+    <!-- Ungraded content items (reference material) for this section -->
+    <div class="content-lane">
+        #if(!section.contentItems.isEmpty):
+        <table class="results-table content-item-table">
+            <thead>
+                <tr>
+                    <th>Material</th>
+                    <th class="col-hide-phone">Links</th>
+                    <th class="col-hide-phone">Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            #for(item in section.contentItems):
+                <tr class="content-item-row">
+                    <td>
+                        <span class="content-item-kind">#(item.kindLabel)</span>
+                        <span class="content-item-title">#(item.title)</span>
+                        #if(!item.isPublished):<span class="content-item-hidden">Hidden</span>#endif
+                        #if(item.itemDescription):<div class="content-item-desc text-muted">#(item.itemDescription)</div>#endif
+                    </td>
+                    <td class="col-hide-phone content-item-links">#for(link in item.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
+                    <td class="col-hide-phone">#if(item.updatedLabel):#(item.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
+                    <td class="content-item-actions">
+                        <details class="popup-anchor content-item-edit-details">
+                            <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
+                            <div class="add-section-popup card">
+                                <form method="post" action="/instructor/content-items/#(item.id)/edit" class="form popup-form content-item-form">
+                                    #csrfFormField()
+                                    <label class="form-label">Title
+                                        <input class="form-input editor-input" type="text" name="title" value="#(item.title)" required>
+                                    </label>
+                                    <label class="form-label">Type
+                                        <select class="form-input editor-input" name="kind">
+                                            <option value="link" #if(item.kind == "link"):selected#endif>Link</option>
+                                            <option value="notebook" #if(item.kind == "notebook"):selected#endif>Notebook</option>
+                                            <option value="document" #if(item.kind == "document"):selected#endif>Document</option>
+                                            <option value="slides" #if(item.kind == "slides"):selected#endif>Slides</option>
+                                            <option value="outline" #if(item.kind == "outline"):selected#endif>Outline</option>
+                                            <option value="heading" #if(item.kind == "heading"):selected#endif>Heading</option>
+                                        </select>
+                                    </label>
+                                    <div class="content-item-link-fields">
+                                        #for(link in item.links):
+                                        <span class="content-item-link-pair">
+                                            <input class="form-input editor-input" type="text" name="linkLabels[]" value="#(link.label)" placeholder="Label">
+                                            <input class="form-input editor-input" type="text" name="linkURLs[]" value="#(link.url)" placeholder="https://…">
+                                        </span>
+                                        #endfor
+                                        <span class="content-item-link-pair">
+                                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label">
+                                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                                        </span>
+                                    </div>
+                                    <label class="form-label">Description
+                                        <input class="form-input editor-input" type="text" name="description" value="#if(item.itemDescription):#(item.itemDescription)#endif">
+                                    </label>
+                                    <label class="form-label">Updated label
+                                        <input class="form-input editor-input" type="text" name="updatedLabel" value="#if(item.updatedLabel):#(item.updatedLabel)#endif" placeholder="e.g. 2026-05-11">
+                                    </label>
+                                    <label class="form-label">Visibility
+                                        <select class="form-input editor-input" name="isPublished">
+                                            <option value="true" #if(item.isPublished):selected#endif>Published</option>
+                                            <option value="false" #if(!item.isPublished):selected#endif>Hidden</option>
+                                        </select>
+                                    </label>
+                                    <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
+                                </form>
+                            </div>
+                        </details>
+                        <form method="post" action="/instructor/content-items/#(item.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
+                            #csrfFormField()
+                            <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            #endfor
+            </tbody>
+        </table>
+        #endif
+        <details class="add-section-details popup-anchor content-item-add">
+            <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
+            <div class="add-section-popup card">
+                <form method="post" action="/instructor/content-items" class="form popup-form content-item-form">
+                    #csrfFormField()
+                    <input type="hidden" name="sectionID" value="#(section.sectionID)">
+                    <label class="form-label">Title
+                        <input class="form-input editor-input" type="text" name="title" placeholder="e.g. Lecture 1" required>
+                    </label>
+                    <label class="form-label">Type
+                        <select class="form-input editor-input" name="kind">
+                            <option value="link">Link</option>
+                            <option value="notebook">Notebook</option>
+                            <option value="document">Document</option>
+                            <option value="slides">Slides</option>
+                            <option value="outline">Outline</option>
+                            <option value="heading">Heading</option>
+                        </select>
+                    </label>
+                    <div class="content-item-link-fields">
+                        <span class="content-item-link-pair">
+                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. PDF)">
+                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                        </span>
+                        <span class="content-item-link-pair">
+                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. Notebook)">
+                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                        </span>
+                    </div>
+                    <label class="form-label">Description
+                        <input class="form-input editor-input" type="text" name="description">
+                    </label>
+                    <label class="form-label">Updated label
+                        <input class="form-input editor-input" type="text" name="updatedLabel" placeholder="e.g. 2026-05-11">
+                    </label>
+                    <label class="form-label">Visibility
+                        <select class="form-input editor-input" name="isPublished">
+                            <option value="true">Published</option>
+                            <option value="false">Hidden</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary btn-compact" type="submit">Add material</button>
+                </form>
+            </div>
+        </details>
     </div>
 
     <table class="results-table">
@@ -369,11 +496,140 @@
 </div><!-- #sections-container -->
 
 <!-- Ungrouped bucket: shown when there are ungrouped items, or when no sections exist at all (flat-table mode) -->
-#if(hasUngrouped || !hasSections):
+#if(showUngroupedBlock):
 <div class="dashboard-block">
     #if(hasSections):
     <h2 class="ungrouped-heading">Ungrouped</h2>
     #endif
+
+    <!-- Ungraded content items (reference material) with no section -->
+    <div class="content-lane">
+        #if(!ungroupedContentItems.isEmpty):
+        <table class="results-table content-item-table">
+            <thead>
+                <tr>
+                    <th>Material</th>
+                    <th class="col-hide-phone">Links</th>
+                    <th class="col-hide-phone">Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            #for(item in ungroupedContentItems):
+                <tr class="content-item-row">
+                    <td>
+                        <span class="content-item-kind">#(item.kindLabel)</span>
+                        <span class="content-item-title">#(item.title)</span>
+                        #if(!item.isPublished):<span class="content-item-hidden">Hidden</span>#endif
+                        #if(item.itemDescription):<div class="content-item-desc text-muted">#(item.itemDescription)</div>#endif
+                    </td>
+                    <td class="col-hide-phone content-item-links">#for(link in item.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
+                    <td class="col-hide-phone">#if(item.updatedLabel):#(item.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
+                    <td class="content-item-actions">
+                        <details class="popup-anchor content-item-edit-details">
+                            <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
+                            <div class="add-section-popup card">
+                                <form method="post" action="/instructor/content-items/#(item.id)/edit" class="form popup-form content-item-form">
+                                    #csrfFormField()
+                                    <label class="form-label">Title
+                                        <input class="form-input editor-input" type="text" name="title" value="#(item.title)" required>
+                                    </label>
+                                    <label class="form-label">Type
+                                        <select class="form-input editor-input" name="kind">
+                                            <option value="link" #if(item.kind == "link"):selected#endif>Link</option>
+                                            <option value="notebook" #if(item.kind == "notebook"):selected#endif>Notebook</option>
+                                            <option value="document" #if(item.kind == "document"):selected#endif>Document</option>
+                                            <option value="slides" #if(item.kind == "slides"):selected#endif>Slides</option>
+                                            <option value="outline" #if(item.kind == "outline"):selected#endif>Outline</option>
+                                            <option value="heading" #if(item.kind == "heading"):selected#endif>Heading</option>
+                                        </select>
+                                    </label>
+                                    <div class="content-item-link-fields">
+                                        #for(link in item.links):
+                                        <span class="content-item-link-pair">
+                                            <input class="form-input editor-input" type="text" name="linkLabels[]" value="#(link.label)" placeholder="Label">
+                                            <input class="form-input editor-input" type="text" name="linkURLs[]" value="#(link.url)" placeholder="https://…">
+                                        </span>
+                                        #endfor
+                                        <span class="content-item-link-pair">
+                                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label">
+                                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                                        </span>
+                                    </div>
+                                    <label class="form-label">Description
+                                        <input class="form-input editor-input" type="text" name="description" value="#if(item.itemDescription):#(item.itemDescription)#endif">
+                                    </label>
+                                    <label class="form-label">Updated label
+                                        <input class="form-input editor-input" type="text" name="updatedLabel" value="#if(item.updatedLabel):#(item.updatedLabel)#endif" placeholder="e.g. 2026-05-11">
+                                    </label>
+                                    <label class="form-label">Visibility
+                                        <select class="form-input editor-input" name="isPublished">
+                                            <option value="true" #if(item.isPublished):selected#endif>Published</option>
+                                            <option value="false" #if(!item.isPublished):selected#endif>Hidden</option>
+                                        </select>
+                                    </label>
+                                    <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
+                                </form>
+                            </div>
+                        </details>
+                        <form method="post" action="/instructor/content-items/#(item.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
+                            #csrfFormField()
+                            <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            #endfor
+            </tbody>
+        </table>
+        #endif
+        <details class="add-section-details popup-anchor content-item-add">
+            <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
+            <div class="add-section-popup card">
+                <form method="post" action="/instructor/content-items" class="form popup-form content-item-form">
+                    #csrfFormField()
+                    <input type="hidden" name="sectionID" value="">
+                    <label class="form-label">Title
+                        <input class="form-input editor-input" type="text" name="title" placeholder="e.g. Course outline" required>
+                    </label>
+                    <label class="form-label">Type
+                        <select class="form-input editor-input" name="kind">
+                            <option value="link">Link</option>
+                            <option value="notebook">Notebook</option>
+                            <option value="document">Document</option>
+                            <option value="slides">Slides</option>
+                            <option value="outline">Outline</option>
+                            <option value="heading">Heading</option>
+                        </select>
+                    </label>
+                    <div class="content-item-link-fields">
+                        <span class="content-item-link-pair">
+                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. PDF)">
+                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                        </span>
+                        <span class="content-item-link-pair">
+                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label (e.g. Notebook)">
+                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                        </span>
+                    </div>
+                    <label class="form-label">Description
+                        <input class="form-input editor-input" type="text" name="description">
+                    </label>
+                    <label class="form-label">Updated label
+                        <input class="form-input editor-input" type="text" name="updatedLabel" placeholder="e.g. 2026-05-11">
+                    </label>
+                    <label class="form-label">Visibility
+                        <select class="form-input editor-input" name="isPublished">
+                            <option value="true">Published</option>
+                            <option value="false">Hidden</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary btn-compact" type="submit">Add material</button>
+                </form>
+            </div>
+        </details>
+    </div>
+
+    #if(!ungroupedRows.isEmpty):
     <table class="results-table">
         <thead>
             <tr>
@@ -587,6 +843,7 @@
         #endfor
         </tbody>
     </table>
+    #endif
 </div>
 #endif
 

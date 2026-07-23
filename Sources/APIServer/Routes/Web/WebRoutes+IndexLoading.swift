@@ -154,6 +154,22 @@ extension WebRoutes {
             .all()
     }
 
+    /// Ungraded content items for the active course, in lane order. Students
+    /// see only published items; staff (`includeUnpublished`) see drafts too.
+    static func loadCourseContentItems(
+        activeCourseUUID: UUID?,
+        includeUnpublished: Bool,
+        db: any Database
+    ) async throws -> [APICourseContentItem] {
+        guard let activeCourseUUID else { return [] }
+        let query = APICourseContentItem.query(on: db)
+            .filter(\.$courseID == activeCourseUUID)
+        if !includeUnpublished {
+            query.filter(\.$isPublished == true)
+        }
+        return try await query.sort(\.$sortOrder, .ascending).all()
+    }
+
     private static func setupIDByAssignmentID(
         _ assignments: [APIAssignment]
     ) -> [UUID: String] {

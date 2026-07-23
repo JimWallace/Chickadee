@@ -69,6 +69,11 @@ The catalog:
 | `delete_course_section` | `content:write` | Delete a course section (assignments in it are ungrouped, not deleted) |
 | `reorder_course_sections` | `content:write` | Set the display order of a course's sections |
 | `set_assignment_course_section` | `content:write` | Place an assignment into a course section (adopts its grading mode), or ungroup it |
+| `list_content_items` | `content:read` | A course's ungraded content items (reference material — links/notebooks/slides), with their section, links, and published flag |
+| `create_content_item` | `content:write` | Create an ungraded content item (link/notebook/slides/document/outline/heading) in a course, optionally in a section; no test setup, no regrade/close |
+| `update_content_item` | `content:write` | Edit or move a content item (title/kind/links/description/updatedLabel/isPublished/section); no regrade/close |
+| `delete_content_item` | `content:write` | Delete an ungraded content item (idempotent); never touches an assignment or section |
+| `reorder_content_items` | `content:write` | Set the display order of a section's content lane; no regrade/close |
 | `reorder_assignments` | `content:write` | Set the display order of a course's assignments (course-global; permutation, not a subset); no regrade/close |
 | `clone_assignment` | `content:write` | Duplicate an assignment (closed, unvalidated) |
 | `create_assignment` | `content:write` | New notebook-based assignment from scratch |

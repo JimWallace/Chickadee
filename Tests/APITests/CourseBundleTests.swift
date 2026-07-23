@@ -663,6 +663,106 @@ import VaporTesting
         }
     }
 
+    // MARK: - Round-trip: content items preserved through export → import
+
+    @Test func roundTripPreservesContentItems() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "RT_CONTENT")
+            let courseID = try course.requireID()
+
+            let section = APICourseSection(
+                name: "Lectures", defaultGradingMode: "worker", sortOrder: 1, courseID: courseID)
+            try await section.save(on: app.db)
+
+            // One sectioned item (two links) + one ungrouped, hidden item.
+            let sectioned = APICourseContentItem(
+                courseID: courseID, sectionID: try section.requireID(), sortOrder: 1,
+                title: "Lecture 1", kind: .notebook, itemDescription: "Intro",
+                links: [
+                    ContentLink(label: "PDF", url: "https://example.com/l1.pdf"),
+                    ContentLink(label: "NB", url: "/materials/l1.ipynb"),
+                ],
+                updatedLabel: "2026-05-11", isPublished: true)
+            try await sectioned.save(on: app.db)
+            let ungrouped = APICourseContentItem(
+                courseID: courseID, sectionID: nil, sortOrder: 1, title: "Outline",
+                kind: .outline, links: [ContentLink(label: "Link", url: "https://example.com/o")],
+                isPublished: false)
+            try await ungrouped.save(on: app.db)
+
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    exportedZip = Data(res.body.readableBytesView)
+                })
+
+            // Inspect the raw manifest.
+            let extractDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-content-ext-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: extractDir) }
+            let zipVerifyPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-content-\(UUID().uuidString).zip").path
+            defer { try? FileManager.default.removeItem(atPath: zipVerifyPath) }
+            try exportedZip.write(to: URL(fileURLWithPath: zipVerifyPath))
+            try await extractZipArchive(zipPath: zipVerifyPath, into: extractDir)
+            let manifestData = try Data(contentsOf: extractDir.appendingPathComponent("bundle.json"))
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+            #expect(manifest.contentItems?.count == 2)
+            let bundledSectioned = try #require(manifest.contentItems?.first { $0.title == "Lecture 1" })
+            #expect(bundledSectioned.sectionBundleID != nil)
+            #expect(bundledSectioned.links.count == 2)
+            let bundledUngrouped = try #require(manifest.contentItems?.first { $0.title == "Outline" })
+            #expect(bundledUngrouped.sectionBundleID == nil)
+            #expect(bundledUngrouped.isPublished == false)
+
+            // Archive + import into a fresh course.
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "\(body.prefix(300))")
+            #expect(status != .conflict, "\(body.prefix(300))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "RT_CONTENT").filter(\.$isArchived == false).first())
+            let importedItems = try await APICourseContentItem.query(on: app.db)
+                .filter(\.$courseID == imported.requireID()).sort(\.$sortOrder).all()
+            #expect(importedItems.count == 2)
+            let importedSectioned = try #require(importedItems.first { $0.title == "Lecture 1" })
+            #expect(importedSectioned.sectionID != nil, "sectioned item should keep its section link")
+            #expect(importedSectioned.links.count == 2)
+            #expect(importedSectioned.kind == .notebook)
+            let importedUngrouped = try #require(importedItems.first { $0.title == "Outline" })
+            #expect(importedUngrouped.sectionID == nil)
+            #expect(importedUngrouped.isPublished == false)
+        }
+    }
+
+    /// A bundle exported before content items existed omits the key entirely;
+    /// it must decode (contentItems == nil) and import without error. Wrapped in
+    /// `withApp` so the per-test app created in `init()` shuts down cleanly.
+    @Test func manifestWithoutContentItemsDecodesToNil() async throws {
+        try await withApp(app) { _ in
+            let json = """
+                {"schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z","exportedBy":"admin",
+                 "chickadeeVersion":"0.0.0","course":{"code":"OLD","name":"Old"},
+                 "users":[],"enrolledUserBundleIDs":[],"assignments":[],"testSetups":[],
+                 "submissions":[],"results":[]}
+                """
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(CourseBundleManifest.self, from: Data(json.utf8))
+            #expect(manifest.contentItems == nil)
+            #expect(manifest.sections == nil)
+        }
+    }
+
     // MARK: - Bundle builder with a user (used by user-matching tests)
 
     private func makeBundleZipWithUser(courseCode: String, username: String) async throws -> Data {
