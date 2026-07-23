@@ -33,6 +33,9 @@ public struct CourseBundleManifest: Codable, Sendable {
     public let enrolledUserBundleIDs: [String]
     /// Course sections (nil in bundles exported before this field was added).
     public let sections: [BundledSection]?
+    /// Ungraded course content items (nil in bundles exported before this field
+    /// was added). Each references its section via `sectionBundleID`.
+    public let contentItems: [BundledContentItem]?
     public let assignments: [BundledAssignment]
     public let testSetups: [BundledTestSetup]
     /// Student submissions only (kind == "student"); validation runs excluded.
@@ -49,6 +52,7 @@ public struct CourseBundleManifest: Codable, Sendable {
         users: [BundledUser],
         enrolledUserBundleIDs: [String],
         sections: [BundledSection] = [],
+        contentItems: [BundledContentItem] = [],
         assignments: [BundledAssignment],
         testSetups: [BundledTestSetup],
         submissions: [BundledSubmission],
@@ -62,6 +66,7 @@ public struct CourseBundleManifest: Codable, Sendable {
         self.users = users
         self.enrolledUserBundleIDs = enrolledUserBundleIDs
         self.sections = sections
+        self.contentItems = contentItems
         self.assignments = assignments
         self.testSetups = testSetups
         self.submissions = submissions
@@ -127,6 +132,37 @@ public struct BundledSection: Codable, Sendable {
         self.bundleID = bundleID
         self.name = name
         self.defaultGradingMode = defaultGradingMode
+        self.sortOrder = sortOrder
+    }
+}
+
+/// An ungraded course content item (reference material) carried in a bundle.
+/// Content items carry no files (link-first), so — like sections — they are
+/// pure manifest rows. No own `bundleID`: nothing references a content item.
+public struct BundledContentItem: Codable, Sendable {
+    /// References BundledSection.bundleID (nil = ungrouped, or a bundle
+    /// exported before sections were carried).
+    public let sectionBundleID: String?
+    public let title: String
+    /// Raw ContentItemKind ("link" | "notebook" | "document" | …).
+    public let kind: String
+    public let description: String?
+    public let links: [ContentLink]
+    public let updatedLabel: String?
+    public let isPublished: Bool
+    public let sortOrder: Int
+
+    public init(
+        sectionBundleID: String?, title: String, kind: String, description: String?,
+        links: [ContentLink], updatedLabel: String?, isPublished: Bool, sortOrder: Int
+    ) {
+        self.sectionBundleID = sectionBundleID
+        self.title = title
+        self.kind = kind
+        self.description = description
+        self.links = links
+        self.updatedLabel = updatedLabel
+        self.isPublished = isPublished
         self.sortOrder = sortOrder
     }
 }

@@ -1359,6 +1359,45 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .assignment-table { margin-bottom: .5rem; }
 .assignment-table--ungrouped { margin-top: 1rem; }
 
+/* Ungraded content items (reference material shown inside course sections,
+   above the assignments — links, notebooks, slides, outlines). Shared by the
+   student dashboard and the instructor authoring view. */
+.content-lane { margin-bottom: .75rem; }
+.content-item-table { margin-bottom: .5rem; }
+.content-item-kind {
+    display: inline-block;
+    font-size: var(--text-2xs);
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    padding: .1rem .4rem;
+    margin-right: .35rem;
+}
+.content-item-title { font-weight: 600; }
+.content-item-hidden {
+    display: inline-block;
+    font-size: var(--text-2xs);
+    text-transform: uppercase;
+    color: var(--accent-fg);
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius-full);
+    padding: .1rem .4rem;
+    margin-left: .35rem;
+}
+.content-item-desc { font-size: var(--text-xs); margin-top: .15rem; }
+.content-item-links a { margin-right: .5rem; }
+.content-item-actions { display: flex; gap: .35rem; align-items: center; }
+.content-item-link-fields {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    margin-bottom: .5rem;
+}
+.content-item-link-pair { display: flex; gap: .35rem; }
+
 .text-muted { color: var(--gray-600); }
 
 .due-extension-note { font-size: var(--text-xs); color: var(--gray-600); }

@@ -411,11 +411,15 @@ extension InstructorDashboardRoutes {
 
     /// Buckets sorted rows into per-section groups + a trailing
     /// "ungrouped" list for rows whose assignment has no `sectionID`
-    /// (or whose `sectionID` no longer matches any section).
+    /// (or whose `sectionID` no longer matches any section).  Each section also
+    /// carries its ungraded content-item lane (`contentRowsBySectionID`); every
+    /// section is emitted even when empty, so a content-only section still
+    /// renders on the instructor dashboard.
     func groupRowsBySection(
         sortedRows: [AssignmentRow],
         allSections: [APICourseSection],
-        sectionByPublicID: [String: UUID]
+        sectionByPublicID: [String: UUID],
+        contentRowsBySectionID: [UUID: [ContentItemRow]]
     ) -> (sectionContexts: [CourseSectionRow], ungroupedRows: [AssignmentRow]) {
         var rowsBySectionID: [UUID: [AssignmentRow]] = [:]
         var ungroupedRows: [AssignmentRow] = []
@@ -433,9 +437,41 @@ extension InstructorDashboardRoutes {
                 name: section.name,
                 defaultGradingMode: section.defaultGradingMode,
                 sortOrder: section.sortOrder,
-                rows: rowsBySectionID[sID] ?? []
+                rows: rowsBySectionID[sID] ?? [],
+                contentItems: contentRowsBySectionID[sID] ?? []
             )
         }
         return (sectionContexts, ungroupedRows)
+    }
+
+    /// Content items for the active course, in lane order. The instructor
+    /// dashboard shows all items (published and hidden drafts alike).
+    func loadCourseContentItems(
+        req: Request,
+        activeCourseUUID: UUID?
+    ) async throws -> [APICourseContentItem] {
+        guard let activeCourseUUID else { return [] }
+        return try await APICourseContentItem.query(on: req.db)
+            .filter(\.$courseID == activeCourseUUID)
+            .sort(\.$sortOrder, .ascending)
+            .all()
+    }
+
+    /// Buckets content items into `[sectionID: rows]` + an ungrouped list
+    /// (items with no section), preserving lane order.
+    func bucketContentItems(
+        _ items: [APICourseContentItem]
+    ) -> (bySectionID: [UUID: [ContentItemRow]], ungrouped: [ContentItemRow]) {
+        var bySectionID: [UUID: [ContentItemRow]] = [:]
+        var ungrouped: [ContentItemRow] = []
+        for item in items {
+            let row = ContentItemRow(from: item)
+            if let sid = item.sectionID {
+                bySectionID[sid, default: []].append(row)
+            } else {
+                ungrouped.append(row)
+            }
+        }
+        return (bySectionID, ungrouped)
     }
 }

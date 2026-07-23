@@ -32,6 +32,9 @@ struct CourseSectionRow: Encodable {
     let defaultGradingMode: String  // "browser" | "worker"
     let sortOrder: Int
     let rows: [AssignmentRow]  // assignments in this section, sorted
+    /// Ungraded content items (reference material) in this section's content
+    /// lane, rendered above the assignments on the instructor dashboard.
+    let contentItems: [ContentItemRow]
 }
 
 /// Overview tab (`GET /instructor`): dashboard metrics + the assignment /
@@ -45,8 +48,18 @@ struct AssignmentsContext: Encodable {
     let activeInstructorTab: String
     let sections: [CourseSectionRow]  // sections with their assignments
     let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
+    let ungroupedContentItems: [ContentItemRow]  // ungrouped content items (no section)
     let hasSections: Bool
     let hasUngrouped: Bool
+    /// Whether to render the trailing "Ungrouped" block — true when there are
+    /// ungrouped assignments, ungrouped content items, or no sections at all
+    /// (flat-table mode). Precomputed so the template branches on a flat bool
+    /// (LeafKit 1.14.2 mis-parses chained `||`).
+    let showUngroupedBlock: Bool
+    /// Whether to render the "No assignments yet" empty message — true only when
+    /// the course has nothing to list in any lane. Precomputed for the same
+    /// reason.
+    let showEmptyMessage: Bool
     let enrolledStudentCount: Int
 }
 

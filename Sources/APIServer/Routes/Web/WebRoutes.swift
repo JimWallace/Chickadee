@@ -120,6 +120,11 @@ struct WebRoutes: RouteCollection {
             user: user, allAssignments: allAssignments, db: req.db)
         async let sectionsFetch = Self.loadCourseSections(
             activeCourseUUID: courseState.activeCourseUUID, db: req.db)
+        // Ungraded content items grouped alongside assignments. Staff see
+        // drafts; students see only published items.
+        async let contentItemsFetch = Self.loadCourseContentItems(
+            activeCourseUUID: courseState.activeCourseUUID,
+            includeUnpublished: isActiveCourseStaff, db: req.db)
 
         let extensionDueAtBySetupID = try await extensionsFetch
         let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
@@ -164,31 +169,14 @@ struct WebRoutes: RouteCollection {
         )
         let rows = sortedSetups.map { Self.buildTestSetupRow(setup: $0, context: rowContext) }
 
-        // Sections for the active course (fetch started up top) enable the
-        // grouped display below.
+        // Sections + content items for the active course (fetches started up
+        // top) drive the grouped display. Bucketing both lanes by section and
+        // assembling the ordered groups lives in a helper (WebRoutes+IndexLoading).
         let allSections = try await sectionsFetch
-
-        // Build lookup: testSetupID → section UUID
-        let sectionBySetupID: [String: UUID] = Dictionary(
-            allAssignments.compactMap { a -> (String, UUID)? in
-                guard let sid = a.sectionID else { return nil }
-                return (a.testSetupID, sid)
-            },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        // Ordered display groups (shared fold, #1118): named sections with
-        // visible items first, then a trailing unnamed bucket for ungrouped.
-        let grouped = groupRowsBySection(
-            rows: rows, sections: allSections, includeEmptySections: false,
-            sectionIDForRow: { sectionBySetupID[$0.id] },
-            makeSection: { section, sectionRows in
-                IndexDisplayGroup(name: section.name, setups: sectionRows)
-            })
-        var displayGroups = grouped.sections
-        if !grouped.ungrouped.isEmpty {
-            displayGroups.append(IndexDisplayGroup(name: nil, setups: grouped.ungrouped))
-        }
+        let contentItems = try await contentItemsFetch
+        let displayGroups = Self.buildIndexDisplayGroups(
+            rows: rows, contentItems: contentItems,
+            allAssignments: allAssignments, allSections: allSections)
 
         return try await req.view.render(
             "index",

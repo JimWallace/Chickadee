@@ -82,6 +82,10 @@ import Testing
         // structure, not content.
         "CourseSectionTools.swift",
         "AssignmentOrderingTools.swift",
+        // Ungraded course content items (reference material). They own no test
+        // setup, so create/update/delete/reorder never changes what any
+        // assignment's suite grades — nothing to close or regrade.
+        "CourseContentItemTools.swift",
     ]
 
     @Test func everyWriteToolIsClassifiedForCloseOnEdit() throws {

@@ -21,6 +21,34 @@
 #if(group.name):
 <h2 class="assignment-section-heading">#(group.name)</h2>
 #endif
+#if(!group.contentItems.isEmpty):
+<table class="results-table content-item-table">
+    <thead>
+        <tr>
+            <th>Material</th>
+            <th class="col-hide-phone">Links</th>
+            <th class="col-hide-phone">Updated</th>
+        </tr>
+    </thead>
+    <tbody>
+    #for(item in group.contentItems):
+        <tr class="content-item-row">
+            <td>
+                <span class="content-item-kind">#(item.kindLabel)</span>
+                <span class="content-item-title">#(item.title)</span>
+                #if(!item.isPublished):<span class="content-item-hidden">Hidden</span>#endif
+                #if(item.itemDescription):<div class="content-item-desc text-muted">#(item.itemDescription)</div>#endif
+            </td>
+            <td class="col-hide-phone content-item-links">
+                #for(link in item.links):<a class="content-item-link" href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor
+            </td>
+            <td class="col-hide-phone">#if(item.updatedLabel):#(item.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
+        </tr>
+    #endfor
+    </tbody>
+</table>
+#endif
+#if(!group.setups.isEmpty):
 <table class="results-table assignment-table">
     #extend("_assignment-table-head")
     <tbody>
@@ -29,6 +57,7 @@
     #endfor
     </tbody>
 </table>
+#endif
 #endfor
 #endif
 #endexport
