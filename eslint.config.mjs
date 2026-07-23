@@ -30,6 +30,7 @@ const browserGlobals = {
   indexedDB: 'readonly', crypto: 'readonly', performance: 'readonly',
   location: 'readonly', history: 'readonly', alert: 'readonly',
   confirm: 'readonly', CustomEvent: 'readonly', Event: 'readonly',
+  Element: 'readonly',
   MutationObserver: 'readonly', requestAnimationFrame: 'readonly',
   Worker: 'readonly', WebSocket: 'readonly', DOMParser: 'readonly',
   TextDecoder: 'readonly', TextEncoder: 'readonly',
