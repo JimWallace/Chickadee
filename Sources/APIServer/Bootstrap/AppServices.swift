@@ -30,6 +30,9 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
         PeriodicSweepLifecycleHandler { $0.auditLogReaperMonitor(maxAge: auditLogMaxAge) }
     )
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.dataExportReaperMonitor })
+    // Unstick personal-data exports orphaned in `pending` by a restart mid-
+    // generation, so the account page's status poll can resolve (#557).
+    app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
     // One-time best-effort cleanup of pre-v0.4 notebook working-copy
