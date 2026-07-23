@@ -135,3 +135,87 @@ if (root) {
         if (e.key === 'Escape') closeAll(null);
     });
 }());
+
+// ── Floating action popovers (per-student extension / grade-override) ────────
+// The <details class="ext-details"> panels on the student-submissions page use
+// an absolutely-positioned .action-panel that opens downward. They live inside
+// .results-table, which clips its overflow (for the rounded corners), so a
+// panel on a row near the bottom of the table is cut off — the Save button
+// disappears below the table edge and can't even be scrolled to.
+//
+// When a panel opens, promote it to position:fixed and place it next to its
+// summary button, clamped to stay fully within the viewport: below the button
+// when it fits, flipped above when it doesn't, and height-capped with its own
+// scroll if it is somehow taller than the screen. position:fixed also escapes
+// the table's overflow clip. Phones keep the CSS static-flow panel (the
+// max-width:640px rule), which is in normal flow and never overflows.
+(function floatingActionPopovers() {
+    const details = Array.from(document.querySelectorAll('details.ext-details'))
+        .filter((d) => d.querySelector('.action-panel'));
+    if (details.length === 0) return;
+
+    const GAP = 6;      // px between the summary button and the panel
+    const MARGIN = 8;   // min px kept clear of every viewport edge
+    const isPhone = () => window.matchMedia('(max-width: 640px)').matches;
+    const FLOATED = ['position', 'left', 'top', 'right', 'maxHeight', 'overflowY'];
+
+    let active = null;  // the <details> whose panel is currently floated
+
+    const clear = (panel) => FLOATED.forEach((prop) => { panel.style[prop] = ''; });
+
+    function place(d) {
+        const summary = d.querySelector('summary');
+        const panel = d.querySelector('.action-panel');
+        if (!summary || !panel) return;
+        // On phones the CSS drops the panel into static flow — leave it there.
+        if (isPhone()) { clear(panel); return; }
+
+        // Float it, cap its height to the viewport, and measure at the cap.
+        panel.style.position = 'fixed';
+        panel.style.right = 'auto';
+        panel.style.overflowY = 'auto';
+        panel.style.maxHeight = (window.innerHeight - 2 * MARGIN) + 'px';
+        panel.style.left = '0px';
+        panel.style.top = '0px';
+
+        const s = summary.getBoundingClientRect();
+        const pw = panel.offsetWidth;
+        const ph = panel.offsetHeight;
+
+        // Right-align the panel under the button, then clamp horizontally.
+        const left = Math.min(Math.max(s.right - pw, MARGIN), window.innerWidth - pw - MARGIN);
+        // Prefer below the button; flip above if it would overflow the bottom;
+        // clamp to the top edge if it fits neither way.
+        let top = s.bottom + GAP;
+        if (top + ph > window.innerHeight - MARGIN) {
+            const above = s.top - GAP - ph;
+            top = above >= MARGIN ? above : Math.max(MARGIN, window.innerHeight - MARGIN - ph);
+        }
+        panel.style.left = Math.round(left) + 'px';
+        panel.style.top = Math.round(top) + 'px';
+    }
+
+    const reposition = () => { if (active && active.open) place(active); };
+
+    details.forEach((d) => {
+        d.addEventListener('toggle', () => {
+            if (d.open) {
+                // Native <details> allow several open at once; only float one.
+                if (active && active !== d) active.open = false;
+                active = d;
+                place(d);
+            } else {
+                clear(d.querySelector('.action-panel'));
+                if (active === d) active = null;
+            }
+        });
+    });
+
+    // Keep the floated panel glued to its button as the page scrolls/resizes.
+    // Capture phase so it also fires for scrolls inside nested scroll areas.
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && active) active.open = false;
+    });
+}());

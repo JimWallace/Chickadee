@@ -177,10 +177,11 @@ enum CourseWriteDenial: Equatable {
 /// floor explicitly, there is no default):
 ///   - `.ta` — assignment CONTENT and grading: suite/scripts/families/checks,
 ///     notebook/solution edits, global inputs, datasets, achievements,
-///     retest/reset/grade-override.
+///     retest/reset/grade-override, and per-student deadline extensions (an
+///     individual accommodation, sibling to grade-override).
 ///   - `.instructor` — course LIFECYCLE and structure: enrollment/roster/staff,
-///     assignment create/delete/open/close/deadlines, sections, archive,
-///     BrightSpace binding.
+///     assignment create/delete/open/close and the assignment-wide due date,
+///     sections, archive, BrightSpace binding.
 func evaluateCourseWrite(
     user: APIUser, courseID: UUID, atLeast minimum: CourseRole, db: Database
 ) async throws -> CourseWriteDenial? {

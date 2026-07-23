@@ -57,6 +57,19 @@ import VaporTesting
             taUserID: try taUser.requireID(), csrf: csrf, sessionCookie: sessionCookie)
     }
 
+    /// A fresh student enrolled as `.student` in `courseID`, returned with their
+    /// URL token — the `:urlToken` path segment the per-student action routes
+    /// (extension grant/revoke) key off.
+    private func enrolledTarget(courseID: UUID) async throws -> (student: APIUser, urlToken: String) {
+        let target = APIUser(
+            username: "ext_target", passwordHash: try testPasswordHash("pw"), role: "student")
+        try await target.save(on: app.db)
+        try await APICourseEnrollment(
+            userID: try target.requireID(), courseID: courseID, role: .student
+        ).save(on: app.db)
+        return (target, try target.requireURLToken())
+    }
+
     // MARK: - TA CAN edit assignment content (floor .ta)
 
     @Test func taCanEditAssignmentSuite() async throws {
@@ -74,6 +87,60 @@ import VaporTesting
                     #expect(
                         res.status == .ok, "a TA may edit assignment content, got \(res.status): \(res.body.string)")
                 })
+        }
+    }
+
+    // A per-student deadline extension is an individual accommodation — a
+    // sibling of grade-override, floored at `.ta`, NOT the assignment-wide
+    // deadline. Regression for the reported 403: these endpoints used to
+    // require `.instructor`, so a TA got a 403 on Save even though the
+    // student-submissions page shows them the extension button right beside
+    // retest / grade-override (both `.ta`), which they can use.
+    @Test func taCanGrantAndRevokeExtension() async throws {
+        try await withApp(app) { _ in
+            let fx = try await fixture(role: .ta)
+            let target = try await enrolledTarget(courseID: fx.courseID)
+            let targetID = try target.student.requireID()
+
+            let fmt = DateFormatter()
+            fmt.locale = Locale(identifier: "en_US_POSIX")
+            fmt.timeZone = TimeZone(identifier: "America/Toronto")
+            fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
+            let futureInput = fmt.string(from: Date().addingTimeInterval(86_400))
+
+            // Grant → 303 redirect, exactly one row created.
+            try await app.asyncTest(
+                .POST, "/TAROLE/students/\(target.urlToken)/assignments/\(fx.assignmentID)/extension",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    try req.content.encode(
+                        ["_csrf": fx.csrf, "extendedDueAt": futureInput, "note": "Accommodation"],
+                        as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .seeOther,
+                        "a TA may grant a per-student extension, got \(res.status): \(res.body.string)")
+                })
+            let afterGrant = try await APIAssignmentExtension.query(on: app.db)
+                .filter(\.$userID == targetID).count()
+            #expect(afterGrant == 1, "the extension row must be created")
+
+            // Revoke → 303 redirect, row removed.
+            try await app.asyncTest(
+                .POST,
+                "/TAROLE/students/\(target.urlToken)/assignments/\(fx.assignmentID)/extension/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    try req.content.encode(["_csrf": fx.csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .seeOther, "a TA may revoke a per-student extension, got \(res.status)")
+                })
+            let afterRevoke = try await APIAssignmentExtension.query(on: app.db)
+                .filter(\.$userID == targetID).count()
+            #expect(afterRevoke == 0, "the extension row must be removed")
         }
     }
 
@@ -178,6 +245,29 @@ import VaporTesting
                     #expect(
                         res.status == .forbidden,
                         "a student must not retest submissions, got \(res.status)")
+                })
+        }
+    }
+
+    @Test func studentCannotGrantExtension() async throws {
+        try await withApp(app) { _ in
+            // Lowering the extension floor to `.ta` must not leak down to a
+            // per-course student — the `/instructor` staff gate (role >= .ta)
+            // still shuts them out before the handler runs.
+            let fx = try await fixture(role: .student)
+            let target = try await enrolledTarget(courseID: fx.courseID)
+            try await app.asyncTest(
+                .POST, "/TAROLE/students/\(target.urlToken)/assignments/\(fx.assignmentID)/extension",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.sessionCookie)
+                    try req.content.encode(
+                        ["_csrf": fx.csrf, "extendedDueAt": "2099-01-01T00:00", "note": ""],
+                        as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(
+                        res.status == .forbidden,
+                        "a student must not grant extensions, got \(res.status)")
                 })
         }
     }

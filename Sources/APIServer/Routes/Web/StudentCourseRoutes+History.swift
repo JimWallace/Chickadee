@@ -427,7 +427,7 @@ extension StudentCourseRoutes {
         }
 
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "grant deadline extensions", writeFloor: .instructor)
+            req: req, action: "grant deadline extensions", writeFloor: .ta)
         let (actor, student) = (action.actor, action.student)
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -489,7 +489,7 @@ extension StudentCourseRoutes {
     @Sendable
     func deleteStudentAssignmentExtension(req: Request) async throws -> Response {
         let action = try await resolveStudentAssignmentAction(
-            req: req, action: "revoke deadline extensions", writeFloor: .instructor)
+            req: req, action: "revoke deadline extensions", writeFloor: .ta)
         let student = action.student
         let assignmentIDRaw = action.assignment.publicID
         let studentUUID = action.studentID
@@ -671,9 +671,12 @@ extension StudentCourseRoutes {
     ///
     /// `writeFloor`, when non-nil, additionally authorizes a *write* on that
     /// course via `requireCourseWriteAccess` (archived-course block + the
-    /// action's minimum role): grading actions (retest / reset / grade-override)
-    /// pass `.ta`; deadline grants (extensions) pass `.instructor`. The read-only
-    /// history page leaves it nil so archived courses stay auditable.
+    /// action's minimum role): the per-student grading/accommodation actions
+    /// (retest / reset / grade-override / extension grant / extension revoke)
+    /// all pass `.ta`. A per-student extension is an individual accommodation,
+    /// not a change to the assignment-wide deadline — the assignment *lifecycle*
+    /// (open/close/set due date) stays `.instructor` on its own routes. The
+    /// read-only history page leaves it nil so archived courses stay auditable.
     ///
     /// Error semantics match the guard chain each handler previously
     /// inlined: `notFound("Assignment '<id>'")` when the assignment is
