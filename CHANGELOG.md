@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.625] - 2026-07-23
+
+### Changed
+
+- **Install `zip`/`unzip` explicitly in the runtime image.** The server and
+  worker shell out to `/usr/bin/{zip,unzip}` for test-setup extract/publish,
+  course-bundle import/export, and the personal-data export, but those
+  binaries were only ever present transitively in the `ubuntu:24.04` base.
+  They are now an explicit apt dependency so a future base-image change can't
+  silently drop them and break those paths.
+
+
 ## [0.4.624] - 2026-07-23
 
 ### Fixed
