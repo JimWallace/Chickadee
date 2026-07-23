@@ -34,13 +34,20 @@ if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
   BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
 
-# R kernel via jupyterlite-xeus (xeus-r): when the R environment file is present,
-# copy it into the lite dir and point the XeusAddon at it, so the xeus-r WASM
-# kernel is built alongside the Pyodide Python kernel. Requires micromamba on
-# PATH (jupyterlite-xeus solves the emscripten-forge env at build time).
-if [[ -f "$LITE_SRC_DIR/environment-r.yml" ]]; then
+# R kernel via jupyterlite-xeus (xeus-r): build the xeus-r WASM kernel alongside
+# the Pyodide Python kernel ONLY where micromamba is available. jupyterlite-xeus
+# solves the emscripten-forge env at build time, which needs network to
+# repo.prefix.dev / conda-forge. CI has no such network, so it skips this and
+# treats the committed Public/jupyterlite/xeus/ as the authoritative vendored
+# kernel (the reproducibility check excludes that path; scripts/check-xeus-vendored.sh
+# guards its integrity). Rebuild the vendored kernel where micromamba +
+# emscripten-forge are reachable (a maintainer machine, or this repo's spike env).
+if [[ -f "$LITE_SRC_DIR/environment-r.yml" ]] && command -v micromamba >/dev/null 2>&1; then
   cp "$LITE_SRC_DIR/environment-r.yml" "$TMP_LITE_DIR/environment.yml"
   BUILD_ARGS+=(--XeusAddon.environment_file "$TMP_LITE_DIR/environment.yml")
+  echo "build-jupyterlite: micromamba found — building the xeus-r kernel."
+elif [[ -f "$LITE_SRC_DIR/environment-r.yml" ]]; then
+  echo "build-jupyterlite: micromamba not found — skipping the xeus-r kernel build; the committed Public/jupyterlite/xeus/ is authoritative." >&2
 fi
 
 "$JUPYTER_BIN" lite build "${BUILD_ARGS[@]}"
@@ -48,11 +55,15 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Keep runtime notebook storage roots while refreshing all generated assets.
-rsync -a --delete \
-  --exclude 'files/' \
-  --exclude 'lab/files/' \
-  --exclude 'notebooks/files/' \
-  "$TEMP_BUILD_DIR"/ "$OUTPUT_DIR"/
+RSYNC_EXCLUDES=(--exclude 'files/' --exclude 'lab/files/' --exclude 'notebooks/files/')
+# If this run did NOT build the xeus-r kernel (no micromamba) but a vendored one
+# is already committed, preserve it — don't let --delete wipe the manually-built
+# kernel that this environment can't reproduce.
+if ! command -v micromamba >/dev/null 2>&1 && [[ -d "$OUTPUT_DIR/xeus" ]]; then
+  RSYNC_EXCLUDES+=(--exclude 'xeus/' --exclude 'extensions/@jupyterlite/xeus-extension/')
+  echo "build-jupyterlite: preserving the committed vendored xeus-r kernel (not rebuilt this run)." >&2
+fi
+rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$TEMP_BUILD_DIR"/ "$OUTPUT_DIR"/
 
 mkdir -p "$OUTPUT_DIR/files" "$OUTPUT_DIR/lab/files" "$OUTPUT_DIR/notebooks/files"
 
