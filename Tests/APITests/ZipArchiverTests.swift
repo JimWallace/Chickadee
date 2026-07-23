@@ -100,6 +100,38 @@ final class ZipArchiverTests {
         #expect(bContent == "world")
     }
 
+    // MARK: - Large archive (regression: unread-pipe deadlock)
+
+    /// `zip -r` emits one "adding: …" line per file. When the discarded child
+    /// output was an in-memory `Pipe` nobody drained, an archive whose output
+    /// exceeded the ~64 KB OS pipe buffer deadlocked — `zip` blocked on write,
+    /// never exited, and `runZipProcess`'s continuation never resumed. That
+    /// hung a data-heavy personal-data export forever in `pending`. Enough
+    /// files to blow past the buffer must still complete.
+    @Test(.timeLimit(.minutes(1)))
+    func createZipArchive_manyFiles_doesNotDeadlock() async throws {
+        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
+            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
+        else { return }
+
+        let srcDir = tmpDir.appendingPathComponent("many")
+        try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
+        // ~3000 realistically-named files ≈ 180 KB of verbose zip output,
+        // comfortably past the 64 KB buffer that triggered the hang.
+        let fileCount = 3000
+        for i in 0..<fileCount {
+            let name = String(format: "submissions_sub_%08d_results_%d.json", i, i)
+            try Data("{}\n".utf8).write(to: srcDir.appendingPathComponent(name))
+        }
+
+        let zipPath = tmpDir.appendingPathComponent("many.zip").path
+        try await createZipArchive(sourceDir: srcDir, outputPath: zipPath)
+        #expect(FileManager.default.fileExists(atPath: zipPath))
+
+        let entries = try listZipContents(zipPath: zipPath)
+        #expect(entries.count >= fileCount, "every file should be archived")
+    }
+
     // MARK: - Path traversal detection
 
     @Test func dotDotTraversalThrows() async throws {

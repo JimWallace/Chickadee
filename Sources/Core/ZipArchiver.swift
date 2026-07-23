@@ -46,11 +46,17 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
 /// Creates a ZIP archive from all contents of `sourceDir`.
 /// The resulting archive contains paths relative to `sourceDir` (no parent dir prefix).
 ///
-/// Equivalent to: cd <sourceDir> && /usr/bin/zip -r <outputPath> .
+/// Equivalent to: cd <sourceDir> && /usr/bin/zip -q -r <outputPath> .
+///
+/// `-q` (quiet) matters: without it `zip` prints one "adding: …" line per
+/// file, and for a large tree (e.g. a data-heavy personal-data export) that
+/// output is what used to overflow the discarded-output buffer.  The real
+/// deadlock guard is `runZipProcess` writing child output to the null device,
+/// but staying quiet avoids generating megabytes of output nobody reads.
 public func createZipArchive(sourceDir: URL, outputPath: String) async throws {
     try await runZipProcess(
         executablePath: "/usr/bin/zip",
-        arguments: ["-r", outputPath, "."],
+        arguments: ["-q", "-r", outputPath, "."],
         workingDirectory: sourceDir
     )
 }
@@ -149,8 +155,15 @@ private func runZipProcess(
         if let dir = workingDirectory {
             proc.currentDirectoryURL = dir
         }
-        proc.standardOutput = Pipe()  // discard stdout
-        proc.standardError = Pipe()  // discard stderr
+        // Discard child output to the NULL DEVICE, not an in-memory Pipe.
+        // A Pipe we never drain deadlocks once the child writes more than the
+        // OS pipe buffer (~64 KB): the child blocks on write, so it never
+        // exits, so `terminationHandler` never fires and this continuation
+        // never resumes. `zip -r` emits one line per file, so a large archive
+        // (a data-heavy personal-data export) hit exactly this and hung the
+        // export forever. `/dev/null` sinks any volume without blocking.
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
         proc.terminationHandler = { process in
             if process.terminationStatus == 0 {
                 continuation.resume()
