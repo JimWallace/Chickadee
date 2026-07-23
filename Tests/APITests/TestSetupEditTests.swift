@@ -479,13 +479,13 @@ import VaporTesting
             let savedJSON = try JSONSerialization.jsonObject(with: savedData) as? [String: Any]
             let metadata = savedJSON?["metadata"] as? [String: Any]
             let kernelspec = metadata?["kernelspec"] as? [String: Any]
-            #expect(kernelspec?["name"] as? String == "webr", "ir kernel should be normalized to webr")
-            #expect(kernelspec?["display_name"] as? String == "R (WebR)", "display_name should be R (WebR)")
+            #expect(kernelspec?["name"] as? String == "xr", "ir kernel should be normalized to xr")
+            #expect(kernelspec?["display_name"] as? String == "R (xeus-r)", "display_name should be R (xeus-r)")
 
         }
     }
 
-    @Test func getAssignmentNormalizesIRKernelToWebR() async throws {
+    @Test func getAssignmentNormalizesIRKernelToXeusR() async throws {
         try await withApp(try await makeApp()) { app in
             let cookie = try await loginAsInstructor(on: app)
             try await insertSetup(id: "setup_flat_ir", on: app)
@@ -508,9 +508,9 @@ import VaporTesting
                     let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
                     let metadata = json?["metadata"] as? [String: Any]
                     let kernelspec = metadata?["kernelspec"] as? [String: Any]
-                    #expect(kernelspec?["name"] as? String == "webr", "ir kernel should be normalized to webr on GET")
+                    #expect(kernelspec?["name"] as? String == "xr", "ir kernel should be normalized to xr on GET")
                     #expect(
-                        kernelspec?["display_name"] as? String == "R (WebR)", "display_name should be R (WebR) on GET")
+                        kernelspec?["display_name"] as? String == "R (xeus-r)", "display_name should be R (xeus-r) on GET")
                 }
             )
 
