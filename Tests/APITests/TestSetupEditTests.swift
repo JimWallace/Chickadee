@@ -510,7 +510,8 @@ import VaporTesting
                     let kernelspec = metadata?["kernelspec"] as? [String: Any]
                     #expect(kernelspec?["name"] as? String == "xr", "ir kernel should be normalized to xr on GET")
                     #expect(
-                        kernelspec?["display_name"] as? String == "R (xeus-r)", "display_name should be R (xeus-r) on GET")
+                        kernelspec?["display_name"] as? String == "R (xeus-r)",
+                        "display_name should be R (xeus-r) on GET")
                 }
             )
 
