@@ -25,16 +25,34 @@ struct AssignmentRow: Encodable {
     let vanityURL: String?  // e.g. "/CS101/lab-1-intro"; nil if unpublished or no active course
 }
 
-/// A course section with its grouped assignment rows, used in instructor and student views.
+/// One element of a section's unified item list on the instructor dashboard: a
+/// graded assignment row (`assignment`) OR an ungraded content item (`content`),
+/// discriminated by `isContent`. The two lanes interleave in one drag-orderable
+/// `sort_order` sequence, so a reading can sit between two labs.
+struct InstructorSectionItem: Encodable {
+    let isContent: Bool
+    /// Populated when `!isContent`.
+    let assignment: AssignmentRow?
+    /// Populated when `isContent`.
+    let content: ContentItemRow?
+
+    static func assignment(_ row: AssignmentRow) -> InstructorSectionItem {
+        InstructorSectionItem(isContent: false, assignment: row, content: nil)
+    }
+    static func material(_ content: ContentItemRow) -> InstructorSectionItem {
+        InstructorSectionItem(isContent: true, assignment: nil, content: content)
+    }
+}
+
+/// A course section with its unified item list (assignments + content items
+/// interleaved by `sort_order`), used on the instructor dashboard.
 struct CourseSectionRow: Encodable {
     let sectionID: String  // UUID as string
     let name: String
     let defaultGradingMode: String  // "browser" | "worker"
     let sortOrder: Int
-    let rows: [AssignmentRow]  // assignments in this section, sorted
-    /// Ungraded content items (reference material) in this section's content
-    /// lane, rendered above the assignments on the instructor dashboard.
-    let contentItems: [ContentItemRow]
+    /// Assignments and content items in this section, interleaved and sorted.
+    let items: [InstructorSectionItem]
 }
 
 /// Overview tab (`GET /instructor`): dashboard metrics + the assignment /
@@ -46,15 +64,14 @@ struct CourseSectionRow: Encodable {
 struct AssignmentsContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
-    let sections: [CourseSectionRow]  // sections with their assignments
-    let ungroupedRows: [AssignmentRow]  // assignments/setups not in any section
-    let ungroupedContentItems: [ContentItemRow]  // ungrouped content items (no section)
+    let sections: [CourseSectionRow]  // sections with their interleaved items
+    /// Assignments + content items not in any section, interleaved and sorted.
+    let ungroupedItems: [InstructorSectionItem]
     let hasSections: Bool
-    let hasUngrouped: Bool
     /// Whether to render the trailing "Ungrouped" block — true when there are
-    /// ungrouped assignments, ungrouped content items, or no sections at all
-    /// (flat-table mode). Precomputed so the template branches on a flat bool
-    /// (LeafKit 1.14.2 mis-parses chained `||`).
+    /// ungrouped items, or no sections at all (flat-table mode). Precomputed so
+    /// the template branches on a flat bool (LeafKit 1.14.2 mis-parses chained
+    /// `||`).
     let showUngroupedBlock: Bool
     /// Whether to render the "No assignments yet" empty message — true only when
     /// the course has nothing to list in any lane. Precomputed for the same

@@ -376,60 +376,60 @@ extension InstructorDashboardRoutes {
         }
     }
 
-    /// Sorts rows: published-with-sortOrder first (ascending), then
-    /// published-without-sortOrder (in setup-creation order), then
-    /// unpublished setups (in setup-creation order).
-    func sortAssignmentRows(
-        _ rows: [AssignmentRow],
-        setupIndexByID: [String: Int]
-    ) -> [AssignmentRow] {
-        rows.sorted { lhs, rhs in
-            let lhsPublished = lhs.assignmentID != nil
-            let rhsPublished = rhs.assignmentID != nil
-            if lhsPublished != rhsPublished {
-                return lhsPublished && !rhsPublished
-            }
-
-            if lhsPublished && rhsPublished {
-                switch (lhs.sortOrder, rhs.sortOrder) {
-                case (let l?, let r?) where l != r:
-                    return l < r
-                case (_?, nil):
-                    return true
-                case (nil, _?):
-                    return false
-                default:
-                    break
-                }
-            }
-
-            let lhsIndex = setupIndexByID[lhs.setupID] ?? Int.max
-            let rhsIndex = setupIndexByID[rhs.setupID] ?? Int.max
-            return lhsIndex < rhsIndex
-        }
-    }
-
-    /// Buckets sorted rows into per-section groups + a trailing
-    /// "ungrouped" list for rows whose assignment has no `sectionID`
-    /// (or whose `sectionID` no longer matches any section).  Each section also
-    /// carries its ungraded content-item lane (`contentRowsBySectionID`); every
-    /// section is emitted even when empty, so a content-only section still
-    /// renders on the instructor dashboard.
-    func groupRowsBySection(
-        sortedRows: [AssignmentRow],
+    /// Interleaves each section's assignment lane and content lane into one
+    /// ordered `items` list, and produces the trailing ungrouped bucket the same
+    /// way. Within a section (which only ever holds published assignments, since
+    /// an unpublished draft has no `sectionID`) the two lanes merge by their
+    /// shared `sort_order` (`mergedBySectionItemOrder`). The ungrouped bucket
+    /// merges published assignments + content the same way, then appends
+    /// unpublished drafts (in setup-creation order) so drafts stay at the bottom.
+    /// Every section is emitted even when empty, so a content-only section still
+    /// renders.
+    func buildInstructorSectionItems(
+        assignmentRows: [AssignmentRow],
+        contentItems: [APICourseContentItem],
         allSections: [APICourseSection],
         sectionByPublicID: [String: UUID],
-        contentRowsBySectionID: [UUID: [ContentItemRow]]
-    ) -> (sectionContexts: [CourseSectionRow], ungroupedRows: [AssignmentRow]) {
-        var rowsBySectionID: [UUID: [AssignmentRow]] = [:]
-        var ungroupedRows: [AssignmentRow] = []
-        for row in sortedRows {
-            if let aID = row.assignmentID, let sID = sectionByPublicID[aID] {
-                rowsBySectionID[sID, default: []].append(row)
+        setupByID: [String: APITestSetup],
+        setupIndexByID: [String: Int]
+    ) -> (sectionContexts: [CourseSectionRow], ungroupedItems: [InstructorSectionItem]) {
+        typealias Keyed = (key: SectionItemSortKey, item: InstructorSectionItem)
+        let liveSectionIDs = Set(allSections.compactMap(\.id))
+        var keyedBySectionID: [UUID: [Keyed]] = [:]
+        var ungroupedKeyed: [Keyed] = []
+        var ungroupedUnpublished: [(index: Int, row: AssignmentRow)] = []
+
+        func assignmentKey(_ row: AssignmentRow) -> SectionItemSortKey {
+            SectionItemSortKey(
+                sortOrder: row.sortOrder,
+                createdAt: setupByID[row.setupID]?.createdAt,
+                stableID: row.setupID)
+        }
+        for row in assignmentRows {
+            if let aID = row.assignmentID, let sID = sectionByPublicID[aID], liveSectionIDs.contains(sID) {
+                keyedBySectionID[sID, default: []].append((assignmentKey(row), .assignment(row)))
+            } else if row.assignmentID != nil {
+                ungroupedKeyed.append((assignmentKey(row), .assignment(row)))
             } else {
-                ungroupedRows.append(row)
+                // Unpublished draft: no section, always sorted after the merged
+                // published/content items, by setup-creation order.
+                ungroupedUnpublished.append((setupIndexByID[row.setupID] ?? Int.max, row))
             }
         }
+        for item in contentItems {
+            let keyed: Keyed = (
+                SectionItemSortKey(
+                    sortOrder: item.sortOrder, createdAt: item.createdAt,
+                    stableID: item.id?.uuidString ?? ""),
+                .material(ContentItemRow(from: item))
+            )
+            if let sID = item.sectionID, liveSectionIDs.contains(sID) {
+                keyedBySectionID[sID, default: []].append(keyed)
+            } else {
+                ungroupedKeyed.append(keyed)
+            }
+        }
+
         let sectionContexts = allSections.map { section -> CourseSectionRow in
             let sID = section.id ?? UUID()
             return CourseSectionRow(
@@ -437,11 +437,16 @@ extension InstructorDashboardRoutes {
                 name: section.name,
                 defaultGradingMode: section.defaultGradingMode,
                 sortOrder: section.sortOrder,
-                rows: rowsBySectionID[sID] ?? [],
-                contentItems: contentRowsBySectionID[sID] ?? []
+                items: mergedBySectionItemOrder(keyedBySectionID[sID] ?? [])
             )
         }
-        return (sectionContexts, ungroupedRows)
+
+        var ungroupedItems = mergedBySectionItemOrder(ungroupedKeyed)
+        ungroupedItems +=
+            ungroupedUnpublished
+            .sorted { $0.index < $1.index }
+            .map { InstructorSectionItem.assignment($0.row) }
+        return (sectionContexts, ungroupedItems)
     }
 
     /// Content items for the active course, in lane order. The instructor
@@ -455,23 +460,5 @@ extension InstructorDashboardRoutes {
             .filter(\.$courseID == activeCourseUUID)
             .sort(\.$sortOrder, .ascending)
             .all()
-    }
-
-    /// Buckets content items into `[sectionID: rows]` + an ungrouped list
-    /// (items with no section), preserving lane order.
-    func bucketContentItems(
-        _ items: [APICourseContentItem]
-    ) -> (bySectionID: [UUID: [ContentItemRow]], ungrouped: [ContentItemRow]) {
-        var bySectionID: [UUID: [ContentItemRow]] = [:]
-        var ungrouped: [ContentItemRow] = []
-        for item in items {
-            let row = ContentItemRow(from: item)
-            if let sid = item.sectionID {
-                bySectionID[sid, default: []].append(row)
-            } else {
-                ungrouped.append(row)
-            }
-        }
-        return (bySectionID, ungrouped)
     }
 }

@@ -157,6 +157,23 @@ struct WebRoutes: RouteCollection {
         let hasNotebookBySetupID = await Self.loadHasNotebookBySetupID(
             setups: sortedSetups, application: req.application)
 
+        // Per-setup key for the unified section interleave: the assignment's
+        // `sortOrder` (nil when never reordered) over the setup's creation date,
+        // the same rule that orders content items — so both lanes merge into one
+        // ordered list inside each section (WebRoutes+IndexLoading).
+        let setupKeyByID: [String: SectionItemSortKey] = Dictionary(
+            sortedSetups.map { setup -> (String, SectionItemSortKey) in
+                let sid = setup.id ?? ""
+                return (
+                    sid,
+                    SectionItemSortKey(
+                        sortOrder: assignmentBySetup[sid]?.sortOrder,
+                        createdAt: setup.createdAt, stableID: sid)
+                )
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+
         let rowContext = IndexRowContext(
             fmt: fmt,
             assignmentBySetup: assignmentBySetup,
@@ -175,7 +192,7 @@ struct WebRoutes: RouteCollection {
         let allSections = try await sectionsFetch
         let contentItems = try await contentItemsFetch
         let displayGroups = Self.buildIndexDisplayGroups(
-            rows: rows, contentItems: contentItems,
+            rows: rows, setupKeyByID: setupKeyByID, contentItems: contentItems,
             allAssignments: allAssignments, allSections: allSections)
 
         return try await req.view.render(

@@ -262,6 +262,11 @@ struct SetAssignmentCourseSectionTool: ContentTool {
         }
 
         assignment.sectionID = resolvedSectionID
+        // Append to the destination lane's shared (assignment + content) order so
+        // the moved assignment doesn't collide with an existing sort_order
+        // (mirrors the web moveToSection under the unified-interleave model).
+        assignment.sortOrder = try await nextAssignmentSortOrder(
+            courseID: assignment.courseID, sectionID: resolvedSectionID, db: context.db)
         try await assignment.save(on: context.db)
 
         // Moving into a named section adopts that section's default grading

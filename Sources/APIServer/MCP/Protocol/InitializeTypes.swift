@@ -119,17 +119,20 @@ enum MCPServerInstructions {
         rename or change the default grading mode with rename_course_section, reorder with \
         reorder_course_sections, delete with delete_course_section (assignments in it are ungrouped, \
         not deleted), and assign an assignment with set_assignment_course_section (which adopts the section's \
-        default grading mode). get_assignment reports an assignment's current course section. Order \
-        the assignments themselves within the list with reorder_assignments (a course-global order, \
-        lower first; the dashboard still groups the ordered assignments by their section for display).
+        default grading mode). get_assignment reports an assignment's current course section. \
+        Assignments and content items share ONE interleaved per-section display order (a reading can \
+        sit between two labs): order a section's items with reorder_section_items (the primary tool, a \
+        mix of assignments and content items renumbered together), or reorder_assignments / \
+        reorder_content_items for a section that holds only that one type.
         - Course content item — ungraded reference material shown to students inside a course section \
         alongside assignments: a link, notebook, document, slides, outline, or heading, each with a \
         title and one or more labelled links ({label, url}; http(s) or site-relative only). It owns no \
         test setup, so creating or editing one never validates, re-grades, or closes anything. List with \
         list_content_items, create with create_content_item (optionally into a course section via \
         courseSectionID; isPublished:false hides it from students as a draft), edit or move with \
-        update_content_item, remove with delete_content_item, and order a section's content lane with \
-        reorder_content_items. Distinct from assignments (list_assignments) and test-suite items \
+        update_content_item, remove with delete_content_item, and order it among the section's items \
+        (interleaved with assignments) with reorder_section_items, or reorder_content_items for a \
+        content-only section. Distinct from assignments (list_assignments) and test-suite items \
         (get_suite).
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \

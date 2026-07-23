@@ -1,7 +1,7 @@
 // Tests for the assignment-ordering MCP tool — reorder_assignments. Mirrors the
-// web instructor dashboard's drag-reorder (POST /instructor/reorder): it writes
-// the course-global APIAssignment.sortOrder from a full permutation of the
-// course's assignment public IDs. Backed by a real test database.
+// web instructor dashboard's drag-reorder: it writes the per-section
+// APIAssignment.sortOrder for the given assignments (normally one section),
+// renumbering them 1..n. Backed by a real test database.
 
 import Core
 import Fluent
@@ -56,7 +56,7 @@ import Vapor
             #expect(out.assignments.map(\.title) == ["C", "A", "B"])
             #expect(out.assignments.map(\.sortOrder) == [1, 2, 3])
 
-            // Persisted course-global sortOrder reflects the new order.
+            // Persisted per-section sortOrder reflects the new order.
             let reloadedC = try #require(try await APIAssignment.find(c.id, on: app.db))
             let reloadedA = try #require(try await APIAssignment.find(a.id, on: app.db))
             let reloadedB = try #require(try await APIAssignment.find(b.id, on: app.db))
@@ -66,20 +66,29 @@ import Vapor
         }
     }
 
-    @Test func reorderRejectsSubset() async throws {
+    @Test func reorderAcceptsSubset() async throws {
+        // Per-section ordering: a subset (one section's assignments) is valid;
+        // only the named assignments are renumbered, untouched ones keep theirs.
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let course = try await fixture(on: app)
             let courseID = try course.requireID()
             let a = try await makeAssignment(on: app, setupID: "s_a", title: "A", courseID: courseID)
-            _ = try await makeAssignment(on: app, setupID: "s_b", title: "B", courseID: courseID)
+            let b = try await makeAssignment(on: app, setupID: "s_b", title: "B", courseID: courseID)
+            let c = try await makeAssignment(on: app, setupID: "s_c", title: "C", courseID: courseID)
 
-            // Only one of the two assignments — must be a full permutation.
-            await #expect(throws: MCPToolError.self) {
-                _ = try await ReorderAssignmentsTool().execute(
-                    .init(courseCode: "CS246", orderedAssignmentPublicIDs: [a.publicID]),
-                    context(app))
-            }
+            let out = try await ReorderAssignmentsTool().execute(
+                .init(courseCode: "CS246", orderedAssignmentPublicIDs: [b.publicID, a.publicID]),
+                context(app))
+            #expect(out.assignments.map(\.title) == ["B", "A"])
+            #expect(out.assignments.map(\.sortOrder) == [1, 2])
+
+            let reloadedB = try #require(try await APIAssignment.find(b.id, on: app.db))
+            let reloadedA = try #require(try await APIAssignment.find(a.id, on: app.db))
+            let reloadedC = try #require(try await APIAssignment.find(c.id, on: app.db))
+            #expect(reloadedB.sortOrder == 1)
+            #expect(reloadedA.sortOrder == 2)
+            #expect(reloadedC.sortOrder == nil)  // untouched
         }
     }
 

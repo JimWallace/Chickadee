@@ -171,12 +171,16 @@ extension WebRoutes {
     }
 
     /// Buckets both lanes — graded assignment rows and ungraded content items —
-    /// by section and assembles the ordered display groups. Done inline (rather
-    /// than via the shared `groupRowsBySection` fold) because a group now carries
-    /// two row types and a section with content items but no visible assignments
-    /// must still render — the fold's `includeEmptySections: false` would drop it.
+    /// by section and assembles the ordered display groups, interleaving the two
+    /// lanes within each section by their shared `sort_order` (`setupKeyByID`
+    /// carries each assignment row's key; content items carry their own). Done
+    /// inline (rather than via the shared `groupRowsBySection` fold) because a
+    /// group now carries two row types and a section with content items but no
+    /// visible assignments must still render — the fold's
+    /// `includeEmptySections: false` would drop it.
     static func buildIndexDisplayGroups(
         rows: [TestSetupRow],
+        setupKeyByID: [String: SectionItemSortKey],
         contentItems: [APICourseContentItem],
         allAssignments: [APIAssignment],
         allSections: [APICourseSection]
@@ -189,40 +193,41 @@ extension WebRoutes {
             },
             uniquingKeysWith: { first, _ in first }
         )
-        var setupRowsBySectionID: [UUID: [TestSetupRow]] = [:]
-        var ungroupedSetupRows: [TestSetupRow] = []
+        // Each keyed element carries its shared-order key plus the display item.
+        typealias Keyed = (key: SectionItemSortKey, item: IndexSectionItem)
+        var keyedBySectionID: [UUID: [Keyed]] = [:]
+        var ungroupedKeyed: [Keyed] = []
+        func place(_ sectionID: UUID?, _ keyed: Keyed) {
+            if let sectionID {
+                keyedBySectionID[sectionID, default: []].append(keyed)
+            } else {
+                ungroupedKeyed.append(keyed)
+            }
+        }
         for row in rows {
-            if let sid = sectionBySetupID[row.id] {
-                setupRowsBySectionID[sid, default: []].append(row)
-            } else {
-                ungroupedSetupRows.append(row)
-            }
+            let key =
+                setupKeyByID[row.id]
+                ?? SectionItemSortKey(sortOrder: nil, createdAt: nil, stableID: row.id)
+            place(sectionBySetupID[row.id], (key, .assignment(row)))
         }
-        var contentRowsBySectionID: [UUID: [ContentItemRow]] = [:]
-        var ungroupedContentRows: [ContentItemRow] = []
         for item in contentItems {
-            let contentRow = ContentItemRow(from: item)
-            if let sid = item.sectionID {
-                contentRowsBySectionID[sid, default: []].append(contentRow)
-            } else {
-                ungroupedContentRows.append(contentRow)
-            }
+            let key = SectionItemSortKey(
+                sortOrder: item.sortOrder, createdAt: item.createdAt,
+                stableID: item.id?.uuidString ?? "")
+            place(item.sectionID, (key, .material(ContentItemRow(from: item))))
         }
+
         var displayGroups: [IndexDisplayGroup] = []
         for section in allSections {
-            guard let sid = section.id else { continue }
-            let sectionSetups = setupRowsBySectionID[sid] ?? []
-            let sectionContent = contentRowsBySectionID[sid] ?? []
-            // Drop only sections with nothing to show in either lane.
-            if sectionSetups.isEmpty, sectionContent.isEmpty { continue }
+            guard let sid = section.id, let keyed = keyedBySectionID[sid], !keyed.isEmpty else {
+                continue
+            }
             displayGroups.append(
-                IndexDisplayGroup(
-                    name: section.name, contentItems: sectionContent, setups: sectionSetups))
+                IndexDisplayGroup(name: section.name, items: mergedBySectionItemOrder(keyed)))
         }
-        if !ungroupedSetupRows.isEmpty || !ungroupedContentRows.isEmpty {
+        if !ungroupedKeyed.isEmpty {
             displayGroups.append(
-                IndexDisplayGroup(
-                    name: nil, contentItems: ungroupedContentRows, setups: ungroupedSetupRows))
+                IndexDisplayGroup(name: nil, items: mergedBySectionItemOrder(ungroupedKeyed)))
         }
         return displayGroups
     }

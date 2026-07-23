@@ -73,7 +73,8 @@ from `MCPServerRegistration.swift:18-57`).
 | `delete_course_section` | `CourseSectionTools.swift:409` | section id | course-enrol (`:586`) | `APICourseSection` (assignments ungrouped) |
 | `reorder_course_sections` | `CourseSectionTools.swift:483` | `courseCode` | course-enrol (`:632`) | `APICourseSection` order |
 | `set_assignment_course_section` | `CourseSectionTools.swift:208` | `assignmentPublicID` + section | course-enrol (`:247`, `:453`) | `APIAssignment` section ref |
-| `reorder_assignments` | `AssignmentOrderingTools.swift:23` | `courseCode` | course-enrol (`resolveCourseID`) | `APIAssignment` order (`sort_order`) |
+| `reorder_section_items` | `AssignmentOrderingTools.swift` | `courseCode` + `orderedItems` | course-enrol (`resolveCourseIDForWrite`, TA+) | `APIAssignment` + `APICourseContentItem` order (`sort_order`) |
+| `reorder_assignments` | `AssignmentOrderingTools.swift` | `courseCode` | course-enrol (`resolveCourseIDForWrite`, TA+) | `APIAssignment` order (`sort_order`) |
 | `list_content_items` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseID`) | `APICourseContentItem` (read) |
 | `create_content_item` | `CourseContentItemTools.swift` | `courseCode` | course-enrol (`resolveCourseIDForWrite`, TA+) | new `APICourseContentItem` |
 | `update_content_item` | `CourseContentItemTools.swift` | content-item id | course-enrol (`authorizeCourseWriteAccess`, TA+) | `APICourseContentItem` |

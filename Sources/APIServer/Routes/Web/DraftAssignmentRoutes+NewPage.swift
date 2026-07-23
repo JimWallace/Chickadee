@@ -209,8 +209,7 @@ extension DraftAssignmentRoutes {
                     name: s.name,
                     defaultGradingMode: s.defaultGradingMode,
                     sortOrder: s.sortOrder,
-                    rows: [],
-                    contentItems: []
+                    items: []
                 )
             }
     }
