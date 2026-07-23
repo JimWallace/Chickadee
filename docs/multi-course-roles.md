@@ -188,10 +188,13 @@ representable and creatable.
   default `atLeast` values** — every call site states its floor explicitly:
   - **`.ta`** — assignment *content* and grading: suite/scripts/families/
     checks, notebook/solution edits, global inputs, datasets, achievements,
-    retest/reset/grade-override.
+    retest/reset/grade-override, and per-student deadline extensions (an
+    individual accommodation, sibling to grade-override — *not* the
+    assignment-wide deadline).
   - **`.instructor`** — course *lifecycle* and structure: enrollment/roster/
-    staff management, assignment create/delete/open/close/deadlines, course
-    sections, archive, BrightSpace binding, test-setup upload.
+    staff management, assignment create/delete/open/close and the
+    assignment-wide due date, course sections, archive, BrightSpace binding,
+    test-setup upload.
 
 ### 3.5 UI touchpoints
 
