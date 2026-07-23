@@ -105,13 +105,13 @@ func extractNotebooksToCode(in directory: URL) throws {
             let cells = notebook["cells"] as? [[String: Any]]
         else { continue }
 
-        // Detect kernel language: ir/r/webr → R, everything else → Python.
+        // Detect kernel language: ir/r/webr/xr → R, everything else → Python.
         let language: String = {
             if let meta = notebook["metadata"] as? [String: Any] {
                 if let ks = meta["kernelspec"] as? [String: Any],
                     let name = (ks["name"] as? String)?.lowercased()
                 {
-                    if name == "ir" || name == "r" || name == "webr" { return "r" }
+                    if name == "ir" || name == "r" || name == "webr" || name == "xr" { return "r" }
                 }
                 if let li = meta["language_info"] as? [String: Any],
                     (li["name"] as? String)?.lowercased() == "r"
