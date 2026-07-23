@@ -60,6 +60,13 @@ import VaporTesting
             let requestedAt = Date().addingTimeInterval(-(dataExportStalePendingAge + 60))
             let row = try await insertExport(
                 userID: userID, status: .pending, requestedAt: requestedAt)
+            // Baseline read so the requestedAt check below is DB-value vs
+            // DB-value: Postgres stores microsecond precision, so comparing a
+            // round-tripped timestamp against the raw in-memory Date is a
+            // false mismatch (renders identically, differs in sub-µs bits).
+            let storedRequestedAt = try #require(
+                try await APIDataExport.find(row.id, on: app.db)
+            ).requestedAt
 
             let failed = try await failStalePendingDataExports(on: app.db, logger: app.logger)
             #expect(failed == 1)
@@ -69,7 +76,7 @@ import VaporTesting
             #expect(reloaded.completedAt != nil)
             #expect(reloaded.failureReason != nil)
             // requestedAt is the rate-limit / re-request ledger — never rewritten.
-            #expect(reloaded.requestedAt == requestedAt)
+            #expect(reloaded.requestedAt == storedRequestedAt)
         }
     }
 
