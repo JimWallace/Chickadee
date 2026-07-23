@@ -157,6 +157,11 @@ struct WebRoutes: RouteCollection {
         let hasNotebookBySetupID = await Self.loadHasNotebookBySetupID(
             setups: sortedSetups, application: req.application)
 
+        // Per-setup interleave keys (helper in WebRoutes+IndexLoading) so both
+        // lanes merge into one ordered list inside each section.
+        let setupKeyByID = Self.buildSetupKeyMap(
+            setups: sortedSetups, assignmentBySetup: assignmentBySetup)
+
         let rowContext = IndexRowContext(
             fmt: fmt,
             assignmentBySetup: assignmentBySetup,
@@ -175,7 +180,7 @@ struct WebRoutes: RouteCollection {
         let allSections = try await sectionsFetch
         let contentItems = try await contentItemsFetch
         let displayGroups = Self.buildIndexDisplayGroups(
-            rows: rows, contentItems: contentItems,
+            rows: rows, setupKeyByID: setupKeyByID, contentItems: contentItems,
             allAssignments: allAssignments, allSections: allSections)
 
         return try await req.view.render(

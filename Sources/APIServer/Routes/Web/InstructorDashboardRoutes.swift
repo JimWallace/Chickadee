@@ -71,6 +71,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         // suite / family / check / script / suite-section CRUD) lives on
         // `DraftAssignmentRoutes` (registered in routes.swift).
         r.post("reorder", use: reorderAssignments)
+        // Unified interleave: assignments + content items share one drag-orderable
+        // per-section sequence.
+        r.post("section-items", "reorder", use: reorderSectionItems)
         // Section CRUD + `:assignmentID/section` move live on
         // `CourseAdminRoutes` (registered in routes.swift).
         r.get(":assignmentID", "edit", use: editPage)
@@ -156,12 +159,11 @@ struct InstructorDashboardRoutes: RouteCollection {
             activeCourse: courseState.active,
             fmt: fmt
         )
-        let sortedRows = sortAssignmentRows(unsortedRows, setupIndexByID: setupIndexByID)
-
         let allSections = try await loadCourseSections(req: req, activeCourseUUID: courseState.activeCourseUUID)
         let allContentItems = try await loadCourseContentItems(
             req: req, activeCourseUUID: courseState.activeCourseUUID)
-        let (contentRowsBySectionID, ungroupedContentRows) = bucketContentItems(allContentItems)
+        let setupByID: [String: APITestSetup] = Dictionary(
+            uniqueKeysWithValues: allSetups.compactMap { setup in setup.id.map { ($0, setup) } })
         let sectionByPublicID: [String: UUID] = Dictionary(
             allAssignments.compactMap { a -> (String, UUID)? in
                 guard let sid = a.sectionID else { return nil }
@@ -169,26 +171,27 @@ struct InstructorDashboardRoutes: RouteCollection {
             },
             uniquingKeysWith: { first, _ in first }
         )
-        let (sectionContexts, ungroupedRows) = groupRowsBySection(
-            sortedRows: sortedRows,
+        // Merge each section's assignment + content lanes into one interleaved,
+        // drag-orderable item list (unpublished drafts trail the ungrouped bucket).
+        let (sectionContexts, ungroupedItems) = buildInstructorSectionItems(
+            assignmentRows: unsortedRows,
+            contentItems: allContentItems,
             allSections: allSections,
             sectionByPublicID: sectionByPublicID,
-            contentRowsBySectionID: contentRowsBySectionID
+            setupByID: setupByID,
+            setupIndexByID: setupIndexByID
         )
 
         let hasSections = !allSections.isEmpty
-        let hasUngrouped = !ungroupedRows.isEmpty
-        let hasUngroupedContent = !ungroupedContentRows.isEmpty
+        let hasUngrouped = !ungroupedItems.isEmpty
         let ctx = AssignmentsContext(
             currentUser: userContext,
             activeInstructorTab: "overview",
             sections: sectionContexts,
-            ungroupedRows: ungroupedRows,
-            ungroupedContentItems: ungroupedContentRows,
+            ungroupedItems: ungroupedItems,
             hasSections: hasSections,
-            hasUngrouped: hasUngrouped,
-            showUngroupedBlock: hasUngrouped || hasUngroupedContent || !hasSections,
-            showEmptyMessage: !hasSections && !hasUngrouped && !hasUngroupedContent,
+            showUngroupedBlock: hasUngrouped || !hasSections,
+            showEmptyMessage: !hasSections && !hasUngrouped,
             enrolledStudentCount: roster.enrolledStudentCount
         )
         return try await req.view.render("assignments", ctx).encodeResponse(for: req)
@@ -251,6 +254,85 @@ struct InstructorDashboardRoutes: RouteCollection {
             guard let assignment = byID[rawID] else { continue }
             assignment.sortOrder = index + 1
             try await assignment.save(on: req.db)
+        }
+        return .ok
+    }
+
+    // MARK: - POST /instructor/section-items/reorder
+
+    /// Persists the interleaved order of a section's items — assignments AND
+    /// content items share one per-section `sort_order` sequence, so this
+    /// renumbers both tables `1..n` in the given mixed order. `items` is the
+    /// section's full ordered list; each entry names its `type`
+    /// ("assignment" | "content") and `id`. Every touched course is authorized
+    /// (TA+, matching content authoring). AJAX (returns `.ok`).
+    @Sendable
+    func reorderSectionItems(req: Request) async throws -> HTTPStatus {
+        struct ItemRef: Content {
+            var type: String
+            var id: String
+        }
+        struct ReorderBody: Content {
+            /// The lane the client reordered; informational — the item set below
+            /// defines exactly which rows are renumbered.
+            var sectionID: String?
+            var items: [ItemRef]
+        }
+        let caller = try req.auth.require(APIUser.self)
+        let body = try req.content.decode(ReorderBody.self)
+        guard !body.items.isEmpty else { return .ok }
+
+        let assignmentIDs = body.items.filter { $0.type == "assignment" }.map(\.id)
+        let contentUUIDs = body.items.filter { $0.type == "content" }.compactMap { UUID(uuidString: $0.id) }
+        guard assignmentIDs.allSatisfy(isValidAssignmentPublicID(_:)) else {
+            throw WebAssignmentError.invalidParameter(
+                name: "items", reason: "invalid assignment ID in reorder payload")
+        }
+        guard
+            contentUUIDs.count == body.items.filter({ $0.type == "content" }).count
+        else {
+            throw WebAssignmentError.invalidParameter(
+                name: "items", reason: "invalid content-item ID in reorder payload")
+        }
+
+        let assignments =
+            assignmentIDs.isEmpty
+            ? []
+            : try await APIAssignment.query(on: req.db).filter(\.$publicID ~~ assignmentIDs).all()
+        let contentItems =
+            contentUUIDs.isEmpty
+            ? []
+            : try await APICourseContentItem.query(on: req.db).filter(\.$id ~~ contentUUIDs).all()
+        guard assignments.count == Set(assignmentIDs).count,
+            contentItems.count == Set(contentUUIDs).count
+        else {
+            throw WebAssignmentError.invalidParameter(
+                name: "items", reason: "item set mismatch in reorder payload")
+        }
+        let assignmentByPublicID = Dictionary(uniqueKeysWithValues: assignments.map { ($0.publicID, $0) })
+        let contentByID = Dictionary(
+            uniqueKeysWithValues: contentItems.compactMap { c in c.id.map { ($0, c) } })
+
+        // Reordering writes sort_order across every course the payload touches:
+        // authorize each so the payload can't renumber another (or archived)
+        // course's items (#417 Slice D). TA+, matching content authoring.
+        var courses = Set(assignments.map(\.courseID))
+        courses.formUnion(contentItems.map(\.courseID))
+        for courseID in courses {
+            try await requireCourseWriteAccess(caller: caller, courseID: courseID, atLeast: .ta, db: req.db)
+        }
+
+        for (index, ref) in body.items.enumerated() {
+            let order = index + 1
+            if ref.type == "assignment", let assignment = assignmentByPublicID[ref.id] {
+                assignment.sortOrder = order
+                try await assignment.save(on: req.db)
+            } else if ref.type == "content", let uuid = UUID(uuidString: ref.id),
+                let item = contentByID[uuid]
+            {
+                item.sortOrder = order
+                try await item.save(on: req.db)
+            }
         }
         return .ok
     }

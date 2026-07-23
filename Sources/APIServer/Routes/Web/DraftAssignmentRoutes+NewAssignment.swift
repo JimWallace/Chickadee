@@ -575,7 +575,8 @@ extension DraftAssignmentRoutes {
             dueAt: validated.dueAt,
             startsAt: validated.startsAt,
             visibility: .closed,
-            sortOrder: try await nextAssignmentSortOrder(req: req),
+            sortOrder: try await nextAssignmentSortOrder(
+                courseID: courseID, sectionID: sectionID, db: req.db),
             validationStatus: shouldQueueValidation ? "pending" : nil,
             validationSubmissionID: nil,
             sectionID: sectionID,
@@ -741,7 +742,10 @@ extension DraftAssignmentRoutes {
             title: body.title.isEmpty ? body.testSetupID : body.title,
             dueAt: due,
             visibility: .closed,  // stays closed until instructor validates + opens
-            sortOrder: try await nextAssignmentSortOrder(req: req),
+            // Quick-publish creates an ungrouped assignment (no section picker),
+            // so it appends to the ungrouped lane.
+            sortOrder: try await nextAssignmentSortOrder(
+                courseID: courseID, sectionID: nil, db: req.db),
             courseID: courseID
         )
         // Open the editor to finalize the draft (notebook, solution, suite);

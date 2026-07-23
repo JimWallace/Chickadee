@@ -116,19 +116,37 @@ struct ContentItemRow: Encodable {
     }
 }
 
+/// One element of a section's unified item list on the student dashboard: a
+/// graded assignment row (`setup`) OR an ungraded content item (`content`),
+/// discriminated by `isContent`. Materials and assignments interleave in one
+/// `sort_order` sequence, so a reading can sit between two labs rather than
+/// living in a separate lane above them.
+struct IndexSectionItem: Encodable {
+    let isContent: Bool
+    /// Populated when `!isContent`.
+    let setup: TestSetupRow?
+    /// Populated when `isContent`.
+    let content: ContentItemRow?
+
+    static func assignment(_ setup: TestSetupRow) -> IndexSectionItem {
+        IndexSectionItem(isContent: false, setup: setup, content: nil)
+    }
+    static func material(_ content: ContentItemRow) -> IndexSectionItem {
+        IndexSectionItem(isContent: true, setup: nil, content: content)
+    }
+}
+
 /// One rendered group on the student dashboard.  A named section renders an
 /// `<h2>` heading; the trailing "ungrouped" bucket carries `name == nil` so it
-/// renders no heading.  Each group carries its own ungraded `contentItems` lane
-/// (rendered above the assignments) plus the graded `setups`.  Folding groups
-/// into one list lets `index.leaf` render every group with a single shared
-/// `#extend`'d assignment-row partial (LeafKit 1.x raises a false "cyclically
-/// referenced" error if the same partial is extended from more than one site in
-/// a template, so the single-loop shape is load-bearing, not just tidier — the
-/// content-item lane is inlined markup for the same reason).
+/// renders no heading.  Each group carries one ordered `items` list that
+/// interleaves the section's assignments and content items by their shared
+/// `sort_order` (the two stacked lanes were merged in the unified-interleave
+/// pass).  The row markup is inlined in `index.leaf` (rather than a shared
+/// `#extend`'d partial) because LeafKit 1.x raises a false "cyclically
+/// referenced" error if the same partial is extended from more than one site.
 struct IndexDisplayGroup: Encodable {
     let name: String?  // nil → ungrouped bucket (no heading)
-    let contentItems: [ContentItemRow]
-    let setups: [TestSetupRow]
+    let items: [IndexSectionItem]
 }
 
 struct IndexContext: Encodable {

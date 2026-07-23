@@ -110,86 +110,9 @@
         </div>
     </div>
 
-    <!-- Ungraded content items (reference material) for this section -->
+    <!-- Toolbar: add ungraded reference material to this section (interleaved
+         with the assignments in the drag-orderable table below). -->
     <div class="content-lane">
-        #if(!section.contentItems.isEmpty):
-        <table class="results-table content-item-table">
-            <thead>
-                <tr>
-                    <th>Material</th>
-                    <th class="col-hide-phone">Links</th>
-                    <th class="col-hide-phone">Updated</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-            #for(item in section.contentItems):
-                <tr class="content-item-row">
-                    <td>
-                        <span class="content-item-kind">#(item.kindLabel)</span>
-                        <span class="content-item-title">#(item.title)</span>
-                        #if(!item.isPublished):<span class="content-item-hidden">Hidden</span>#endif
-                        #if(item.itemDescription):<div class="content-item-desc text-muted">#(item.itemDescription)</div>#endif
-                    </td>
-                    <td class="col-hide-phone content-item-links">#for(link in item.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
-                    <td class="col-hide-phone">#if(item.updatedLabel):#(item.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
-                    <td class="content-item-actions">
-                        <details class="popup-anchor content-item-edit-details">
-                            <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
-                            <div class="add-section-popup card">
-                                <form method="post" action="/instructor/content-items/#(item.id)/edit" class="form popup-form content-item-form">
-                                    #csrfFormField()
-                                    <label class="form-label">Title
-                                        <input class="form-input editor-input" type="text" name="title" value="#(item.title)" required>
-                                    </label>
-                                    <label class="form-label">Type
-                                        <select class="form-input editor-input" name="kind">
-                                            <option value="link" #if(item.kind == "link"):selected#endif>Link</option>
-                                            <option value="notebook" #if(item.kind == "notebook"):selected#endif>Notebook</option>
-                                            <option value="document" #if(item.kind == "document"):selected#endif>Document</option>
-                                            <option value="slides" #if(item.kind == "slides"):selected#endif>Slides</option>
-                                            <option value="outline" #if(item.kind == "outline"):selected#endif>Outline</option>
-                                            <option value="heading" #if(item.kind == "heading"):selected#endif>Heading</option>
-                                        </select>
-                                    </label>
-                                    <div class="content-item-link-fields">
-                                        #for(link in item.links):
-                                        <span class="content-item-link-pair">
-                                            <input class="form-input editor-input" type="text" name="linkLabels[]" value="#(link.label)" placeholder="Label">
-                                            <input class="form-input editor-input" type="text" name="linkURLs[]" value="#(link.url)" placeholder="https://…">
-                                        </span>
-                                        #endfor
-                                        <span class="content-item-link-pair">
-                                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label">
-                                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
-                                        </span>
-                                    </div>
-                                    <label class="form-label">Description
-                                        <input class="form-input editor-input" type="text" name="description" value="#if(item.itemDescription):#(item.itemDescription)#endif">
-                                    </label>
-                                    <label class="form-label">Updated label
-                                        <input class="form-input editor-input" type="text" name="updatedLabel" value="#if(item.updatedLabel):#(item.updatedLabel)#endif" placeholder="e.g. 2026-05-11">
-                                    </label>
-                                    <label class="form-label">Visibility
-                                        <select class="form-input editor-input" name="isPublished">
-                                            <option value="true" #if(item.isPublished):selected#endif>Published</option>
-                                            <option value="false" #if(!item.isPublished):selected#endif>Hidden</option>
-                                        </select>
-                                    </label>
-                                    <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
-                                </form>
-                            </div>
-                        </details>
-                        <form method="post" action="/instructor/content-items/#(item.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
-                            #csrfFormField()
-                            <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
-                        </form>
-                    </td>
-                </tr>
-            #endfor
-            </tbody>
-        </table>
-        #endif
         <details class="add-section-details popup-anchor content-item-add">
             <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
@@ -249,93 +172,160 @@
             </tr>
         </thead>
         <tbody class="assignments-body" data-section-id="#(section.sectionID)">
-        #if(section.rows.isEmpty):
+        #if(section.items.isEmpty):
         <tr class="section-empty-row">
             <td colspan="6" class="section-empty-cell">
                 Drag items here or use <a href="/instructor/new?sectionID=#(section.sectionID)">+ Create New</a>
             </td>
         </tr>
         #else:
-        #for(row in section.rows):
-            <tr class="#if(row.status == "open"):status-open#elseif(row.status == "preview"):status-preview#elseif(row.status == "closed"):status-closed#endif"
-                #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
+        #for(item in section.items):
+        #if(item.isContent):
+            <tr class="content-item-row" data-content-item-id="#(item.content.id)">
                 <td>
-                    #if(row.assignmentID):
+                    <span class="assignment-name-cell">
+                        <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
+                        <span class="content-item-kind">#(item.content.kindLabel)</span>
+                        <span class="content-item-title">#(item.content.title)</span>
+                        #if(!item.content.isPublished):<span class="content-item-hidden">Hidden</span>#endif
+                    </span>
+                    #if(item.content.itemDescription):<div class="content-item-desc text-muted">#(item.content.itemDescription)</div>#endif
+                </td>
+                <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
+                <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
+                <td class="content-item-actions">
+                    <details class="popup-anchor content-item-edit-details">
+                        <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
+                        <div class="add-section-popup card">
+                            <form method="post" action="/instructor/content-items/#(item.content.id)/edit" class="form popup-form content-item-form">
+                                #csrfFormField()
+                                <label class="form-label">Title
+                                    <input class="form-input editor-input" type="text" name="title" value="#(item.content.title)" required>
+                                </label>
+                                <label class="form-label">Type
+                                    <select class="form-input editor-input" name="kind">
+                                        <option value="link" #if(item.content.kind == "link"):selected#endif>Link</option>
+                                        <option value="notebook" #if(item.content.kind == "notebook"):selected#endif>Notebook</option>
+                                        <option value="document" #if(item.content.kind == "document"):selected#endif>Document</option>
+                                        <option value="slides" #if(item.content.kind == "slides"):selected#endif>Slides</option>
+                                        <option value="outline" #if(item.content.kind == "outline"):selected#endif>Outline</option>
+                                        <option value="heading" #if(item.content.kind == "heading"):selected#endif>Heading</option>
+                                    </select>
+                                </label>
+                                <div class="content-item-link-fields">
+                                    #for(link in item.content.links):
+                                    <span class="content-item-link-pair">
+                                        <input class="form-input editor-input" type="text" name="linkLabels[]" value="#(link.label)" placeholder="Label">
+                                        <input class="form-input editor-input" type="text" name="linkURLs[]" value="#(link.url)" placeholder="https://…">
+                                    </span>
+                                    #endfor
+                                    <span class="content-item-link-pair">
+                                        <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label">
+                                        <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                                    </span>
+                                </div>
+                                <label class="form-label">Description
+                                    <input class="form-input editor-input" type="text" name="description" value="#if(item.content.itemDescription):#(item.content.itemDescription)#endif">
+                                </label>
+                                <label class="form-label">Updated label
+                                    <input class="form-input editor-input" type="text" name="updatedLabel" value="#if(item.content.updatedLabel):#(item.content.updatedLabel)#endif" placeholder="e.g. 2026-05-11">
+                                </label>
+                                <label class="form-label">Visibility
+                                    <select class="form-input editor-input" name="isPublished">
+                                        <option value="true" #if(item.content.isPublished):selected#endif>Published</option>
+                                        <option value="false" #if(!item.content.isPublished):selected#endif>Hidden</option>
+                                    </select>
+                                </label>
+                                <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
+                            </form>
+                        </div>
+                    </details>
+                    <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        #else:
+            <tr class="#if(item.assignment.status == "open"):status-open#elseif(item.assignment.status == "preview"):status-preview#elseif(item.assignment.status == "closed"):status-closed#endif"
+                #if(item.assignment.assignmentID):data-assignment-id="#(item.assignment.assignmentID)"#endif>
+                <td>
+                    #if(item.assignment.assignmentID):
                     <span class="assignment-name-cell">
                         <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
-                    #if(row.title):
-                    #if(row.assignmentID):
-                    <a href="/instructor/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
+                    #if(item.assignment.title):
+                    #if(item.assignment.assignmentID):
+                    <a href="/instructor/#(item.assignment.assignmentID)/submissions"><strong>#(item.assignment.title)</strong></a>
                     #else:
-                    <strong>#(row.title)</strong>
+                    <strong>#(item.assignment.title)</strong>
                     #endif
                     #else:
                     <span class="text-muted">Unpublished</span>
                     #endif
-                    #if(row.assignmentID):
+                    #if(item.assignment.assignmentID):
                     </span>
                     #endif
                 </td>
                 <td>
-                    #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
+                    #if(item.assignment.assignmentID && item.assignment.validationStatus == "passed"):
+                    <form method="post" action="/instructor/#(item.assignment.assignmentID)/status" class="status-form">
                         #csrfFormField()
-                        <label class="visually-hidden" for="status-s-#(row.assignmentID)">Status for #(row.title)</label>
-                        <select id="status-s-#(row.assignmentID)" class="form-input status-toggle-btn" name="status"
+                        <label class="visually-hidden" for="status-s-#(item.assignment.assignmentID)">Status for #(item.assignment.title)</label>
+                        <select id="status-s-#(item.assignment.assignmentID)" class="form-input status-toggle-btn" name="status"
                                 onchange="this.form.submit()">
-                            <option value="open" #if(row.status == "open"):selected#endif>open</option>
-                            <option value="preview" #if(row.status == "preview"):selected#endif>staff only</option>
-                            <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
+                            <option value="open" #if(item.assignment.status == "open"):selected#endif>open</option>
+                            <option value="preview" #if(item.assignment.status == "preview"):selected#endif>staff only</option>
+                            <option value="closed" #if(item.assignment.status == "closed"):selected#endif>closed</option>
                         </select>
                     </form>
-                    #elseif(row.assignmentID):
+                    #elseif(item.assignment.assignmentID):
                     <span class="tier tier-closed">closed</span>
                     #else:
                     <span class="tier
-                        #if(row.status == "open"):tier-open
-                        #elseif(row.status == "preview"):tier-preview
-                        #elseif(row.status == "closed"):tier-closed
-                        #elseif(row.status == "unpublished"):tier-unpublished
-                    #endif">#(row.status)</span>
+                        #if(item.assignment.status == "open"):tier-open
+                        #elseif(item.assignment.status == "preview"):tier-preview
+                        #elseif(item.assignment.status == "closed"):tier-closed
+                        #elseif(item.assignment.status == "unpublished"):tier-unpublished
+                    #endif">#(item.assignment.status)</span>
                     #endif
                 </td>
                 <td>
-                    #if(row.validationStatus == "passed"):
+                    #if(item.assignment.validationStatus == "passed"):
                     <span class="tier tier-open">passed</span>
-                    #elseif(row.validationStatus == "failed"):
+                    #elseif(item.assignment.validationStatus == "failed"):
                     <span class="tier tier-closed">failed</span>
-                    #if(row.validationSubmissionID):
+                    #if(item.assignment.validationSubmissionID):
                     <div class="cell-subrow">
-                        <a href="/submissions/#(row.validationSubmissionID)">View results</a>
+                        <a href="/submissions/#(item.assignment.validationSubmissionID)">View results</a>
                     </div>
                     #endif
-                    #elseif(row.validationStatus == "pending"):
+                    #elseif(item.assignment.validationStatus == "pending"):
                     <span class="tier">pending</span>
-                    #if(row.validationSubmissionID):
+                    #if(item.assignment.validationSubmissionID):
                     <div class="cell-subrow">
-                        <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
+                        <a href="/submissions/#(item.assignment.validationSubmissionID)">Track status</a>
                     </div>
                     #endif
-                    #elseif(row.validationStatus == "no-runner"):
+                    #elseif(item.assignment.validationStatus == "no-runner"):
                     <span class="tier tier-closed" title="No compatible runner was available when the assignment was last saved. Validation was not enqueued — ask an admin to start a compatible runner, then re-save the assignment.">no runner</span>
                     #else:
                     <span class="tier">—</span>
                     #endif
                 </td>
-                <td class="due-col col-hide-phone">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td class="due-col col-hide-phone">#if(item.assignment.dueAt):#(item.assignment.dueAt)#else:—#endif</td>
                 <td class="col-hide-phone nowrap">
-                    #if(row.assignmentID):
-                    <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
+                    #if(item.assignment.assignmentID):
+                    <span title="#(item.assignment.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(item.assignment.submittedStudentCount) / #(enrolledStudentCount)</span>
                     #else:—#endif
                 </td>
                 <td>
-                    #if(row.status == "unpublished"):
+                    #if(item.assignment.status == "unpublished"):
                     <div class="row-actions-tight">
                     <details class="publish-details">
                         <summary class="btn action-btn summary-btn">Publish…</summary>
                         <form class="publish-form" method="post" action="/instructor">
-                            <input type="hidden" name="testSetupID" value="#(row.setupID)">
+                            <input type="hidden" name="testSetupID" value="#(item.assignment.setupID)">
                             <label class="form-label publish-label">
                                 Title
                                 <input class="form-input" type="text" name="title"
@@ -351,7 +341,7 @@
                             <button class="btn btn-primary btn-compact" type="submit">Create draft</button>
                         </form>
                     </details>
-                    <form method="post" action="/instructor/setup/#(row.setupID)/delete"
+                    <form method="post" action="/instructor/setup/#(item.assignment.setupID)/delete"
                           onsubmit="return confirm('Delete this unpublished setup? This cannot be undone.')">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
@@ -361,20 +351,20 @@
                         </button>
                     </form>
                     </div>
-                    #elseif(row.status == "closed"):
+                    #elseif(item.assignment.status == "closed"):
                     <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                
-                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
+                                onclick="copyAssignmentURL(this, '#(item.assignment.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                        <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
-                        <form method="post" action="/instructor/#(row.assignmentID)/clone"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
                               onsubmit="return confirm('Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -383,7 +373,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/retest"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/retest"
                               onsubmit="return confirm('Retest every submission for this assignment? The worker will re-grade each one against the current test suite.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -392,7 +382,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
@@ -402,20 +392,20 @@
                             </button>
                         </form>
                     </div>
-                    #elseif(row.status == "open"):
+                    #elseif(item.assignment.status == "open"):
                     <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                
-                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
+                                onclick="copyAssignmentURL(this, '#(item.assignment.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                        <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
-                        <form method="post" action="/instructor/#(row.assignmentID)/clone"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
                               onsubmit="return confirm('Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -424,7 +414,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/retest"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/retest"
                               onsubmit="return confirm('Retest every submission for this assignment? The worker will re-grade each one against the current test suite.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -433,7 +423,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
@@ -448,15 +438,15 @@
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                
-                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
+                                onclick="copyAssignmentURL(this, '#(item.assignment.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                        <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
-                        <form method="post" action="/instructor/#(row.assignmentID)/clone"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
                               onsubmit="return confirm('Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -465,7 +455,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/retest"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/retest"
                               onsubmit="return confirm('Retest every submission for this assignment? The worker will re-grade each one against the current test suite.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -474,7 +464,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.364 6.364L3 16m0 0v5m0-5h5"/><path d="M3 12a9 9 0 0 1 15.364-6.364L21 8m0 0V3m0 5h-5"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
@@ -487,6 +477,7 @@
                     #endif
                 </td>
             </tr>
+        #endif
         #endfor
         #endif
         </tbody>
@@ -502,86 +493,9 @@
     <h2 class="ungrouped-heading">Ungrouped</h2>
     #endif
 
-    <!-- Ungraded content items (reference material) with no section -->
+    <!-- Toolbar: add ungraded reference material with no section (interleaved
+         with the ungrouped assignments in the drag-orderable table below). -->
     <div class="content-lane">
-        #if(!ungroupedContentItems.isEmpty):
-        <table class="results-table content-item-table">
-            <thead>
-                <tr>
-                    <th>Material</th>
-                    <th class="col-hide-phone">Links</th>
-                    <th class="col-hide-phone">Updated</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-            #for(item in ungroupedContentItems):
-                <tr class="content-item-row">
-                    <td>
-                        <span class="content-item-kind">#(item.kindLabel)</span>
-                        <span class="content-item-title">#(item.title)</span>
-                        #if(!item.isPublished):<span class="content-item-hidden">Hidden</span>#endif
-                        #if(item.itemDescription):<div class="content-item-desc text-muted">#(item.itemDescription)</div>#endif
-                    </td>
-                    <td class="col-hide-phone content-item-links">#for(link in item.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
-                    <td class="col-hide-phone">#if(item.updatedLabel):#(item.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
-                    <td class="content-item-actions">
-                        <details class="popup-anchor content-item-edit-details">
-                            <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
-                            <div class="add-section-popup card">
-                                <form method="post" action="/instructor/content-items/#(item.id)/edit" class="form popup-form content-item-form">
-                                    #csrfFormField()
-                                    <label class="form-label">Title
-                                        <input class="form-input editor-input" type="text" name="title" value="#(item.title)" required>
-                                    </label>
-                                    <label class="form-label">Type
-                                        <select class="form-input editor-input" name="kind">
-                                            <option value="link" #if(item.kind == "link"):selected#endif>Link</option>
-                                            <option value="notebook" #if(item.kind == "notebook"):selected#endif>Notebook</option>
-                                            <option value="document" #if(item.kind == "document"):selected#endif>Document</option>
-                                            <option value="slides" #if(item.kind == "slides"):selected#endif>Slides</option>
-                                            <option value="outline" #if(item.kind == "outline"):selected#endif>Outline</option>
-                                            <option value="heading" #if(item.kind == "heading"):selected#endif>Heading</option>
-                                        </select>
-                                    </label>
-                                    <div class="content-item-link-fields">
-                                        #for(link in item.links):
-                                        <span class="content-item-link-pair">
-                                            <input class="form-input editor-input" type="text" name="linkLabels[]" value="#(link.label)" placeholder="Label">
-                                            <input class="form-input editor-input" type="text" name="linkURLs[]" value="#(link.url)" placeholder="https://…">
-                                        </span>
-                                        #endfor
-                                        <span class="content-item-link-pair">
-                                            <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label">
-                                            <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
-                                        </span>
-                                    </div>
-                                    <label class="form-label">Description
-                                        <input class="form-input editor-input" type="text" name="description" value="#if(item.itemDescription):#(item.itemDescription)#endif">
-                                    </label>
-                                    <label class="form-label">Updated label
-                                        <input class="form-input editor-input" type="text" name="updatedLabel" value="#if(item.updatedLabel):#(item.updatedLabel)#endif" placeholder="e.g. 2026-05-11">
-                                    </label>
-                                    <label class="form-label">Visibility
-                                        <select class="form-input editor-input" name="isPublished">
-                                            <option value="true" #if(item.isPublished):selected#endif>Published</option>
-                                            <option value="false" #if(!item.isPublished):selected#endif>Hidden</option>
-                                        </select>
-                                    </label>
-                                    <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
-                                </form>
-                            </div>
-                        </details>
-                        <form method="post" action="/instructor/content-items/#(item.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
-                            #csrfFormField()
-                            <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
-                        </form>
-                    </td>
-                </tr>
-            #endfor
-            </tbody>
-        </table>
-        #endif
         <details class="add-section-details popup-anchor content-item-add">
             <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
@@ -629,7 +543,7 @@
         </details>
     </div>
 
-    #if(!ungroupedRows.isEmpty):
+    #if(!ungroupedItems.isEmpty):
     <table class="results-table">
         <thead>
             <tr>
@@ -642,86 +556,153 @@
             </tr>
         </thead>
         <tbody id="assignments-body" data-section-id="">
-        #for(row in ungroupedRows):
-            <tr class="#if(row.status == "open"):status-open#elseif(row.status == "preview"):status-preview#elseif(row.status == "closed"):status-closed#endif"
-                #if(row.assignmentID):data-assignment-id="#(row.assignmentID)"#endif>
+        #for(item in ungroupedItems):
+        #if(item.isContent):
+            <tr class="content-item-row" data-content-item-id="#(item.content.id)">
                 <td>
-                    #if(row.assignmentID):
+                    <span class="assignment-name-cell">
+                        <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
+                        <span class="content-item-kind">#(item.content.kindLabel)</span>
+                        <span class="content-item-title">#(item.content.title)</span>
+                        #if(!item.content.isPublished):<span class="content-item-hidden">Hidden</span>#endif
+                    </span>
+                    #if(item.content.itemDescription):<div class="content-item-desc text-muted">#(item.content.itemDescription)</div>#endif
+                </td>
+                <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
+                <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
+                <td class="content-item-actions">
+                    <details class="popup-anchor content-item-edit-details">
+                        <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
+                        <div class="add-section-popup card">
+                            <form method="post" action="/instructor/content-items/#(item.content.id)/edit" class="form popup-form content-item-form">
+                                #csrfFormField()
+                                <label class="form-label">Title
+                                    <input class="form-input editor-input" type="text" name="title" value="#(item.content.title)" required>
+                                </label>
+                                <label class="form-label">Type
+                                    <select class="form-input editor-input" name="kind">
+                                        <option value="link" #if(item.content.kind == "link"):selected#endif>Link</option>
+                                        <option value="notebook" #if(item.content.kind == "notebook"):selected#endif>Notebook</option>
+                                        <option value="document" #if(item.content.kind == "document"):selected#endif>Document</option>
+                                        <option value="slides" #if(item.content.kind == "slides"):selected#endif>Slides</option>
+                                        <option value="outline" #if(item.content.kind == "outline"):selected#endif>Outline</option>
+                                        <option value="heading" #if(item.content.kind == "heading"):selected#endif>Heading</option>
+                                    </select>
+                                </label>
+                                <div class="content-item-link-fields">
+                                    #for(link in item.content.links):
+                                    <span class="content-item-link-pair">
+                                        <input class="form-input editor-input" type="text" name="linkLabels[]" value="#(link.label)" placeholder="Label">
+                                        <input class="form-input editor-input" type="text" name="linkURLs[]" value="#(link.url)" placeholder="https://…">
+                                    </span>
+                                    #endfor
+                                    <span class="content-item-link-pair">
+                                        <input class="form-input editor-input" type="text" name="linkLabels[]" placeholder="Label">
+                                        <input class="form-input editor-input" type="text" name="linkURLs[]" placeholder="https://…">
+                                    </span>
+                                </div>
+                                <label class="form-label">Description
+                                    <input class="form-input editor-input" type="text" name="description" value="#if(item.content.itemDescription):#(item.content.itemDescription)#endif">
+                                </label>
+                                <label class="form-label">Updated label
+                                    <input class="form-input editor-input" type="text" name="updatedLabel" value="#if(item.content.updatedLabel):#(item.content.updatedLabel)#endif" placeholder="e.g. 2026-05-11">
+                                </label>
+                                <label class="form-label">Visibility
+                                    <select class="form-input editor-input" name="isPublished">
+                                        <option value="true" #if(item.content.isPublished):selected#endif>Published</option>
+                                        <option value="false" #if(!item.content.isPublished):selected#endif>Hidden</option>
+                                    </select>
+                                </label>
+                                <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
+                            </form>
+                        </div>
+                    </details>
+                    <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
+                        #csrfFormField()
+                        <button class="btn action-btn action-danger btn-tiny" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        #else:
+            <tr class="#if(item.assignment.status == "open"):status-open#elseif(item.assignment.status == "preview"):status-preview#elseif(item.assignment.status == "closed"):status-closed#endif"
+                #if(item.assignment.assignmentID):data-assignment-id="#(item.assignment.assignmentID)"#endif>
+                <td>
+                    #if(item.assignment.assignmentID):
                     <span class="assignment-name-cell">
                         <span class="assignment-drag-handle" title="Drag to reorder or move between sections" aria-hidden="true">⋮⋮</span>
                     #endif
-                    #if(row.title):
-                    #if(row.assignmentID):
-                    <a href="/instructor/#(row.assignmentID)/submissions"><strong>#(row.title)</strong></a>
+                    #if(item.assignment.title):
+                    #if(item.assignment.assignmentID):
+                    <a href="/instructor/#(item.assignment.assignmentID)/submissions"><strong>#(item.assignment.title)</strong></a>
                     #else:
-                    <strong>#(row.title)</strong>
+                    <strong>#(item.assignment.title)</strong>
                     #endif
                     #else:
                     <span class="text-muted">Unpublished</span>
                     #endif
-                    #if(row.assignmentID):
+                    #if(item.assignment.assignmentID):
                     </span>
                     #endif
                 </td>
                 <td>
-                    #if(row.assignmentID && row.validationStatus == "passed"):
-                    <form method="post" action="/instructor/#(row.assignmentID)/status" class="status-form">
+                    #if(item.assignment.assignmentID && item.assignment.validationStatus == "passed"):
+                    <form method="post" action="/instructor/#(item.assignment.assignmentID)/status" class="status-form">
                         #csrfFormField()
-                        <label class="visually-hidden" for="status-u-#(row.assignmentID)">Status for #(row.title)</label>
-                        <select id="status-u-#(row.assignmentID)" class="form-input status-toggle-btn" name="status"
+                        <label class="visually-hidden" for="status-u-#(item.assignment.assignmentID)">Status for #(item.assignment.title)</label>
+                        <select id="status-u-#(item.assignment.assignmentID)" class="form-input status-toggle-btn" name="status"
                                 onchange="this.form.submit()">
-                            <option value="open" #if(row.status == "open"):selected#endif>open</option>
-                            <option value="preview" #if(row.status == "preview"):selected#endif>staff only</option>
-                            <option value="closed" #if(row.status == "closed"):selected#endif>closed</option>
+                            <option value="open" #if(item.assignment.status == "open"):selected#endif>open</option>
+                            <option value="preview" #if(item.assignment.status == "preview"):selected#endif>staff only</option>
+                            <option value="closed" #if(item.assignment.status == "closed"):selected#endif>closed</option>
                         </select>
                     </form>
-                    #elseif(row.assignmentID):
+                    #elseif(item.assignment.assignmentID):
                     <span class="tier tier-closed">closed</span>
                     #else:
                     <span class="tier
-                        #if(row.status == "open"):tier-open
-                        #elseif(row.status == "preview"):tier-preview
-                        #elseif(row.status == "closed"):tier-closed
-                        #elseif(row.status == "unpublished"):tier-unpublished
-                    #endif">#(row.status)</span>
+                        #if(item.assignment.status == "open"):tier-open
+                        #elseif(item.assignment.status == "preview"):tier-preview
+                        #elseif(item.assignment.status == "closed"):tier-closed
+                        #elseif(item.assignment.status == "unpublished"):tier-unpublished
+                    #endif">#(item.assignment.status)</span>
                     #endif
                 </td>
                 <td>
-                    #if(row.validationStatus == "passed"):
+                    #if(item.assignment.validationStatus == "passed"):
                     <span class="tier tier-open">passed</span>
-                    #elseif(row.validationStatus == "failed"):
+                    #elseif(item.assignment.validationStatus == "failed"):
                     <span class="tier tier-closed">failed</span>
-                    #if(row.validationSubmissionID):
+                    #if(item.assignment.validationSubmissionID):
                     <div class="cell-subrow">
-                        <a href="/submissions/#(row.validationSubmissionID)">View results</a>
+                        <a href="/submissions/#(item.assignment.validationSubmissionID)">View results</a>
                     </div>
                     #endif
-                    #elseif(row.validationStatus == "pending"):
+                    #elseif(item.assignment.validationStatus == "pending"):
                     <span class="tier">pending</span>
-                    #if(row.validationSubmissionID):
+                    #if(item.assignment.validationSubmissionID):
                     <div class="cell-subrow">
-                        <a href="/submissions/#(row.validationSubmissionID)">Track status</a>
+                        <a href="/submissions/#(item.assignment.validationSubmissionID)">Track status</a>
                     </div>
                     #endif
-                    #elseif(row.validationStatus == "no-runner"):
+                    #elseif(item.assignment.validationStatus == "no-runner"):
                     <span class="tier tier-closed" title="No compatible runner was available when the assignment was last saved. Validation was not enqueued — ask an admin to start a compatible runner, then re-save the assignment.">no runner</span>
                     #else:
                     <span class="tier">—</span>
                     #endif
                 </td>
-                <td class="due-col col-hide-phone">#if(row.dueAt):#(row.dueAt)#else:—#endif</td>
+                <td class="due-col col-hide-phone">#if(item.assignment.dueAt):#(item.assignment.dueAt)#else:—#endif</td>
                 <td class="col-hide-phone nowrap">
-                    #if(row.assignmentID):
-                    <span title="#(row.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(row.submittedStudentCount) / #(enrolledStudentCount)</span>
+                    #if(item.assignment.assignmentID):
+                    <span title="#(item.assignment.submittedStudentCount) / #(enrolledStudentCount) students submitted">#(item.assignment.submittedStudentCount) / #(enrolledStudentCount)</span>
                     #else:—#endif
                 </td>
                 <td>
-                    #if(row.status == "unpublished"):
+                    #if(item.assignment.status == "unpublished"):
                     <div class="row-actions-tight">
                     <details class="publish-details">
                         <summary class="btn action-btn summary-btn">Publish…</summary>
                         <form class="publish-form" method="post" action="/instructor">
-                            <input type="hidden" name="testSetupID" value="#(row.setupID)">
+                            <input type="hidden" name="testSetupID" value="#(item.assignment.setupID)">
                             <label class="form-label publish-label">
                                 Title
                                 <input class="form-input" type="text" name="title"
@@ -737,7 +718,7 @@
                             <button class="btn btn-primary btn-compact" type="submit">Create draft</button>
                         </form>
                     </details>
-                    <form method="post" action="/instructor/setup/#(row.setupID)/delete"
+                    <form method="post" action="/instructor/setup/#(item.assignment.setupID)/delete"
                           onsubmit="return confirm('Delete this unpublished setup? This cannot be undone.')">
                         #csrfFormField()
                         <button class="btn action-btn action-danger" type="submit"
@@ -747,20 +728,20 @@
                         </button>
                     </form>
                     </div>
-                    #elseif(row.status == "closed"):
+                    #elseif(item.assignment.status == "closed"):
                     <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                
-                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
+                                onclick="copyAssignmentURL(this, '#(item.assignment.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                        <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
-                        <form method="post" action="/instructor/#(row.assignmentID)/clone"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
                               onsubmit="return confirm('Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -769,7 +750,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
@@ -779,20 +760,20 @@
                             </button>
                         </form>
                     </div>
-                    #elseif(row.status == "open"):
+                    #elseif(item.assignment.status == "open"):
                     <div class="row-actions-tight">
                         <button class="btn action-btn" type="button"
                                 title="Copy student link" aria-label="Copy student link"
                                
-                                onclick="copyAssignmentURL(this, '#(row.vanityURL)')">
+                                onclick="copyAssignmentURL(this, '#(item.assignment.vanityURL)')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         </button>
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                        <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
-                        <form method="post" action="/instructor/#(row.assignmentID)/clone"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
                               onsubmit="return confirm('Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -801,7 +782,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
@@ -813,12 +794,12 @@
                     </div>
                     #else:
                     <div class="row-actions-tight">
-                        <a class="btn action-btn" href="/instructor/#(row.assignmentID)/edit"
+                        <a class="btn action-btn" href="/instructor/#(item.assignment.assignmentID)/edit"
                            title="Edit assignment" aria-label="Edit assignment"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </a>
-                        <form method="post" action="/instructor/#(row.assignmentID)/clone"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/clone"
                               onsubmit="return confirm('Duplicate this assignment? A closed, unvalidated copy will be created for you to edit.')">
                             #csrfFormField()
                             <button class="btn action-btn" type="submit"
@@ -827,7 +808,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             </button>
                         </form>
-                        <form method="post" action="/instructor/#(row.assignmentID)/delete"
+                        <form method="post" action="/instructor/#(item.assignment.assignmentID)/delete"
                               onsubmit="return confirm('Delete this assignment? Students will no longer see it.')">
                             #csrfFormField()
                             <button class="btn action-btn action-danger" type="submit"
@@ -840,6 +821,7 @@
                     #endif
                 </td>
             </tr>
+        #endif
         #endfor
         </tbody>
     </table>
@@ -884,6 +866,7 @@ tr.assignment-draggable td {
    global stylesheet (shared with assignment-edit.leaf). */
 </style>
 <script src="/relative-time.js?v=#appVersion()"></script>
+<script src="/section-items-dnd.js?v=#appVersion()"></script>
 <script>
 (function () {
     'use strict';
@@ -962,146 +945,14 @@ tr.assignment-draggable td {
         setInterval(refresh, 60000);
     }());
 
-    // ── Assignment drag-and-drop (within and across sections) ─────────────────
-    //
-    // All assignment tbodies carry data-section-id (empty string = ungrouped).
-    // Dragging to a different tbody triggers a section-move API call + reload.
-    // Dragging within the same tbody triggers a reorder API call.
+    // ── Section-item drag-and-drop (assignments + content items interleaved) ──
+    //   Moved to Public/section-items-dnd.js so it is linted and testable; it
+    //   drives the merged per-section item order (assignments AND content items
+    //   share one drag-orderable sequence). It attaches its own document-level
+    //   handlers, decoupled from the section-reorder DnD below by the section
+    //   header's stopPropagation.
 
-    // Shared implementation (Public/chickadee-ui.js, loaded from base.leaf).
     var csrfToken = ChickadeeUI.getCsrfToken();
-
-    var assignDragged = null;
-    var assignStartTbody = null;
-    var assignStartOrder = '';
-
-    function currentOrder(tbody) {
-        return Array.from(tbody.querySelectorAll('tr[data-assignment-id]'))
-            .map(function (r) { return r.getAttribute('data-assignment-id'); })
-            .filter(Boolean);
-    }
-
-    async function persistReorder(tbody) {
-        var res = await fetch('/instructor/reorder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-            body: JSON.stringify({ assignmentIDs: currentOrder(tbody) })
-        });
-        if (!res.ok) window.location.reload();
-    }
-
-    // Make all assignment rows draggable on page load.
-    document.querySelectorAll('tr[data-assignment-id]').forEach(function (row) {
-        row.classList.add('assignment-draggable');
-        row.setAttribute('draggable', 'true');
-        // Prevent native link / image drag from taking priority over the row
-        // drag. Without this, clicking on the assignment-name <a> starts a
-        // browser link-drag instead of our custom row drag.
-        row.querySelectorAll('a, img').forEach(function (el) {
-            el.setAttribute('draggable', 'false');
-        });
-    });
-
-    document.addEventListener('dragstart', function (event) {
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-        var row = target.closest('tr[data-assignment-id]');
-        if (!row) return;
-        assignDragged = row;
-        assignStartTbody = row.parentElement;
-        assignStartOrder = currentOrder(assignStartTbody).join(',');
-        row.classList.add('dragging');
-        if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', row.getAttribute('data-assignment-id') || '');
-        }
-    });
-
-    document.addEventListener('dragover', function (event) {
-        if (!assignDragged) return;
-        // Call preventDefault unconditionally so the drop cursor stays valid
-        // regardless of which element is under the pointer. Without this, once
-        // the dragged row has already moved to the target tbody, subsequent
-        // dragover events over empty table space would find no matching branch
-        // and never call preventDefault, causing the browser to cancel the drop.
-        event.preventDefault();
-        var target = event.target;
-        if (!(target instanceof Element)) return;
-
-        // 1. Over another assignment row — insert before or after it.
-        var overRow = target.closest('tr[data-assignment-id]');
-        if (overRow && overRow !== assignDragged) {
-            var rect = overRow.getBoundingClientRect();
-            var after = event.clientY > rect.top + rect.height / 2;
-            overRow.parentElement.insertBefore(assignDragged, after ? overRow.nextSibling : overRow);
-            return;
-        }
-
-        // 2. Over an empty-section placeholder row — move into that section.
-        var emptyRow = target.closest('tr.section-empty-row');
-        if (emptyRow) {
-            emptyRow.style.display = 'none';
-            emptyRow.parentElement.insertBefore(assignDragged, emptyRow);
-            return;
-        }
-
-        // 3. Over a tbody but not a specific row — append if from a different section.
-        var dropTbody = target.closest('tbody[data-section-id]');
-        if (dropTbody && assignDragged.parentElement !== dropTbody) {
-            dropTbody.appendChild(assignDragged);
-            return;
-        }
-
-        // 4. Over a section block's header / gap area (outside the table body).
-        //    Find the block's tbody and move the row there.
-        var overBlock = target.closest('.section-block[data-section-id]');
-        if (overBlock) {
-            var blockTbody = overBlock.querySelector('tbody[data-section-id]');
-            if (blockTbody && assignDragged.parentElement !== blockTbody) {
-                blockTbody.appendChild(assignDragged);
-            }
-        }
-    });
-
-    document.addEventListener('drop', function (event) {
-        if (!assignDragged) return;
-        event.preventDefault();
-    });
-
-    document.addEventListener('dragend', function () {
-        if (!assignDragged) return;
-        assignDragged.classList.remove('dragging');
-        var row = assignDragged;
-        var startTbody = assignStartTbody;
-        var startOrder = assignStartOrder;
-        assignDragged = null;
-        assignStartTbody = null;
-        assignStartOrder = '';
-
-        var currentTbody = row.parentElement;
-        if (!currentTbody) return;
-
-        if (currentTbody !== startTbody) {
-            // Cross-section move.
-            var newSectionID = currentTbody.getAttribute('data-section-id') || '';
-            var assignmentID = row.getAttribute('data-assignment-id');
-            fetch('/instructor/' + assignmentID + '/section', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-                body: JSON.stringify({ sectionID: newSectionID })
-            }).then(function () {
-                window.location.reload();
-            }).catch(function () {
-                window.location.reload();
-            });
-        } else {
-            // Within-section reorder.
-            var newOrder = currentOrder(currentTbody).join(',');
-            if (newOrder !== startOrder) {
-                persistReorder(currentTbody).catch(function () { window.location.reload(); });
-            }
-        }
-    });
 
     // ── Section drag-and-drop (reorder sections) ──────────────────────────────
     var sectionsContainer = document.getElementById('sections-container');

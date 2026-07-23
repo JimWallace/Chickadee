@@ -60,6 +60,7 @@ enum MCPToolCatalog {
             DeleteContentItemTool().erased(),
             ReorderContentItemsTool().erased(),
             ReorderAssignmentsTool().erased(),
+            ReorderSectionItemsTool().erased(),
             CloneAssignmentTool().erased(),
             CreateAssignmentTool().erased(),
         ])

@@ -162,6 +162,11 @@ extension CourseAdminRoutes {
         let body = (try? req.content.decode(MoveBody.self))
         let newSectionID: UUID? = try await resolveSectionID(body?.sectionID, courseID: courseID, db: req.db)
         assignment.sectionID = newSectionID
+        // Append to the destination lane's shared (assignment + content) order so
+        // the moved assignment doesn't collide with an existing sort_order; the
+        // DnD client follows with a reorder to place it exactly.
+        assignment.sortOrder = try await nextAssignmentSortOrder(
+            courseID: courseID, sectionID: newSectionID, db: req.db)
         try await assignment.save(on: req.db)
 
         // When moving into a named section, sync the test setup's grading mode

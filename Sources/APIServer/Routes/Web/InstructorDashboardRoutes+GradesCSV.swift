@@ -18,14 +18,17 @@ extension InstructorDashboardRoutes {
         let user = try req.auth.require(APIUser.self)
         let courseState = try await req.resolveActiveCourse(for: user)
 
-        // Phase 1: students + assignments in parallel.  Both only need
-        // `activeCourseUUID`; neither depends on the other.
+        // Phase 1: students + assignments + sections in parallel.  All only need
+        // `activeCourseUUID`; none depends on the others.
         async let studentsFuture = loadGradesCSVStudents(
             req: req, activeCourseUUID: courseState.activeCourseUUID)
         async let assignmentsFuture = loadGradesCSVAssignments(
             req: req, activeCourseUUID: courseState.activeCourseUUID)
+        async let sectionsFuture = loadCourseSections(
+            req: req, activeCourseUUID: courseState.activeCourseUUID)
         let students = try await studentsFuture
         let assignments = try await assignmentsFuture
+        let sections = try await sectionsFuture
 
         let setupIDs = Set(assignments.map(\.testSetupID))
         let studentIDs = Set(students.compactMap(\.id))
@@ -38,7 +41,22 @@ extension InstructorDashboardRoutes {
         let setupByID = try await setupByIDFuture
         let submissions = try await submissionsFuture
 
-        let sortedAssignments = sortedByAssignmentDisplayOrder(assignments, setupsByID: setupByID)
+        // Section-aware column order: assignments group by their section's
+        // display order (ungrouped last), then by the shared per-section item
+        // order within each group — deterministic even though `sort_order` is
+        // now only unique per (course, section), not course-globally.
+        let sectionSortByID: [UUID: Int] = Dictionary(
+            uniqueKeysWithValues: sections.compactMap { s in s.id.map { ($0, s.sortOrder) } })
+        let sortedAssignments = assignments.sorted { lhs, rhs in
+            let lhsSection = lhs.sectionID.flatMap { sectionSortByID[$0] } ?? Int.max
+            let rhsSection = rhs.sectionID.flatMap { sectionSortByID[$0] } ?? Int.max
+            if lhsSection != rhsSection { return lhsSection < rhsSection }
+            return assignmentDisplayOrderPrecedes(
+                lhsSortOrder: lhs.sortOrder, rhsSortOrder: rhs.sortOrder,
+                lhsCreatedAt: setupByID[lhs.testSetupID]?.createdAt,
+                rhsCreatedAt: setupByID[rhs.testSetupID]?.createdAt,
+                lhsSetupID: lhs.testSetupID, rhsSetupID: rhs.testSetupID)
+        }
         let submissionIDs = submissions.map(\.id)
 
         // Serial follow-on: needs submission IDs from phase 2.
