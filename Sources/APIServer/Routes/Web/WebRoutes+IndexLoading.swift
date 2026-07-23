@@ -170,6 +170,27 @@ extension WebRoutes {
         return try await query.sort(\.$sortOrder, .ascending).all()
     }
 
+    /// Per-setup key for the unified section interleave: the assignment's
+    /// `sortOrder` (nil when never reordered) over the setup's creation date,
+    /// the same rule that orders content items — so both lanes merge into one
+    /// ordered list inside each section (`buildIndexDisplayGroups`).
+    static func buildSetupKeyMap(
+        setups: [APITestSetup], assignmentBySetup: [String: APIAssignment]
+    ) -> [String: SectionItemSortKey] {
+        Dictionary(
+            setups.map { setup -> (String, SectionItemSortKey) in
+                let sid = setup.id ?? ""
+                return (
+                    sid,
+                    SectionItemSortKey(
+                        sortOrder: assignmentBySetup[sid]?.sortOrder,
+                        createdAt: setup.createdAt, stableID: sid)
+                )
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
     /// Buckets both lanes — graded assignment rows and ungraded content items —
     /// by section and assembles the ordered display groups, interleaving the two
     /// lanes within each section by their shared `sort_order` (`setupKeyByID`
