@@ -18,6 +18,12 @@
       },
       {
         "extension": "./extension",
+        "load": "static/remoteEntry.d7c4e2e310eb29cb.js",
+        "name": "@jupyterlite/xeus-extension",
+        "style": "./style"
+      },
+      {
+        "extension": "./extension",
         "load": "static/remoteEntry.a4977091f52be18e7851.js",
         "name": "jupyter-iframe-commands"
       }

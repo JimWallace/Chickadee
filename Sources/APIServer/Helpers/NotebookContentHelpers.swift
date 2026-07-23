@@ -20,8 +20,8 @@ let hiddenTiersForStudents: Set<String> = ["secret", "release"]
 // JupyterLite kernel identifiers used when normalizing notebook metadata.
 let jupyterLitePythonKernelName = "python"
 let jupyterLitePythonKernelDisplayName = "Python (Pyodide)"
-let jupyterLiteRKernelName = "webr"
-let jupyterLiteRKernelDisplayName = "R (WebR)"
+let jupyterLiteRKernelName = "xr"
+let jupyterLiteRKernelDisplayName = "R (xeus-r)"
 
 /// Extracts the joined source string for a notebook cell dictionary.
 func cellSource(_ cell: [String: Any]) -> String? {
@@ -96,8 +96,8 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
 ///
 /// - Python notebooks (`python`/`python3` or missing kernelspec) →
 ///   kernelspec.name = "python", display_name = "Python (Pyodide)".
-/// - R notebooks (`ir`, `r`) →
-///   kernelspec.name = "webr", display_name = "R (WebR)".
+/// - R notebooks (`ir`, `r`, `webr`, `xr`) →
+///   kernelspec.name = "xr", display_name = "R (xeus-r)" — the vendored xeus-r kernel.
 /// - Any other explicit kernelspec → returned unchanged.
 /// - Returns original data unchanged if JSON parsing fails.
 func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
@@ -111,8 +111,8 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     var kernelSpec = existingKernelSpec ?? [:]
     var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
 
-    if let name = existingName, name == "ir" || name == "r" {
-        // R notebook (IRkernel) → normalize to the JupyterLite webR kernel.
+    if let name = existingName, name == "ir" || name == "r" || name == "webr" || name == "xr" {
+        // R notebook (IRkernel / legacy webr / xeus-r) → normalize to the vendored xeus-r kernel.
         kernelSpec["name"] = jupyterLiteRKernelName
         kernelSpec["display_name"] = jupyterLiteRKernelDisplayName
         metadata["kernelspec"] = kernelSpec

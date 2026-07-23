@@ -604,6 +604,22 @@ import Testing
             "WebR kernel should produce .R file")
     }
 
+    @Test func extractRNotebookWithXeusRKernelProducesRFile() throws {
+        let nb = """
+            {
+              "nbformat": 4,
+              "metadata": {"kernelspec": {"name": "xr"}},
+              "cells": [{"cell_type": "code", "source": ["z <- 2"]}]
+            }
+            """
+        try writeNotebook(nb)
+        try extractNotebooksToCode(in: tmpDir)
+
+        #expect(
+            FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("assignment.R").path),
+            "xeus-r (xr) kernel should produce .R file")
+    }
+
     @Test func extractPythonNotebookDetectsViaLanguageInfo() throws {
         // No kernelspec, but language_info says python → should produce .py
         let nb = """

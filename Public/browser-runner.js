@@ -815,7 +815,7 @@
         const ks     = meta.kernelspec || {};
         const ksName = (ks.name || '').toLowerCase();
         const liName = ((meta.language_info || {}).name || '').toLowerCase();
-        const isR    = ksName === 'ir' || ksName === 'r' || ksName === 'webr' || liName === 'r';
+        const isR    = ksName === 'ir' || ksName === 'r' || ksName === 'webr' || ksName === 'xr' || liName === 'r';
         const stem   = filename.replace(/\.ipynb$/i, '');
 
         if (isR) {

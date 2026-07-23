@@ -1,0 +1,9 @@
+# R kernel environment for jupyterlite-xeus (xeus-r), built into
+# Public/jupyterlite by scripts/build-jupyterlite.sh.  Kept minimal for now;
+# add r-* packages here as courses need them.  See docs/xeus-r-kernel-spike.md.
+name: chickadee-r
+channels:
+  - https://repo.prefix.dev/emscripten-forge-dev
+  - https://repo.prefix.dev/conda-forge
+dependencies:
+  - xeus-r
