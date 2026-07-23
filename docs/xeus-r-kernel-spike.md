@@ -21,13 +21,17 @@ deferred part 2 — an **in-browser R kernel** for the JupyterLite editor.
 - **R and Python coexist in one editor.** `jupyterlite-pyodide-kernel` (our
   existing Python kernel, using our vendored Pyodide) and `jupyterlite-xeus`
   (xeus-r) boot side by side in one deployment, both cross-origin isolated.
-- **`xeus-python` also works — with a one-line pin.** Left to the solver's
-  default it picks the *newest* xeus-python (0.17.8), which hard-pins the old
-  xeus 5.2 and crashes on the xeus-6 loader. Pinning `xeus >=6` selects
-  xeus-python **0.17.4** on xeus 6.0.3, which boots and runs numpy/pandas — and
-  R + Python then unify in **one xeus-6 environment**. So single-framework
-  unification is achievable today; the remaining gates are Safari + package
-  parity, not the kernel.
+- **`xeus-python` on xeus 6 is possible but *unsupported* — not recommended.**
+  The newest xeus-python (0.17.8) is ABI-pinned to xeus 5.2 (`xeus >=5.2.8,<5.3`
+  — a conda `run_exports` bind, i.e. it is *compiled against* xeus 5.2) and
+  crashes on jupyterlite-xeus's xeus-6 loader. Forcing `xeus >=6` falls back to
+  the older, *unpinned* xeus-python **0.17.4** and runs it on xeus 6.0.3 — an
+  ABI-unguarded pairing. It does execute (verified: values, error tracebacks,
+  and rich HTML display all render), but **no xeus-python is actually built
+  against xeus 6 yet**, so the xcomm-refactor surface (comms/widgets) and other
+  protocol edges are untested. **Real Python unification waits for an upstream
+  xeus-6 xeus-python.** Meanwhile ship R on xeus (fully supported — below) and
+  keep Python on Pyodide.
 - **One open risk: Safari / iPad.** xeus (R *and* Python) hard-requires
   SharedArrayBuffer with no fallback; we currently serve WebKit non-isolated on
   purpose. Needs a real-device test.
@@ -63,8 +67,8 @@ in headless Chromium (Playwright) against a static server sending
 | Kernel | package / bundled xeus | build | boot + execute | notes |
 |---|---|---|---|---|
 | **xeus-r** | `xeus-r 0.10.0` / xeus 6.0.3 | ✅ | ✅ R 4.5.1 | `crossOriginIsolated=true`, `mean`/`sd`/`summary()` correct |
-| **xeus-python** (solver default) | `0.17.8` / xeus 5.2.8 | ✅ | ❌ | `type "XKernel" is already registered` — newest build pins xeus 5.2, ABI-mismatches the xeus-6 loader |
-| **xeus-python** (pin `xeus >=6`) | `0.17.4` / xeus 6.0.3 | ✅ | ✅ Py 3.13.1 | numpy 2.4.4 + pandas 3.0.2; **unified with xeus-r in one env** |
+| **xeus-python** (solver default) | `0.17.8` / xeus 5.2.8 | ✅ | ❌ | `type "XKernel" is already registered` — newest build is ABI-pinned to xeus 5.2, mismatches the xeus-6 loader |
+| **xeus-python** (force `xeus >=6`) | `0.17.4` / xeus 6.0.3 | ✅ | ⚠️ runs | ABI-**unguarded**: 0.17.4 is xeus-5-era + unpinned. exec/error/rich-display verified, but **not built against xeus 6** — comms/widgets untested. Not for production |
 | **Pyodide-Python** | `jupyterlite-pyodide-kernel 0.8.1` | ✅ | ✅ Py 3.14.2 | our vendored `Public/pyodide`, unchanged |
 | **Pyodide + xeus-r in one site** | both of the above | ✅ | ✅ both | no `XKernel` collision — Pyodide is not a xeus kernel |
 
@@ -78,26 +82,37 @@ which requires `jupyterlite-core<0.7`. We pin `0.8.1`. No release targeting core
 our pin — and builds the R kernel from the `xeus-r` emscripten-forge package. Same
 end result (R-in-WASM in the browser), maintained, current.
 
-### xeus-python: works with a `xeus >=6` pin
+### xeus-python: runs on xeus 6, but the pairing is unsupported
 
-The original failure was a **solver default**, not a dead end. Left
-unconstrained, the environment solve picks the *newest* `xeus-python` (0.17.8),
-whose pin `xeus >=5.2.8,<5.3` drags in xeus 5.2.8 — ABI-incompatible with
-`jupyterlite-xeus 5.0.0`'s xeus-6 JS loader, so its WASM double-registers embind
-types (`type "XKernel" is already registered`) and the kernel dies at boot.
-Reproduced both solo and alongside R.
+The boot failure is real but its cause is precise. Left unconstrained, the solve
+picks the *newest* `xeus-python` (0.17.8), whose pin `xeus >=5.2.8,<5.3` drags in
+xeus 5.2.8 — ABI-incompatible with `jupyterlite-xeus 5.0.0`'s xeus-6 loader, so
+its WASM double-registers embind types (`type "XKernel" is already registered`)
+and the kernel dies at boot. Reproduced both solo and alongside R.
 
-Pinning **`xeus >=6`** in the environment makes the solver select
-**`xeus-python 0.17.4`** (build `_4`, which carries no xeus pin) on **xeus 6.0.3**
-— the same xeus `xeus-r 0.10.0` uses. That pairing **boots and runs numpy/pandas**
-in headless Chromium, and R + Python coexist in **one environment** (a single
-`environment.yml` listing both `xeus-python` and `xeus-r` under `xeus >=6`). A
-genuine single-framework unification is therefore achievable today.
+**Why that pin exists (this is the important part).** It is not a "we tried xeus 6
+and reverted" decision — it is a conda **`run_exports`** ABI bind. xeus-python
+0.17.5+ is *compiled against* xeus 5.2.x, and the build system auto-pins it to
+that ABI (`>=5.2.x,<5.3`). The pin **is** the documented rationale, in enforced
+form: this binary is linked to xeus 5.2. **No xeus-python has been built against
+xeus 6 at all** — 0.17.8, the newest, is still xeus 5.2.8. xeus 6.0.0 is a major
+release that refactored the **xcomm API** and changed `create_info_reply`, so a
+xeus-5-era kernel on a xeus-6 core is a genuine mismatch.
 
-Caveat: 0.17.4 is one point release behind 0.17.8 (functionally near-identical —
-same Python 3.13.1, same `xeus-python-shell` 0.6.6). It is a pin to manage until
-emscripten-forge rebuilds a newer `xeus-python` against xeus 6 — treat it like
-the Pyodide version-derivation discipline (one deliberate pin, no drift).
+**What the `xeus >=6` trick actually does.** It forces the solver onto the older,
+*unpinned* `xeus-python 0.17.4` (a xeus-5-era build that predates the run_exports
+guard) and runs it on xeus 6.0.3 — i.e. it **removes the guardrail, it does not
+satisfy it.** Empirically the pairing survives more than a smoke test — value
+output, error tracebacks, and rich HTML (DataFrame) display all render correctly
+in headless Chromium — but the untested surface is exactly what xeus 6 changed
+(comms/widgets, interactive output), and depending on an unpinned old build is
+fragile against a re-solve. **Runs is not the same as supported.**
+
+**Conclusion.** Do not ship Python-on-xeus on this pairing. The supported path is
+to wait for emscripten-forge to publish a `xeus-python` built against xeus 6
+(proper `run_exports` pin to 6), and keep Python on Pyodide until then. Note the
+asymmetry: **`xeus-r 0.10.0` *is* built against xeus 6** (`xeus >=6.0.2,<6.1`), so
+R-on-xeus is fully supported and unaffected by any of this.
 
 ### The Safari / iPad squeeze
 
@@ -246,17 +261,15 @@ Nothing to build. Worker-R already grades authoritatively. With web-based
 grading being retired, no browser-side R grader (WebR or xeus) is needed —
 **punt WebR-for-grading.**
 
-### Phase 3 — Python → xeus unification (viable now; gated on Safari + parity)
+### Phase 3 — Python → xeus unification (blocked on upstream)
 
-`xeus-python` boots on xeus 6 (pin `xeus >=6` → build 0.17.4) and coexists with
-`xeus-r` in one environment, so one kernel framework for both R and Python is
-achievable today. Before committing to replace Pyodide in the editor, settle:
-(1) the **Safari/iPad SAB** question (unchanged — xeus has no non-isolated
-fallback); (2) **package parity** — confirm every package courses rely on exists
-on emscripten-forge (numpy/pandas/matplotlib are present); (3) **pin discipline**
-for the xeus-python/xeus pair (until a newer xeus-python is rebuilt against xeus 6).
-This is now a product decision, not a technical blocker. Do not couple it to
-shipping R.
+Unifying Python onto xeus is **blocked until emscripten-forge ships a
+`xeus-python` built against xeus 6**. Every published xeus-python is ABI-bound to
+xeus 5.2; the `xeus >=6` workaround runs an unguarded xeus-5-era build (0.17.4)
+and is **not production-safe** (see the xeus-python section). When a xeus-6
+`xeus-python` lands, the remaining gates are the **Safari/iPad SAB** question and
+a **package-parity sweep**. Until then, keep Python on Pyodide. Do not couple this
+to shipping R.
 
 ---
 
@@ -268,8 +281,8 @@ shipping R.
 | jupyterlite-xeus | 5.0.0 |
 | jupyterlite-pyodide-kernel | 0.8.1 |
 | xeus-r | 0.10.0 (xeus 6.0.3), R 4.5.1 |
-| xeus-python (solver default — fails to boot) | 0.17.8 (xeus 5.2.8) |
-| xeus-python (pin `xeus >=6` — boots) | 0.17.4 (xeus 6.0.3), Python 3.13.1, numpy 2.4.4, pandas 3.0.2 |
+| xeus-python (solver default — fails to boot) | 0.17.8 (ABI-bound to xeus 5.2.8) |
+| xeus-python (force `xeus >=6` — runs, unsupported) | 0.17.4 (xeus-5-era build on xeus 6.0.3), Python 3.13.1, numpy 2.4.4, pandas 3.0.2 |
 | Pyodide (vendored) | Public/pyodide (Python 3.14.2) |
 | empack | 6.0.1 |
 | micromamba | 2.8.1 |
