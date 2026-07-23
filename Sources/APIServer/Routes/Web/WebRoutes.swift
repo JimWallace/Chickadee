@@ -169,61 +169,14 @@ struct WebRoutes: RouteCollection {
         )
         let rows = sortedSetups.map { Self.buildTestSetupRow(setup: $0, context: rowContext) }
 
-        // Sections for the active course (fetch started up top) enable the
-        // grouped display below.
+        // Sections + content items for the active course (fetches started up
+        // top) drive the grouped display. Bucketing both lanes by section and
+        // assembling the ordered groups lives in a helper (WebRoutes+IndexLoading).
         let allSections = try await sectionsFetch
-
-        // Build lookup: testSetupID → section UUID
-        let sectionBySetupID: [String: UUID] = Dictionary(
-            allAssignments.compactMap { a -> (String, UUID)? in
-                guard let sid = a.sectionID else { return nil }
-                return (a.testSetupID, sid)
-            },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        // Bucket both lanes — graded assignment rows and ungraded content items
-        // — by section, then assemble the ordered display groups. Done inline
-        // (rather than via the shared `groupRowsBySection` fold) because a group
-        // now carries two row types and a section with content items but no
-        // visible assignments must still render — the fold's
-        // `includeEmptySections: false` would drop it.
-        var setupRowsBySectionID: [UUID: [TestSetupRow]] = [:]
-        var ungroupedSetupRows: [TestSetupRow] = []
-        for row in rows {
-            if let sid = sectionBySetupID[row.id] {
-                setupRowsBySectionID[sid, default: []].append(row)
-            } else {
-                ungroupedSetupRows.append(row)
-            }
-        }
         let contentItems = try await contentItemsFetch
-        var contentRowsBySectionID: [UUID: [ContentItemRow]] = [:]
-        var ungroupedContentRows: [ContentItemRow] = []
-        for item in contentItems {
-            let contentRow = ContentItemRow(from: item)
-            if let sid = item.sectionID {
-                contentRowsBySectionID[sid, default: []].append(contentRow)
-            } else {
-                ungroupedContentRows.append(contentRow)
-            }
-        }
-        var displayGroups: [IndexDisplayGroup] = []
-        for section in allSections {
-            guard let sid = section.id else { continue }
-            let sectionSetups = setupRowsBySectionID[sid] ?? []
-            let sectionContent = contentRowsBySectionID[sid] ?? []
-            // Drop only sections with nothing to show in either lane.
-            if sectionSetups.isEmpty, sectionContent.isEmpty { continue }
-            displayGroups.append(
-                IndexDisplayGroup(
-                    name: section.name, contentItems: sectionContent, setups: sectionSetups))
-        }
-        if !ungroupedSetupRows.isEmpty || !ungroupedContentRows.isEmpty {
-            displayGroups.append(
-                IndexDisplayGroup(
-                    name: nil, contentItems: ungroupedContentRows, setups: ungroupedSetupRows))
-        }
+        let displayGroups = Self.buildIndexDisplayGroups(
+            rows: rows, contentItems: contentItems,
+            allAssignments: allAssignments, allSections: allSections)
 
         return try await req.view.render(
             "index",

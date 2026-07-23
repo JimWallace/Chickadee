@@ -68,7 +68,11 @@ import VaporTesting
         var updatedLabel: String
         var sectionID: String
         var isPublished: String
-        var _csrf: String
+        var csrf: String
+        enum CodingKeys: String, CodingKey {
+            case title, kind, linkLabels, linkURLs, description, updatedLabel, sectionID, isPublished
+            case csrf = "_csrf"
+        }
     }
 
     // MARK: - Create
@@ -94,7 +98,7 @@ import VaporTesting
                             linkURLs: ["https://example.com/l1.pdf", "/materials/l1.ipynb"],
                             description: "Intro", updatedLabel: "2026-05-11",
                             sectionID: section.requireID().uuidString, isPublished: "true",
-                            _csrf: token),
+                            csrf: token),
                         as: .urlEncodedForm)
                 },
                 afterResponse: { res in #expect(res.status == .seeOther) })
@@ -127,7 +131,7 @@ import VaporTesting
                         CreateBody(
                             title: "   ", kind: "link", linkLabels: [], linkURLs: [],
                             description: "", updatedLabel: "", sectionID: "", isPublished: "true",
-                            _csrf: token),
+                            csrf: token),
                         as: .urlEncodedForm)
                 },
                 afterResponse: { res in #expect(res.status == .badRequest) })
@@ -151,7 +155,7 @@ import VaporTesting
                         CreateBody(
                             title: "Bad", kind: "link", linkLabels: ["x"],
                             linkURLs: ["javascript:alert(1)"], description: "", updatedLabel: "",
-                            sectionID: "", isPublished: "true", _csrf: token),
+                            sectionID: "", isPublished: "true", csrf: token),
                         as: .urlEncodedForm)
                 },
                 afterResponse: { res in #expect(res.status == .badRequest) })
@@ -173,7 +177,7 @@ import VaporTesting
                         CreateBody(
                             title: "Nope", kind: "link", linkLabels: [], linkURLs: [],
                             description: "", updatedLabel: "", sectionID: "", isPublished: "true",
-                            _csrf: token),
+                            csrf: token),
                         as: .urlEncodedForm)
                 },
                 afterResponse: { res in
@@ -202,7 +206,7 @@ import VaporTesting
                         CreateBody(
                             title: "New", kind: "slides", linkLabels: ["Deck"],
                             linkURLs: ["https://example.com/d.pdf"], description: "", updatedLabel: "",
-                            sectionID: "", isPublished: "false", _csrf: token),
+                            sectionID: "", isPublished: "false", csrf: token),
                         as: .urlEncodedForm)
                 },
                 afterResponse: { res in #expect(res.status == .seeOther) })

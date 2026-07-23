@@ -112,6 +112,6 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
     /// array literal if encoding somehow fails (keeps the column non-null).
     static func encodeLinks(_ links: [ContentLink]) -> String {
         guard let data = try? JSONEncoder().encode(links) else { return "[]" }
-        return String(decoding: data, as: UTF8.self)
+        return String(bytes: data, encoding: .utf8) ?? "[]"
     }
 }
