@@ -78,6 +78,12 @@ import VaporTesting
         try await submission.save(on: app.db)
         let section = APICourseSection(name: "Authz Section", sortOrder: 0, courseID: ownedID)
         try await section.save(on: app.db)
+        // A content item in OWNED so the /instructor/content-items/:id routes
+        // reach their per-resource write gate (rather than 404ing) under the
+        // cross-course-staff actor.
+        let contentItem = APICourseContentItem(
+            courseID: ownedID, sortOrder: 0, title: "Authz Material")
+        try await contentItem.save(on: app.db)
 
         let outsiderCookie = try await loginUser(
             username: "authz_outsider", password: "pw", role: "user", on: app)
@@ -105,6 +111,8 @@ import VaporTesting
                 "submissionID": "sub_authz",
                 "setupID": "authz_setup",
                 "sectionID": try section.requireID().uuidString,
+                // The /instructor/content-items/:id/{edit,delete,section} routes.
+                "id": try contentItem.requireID().uuidString,
                 "preEnrollmentID": UUID().uuidString,
                 "filename": "publictest_authz.py",
             ],
