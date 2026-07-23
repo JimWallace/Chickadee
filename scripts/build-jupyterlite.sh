@@ -29,16 +29,21 @@ fi
 trap 'rm -rf "$TMP_LITE_DIR" "$TEMP_BUILD_DIR"' EXIT
 cp "$LITE_SRC_DIR/jupyter-lite.json" "$TMP_LITE_DIR/jupyter-lite.json"
 
+BUILD_ARGS=(--lite-dir "$TMP_LITE_DIR" --output-dir "$TEMP_BUILD_DIR")
 if [[ -n "$SOURCE_DATE_EPOCH" ]]; then
-  "$JUPYTER_BIN" lite build \
-    --lite-dir "$TMP_LITE_DIR" \
-    --output-dir "$TEMP_BUILD_DIR" \
-    --source-date-epoch "$SOURCE_DATE_EPOCH"
-else
-  "$JUPYTER_BIN" lite build \
-    --lite-dir "$TMP_LITE_DIR" \
-    --output-dir "$TEMP_BUILD_DIR"
+  BUILD_ARGS+=(--source-date-epoch "$SOURCE_DATE_EPOCH")
 fi
+
+# R kernel via jupyterlite-xeus (xeus-r): when the R environment file is present,
+# copy it into the lite dir and point the XeusAddon at it, so the xeus-r WASM
+# kernel is built alongside the Pyodide Python kernel. Requires micromamba on
+# PATH (jupyterlite-xeus solves the emscripten-forge env at build time).
+if [[ -f "$LITE_SRC_DIR/environment-r.yml" ]]; then
+  cp "$LITE_SRC_DIR/environment-r.yml" "$TMP_LITE_DIR/environment.yml"
+  BUILD_ARGS+=(--XeusAddon.environment_file "$TMP_LITE_DIR/environment.yml")
+fi
+
+"$JUPYTER_BIN" lite build "${BUILD_ARGS[@]}"
 
 mkdir -p "$OUTPUT_DIR"
 
