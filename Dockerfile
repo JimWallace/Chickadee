@@ -69,6 +69,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # System dependencies:
 #   - C runtime libs (Swift stdlib is statically linked)
+#   - zip / unzip: the server and worker shell out to /usr/bin/{zip,unzip}
+#     for test-setup extract/publish, course-bundle import/export, and the
+#     personal-data export (ZipArchiver, TestSetupZipHelpers). They were only
+#     ever present transitively; installed explicitly so a future base-image
+#     change can't silently drop them and break those paths.
 #   - Python 3 + common scientific packages (for Python test scripts / submissions)
 #   - R base (for R test scripts / submissions)
 #
@@ -85,6 +90,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
         curl \
         file \
         tzdata \
+        unzip \
+        zip \
         libsqlite3-0 \
         libssl3 \
         libcurl4 \
