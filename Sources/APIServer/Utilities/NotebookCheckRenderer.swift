@@ -14,8 +14,10 @@ import Foundation
 /// `{tier}check_{checkID}.py`.  The "check_" infix distinguishes from
 /// pattern-family files ("test_") so a glance at the zip listing tells
 /// you which generator produced the file; the runner doesn't care.
-func generatedCheckFilename(checkID: String, tier: TestTier) -> String {
-    "\(tierFilenamePrefix(tier))check_\(checkID).py"
+func generatedCheckFilename(
+    checkID: String, tier: TestTier, language: AssignmentLanguage = .python
+) -> String {
+    "\(tierFilenamePrefix(tier))check_\(checkID).\(language.generatedScriptExtension)"
 }
 
 /// Stable filename for a check's expected-data sidecar CSV.  Used by
@@ -38,23 +40,37 @@ struct GeneratedCheck: Equatable {
 /// All filenames a check **would** produce (script + sidecars).  Used
 /// when diffing old/new specs so stale sidecars get cleaned up alongside
 /// the test scripts.  Mirrors `patternFamilyAllGeneratedFilenames`.
-func notebookCheckAllGeneratedFilenames(_ check: NotebookCheck) -> [String] {
-    var out = [generatedCheckFilename(checkID: check.id, tier: check.tier)]
+func notebookCheckAllGeneratedFilenames(
+    _ check: NotebookCheck, language: AssignmentLanguage = .python
+) -> [String] {
+    var out = [generatedCheckFilename(checkID: check.id, tier: check.tier, language: language)]
+    // Sidecars are language-neutral data (the expected-values CSV), so the
+    // same filenames apply either way.
     out.append(contentsOf: notebookCheckKindHandler(for: check.kind).sidecars(check).keys.sorted())
     return out
 }
 
 /// Top-level entry point.  Returns the test script plus any sidecar
-/// files the kind needs.
-func renderNotebookCheck(_ check: NotebookCheck) -> GeneratedCheck {
+/// files the kind needs.  Python routes through the per-kind handlers (whose
+/// bytes are pinned by `spec_hash` / `TestSetupCache`); R has its own renderer
+/// covering the data-frame kinds, with the rest gated at save time by
+/// `notebookCheckKindSupportsR`.
+func renderNotebookCheck(
+    _ check: NotebookCheck, language: AssignmentLanguage = .python
+) -> GeneratedCheck {
     let hash = notebookCheckSpecHash(check)
     let handler = notebookCheckKindHandler(for: check.kind)
-    let source = handler.render(check, specHash: hash)
+    let source: String
+    switch language {
+    case .python: source = handler.render(check, specHash: hash)
+    case .r: source = renderRNotebookCheck(check, specHash: hash)
+    }
     let displayName = check.name ?? handler.defaultLabel(check)
     let sidecars = handler.sidecars(check)
 
     let script = GeneratedScript(
-        filename: generatedCheckFilename(checkID: check.id, tier: check.tier),
+        filename: generatedCheckFilename(
+            checkID: check.id, tier: check.tier, language: language),
         source: source,
         tier: check.tier,
         points: check.points,

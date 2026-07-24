@@ -27,10 +27,29 @@ import Vapor
 func validateNotebookChecks(
     _ checks: [NotebookCheck],
     patternFamilies: [PatternFamily] = [],
-    testSuites: [TestSuiteEntry] = []
+    testSuites: [TestSuiteEntry] = [],
+    language: AssignmentLanguage = .python
 ) throws {
     var seenCheckIDs: Set<String> = []
     for check in checks {
+        // Reject a kind with no renderer in this assignment's language at save
+        // time. Rendering Python for an R assignment would emit a `.py` script
+        // the R suite can never run, and the failure would surface as a
+        // confusing grading error rather than an authoring mistake.
+        if language == .r, !notebookCheckKindSupportsR(check.kind) {
+            let supported = NotebookCheckKind.allCases
+                .filter(notebookCheckKindSupportsR)
+                .map(\.rawValue)
+                .sorted()
+                .joined(separator: ", ")
+            throw Abort(
+                .unprocessableEntity,
+                reason:
+                    "Notebook check '\(check.id)' (\(check.kind.rawValue)) is not supported for R "
+                    + "assignments yet — supported kinds are: \(supported). "
+                    + "Express this check as a hand-written .R test for now."
+            )
+        }
         guard isValidIdentifierFragment(check.id) else {
             throw Abort(
                 .unprocessableEntity,

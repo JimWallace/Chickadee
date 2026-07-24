@@ -208,14 +208,54 @@ hand-written test sees the assignment's literal inputs either way. Anything else
 (a `.sh` script, a data file) has no literal syntax to inline into and is
 returned unchanged.
 
-## What is deliberately not (yet) in R
+## Notebook checks in R — the data-frame family
 
-- **Notebook checks.** All ten `NotebookCheckKind`s still render Python. Several
-  lean on genuinely Python-specific machinery — pandas DataFrame/Series
-  assertions, matplotlib figure counting, and `ast`-module structure predicates
-  (`list_comprehension` has no R analogue at all) — so per-language checks are a
-  larger design question than the family renderers were, not a mechanical port.
-  R assignments hand-author `.R` tests for those cases today.
+Four of the ten `NotebookCheckKind`s render in R today:
+`data_frame_shape`, `data_frame_columns`, `data_frame_equality` and
+`series_equality` (`NotebookCheckRendererR.swift`). They read the student's
+state from `chickadee_load_student()`, which is the analogue of Python's
+`student_module` — and simpler: R's loader evaluates every top-level
+expression, so a frame built by top-level calls is just there, where Python
+needs `student_main_state()` to get the same effect.
+
+Mapping decisions:
+
+- **A pandas DataFrame maps to a base-R `data.frame`.** The guard is
+  `is.data.frame`, not an exact class comparison, so tibbles and `data.table`s
+  (which inherit) pass too — a course can add dplyr without the checks caring,
+  and no package is needed at grading time.
+- **R has no Series.** `series_equality` therefore accepts *a vector, or a
+  one-column data frame* (unwrapped automatically), compared against the same
+  single-column expected CSV. That is the honest analogue; pretending a Series
+  type exists would not be. A multi-column frame is ambiguous and refused.
+- **Expected data reuses the existing `_expected_<id>.csv` sidecar**, read with
+  base `read.csv`. Sidecar filenames are language-neutral, so they are identical
+  across Python and R.
+- **Numeric columns compare within `rtol`/`atol`; everything else compares as
+  text**, so a `factor` and a `character` column holding the same labels agree —
+  students routinely end up with one or the other.
+
+### The remaining six kinds
+
+`numeric_array_close`, `figure_count`, `cell_contains`, `function_exists`,
+`variable_exists` and `ast_structure` are still Python-only, and are **rejected
+at save time** for an R assignment (`notebookCheckKindSupportsR`) with a message
+naming what is supported. That gate matters: rendering Python for an R
+assignment would emit a `.py` script the R suite can never run, surfacing as a
+confusing grading error instead of an authoring one. Should such a spec ever
+reach grading anyway, the generated R fails closed with the same explanation
+rather than passing silently.
+
+Of those six, four are near-trivial (`function_exists` via
+`length(formals(f))`, `variable_exists` via the existing type predicates,
+`numeric_array_close`, and `cell_contains` — for which the extracted `.R` file
+*is* the source, no sidecar needed). `figure_count` needs a mechanism rather
+than a port: R has no persistent figure objects, but loading the student under
+`pdf(tempfile("ckplot%03d.pdf"), onefile = FALSE)` yields one file per plot to
+count. `ast_structure` is the real design question — R's `parse()` walks fine
+and `for_loop` / `while_loop` / `recursion` / `lambda` / `import:` all port, but
+`list_comprehension` has **no R analogue**, so the predicate vocabulary needs to
+become language-scoped (R would want `apply_family`, `pipe`, `vectorized`).
 
 ## Verification
 
