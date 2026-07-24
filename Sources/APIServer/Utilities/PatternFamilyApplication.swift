@@ -335,13 +335,28 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // produce sidecar files (e.g. `_expected_<id>.csv` for
     // `.dataFrameEquality`); both the script and the sidecars are
     // tracked here so removing a check cleans up all of its files.
-    // Listed for every language, not just the assignment's current one: the
-    // generated extension is part of the filename, so an assignment that flips
-    // language (or one whose families predate R support) would otherwise leave
-    // the old-extension files behind forever. Naming a file that was never
-    // written is harmless — the deletion diff simply doesn't find it.
+    // The assignment's language decides how each case renders and which
+    // extension it gets. Prefer the authored items when supplied — they carry
+    // the edit being applied, which may be the very first `.R` test — and fall
+    // back to the stored manifest (which records the language once known).
+    // Defaults to `.python`, so a Python assignment renders byte-for-byte as
+    // before.
+    let previousLanguage = AssignmentLanguage.resolve(manifest: props)
+    let assignmentLanguage: AssignmentLanguage = {
+        for item in authoredItems ?? [] {
+            guard case .script(let raw) = item else { continue }
+            if URL(fileURLWithPath: raw.script).pathExtension.lowercased() == "r" { return .r }
+        }
+        return previousLanguage
+    }()
+
+    // The generated extension is part of the filename, so the old files must be
+    // listed under the language the *previous* manifest was written in — and,
+    // when the assignment changes language, under the new one too, or the
+    // old-extension scripts would be stranded in the setup forever. Listing
+    // only these two keeps `deletedFiles` free of names that were never written.
     let oldGeneratedFilenames = Set(
-        AssignmentLanguage.allCases.flatMap { language in
+        Set([previousLanguage, assignmentLanguage]).flatMap { language in
             props.patternFamilies.flatMap {
                 patternFamilyAllGeneratedFilenames($0, language: language)
             }
@@ -362,19 +377,6 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // time per family, which wasted work and meant a renderer that ever
     // became non-deterministic would silently desync the zip bytes from
     // the manifest entries (#1123).
-    // The assignment's language decides how each case renders and which
-    // extension it gets. Prefer the authored items when supplied — they carry
-    // the edit being applied, which may be the very first `.R` test — and fall
-    // back to the stored manifest. Defaults to `.python`, so a Python
-    // assignment renders byte-for-byte as before.
-    let assignmentLanguage: AssignmentLanguage = {
-        for item in authoredItems ?? [] {
-            guard case .script(let raw) = item else { continue }
-            if URL(fileURLWithPath: raw.script).pathExtension.lowercased() == "r" { return .r }
-        }
-        return AssignmentLanguage.resolve(manifest: props)
-    }()
-
     let artifacts = renderFamilyArtifacts(
         families: nextFamilies,
         familySectionID: familySectionID,
@@ -645,7 +647,16 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         achievements: props.achievements,
         disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
         builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets
+        datasets: props.datasets,
+        // Always record the language, Python included. An explicit answer is
+        // the point: a suite that later holds only pattern families has no
+        // `.R` script left to sniff, and "we inferred Python" and "this is a
+        // Python assignment" should not be the same state. The first save of
+        // a pre-existing assignment therefore changes its manifest hash once,
+        // which re-keys the runner's TestSetupCache and triggers one
+        // revision-retest fan-out for that assignment — a bounded, one-time
+        // cost accepted in exchange for the language never being re-inferred.
+        language: assignmentLanguage
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner

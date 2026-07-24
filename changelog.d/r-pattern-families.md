@@ -17,6 +17,15 @@
 - **R value-comparison helpers in the grading runtime** — `chickadee_format`,
   `chickadee_equal` (numerics compared by value, so `3L` satisfies an expected
   `3`), and `chickadee_unordered_equal`.
+- **The assignment's language is persisted on the manifest.**
+  `TestProperties.language` records the answer explicitly — Python as well as R
+  — so it is stated rather than re-derived on every save. This is what lets a
+  suite made up only of pattern families stay R: with no `.R` script left to
+  sniff it would otherwise fall back to Python and start emitting `.py` cases.
+  The first save of a pre-existing assignment changes its manifest hash once,
+  which re-keys the runner's `TestSetupCache` and triggers one revision-retest
+  fan-out for that assignment. Manifests written before the field existed
+  decode with no language and keep sniffing until their next save.
 
 ### Fixed
 

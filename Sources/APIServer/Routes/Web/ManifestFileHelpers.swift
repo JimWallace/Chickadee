@@ -104,7 +104,10 @@ func updateManifestAddingScript(
         achievements: props.achievements,
         disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
         builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets
+        datasets: props.datasets,
+        // Preserve the recorded language: rebuilding the manifest to add or
+        // remove one script must never silently drop it back to "unrecorded".
+        language: props.language
     )
 }
 
@@ -153,7 +156,10 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         achievements: props.achievements,
         disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
         builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets
+        datasets: props.datasets,
+        // Preserve the recorded language: rebuilding the manifest to add or
+        // remove one script must never silently drop it back to "unrecorded".
+        language: props.language
     )
 }
 
@@ -171,7 +177,8 @@ func makeWorkerManifestJSON(
     achievements: [Achievement] = [],
     disabledBuiltInAwardIDs: [String] = [],
     builtInAchievementsSeeded: Bool = false,
-    datasets: [DatasetSpec] = []
+    datasets: [DatasetSpec] = [],
+    language: AssignmentLanguage? = nil
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -188,6 +195,12 @@ func makeWorkerManifestJSON(
     ]
     if let starterNotebook {
         manifest["starterNotebook"] = starterNotebook
+    }
+    // Omitted only when the caller has nothing to record (a manifest rebuilt
+    // from one that predates the field). Callers that know the language pass
+    // it — Python included — so the answer is stated, not re-inferred later.
+    if let language {
+        manifest["language"] = language.rawValue
     }
     try spliceEncodedArray(into: &manifest, key: "patternFamilies", values: patternFamilies)
     try spliceEncodedArray(into: &manifest, key: "notebookChecks", values: notebookChecks)

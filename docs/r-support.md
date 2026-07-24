@@ -166,13 +166,39 @@ Two behaviours worth knowing:
   `data.frame`, …) *and* Python ones (`str`, `int`, `bool`, `dict`), so a family
   converted from a Python assignment keeps working.
 
-The assignment's language is resolved in `applyPatternFamilies` from the
-authored raw scripts first (they carry the edit being applied, which may be the
-first `.R` test) and then the stored manifest. **Caveat:** an assignment whose
-suite is *only* families, with no `.R` script anywhere, resolves as Python — add
-one hand-authored `.R` test, or set the language explicitly, to make it R. Stale
-generated files are diffed across *both* extensions, so a language flip cleans
-up the old ones.
+### How the language is resolved and remembered
+
+`AssignmentLanguage.resolve(manifest:)` answers in this order:
+
+1. the manifest's recorded `language`, when it has one;
+2. any `.R` graded test script;
+3. an R notebook kernel;
+4. `.python`.
+
+`applyPatternFamilies` checks the authored raw scripts first (they carry the
+edit being applied, which may be the very first `.R` test) and otherwise takes
+the resolved answer, then **records it on the rebuilt manifest — Python
+included**. That persistence is what lets a suite made up *only* of pattern
+families stay R: there is no `.R` script left to sniff, so without it the
+assignment would fall back to Python on its next save and start emitting `.py`
+cases. Recording Python explicitly matters for the same reason — "we inferred
+Python" and "this is a Python assignment" are different states, and only one of
+them is safe to act on.
+
+The first save of a pre-existing assignment therefore changes its manifest hash
+once. That hash re-keys the runner's `TestSetupCache` (a cheap re-cache) and
+triggers one revision-retest fan-out for that assignment — a bounded, one-time
+cost, accepted so the language is never re-inferred.
+
+`TestProperties.language` is `encodeIfPresent` / `decodeIfPresent` and carried
+through `runnerSanitized()`. Nil means "written before the field existed": those
+manifests keep sniffing until their next save stamps a value. The two
+manifest-rebuild helpers (add-script / remove-script) pass the existing value
+through, so an unrelated edit can never silently drop it.
+
+Stale generated files are listed under the *previous* manifest's language and,
+when the assignment changes language, the new one too — so a flip cleans up the
+old-extension scripts without reporting deletions for files that never existed.
 
 ## Literal globals in hand-authored scripts
 

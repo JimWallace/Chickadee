@@ -317,6 +317,21 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// removed).  Stripped from the runner manifest via the memberwise default.
     public let builtInAchievementsSeeded: Bool
 
+    /// The language this assignment is authored and graded in.
+    ///
+    /// Recorded explicitly — for Python as well as R — so the answer is stated
+    /// rather than re-derived. Sniffing cannot stand on its own: a suite made
+    /// up only of pattern families has no `.R` script to find, so an R
+    /// assignment would silently fall back to Python and start emitting `.py`
+    /// cases. "We inferred Python" and "this is a Python assignment" are also
+    /// genuinely different states, and only one of them is safe to act on.
+    ///
+    /// Nil means "written before the language was recorded" — every manifest
+    /// on disk today. `AssignmentLanguage.resolve(manifest:)` falls back to
+    /// sniffing for those, so they keep behaving exactly as before until their
+    /// next save stamps a value.
+    public let language: AssignmentLanguage?
+
     public init(
         schemaVersion: Int = 1,
         gradingMode: GradingMode = .worker,
@@ -325,6 +340,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         timeLimitSeconds: Int = 10,
         makefile: MakefileConfig? = nil,
         starterNotebook: String? = nil,
+        language: AssignmentLanguage? = nil,
         patternFamilies: [PatternFamily] = [],
         notebookChecks: [NotebookCheck] = [],
         sections: [TestSuiteSection] = [],
@@ -344,6 +360,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.timeLimitSeconds = timeLimitSeconds
         self.makefile = makefile
         self.starterNotebook = starterNotebook
+        self.language = language
         // `testItems` wins when supplied; otherwise synthesize it from the
         // legacy `patternFamilies` / `notebookChecks` arguments (families
         // first, then checks) so every existing call site keeps working.
@@ -370,6 +387,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         timeLimitSeconds = try c.decodeIfPresent(Int.self, forKey: .timeLimitSeconds) ?? 10
         makefile = try c.decodeIfPresent(MakefileConfig.self, forKey: .makefile)
         starterNotebook = try c.decodeIfPresent(String.self, forKey: .starterNotebook)
+        // Absent on every manifest written before the language became
+        // first-class; nil falls back to sniffing the suite.
+        language = try c.decodeIfPresent(AssignmentLanguage.self, forKey: .language)
         // `testItems` is the canonical unified list when present.  A legacy
         // manifest carries the separate `patternFamilies` / `notebookChecks`
         // arrays instead — migrate them on read.  (An explicitly-empty
@@ -410,6 +430,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case timeLimitSeconds
         case makefile
         case starterNotebook
+        case language
         case testItems
         case patternFamilies
         case notebookChecks
@@ -432,6 +453,9 @@ public struct TestProperties: Codable, Equatable, Sendable {
         try c.encode(timeLimitSeconds, forKey: .timeLimitSeconds)
         try c.encodeIfPresent(makefile, forKey: .makefile)
         try c.encodeIfPresent(starterNotebook, forKey: .starterNotebook)
+        // encodeIfPresent, not encode: an assignment with no recorded language
+        // must produce the exact bytes it always has.
+        try c.encodeIfPresent(language, forKey: .language)
         try c.encode(testItems, forKey: .testItems)
         // Mirror the legacy arrays (derived from `testItems`, so they can
         // never drift) for cross-version readers that predate `testItems`.
@@ -469,6 +493,10 @@ public struct TestProperties: Codable, Equatable, Sendable {
             timeLimitSeconds: timeLimitSeconds,
             makefile: makefile,
             starterNotebook: starterNotebook,
+            // Kept: the runner reads the language off `Job.language`, but a
+            // manifest that silently lost it here would resolve differently on
+            // any path that re-sniffs from the runner-facing copy.
+            language: language,
             patternFamilies: [],
             notebookChecks: [],
             // Expressions are a server-side authoring concern — both global
