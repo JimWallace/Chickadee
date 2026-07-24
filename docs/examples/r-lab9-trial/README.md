@@ -57,6 +57,24 @@ needs:
 - `require_student_fn(env, name)` fetches a required function with a clear
   error if it is missing.
 
+### The worker fix this trial surfaced
+
+Authoring the trial exposed a real gap in the shipped R path: the worker's
+submission router (`shouldNormalizePythonSubmission` in
+`Sources/Worker/SubmissionStaging.swift`) treated **every** `.ipynb` submission
+as Python, so an R-kernel notebook was normalized to `solution.py` and the
+R-aware extractor (`extractNotebooksToCode`, which emits `.R`) was never
+reached. Every test then errored with *"No R submission file was found to
+grade."* — the `extractNotebooksToCode` R support existed but nothing routed a
+notebook submission to it.
+
+This PR makes the router R-aware: an R-kernel notebook (`ir`/`r`/`webr`/`xr`,
+or `language_info.name == "r"`) in a setup with no Python (`.py` required files
+or `.py` test scripts) now skips the Python normalizer and is extracted to
+`solution.R`. Python and mixed assignments are unchanged. New helper
+`submissionIsRNotebook`; regression coverage in
+`Tests/WorkerTests/SubmissionRoutingRNotebookTests.swift`.
+
 ---
 
 ## Files
@@ -128,6 +146,14 @@ Authored entirely through the Chickadee MCP server against the live TEST course:
 Regenerate the notebooks and the dataset subsample from the checked-in sources
 with the scripts noted in the repo history for this folder; the `.R` sources
 here are the exact bytes uploaded as support/test files.
+
+**Verification.** The four tests were run against the reference solution with
+real `Rscript` — all four pass, including the secret gate (`glm` on
+`age + waist + bmi` → **0.743 ≥ 0.70**); the unfinished starter grades to
+graceful `fail`s with no crashes. End-to-end server validation through the MCP
+depends on the router fix above being live on the worker; until it deploys,
+`validate_assignment` reports the tests erroring with *"No R submission file was
+found to grade."*
 
 ---
 
