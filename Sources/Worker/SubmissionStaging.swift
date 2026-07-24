@@ -122,6 +122,52 @@ func stagedSubmissionDestination(
     return submissionDirectory.appendingPathComponent(safeName)
 }
 
+/// True when the staged submission is an **R-kernel** notebook (IRkernel `ir`,
+/// legacy `webr`, or xeus-r `xr`), which must be extracted to `.R` by
+/// `extractNotebooksToCode` rather than run through the Python normalizer.
+///
+/// Mirrors the kernel-language detection in `extractNotebooksToCode`
+/// (NotebookExtractor.swift): kernelspec name in {ir, r, webr, xr}, or
+/// `language_info.name == "r"`. Resolves the named submission when it is an
+/// `.ipynb`, otherwise the first `.ipynb` staged in `submissionDirectory`
+/// (zip submissions). Any read/parse failure returns false so the caller keeps
+/// its existing (Python) behaviour.
+func submissionIsRNotebook(submissionDirectory: URL, submissionFilename: String?) -> Bool {
+    let notebookURL: URL? = {
+        if let submissionFilename,
+            URL(fileURLWithPath: submissionFilename).pathExtension.lowercased() == "ipynb"
+        {
+            return stagedSubmissionDestination(
+                submissionDirectory: submissionDirectory, submittedFilename: submissionFilename)
+        }
+        let entries =
+            (try? FileManager.default.contentsOfDirectory(
+                at: submissionDirectory, includingPropertiesForKeys: nil)) ?? []
+        return entries.first { $0.pathExtension.lowercased() == "ipynb" }
+    }()
+
+    guard let notebookURL,
+        let data = try? Data(contentsOf: notebookURL),
+        let notebook = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let meta = notebook["metadata"] as? [String: Any]
+    else {
+        return false
+    }
+
+    if let kernelSpec = meta["kernelspec"] as? [String: Any],
+        let name = (kernelSpec["name"] as? String)?.lowercased(),
+        name == "ir" || name == "r" || name == "webr" || name == "xr"
+    {
+        return true
+    }
+    if let languageInfo = meta["language_info"] as? [String: Any],
+        (languageInfo["name"] as? String)?.lowercased() == "r"
+    {
+        return true
+    }
+    return false
+}
+
 func shouldNormalizePythonSubmission(
     manifest: TestProperties,
     submissionFilename: String?,
@@ -132,6 +178,24 @@ func shouldNormalizePythonSubmission(
     }
     if !requiredPythonFiles.isEmpty { return true }
 
+    let hasPythonSuite = manifest.testSuites.contains {
+        URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py"
+    }
+
+    // An R-kernel notebook is not a Python submission: route it to the generic
+    // notebook extractor (`extractNotebooksToCode`, which emits `.R`) instead of
+    // the Python normalizer. This must run before the extension/content probes
+    // below, which would otherwise treat any `.ipynb` as Python — the gap that
+    // made worker-graded R *notebook* assignments fail to produce `solution.R`.
+    // Guarded on a pure-R setup: if it also ships Python (required `.py` files,
+    // handled above, or `.py` test scripts) we keep Python-normalizing.
+    if !hasPythonSuite,
+        submissionIsRNotebook(
+            submissionDirectory: submissionDirectory, submissionFilename: submissionFilename)
+    {
+        return false
+    }
+
     if let submissionFilename {
         let ext = URL(fileURLWithPath: submissionFilename).pathExtension.lowercased()
         if ["py", "ipynb", "json"].contains(ext) {
@@ -139,7 +203,7 @@ func shouldNormalizePythonSubmission(
         }
     }
 
-    if manifest.testSuites.contains(where: { URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py" }) {
+    if hasPythonSuite {
         return true
     }
 
