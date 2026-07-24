@@ -71,9 +71,8 @@ struct CourseBundleRoutes: RouteCollection {
         // Extracted to primitives here so the thread-pool closure captures no
         // Fluent models (#1158).
         let app = req.application
-        let contentFileCopies: [(src: String, bundleName: String)] = data.contentItems.flatMap {
-            item -> [(src: String, bundleName: String)] in
-            guard let itemID = item.id else { return [] }
+        let contentFileCopies: [(src: String, bundleName: String)] = data.contentItems.flatMap { item in
+            guard let itemID = item.id else { return [(src: String, bundleName: String)]() }
             return item.attachments.map { att in
                 (
                     src: ContentAttachmentStore.path(app, itemID: itemID, attachmentID: att.id),
@@ -283,29 +282,7 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
-        let bundledContentItems = data.contentItems.map { item -> BundledContentItem in
-            // Each attachment's global UUID doubles as its unique bundle
-            // filename (content/<id>); the bytes are copied in writeExportStaging.
-            let attachments = item.attachments.map { att in
-                BundledAttachment(
-                    originalName: att.originalName,
-                    sizeBytes: att.sizeBytes,
-                    label: att.label,
-                    sortOrder: att.sortOrder,
-                    bundleFilename: "content/\(att.id.uuidString)")
-            }
-            return BundledContentItem(
-                sectionBundleID: item.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] },
-                title: item.title,
-                kind: item.kind.rawValue,
-                description: item.itemDescription,
-                links: item.links,
-                attachments: attachments.isEmpty ? nil : attachments,
-                updatedLabel: item.updatedLabel,
-                isPublished: item.isPublished,
-                sortOrder: item.sortOrder
-            )
-        }
+        let bundledContentItems = buildBundledContentItems(data: data, bundleIDs: bundleIDs)
 
         let bundledAssignments = data.assignments.compactMap { a -> BundledAssignment? in
             guard let aid = a.id, let bid = bundleIDs.assignBundleIDByID[aid],
@@ -370,6 +347,37 @@ struct CourseBundleRoutes: RouteCollection {
             submissions: bundledSubmissions,
             results: bundledResults
         )
+    }
+
+    /// Maps each course content item to its bundle representation, nesting the
+    /// attachment metadata. Each attachment's global UUID doubles as its unique
+    /// bundle filename (`content/<id>`); the bytes are copied in
+    /// writeExportStaging.
+    private func buildBundledContentItems(
+        data: ExportData,
+        bundleIDs: ExportBundleIDs
+    ) -> [BundledContentItem] {
+        data.contentItems.map { item in
+            let attachments = item.attachments.map { att in
+                BundledAttachment(
+                    originalName: att.originalName,
+                    sizeBytes: att.sizeBytes,
+                    label: att.label,
+                    sortOrder: att.sortOrder,
+                    bundleFilename: "content/\(att.id.uuidString)")
+            }
+            return BundledContentItem(
+                sectionBundleID: item.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] },
+                title: item.title,
+                kind: item.kind.rawValue,
+                description: item.itemDescription,
+                links: item.links,
+                attachments: attachments.isEmpty ? nil : attachments,
+                updatedLabel: item.updatedLabel,
+                isPublished: item.isPublished,
+                sortOrder: item.sortOrder
+            )
+        }
     }
 
     // ── 4. Write staging directory ─────────────────────────────────────
