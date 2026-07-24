@@ -308,9 +308,15 @@ struct WorkerJobRoutes: RouteCollection {
             throw WorkerJobError.internalInconsistency(reason: "Failed to build worker download URLs from base=\(base)")
         }
 
+        // The assignment's language selects how per-student inputs are rendered
+        // (`_ck_inputs.py` vs `_ck_inputs.R`) and which interpreter evaluated the
+        // expressions. Resolved from the manifest (any `.R` graded script → R);
+        // stamped on the Job so the worker materializes the right file.
+        let language = AssignmentLanguage.resolve(manifest: claimed.manifest)
+
         // Resolve per-student personalization inputs (issue #461) for this seed,
         // server-side, so the worker can bind them in generated scripts via
-        // `_ck_inputs.py`. Shared with the browser seed endpoint via
+        // `_ck_inputs.{py,R}`. Shared with the browser seed endpoint via
         // `gradingInputs` so the two grading paths resolve identically. For a
         // pre-materialized validation submission we use the cached values
         // (no re-eval on this hot path); otherwise we resolve live.
@@ -320,7 +326,8 @@ struct WorkerJobRoutes: RouteCollection {
         } else {
             let supportDir = req.application.testSetupsDirectory + "shared/\(setupID)/"
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
-                manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir)
+                manifest: claimed.manifest, seedHex: assignmentSeed, supportFilesDirectory: supportDir,
+                language: language)
         }
 
         // Resolve per-student dataset slices (Phase 1 datasets) for this seed.
@@ -345,7 +352,8 @@ struct WorkerJobRoutes: RouteCollection {
             submissionFilename: submission.filename,
             assignmentSeed: assignmentSeed,
             personalizedInputs: personalizedInputs,
-            personalizedFiles: personalizedFiles
+            personalizedFiles: personalizedFiles,
+            language: language
         )
     }
 

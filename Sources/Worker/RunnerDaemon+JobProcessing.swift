@@ -392,32 +392,25 @@ extension WorkerDaemon {
             }
 
             // Materialize per-student personalization inputs (issue #461) into the
-            // grading workspace as `_ck_inputs.py`, so generated pattern-family
-            // scripts that reference per-student args / expected can load them by
-            // path. Each value is already a Python literal (`repr`) resolved
-            // server-side; keys are emitted as escaped Python string literals via
-            // `JSONValue.string(_:).pythonLiteral` — the same canonical escaping the
-            // renderer's reader and the browser path (`JSON.stringify`) use, so the
-            // three stay byte-for-byte consistent (input names are validated
-            // identifiers today, so this is defense in depth). The filename is
-            // reserved (excluded from student-module candidates in test_runtime), so
-            // it can't be mistaken for the submission.
+            // grading workspace as `_ck_inputs.py` (Python) or `_ck_inputs.R` (R),
+            // so generated pattern-family scripts / hand-authored tests that
+            // reference per-student args / expected can load them by path. Each
+            // value is already a source literal in the job's language (`repr` /
+            // `deparse`) resolved server-side; `AssignmentLanguage.renderInputsFile`
+            // owns the exact bytes (the Python form is byte-for-byte the historical
+            // writer, so existing Python jobs are unchanged). The filename is
+            // reserved (excluded from student-module candidates in the runtimes), so
+            // it can't be mistaken for the submission. Language is nil on payloads
+            // from an older server → `.python`, preserving legacy behaviour.
             if let inputs = job.personalizedInputs, !inputs.isEmpty {
-                var lines = [
-                    "# Auto-generated per-student grading inputs (issue #461). Do not edit.",
-                    "_ck = {",
-                ]
-                for key in inputs.keys.sorted() {
-                    lines.append("    \(JSONValue.string(key).pythonLiteral): \(inputs[key] ?? "None"),")
-                }
-                lines.append("}")
-                let source = lines.joined(separator: "\n") + "\n"
+                let language = job.language ?? .python
+                let source = language.renderInputsFile(inputs)
                 // A failed write here would make every personalized test error with
                 // a confusing missing-file traceback that looks like a student
                 // mistake — and persist it as their grade. Throw instead so the job
                 // is reported as buildStatus:failed and stays retestable.
                 try source.write(
-                    to: testSetupDir.appendingPathComponent("_ck_inputs.py"),
+                    to: testSetupDir.appendingPathComponent(language.inputsFileName),
                     atomically: true, encoding: .utf8)
             }
 

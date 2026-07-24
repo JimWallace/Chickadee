@@ -1,11 +1,13 @@
 # Personalization evaluation runtime
 
-**Status:** design note + deferred future work (targeting 0.5+). No action for
-now — the current Python-on-the-server implementation is intentionally kept.
+**Status:** decision recorded + partially implemented. R landed as the second
+language via **per-language evaluation on the server** (`python3` + `Rscript`),
+which keeps today's trilemma corner (2 + 3 below). The eventual move of *all*
+language execution to the runner tier remains deferred future work (0.5+).
 
 This records a design discussion about *where* and *in what language* per-student
 personalization expressions are evaluated, so we don't relitigate it from scratch
-later.
+later. See [r-support.md](r-support.md) for the R implementation.
 
 ## What runs today
 

@@ -184,7 +184,8 @@ enum SectionInputsService {
                 seedHex: seedHex,
                 staticVariables: staticVars,
                 expressions: inputs.expressions,
-                supportFilesDirectory: supportDir)
+                supportFilesDirectory: supportDir,
+                language: AssignmentLanguage.resolve(manifest: manifest))
         } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
             let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
             throw WebAssignmentError.unprocessable(
