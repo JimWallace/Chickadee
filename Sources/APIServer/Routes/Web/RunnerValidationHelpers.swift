@@ -187,8 +187,10 @@ private func resolveAndCacheValidationMaterialization(
         }
 
         let supportDir = testSetupsDirectory + "shared/\(setupID)/"
+        let language = AssignmentLanguage.resolve(manifest: manifest)
         let resolution = await PersonalizationSubstitution.resolve(
-            manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir)
+            manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir,
+            language: language)
 
         // Expression-only value map (identical to `gradingInputs`) → _ck_inputs.py.
         let exprNames = Set(resolution.evaluatedExpressionNames)

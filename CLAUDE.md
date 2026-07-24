@@ -92,6 +92,22 @@ namespaces). Enable with `--sandbox` on the runner.
 Python interpreter, or any language runtime. Everything goes through
 `Process` + sandbox.
 
+**Assignments are Python *or* R; language is first-class (`AssignmentLanguage`).**
+`AssignmentLanguage` (`.python | .r`, Core) is resolved from the manifest (any
+`.R` graded script → `.r`; else an R notebook kernel in `{ir,r,webr,xr}` → `.r`;
+else `.python`) and every language-specific path dispatches through it — literal
+rendering (`pythonLiteral`/`rLiteral`), the per-student inputs file
+(`_ck_inputs.py`/`_ck_inputs.R` via `renderInputsFile`), and the expression
+driver. Personalization is evaluated **per-language on the server**:
+`PersonalizationEvaluator` spawns `python3` or `Rscript` (r-base is on the
+server image), preserving the property that expression source + the solution
+never reach the runner. Base R has no bignum, so the seed is a deterministic
+Horner-fold reduction (`RPersonalizationRuntime.chickadeeSeedRSource`, shared by
+the server driver and the grading runtime so they never drift). The default is
+`.python` at every call site, so existing Python bytes are byte-for-byte
+unchanged. Deferred: literal-globals inlined into hand-authored `.R` scripts,
+and R pattern-family / notebook-check renderers. See `docs/r-support.md`.
+
 **Roles are two-level: a deployment role plus a per-course role (#417).**
 The deployment-global `UserRole` on `APIUser` is just `user` | `admin`
 (plus the non-human `mcp` service-account role) — the legacy global
@@ -1182,7 +1198,8 @@ Per-version detail in `CHANGELOG.md`; the arcs a fresh session should know:
 - `docs/personalization-phase1.md` — per-(student, assignment) seed contract (`CHICKADEE_ASSIGNMENT_SEED`), worked hand-written example
 - `docs/inputs.md` — Global + section inputs: literal variables, per-student `=` expressions, `$name` references, save-time inlining vs. notebook substitution
 - `docs/personalization-pattern-families.md` — per-student pattern families: `$name`/`expectedVarRef` → server-resolved values delivered via `_ck_inputs.py` (worker) / browser seed endpoint
-- `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; why the server runs `python3` today, the trilemma, and the direction to move eval to the runner/browser per-language
+- `docs/personalization-eval-runtime.md` — design note + deferred 0.5+ future work: where/in-what-language personalization expressions are evaluated; the trilemma, the per-language-on-server decision (`python3` + `Rscript`), and the direction to move eval to the runner/browser per-language
+- `docs/r-support.md` — first-class R support: `AssignmentLanguage` resolution + strategy, per-language personalization (`Rscript` expression driver, base-R `chickadee_seed()`, `_ck_inputs.R` delivery, R-literal notebook substitution), the R grading runtime, and what is deliberately deferred (literal-globals into `.R` scripts, R pattern families / notebook checks)
 - `docs/mcp-validation-access.md` — planned MCP read tool for validation-run results only (per-test outcomes, never student data)
 - `docs/unlockable-labs.md` — locked design for assignment prerequisites + sticky per-student unlocks (#59/#62 under epic #49): edge table, unlock semantics, enforcement chokepoints, drag authoring, slice plan
 - `docs/ci-followups.md` — historical CI reshaping notes from v0.4.6 (WorkerTests are back in the per-PR gate as of the 2026 cleanup)

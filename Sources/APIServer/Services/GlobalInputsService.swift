@@ -231,7 +231,8 @@ enum GlobalInputsService {
                 seedHex: seedHex,
                 staticVariables: staticVars,
                 expressions: inputs.expressions,
-                supportFilesDirectory: testSetupsDirectory + "shared/\(assignment.testSetupID)/")
+                supportFilesDirectory: testSetupsDirectory + "shared/\(assignment.testSetupID)/",
+                language: AssignmentLanguage.resolve(manifest: manifest))
         } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
             let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
             throw WebAssignmentError.unprocessable(

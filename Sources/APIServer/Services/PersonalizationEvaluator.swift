@@ -3,13 +3,16 @@
 // Slice 2 of #461 — server-side evaluation of `PersonalizationExpression`
 // rows with `seed` bound to the per-(student, assignment) hex seed.
 //
-// Each evaluation spawns `python3` against a tiny generated driver
-// script that binds `seed`, every static `globalVariables` + section
-// variable as Python module-level names, then evaluates each
-// expression in declared order so later expressions can reference
-// earlier ones.  Values are emitted as `repr(value)` strings — drop-in
-// Python literals that `NotebookSubstitution.apply` substitutes into
-// `{{name}}` placeholders.
+// Each evaluation spawns the assignment's interpreter (`python3` or, for
+// an R assignment, `Rscript`) against a tiny generated driver script that
+// binds `seed`, every static `globalVariables` + section variable as
+// module-level names, then evaluates each expression in declared order so
+// later expressions can reference earlier ones.  Values are emitted as
+// source literals (`repr(value)` in Python, `deparse(value)` in R) — drop-in
+// literals that `NotebookSubstitution.apply` substitutes into `{{name}}`
+// placeholders and that the worker writes into `_ck_inputs.{py,R}`. The
+// language is chosen per assignment (`AssignmentLanguage`); the default is
+// `.python`, so every existing caller is byte-for-byte unchanged.
 //
 // Trust model: instructor-authored Python on the instructor's own
 // server.  Same risk profile as the validation-submission path that
@@ -100,6 +103,7 @@ enum PersonalizationEvaluator {
         staticVariables: [FamilyVariable],
         expressions: [PersonalizationExpression],
         supportFilesDirectory: String? = nil,
+        language: AssignmentLanguage = .python,
         timeoutSeconds: Int = defaultTimeoutSeconds
     ) async throws -> [String: String] {
         guard !expressions.isEmpty else { return [:] }
@@ -110,49 +114,53 @@ enum PersonalizationEvaluator {
         try? fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: tempDir) }
 
-        // Slice 5 of #461: when a support-files directory is provided,
-        // collect every `.py` module name so the driver auto-imports
-        // them.  Module names are filename stems that are valid Python
-        // identifiers (`__init__` excluded — that's a package marker,
-        // not a usable helper).
-        let supportModules: [String] = {
-            guard let dir = supportFilesDirectory,
-                fm.fileExists(atPath: dir),
-                let entries = try? fm.contentsOfDirectory(atPath: dir)
-            else {
-                return []
-            }
-            return entries.compactMap { entry -> String? in
-                guard entry.hasSuffix(".py") else { return nil }
-                let stem = String(entry.dropLast(3))
-                guard stem != "__init__", isValidPyIdent(stem) else { return nil }
-                return stem
-            }.sorted()
-        }()
+        // Slice 5 of #461: when a support-files directory is provided, collect
+        // every helper the driver should auto-load — Python `.py` module stems
+        // (valid identifiers, `__init__` excluded) for the Python driver, or
+        // `.R`/`.r` filenames for the R driver (which `source()`s them). The
+        // solution notebook's code cells are extracted to `solution.py` /
+        // `solution.R` and picked up here so an expression can call a
+        // reference-solution function.
+        let supportEntries = supportFileEntries(in: supportFilesDirectory, language: language, fm: fm)
 
-        let driverSource = renderDriverScript(
-            staticVariables: staticVariables,
-            expressions: expressions,
-            supportModules: supportModules
-        )
-        let driverURL = tempDir.appendingPathComponent("personalize_driver.py")
+        let driverSource: String
+        let driverURL: URL
+        let interpreter: String
+        switch language {
+        case .python:
+            driverSource = renderDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportModules: supportEntries
+            )
+            driverURL = tempDir.appendingPathComponent("personalize_driver.py")
+            interpreter = "python3"
+        case .r:
+            driverSource = renderRDriverScript(
+                staticVariables: staticVariables,
+                expressions: expressions,
+                supportFiles: supportEntries
+            )
+            driverURL = tempDir.appendingPathComponent("personalize_driver.R")
+            interpreter = "Rscript"
+        }
         do {
             try driverSource.write(to: driverURL, atomically: true, encoding: .utf8)
         } catch {
             throw PersonalizationEvaluatorError.driverWriteFailed
         }
 
-        // Subprocess cwd + PYTHONPATH point at the support-files
-        // directory when supplied, so `open("quotes.txt")` works for
-        // non-`.py` data files and `import helpers` resolves.  Falls
-        // back to the isolated temp dir when no support dir is given
-        // (preserves Slice 2 behaviour for callers that haven't been
-        // updated).
+        // Subprocess cwd points at the support-files directory when supplied,
+        // so `open("quotes.txt")` / `source("solution.R")` works for data files
+        // and the auto-loaded helpers resolve. `PYTHONPATH` lets `import
+        // helpers` resolve for Python only (R uses cwd-relative `source`). Falls
+        // back to the isolated temp dir when no support dir is given (preserves
+        // Slice 2 behaviour for callers that haven't been updated).
         var env: [String: String] = ["CHICKADEE_ASSIGNMENT_SEED": seedHex]
         let spawnCwd: URL
         if let supportFilesDirectory, fm.fileExists(atPath: supportFilesDirectory) {
             spawnCwd = URL(fileURLWithPath: supportFilesDirectory, isDirectory: true)
-            env["PYTHONPATH"] = supportFilesDirectory
+            if language == .python { env["PYTHONPATH"] = supportFilesDirectory }
         } else {
             spawnCwd = tempDir
         }
@@ -164,7 +172,7 @@ enum PersonalizationEvaluator {
         do {
             (stdout, stderr, exitCode) = try await spawnAndCapture(
                 executableURL: URL(fileURLWithPath: "/usr/bin/env"),
-                arguments: ["python3", driverURL.path],
+                arguments: [interpreter, driverURL.path],
                 cwd: spawnCwd,
                 env: env,
                 timeoutSeconds: timeoutSeconds
@@ -255,6 +263,120 @@ enum PersonalizationEvaluator {
         lines.append("print(json.dumps(_out))")
         return lines.joined(separator: "\n") + "\n"
     }
+
+    /// Discovers the support-file helpers the driver should auto-load, in the
+    /// shape each language's driver expects: Python module stems for `.python`
+    /// (valid identifiers, `__init__` excluded), `.R`/`.r` filenames for `.r`
+    /// (the R driver `source()`s them). Returns a sorted list for deterministic
+    /// driver bytes; empty when no support dir is given or it doesn't exist.
+    private static func supportFileEntries(
+        in supportFilesDirectory: String?,
+        language: AssignmentLanguage,
+        fm: FileManager
+    ) -> [String] {
+        guard let dir = supportFilesDirectory,
+            fm.fileExists(atPath: dir),
+            let entries = try? fm.contentsOfDirectory(atPath: dir)
+        else {
+            return []
+        }
+        switch language {
+        case .python:
+            return entries.compactMap { entry -> String? in
+                guard entry.hasSuffix(".py") else { return nil }
+                let stem = String(entry.dropLast(3))
+                guard stem != "__init__", isValidPyIdent(stem) else { return nil }
+                return stem
+            }.sorted()
+        case .r:
+            return entries.filter { (($0 as NSString).pathExtension).lowercased() == "r" }.sorted()
+        }
+    }
+
+    /// Renders the R sibling of `renderDriverScript`. Binds `seed` from the
+    /// canonical base-R `chickadee_seed()` (shared with the grading runtime via
+    /// `RPersonalizationRuntime`), `source()`s each support `.R` helper, binds
+    /// every static variable via `rLiteral`, evaluates each R `= expression` in
+    /// declared order, then emits — as the LAST stdout line — a JSON map
+    /// `name → deparse(value)` (an R literal string per value). The Swift return
+    /// path parses that last line identically for both languages, so only the
+    /// driver bytes differ.
+    static func renderRDriverScript(
+        staticVariables: [FamilyVariable],
+        expressions: [PersonalizationExpression],
+        supportFiles: [String] = []
+    ) -> String {
+        var lines: [String] = ["# Auto-generated personalization driver.  Do not edit.", ""]
+        // Seed primitive — one source of truth with the grading runtime, so the
+        // seed the driver binds equals the seed a grading script reads.
+        lines.append(RPersonalizationRuntime.chickadeeSeedRSource)
+        lines.append("")
+        // JSON string encoder (char-by-char; avoids gsub replacement-escaping
+        // ambiguity so backslash/quote-heavy deparse output encodes correctly).
+        lines.append(rJSONStringEncoderSource)
+        lines.append("")
+        lines.append("seed <- chickadee_seed()")
+        lines.append("")
+        if !supportFiles.isEmpty {
+            lines.append("# Auto-sourced support files (instructor .R helpers +")
+            lines.append("# the solution.ipynb code cells extracted into solution.R).")
+            lines.append("# A broken helper is ignored here; a missing name surfaces")
+            lines.append("# as an error only if an expression actually references it.")
+            for name in supportFiles {
+                lines.append(
+                    "tryCatch(source(\(JSONValue.string(name).rLiteral)), error = function(e) NULL)")
+            }
+            lines.append("")
+        }
+        if !staticVariables.isEmpty {
+            lines.append("# Static globals + section variables (in scope for expressions).")
+            for v in staticVariables {
+                lines.append("`\(v.name)` <- \(v.value.rLiteral)")
+            }
+            lines.append("")
+        }
+        lines.append("# Per-student expressions, evaluated in declared order.")
+        for e in expressions {
+            lines.append("`\(e.name)` <- (\(e.expression))")
+        }
+        lines.append("")
+        lines.append("# Emit one deparse(value) per declared expression as a JSON map")
+        lines.append("# (the LAST stdout line — earlier instructor output is ignored).")
+        lines.append(".ck_deparse1 <- function(x) paste(deparse(x), collapse = \" \")")
+        lines.append(".ck_pairs <- character(0)")
+        for e in expressions {
+            let key = JSONValue.string(e.name).rLiteral
+            lines.append(
+                ".ck_pairs <- c(.ck_pairs, paste0(.ck_json_str(\(key)), \":\", "
+                    + ".ck_json_str(.ck_deparse1(`\(e.name)`))))")
+        }
+        lines.append("cat(paste0(\"{\", paste(.ck_pairs, collapse = \",\"), \"}\"), \"\\n\", sep = \"\")")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Base-R JSON string encoder used by the R driver's output stage. Encodes
+    /// char-by-char (`utf8ToInt`/`intToUtf8`) so it never trips over `gsub`'s
+    /// replacement-string backslash rules — deparse output is quote-heavy and
+    /// occasionally backslash-heavy, and this must round-trip through
+    /// `JSONSerialization` on the Swift side.
+    private static let rJSONStringEncoderSource = #"""
+        .ck_json_str <- function(x) {
+            if (length(x) != 1L) x <- paste(as.character(x), collapse = "")
+            x <- as.character(x)
+            codes <- utf8ToInt(x)
+            if (length(codes) == 0L) return("\"\"")
+            out <- vapply(codes, function(cp) {
+                if (cp == 34L) "\\\""
+                else if (cp == 92L) "\\\\"
+                else if (cp == 10L) "\\n"
+                else if (cp == 13L) "\\r"
+                else if (cp == 9L)  "\\t"
+                else if (cp < 32L)  sprintf("\\u%04x", cp)
+                else intToUtf8(cp)
+            }, character(1L))
+            paste0("\"", paste(out, collapse = ""), "\"")
+        }
+        """#
 
     /// Same identifier predicate the editor JS uses.  Used to filter
     /// support-file names down to legal Python module names.

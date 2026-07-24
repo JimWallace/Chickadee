@@ -7,6 +7,8 @@
 //   Tools/runner-support/test_runtime.py
 //   Tools/runner-support/test_runtime.R
 
+import Core
+
 let testRuntimePy = """
     import inspect
     import importlib.util
@@ -421,7 +423,7 @@ let sitecustomizePy = """
 //
 // Mirrors the canonical source in Tools/runner-support/test_runtime.R.
 // Keep the two in sync when making changes here.
-let testRuntimeR = #"""
+private let testRuntimeRHelpers = #"""
     # test_runtime.R — Chickadee R test helper library.
     # Source at the top of each R test script: source("test_runtime.R")
     #
@@ -487,3 +489,15 @@ let testRuntimeR = #"""
         quit(status = 2L, save = "no")
     }
     """#
+
+// The full R runtime = the helper library above + the per-student
+// personalization primitives (`chickadee_seed()` / `chickadee_inputs()`), whose
+// source lives in Core (`RPersonalizationRuntime`) so a grading script computes
+// the seed identically to the server-side expression driver. Composing from the
+// one Core source — rather than re-pasting the R here — is what guarantees the
+// two never drift. `Tools/runner-support/test_runtime.R` carries the same three
+// pieces for standalone/manual runs and is kept in sync by hand.
+let testRuntimeR =
+    testRuntimeRHelpers + "\n\n"
+    + RPersonalizationRuntime.chickadeeSeedRSource + "\n\n"
+    + RPersonalizationRuntime.chickadeeInputsRSource + "\n"
