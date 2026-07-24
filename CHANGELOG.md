@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.630] - 2026-07-24
+
+### Added
+
+- **Unlockable-labs design doc.** `docs/unlockable-labs.md` locks the design
+  for assignment prerequisites + sticky per-student unlocks (#59/#62 under
+  epic #49): the `assignment_prerequisites` / `assignment_unlocks` schema,
+  unlock semantics, enforcement chokepoints, instructor drag authoring, MCP
+  parity, carry-through surfaces, and the mergeable slice plan.
+
+
 ## [0.4.629] - 2026-07-23
 
 ### Changed
