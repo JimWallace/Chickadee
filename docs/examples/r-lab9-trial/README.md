@@ -88,27 +88,32 @@ or `.py` test scripts) now skips the Python normalizer and is extracted to
 | `publictest_summarize.R` | Public test — `summarize(cohort)` returns `n`, `mean_age`, `hypertension_rate`. |
 | `publictest_features_valid.R` | Public test — `select_features()` returns a valid, de-duplicated feature vector. |
 | `releasetest_strongest_predictor.R` | Release test — `strongest_predictor(cohort)` names the feature most correlated with `high_bp`. |
-| `secrettest_model_accuracy.R` | Secret test — the tuned model clears **0.70** accuracy on the full data. |
+| `secrettest_model_accuracy.R` | Secret test — the tuned model clears **0.70** accuracy on the student's data slice. |
 
 The four tests are worth 1 point each (public / public / release / secret),
 matching the Python original.
 
-### Dataset
+### Dataset & per-student personalization
 
-`nhanes_bp.csv` is a deterministic **stride-3 subsample** (every third row) of
-HLTH 230 Lab 9's `nhanes_bp.csv` — 1952 rows (1604 after dropping rows with
-missing values), 66 KB. Subsampling keeps the file small and grading fast while
-preserving the pedagogy, verified before upload:
-
-- `high_bp` base rate ≈ 0.54 (a balanced problem, so accuracy is meaningful).
-- Correlation with `high_bp`: **age** (0.49) dominates, then waist (0.28), bmi
-  (0.19); `sleep_hours` (0.02) and `smoker` (0.01) are noise.
-- Logistic-regression accuracy: `sleep_hours` alone ≈ 0.55 (the starter's
-  deliberately-wrong default), `age + waist + bmi` ≈ 0.74 — a safe margin over
-  the 0.70 gate.
-
+`nhanes_bp.csv` is the **full curated NHANES pool** — the same file HLTH 230
+Lab 9 ships: 5856 rows (4861 after dropping rows with missing values), 193 KB.
 Columns: `age, female, bmi, waist, activity_min, smoker, sleep_hours,
 cholesterol, high_bp`.
+
+It is marked a **per-student dataset** (the `set_dataset` tool, `sampleSize`
+3000) — the *identical* personalization mechanism used on the Python version.
+Every student receives their own deterministic 3000-row slice under the same
+filename, so `load_data()` reads *their* rows; the full file is the server-side
+pool and students only ever see their slice. Because the tests recompute the
+expected `summarize` / `strongest_predictor` / accuracy from whatever data is
+present, per-student slices need **no** test or solution changes. Verified:
+
+- `high_bp` base rate ≈ 0.53 (a balanced problem, so accuracy is meaningful).
+- Correlation with `high_bp`: **age** (0.49) dominates, then waist (0.29), bmi
+  (0.19); `sleep_hours` (0.02) and `smoker` (0.01) are noise.
+- Logistic-regression accuracy: `sleep_hours` alone ≈ 0.55 (the starter's
+  deliberately-wrong default), `age + waist + bmi` ≈ 0.74 — clear of the 0.70
+  gate on a 3000-row slice (0 failures across 500 simulated students, R `glm`).
 
 ---
 
