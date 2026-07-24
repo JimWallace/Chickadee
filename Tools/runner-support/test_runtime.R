@@ -103,3 +103,78 @@ chickadee_inputs <- function() {
         list()
     }
 }
+
+# --- Locating the student's submission --------------------------------------
+# Mirror of the testRuntimeRStudentFile block in
+# Sources/Worker/TestRuntimeSources.swift (where the reserved inputs filename is
+# interpolated from AssignmentLanguage). Filenames Chickadee itself writes into
+# the grading workspace are never the student's submission.
+.chickadee_reserved_files <- c("test_runtime.R", "_ck_inputs.R")
+
+.chickadee_is_test_file <- function(names) {
+    grepl("^(publictest|releasetest|secrettest|studenttest)", names)
+}
+
+# The test script currently executing. It is itself a .R file sitting in the
+# working directory, so it must never be mistaken for the submission - the
+# tier-prefix rule above only covers the conventional names.
+.chickadee_running_script <- function() {
+    args  <- commandArgs(trailingOnly = FALSE)
+    fargs <- args[startsWith(args, "--file=")]
+    if (length(fargs) > 0L) return(basename(sub("^--file=", "", fargs[[1L]])))
+    ""
+}
+
+# The student's submitted R file: solution.R during validation, the extracted
+# notebook during grading. Prefers the runner's `.chickadee_student_module`
+# hint when it names an R file that is actually present, then falls back to
+# scanning the working directory. `extra_skip` lets an assignment exclude its
+# own bundled helpers, e.g. chickadee_student_file(c("a2_helpers.R")).
+# Returns NA_character_ when nothing looks like a submission.
+chickadee_student_file <- function(extra_skip = character(0)) {
+    hint_path <- ".chickadee_student_module"
+    if (file.exists(hint_path)) {
+        hinted <- tryCatch(trimws(readLines(hint_path, warn = FALSE)),
+                           error = function(e) character(0))
+        hinted <- hinted[nzchar(hinted)]
+        if (length(hinted) > 0L) {
+            preferred <- basename(hinted[[1L]])
+            if (grepl("\\.[Rr]$", preferred) && file.exists(preferred)) return(preferred)
+        }
+    }
+    rfiles <- list.files(pattern = "\\.[Rr]$")
+    skip   <- c(.chickadee_reserved_files, .chickadee_running_script(), extra_skip)
+    cand   <- rfiles[!(rfiles %in% skip) & !.chickadee_is_test_file(rfiles)]
+    if (length(cand) == 0L) return(NA_character_)
+    if ("solution.R" %in% cand) return("solution.R")
+    cand[[1L]]
+}
+
+# Evaluate the submission expression-by-expression in a fresh environment, so a
+# runtime error in one top-level line still leaves the function definitions
+# that loaded before it available to the tests.
+chickadee_load_student <- function(extra_skip = character(0)) {
+    f <- chickadee_student_file(extra_skip)
+    if (is.na(f)) errored("No R submission file was found to grade.")
+
+    env <- new.env(parent = globalenv())
+    grDevices::pdf(NULL)                 # swallow any plots the notebook draws
+    on.exit(try(grDevices::dev.off(), silent = TRUE), add = TRUE)
+
+    exprs <- tryCatch(parse(file = f), error = function(e) NULL)
+    if (is.null(exprs)) {
+        errored(paste0("Your submission (", f, ") could not be parsed as R - check for a syntax error."))
+    }
+    for (ex in exprs) tryCatch(eval(ex, envir = env), error = function(e) invisible(NULL))
+    env
+}
+
+# Fetch a function the student was asked to write; a clear error when it is
+# missing or was overwritten with something that is not a function.
+chickadee_require_fn <- function(env, name) {
+    fn <- tryCatch(get(name, envir = env, inherits = FALSE), error = function(e) NULL)
+    if (is.null(fn) || !is.function(fn)) {
+        errored(sprintf("Your submission must define a function called `%s()`.", name))
+    }
+    fn
+}

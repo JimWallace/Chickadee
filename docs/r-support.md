@@ -98,12 +98,45 @@ literals.
 
 `Tools/runner-support/test_runtime.R` (mirrored inline as `testRuntimeR` in
 `Sources/Worker/TestRuntimeSources.swift`) is the helper library injected into
-every R test working directory: `passed()` / `failed()` / `errored()` (exit
-0/1/2, hand-formatted JSON so no `jsonlite` dependency), plus the two
-personalization primitives `chickadee_seed()` and `chickadee_inputs()`. The
-worker's `testRuntimeR` is *composed* from the one Core source
+every R test working directory:
+
+- `passed()` / `failed()` / `errored()` — exit 0/1/2, hand-formatted JSON so
+  there is no `jsonlite` dependency;
+- `chickadee_seed()` / `chickadee_inputs()` — the personalization primitives;
+- `chickadee_student_file()` / `chickadee_load_student()` /
+  `chickadee_require_fn()` — locating and loading the student's submission.
+
+The worker's `testRuntimeR` is *composed* from the one Core source
 (`RPersonalizationRuntime`) rather than re-pasting the R, which is what
 guarantees the grading runtime and the server driver never drift on the seed.
+`RuntimeSourceDriftTests` pins the inline copy against the canonical file.
+
+### Locating the submission (and why it is central)
+
+`chickadee_student_file(extra_skip)` is the R mirror of `test_runtime.py`'s
+`_preferred_student_module()` / `_candidate_student_files()`. Python reserves
+its own workspace filenames *inside the runtime*; R originally had no
+equivalent, so every assignment's helper hand-rolled the search — and each one
+had to remember, on its own, that `_ck_inputs.R` is an R file sitting right
+next to the submission. A helper that simply scanned `*.R` could grade
+Chickadee's per-student inputs as the student's code.
+
+The reservation is now real: `.chickadee_reserved_files` is built in Swift with
+the inputs filename interpolated straight from `AssignmentLanguage`, so the skip
+list cannot drift from the file the worker actually writes. Resolution order is
+
+1. the runner's `.chickadee_student_module` hint, when it names an `.R` file
+   that is actually present (this disambiguates a student who uploaded a stray
+   `.R` beside their notebook);
+2. otherwise a scan of `*.R`, skipping reserved files, `*test_*` scripts, and
+   any `extra_skip` the assignment passes for its own bundled helpers;
+3. `solution.R` wins when present — the validation path.
+
+A stale hint never wins: it must name an existing `.R` file or the scan takes
+over. That matters because the hint is produced by
+`legacyPreferredStudentModuleFilename`, which extracts a notebook to its
+assignment's source language — an R job's `analysis.ipynb` becomes `analysis.R`,
+not `analysis.py`.
 
 ## What is deliberately not (yet) in R
 

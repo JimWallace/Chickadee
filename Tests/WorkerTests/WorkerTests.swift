@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import RunnerCore
 import Testing
@@ -505,6 +506,137 @@ import Testing
         let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
         #expect(output.exitCode == 0)
         #expect(output.stdout.contains("passed"), "default passed() message should be 'passed'")
+    }
+
+    // MARK: - R runtime: locating the student's submission
+
+    /// The reserved-filename list is interpolated from `AssignmentLanguage`, so
+    /// the R runtime can't drift from the file the worker actually writes.
+    @Test func rRuntimeReservesTheInputsFilename() {
+        #expect(testRuntimeR.contains("\"\(AssignmentLanguage.r.inputsFileName)\""))
+        #expect(testRuntimeR.contains("chickadee_student_file"))
+    }
+
+    /// The bug this closes: `_ck_inputs.R` is an R file in the grading
+    /// workspace, so a helper that just scans `*.R` could grade Chickadee's own
+    /// per-student inputs as the submission. It must never be a candidate — and
+    /// with nothing else present there is simply nothing to grade.
+    @Test func rRuntimeNeverGradesTheInputsFileAsTheSubmission() async throws {
+        guard await rscriptAvailable() else { return }
+        try writeRRuntime()
+        try ".ck_inputs <- list(`x` = 1)\n".write(
+            to: tmpDir.appendingPathComponent("_ck_inputs.R"), atomically: true, encoding: .utf8)
+
+        let script = try writeScript(
+            """
+            source('test_runtime.R')
+            f <- chickadee_student_file()
+            if (!is.na(f)) failed(paste('picked a reserved file:', f))
+            passed('no submission found, as expected')
+            """,
+            name: "test.r"
+        )
+        let runner = UnsandboxedScriptRunner()
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "chickadee_student_file() must skip _ck_inputs.R")
+    }
+
+    /// Reserved files, the assignment's own helper, and test scripts are all
+    /// skipped; `solution.R` wins when present (the validation path).
+    @Test func rRuntimeFindsSubmissionAmongReservedFiles() async throws {
+        guard await rscriptAvailable() else { return }
+        try writeRRuntime()
+        for (name, body) in [
+            ("_ck_inputs.R", ".ck_inputs <- list()\n"),
+            ("a2_helpers.R", "h <- function() 1\n"),
+            ("publictest_thing.R", "# a test\n"),
+            ("analysis.R", "f <- function() 1\n"),
+            ("solution.R", "g <- function() 2\n"),
+        ] {
+            try body.write(
+                to: tmpDir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+
+        let script = try writeScript(
+            """
+            source('test_runtime.R')
+            f <- chickadee_student_file(c('a2_helpers.R'))
+            if (!identical(f, 'solution.R')) failed(paste('expected solution.R, got', f))
+            passed('solution.R selected')
+            """,
+            name: "test.r"
+        )
+        let runner = UnsandboxedScriptRunner()
+        let output = await runScriptRobustly(runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "\(output.stdout)")
+    }
+
+    /// A `.chickadee_student_module` hint naming a real R file wins; a stale
+    /// hint (the pre-fix `.py` name, or a file that was never written) must
+    /// fall back to scanning rather than leaving nothing to grade.
+    @Test func rRuntimeHonoursHintAndIgnoresStaleOnes() async throws {
+        guard await rscriptAvailable() else { return }
+        try writeRRuntime()
+        try "u <- 1\n".write(
+            to: tmpDir.appendingPathComponent("utils.R"), atomically: true, encoding: .utf8)
+        try "f <- function() 1\n".write(
+            to: tmpDir.appendingPathComponent("analysis.R"), atomically: true, encoding: .utf8)
+        let hint = tmpDir.appendingPathComponent(".chickadee_student_module")
+
+        try "utils.R".write(to: hint, atomically: true, encoding: .utf8)
+        var script = try writeScript(
+            """
+            source('test_runtime.R')
+            f <- chickadee_student_file()
+            if (!identical(f, 'utils.R')) failed(paste('hint ignored, got', f))
+            passed('hint honoured')
+            """,
+            name: "test.r"
+        )
+        let runner = UnsandboxedScriptRunner()
+        var output = await runScriptRobustly(
+            runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "\(output.stdout)")
+
+        // Stale `.py` hint — what an R job produced before the language-aware fix.
+        try "analysis.py".write(to: hint, atomically: true, encoding: .utf8)
+        script = try writeScript(
+            """
+            source('test_runtime.R')
+            f <- chickadee_student_file()
+            if (is.na(f)) failed('stale hint left nothing to grade')
+            passed(paste('fell back to', f))
+            """,
+            name: "test.r"
+        )
+        output = await runScriptRobustly(
+            runner, script: script, workDir: tmpDir, timeLimitSeconds: 60)
+        #expect(output.exitCode == 0, "\(output.stdout)")
+    }
+
+    // MARK: - Student-module hint filename
+
+    /// A notebook is extracted to its assignment's source language, so an R
+    /// job's hint has to name the `.R` file. Naming `.py` (the pre-fix
+    /// behaviour) pointed at a path that was never written.
+    @Test func preferredStudentModuleFilenameIsLanguageAware() {
+        #expect(
+            legacyPreferredStudentModuleFilename(submissionFilename: "analysis.ipynb")
+                == "analysis.py")
+        #expect(
+            legacyPreferredStudentModuleFilename(
+                submissionFilename: "analysis.ipynb", language: .python) == "analysis.py")
+        #expect(
+            legacyPreferredStudentModuleFilename(submissionFilename: "analysis.ipynb", language: .r)
+                == "analysis.R")
+        // A source upload is already the module, whatever the assignment's language.
+        #expect(
+            legacyPreferredStudentModuleFilename(submissionFilename: "warmup.py") == "warmup.py")
+        #expect(
+            legacyPreferredStudentModuleFilename(submissionFilename: "warmup.R", language: .r)
+                == "warmup.R")
+        #expect(legacyPreferredStudentModuleFilename(submissionFilename: "data.csv") == nil)
+        #expect(legacyPreferredStudentModuleFilename(submissionFilename: nil) == nil)
     }
 
     // MARK: - ExponentialBackoff
