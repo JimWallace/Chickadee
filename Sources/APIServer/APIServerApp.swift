@@ -154,6 +154,9 @@ struct SubmissionsDirectoryKey: StorageKey {
 struct DataExportsDirectoryKey: StorageKey {
     typealias Value = String
 }
+struct ContentFilesDirectoryKey: StorageKey {
+    typealias Value = String
+}
 struct DeployStateDirectoryKey: StorageKey {
     typealias Value = String
 }
@@ -222,6 +225,14 @@ extension Application {
     var dataExportsDirectory: String {
         get { storage[DataExportsDirectoryKey.self] ?? "data-exports/" }
         set { storage[DataExportsDirectoryKey.self] = newValue }
+    }
+    /// Where hosted content-item file attachments live (PR B). Gated content:
+    /// like submissions and data exports it is never served statically — only
+    /// streamed through the enrollment-gated `/content-files` route — and its
+    /// files are deleted with their item or attachment.
+    var contentFilesDirectory: String {
+        get { storage[ContentFilesDirectoryKey.self] ?? "content-files/" }
+        set { storage[ContentFilesDirectoryKey.self] = newValue }
     }
     /// Directory holding the auto-deploy daemon's IPC files (status.json,
     /// history.jsonl), mounted read-only into the container. Read by the

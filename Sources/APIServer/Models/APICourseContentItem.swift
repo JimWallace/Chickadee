@@ -71,6 +71,25 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
         set { linksJSON = APICourseContentItem.encodeLinks(newValue) }
     }
 
+    /// JSON-encoded `[ContentAttachment]`. Nullable (added after the table
+    /// shipped); a NULL or malformed value reads as `[]` through the
+    /// `attachments` accessor. Files live at
+    /// `contentFilesDirectory/<itemID>/<attachmentID>`.
+    @OptionalField(key: "attachments_json")
+    var attachmentsJSON: String?
+
+    /// Decoded attachments. A malformed/absent stored value yields `[]` rather
+    /// than throwing at read time; every write path encodes valid JSON.
+    var attachments: [ContentAttachment] {
+        get {
+            guard let json = attachmentsJSON, let data = json.data(using: .utf8),
+                let decoded = try? JSONDecoder().decode([ContentAttachment].self, from: data)
+            else { return [] }
+            return decoded
+        }
+        set { attachmentsJSON = APICourseContentItem.encodeAttachments(newValue) }
+    }
+
     /// Instructor-set "Updated" label shown on the row (free text or an ISO date).
     @OptionalField(key: "updated_label")
     var updatedLabel: String?
@@ -93,6 +112,7 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
         kind: ContentItemKind = .link,
         itemDescription: String? = nil,
         links: [ContentLink] = [],
+        attachments: [ContentAttachment] = [],
         updatedLabel: String? = nil,
         isPublished: Bool = true
     ) {
@@ -104,6 +124,7 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
         self.kindRaw = kind.rawValue
         self.itemDescription = itemDescription
         self.linksJSON = APICourseContentItem.encodeLinks(links)
+        self.attachmentsJSON = APICourseContentItem.encodeAttachments(attachments)
         self.updatedLabel = updatedLabel
         self.isPublished = isPublished
     }
@@ -112,6 +133,12 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
     /// array literal if encoding somehow fails (keeps the column non-null).
     static func encodeLinks(_ links: [ContentLink]) -> String {
         guard let data = try? JSONEncoder().encode(links) else { return "[]" }
+        return String(bytes: data, encoding: .utf8) ?? "[]"
+    }
+
+    /// Serialize attachments to the stored JSON string (same fallback as links).
+    static func encodeAttachments(_ attachments: [ContentAttachment]) -> String {
+        guard let data = try? JSONEncoder().encode(attachments) else { return "[]" }
         return String(bytes: data, encoding: .utf8) ?? "[]"
     }
 }

@@ -113,8 +113,9 @@ enum SupportFileURLFetcher {
         return host
     }
 
-    /// Fetches the URL under the SSRF guards and returns the body as UTF-8 text.
-    static func fetch(urlString: String, on request: Request) async throws -> String {
+    /// Fetches the URL under the SSRF guards and returns the raw body bytes.
+    /// Shared by `fetch` (UTF-8 text) and `fetchData` (binary).
+    static func fetchBytes(urlString: String, on request: Request) async throws -> Data {
         let host = try validate(urlString)
 
         // Resolve + classify before connecting.  An IP literal is classified
@@ -154,12 +155,25 @@ enum SupportFileURLFetcher {
         try? await client.shutdown()
 
         let bytes = try outcome.get()
+        request.logger.info(
+            "mcp.support_file_fetch host=\(host) bytes=\(bytes.count) status=ok")
+        return bytes
+    }
+
+    /// Fetches the URL under the SSRF guards and returns the body as UTF-8 text.
+    static func fetch(urlString: String, on request: Request) async throws -> String {
+        let bytes = try await fetchBytes(urlString: urlString, on: request)
         guard let text = String(data: bytes, encoding: .utf8) else {
             throw SupportFileFetchError.notUTF8
         }
-        request.logger.info(
-            "mcp.support_file_fetch host=\(host) bytes=\(bytes.count) status=ok")
         return text
+    }
+
+    /// Fetches the URL under the SSRF guards and returns the raw bytes — for
+    /// binary content files (PDFs, images, notebooks) that need no UTF-8
+    /// requirement. Same guards as `fetch`.
+    static func fetchData(urlString: String, on request: Request) async throws -> Data {
+        try await fetchBytes(urlString: urlString, on: request)
     }
 
     private static func performFetch(_ client: HTTPClient, urlString: String) async throws -> Data {

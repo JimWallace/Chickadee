@@ -81,6 +81,15 @@ struct LatestSubmissionItem: Encodable {
 /// instructor view (all items; `isPublished == false` shows a "Hidden" marker).
 /// Ungraded, so it carries none of `TestSetupRow`'s grade / history / badge
 /// fields — just a title, a kind label, and its links.
+/// One hosted file attachment on a content item, ready for the download link
+/// (the gated `/content-files/:itemID/:attachmentID` route).
+struct ContentAttachmentView: Encodable {
+    let id: String
+    let displayName: String
+    let downloadURL: String
+    let sizeLabel: String  // e.g. "1.2 MB"
+}
+
 struct ContentItemRow: Encodable {
     let id: String
     let title: String
@@ -88,18 +97,29 @@ struct ContentItemRow: Encodable {
     let kindLabel: String  // human-facing label, e.g. "Notebook"
     let itemDescription: String?
     let links: [ContentLink]
+    /// Hosted file attachments, rendered as download links beside `links`.
+    let attachments: [ContentAttachmentView]
     let updatedLabel: String?
     /// False → a draft item hidden from students (surfaced only on the
     /// instructor dashboard as a "Hidden" marker).
     let isPublished: Bool
 
     init(from item: APICourseContentItem) {
-        self.id = item.id?.uuidString ?? ""
+        let itemID = item.id?.uuidString ?? ""
+        self.id = itemID
         self.title = item.title
         self.kind = item.kind.rawValue
         self.kindLabel = ContentItemRow.label(for: item.kind)
         self.itemDescription = item.itemDescription
         self.links = item.links
+        self.attachments = item.attachments.map { attachment in
+            ContentAttachmentView(
+                id: attachment.id.uuidString,
+                displayName: attachment.displayName,
+                downloadURL: "/content-files/\(itemID)/\(attachment.id.uuidString)",
+                sizeLabel: ByteCountFormatter.string(
+                    fromByteCount: Int64(attachment.sizeBytes), countStyle: .file))
+        }
         self.updatedLabel = item.updatedLabel
         self.isPublished = item.isPublished
     }

@@ -11,6 +11,7 @@
 //   bundle.json              — CourseBundleManifest (ISO8601 dates)
 //   testsetups/<id>.zip      — instructor test-setup archives
 //   submissions/<id>.<ext>   — student submission files
+//   content/<attachmentID>   — content-item hosted file attachments
 //
 // This file holds boot + the export pipeline; the import handler and its
 // phase helpers live in CourseBundleRoutes+Import.swift.
@@ -66,6 +67,19 @@ struct CourseBundleRoutes: RouteCollection {
             setup.id.map { (id: $0, zipPath: setup.zipPath) }
         }
         let submissionPaths = data.submissions.map(\.zipPath)
+        // Hosted content-item attachment files: (on-disk src, in-bundle name).
+        // Extracted to primitives here so the thread-pool closure captures no
+        // Fluent models (#1158).
+        let app = req.application
+        let contentFileCopies: [(src: String, bundleName: String)] = data.contentItems.flatMap { item in
+            guard let itemID = item.id else { return [(src: String, bundleName: String)]() }
+            return item.attachments.map { att in
+                (
+                    src: ContentAttachmentStore.path(app, itemID: itemID, attachmentID: att.id),
+                    bundleName: "content/\(att.id.uuidString)"
+                )
+            }
+        }
         let logger = req.logger
         try await runBlocking(on: req) {
             try writeExportStaging(
@@ -73,6 +87,7 @@ struct CourseBundleRoutes: RouteCollection {
                 manifestData: manifestData,
                 setupCopies: setupCopies,
                 submissionPaths: submissionPaths,
+                contentFileCopies: contentFileCopies,
                 logger: logger)
         }
 
@@ -267,18 +282,7 @@ struct CourseBundleRoutes: RouteCollection {
             )
         }
 
-        let bundledContentItems = data.contentItems.map { item -> BundledContentItem in
-            BundledContentItem(
-                sectionBundleID: item.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] },
-                title: item.title,
-                kind: item.kind.rawValue,
-                description: item.itemDescription,
-                links: item.links,
-                updatedLabel: item.updatedLabel,
-                isPublished: item.isPublished,
-                sortOrder: item.sortOrder
-            )
-        }
+        let bundledContentItems = buildBundledContentItems(data: data, bundleIDs: bundleIDs)
 
         let bundledAssignments = data.assignments.compactMap { a -> BundledAssignment? in
             guard let aid = a.id, let bid = bundleIDs.assignBundleIDByID[aid],
@@ -345,6 +349,37 @@ struct CourseBundleRoutes: RouteCollection {
         )
     }
 
+    /// Maps each course content item to its bundle representation, nesting the
+    /// attachment metadata. Each attachment's global UUID doubles as its unique
+    /// bundle filename (`content/<id>`); the bytes are copied in
+    /// writeExportStaging.
+    private func buildBundledContentItems(
+        data: ExportData,
+        bundleIDs: ExportBundleIDs
+    ) -> [BundledContentItem] {
+        data.contentItems.map { item in
+            let attachments = item.attachments.map { att in
+                BundledAttachment(
+                    originalName: att.originalName,
+                    sizeBytes: att.sizeBytes,
+                    label: att.label,
+                    sortOrder: att.sortOrder,
+                    bundleFilename: "content/\(att.id.uuidString)")
+            }
+            return BundledContentItem(
+                sectionBundleID: item.sectionID.flatMap { bundleIDs.sectionBundleIDByUUID[$0] },
+                title: item.title,
+                kind: item.kind.rawValue,
+                description: item.itemDescription,
+                links: item.links,
+                attachments: attachments.isEmpty ? nil : attachments,
+                updatedLabel: item.updatedLabel,
+                isPublished: item.isPublished,
+                sortOrder: item.sortOrder
+            )
+        }
+    }
+
     // ── 4. Write staging directory ─────────────────────────────────────
 
     // ── 6. Stream the ZIP to the browser ──────────────────────────────
@@ -378,6 +413,7 @@ private func writeExportStaging(
     manifestData: Data,
     setupCopies: [(id: String, zipPath: String)],
     submissionPaths: [String],
+    contentFileCopies: [(src: String, bundleName: String)],
     logger: Logger
 ) throws {
     try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
@@ -385,8 +421,22 @@ private func writeExportStaging(
         at: stagingDir.appendingPathComponent("testsetups"), withIntermediateDirectories: true)
     try FileManager.default.createDirectory(
         at: stagingDir.appendingPathComponent("submissions"), withIntermediateDirectories: true)
+    if !contentFileCopies.isEmpty {
+        try FileManager.default.createDirectory(
+            at: stagingDir.appendingPathComponent("content"), withIntermediateDirectories: true)
+    }
 
     try manifestData.write(to: stagingDir.appendingPathComponent("bundle.json"))
+
+    for copy in contentFileCopies {
+        let src = URL(fileURLWithPath: copy.src)
+        let dst = stagingDir.appendingPathComponent(copy.bundleName)
+        if FileManager.default.fileExists(atPath: src.path) {
+            try FileManager.default.copyItem(at: src, to: dst)
+        } else {
+            logger.warning("Export: content attachment missing at \(src.path), skipping")
+        }
+    }
 
     for setup in setupCopies {
         let src = URL(fileURLWithPath: setup.zipPath)

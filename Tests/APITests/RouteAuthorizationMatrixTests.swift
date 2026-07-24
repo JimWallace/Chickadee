@@ -113,6 +113,10 @@ import VaporTesting
                 "sectionID": try section.requireID().uuidString,
                 // The /instructor/content-items/:id/{edit,delete,section} routes.
                 "id": try contentItem.requireID().uuidString,
+                // The content-items/:id/attachments/:attachmentID/delete route
+                // resolves and authorizes the item by :id before it reads
+                // :attachmentID, so any valid UUID denies a non-owner.
+                "attachmentID": UUID().uuidString,
                 "preEnrollmentID": UUID().uuidString,
                 "filename": "publictest_authz.py",
             ],
