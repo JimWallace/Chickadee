@@ -65,6 +65,16 @@ extension AssignmentLanguage {
         }
     }
 
+    /// Extension for scripts Chickadee generates (pattern-family cases,
+    /// notebook checks). `.py` for Python — unchanged, so every existing
+    /// generated filename, `spec_hash` and `TestSetupCache` key is stable.
+    public var generatedScriptExtension: String {
+        switch self {
+        case .python: return "py"
+        case .r: return "R"
+        }
+    }
+
     /// Body of the per-student grading-inputs file. `values` maps each input
     /// name to its already-rendered literal *in this language* (Python literal
     /// for `.python`, R literal for `.r`). Keys are emitted in sorted order for

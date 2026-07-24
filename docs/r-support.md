@@ -138,19 +138,58 @@ over. That matters because the hint is produced by
 assignment's source language — an R job's `analysis.ipynb` becomes `analysis.R`,
 not `analysis.py`.
 
+## Pattern families in R
+
+All eight `PatternKind`s render to `.R`, so an R assignment uses generated test
+families exactly like a Python one — including the **per-student** variants
+(`$name` args and `expectedVarRef`), whose values arrive via `_ck_inputs.R`.
+
+Dispatch is by language at one point (`renderCase`): Python routes through the
+per-kind handlers, R through `PatternFamilyRendererR.swift`, which owns every
+kind in a single `switch`. R is a separate renderer rather than a branch inside
+the Python ones on purpose — the Python bytes feed `spec_hash` and
+`TestSetupCache` keys and must never move. Generated R uses the injected
+runtime: `chickadee_load_student()` / `chickadee_require_fn()` to load the
+submission, and `chickadee_equal` / `chickadee_unordered_equal` /
+`chickadee_format` so failure messages read the same in both languages.
+
+Two behaviours worth knowing:
+
+- `chickadee_equal` compares numerics **by value**, so a student returning `3L`
+  satisfies an expected `3` decoded from the family spec as a double. Structural
+  comparison (names, nesting) falls back to `all.equal`.
+- `.exceptionExpected` has no Python-style exception hierarchy to match against,
+  so the case's `expected` is matched against the condition's **class vector or
+  its message** (case-insensitive). That covers both `stop("...")` and custom
+  condition classes.
+- `.returnTypeCheck` accepts R type names (`character`, `numeric`, `list`,
+  `data.frame`, …) *and* Python ones (`str`, `int`, `bool`, `dict`), so a family
+  converted from a Python assignment keeps working.
+
+The assignment's language is resolved in `applyPatternFamilies` from the
+authored raw scripts first (they carry the edit being applied, which may be the
+first `.R` test) and then the stored manifest. **Caveat:** an assignment whose
+suite is *only* families, with no `.R` script anywhere, resolves as Python — add
+one hand-authored `.R` test, or set the language explicitly, to make it R. Stale
+generated files are diffed across *both* extensions, so a language flip cleans
+up the old ones.
+
+## Literal globals in hand-authored scripts
+
+A raw script's own extension names its language: `applyForRawScript` inlines
+`name = <pythonLiteral>` into `.py` and `name <- <rLiteral>` into `.R`, so a
+hand-written test sees the assignment's literal inputs either way. Anything else
+(a `.sh` script, a data file) has no literal syntax to inline into and is
+returned unchanged.
+
 ## What is deliberately not (yet) in R
 
-- **Literal globals inlined into hand-authored `.R` test scripts.** For Python,
-  `TestScriptVariablePrepender` prepends `name = <pythonLiteral>` to raw `.py`
-  scripts at save time; it is guarded by `.hasSuffix(".py")`, so `.R` scripts
-  pass through untouched (no breakage). R tests instead read per-student values
-  from `chickadee_inputs()` or reference the values delivered by notebook
-  substitution. Routing literal globals through the uniform `_ck_inputs.R`
-  channel is a clean follow-up; it is not needed for the assignments that ship
-  today (their tests read `chickadee_inputs()`).
-- **Pattern families and notebook checks in R.** Their renderers emit Python.
-  R assignments hand-author `.R` tests today; per-language renderers are a
-  separate follow-up (they do not block the personalization engine).
+- **Notebook checks.** All ten `NotebookCheckKind`s still render Python. Several
+  lean on genuinely Python-specific machinery — pandas DataFrame/Series
+  assertions, matplotlib figure counting, and `ast`-module structure predicates
+  (`list_comprehension` has no R analogue at all) — so per-language checks are a
+  larger design question than the family renderers were, not a mechanical port.
+  R assignments hand-author `.R` tests for those cases today.
 
 ## Verification
 

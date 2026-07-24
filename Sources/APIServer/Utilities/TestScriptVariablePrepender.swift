@@ -1,13 +1,15 @@
 // APIServer/Utilities/TestScriptVariablePrepender.swift
 //
-// Renders a Python preamble — `name = <pythonLiteral>` lines, one per
-// FamilyVariable — used by:
+// Renders a variable preamble — one line per FamilyVariable, in the target
+// language (`name = <pythonLiteral>` for Python, `name <- <rLiteral>` for R) —
+// used by:
 //
 // 1. The pattern-family renderer, which prepends section + family
 //    variables (and from Slice 1: global variables) to every generated
 //    test case.
-// 2. The raw-script save-time pass that inlines section + global
-//    variables into instructor-uploaded `.py` test scripts.
+// 2. The raw-script save-time pass that inlines section + global variables
+//    into instructor-uploaded `.py` and `.R` test scripts, so a hand-written
+//    test sees the assignment's literal inputs in either language.
 // 3. The notebook substitution pass (consumes the same JSON literal
 //    representation via `FamilyVariable.value.pythonLiteral`).
 //
@@ -21,13 +23,25 @@ import Foundation
 
 enum TestScriptVariablePrepender {
 
-    /// Returns a newline-joined block of `name = pythonLiteral`
-    /// assignments, one per variable.  Empty string when `variables`
-    /// is empty.
-    static func emit(_ variables: [FamilyVariable]) -> String {
-        variables
-            .map { "\($0.name) = \($0.value.pythonLiteral)" }
-            .joined(separator: "\n")
+    /// Returns a newline-joined block of assignments, one per variable —
+    /// `name = <pythonLiteral>` for Python, `name <- <rLiteral>` for R.
+    /// Empty string when `variables` is empty.  `language` defaults to
+    /// `.python`, so generated Python bytes are unchanged.
+    static func emit(
+        _ variables: [FamilyVariable], language: AssignmentLanguage = .python
+    ) -> String {
+        switch language {
+        case .python:
+            return
+                variables
+                .map { "\($0.name) = \($0.value.pythonLiteral)" }
+                .joined(separator: "\n")
+        case .r:
+            return
+                variables
+                .map { "\(rIdentifier($0.name)) <- \($0.value.rLiteral)" }
+                .joined(separator: "\n")
+        }
     }
 
     /// Wraps `emit` with a trailing blank line so callers can use a
@@ -58,12 +72,13 @@ enum TestScriptVariablePrepender {
     /// path for removing all variables).
     static func prependToRawScript(
         _ originalBody: String,
-        variables: [FamilyVariable]
+        variables: [FamilyVariable],
+        language: AssignmentLanguage = .python
     ) -> String {
         let stripped = stripExistingBlock(originalBody)
         guard !variables.isEmpty else { return stripped }
 
-        let decls = emit(variables)
+        let decls = emit(variables, language: language)
 
         // Detect a leading shebang so we can keep it on line 1.
         if stripped.hasPrefix("#!") {
@@ -113,19 +128,27 @@ enum TestScriptVariablePrepender {
         return lines.joined(separator: "\n")
     }
 
-    /// Convenience for the raw-script save path: returns the script's
-    /// content with global + section variables prepended, sourcing the
-    /// variables from `manifest`.  Non-Python files (no `.py` suffix)
-    /// are returned unchanged.  When `filename` isn't found in
-    /// `manifest.testSuites`, no section variables are applied (treated
-    /// as "ungrouped").
+    /// Convenience for the raw-script save path: returns the script's content
+    /// with global + section variables prepended, sourcing the variables from
+    /// `manifest`.  The script's own extension names its language — `.py` gets
+    /// `name = <pythonLiteral>`, `.R`/`.r` gets `name <- <rLiteral>` — so an
+    /// instructor's hand-written test sees the assignment's literal inputs
+    /// whichever language they wrote it in.  Anything else (a shell script, a
+    /// data file) is returned unchanged.  When `filename` isn't found in
+    /// `manifest.testSuites`, no section variables are applied (treated as
+    /// "ungrouped").
     static func applyForRawScript(
         filename: String,
         content: String,
         manifest: TestProperties,
         explicitSectionID: String? = nil
     ) -> String {
-        guard filename.lowercased().hasSuffix(".py") else { return content }
+        let language: AssignmentLanguage
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "py": language = .python
+        case "r": language = .r
+        default: return content
+        }
         let sectionID: String?
         if let explicitSectionID {
             sectionID = explicitSectionID
@@ -136,6 +159,7 @@ enum TestScriptVariablePrepender {
             guard let sid = sectionID else { return [] }
             return manifest.sections.first(where: { $0.id == sid })?.variables ?? []
         }()
-        return prependToRawScript(content, variables: manifest.globalVariables + sectionVars)
+        return prependToRawScript(
+            content, variables: manifest.globalVariables + sectionVars, language: language)
     }
 }

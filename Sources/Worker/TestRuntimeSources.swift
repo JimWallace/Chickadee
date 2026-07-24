@@ -488,6 +488,47 @@ private let testRuntimeRHelpers = #"""
         .chickadee_emit("error", paste0(label, ": ", msg), error = msg)
         quit(status = 2L, save = "no")
     }
+
+    # --- Value formatting + comparison ------------------------------------------
+    # Used by generated pattern-family tests (and available to hand-authored
+    # ones) so failure messages read the same whatever produced the test.
+
+    # One-line, student-readable rendering of a value - the R analogue of
+    # Python's repr(). Collapsed to a single line and truncated so a failure
+    # message stays scannable.
+    chickadee_format <- function(x, max_chars = 300L) {
+        s <- tryCatch(paste(deparse(x), collapse = " "), error = function(e) "<unprintable>")
+        s <- gsub("[[:space:]]+", " ", s)
+        if (nchar(s) > max_chars) paste0(substr(s, 1L, max_chars), " ...") else s
+    }
+
+    # Exact equality, with JSON-friendly numeric handling: an expected value
+    # decoded from the family spec is a double (1), while a student may well
+    # return an integer (1L). Comparing numerics by value keeps that difference
+    # from failing an otherwise-correct answer. Everything else falls back to
+    # all.equal's structural comparison (names, nesting, attributes).
+    chickadee_equal <- function(actual, expected) {
+        if (is.numeric(actual) && is.numeric(expected)) {
+            if (length(actual) != length(expected)) return(FALSE)
+            return(isTRUE(all(actual == expected)))
+        }
+        if (is.logical(actual) && is.logical(expected)) {
+            if (length(actual) != length(expected)) return(FALSE)
+            return(isTRUE(all(actual == expected)))
+        }
+        isTRUE(all.equal(actual, expected))
+    }
+
+    # Order-insensitive comparison for the unordered_equality kind: same
+    # elements, any order. Compared as characters so mixed numeric/integer
+    # element types do not matter.
+    chickadee_unordered_equal <- function(actual, expected) {
+        a <- tryCatch(unlist(actual, use.names = FALSE), error = function(e) NULL)
+        b <- tryCatch(unlist(expected, use.names = FALSE), error = function(e) NULL)
+        if (is.null(a) || is.null(b)) return(FALSE)
+        if (length(a) != length(b)) return(FALSE)
+        isTRUE(all(sort(as.character(a)) == sort(as.character(b))))
+    }
     """#
 
 // Locating the student's submission — the R mirror of `test_runtime.py`'s
