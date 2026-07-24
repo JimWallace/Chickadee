@@ -168,6 +168,29 @@ func submissionIsRNotebook(submissionDirectory: URL, submissionFilename: String?
     return false
 }
 
+/// True when the manifest's graded suite is **pure R** — at least one `.R` test
+/// script and no Python (`.py` test script or required `.py` file). For such an
+/// assignment every notebook submission must be extracted to `.R`, because the
+/// tests `source()` a `.R` file and a `.py` extraction can never grade. The
+/// manifest is authoritative about the assignment's language, so it — not the
+/// submission notebook's (mangleable) kernelspec — decides. This is what lets a
+/// submission whose R kernelspec was rewritten by the in-browser editor (saved
+/// under the Pyodide/Python kernel) still grade as R, including a submission
+/// stored before the submit-time kernel fix when it is re-tested.
+func manifestTargetsRSubmission(_ manifest: TestProperties) -> Bool {
+    let hasRSuite = manifest.testSuites.contains {
+        URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "r"
+    }
+    guard hasRSuite else { return false }
+    let hasPythonSuite = manifest.testSuites.contains {
+        URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py"
+    }
+    let hasRequiredPython = manifest.requiredFiles.contains {
+        URL(fileURLWithPath: $0).pathExtension.lowercased() == "py"
+    }
+    return !hasPythonSuite && !hasRequiredPython
+}
+
 func shouldNormalizePythonSubmission(
     manifest: TestProperties,
     submissionFilename: String?,
@@ -178,17 +201,25 @@ func shouldNormalizePythonSubmission(
     }
     if !requiredPythonFiles.isEmpty { return true }
 
+    // A pure-R suite grades by `source()`-ing a `.R` file, so ANY notebook
+    // submission must go to the generic extractor (which, forced by the same
+    // predicate at the call site, emits `.R`) — regardless of the submission
+    // notebook's kernelspec, which an in-browser editor can silently rewrite.
+    // The manifest is authoritative about the assignment's language, so it
+    // decides here rather than the possibly-mangled submission metadata.
+    if manifestTargetsRSubmission(manifest) {
+        return false
+    }
+
     let hasPythonSuite = manifest.testSuites.contains {
         URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py"
     }
 
-    // An R-kernel notebook is not a Python submission: route it to the generic
-    // notebook extractor (`extractNotebooksToCode`, which emits `.R`) instead of
-    // the Python normalizer. This must run before the extension/content probes
-    // below, which would otherwise treat any `.ipynb` as Python — the gap that
-    // made worker-graded R *notebook* assignments fail to produce `solution.R`.
-    // Guarded on a pure-R setup: if it also ships Python (required `.py` files,
-    // handled above, or `.py` test scripts) we keep Python-normalizing.
+    // A mixed suite that also ships R: an R-kernel notebook is still not a
+    // Python submission, so route it to the generic notebook extractor
+    // (`extractNotebooksToCode`, which emits `.R`) instead of the Python
+    // normalizer. This must run before the extension/content probes below,
+    // which would otherwise treat any `.ipynb` as Python.
     if !hasPythonSuite,
         submissionIsRNotebook(
             submissionDirectory: submissionDirectory, submissionFilename: submissionFilename)

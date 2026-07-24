@@ -538,7 +538,11 @@ extension WorkerDaemon {
                 return (normalization.warnings, normalization.preferredStudentModule)
             } else {
                 try mergeDirectoryContents(from: paths.submissionDir, into: testSetupDir)
-                try extractNotebooksToCode(in: testSetupDir)
+                // A pure-R suite extracts every notebook to `.R` regardless of the
+                // submission's kernelspec (the in-browser editor can rewrite it).
+                try extractNotebooksToCode(
+                    in: testSetupDir,
+                    forcedLanguage: manifestTargetsRSubmission(manifest) ? "r" : nil)
                 return ([], legacyPreferredStudentModuleFilename(submissionFilename: job.submissionFilename))
             }
         }
