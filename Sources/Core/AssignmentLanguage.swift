@@ -39,3 +39,58 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         return .python
     }
 }
+
+// MARK: - Per-language rendering / delivery strategy
+//
+// A closed 2-case enum owns its own language-specific behavior (cleaner than a
+// protocol + 2 conformances). Every site that used to hardcode Python — literal
+// rendering, the `_ck_inputs.*` file, the expression driver — dispatches here so
+// adding a third language later is one `case`.
+
+extension AssignmentLanguage {
+
+    /// Render a JSON value as a source literal in this language.
+    public func literal(_ value: JSONValue) -> String {
+        switch self {
+        case .python: return value.pythonLiteral
+        case .r: return value.rLiteral
+        }
+    }
+
+    /// Filename of the per-student grading-inputs file the worker materializes.
+    public var inputsFileName: String {
+        switch self {
+        case .python: return "_ck_inputs.py"
+        case .r: return "_ck_inputs.R"
+        }
+    }
+
+    /// Body of the per-student grading-inputs file. `values` maps each input
+    /// name to its already-rendered literal *in this language* (Python literal
+    /// for `.python`, R literal for `.r`). Keys are emitted in sorted order for
+    /// deterministic output.
+    ///
+    /// The `.python` form is byte-for-byte identical to the historical
+    /// `_ck_inputs.py` writer, so existing assignments are unchanged. The `.r`
+    /// form binds `.ck_inputs` (R forbids a leading-underscore identifier, so the
+    /// variable can't be `_ck`) and omits the trailing comma R's `list()` rejects.
+    public func renderInputsFile(_ values: [String: String]) -> String {
+        let header = "# Auto-generated per-student grading inputs (issue #461). Do not edit."
+        let keys = values.keys.sorted()
+        switch self {
+        case .python:
+            var lines = [header, "_ck = {"]
+            for key in keys {
+                lines.append("    \(JSONValue.string(key).pythonLiteral): \(values[key] ?? "None"),")
+            }
+            lines.append("}")
+            return lines.joined(separator: "\n") + "\n"
+        case .r:
+            guard !keys.isEmpty else { return "\(header)\n.ck_inputs <- list()\n" }
+            let assignments = keys.map { "    `\($0)` = \(values[$0] ?? "NULL")" }
+            return "\(header)\n.ck_inputs <- list(\n"
+                + assignments.joined(separator: ",\n")
+                + "\n)\n"
+        }
+    }
+}

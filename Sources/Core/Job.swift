@@ -53,6 +53,14 @@ public struct Job: Codable, Sendable {
     /// the server resolves the bytes; the worker only writes them.
     public let personalizedFiles: [String: String]?
 
+    /// The assignment's language (`.python` | `.r`), resolved server-side from
+    /// the manifest / notebook kernel. Selects how per-student inputs are
+    /// rendered + delivered (`_ck_inputs.py` vs `_ck_inputs.R`) and which
+    /// interpreter evaluated the expressions. Optional for wire back-compat: a
+    /// payload from an older server decodes as nil, which callers treat as
+    /// `.python` — so existing Python jobs are byte-for-byte unchanged.
+    public let language: AssignmentLanguage?
+
     public init(
         submissionID: String,
         testSetupID: String,
@@ -63,7 +71,8 @@ public struct Job: Codable, Sendable {
         submissionFilename: String? = nil,
         assignmentSeed: String? = nil,
         personalizedInputs: [String: String]? = nil,
-        personalizedFiles: [String: String]? = nil
+        personalizedFiles: [String: String]? = nil,
+        language: AssignmentLanguage? = nil
     ) {
         self.submissionID = submissionID
         self.testSetupID = testSetupID
@@ -75,5 +84,6 @@ public struct Job: Codable, Sendable {
         self.assignmentSeed = assignmentSeed
         self.personalizedInputs = personalizedInputs
         self.personalizedFiles = personalizedFiles
+        self.language = language
     }
 }
