@@ -89,6 +89,26 @@ func mergeNotebook(student studentData: Data, instructor instructorData: Data) -
     let testCells = instructorCells.filter { isTestCell($0) }
 
     studentNB["cells"] = solutionCells + testCells
+
+    // Grade in the assignment's language, not the editor's. The instructor
+    // notebook is authoritative; an in-browser editor can drop or overwrite the
+    // student notebook's kernelspec — e.g. saving an R (`xr`) notebook under the
+    // Pyodide kernel — which would make the worker extract the submission to the
+    // wrong language (`.py` instead of `.R`) so every test errors with "No R
+    // submission file was found to grade." Adopt the instructor's kernel/language
+    // so grading follows the assignment. (A Python assignment is unaffected: its
+    // instructor kernelspec is already Python.)
+    if let instructorMeta = instructorNB["metadata"] as? [String: Any] {
+        var studentMeta = studentNB["metadata"] as? [String: Any] ?? [:]
+        if let kernelspec = instructorMeta["kernelspec"] {
+            studentMeta["kernelspec"] = kernelspec
+        }
+        if let languageInfo = instructorMeta["language_info"] {
+            studentMeta["language_info"] = languageInfo
+        }
+        studentNB["metadata"] = studentMeta
+    }
+
     return (try? JSONSerialization.data(withJSONObject: studentNB)) ?? studentData
 }
 
