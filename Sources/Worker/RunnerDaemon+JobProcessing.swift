@@ -532,11 +532,19 @@ extension WorkerDaemon {
             } else {
                 try mergeDirectoryContents(from: paths.submissionDir, into: testSetupDir)
                 // A pure-R suite extracts every notebook to `.R` regardless of the
-                // submission's kernelspec (the in-browser editor can rewrite it).
+                // submission's kernelspec (the in-browser editor can rewrite it) —
+                // so the student-module hint has to name the `.R` file too, or it
+                // points at a path that was never written.
+                let targetsR = manifestTargetsRSubmission(manifest)
                 try extractNotebooksToCode(
                     in: testSetupDir,
-                    forcedLanguage: manifestTargetsRSubmission(manifest) ? "r" : nil)
-                return ([], legacyPreferredStudentModuleFilename(submissionFilename: job.submissionFilename))
+                    forcedLanguage: targetsR ? "r" : nil)
+                return (
+                    [],
+                    legacyPreferredStudentModuleFilename(
+                        submissionFilename: job.submissionFilename,
+                        language: targetsR ? .r : .python)
+                )
             }
         }
     }

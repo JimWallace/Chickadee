@@ -98,17 +98,31 @@ func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory
     }
 }
 
-func legacyPreferredStudentModuleFilename(submissionFilename: String?) -> String? {
+/// Filename the extracted submission will have in the grading workspace, written
+/// to `.chickadee_student_module` so the runtimes can prefer it over guessing.
+///
+/// `language` matters because a notebook is extracted to its assignment's source
+/// language: an R job's `analysis.ipynb` becomes `analysis.R`, not `analysis.py`.
+/// Naming the Python file on an R job produced a hint pointing at a file that
+/// never exists, so `chickadee_student_file()` had nothing to prefer and fell
+/// back to scanning. Defaults to `.python`, so the Python path is unchanged.
+func legacyPreferredStudentModuleFilename(
+    submissionFilename: String?,
+    language: AssignmentLanguage = .python
+) -> String? {
     guard let submissionFilename, !submissionFilename.isEmpty else { return nil }
     let submittedName = URL(fileURLWithPath: submissionFilename).lastPathComponent
     guard !submittedName.isEmpty else { return nil }
 
     let ext = URL(fileURLWithPath: submittedName).pathExtension.lowercased()
-    if ext == "py" {
+    // A source file is already the module; the extension the student used wins
+    // over the assignment's language (an `.R` upload is an R module either way).
+    if ext == "py" || ext == "r" {
         return submittedName
     }
     if ext == "ipynb" {
-        return (submittedName as NSString).deletingPathExtension + ".py"
+        let sourceExtension = language == .r ? "R" : "py"
+        return (submittedName as NSString).deletingPathExtension + "." + sourceExtension
     }
     return nil
 }
