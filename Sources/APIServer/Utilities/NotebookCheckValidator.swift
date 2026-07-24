@@ -57,7 +57,13 @@ func validateNotebookChecks(
     // as a future check; this catches that at save time so the runner
     // never sees a duplicate.
     let rawScripts = Set(testSuites.filter { !$0.isGenerated }.map(\.script))
-    let familyFilenames = Set(patternFamilies.flatMap(patternFamilyAllGeneratedFilenames))
+    // Every language's filenames, so a check can't collide with a family's
+    // generated name whichever language the assignment renders in.
+    let familyFilenames = Set(
+        AssignmentLanguage.allCases.flatMap { language in
+            patternFamilies.flatMap { patternFamilyAllGeneratedFilenames($0, language: language) }
+        }
+    )
     var seenCheckFilenames: Set<String> = []
     for check in checks {
         for filename in notebookCheckAllGeneratedFilenames(check) {

@@ -335,8 +335,32 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // produce sidecar files (e.g. `_expected_<id>.csv` for
     // `.dataFrameEquality`); both the script and the sidecars are
     // tracked here so removing a check cleans up all of its files.
+    // The assignment's language decides how each case renders and which
+    // extension it gets. Prefer the authored items when supplied — they carry
+    // the edit being applied, which may be the very first `.R` test — and fall
+    // back to the stored manifest (which records the language once known).
+    // Defaults to `.python`, so a Python assignment renders byte-for-byte as
+    // before.
+    let previousLanguage = AssignmentLanguage.resolve(manifest: props)
+    let assignmentLanguage: AssignmentLanguage = {
+        for item in authoredItems ?? [] {
+            guard case .script(let raw) = item else { continue }
+            if URL(fileURLWithPath: raw.script).pathExtension.lowercased() == "r" { return .r }
+        }
+        return previousLanguage
+    }()
+
+    // The generated extension is part of the filename, so the old files must be
+    // listed under the language the *previous* manifest was written in — and,
+    // when the assignment changes language, under the new one too, or the
+    // old-extension scripts would be stranded in the setup forever. Listing
+    // only these two keeps `deletedFiles` free of names that were never written.
     let oldGeneratedFilenames = Set(
-        props.patternFamilies.flatMap(patternFamilyAllGeneratedFilenames)
+        Set([previousLanguage, assignmentLanguage]).flatMap { language in
+            props.patternFamilies.flatMap {
+                patternFamilyAllGeneratedFilenames($0, language: language)
+            }
+        }
     ).union(
         props.notebookChecks.flatMap(notebookCheckAllGeneratedFilenames)
     )
@@ -358,7 +382,8 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         familySectionID: familySectionID,
         sectionVarsByID: sectionVarsByID,
         globalVariables: resolvedGlobalVariables,
-        perStudentNames: perStudentExpressionNames
+        perStudentNames: perStudentExpressionNames,
+        language: assignmentLanguage
     )
 
     var renderedByFilename: [String: GeneratedScript] = [:]
@@ -622,7 +647,16 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         achievements: props.achievements,
         disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
         builtInAchievementsSeeded: props.builtInAchievementsSeeded,
-        datasets: props.datasets
+        datasets: props.datasets,
+        // Always record the language, Python included. An explicit answer is
+        // the point: a suite that later holds only pattern families has no
+        // `.R` script left to sniff, and "we inferred Python" and "this is a
+        // Python assignment" should not be the same state. The first save of
+        // a pre-existing assignment therefore changes its manifest hash once,
+        // which re-keys the runner's TestSetupCache and triggers one
+        // revision-retest fan-out for that assignment — a bounded, one-time
+        // cost accepted in exchange for the language never being re-inferred.
+        language: assignmentLanguage
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner
@@ -874,7 +908,8 @@ private func renderFamilyArtifacts(
     familySectionID: [String: String],
     sectionVarsByID: [String: [FamilyVariable]],
     globalVariables: [FamilyVariable],
-    perStudentNames: Set<String>
+    perStudentNames: Set<String>,
+    language: AssignmentLanguage = .python
 ) -> RenderedFamilyArtifacts {
     var caseScripts: [String: [GeneratedScript]] = [:]
     var guardScripts: [String: GeneratedScript] = [:]
@@ -882,9 +917,10 @@ private func renderFamilyArtifacts(
         let sectionVariables = familySectionID[family.id].flatMap { sectionVarsByID[$0] } ?? []
         caseScripts[family.id] = renderPatternFamily(
             family, sectionVariables: sectionVariables, globalVariables: globalVariables,
-            perStudentNames: perStudentNames)
+            perStudentNames: perStudentNames, language: language)
         if let guardScript = existenceGuard(
-            for: family, sectionVariables: sectionVariables, globalVariables: globalVariables)
+            for: family, sectionVariables: sectionVariables, globalVariables: globalVariables,
+            language: language)
         {
             guardScripts[family.id] = guardScript
         }
@@ -914,20 +950,28 @@ private func rawScriptOverlayWrites(
         // raw script to clash with a family-generated name), the family
         // version wins — skip the raw-script overlay.
         guard !generatedFilenames.contains(filename) else { continue }
-        let isPython = filename.lowercased().hasSuffix(".py")
+        // A raw script's extension names its language: `.py` gets Python
+        // literals, `.R`/`.r` gets R ones. Anything else (a shell script, a
+        // data file) has no literal syntax to inline into and is left alone.
+        let scriptLanguage: AssignmentLanguage?
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "py": scriptLanguage = .python
+        case "r": scriptLanguage = .r
+        default: scriptLanguage = nil
+        }
         let sectionVars = s.sectionID.flatMap { sectionVarsByID[$0] } ?? []
         if let provided = s.content {
             // Declarative content from the payload (the PUT /suite channel
             // for creating/updating a hand-written script). Write it
-            // verbatim, re-inlining global + section variables for Python
-            // scripts only. Idempotent at the zip layer — identical bytes
-            // are a no-op there.
+            // verbatim, re-inlining global + section variables for scripts
+            // that have a literal syntax. Idempotent at the zip layer —
+            // identical bytes are a no-op there.
             writes[filename] =
-                isPython
-                ? TestScriptVariablePrepender.prependToRawScript(
-                    provided, variables: globalVariables + sectionVars)
-                : provided
-        } else if isPython {
+                scriptLanguage.map {
+                    TestScriptVariablePrepender.prependToRawScript(
+                        provided, variables: globalVariables + sectionVars, language: $0)
+                } ?? provided
+        } else if let scriptLanguage {
             // No content provided — preserve the existing file, re-inlining
             // the current global + section variables (idempotent prepend).
             guard
@@ -937,13 +981,14 @@ private func rawScriptOverlayWrites(
             else { continue }
             let updated = TestScriptVariablePrepender.prependToRawScript(
                 existing,
-                variables: globalVariables + sectionVars
+                variables: globalVariables + sectionVars,
+                language: scriptLanguage
             )
             if updated != existing {
                 writes[filename] = updated
             }
         }
-        // (.sh/.r with no provided content: existing file left untouched.)
+        // (.sh and other extensions with no provided content: left untouched.)
     }
     return writes
 }

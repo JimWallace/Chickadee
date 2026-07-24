@@ -50,7 +50,8 @@ func renderPatternFamily(
     _ family: PatternFamily,
     sectionVariables: [FamilyVariable] = [],
     globalVariables: [FamilyVariable] = [],
-    perStudentNames: Set<String> = []
+    perStudentNames: Set<String> = [],
+    language: AssignmentLanguage = .python
 ) -> [GeneratedScript] {
     // Pre-combine globals and section vars into a single "scope" list so the
     // existing render-* helpers stay parameterised on a single prepend list.
@@ -64,19 +65,22 @@ func renderPatternFamily(
         return renderCase(
             family: family, case: c,
             sectionVariables: scopeVariables, specHash: hash,
-            perStudentNames: perStudentNames)
+            perStudentNames: perStudentNames, language: language)
     }
 }
 
 /// All filenames this family **would** produce if every case were enabled.
 /// Used when diffing old/new specs so we can detect stale files that need
 /// deleting, even for cases that were previously disabled.
-func patternFamilyAllGeneratedFilenames(_ family: PatternFamily) -> [String] {
+func patternFamilyAllGeneratedFilenames(
+    _ family: PatternFamily, language: AssignmentLanguage = .python
+) -> [String] {
     var names = family.cases.map { c in
         generatedScriptFilename(
             familyID: family.id,
             caseKey: c.key,
-            tier: c.resolvedTier(defaults: family.defaults)
+            tier: c.resolvedTier(defaults: family.defaults),
+            language: language
         )
     }
     // The auto-existence guard isn't a `case`, but its file is generated for
@@ -89,7 +93,8 @@ func patternFamilyAllGeneratedFilenames(_ family: PatternFamily) -> [String] {
             generatedScriptFilename(
                 familyID: family.id,
                 caseKey: patternExistenceGuardCaseKey,
-                tier: family.defaults.tier
+                tier: family.defaults.tier,
+                language: language
             ))
     }
     return names
@@ -117,7 +122,8 @@ let patternExistenceGuardCaseKey = "exists"
 func existenceGuard(
     for family: PatternFamily,
     sectionVariables: [FamilyVariable] = [],
-    globalVariables: [FamilyVariable] = []
+    globalVariables: [FamilyVariable] = [],
+    language: AssignmentLanguage = .python
 ) -> GeneratedScript? {
     guard patternKindHandler(for: family.kind).requiresFunctionName,
         family.cases.contains(where: \.enabled)
@@ -126,6 +132,20 @@ func existenceGuard(
         family, sectionVariables: sectionVariables, globalVariables: globalVariables)
     let tier = family.defaults.tier
     let label = "\(family.functionName) is defined"
+    if language == .r {
+        return GeneratedScript(
+            filename: generatedScriptFilename(
+                familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
+                language: .r),
+            source: renderRExistenceGuard(family: family, specHash: hash),
+            tier: tier,
+            points: 0,
+            displayName: label,
+            caseKey: patternExistenceGuardCaseKey,
+            familyID: family.id,
+            timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
+        )
+    }
     let nameLiteral = "\"" + escapeForPythonStringLiteral(family.functionName) + "\""
     // Mirrors the `getattr(..., _MISSING)` sentinel that `variableEquality`
     // (and the function_exists notebook check) already use — `_MISSING`
@@ -164,11 +184,16 @@ func existenceGuard(
     )
 }
 
-/// Stable filename for one case.  Format: `{tier}test_{familyID}_{caseKey}.py`.
-/// The tier prefix mirrors the convention used elsewhere in the codebase so
-/// the runner's student-module loader correctly excludes generated test files.
-func generatedScriptFilename(familyID: String, caseKey: String, tier: TestTier) -> String {
-    "\(tierFilenamePrefix(tier))test_\(familyID)_\(caseKey).py"
+/// Stable filename for one case.  Format:
+/// `{tier}test_{familyID}_{caseKey}.{py|R}`.  The tier prefix mirrors the
+/// convention used elsewhere in the codebase so the runner's student-module
+/// loaders correctly exclude generated test files.  `language` defaults to
+/// `.python`, so every existing filename (and therefore every `spec_hash` and
+/// `TestSetupCache` key) is unchanged.
+func generatedScriptFilename(
+    familyID: String, caseKey: String, tier: TestTier, language: AssignmentLanguage = .python
+) -> String {
+    "\(tierFilenamePrefix(tier))test_\(familyID)_\(caseKey).\(language.generatedScriptExtension)"
 }
 
 /// 16-character hex prefix of a SHA-256 over the canonical JSON encoding of
@@ -200,16 +225,30 @@ private func renderCase(
     case c: PatternCase,
     sectionVariables: [FamilyVariable],
     specHash: String,
-    perStudentNames: Set<String>
+    perStudentNames: Set<String>,
+    language: AssignmentLanguage = .python
 ) -> GeneratedScript {
-    let source = patternKindHandler(for: family.kind).render(
-        family: family, case: c,
-        sectionVariables: sectionVariables, specHash: specHash,
-        perStudentNames: perStudentNames)
+    // Python routes through the per-kind handlers (bytes are pinned by
+    // spec_hash / TestSetupCache and must never change); R has its own
+    // renderer, which owns every kind in one switch.
+    let source: String
+    switch language {
+    case .python:
+        source = patternKindHandler(for: family.kind).render(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash,
+            perStudentNames: perStudentNames)
+    case .r:
+        source = renderRPatternCase(
+            family: family, case: c,
+            sectionVariables: sectionVariables, specHash: specHash,
+            perStudentNames: perStudentNames)
+    }
 
     let tier = c.resolvedTier(defaults: family.defaults)
     return GeneratedScript(
-        filename: generatedScriptFilename(familyID: family.id, caseKey: c.key, tier: tier),
+        filename: generatedScriptFilename(
+            familyID: family.id, caseKey: c.key, tier: tier, language: language),
         source: source,
         tier: tier,
         points: c.resolvedPoints(defaults: family.defaults),

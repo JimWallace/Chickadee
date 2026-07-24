@@ -19,6 +19,9 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
 
     /// Resolve the language from the manifest and (optionally) the notebook
     /// kernel. Precedence:
+    ///   0. the manifest's recorded `language`, when it has one — an explicit
+    ///      answer always beats sniffing, and it is what lets a suite made up
+    ///      only of pattern families (no `.R` script to find) stay R;
     ///   1. any `.R`/`.r` graded test script → `.r` (the graded suite is the
     ///      strongest signal — it's what actually runs);
     ///   2. else an R notebook kernel (`kernelspec.name` in `rKernelNames`, or
@@ -30,6 +33,7 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
         notebookKernelName: String? = nil,
         notebookLanguageInfoName: String? = nil
     ) -> AssignmentLanguage {
+        if let recorded = manifest.language { return recorded }
         let hasRScript = manifest.testSuites.contains {
             URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "r"
         }
@@ -62,6 +66,16 @@ extension AssignmentLanguage {
         switch self {
         case .python: return "_ck_inputs.py"
         case .r: return "_ck_inputs.R"
+        }
+    }
+
+    /// Extension for scripts Chickadee generates (pattern-family cases,
+    /// notebook checks). `.py` for Python — unchanged, so every existing
+    /// generated filename, `spec_hash` and `TestSetupCache` key is stable.
+    public var generatedScriptExtension: String {
+        switch self {
+        case .python: return "py"
+        case .r: return "R"
         }
     }
 
