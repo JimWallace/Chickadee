@@ -448,4 +448,7 @@ func registerMigrations(on app: Application) {
     // `course_sections`, both created by CreateCourses above, so no additional
     // ordering constraint.
     app.migrations.add(CreateCourseContentItems())
+    // Hosted file attachments on content items (served via the gated
+    // /content-files route). Additive column on the table created above.
+    app.migrations.add(AddContentItemAttachments())
 }

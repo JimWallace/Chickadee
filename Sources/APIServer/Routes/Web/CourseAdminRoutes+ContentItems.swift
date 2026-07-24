@@ -30,6 +30,9 @@ extension CourseAdminRoutes {
         var isPublished: String?
         var linkLabels: [String]?
         var linkURLs: [String]?
+        /// Uploaded file attachments (one bare `File` or a repeated `File[]`);
+        /// empty parts (untouched inputs) are ignored.
+        var attachmentFiles: MultipartFileList?
     }
 
     // MARK: - POST /instructor/content-items
@@ -66,6 +69,7 @@ extension CourseAdminRoutes {
             isPublished: body.isPublished != "false"
         )
         try await item.save(on: req.db)
+        try await storeUploadedAttachments(body.attachmentFiles, for: item, req: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -86,6 +90,7 @@ extension CourseAdminRoutes {
         item.updatedLabel = normalizedOptional(body.updatedLabel)
         item.isPublished = body.isPublished != "false"
         try await item.save(on: req.db)
+        try await storeUploadedAttachments(body.attachmentFiles, for: item, req: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -94,7 +99,29 @@ extension CourseAdminRoutes {
     @Sendable
     func deleteContentItem(req: Request) async throws -> Response {
         let item = try await loadContentItemForWrite(req)
+        if let itemID = item.id {
+            ContentAttachmentStore.removeDirectory(req.application, itemID: itemID)
+        }
         try await item.delete(on: req.db)
+        return req.redirect(to: "/instructor")
+    }
+
+    // MARK: - POST /instructor/content-items/:id/attachments/:attachmentID/delete
+
+    /// Removes one hosted attachment from the item (DB entry + file on disk).
+    @Sendable
+    func removeContentAttachment(req: Request) async throws -> Response {
+        let item = try await loadContentItemForWrite(req)
+        guard let attachmentRaw = req.parameters.get("attachmentID"),
+            let attachmentID = UUID(uuidString: attachmentRaw)
+        else {
+            throw WebAssignmentError.notFound(resource: "Attachment")
+        }
+        item.attachments = item.attachments.filter { $0.id != attachmentID }
+        try await item.save(on: req.db)
+        if let itemID = item.id {
+            ContentAttachmentStore.removeFile(req.application, itemID: itemID, attachmentID: attachmentID)
+        }
         return req.redirect(to: "/instructor")
     }
 
@@ -180,6 +207,40 @@ extension CourseAdminRoutes {
         try await requireCourseWriteAccess(
             caller: caller, courseID: item.courseID, atLeast: .ta, db: req.db)
         return item
+    }
+
+    /// Stores any uploaded attachment files on the item. Pre-validates the whole
+    /// batch (name / type / size) before writing any, so a bad file never leaves
+    /// partial files on disk, then appends to the item's existing attachments and
+    /// re-saves. No-op when no (non-empty) files were posted — an untouched file
+    /// input posts an empty part.
+    private func storeUploadedAttachments(
+        _ files: MultipartFileList?, for item: APICourseContentItem, req: Request
+    ) async throws {
+        guard let itemID = item.id, let files, !files.files.isEmpty else { return }
+        let candidates: [(name: String, bytes: Data)] = files.files.compactMap { file in
+            let bytes = Data(file.data.readableBytesView)
+            return bytes.isEmpty ? nil : (file.filename, bytes)
+        }
+        guard !candidates.isEmpty else { return }
+        do {
+            for candidate in candidates {
+                try ContentAttachmentStore.validate(bytes: candidate.bytes, originalName: candidate.name)
+            }
+        } catch let error as ContentAttachmentStore.StoreError {
+            throw WebAssignmentError.invalidParameter(name: "attachmentFiles", reason: error.reason)
+        }
+        var attachments = item.attachments
+        var nextOrder = (attachments.map(\.sortOrder).max() ?? 0) + 1
+        for candidate in candidates {
+            let attachment = try await ContentAttachmentStore.store(
+                bytes: candidate.bytes, originalName: candidate.name, label: nil,
+                sortOrder: nextOrder, itemID: itemID, on: req)
+            attachments.append(attachment)
+            nextOrder += 1
+        }
+        item.attachments = attachments
+        try await item.save(on: req.db)
     }
 
     /// Next sort order in the content-item lane of `(course, section)`.

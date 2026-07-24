@@ -39,10 +39,15 @@ struct CourseAdminRoutes: RouteCollection {
         r.post("sections", ":sectionID", "delete", use: deleteSection)
         r.post(":assignmentID", "section", use: moveToSection)
         // Ungraded course content items (reference material) inside a section.
-        r.post("content-items", use: createContentItem)
+        // Create + edit accept multipart file uploads, so they carry an explicit
+        // body-collection cap (a few files at the per-file limit plus fields).
+        r.on(.POST, "content-items", body: .collect(maxSize: "60mb"), use: createContentItem)
         r.post("content-items", "reorder", use: reorderContentItems)
-        r.post("content-items", ":id", "edit", use: updateContentItem)
+        r.on(.POST, "content-items", ":id", "edit", body: .collect(maxSize: "60mb"), use: updateContentItem)
         r.post("content-items", ":id", "delete", use: deleteContentItem)
         r.post("content-items", ":id", "section", use: moveContentItemToSection)
+        r.post(
+            "content-items", ":id", "attachments", ":attachmentID", "delete",
+            use: removeContentAttachment)
     }
 }

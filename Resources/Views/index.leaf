@@ -35,6 +35,7 @@
             </td>
             <td colspan="4" class="col-hide-phone content-item-links">
                 #for(link in item.content.links):<a class="content-item-link" href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor
+                #for(att in item.content.attachments):<a class="content-item-link" href="#(att.downloadURL)">#(att.displayName)</a>#endfor
             </td>
             <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
         </tr>

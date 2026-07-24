@@ -47,13 +47,15 @@ extension CourseBundleRoutes {
 
         let setupsDir = req.application.testSetupsDirectory
         let subsDir = req.application.submissionsDirectory
+        let contentFilesDir = req.application.contentFilesDirectory
 
         let tally = try await performImportTransaction(
             db: req.db,
             manifest: manifest,
             extractDir: extractDir,
             setupsDir: setupsDir,
-            subsDir: subsDir
+            subsDir: subsDir,
+            contentFilesDir: contentFilesDir
         )
 
         await AuditLogger.record(
@@ -143,6 +145,31 @@ extension CourseBundleRoutes {
                     reason: "Bundle is missing submission file: \(sub.submissionFilename)")
             }
         }
+        for item in manifest.contentItems ?? [] {
+            for att in item.attachments ?? [] {
+                guard
+                    let path = safeContentAttachmentSource(
+                        extractDir: extractDir, bundleFilename: att.bundleFilename),
+                    FileManager.default.fileExists(atPath: path.path)
+                else {
+                    throw Abort(
+                        .badRequest,
+                        reason:
+                            "Bundle is missing or has an invalid content attachment file: "
+                            + att.bundleFilename)
+                }
+            }
+        }
+    }
+
+    /// Resolves an attachment's in-bundle path to a safe source under the
+    /// extract dir: only `content/<uuid>` is accepted (its last component must be
+    /// a UUID), so a hostile `bundleFilename` can't traverse out of the extract
+    /// dir. Returns nil for anything else.
+    private func safeContentAttachmentSource(extractDir: URL, bundleFilename: String) -> URL? {
+        let name = (bundleFilename as NSString).lastPathComponent
+        guard UUID(uuidString: name) != nil else { return nil }
+        return extractDir.appendingPathComponent("content").appendingPathComponent(name)
     }
 
     // ── 6. Transactional import ───────────────────────────────────────
@@ -160,7 +187,8 @@ extension CourseBundleRoutes {
         manifest: CourseBundleManifest,
         extractDir: URL,
         setupsDir: String,
-        subsDir: String
+        subsDir: String,
+        contentFilesDir: String
     ) async throws -> ImportTally {
         try await db.transaction { (db) -> ImportTally in
             // 6a. Check for course code conflicts (moved inside transaction)
@@ -209,7 +237,8 @@ extension CourseBundleRoutes {
             // 6e-bis. Create ungraded content items, re-linked to the sections
             // recreated above (depends only on sectionIDMap).
             try await importBundledContentItems(
-                manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID, db: db)
+                manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID,
+                extractDir: extractDir, contentFilesDir: contentFilesDir, db: db)
 
             // 6f. Create test setups → setupIDMap[bundleID] = new live ID
             let setupIDMap = try await importBundledTestSetups(
@@ -425,6 +454,8 @@ private func importBundledContentItems(
     manifest: CourseBundleManifest,
     sectionIDMap: [String: UUID],
     courseID: UUID,
+    extractDir: URL,
+    contentFilesDir: String,
     db: Database
 ) async throws {
     for item in manifest.contentItems ?? [] {
@@ -440,6 +471,34 @@ private func importBundledContentItems(
             isPublished: item.isPublished
         )
         try await newItem.save(on: db)
+
+        // Re-host each attachment under freshly generated ids: copy the bundle
+        // file (content/<uuid>, validated safe) into the new item's directory.
+        guard let newItemID = newItem.id, let bundleAtts = item.attachments, !bundleAtts.isEmpty
+        else { continue }
+        let destDir = contentFilesDir + newItemID.uuidString + "/"
+        try FileManager.default.createDirectory(atPath: destDir, withIntermediateDirectories: true)
+        var stored: [ContentAttachment] = []
+        for att in bundleAtts {
+            let name = (att.bundleFilename as NSString).lastPathComponent
+            guard UUID(uuidString: name) != nil else { continue }
+            let src = extractDir.appendingPathComponent("content").appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: src.path) else { continue }
+            let newAttachmentID = UUID()
+            try FileManager.default.copyItem(
+                atPath: src.path, toPath: destDir + newAttachmentID.uuidString)
+            stored.append(
+                ContentAttachment(
+                    id: newAttachmentID,
+                    originalName: FilenameSafety.bareFilename(att.originalName) ?? "attachment",
+                    sizeBytes: att.sizeBytes,
+                    sortOrder: att.sortOrder,
+                    label: att.label))
+        }
+        if !stored.isEmpty {
+            newItem.attachments = stored
+            try await newItem.save(on: db)
+        }
     }
 }
 

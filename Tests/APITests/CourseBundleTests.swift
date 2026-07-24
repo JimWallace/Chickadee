@@ -744,6 +744,75 @@ import VaporTesting
         }
     }
 
+    @Test func roundTripPreservesContentAttachments() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin()
+            let course = try await makeTestCourse(code: "RT_ATTACH")
+            let courseID = try course.requireID()
+
+            let item = APICourseContentItem(
+                courseID: courseID, sortOrder: 1, title: "Slides", kind: .slides, isPublished: true)
+            try await item.save(on: app.db)
+            let itemID = try item.requireID()
+            let bytes = Data("SLIDE-DECK-BYTES".utf8)
+            let attachment = try await ContentAttachmentStore.store(
+                bytes: bytes, originalName: "week1.pdf", label: "Week 1", sortOrder: 1,
+                itemID: itemID, on: Request(application: app, on: app.eventLoopGroup.any()))
+            item.attachments = [attachment]
+            try await item.save(on: app.db)
+
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    exportedZip = Data(res.body.readableBytesView)
+                })
+
+            // Manifest carries the attachment metadata + the bytes are in the zip.
+            let extractDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-attach-ext-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: extractDir) }
+            let zipVerifyPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("rt-attach-\(UUID().uuidString).zip").path
+            defer { try? FileManager.default.removeItem(atPath: zipVerifyPath) }
+            try exportedZip.write(to: URL(fileURLWithPath: zipVerifyPath))
+            try await extractZipArchive(zipPath: zipVerifyPath, into: extractDir)
+            let manifestData = try Data(contentsOf: extractDir.appendingPathComponent("bundle.json"))
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(CourseBundleManifest.self, from: manifestData)
+            let bundledItem = try #require(manifest.contentItems?.first { $0.title == "Slides" })
+            let bundledAtt = try #require(bundledItem.attachments?.first)
+            #expect(bundledAtt.originalName == "week1.pdf")
+            #expect(bundledAtt.label == "Week 1")
+            let contentFile = extractDir.appendingPathComponent(bundledAtt.bundleFilename)
+            #expect(try Data(contentsOf: contentFile) == bytes)
+
+            // Archive + import into a fresh course; the file bytes survive under
+            // a regenerated attachment id.
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "\(body.prefix(300))")
+            #expect(status != .conflict, "\(body.prefix(300))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "RT_ATTACH").filter(\.$isArchived == false).first())
+            let importedItem = try #require(
+                try await APICourseContentItem.query(on: app.db)
+                    .filter(\.$courseID == imported.requireID()).first())
+            let importedAtt = try #require(importedItem.attachments.first)
+            #expect(importedAtt.originalName == "week1.pdf")
+            #expect(importedAtt.id != attachment.id, "attachment id is regenerated on import")
+            let importedPath = ContentAttachmentStore.path(
+                app, itemID: try importedItem.requireID(), attachmentID: importedAtt.id)
+            #expect(try Data(contentsOf: URL(fileURLWithPath: importedPath)) == bytes)
+        }
+    }
+
     /// A bundle exported before content items existed omits the key entirely;
     /// it must decode (contentItems == nil) and import without error. Wrapped in
     /// `withApp` so the per-test app created in `init()` shuts down cleanly.

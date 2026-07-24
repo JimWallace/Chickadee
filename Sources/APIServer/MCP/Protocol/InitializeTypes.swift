@@ -132,8 +132,10 @@ enum MCPServerInstructions {
         courseSectionID; isPublished:false hides it from students as a draft), edit or move with \
         update_content_item, remove with delete_content_item, and order it among the section's items \
         (interleaved with assignments) with reorder_section_items, or reorder_content_items for a \
-        content-only section. Distinct from assignments (list_assignments) and test-suite items \
-        (get_suite).
+        content-only section. It can also host files: pass attachments:[{sourceUrl}] (an https URL \
+        the server fetches under the SSRF guard) to create_content_item / update_content_item, and \
+        they serve to enrolled students through the gated /content-files route. Distinct from \
+        assignments (list_assignments) and test-suite items (get_suite).
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \
         (public/release/secret/student), points, an optional section, prerequisites (dependsOn), and \

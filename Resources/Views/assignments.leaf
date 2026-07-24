@@ -116,7 +116,7 @@
         <details class="add-section-details popup-anchor content-item-add">
             <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
-                <form method="post" action="/instructor/content-items" class="form popup-form content-item-form">
+                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form content-item-form">
                     #csrfFormField()
                     <input type="hidden" name="sectionID" value="#(section.sectionID)">
                     <label class="form-label">Title
@@ -153,6 +153,9 @@
                             <option value="true">Published</option>
                             <option value="false">Hidden</option>
                         </select>
+                    </label>
+                    <label class="form-label">Files (optional)
+                        <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
                     </label>
                     <button class="btn btn-primary btn-compact" type="submit">Add material</button>
                 </form>
@@ -191,13 +194,13 @@
                     </span>
                     #if(item.content.itemDescription):<div class="content-item-desc text-muted">#(item.content.itemDescription)</div>#endif
                 </td>
-                <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
+                <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor#for(att in item.content.attachments):<a href="#(att.downloadURL)">#(att.displayName)</a>#endfor</td>
                 <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
                 <td class="content-item-actions">
                     <details class="popup-anchor content-item-edit-details">
                         <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
                         <div class="add-section-popup card">
-                            <form method="post" action="/instructor/content-items/#(item.content.id)/edit" class="form popup-form content-item-form">
+                            <form method="post" action="/instructor/content-items/#(item.content.id)/edit" enctype="multipart/form-data" class="form popup-form content-item-form">
                                 #csrfFormField()
                                 <label class="form-label">Title
                                     <input class="form-input editor-input" type="text" name="title" value="#(item.content.title)" required>
@@ -236,8 +239,25 @@
                                         <option value="false" #if(!item.content.isPublished):selected#endif>Hidden</option>
                                     </select>
                                 </label>
+                                <label class="form-label">Add files
+                                    <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
+                                </label>
                                 <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
                             </form>
+                            #if(!item.content.attachments.isEmpty):
+                            <div class="content-item-attachment-list">
+                                #for(att in item.content.attachments):
+                                <div class="content-item-attachment">
+                                    <a href="#(att.downloadURL)">#(att.displayName)</a>
+                                    <span class="text-muted content-item-attachment-size">#(att.sizeLabel)</span>
+                                    <form method="post" action="/instructor/content-items/#(item.content.id)/attachments/#(att.id)/delete" onsubmit="return confirm('Remove this file?')">
+                                        #csrfFormField()
+                                        <button class="btn action-btn action-danger btn-tiny" type="submit">Remove</button>
+                                    </form>
+                                </div>
+                                #endfor
+                            </div>
+                            #endif
                         </div>
                     </details>
                     <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">
@@ -499,7 +519,7 @@
         <details class="add-section-details popup-anchor content-item-add">
             <summary class="btn action-btn btn-tiny summary-btn">+ Add material</summary>
             <div class="add-section-popup card">
-                <form method="post" action="/instructor/content-items" class="form popup-form content-item-form">
+                <form method="post" action="/instructor/content-items" enctype="multipart/form-data" class="form popup-form content-item-form">
                     #csrfFormField()
                     <input type="hidden" name="sectionID" value="">
                     <label class="form-label">Title
@@ -537,6 +557,9 @@
                             <option value="false">Hidden</option>
                         </select>
                     </label>
+                    <label class="form-label">Files (optional)
+                        <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
+                    </label>
                     <button class="btn btn-primary btn-compact" type="submit">Add material</button>
                 </form>
             </div>
@@ -568,13 +591,13 @@
                     </span>
                     #if(item.content.itemDescription):<div class="content-item-desc text-muted">#(item.content.itemDescription)</div>#endif
                 </td>
-                <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor</td>
+                <td colspan="3" class="col-hide-phone content-item-links">#for(link in item.content.links):<a href="#(link.url)" target="_blank" rel="noopener noreferrer">#(link.label)</a>#endfor#for(att in item.content.attachments):<a href="#(att.downloadURL)">#(att.displayName)</a>#endfor</td>
                 <td class="col-hide-phone">#if(item.content.updatedLabel):#(item.content.updatedLabel)#else:<span class="text-muted">—</span>#endif</td>
                 <td class="content-item-actions">
                     <details class="popup-anchor content-item-edit-details">
                         <summary class="btn action-btn btn-tiny summary-btn">Edit</summary>
                         <div class="add-section-popup card">
-                            <form method="post" action="/instructor/content-items/#(item.content.id)/edit" class="form popup-form content-item-form">
+                            <form method="post" action="/instructor/content-items/#(item.content.id)/edit" enctype="multipart/form-data" class="form popup-form content-item-form">
                                 #csrfFormField()
                                 <label class="form-label">Title
                                     <input class="form-input editor-input" type="text" name="title" value="#(item.content.title)" required>
@@ -613,8 +636,25 @@
                                         <option value="false" #if(!item.content.isPublished):selected#endif>Hidden</option>
                                     </select>
                                 </label>
+                                <label class="form-label">Add files
+                                    <input class="form-input editor-input" type="file" name="attachmentFiles" multiple>
+                                </label>
                                 <button class="btn btn-primary btn-compact" type="submit">Save changes</button>
                             </form>
+                            #if(!item.content.attachments.isEmpty):
+                            <div class="content-item-attachment-list">
+                                #for(att in item.content.attachments):
+                                <div class="content-item-attachment">
+                                    <a href="#(att.downloadURL)">#(att.displayName)</a>
+                                    <span class="text-muted content-item-attachment-size">#(att.sizeLabel)</span>
+                                    <form method="post" action="/instructor/content-items/#(item.content.id)/attachments/#(att.id)/delete" onsubmit="return confirm('Remove this file?')">
+                                        #csrfFormField()
+                                        <button class="btn action-btn action-danger btn-tiny" type="submit">Remove</button>
+                                    </form>
+                                </div>
+                                #endfor
+                            </div>
+                            #endif
                         </div>
                     </details>
                     <form method="post" action="/instructor/content-items/#(item.content.id)/delete" class="content-item-delete-form" onsubmit="return confirm('Delete this material?')">

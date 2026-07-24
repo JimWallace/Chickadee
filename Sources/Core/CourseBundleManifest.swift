@@ -6,6 +6,7 @@
 //   bundle.json                        — this manifest (JSON, iso8601 dates)
 //   testsetups/<originalSetupID>.zip   — instructor test-setup zips
 //   submissions/<originalSubID>.<ext>  — student submission files
+//   content/<exportAttachmentID>       — content-item hosted file attachments
 //
 // bundleID values are stable cross-references within a single bundle.
 // They are NEVER reused as DB primary keys on the target instance;
@@ -136,9 +137,32 @@ public struct BundledSection: Codable, Sendable {
     }
 }
 
+/// One hosted file attachment on a content item, carried in a bundle. Nested
+/// inside its `BundledContentItem` (no own bundleID — the import loop that
+/// re-creates the item copies its files), with the bytes stored in the ZIP at
+/// `bundleFilename` and re-hosted under a fresh id on import.
+public struct BundledAttachment: Codable, Sendable {
+    public let originalName: String
+    public let sizeBytes: Int
+    public let label: String?
+    public let sortOrder: Int
+    /// Relative path within the bundle ZIP: "content/<exportAttachmentID>".
+    public let bundleFilename: String
+
+    public init(
+        originalName: String, sizeBytes: Int, label: String?, sortOrder: Int, bundleFilename: String
+    ) {
+        self.originalName = originalName
+        self.sizeBytes = sizeBytes
+        self.label = label
+        self.sortOrder = sortOrder
+        self.bundleFilename = bundleFilename
+    }
+}
+
 /// An ungraded course content item (reference material) carried in a bundle.
-/// Content items carry no files (link-first), so — like sections — they are
-/// pure manifest rows. No own `bundleID`: nothing references a content item.
+/// No own `bundleID`: nothing references a content item; its hosted file
+/// attachments are nested (`attachments`) and copied by the import loop.
 public struct BundledContentItem: Codable, Sendable {
     /// References BundledSection.bundleID (nil = ungrouped, or a bundle
     /// exported before sections were carried).
@@ -148,19 +172,24 @@ public struct BundledContentItem: Codable, Sendable {
     public let kind: String
     public let description: String?
     public let links: [ContentLink]
+    /// Hosted file attachments (nil in bundles exported before files were
+    /// carried — decodes as nil, imported as none).
+    public let attachments: [BundledAttachment]?
     public let updatedLabel: String?
     public let isPublished: Bool
     public let sortOrder: Int
 
     public init(
         sectionBundleID: String?, title: String, kind: String, description: String?,
-        links: [ContentLink], updatedLabel: String?, isPublished: Bool, sortOrder: Int
+        links: [ContentLink], attachments: [BundledAttachment]? = nil, updatedLabel: String?,
+        isPublished: Bool, sortOrder: Int
     ) {
         self.sectionBundleID = sectionBundleID
         self.title = title
         self.kind = kind
         self.description = description
         self.links = links
+        self.attachments = attachments
         self.updatedLabel = updatedLabel
         self.isPublished = isPublished
         self.sortOrder = sortOrder

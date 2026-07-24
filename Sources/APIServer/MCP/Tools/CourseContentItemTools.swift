@@ -25,6 +25,15 @@ struct ContentItemDTO: Encodable, Sendable {
         let label: String
         let url: String
     }
+    /// One hosted file attachment (metadata + the gated download path).
+    struct Attachment: Encodable, Sendable {
+        let attachmentID: String
+        let originalName: String
+        let sizeBytes: Int
+        let label: String?
+        /// Enrollment-gated download path: /content-files/<itemID>/<attachmentID>.
+        let downloadPath: String
+    }
     let contentItemID: String
     /// The owning section's id, or "" when ungrouped.
     let courseSectionID: String
@@ -32,6 +41,7 @@ struct ContentItemDTO: Encodable, Sendable {
     let kind: String
     let description: String?
     let links: [Link]
+    let attachments: [Attachment]
     let updatedLabel: String?
     let isPublished: Bool
     let sortOrder: Int
@@ -43,17 +53,75 @@ struct ContentLinkInput: Decodable, Sendable {
     let url: String
 }
 
+/// One attachment to fetch by URL and host, as accepted on input.
+struct ContentAttachmentInput: Decodable, Sendable {
+    let label: String?
+    let sourceUrl: String
+}
+
 func contentItemDTO(from item: APICourseContentItem) -> ContentItemDTO {
-    ContentItemDTO(
-        contentItemID: item.id?.uuidString ?? "",
+    let itemID = item.id?.uuidString ?? ""
+    return ContentItemDTO(
+        contentItemID: itemID,
         courseSectionID: item.sectionID?.uuidString ?? "",
         title: item.title,
         kind: item.kind.rawValue,
         description: item.itemDescription,
         links: item.links.map { ContentItemDTO.Link(label: $0.label, url: $0.url) },
+        attachments: item.attachments.map { attachment in
+            ContentItemDTO.Attachment(
+                attachmentID: attachment.id.uuidString,
+                originalName: attachment.originalName,
+                sizeBytes: attachment.sizeBytes,
+                label: attachment.label,
+                downloadPath: "/content-files/\(itemID)/\(attachment.id.uuidString)")
+        },
         updatedLabel: item.updatedLabel,
         isPublished: item.isPublished,
         sortOrder: item.sortOrder)
+}
+
+/// Derives a bare filename from an attachment's source URL (its last path
+/// component, percent-decoded); the store then validates the extension + size.
+func attachmentFilename(fromURL urlString: String) -> String {
+    guard let comps = URLComponents(string: urlString) else { return "attachment" }
+    let last = (comps.path as NSString).lastPathComponent
+    let decoded = last.removingPercentEncoding ?? last
+    return decoded.isEmpty || decoded == "/" ? "attachment" : decoded
+}
+
+/// Fetches each attachment's sourceUrl under the SSRF guard and stores it on the
+/// item, appending to any existing attachments. Order mirrors author_script's
+/// materialize: authz (already done by the caller) → cheap validate → fetch →
+/// store. A fetch or validation failure surfaces as an `invalidArguments`
+/// detail so the agent learns why.
+func fetchAndStoreContentAttachments(
+    _ inputs: [ContentAttachmentInput], for item: APICourseContentItem,
+    tool: String, context: ToolContext
+) async throws {
+    guard !inputs.isEmpty, let itemID = item.id else { return }
+    var attachments = item.attachments
+    var nextOrder = (attachments.map(\.sortOrder).max() ?? 0) + 1
+    for input in inputs {
+        let bytes: Data
+        do {
+            bytes = try await SupportFileURLFetcher.fetchData(
+                urlString: input.sourceUrl, on: context.request)
+        } catch let error as SupportFileFetchError {
+            throw MCPToolError.invalidArguments(tool: tool, detail: error.toolDetail)
+        }
+        do {
+            let attachment = try await ContentAttachmentStore.store(
+                bytes: bytes, originalName: attachmentFilename(fromURL: input.sourceUrl),
+                label: input.label, sortOrder: nextOrder, itemID: itemID, on: context.request)
+            attachments.append(attachment)
+            nextOrder += 1
+        } catch let error as ContentAttachmentStore.StoreError {
+            throw MCPToolError.invalidArguments(tool: tool, detail: error.reason)
+        }
+    }
+    item.attachments = attachments
+    try await item.save(on: context.db)
 }
 
 /// http(s) or site-relative only — the URLs render as `href`s, so `javascript:`
@@ -177,14 +245,60 @@ private let contentItemObjectSchema: JSONValue = .object([
                 "required": .array([.string("label"), .string("url")]),
             ]),
         ]),
+        "attachments": .object([
+            "type": .string("array"),
+            "items": .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "attachmentID": MCPSchema.string,
+                    "originalName": MCPSchema.string,
+                    "sizeBytes": MCPSchema.integer,
+                    "label": MCPSchema.string,
+                    "downloadPath": MCPSchema.string,
+                ]),
+                "required": .array([
+                    .string("attachmentID"), .string("originalName"), .string("sizeBytes"),
+                    .string("downloadPath"),
+                ]),
+            ]),
+        ]),
         "updatedLabel": MCPSchema.string,
         "isPublished": MCPSchema.boolean,
         "sortOrder": MCPSchema.integer,
     ]),
     "required": .array([
         .string("contentItemID"), .string("courseSectionID"), .string("title"),
-        .string("kind"), .string("links"), .string("isPublished"), .string("sortOrder"),
+        .string("kind"), .string("links"), .string("attachments"), .string("isPublished"),
+        .string("sortOrder"),
     ]),
+])
+
+/// Reusable JSON-schema fragment for the `attachments` input array (files the
+/// server fetches by URL and hosts).
+private let attachmentsInputSchema: JSONValue = .object([
+    "type": .string("array"),
+    "items": .object([
+        "type": .string("object"),
+        "properties": .object([
+            "label": .object([
+                "type": .string("string"),
+                "description": .string("Optional label; falls back to the file name."),
+            ]),
+            "sourceUrl": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "https URL the server fetches under an SSRF guard (https only, no "
+                        + "private/loopback/metadata hosts, no redirects, 25 MB cap). The URL's last "
+                        + "path segment becomes the stored filename; its extension must be an allowed "
+                        + "type (pdf, ipynb, png/jpg/gif/svg/webp, txt/md/csv/tsv/json/py, "
+                        + "docx/pptx/xlsx)."),
+            ]),
+        ]),
+        "required": .array([.string("sourceUrl")]),
+    ]),
+    "description": .string(
+        "Files to host on this item — each fetched from an https URL and served to enrolled "
+            + "students through the gated /content-files route. Appended to any existing attachments."),
 ])
 
 private let kindEnumSchema: JSONValue = .object([
@@ -252,12 +366,33 @@ struct CreateContentItemTool: ContentTool {
         let title: String
         let kind: String?
         let links: [ContentLinkInput]?
+        /// Files to fetch by URL and host on the item.
+        let attachments: [ContentAttachmentInput]?
         let description: String?
         let updatedLabel: String?
         /// Course-section id (from list_course_sections); "" / omitted = ungrouped.
         let courseSectionID: String?
         /// Defaults to true (visible to students).
         let isPublished: Bool?
+
+        // Explicit init so the memberwise form keeps working with `attachments`
+        // defaulted (the synthesized Decodable init handles the wire decode).
+        init(
+            courseCode: String, title: String, kind: String? = nil,
+            links: [ContentLinkInput]? = nil, attachments: [ContentAttachmentInput]? = nil,
+            description: String? = nil, updatedLabel: String? = nil, courseSectionID: String? = nil,
+            isPublished: Bool? = nil
+        ) {
+            self.courseCode = courseCode
+            self.title = title
+            self.kind = kind
+            self.links = links
+            self.attachments = attachments
+            self.description = description
+            self.updatedLabel = updatedLabel
+            self.courseSectionID = courseSectionID
+            self.isPublished = isPublished
+        }
     }
 
     typealias Output = ContentItemDTO
@@ -268,8 +403,10 @@ struct CreateContentItemTool: ContentTool {
         + "outline, or heading) in a course, by course code. Provide a title and optionally a kind, "
         + "links (each {label, url}; http(s) or site-relative only), description, updatedLabel, "
         + "courseSectionID (from list_course_sections; omit to leave ungrouped), and isPublished "
-        + "(default true — set false to hide it from students). Appended to the end of its section's "
-        + "content lane. This is ungraded material: it creates no test setup and triggers no grading."
+        + "(default true — set false to hide it from students). attachments hosts files fetched from "
+        + "https URLs (served to enrolled students through the gated /content-files route). Appended "
+        + "to the end of its section's content lane. This is ungraded material: it creates no test "
+        + "setup and triggers no grading."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -280,6 +417,7 @@ struct CreateContentItemTool: ContentTool {
             ]),
             "kind": kindEnumSchema,
             "links": contentLinksSchema,
+            "attachments": attachmentsInputSchema,
             "description": .object([
                 "type": .string("string"),
                 "description": .string("Optional descriptive blurb shown under the title."),
@@ -330,6 +468,8 @@ struct CreateContentItemTool: ContentTool {
             updatedLabel: normalizedContentField(input.updatedLabel),
             isPublished: input.isPublished ?? true)
         try await item.save(on: context.db)
+        try await fetchAndStoreContentAttachments(
+            input.attachments ?? [], for: item, tool: Self.name, context: context)
         return contentItemDTO(from: item)
     }
 }
@@ -343,6 +483,9 @@ struct UpdateContentItemTool: ContentTool {
         let kind: String?
         /// When present (even empty), replaces the item's links entirely.
         let links: [ContentLinkInput]?
+        /// Files to fetch by URL and APPEND to the item's attachments (never
+        /// removes existing ones).
+        let attachments: [ContentAttachmentInput]?
         /// "" clears; omit to leave unchanged.
         let description: String?
         /// "" clears; omit to leave unchanged.
@@ -350,6 +493,25 @@ struct UpdateContentItemTool: ContentTool {
         let isPublished: Bool?
         /// "" / "none" ungroups; omit to leave unchanged.
         let courseSectionID: String?
+
+        // Explicit init so the memberwise form keeps working with `attachments`
+        // defaulted (the synthesized Decodable init handles the wire decode).
+        init(
+            contentItemID: String, title: String? = nil, kind: String? = nil,
+            links: [ContentLinkInput]? = nil, attachments: [ContentAttachmentInput]? = nil,
+            description: String? = nil, updatedLabel: String? = nil, isPublished: Bool? = nil,
+            courseSectionID: String? = nil
+        ) {
+            self.contentItemID = contentItemID
+            self.title = title
+            self.kind = kind
+            self.links = links
+            self.attachments = attachments
+            self.description = description
+            self.updatedLabel = updatedLabel
+            self.isPublished = isPublished
+            self.courseSectionID = courseSectionID
+        }
     }
 
     typealias Output = ContentItemDTO
@@ -359,8 +521,9 @@ struct UpdateContentItemTool: ContentTool {
         "Update an ungraded content item by id (from list_content_items). Any provided field is "
         + "changed; omitted fields are left unchanged. title/kind replace; links (when given, even "
         + "empty) replaces the whole link list; description/updatedLabel accept \"\" to clear; "
-        + "isPublished toggles student visibility; courseSectionID moves it (\"\"/\"none\" ungroups). "
-        + "Ungraded material — no test setup, no re-validation, no re-grade."
+        + "isPublished toggles student visibility; courseSectionID moves it (\"\"/\"none\" ungroups); "
+        + "attachments fetches more files by URL and appends them (to remove a hosted file, use the "
+        + "web editor). Ungraded material — no test setup, no re-validation, no re-grade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -374,6 +537,7 @@ struct UpdateContentItemTool: ContentTool {
             ]),
             "kind": kindEnumSchema,
             "links": contentLinksSchema,
+            "attachments": attachmentsInputSchema,
             "description": .object([
                 "type": .string("string"),
                 "description": .string("New description; \"\" clears; omit to leave unchanged."),
@@ -403,8 +567,8 @@ struct UpdateContentItemTool: ContentTool {
     func execute(_ input: Input, _ context: ToolContext) async throws -> Output {
         guard
             input.title != nil || input.kind != nil || input.links != nil
-                || input.description != nil || input.updatedLabel != nil || input.isPublished != nil
-                || input.courseSectionID != nil
+                || input.attachments != nil || input.description != nil || input.updatedLabel != nil
+                || input.isPublished != nil || input.courseSectionID != nil
         else {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "Provide at least one field to change.")
@@ -448,6 +612,8 @@ struct UpdateContentItemTool: ContentTool {
             }
         }
         try await item.save(on: context.db)
+        try await fetchAndStoreContentAttachments(
+            input.attachments ?? [], for: item, tool: Self.name, context: context)
         return contentItemDTO(from: item)
     }
 }
@@ -505,6 +671,9 @@ struct DeleteContentItemTool: ContentTool {
             return Output(contentItemID: raw, removed: false)
         }
         try await context.authorizeCourseWriteAccess(item.courseID, tool: Self.name, atLeast: .ta)
+        if let itemID = item.id {
+            ContentAttachmentStore.removeDirectory(context.request.application, itemID: itemID)
+        }
         try await item.delete(on: context.db)
         return Output(contentItemID: raw, removed: true)
     }

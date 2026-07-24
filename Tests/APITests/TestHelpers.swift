@@ -310,7 +310,9 @@ func makeTestApp(
         let tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(prefix)-\(UUID().uuidString)/")
             .path
-        let dirs = ["results/", "testsetups/", "submissions/", "data-exports/"].map { tmpDir + $0 }
+        let dirs = ["results/", "testsetups/", "submissions/", "data-exports/", "content-files/"].map {
+            tmpDir + $0
+        }
         for dir in dirs {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
@@ -318,6 +320,7 @@ func makeTestApp(
         app.testSetupsDirectory = dirs[1]
         app.submissionsDirectory = dirs[2]
         app.dataExportsDirectory = dirs[3]
+        app.contentFilesDirectory = dirs[4]
         // Seed the worker-secret and local-runner-autostart paths into the
         // per-test temp directory so admin/worker-management tests don't
         // collide with each other or with the dev .worker-secret on disk.

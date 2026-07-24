@@ -21,8 +21,9 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     let setupsDir = workDir + "testsetups/"
     let submissionsDir = workDir + "submissions/"
     let dataExportsDir = workDir + "data-exports/"
+    let contentFilesDir = workDir + "content-files/"
 
-    for dir in [resultsDir, setupsDir, submissionsDir, dataExportsDir] {
+    for dir in [resultsDir, setupsDir, submissionsDir, dataExportsDir, contentFilesDir] {
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     }
 
@@ -32,6 +33,7 @@ func bootstrapAppDirectories(_ app: Application, workDir: String, cliWorkerSecre
     app.storage[TestSetupsDirectoryKey.self] = setupsDir
     app.storage[SubmissionsDirectoryKey.self] = submissionsDir
     app.storage[DataExportsDirectoryKey.self] = dataExportsDir
+    app.storage[ContentFilesDirectoryKey.self] = contentFilesDir
     // Read-only mount of the auto-deploy daemon's IPC dir (status.json /
     // history.jsonl); absolute host path, not under the data volume.  Read
     // through AppConfig like every other env var (#1129) so it shows up in
