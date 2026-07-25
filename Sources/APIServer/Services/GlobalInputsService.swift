@@ -97,6 +97,7 @@ enum GlobalInputsService {
             manifest: manifest,
             inputs: inputs,
             testSetupsDirectory: testSetupsDirectory,
+            language: AssignmentLanguage.resolve(for: setup, manifest: manifest),
             seedDB: pools.seed)
 
         // 5. Re-render through `applyPatternFamilies` so generated tests and raw
@@ -212,6 +213,7 @@ enum GlobalInputsService {
         manifest: TestProperties,
         inputs: Inputs,
         testSetupsDirectory: String,
+        language: AssignmentLanguage = .python,
         seedDB: any Database
     ) async throws {
         guard !inputs.expressions.isEmpty,
@@ -232,7 +234,7 @@ enum GlobalInputsService {
                 staticVariables: staticVars,
                 expressions: inputs.expressions,
                 supportFilesDirectory: testSetupsDirectory + "shared/\(assignment.testSetupID)/",
-                language: AssignmentLanguage.resolve(manifest: manifest))
+                language: language)
         } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
             let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
             throw WebAssignmentError.unprocessable(

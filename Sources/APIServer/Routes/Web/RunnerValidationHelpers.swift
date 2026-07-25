@@ -187,7 +187,7 @@ private func resolveAndCacheValidationMaterialization(
         }
 
         let supportDir = testSetupsDirectory + "shared/\(setupID)/"
-        let language = AssignmentLanguage.resolve(manifest: manifest)
+        let language = AssignmentLanguage.resolve(for: setup, manifest: manifest)
         let resolution = await PersonalizationSubstitution.resolve(
             manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir,
             language: language)

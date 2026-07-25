@@ -315,7 +315,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // back to the stored manifest (which records the language once known).
     // Defaults to `.python`, so a Python assignment renders byte-for-byte as
     // before.
-    let previousLanguage = AssignmentLanguage.resolve(manifest: props)
+    let previousLanguage = AssignmentLanguage.resolve(for: setup, manifest: props)
     let assignmentLanguage: AssignmentLanguage = {
         for item in authoredItems ?? [] {
             guard case .script(let raw) = item else { continue }

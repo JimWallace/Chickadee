@@ -180,7 +180,7 @@ struct BrowserRunnerRoutes: RouteCollection {
             personalizedInputs = await PersonalizationSubstitution.gradingInputs(
                 manifest: manifest, seedHex: seed,
                 supportFilesDirectory: sharedDir,
-                language: AssignmentLanguage.resolve(manifest: manifest))
+                language: AssignmentLanguage.resolve(for: setup, manifest: manifest))
             // Resolve per-student dataset slices (Phase 1 datasets) — returns nil when
             // the manifest declares no datasets, which is the common case.
             personalizedFiles = DatasetResolver.resolve(

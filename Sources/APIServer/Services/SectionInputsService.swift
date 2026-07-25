@@ -75,7 +75,8 @@ enum SectionInputsService {
         // seed lookup/insert runs on `seedDB` (the owner pool on the MCP path),
         // not the content `db`, so it never needs a grant on the `.mcp` role.
         try await evaluateForActingSeed(
-            manifest: manifest, sectionID: sectionID, inputs: inputs, seed: seed, seedDB: seedDB)
+            manifest: manifest, sectionID: sectionID, inputs: inputs, seed: seed,
+            language: AssignmentLanguage.resolve(for: setup, manifest: manifest), seedDB: seedDB)
         // 4. Persist onto the manifest's section list.
         try await persist(setup: setup, sectionID: sectionID, inputs: inputs, on: db)
     }
@@ -162,6 +163,7 @@ enum SectionInputsService {
         sectionID: String,
         inputs: Inputs,
         seed: SeedContext,
+        language: AssignmentLanguage = .python,
         seedDB: any Database
     ) async throws {
         guard !inputs.expressions.isEmpty,
@@ -185,7 +187,7 @@ enum SectionInputsService {
                 staticVariables: staticVars,
                 expressions: inputs.expressions,
                 supportFilesDirectory: supportDir,
-                language: AssignmentLanguage.resolve(manifest: manifest))
+                language: language)
         } catch let PersonalizationEvaluatorError.nonZeroExit(_, stderr) {
             let tail = stderr.split(separator: "\n").suffix(3).joined(separator: " ")
             throw WebAssignmentError.unprocessable(

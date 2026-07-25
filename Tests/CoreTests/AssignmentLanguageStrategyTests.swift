@@ -110,6 +110,59 @@ import Testing
         #expect(AssignmentLanguage.resolve(manifest: manifest) == .python)
     }
 
+    // MARK: - Resolution from the starter notebook
+
+    private func notebook(kernel: String?, languageInfo: String?) -> Data {
+        var metadata: [String: Any] = [:]
+        if let kernel { metadata["kernelspec"] = ["name": kernel] }
+        if let languageInfo { metadata["language_info"] = ["name": languageInfo] }
+        // swiftlint:disable:next force_try
+        return try! JSONSerialization.data(withJSONObject: ["cells": [], "metadata": metadata])
+    }
+
+    /// The bug this closes: a brand-new R notebook assignment has an empty
+    /// suite and no recorded language, so the manifest alone says `.python` —
+    /// which sent the instructor's first R `=` expression to `python3` and
+    /// rejected it with a Python SyntaxError. The kernelspec is the only signal
+    /// available at that point.
+    @Test func emptySuiteResolvesFromTheNotebookKernel() {
+        let manifest = TestProperties(testSuites: [])
+        #expect(AssignmentLanguage.resolve(manifest: manifest) == .python)
+        #expect(
+            AssignmentLanguage.resolve(
+                manifest: manifest, notebookData: notebook(kernel: "xr", languageInfo: nil)) == .r)
+        #expect(
+            AssignmentLanguage.resolve(
+                manifest: manifest, notebookData: notebook(kernel: nil, languageInfo: "R")) == .r)
+        #expect(
+            AssignmentLanguage.resolve(
+                manifest: manifest, notebookData: notebook(kernel: "python3", languageInfo: nil))
+                == .python)
+    }
+
+    /// Absent or unparseable notebook bytes fall back to the manifest-only
+    /// answer, so nothing regresses for an assignment without a notebook.
+    @Test func unreadableNotebookFallsBackToTheManifest() {
+        let rSuite = TestProperties(testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.R")])
+        #expect(AssignmentLanguage.resolve(manifest: rSuite, notebookData: nil) == .r)
+        #expect(
+            AssignmentLanguage.resolve(
+                manifest: rSuite, notebookData: Data("not json".utf8)) == .r)
+        #expect(
+            AssignmentLanguage.resolve(
+                manifest: TestProperties(testSuites: []), notebookData: Data("not json".utf8))
+                == .python)
+    }
+
+    /// A recorded language still wins over the notebook.
+    @Test func recordedLanguageBeatsTheNotebookKernel() {
+        let manifest = TestProperties(testSuites: [], language: .python)
+        #expect(
+            AssignmentLanguage.resolve(
+                manifest: manifest, notebookData: notebook(kernel: "xr", languageInfo: nil))
+                == .python)
+    }
+
     /// A legacy manifest with no `language` key must still decode.
     @Test func legacyManifestWithoutLanguageDecodes() throws {
         let legacy = #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
