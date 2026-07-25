@@ -64,6 +64,12 @@ struct GetValidationResultTool: ContentTool {
         let warnings: [String]
         let outcomes: [OutcomeDTO]
         let counts: Counts?
+        /// Which runner produced this result, and the version it was running.
+        /// A suite that depends on a newer runner build fails on a lagging
+        /// runner and passes on a current one; without these, that reads as a
+        /// content bug rather than version skew.
+        let runnerID: String?
+        let runnerVersion: String?
     }
 
     static let name = "get_validation_result"
@@ -75,7 +81,10 @@ struct GetValidationResultTool: ContentTool {
         + "Validation runs only — it resolves the instructor's own reference-solution run from the "
         + "assignment and never accepts or returns a student submission, identity, or grade. All tiers "
         + "(public/release/secret/student) are included so secret-tier failures are visible. A pending or "
-        + "missing run returns the current validationStatus with empty outcomes."
+        + "missing run returns the current validationStatus with empty outcomes. Also reports runnerID "
+        + "and runnerVersion — which runner produced the result and the build it was running — so a "
+        + "failure caused by a runner lagging behind the suite's requirements is distinguishable from "
+        + "a content bug."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -97,6 +106,8 @@ struct GetValidationResultTool: ContentTool {
             ]),
             "outcomes": .object(["type": .string("array")]),
             "counts": .object(["type": .array([.string("object"), .string("null")])]),
+            "runnerID": .object(["type": .array([.string("string"), .string("null")])]),
+            "runnerVersion": .object(["type": .array([.string("string"), .string("null")])]),
         ]),
         "required": .array([
             .string("assignmentPublicID"), .string("validationStatus"), .string("outcomes"),
@@ -115,6 +126,7 @@ struct GetValidationResultTool: ContentTool {
         // (e.g. a missing SELECT grant for the least-privilege MCP role) instead
         // of an opaque protocol-level internal error.
         let collectionJSON: String?
+        var runnerID: String?
         do {
             if let submission = try await MCPStudentDataBoundary.validationSubmission(
                 for: assignment, on: context.db),
@@ -122,6 +134,7 @@ struct GetValidationResultTool: ContentTool {
                     forSubmissionID: submission.requireID(), on: context.db)
             {
                 collectionJSON = try await result.loadCollectionJSON(on: context.db)
+                runnerID = submission.workerID
             } else {
                 collectionJSON = nil
             }
@@ -163,7 +176,12 @@ struct GetValidationResultTool: ContentTool {
                 pass: collection.passCount,
                 fail: collection.failCount,
                 error: collection.errorCount,
-                timeout: collection.timeoutCount))
+                timeout: collection.timeoutCount),
+            runnerID: runnerID,
+            // The version carried on the result itself, so it is the build that
+            // actually produced these outcomes rather than whatever that runner
+            // happens to be running now.
+            runnerVersion: collection.runnerVersion)
     }
 
     /// The pending / no-result-yet response: the current status with no outcomes
@@ -177,6 +195,8 @@ struct GetValidationResultTool: ContentTool {
             compilerOutput: nil,
             warnings: [],
             outcomes: [],
-            counts: nil)
+            counts: nil,
+            runnerID: nil,
+            runnerVersion: nil)
     }
 }

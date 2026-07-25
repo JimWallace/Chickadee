@@ -246,7 +246,8 @@ struct WorkerJobRoutes: RouteCollection {
         req: Request, body: WorkerActivityPayload, claimed: ClaimedJob
     ) async {
         await req.application.diagnostics.recordJobAssigned(
-            submission: claimed.submission, on: req.db, logger: req.logger
+            submission: claimed.submission, runnerVersion: body.runnerVersion,
+            on: req.db, logger: req.logger
         )
         req.application.diagnostics.recordCompatibleJobAssignment(
             submission: claimed.submission,

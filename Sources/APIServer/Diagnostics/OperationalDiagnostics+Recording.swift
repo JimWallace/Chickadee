@@ -256,6 +256,7 @@ extension OperationalDiagnosticsService {
 
     func recordJobAssigned(
         submission: APISubmission,
+        runnerVersion: String? = nil,
         on db: Database,
         logger: Logger
     ) async {
@@ -269,6 +270,10 @@ extension OperationalDiagnosticsService {
             )
             diagnostics.assignedAt = submission.assignedAt ?? diagnostics.assignedAt
             diagnostics.runnerID = submission.workerID ?? diagnostics.runnerID
+            // Stamped from the claim payload, not looked up later: this must be
+            // the version that actually ran the job, which is not necessarily
+            // what the runner is running by the time anyone asks.
+            diagnostics.runnerVersion = runnerVersion ?? diagnostics.runnerVersion
             try await diagnostics.save(on: db)
 
             let metric = try await findOrCreateJobExecutionMetric(
