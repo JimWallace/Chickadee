@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.645] - 2026-07-25
+
+### Fixed
+
+- **Notebook-check validation hardening.** `cell_contains` regex validation no
+  longer rejects an escaped `\(`, a parenthesis inside a `[...]` character
+  class, or a literal trailing `\\` as unbalanced/dangling — it tracks escape
+  state and character-class nesting instead of counting raw parentheses (this
+  affected Python authors too). Name fields (`variable`, function names) on an R
+  assignment now accept idiomatic R names such as `my.df` via a new
+  `isValidRIdentifier`, instead of being held to Python's identifier rules.
+
+
 ## [0.4.644] - 2026-07-25
 
 ### Added
