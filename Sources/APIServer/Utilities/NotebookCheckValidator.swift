@@ -66,7 +66,7 @@ func validateNotebookChecks(
                 reason: "Notebook check '\(check.id)': points must be non-negative")
         }
 
-        try notebookCheckKindHandler(for: check.kind).validate(check)
+        try notebookCheckKindHandler(for: check.kind).validate(check, language: language)
     }
 
     // Filename collisions: every generated filename a check produces
