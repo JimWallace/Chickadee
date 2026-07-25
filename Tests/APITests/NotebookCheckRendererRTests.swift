@@ -50,17 +50,49 @@ import Testing
         #expect(r.contains("publiccheck_eq1.R"))
     }
 
-    @Test func supportedKindsAreTheDataFrameFamily() {
-        #expect(notebookCheckKindSupportsR(.dataFrameShape))
-        #expect(notebookCheckKindSupportsR(.dataFrameColumns))
-        #expect(notebookCheckKindSupportsR(.dataFrameEquality))
-        #expect(notebookCheckKindSupportsR(.seriesEquality))
-        for kind: NotebookCheckKind in [
-            .numericArrayClose, .figureCount, .cellContains, .functionExists,
-            .variableExists, .astStructure,
-        ] {
-            #expect(!notebookCheckKindSupportsR(kind), "\(kind.rawValue) is not R-ready yet")
+    /// Every kind but `astStructure` renders in R — its predicate vocabulary
+    /// (`list_comprehension`) has no R analogue and needs a design decision,
+    /// not a port.
+    @Test func everyKindButASTStructureRendersInR() {
+        for kind in NotebookCheckKind.allCases where kind != .astStructure {
+            #expect(notebookCheckKindSupportsR(kind), "\(kind.rawValue) should render in R")
         }
+        #expect(!notebookCheckKindSupportsR(.astStructure))
+    }
+
+    /// Python's bytes must not move for any of the newly-added kinds either —
+    /// they feed `spec_hash` and `TestSetupCache` keys.
+    @Test(arguments: [
+        NotebookCheckKind.variableExists, .functionExists, .numericArrayClose, .figureCount,
+    ])
+    func pythonBytesUnchangedForTheNewKinds(_ kind: NotebookCheckKind) {
+        let check = NotebookCheck(
+            id: "k1", kind: kind, tier: .pub, points: 1, variable: "x",
+            expectedArray: [1.0, 2.0], minFigures: 2, expectedArity: 1, expectedType: "numeric")
+        #expect(renderNotebookCheck(check) == renderNotebookCheck(check, language: .python))
+        #expect(renderNotebookCheck(check).script.filename == "publiccheck_k1.py")
+        #expect(renderNotebookCheck(check, language: .r).script.filename == "publiccheck_k1.R")
+    }
+
+    /// `cellContains` reads the submission's *source*, so it must not evaluate
+    /// it — a student whose top-level code errors should still be told whether
+    /// they wrote the cell.
+    @Test func cellContainsDoesNotEvaluateTheSubmission() {
+        let check = NotebookCheck(
+            id: "cc", kind: .cellContains, tier: .pub, points: 1, containsText: "groupby")
+        let source = renderNotebookCheck(check, language: .r).script.source
+        #expect(source.contains("chickadee_student_cells()"))
+        #expect(!source.contains("chickadee_load_student()"))
+    }
+
+    /// The figure counter has to be armed before the submission is evaluated,
+    /// so it deliberately does not use the shared preamble.
+    @Test func figureCountArmsItsHooksBeforeLoadingTheStudent() throws {
+        let check = NotebookCheck(id: "figs", kind: .figureCount, tier: .pub, points: 1, minFigures: 2)
+        let source = renderNotebookCheck(check, language: .r).script.source
+        let hookIndex = try #require(source.range(of: "setHook(\"plot.new\""))
+        let loadIndex = try #require(source.range(of: "chickadee_load_student()"))
+        #expect(hookIndex.lowerBound < loadIndex.lowerBound)
     }
 
     /// An unsupported kind must be refused at save time, naming what *is*
@@ -270,7 +302,200 @@ import Testing
     @Test func unsupportedKindFailsClosedAtGradingTime() throws {
         guard Self.hasRscript else { return }
         let check = NotebookCheck(
-            id: "fig1", kind: .figureCount, tier: .pub, points: 1, minFigures: 1)
+            id: "ast1", kind: .astStructure, tier: .pub, points: 1,
+            requiredConstructs: ["for_loop"])
         #expect(try run(check: check, submission: "x <- 1\n") == 2)
+    }
+
+    // MARK: - .variableExists
+
+    @Test func variableExistsChecksPresenceAndType() throws {
+        guard Self.hasRscript else { return }
+        let untyped = NotebookCheck(
+            id: "v1", kind: .variableExists, tier: .pub, points: 1, variable: "beats")
+        #expect(try run(check: untyped, submission: "beats <- 5\n") == 0)
+        #expect(try run(check: untyped, submission: "other <- 5\n") == 1)
+
+        // "DataFrame" is the Python spelling; it must mean `data.frame` in R so
+        // a check authored for a Python assignment survives the conversion.
+        let typed = NotebookCheck(
+            id: "v2", kind: .variableExists, tier: .pub, points: 1,
+            variable: "df", expectedType: "DataFrame")
+        #expect(try run(check: typed, submission: "df <- data.frame(a = 1:3)\n") == 0)
+        #expect(try run(check: typed, submission: "df <- c(1, 2, 3)\n") == 1)
+    }
+
+    /// A variable built by top-level calls is the case Python needs
+    /// `student_main_state()` for; in R it is simply in the environment.
+    @Test func variableExistsSeesAValueBuiltByTopLevelCalls() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "v3", kind: .variableExists, tier: .pub, points: 1,
+            variable: "total", expectedType: "numeric")
+        let submission = """
+            add <- function(a, b) a + b
+            total <- add(2, 3)
+            """
+        #expect(try run(check: check, submission: submission) == 0)
+    }
+
+    // MARK: - .functionExists
+
+    @Test func functionExistsChecksDefinitionAndCallability() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "f1", kind: .functionExists, tier: .pub, points: 1, variable: "bmi")
+        #expect(try run(check: check, submission: "bmi <- function(m, h) m / h^2\n") == 0)
+        #expect(try run(check: check, submission: "x <- 1\n") == 1)
+        // Defined, but shadowed by a non-function.
+        #expect(try run(check: check, submission: "bmi <- 27.1\n") == 1)
+    }
+
+    @Test func functionExistsChecksArity() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "f2", kind: .functionExists, tier: .pub, points: 1,
+            variable: "bmi", expectedArity: 2)
+        #expect(try run(check: check, submission: "bmi <- function(m, h) m / h^2\n") == 0)
+        #expect(try run(check: check, submission: "bmi <- function(m) m\n") == 1)
+        // A defaulted third argument is optional, so 2 is still satisfiable.
+        #expect(try run(check: check, submission: "bmi <- function(m, h, r = 1) m / h^2\n") == 0)
+        // `...` means "accepts more", so one required argument still passes.
+        #expect(try run(check: check, submission: "bmi <- function(m, ...) m\n") == 0)
+        // …but three *required* arguments cannot be called with two.
+        #expect(try run(check: check, submission: "bmi <- function(a, b, c) a\n") == 1)
+    }
+
+    // MARK: - .numericArrayClose
+
+    @Test func numericArrayCloseComparesWithinTolerance() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "n1", kind: .numericArrayClose, tier: .pub, points: 1,
+            variable: "scores", rtol: 1e-5, atol: 1e-8, expectedArray: [1.0, 2.5, 3.25])
+        #expect(try run(check: check, submission: "scores <- c(1, 2.5, 3.25)\n") == 0)
+        // Inside the tolerance.
+        #expect(try run(check: check, submission: "scores <- c(1, 2.500001, 3.25)\n") == 0)
+        // Outside it.
+        #expect(try run(check: check, submission: "scores <- c(1, 2.6, 3.25)\n") == 1)
+        // Wrong length.
+        #expect(try run(check: check, submission: "scores <- c(1, 2.5)\n") == 1)
+        // Missing entirely.
+        #expect(try run(check: check, submission: "other <- c(1, 2.5, 3.25)\n") == 1)
+        // Not numeric at all.
+        #expect(try run(check: check, submission: "scores <- c(\"a\", \"b\", \"c\")\n") == 1)
+    }
+
+    /// Mirrors numpy's `equal_nan` default so a check converted from Python
+    /// keeps agreeing with itself.
+    @Test func numericArrayCloseTreatsMatchingNaNAndInfAsEqual() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "n2", kind: .numericArrayClose, tier: .pub, points: 1,
+            variable: "xs", expectedArray: [Double.nan, .infinity, -.infinity, 1.0])
+        #expect(try run(check: check, submission: "xs <- c(NaN, Inf, -Inf, 1)\n") == 0)
+        // Sign of the infinity matters.
+        #expect(try run(check: check, submission: "xs <- c(NaN, Inf, Inf, 1)\n") == 1)
+    }
+
+    // MARK: - .cellContains
+
+    /// The submission the extractor produces: an inert marker comment ahead of
+    /// each code cell, which is what gives this check cell granularity.
+    private func extractedNotebook(cells: [String]) -> String {
+        var out = "# Generated from analysis.ipynb\n\n"
+        for (index, body) in cells.enumerated() {
+            out += "# ---- chickadee:cell \(index + 1) ----\n"
+            out += body + "\n\n"
+        }
+        return out
+    }
+
+    @Test func cellContainsMatchesLiteralText() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "cc1", kind: .cellContains, tier: .pub, points: 1, containsText: "aggregate")
+        let hit = extractedNotebook(cells: [
+            "df <- read.csv(\"cases.csv\")",
+            "aggregate(age ~ sex, data = df, FUN = mean)",
+        ])
+        #expect(try run(check: check, submission: hit) == 0)
+        let miss = extractedNotebook(cells: ["df <- read.csv(\"cases.csv\")", "summary(df)"])
+        #expect(try run(check: check, submission: miss) == 1)
+    }
+
+    @Test func cellContainsMatchesARegularExpression() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "cc2", kind: .cellContains, tier: .pub, points: 1,
+            containsText: "\\$(weight|height|bmi)[[:space:]]*\\|>", regex: true)
+        let hit = extractedNotebook(cells: ["df$weight |> hist()"])
+        #expect(try run(check: check, submission: hit) == 0)
+        // Same shape, but on a variable the check does not accept.
+        let miss = extractedNotebook(cells: ["df$age |> hist()"])
+        #expect(try run(check: check, submission: miss) == 1)
+    }
+
+    /// The "write your own analysis, do not paste the example" constraint.
+    @Test func cellContainsRejectsACopyOfTheExample() throws {
+        guard Self.hasRscript else { return }
+        let example = "aggregate(age ~ sex, data = df, FUN = mean)"
+        let check = NotebookCheck(
+            id: "cc3", kind: .cellContains, tier: .pub, points: 1,
+            containsText: "aggregate", mustDifferFrom: example)
+        // Only the example — refused, even re-indented and re-spaced.
+        #expect(try run(check: check, submission: extractedNotebook(cells: [example])) == 1)
+        #expect(
+            try run(
+                check: check,
+                submission: extractedNotebook(cells: ["   aggregate(age ~ sex,  data = df,  FUN = mean)  "]))
+                == 1)
+        // Their own version alongside it — accepted.
+        #expect(
+            try run(
+                check: check,
+                submission: extractedNotebook(cells: [
+                    example, "aggregate(weight ~ department, data = df, FUN = mean)",
+                ])) == 0)
+    }
+
+    /// A hand-written `.R` upload never went through the extractor, so it has
+    /// no markers. The whole file is one cell rather than an error.
+    @Test func cellContainsFallsBackToFileGranularityWithoutMarkers() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "cc4", kind: .cellContains, tier: .pub, points: 1, containsText: "aggregate")
+        #expect(try run(check: check, submission: "aggregate(age ~ sex, data = df, FUN = mean)\n") == 0)
+        #expect(try run(check: check, submission: "summary(df)\n") == 1)
+    }
+
+    // MARK: - .figureCount
+
+    @Test func figureCountCountsHighLevelPlots() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "fig2", kind: .figureCount, tier: .pub, points: 1, minFigures: 2)
+        let twoCharts = """
+            hist(c(1, 2, 2, 3, 3, 3))
+            barplot(c(1, 2, 3))
+            """
+        #expect(try run(check: check, submission: twoCharts) == 0)
+        #expect(try run(check: check, submission: "hist(c(1, 2, 3))\n") == 1)
+        #expect(try run(check: check, submission: "x <- 1\n") == 1)
+    }
+
+    /// The distinction that makes `plot.new` the right hook: adding a line to
+    /// an existing chart is not a second chart.
+    @Test func figureCountIgnoresLowLevelAdditions() throws {
+        guard Self.hasRscript else { return }
+        let check = NotebookCheck(
+            id: "fig3", kind: .figureCount, tier: .pub, points: 1, minFigures: 2)
+        let onePlotPlusDecoration = """
+            plot(1:10, 1:10)
+            lines(1:10, 10:1)
+            points(1:10, rep(5, 10))
+            abline(h = 5)
+            """
+        #expect(try run(check: check, submission: onePlotPlusDecoration) == 1)
     }
 }

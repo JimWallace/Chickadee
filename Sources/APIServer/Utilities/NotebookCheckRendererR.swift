@@ -29,10 +29,10 @@ import Foundation
 /// R assignment (which would produce a `.py` script the R suite can't run).
 func notebookCheckKindSupportsR(_ kind: NotebookCheckKind) -> Bool {
     switch kind {
-    case .dataFrameShape, .dataFrameColumns, .dataFrameEquality, .seriesEquality:
+    case .dataFrameShape, .dataFrameColumns, .dataFrameEquality, .seriesEquality,
+        .numericArrayClose, .figureCount, .functionExists, .variableExists, .cellContains:
         return true
-    case .numericArrayClose, .figureCount, .cellContains, .functionExists,
-        .variableExists, .astStructure:
+    case .astStructure:
         return false
     }
 }
@@ -47,8 +47,12 @@ func renderRNotebookCheck(_ check: NotebookCheck, specHash: String) -> String {
     case .dataFrameColumns: return renderRDataFrameColumns(check, specHash: specHash)
     case .dataFrameEquality: return renderRDataFrameEquality(check, specHash: specHash)
     case .seriesEquality: return renderRSeriesEquality(check, specHash: specHash)
-    case .numericArrayClose, .figureCount, .cellContains, .functionExists,
-        .variableExists, .astStructure:
+    case .variableExists: return renderRVariableExists(check, specHash: specHash)
+    case .functionExists: return renderRFunctionExists(check, specHash: specHash)
+    case .numericArrayClose: return renderRNumericArrayClose(check, specHash: specHash)
+    case .figureCount: return renderRFigureCount(check, specHash: specHash)
+    case .cellContains: return renderRCellContains(check, specHash: specHash)
+    case .astStructure:
         return rUnsupportedCheck(check, specHash: specHash)
     }
 }
@@ -59,7 +63,7 @@ func renderRNotebookCheck(_ check: NotebookCheck, specHash: String) -> String {
 /// here: `chickadee_load_student()` evaluates the submission expression by
 /// expression, so a variable built by top-level calls is simply present (the
 /// Python side needs `student_main_state()` to get the same effect).
-private func rCheckPreamble(_ check: NotebookCheck, specHash: String, kindName: String) -> String {
+func rCheckPreamble(_ check: NotebookCheck, specHash: String, kindName: String) -> String {
     let label = check.name ?? notebookCheckKindHandler(for: check.kind).defaultLabel(check)
     return """
         # Test: \(rCheckComment(label))
@@ -73,7 +77,7 @@ private func rCheckPreamble(_ check: NotebookCheck, specHash: String, kindName: 
 /// Binds `actual` from the student environment, failing with a clear message
 /// when the name was never defined. `expectation` completes the sentence
 /// "expected: ...".
-private func rFetchVariable(_ variable: String, expectation: String) -> String {
+func rFetchVariable(_ variable: String, expectation: String) -> String {
     """
     variable_name <- \(JSONValue.string(variable).rLiteral)
 
@@ -333,7 +337,7 @@ private func rUnsupportedCheck(_ check: NotebookCheck, specHash: String) -> Stri
 }
 
 /// Flattens a string for safe use inside a one-line `#` comment.
-private func rCheckComment(_ text: String) -> String {
+func rCheckComment(_ text: String) -> String {
     text.replacingOccurrences(of: "\n", with: " ")
         .replacingOccurrences(of: "\r", with: " ")
 }
