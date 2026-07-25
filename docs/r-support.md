@@ -261,27 +261,100 @@ Mapping decisions:
   text**, so a `factor` and a `character` column holding the same labels agree —
   students routinely end up with one or the other.
 
-### The remaining six kinds
+## Code-shape notebook checks in R
 
-`numeric_array_close`, `figure_count`, `cell_contains`, `function_exists`,
-`variable_exists` and `ast_structure` are still Python-only, and are **rejected
-at save time** for an R assignment (`notebookCheckKindSupportsR`) with a message
-naming what is supported. That gate matters: rendering Python for an R
-assignment would emit a `.py` script the R suite can never run, surfacing as a
-confusing grading error instead of an authoring one. Should such a spec ever
-reach grading anyway, the generated R fails closed with the same explanation
-rather than passing silently.
+`variable_exists`, `function_exists`, `numeric_array_close` and `figure_count`
+render in R too (`NotebookCheckRendererR+Code.swift`). Where the R answer is not
+a transliteration of the Python one:
 
-Of those six, four are near-trivial (`function_exists` via
-`length(formals(f))`, `variable_exists` via the existing type predicates,
-`numeric_array_close`, and `cell_contains` — for which the extracted `.R` file
-*is* the source, no sidecar needed). `figure_count` needs a mechanism rather
-than a port: R has no persistent figure objects, but loading the student under
-`pdf(tempfile("ckplot%03d.pdf"), onefile = FALSE)` yields one file per plot to
-count. `ast_structure` is the real design question — R's `parse()` walks fine
-and `for_loop` / `while_loop` / `recursion` / `lambda` / `import:` all port, but
-`list_comprehension` has **no R analogue**, so the predicate vocabulary needs to
-become language-scoped (R would want `apply_family`, `pipe`, `vectorized`).
+- **`variable_exists` and `numeric_array_close` read the environment directly.**
+  Python needs `student_main_state()` to see a variable that only exists after
+  top-level statements ran; R has no import/exec split, so
+  `chickadee_load_student()` already has it. Type names route through the same
+  `rTypeCheckExpression` the pattern-family `return_type_check` uses, so
+  `"DataFrame"` means `is.data.frame` and a check converted from a Python
+  assignment keeps its meaning.
+- **`function_exists` counts formals, not a signature.** An argument with no
+  default is stored as the empty symbol, which is how "required" is derived;
+  `...` is excluded from the count and read as "accepts more", so
+  `f(x, ...)` satisfies an arity of 3. A shadowed builtin has no formals of its
+  own, so `args()` supplies the documented signature instead.
+- **`numeric_array_close` mirrors numpy's `allclose`, including `equal_nan`.**
+  Two `NaN`s agree and two same-signed infinities agree; non-finite positions
+  are settled by those rules alone and never by the tolerance, because
+  `rtol * Inf` is `Inf` and would otherwise make every infinity match every
+  other one.
+- **`figure_count` hooks `plot.new`, it does not count files.** R has no
+  persistent figure objects, and the obvious `pdf(..., onefile = FALSE)`
+  file-counting trick can't tell zero plots from one (the device writes its
+  first page on open). `setHook("plot.new")` fires exactly once per *high-level*
+  plot — `hist`, `plot`, `barplot` — and never for a low-level addition like
+  `lines()` or `abline()`, so it counts charts rather than drawing operations.
+  `grid.newpage` is hooked alongside it, so lattice and a printed ggplot object
+  count where a course has installed them. A ggplot object that is assigned and
+  never printed produces no figure — true in a notebook too, so the check is not
+  inventing a rule. The hooks are armed before `chickadee_load_student()`, which
+  is why this renderer does not use the shared preamble.
+
+## Source-level checks in R: the cell-boundary marker
+
+`cell_contains` asks about the *source* of a notebook cell, so it needs cell
+granularity — and flattening a notebook to one `.R` file destroys it. Python
+keeps the boundaries because `wrapCellForResilientLoad` labels each cell;
+`_submission.ipynb` is preserved next to the flattened file for the same reason,
+but base R cannot parse JSON and adding `r-cran-jsonlite` would put the renderer
+beyond what the tests can execute (CI has no R at all — every R renderer here is
+verified by really running `Rscript` locally).
+
+So the R extraction writes an inert marker comment ahead of each cell:
+
+```
+# ---- chickadee:cell 3 ----
+```
+
+`rCellBoundaryMarker(cellNumber:)` (`NotebookExtractor.swift`) writes it and
+`chickadee_student_cells()` (the grading runtime) splits on it, with base R and
+no dependency. The two spellings are separate — `Tools/runner-support/test_runtime.R`
+is a byte-for-byte mirror and cannot interpolate a Swift constant — so
+`NotebookExtractorRCellMarkerTests` pins them against each other; a change to
+either alone fails there rather than silently collapsing every notebook to one
+cell. Numbers follow the cell's position in the notebook, so a markdown cell
+shows up as a gap rather than renumbering the code cells around it.
+
+Two consequences worth stating:
+
+- **The marker is an ordinary R comment**, so the flattened submission still
+  runs unchanged, and a student reading it sees where their cells went.
+- **A hand-written `.R` upload has no markers**, so `chickadee_student_cells()`
+  returns the whole file as a single cell. That is file granularity, which is
+  the honest answer for a file that has no cells — not an error.
+
+`cell_contains` also deliberately does *not* evaluate the submission (it is the
+one R check that skips `chickadee_load_student()`), so a student whose top-level
+code errors is still told whether they wrote the cell. Patterns run under PCRE
+(`perl = TRUE`), the closest R gets to Python's `re`.
+
+### The remaining kind
+
+`ast_structure` is still Python-only, and is **rejected at save time** for an R
+assignment (`notebookCheckKindSupportsR`) with a message naming what is
+supported. That gate matters: rendering Python for an R assignment would emit a
+`.py` script the R suite can never run, surfacing as a confusing grading error
+instead of an authoring one. Should such a spec ever reach grading anyway, the
+generated R fails closed with the same explanation rather than passing silently.
+
+It is a design question, not a port. R's `parse()` walks fine and `for_loop` /
+`while_loop` / `recursion` / `lambda` / `import:` all have analogues, but
+`list_comprehension` has **none**, so the predicate vocabulary has to become
+language-scoped first (R would want `apply_family`, `pipe`, `vectorized`).
+
+### Known limitation: variable names with a dot
+
+A check's `variable` is validated as a *Python* identifier
+(`validateRequiredIdentifier` in `NotebookCheckKindHandler.swift`), so an
+idiomatic R name like `my.df` is refused at save time even on an R assignment.
+The handler's `validate` has no language in scope today; threading one through
+is the fix, and it applies to every kind equally.
 
 ## Verification
 

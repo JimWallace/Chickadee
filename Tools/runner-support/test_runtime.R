@@ -210,6 +210,27 @@ chickadee_load_student <- function(extra_skip = character(0)) {
     env
 }
 
+# Split the submission back into the notebook cells it was flattened from.
+# `extractNotebooksToCode` writes an inert marker comment ahead of each code
+# cell, which is what gives a source-level check cell granularity that plain
+# concatenation loses. A submission that never came from a notebook (a
+# hand-written .R upload) has no markers, so the whole file is returned as one
+# cell — file granularity, which is the honest answer for a file with no cells.
+chickadee_student_cells <- function(extra_skip = character(0)) {
+    f <- chickadee_student_file(extra_skip)
+    if (is.na(f)) errored("No R submission file was found to grade.")
+    lines <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
+    starts <- which(grepl("^# ---- chickadee:cell [0-9]+ ----$", lines))
+    if (length(starts) == 0L) return(paste(lines, collapse = "\n"))
+    ends <- c(starts[-1L] - 1L, length(lines))
+    out <- character(length(starts))
+    for (i in seq_along(starts)) {
+        first <- starts[[i]] + 1L
+        out[[i]] <- if (first > ends[[i]]) "" else paste(lines[first:ends[[i]]], collapse = "\n")
+    }
+    out
+}
+
 # Fetch a function the student was asked to write; a clear error when it is
 # missing or was overwritten with something that is not a function.
 chickadee_require_fn <- function(env, name) {

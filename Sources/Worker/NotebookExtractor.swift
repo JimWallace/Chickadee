@@ -148,6 +148,12 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: String? = nil) th
                 guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 output += extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
             } else {
+                // Flattening concatenates cells, which loses the boundaries a
+                // source-level check (`.cellContains`) needs.  Python keeps them
+                // because `wrapCellForResilientLoad` labels each cell; R gets
+                // the same information from an inert comment, which
+                // `chickadee_student_cells()` splits on.
+                output += rCellBoundaryMarker(cellNumber: index + 1) + "\n"
                 output += src + "\n\n"
             }
         }
@@ -155,3 +161,21 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: String? = nil) th
         try output.write(to: outURL, atomically: true, encoding: .utf8)
     }
 }
+
+// MARK: - R cell boundaries
+
+/// Comment line the R extraction writes ahead of each code cell, so the
+/// flattened `.R` file keeps the cell granularity a source-level notebook check
+/// needs. It is an ordinary R comment, so it is inert when the submission runs.
+///
+/// The grading side splits on this in `chickadee_student_cells()`
+/// (`testRuntimeRStudentFile`, mirrored in `Tools/runner-support/test_runtime.R`).
+/// `NotebookExtractorRCellMarkerTests` pins the two against each other.
+func rCellBoundaryMarker(cellNumber: Int) -> String {
+    "# ---- chickadee:cell \(cellNumber) ----"
+}
+
+/// Regex the runtime uses to recognize a marker line. Kept here so the writer
+/// and the reader are defined together; the runtime spells it out literally
+/// because `Tools/runner-support/test_runtime.R` is a byte-for-byte mirror.
+let rCellBoundaryMarkerPattern = "^# ---- chickadee:cell [0-9]+ ----$"
