@@ -64,6 +64,9 @@ import Testing
         "SetGradingModeTool.swift",
         // Time limits are enforced at run time; no content change.
         "SetTimeLimitTool.swift",
+        // Minimum-runner-version gate: changes which runner may grade, not what
+        // the suite grades; enforced server-side at claim time. No close/regrade.
+        "SetMinimumRunnerVersionTool.swift",
         // Dataset marks change delivery (per-student slices), not the graded
         // suite; mirrors the web PUT /datasets endpoint, which neither closes
         // nor regrades. Slices apply on the next (re)grade.

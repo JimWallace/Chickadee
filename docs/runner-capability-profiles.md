@@ -116,6 +116,43 @@ incompatible, for example:
 - `missing capability pandas`
 - `architecture arm64 != required x86_64`
 - `runner profile unavailable`
+- `runner version 0.4.639 < required minimum 0.5.0`
+
+## Minimum Runner Version Gate (manifest)
+
+Separate from the capability profile above, a test setup's **manifest** may carry
+an optional `minimumRunnerVersion` (`TestProperties.minimumRunnerVersion`). It
+gates on the runner's *Chickadee build version* — `ChickadeeVersion.current`,
+advertised as `runnerVersion` on every poll — rather than on installed platform /
+language / package capabilities. Use it when a suite depends on behaviour only
+present in a newer `chickadee-runner` build.
+
+- **Optional and opt-in.** `nil` (every manifest written before the field, and
+  every un-gated assignment) means no gate, and the manifest is byte-for-byte
+  unchanged. A plain semver string like `"0.5.0"` enables it.
+- **Enforced server-side at claim time.** The same `POST /api/v1/worker/request`
+  claim path that runs capability matching also compares the polling runner's
+  advertised version against the gate; the two verdicts are merged, so a version
+  block surfaces through the identical diagnostics
+  (`no_compatible_runner_available`) and leaves the submission `pending` until a
+  new-enough runner polls. It is deliberately *not* a runner-side check: an older
+  runner has no gate code, so only the server can reliably keep old runners off a
+  gated job.
+- **Fail-closed on an unparseable runner version**, but only when a gate is set;
+  a `nil`/blank gate short-circuits without parsing, so un-gated assignments —
+  and runners advertising a non-semver version — are unaffected.
+- **Worker path only.** Browser (`gradingMode: browser`) grading runs the
+  server's own vended WASM bundle, which has no runner version, so the gate never
+  applies there (it can still bite a browser submission that fails over to the
+  worker backstop).
+- **Stripped from the runner-facing manifest.** The gate is a server-side
+  dispatch concern; `runnerSanitized()` drops it, so the runner never receives it
+  and old runners can't choke on it.
+
+Authoring: set or clear it over MCP with `set_minimum_runner_version` (a
+metadata-only edit — no regrade or close), or include it in the uploaded manifest
+/ a `.chickadee` course bundle. A malformed value is rejected at upload time.
+`get_suite` and `get_assignment` report the current value.
 
 ## Rollout And Backwards Compatibility
 

@@ -51,6 +51,7 @@ The catalog:
 | `set_grading_mode` | `content:write` | Set an assignment's grading path (worker vs browser); no regrade/close |
 | `set_time_limit` | `content:write` | Set the assignment-wide (or per-test) execution time limit; no regrade/close |
 | `set_dataset` | `content:write` | Mark a support file as a per-student dataset (per-seed row sample under the same filename) or clear the mark; no regrade/close |
+| `set_minimum_runner_version` | `content:write` | Set (or clear) the minimum native-runner version that may grade the assignment (semver); server-side claim-time gate, worker path only; no regrade/close |
 | `update_suite` | `content:write` | Script metadata: tier, points, displayName, dependsOn, section |
 | `update_global_inputs` | `content:write` | Replace the assignment's global personalization variables/expressions |
 | `update_achievements` | `content:write` | Replace the assignment's composable awards (display-only; no regrade/close) |

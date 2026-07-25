@@ -522,9 +522,21 @@ extension WorkerJobRoutes {
                 logger: req.logger
             )
 
-            let compatibilityResult = evaluator.compatibilityMatcher.evaluate(
+            let capabilityResult = evaluator.compatibilityMatcher.evaluate(
                 runnerProfile: runnerProfile,
                 requirements: requirementSpec
+            )
+            // Fold the manifest's optional `minimumRunnerVersion` gate into the
+            // same verdict so a version block rides the existing diagnostics /
+            // guard / blocked-candidate path.  Use the *merged* result below,
+            // not `capabilityResult`, or the diagnostics would report
+            // "compatible" while the job is actually blocked on version.
+            let compatibilityResult = RunnerVersionGate.combine(
+                capabilityResult,
+                RunnerVersionGate.evaluate(
+                    runnerVersion: body.runnerVersion,
+                    minimumRunnerVersion: manifest.minimumRunnerVersion
+                )
             )
             await req.application.diagnostics.recordCompatibilityDecision(
                 submission: submission,
