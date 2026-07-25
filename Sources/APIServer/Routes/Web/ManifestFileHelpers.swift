@@ -167,6 +167,68 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
     )
 }
 
+/// Returns manifest JSON identical to `manifestJSON` except for its recorded
+/// `language`, rebuilt through the canonical `makeWorkerManifestJSON` writer so
+/// every other field is preserved. Returns nil if the manifest can't be decoded.
+func updateManifestLanguage(manifestJSON: String, language: AssignmentLanguage?) -> String? {
+    guard let props = decodeManifest(fromJSON: manifestJSON) else { return nil }
+    let entries = props.testSuites.enumerated().map { idx, e in
+        ConfiguredSuiteEntry(
+            script: e.script,
+            tier: e.tier.rawValue,
+            order: idx + 1,
+            dependsOn: e.dependsOn,
+            points: e.points,
+            displayName: e.name,
+            generatedBy: e.generatedBy,
+            generatedByCheck: e.generatedByCheck,
+            sectionID: e.sectionID,
+            hint: e.hint,
+            timeLimitSeconds: e.timeLimitSeconds
+        )
+    }
+    return try? makeWorkerManifestJSON(
+        testSuites: entries,
+        includeMakefile: props.makefile != nil,
+        gradingMode: props.gradingMode.rawValue,
+        timeLimitSeconds: props.timeLimitSeconds,
+        starterNotebook: props.starterNotebook,
+        patternFamilies: props.patternFamilies,
+        notebookChecks: props.notebookChecks,
+        sections: props.sections,
+        globalVariables: props.globalVariables,
+        globalExpressions: props.globalExpressions,
+        achievements: props.achievements,
+        disabledBuiltInAwardIDs: props.disabledBuiltInAwardIDs,
+        builtInAchievementsSeeded: props.builtInAchievementsSeeded,
+        datasets: props.datasets,
+        language: language,
+        minimumRunnerVersion: props.minimumRunnerVersion
+    )
+}
+
+/// Re-derives the assignment language from a freshly-written starter notebook,
+/// treating the recorded manifest `language` as a memo of what was last resolved
+/// rather than a fixed declaration. Returns updated manifest JSON when the
+/// recorded language no longer matches what the new notebook implies (e.g. a
+/// cloned Python assignment whose starter notebook is replaced with an R one),
+/// or nil when nothing needs to change:
+///   - no language was ever recorded — lazy `resolve(…notebookData:)` already
+///     re-derives that case from the notebook on every read, so there is nothing
+///     sticky to correct and no reason to churn the manifest bytes;
+///   - the recorded language still matches the notebook (the common case: a
+///     Python notebook re-saved on a Python assignment stays `.python`).
+func manifestWithRederivedLanguage(manifestJSON: String, notebookData: Data) -> String? {
+    guard let props = decodeManifest(fromJSON: manifestJSON),
+        let recorded = props.language
+    else {
+        return nil
+    }
+    let rederived = AssignmentLanguage.rederive(manifest: props, notebookData: notebookData)
+    guard recorded != rederived else { return nil }
+    return updateManifestLanguage(manifestJSON: manifestJSON, language: rederived)
+}
+
 func makeWorkerManifestJSON(
     testSuites: [ConfiguredSuiteEntry],
     includeMakefile: Bool,
