@@ -374,6 +374,7 @@ func registerMigrations(on app: Application) {
     // report, so a diagnostic can be attributed to a build (an old value flags a
     // stale browser tab / cached bundle, not a live regression).
     app.migrations.add(AddClientDiagnosticAppVersion())
+    app.migrations.add(AddSubmissionDiagnosticsRunnerVersion())
 
     // Per-(student, course) LEARN sync readiness on course_enrollments:
     // unconfirmed (default) → confirmed / unreachable, maintained by the

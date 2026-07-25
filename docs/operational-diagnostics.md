@@ -20,6 +20,13 @@ Captured fields include:
 - `assignment_id`
 - `user_id`
 - `runner_id`
+- `runner_version` — the version the runner advertised when it *claimed* this
+  job. Recorded at claim time rather than joined from the runner's live state:
+  a runner's current version is not the version it ran a past job with, and
+  during a rolling upgrade those differ — which is exactly when the question
+  gets asked. It is also the only record for a job that never reported a result
+  (timed out, or the runner died), since there is no result document to read a
+  version off. Null for rows written before v0.4.643.
 - `kind`
 - `attempt_number`
 - `enqueued_at`

@@ -40,6 +40,53 @@ import VaporTesting
         }
     }
 
+    /// The runner's version is stamped from the claim payload, not looked up
+    /// later: a runner's *current* version is not the version it ran a past job
+    /// with, and during a rolling upgrade those differ — which is exactly when
+    /// the question gets asked. Without this, a suite failing on a lagging
+    /// runner is indistinguishable from a content bug.
+    @Test func claimStampsTheRunnerVersionThatRanTheJob() async throws {
+        try await withApp(app) { _ in
+            let (_, submission) = try await makeSubmission(submissionID: "sub_runner_version")
+            submission.workerID = "runner-lagging"
+            submission.assignedAt = Date()
+            submission.status = "assigned"
+            try await submission.update(on: app.db)
+
+            await app.diagnostics.recordJobAssigned(
+                submission: submission, runnerVersion: "0.4.632", on: app.db, logger: app.logger)
+
+            let row = try await APISubmissionDiagnostics.find("sub_runner_version", on: app.db)
+            #expect(row?.runnerID == "runner-lagging")
+            #expect(row?.runnerVersion == "0.4.632")
+        }
+    }
+
+    /// A runner that advertises no version (or a caller that omits it) leaves
+    /// the column null rather than recording something invented — and must not
+    /// clobber a version already recorded for that job.
+    @Test func absentRunnerVersionLeavesTheRecordedOneIntact() async throws {
+        try await withApp(app) { _ in
+            let (_, submission) = try await makeSubmission(submissionID: "sub_no_version")
+            submission.workerID = "runner-quiet"
+            submission.assignedAt = Date()
+            submission.status = "assigned"
+            try await submission.update(on: app.db)
+
+            await app.diagnostics.recordJobAssigned(
+                submission: submission, on: app.db, logger: app.logger)
+            #expect(try await APISubmissionDiagnostics.find("sub_no_version", on: app.db)?.runnerVersion == nil)
+
+            await app.diagnostics.recordJobAssigned(
+                submission: submission, runnerVersion: "0.4.642", on: app.db, logger: app.logger)
+            await app.diagnostics.recordJobAssigned(
+                submission: submission, on: app.db, logger: app.logger)
+            #expect(
+                try await APISubmissionDiagnostics.find("sub_no_version", on: app.db)?.runnerVersion
+                    == "0.4.642")
+        }
+    }
+
     @Test func executionDurationAndFinalStatusPersistence() async throws {
         try await withApp(app) { _ in
             let (_, submission) = try await makeSubmission(submissionID: "sub_exec_metric")

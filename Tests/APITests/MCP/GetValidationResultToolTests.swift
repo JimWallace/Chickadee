@@ -49,7 +49,8 @@ import Vapor
     }
 
     private func collectionJSON(
-        submissionID: String, outcomes: [TestOutcome], buildStatus: BuildStatus = .passed
+        submissionID: String, outcomes: [TestOutcome], buildStatus: BuildStatus = .passed,
+        runnerVersion: String = "shell-runner/1.0"
     ) throws -> String {
         let collection = TestOutcomeCollection(
             submissionID: submissionID, testSetupID: "setup_val", attemptNumber: 1,
@@ -59,7 +60,7 @@ import Vapor
             failCount: outcomes.filter { $0.status == .fail }.count,
             errorCount: outcomes.filter { $0.status == .error }.count,
             timeoutCount: outcomes.filter { $0.status == .timeout }.count,
-            executionTimeMs: 5, runnerVersion: "shell-runner/1.0", timestamp: Date())
+            executionTimeMs: 5, runnerVersion: runnerVersion, timestamp: Date())
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(collection)
@@ -109,6 +110,50 @@ import Vapor
             let failing = try #require(output.outcomes.first { $0.status == "fail" })
             #expect(failing.tier == "secret")  // secret-tier failures are visible
             #expect(failing.longResult?.contains("got: 0") == true)
+        }
+    }
+
+    /// Runner attribution: which runner produced the result, and the build it
+    /// was running. Without these, a failure caused by a runner lagging behind
+    /// what the suite needs is indistinguishable from a content bug — which is
+    /// exactly how a mixed fleet burned a day of debugging.
+    @Test func reportsWhichRunnerProducedTheResultAndItsVersion() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let submission = try await makeTestSubmission(
+                on: app, id: "sub_val", setupID: "setup_val", userID: testerID(on: app),
+                kind: APISubmission.Kind.validation)
+            submission.workerID = "runner-abc123"
+            try await submission.save(on: app.db)
+            try await makeTestResult(
+                on: app, submissionID: "sub_val",
+                collectionJSON: collectionJSON(
+                    submissionID: "sub_val",
+                    outcomes: [outcome("df is loaded", .pass, short: "ok")],
+                    runnerVersion: "0.4.632"))
+            assignment.validationSubmissionID = "sub_val"
+            assignment.validationStatus = "passed"
+            try await assignment.save(on: app.db)
+
+            let output = try await run(app, publicID: assignment.publicID)
+
+            #expect(output.runnerID == "runner-abc123")
+            // The version carried on the result itself — the build that actually
+            // produced these outcomes, not whatever that runner is running now.
+            #expect(output.runnerVersion == "0.4.632")
+        }
+    }
+
+    /// A pending / no-result assignment reports no attribution rather than
+    /// inventing one.
+    @Test func reportsNoRunnerAttributionWhenThereIsNoResult() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let assignment = try await fixture(on: app)
+            let output = try await run(app, publicID: assignment.publicID)
+            #expect(output.runnerID == nil)
+            #expect(output.runnerVersion == nil)
         }
     }
 

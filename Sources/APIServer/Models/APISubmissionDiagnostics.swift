@@ -47,6 +47,14 @@ final class APISubmissionDiagnostics: Model, Content, @unchecked Sendable {
     @OptionalField(key: "runner_id")
     var runnerID: String?
 
+    /// The version the runner advertised when it claimed this job. Recorded at
+    /// claim time rather than joined from the runner's live state, because a
+    /// runner's current version is not the version it ran a past job with —
+    /// during a rolling upgrade those differ, which is precisely when the
+    /// question matters. Nil for rows written before this was recorded.
+    @OptionalField(key: "runner_version")
+    var runnerVersion: String?
+
     @OptionalField(key: "timed_out")
     var timedOut: Bool?
 
