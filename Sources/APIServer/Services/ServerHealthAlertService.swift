@@ -1,3 +1,4 @@
+import Core
 import Fluent
 import Foundation
 import SQLKit
@@ -32,6 +33,11 @@ func evaluateHealthRules(
         on: application,
         pending: pendingState,
         offlineThreshold: configuration.runnerOfflineSeconds,
+        now: now
+    )
+    results[.runnerVersionSkew] = await evaluateRunnerVersionSkew(
+        on: application,
+        configuration: configuration,
         now: now
     )
     results[.queueBackedUp] = evaluateQueueBackedUp(
@@ -145,6 +151,79 @@ private func evaluateRunnerOffline(
         pending: pending,
         presence: state,
         offlineSeconds: offlineThreshold
+    )
+}
+
+/// Decides the runner-version-skew rule purely, so the firing logic is
+/// table-testable without a Vapor app. Fire when a runner still known this
+/// session advertises a version *behind* `serverVersion` — but only once the
+/// server has been up longer than `graceSeconds`.
+///
+/// The grace is the crux. A blue/green deploy flips the server before it
+/// refreshes the runner (`docs/zero-downtime-deploy.md` step 8), so immediately
+/// after every deploy the runner is briefly a release behind. Gating on server
+/// uptime means that expected, transient skew never pages — the freshly-booted
+/// server's uptime is below the grace — while a runner that stays behind past
+/// the grace (a failed runner refresh, or an old runner rejoining the fleet)
+/// does. Correctness during the window is already protected independently by the
+/// per-assignment minimum-runner-version gate (#1210), which queues rather than
+/// mis-grades, so the alert can afford to wait for genuine, persistent skew.
+///
+/// Runner versions that don't parse as semver (a mock or third-party runner
+/// reporting e.g. `"runner/1.0"`) are skipped, never counted as behind —
+/// mirroring `RunnerVersionGate`'s tolerance so the fleet's odd one out can't
+/// page.
+func decideRunnerVersionSkew(
+    serverVersion: String,
+    runnerVersions: [String],
+    serverUptimeSeconds: TimeInterval,
+    graceSeconds: TimeInterval
+) -> RuleEvaluation {
+    guard serverUptimeSeconds >= graceSeconds else { return .ok }
+    let comparator = VersionComparator()
+    // A server version that itself doesn't parse can't ground a comparison; stay
+    // quiet rather than guess. `ChickadeeVersion.current` is always clean semver,
+    // so this is purely defensive.
+    guard comparator.canParse(serverVersion) else { return .ok }
+
+    let behind = runnerVersions.filter {
+        comparator.compare($0, serverVersion) == .orderedAscending
+    }
+    guard !behind.isEmpty else { return .ok }
+
+    let oldest =
+        behind.min { (comparator.compare($0, $1) ?? .orderedSame) == .orderedAscending } ?? behind[0]
+    let distinctBehind = Set(behind).sorted()
+    return RuleEvaluation(
+        isFiring: true,
+        summary:
+            "\(behind.count) runner(s) behind server v\(serverVersion) (oldest v\(oldest)) — "
+            + "grading against a stale test runtime; refresh the runner image",
+        details: [
+            "server_version": serverVersion,
+            "behind_count": String(behind.count),
+            "behind_versions": distinctBehind.joined(separator: ","),
+            "oldest_runner_version": oldest,
+            "grace_seconds": String(Int(graceSeconds)),
+        ]
+    )
+}
+
+private func evaluateRunnerVersionSkew(
+    on application: Application,
+    configuration: ServerHealthAlertConfiguration,
+    now: Date
+) async -> RuleEvaluation {
+    let uptime = now.timeIntervalSince(application.serverStartedAt)
+    let versions = await application.workerActivityStore.knownRunnerVersions(
+        rememberSeconds: runnerPresenceRememberSeconds,
+        now: now
+    )
+    return decideRunnerVersionSkew(
+        serverVersion: ChickadeeVersion.current,
+        runnerVersions: versions,
+        serverUptimeSeconds: uptime,
+        graceSeconds: configuration.runnerVersionSkewGraceSeconds
     )
 }
 
@@ -652,6 +731,10 @@ func writeAlertWebhookURLToDisk(value: String, filePath: String) {
 /// alerts-enabled flag (with its own log line when disabled).
 struct ServerHealthAlertLifecycleHandler: LifecycleHandler {
     func didBoot(_ application: Application) throws {
+        // Stamp the boot time unconditionally (before the enabled-guard) so the
+        // runner-version-skew deploy grace is accurate even when paging is off
+        // and only the read-only `get_health_alerts` view evaluates the rule.
+        application.serverStartedAt = Date()
         guard application.serverHealthAlertConfiguration.enabled else {
             application.logger.info("server_health_alerts_disabled")
             return
@@ -674,6 +757,10 @@ struct ServerHealthAlertSweepMonitorKey: StorageKey {
 
 struct ServerHealthAlertWebhookURLFilePathKey: StorageKey {
     typealias Value = String
+}
+
+struct ServerStartedAtKey: StorageKey {
+    typealias Value = Date
 }
 
 extension Application {
@@ -717,5 +804,20 @@ extension Application {
                 ?? (DirectoryConfiguration.detect().workingDirectory + ".alert-webhook-url")
         }
         set { storage[ServerHealthAlertWebhookURLFilePathKey.self] = newValue }
+    }
+
+    /// When this server process booted — used by the runner-version-skew alert's
+    /// deploy grace (see `decideRunnerVersionSkew`). Set explicitly at boot by
+    /// `ServerHealthAlertLifecycleHandler.didBoot`; the lazy fallback captures the
+    /// first read for paths that never ran the handler (e.g. a test app that
+    /// evaluates rules directly), so the value is always populated and stable.
+    var serverStartedAt: Date {
+        get {
+            if let existing = storage[ServerStartedAtKey.self] { return existing }
+            let now = Date()
+            storage[ServerStartedAtKey.self] = now
+            return now
+        }
+        set { storage[ServerStartedAtKey.self] = newValue }
     }
 }

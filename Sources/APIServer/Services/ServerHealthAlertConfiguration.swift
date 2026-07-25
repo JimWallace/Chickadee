@@ -9,6 +9,16 @@ struct ServerHealthAlertConfiguration: Sendable {
     /// this session has not checked in within this window, regardless of whether
     /// jobs are queued.
     let runnerOfflineSeconds: TimeInterval
+    /// Runner version-skew rule: fire when a runner still known this session
+    /// advertises a version behind the server's own `ChickadeeVersion.current`,
+    /// but only once the server itself has been up longer than this grace. The
+    /// grace exists because a blue/green deploy flips the server *before* it
+    /// refreshes the runner (`docs/zero-downtime-deploy.md` step 8), so every
+    /// deploy has an expected transient window where the runner is a release
+    /// behind; firing during it would page on every deploy. A persistently-behind
+    /// runner (a failed runner refresh, or an old runner rejoining the fleet)
+    /// outlives the grace and pages once.
+    let runnerVersionSkewGraceSeconds: TimeInterval
     let queueDepthThreshold: Int
     let oldestPendingSeconds: TimeInterval
     let errorRateThreshold: Double
@@ -37,6 +47,7 @@ struct ServerHealthAlertConfiguration: Sendable {
         checkIntervalSeconds: 60,
         cooldownSeconds: 1800,
         runnerOfflineSeconds: 300,
+        runnerVersionSkewGraceSeconds: 900,
         queueDepthThreshold: 25,
         oldestPendingSeconds: 600,
         errorRateThreshold: 0.30,
@@ -55,6 +66,8 @@ struct ServerHealthAlertConfiguration: Sendable {
             checkIntervalSeconds: TimeInterval(environmentInt("ALERT_CHECK_INTERVAL_SECONDS") ?? 60),
             cooldownSeconds: TimeInterval(environmentInt("ALERT_COOLDOWN_SECONDS") ?? 1800),
             runnerOfflineSeconds: TimeInterval(environmentInt("ALERT_RUNNER_OFFLINE_SECONDS") ?? 300),
+            runnerVersionSkewGraceSeconds: TimeInterval(
+                environmentInt("ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS") ?? 900),
             queueDepthThreshold: environmentInt("ALERT_QUEUE_DEPTH_THRESHOLD") ?? 25,
             oldestPendingSeconds: TimeInterval(environmentInt("ALERT_OLDEST_PENDING_SECONDS") ?? 600),
             errorRateThreshold: environmentDouble("ALERT_ERROR_RATE_THRESHOLD") ?? 0.30,
