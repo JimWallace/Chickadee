@@ -33,8 +33,10 @@ protocol NotebookCheckKindHandler: Sendable {
     /// test script.  Default: none.
     func sidecars(_ check: NotebookCheck) -> [String: String]
 
-    /// Validates the kind-specific required fields.
-    func validate(_ check: NotebookCheck) throws
+    /// Validates the kind-specific required fields. `language` selects the
+    /// identifier grammar for name fields (Python vs R) so an R assignment's
+    /// idiomatic names (`my.df`) aren't held to Python's rules.
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws
 }
 
 extension NotebookCheckKindHandler {
@@ -67,21 +69,40 @@ func notebookCheckKindHandler(for kind: NotebookCheckKind) -> any NotebookCheckK
 /// `(kind_name)` infix and `field` names the offending field in the message
 /// (some kinds call it a "variable name", `.functionExists` a "function name").
 private func validateRequiredIdentifier(
-    _ value: String?, check: NotebookCheck, kindLabel: String, field: String
+    _ value: String?, check: NotebookCheck, kindLabel: String, field: String,
+    language: AssignmentLanguage
 ) throws -> String {
     guard let value, !value.isEmpty else {
         throw Abort(
             .unprocessableEntity,
             reason: "Notebook check '\(check.id)' (\(kindLabel)): \(field) is required")
     }
-    guard isValidPythonIdentifier(value) else {
+    guard isValidIdentifier(value, language: language) else {
         throw Abort(
             .unprocessableEntity,
             reason:
-                "Notebook check '\(check.id)' (\(kindLabel)): \(field) '\(value)' is not a valid Python identifier"
+                "Notebook check '\(check.id)' (\(kindLabel)): \(field) '\(value)' is not a valid \(identifierKindName(language))"
         )
     }
     return value
+}
+
+/// Identifier grammar for `language`. Keeps name fields (`variable`, function
+/// names) held to the right language's rules, so an R name like `my.df` passes
+/// on an R assignment while Python assignments are unchanged.
+private func isValidIdentifier(_ value: String, language: AssignmentLanguage) -> Bool {
+    switch language {
+    case .python: return isValidPythonIdentifier(value)
+    case .r: return isValidRIdentifier(value)
+    }
+}
+
+/// Human-readable name of the identifier grammar, for validation messages.
+private func identifierKindName(_ language: AssignmentLanguage) -> String {
+    switch language {
+    case .python: return "Python identifier"
+    case .r: return "R name"
+    }
 }
 
 /// rtol / atol bounds check shared by the float-comparison kinds.
@@ -98,6 +119,46 @@ private func validateTolerances(_ check: NotebookCheck, kindLabel: String) throw
     }
 }
 
+/// Cheap sanity scan for a user-supplied `cell_contains` regex needle.  A full
+/// Python/R regex engine isn't available from Swift, so this only catches the
+/// common typos: unbalanced parentheses and a dangling trailing backslash.  It
+/// walks the pattern tracking escape state and character-class nesting, so an
+/// escaped `\(`, a literal `[(]`, or a literal `\\` at the end isn't
+/// miscounted — the bug this replaced compared raw `(`/`)` character counts and
+/// tested `hasSuffix("\\")`, both of which mis-flagged those cases.
+private func validateRegexSanity(_ needle: String, checkID: String) throws {
+    func unbalanced() -> Abort {
+        Abort(
+            .unprocessableEntity,
+            reason: "Notebook check '\(checkID)' (cell_contains): regex has unbalanced parentheses")
+    }
+    var depth = 0
+    var inClass = false
+    var escaped = false
+    for ch in needle {
+        if escaped {
+            escaped = false
+            continue
+        }
+        switch ch {
+        case "\\": escaped = true
+        case "[" where !inClass: inClass = true
+        case "]" where inClass: inClass = false
+        case "(" where !inClass: depth += 1
+        case ")" where !inClass:
+            guard depth > 0 else { throw unbalanced() }
+            depth -= 1
+        default: break
+        }
+    }
+    if escaped {
+        throw Abort(
+            .unprocessableEntity,
+            reason: "Notebook check '\(checkID)' (cell_contains): regex ends with a dangling backslash")
+    }
+    guard depth == 0 else { throw unbalanced() }
+}
+
 // MARK: - dataFrameShape
 
 struct DataFrameShapeKind: NotebookCheckKindHandler {
@@ -106,9 +167,9 @@ struct DataFrameShapeKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultDataFrameShapeLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         _ = try validateRequiredIdentifier(
-            check.variable, check: check, kindLabel: "data_frame_shape", field: "variable name")
+            check.variable, check: check, kindLabel: "data_frame_shape", field: "variable name", language: language)
         guard let rows = check.expectedRows, rows >= 0 else {
             throw Abort(
                 .unprocessableEntity,
@@ -132,9 +193,9 @@ struct DataFrameColumnsKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultDataFrameColumnsLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         _ = try validateRequiredIdentifier(
-            check.variable, check: check, kindLabel: "data_frame_columns", field: "variable name")
+            check.variable, check: check, kindLabel: "data_frame_columns", field: "variable name", language: language)
         guard let columns = check.expectedColumns, !columns.isEmpty else {
             throw Abort(
                 .unprocessableEntity,
@@ -178,9 +239,9 @@ struct DataFrameEqualityKind: NotebookCheckKindHandler {
         [expectedCSVSidecarFilename(checkID: check.id): check.expectedCSV ?? ""]
     }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         _ = try validateRequiredIdentifier(
-            check.variable, check: check, kindLabel: "data_frame_equality", field: "variable name")
+            check.variable, check: check, kindLabel: "data_frame_equality", field: "variable name", language: language)
         guard let csv = check.expectedCSV, !csv.isEmpty else {
             throw Abort(
                 .unprocessableEntity,
@@ -215,9 +276,9 @@ struct SeriesEqualityKind: NotebookCheckKindHandler {
         [expectedCSVSidecarFilename(checkID: check.id): check.expectedCSV ?? ""]
     }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         _ = try validateRequiredIdentifier(
-            check.variable, check: check, kindLabel: "series_equality", field: "variable name")
+            check.variable, check: check, kindLabel: "series_equality", field: "variable name", language: language)
         guard let csv = check.expectedCSV, !csv.isEmpty else {
             throw Abort(
                 .unprocessableEntity,
@@ -252,9 +313,9 @@ struct NumericArrayCloseKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultNumericArrayCloseLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         _ = try validateRequiredIdentifier(
-            check.variable, check: check, kindLabel: "numeric_array_close", field: "variable name")
+            check.variable, check: check, kindLabel: "numeric_array_close", field: "variable name", language: language)
         guard let array = check.expectedArray, !array.isEmpty else {
             throw Abort(
                 .unprocessableEntity,
@@ -274,7 +335,7 @@ struct FigureCountKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultFigureCountLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         guard let n = check.minFigures, n >= 0 else {
             throw Abort(
                 .unprocessableEntity,
@@ -291,28 +352,16 @@ struct CellContainsKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultCellContainsLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         guard let needle = check.containsText, !needle.isEmpty else {
             throw Abort(
                 .unprocessableEntity,
                 reason: "Notebook check '\(check.id)' (cell_contains): containsText must be a non-empty string")
         }
-        // If regex, sanity-check that it compiles.  We can't run a
-        // Python regex from Swift, but a simple parser catches the
-        // most common typos (unbalanced parens, dangling `\`).
+        // If regex, sanity-check that it compiles.  We can't run a Python/R
+        // regex from Swift, but a small scan catches the most common typos.
         if check.regex == true {
-            let openParens = needle.filter { $0 == "(" }.count
-            let closeParens = needle.filter { $0 == ")" }.count
-            guard openParens == closeParens else {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (cell_contains): regex has unbalanced parentheses")
-            }
-            if needle.hasSuffix("\\") {
-                throw Abort(
-                    .unprocessableEntity,
-                    reason: "Notebook check '\(check.id)' (cell_contains): regex ends with a dangling backslash")
-            }
+            try validateRegexSanity(needle, checkID: check.id)
         }
     }
 }
@@ -325,7 +374,7 @@ struct FunctionExistsKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultFunctionExistsLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         // Inlined rather than routed through `validateRequiredIdentifier`:
         // this kind's two messages historically used different field
         // wording ("function name (variable)" when missing, "function
@@ -335,11 +384,11 @@ struct FunctionExistsKind: NotebookCheckKindHandler {
                 .unprocessableEntity,
                 reason: "Notebook check '\(check.id)' (function_exists): function name (variable) is required")
         }
-        guard isValidPythonIdentifier(name) else {
+        guard isValidIdentifier(name, language: language) else {
             throw Abort(
                 .unprocessableEntity,
                 reason:
-                    "Notebook check '\(check.id)' (function_exists): function name '\(name)' is not a valid Python identifier"
+                    "Notebook check '\(check.id)' (function_exists): function name '\(name)' is not a valid \(identifierKindName(language))"
             )
         }
         if let arity = check.expectedArity, arity < 0 {
@@ -358,9 +407,9 @@ struct VariableExistsKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultVariableExistsLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         _ = try validateRequiredIdentifier(
-            check.variable, check: check, kindLabel: "variable_exists", field: "variable name")
+            check.variable, check: check, kindLabel: "variable_exists", field: "variable name", language: language)
         // expectedType (if present) must be non-empty and non-whitespace.
         // Unknown type names fall through to the renderer's MRO-walk
         // fallback (same behaviour as `.returnTypeCheck`), so we don't
@@ -386,7 +435,7 @@ struct ASTStructureKind: NotebookCheckKindHandler {
     }
     func defaultLabel(_ check: NotebookCheck) -> String { defaultASTStructureLabel(check) }
 
-    func validate(_ check: NotebookCheck) throws {
+    func validate(_ check: NotebookCheck, language: AssignmentLanguage) throws {
         guard let constructs = check.requiredConstructs, !constructs.isEmpty else {
             throw Abort(
                 .unprocessableEntity,

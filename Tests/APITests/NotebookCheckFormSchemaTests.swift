@@ -64,7 +64,7 @@ import Testing
             #expect(
                 throws: Never.self,
                 "Valid sample for \(kind.rawValue) should pass its validator"
-            ) { try handler.validate(sample) }
+            ) { try handler.validate(sample, language: .python) }
 
             // Negative: clearing each schema-required field trips the validator.
             let required = (schema.kinds[kind.rawValue] ?? []).filter(\.required).map(\.name)
@@ -73,7 +73,7 @@ import Testing
                 #expect(
                     throws: (any Error).self,
                     "Clearing required field '\(field)' for \(kind.rawValue) must fail validation"
-                ) { try handler.validate(broken) }
+                ) { try handler.validate(broken, language: .python) }
             }
         }
     }
