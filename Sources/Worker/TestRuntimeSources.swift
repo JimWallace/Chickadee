@@ -437,11 +437,11 @@ private let testRuntimeRHelpers = #"""
 
     .chickadee_json_str <- function(x) {
         x <- as.character(x)
-        x <- gsub("\\\\", "\\\\\\\\", x, fixed = TRUE)
-        x <- gsub('"',    '\\\\"',    x, fixed = TRUE)
-        x <- gsub("\n",   "\\\\n",    x, fixed = TRUE)
-        x <- gsub("\r",   "\\\\r",    x, fixed = TRUE)
-        x <- gsub("\t",   "\\\\t",    x, fixed = TRUE)
+        x <- gsub("\\", "\\\\", x, fixed = TRUE)
+        x <- gsub('"',    '\\"',    x, fixed = TRUE)
+        x <- gsub("\n",   "\\n",    x, fixed = TRUE)
+        x <- gsub("\r",   "\\r",    x, fixed = TRUE)
+        x <- gsub("\t",   "\\t",    x, fixed = TRUE)
         paste0('"', x, '"')
     }
 
