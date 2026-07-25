@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.642] - 2026-07-25
+
+### Changed
+
+- **`docs/r-support-handoff.md` refreshed now that #1211 has landed.** The
+  remaining work is down to one blocked task (apply the
+  `set_minimum_runner_version` gates once an MCP client reconnect picks up the
+  new tool) plus a ranked backlog; there are no open PRs.
+
+
 ## [0.4.641] - 2026-07-25
 
 ### Fixed
