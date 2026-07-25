@@ -309,10 +309,26 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         globalVariableNames: Set(resolvedGlobalVariables.map(\.name)),
         perStudentExpressionNames: perStudentExpressionNames
     )
+    // The assignment's language decides how each case renders and which
+    // extension it gets. Prefer the authored items when supplied — they carry
+    // the edit being applied, which may be the very first `.R` test — and fall
+    // back to the stored manifest (which records the language once known).
+    // Defaults to `.python`, so a Python assignment renders byte-for-byte as
+    // before.
+    let previousLanguage = AssignmentLanguage.resolve(manifest: props)
+    let assignmentLanguage: AssignmentLanguage = {
+        for item in authoredItems ?? [] {
+            guard case .script(let raw) = item else { continue }
+            if URL(fileURLWithPath: raw.script).pathExtension.lowercased() == "r" { return .r }
+        }
+        return previousLanguage
+    }()
+
     try validateNotebookChecks(
         resolvedChecks,
         patternFamilies: nextFamilies,
-        testSuites: authoredAsTestSuites
+        testSuites: authoredAsTestSuites,
+        language: assignmentLanguage
     )
 
     try validateFamilyRefDependencies(
@@ -335,21 +351,6 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     // produce sidecar files (e.g. `_expected_<id>.csv` for
     // `.dataFrameEquality`); both the script and the sidecars are
     // tracked here so removing a check cleans up all of its files.
-    // The assignment's language decides how each case renders and which
-    // extension it gets. Prefer the authored items when supplied — they carry
-    // the edit being applied, which may be the very first `.R` test — and fall
-    // back to the stored manifest (which records the language once known).
-    // Defaults to `.python`, so a Python assignment renders byte-for-byte as
-    // before.
-    let previousLanguage = AssignmentLanguage.resolve(manifest: props)
-    let assignmentLanguage: AssignmentLanguage = {
-        for item in authoredItems ?? [] {
-            guard case .script(let raw) = item else { continue }
-            if URL(fileURLWithPath: raw.script).pathExtension.lowercased() == "r" { return .r }
-        }
-        return previousLanguage
-    }()
-
     // The generated extension is part of the filename, so the old files must be
     // listed under the language the *previous* manifest was written in — and,
     // when the assignment changes language, under the new one too, or the
@@ -362,7 +363,11 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
             }
         }
     ).union(
-        props.notebookChecks.flatMap(notebookCheckAllGeneratedFilenames)
+        Set([previousLanguage, assignmentLanguage]).flatMap { language in
+            props.notebookChecks.flatMap {
+                notebookCheckAllGeneratedFilenames($0, language: language)
+            }
+        }
     )
 
     // A family whose id is missing from `familySectionID` (defensive path
@@ -405,7 +410,7 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
     var renderedCheckByID: [String: GeneratedScript] = [:]
     var sidecarFilesToWrite: [String: String] = [:]
     for check in resolvedChecks {
-        let bundle = renderNotebookCheck(check)
+        let bundle = renderNotebookCheck(check, language: assignmentLanguage)
         renderedByFilename[bundle.script.filename] = bundle.script
         renderedCheckByID[check.id] = bundle.script
         for (name, content) in bundle.sidecars {
