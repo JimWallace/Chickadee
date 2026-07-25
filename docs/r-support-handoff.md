@@ -1,7 +1,7 @@
 # Handoff: first-class R support (HLTH 230 → R)
 
 Written 2026-07-25. Repo `JimWallace/Chickadee`, branch
-`claude/hlth230-assignments-r-conversion-waxnqw`, server at v0.4.640.
+`claude/hlth230-assignments-r-conversion-waxnqw`, released through v0.4.641.
 
 ## Goal
 
@@ -13,7 +13,7 @@ rationale: [`docs/r-support.md`](r-support.md). This file is only the
 
 ## State: done and verified
 
-The engine is complete and merged (v0.4.635–v0.4.640). All five HLTH 230
+The engine is complete and merged (v0.4.635–v0.4.641). All five HLTH 230
 assignments are converted to R in course **TEST** and **validate green**:
 
 | Assignment | Public ID | Notes |
@@ -26,21 +26,11 @@ assignments are converted to R in course **TEST** and **validate green**:
 
 Notebook checks render in R for **every kind but `ast_structure`**.
 
-## Task 1 — drive PR #1211 to merge (only open item)
+There are **no open PRs**. #1211 (every escape in the R runtime's JSON result
+formatter) merged as v0.4.641; runners pick it up on the normal deploy path,
+after which student-visible R messages render correctly.
 
-[#1211](https://github.com/JimWallace/Chickadee/pull/1211) fixes every escape in
-the R runtime's JSON result formatter (`.chickadee_json_str`). It was open and
-in CI at handoff time.
-
-```
-gh-equivalent: mcp__github__pull_request_read  method=get  pullNumber=1211
-```
-
-If CI is green: mark it ready (`update_pull_request draft=false`), squash-merge,
-**wait for the `chore(release)` commit on main**, then reset the branch (see
-Trap 2). If red: diagnose and push a fix — do not leave it red.
-
-## Task 2 — apply minimum-runner-version gates (blocked on a client reconnect)
+## Task 1 — apply minimum-runner-version gates (blocked on a client reconnect)
 
 v0.4.640 added the MCP tool `set_minimum_runner_version` (#1210). It gates a
 submission to a runner at or above a given version; a job that doesn't qualify
@@ -65,7 +55,7 @@ All five are green today, so correct gates change nothing. If one starts
 **queueing**, that is the gate catching an old runner before it produces a
 misleading red — not a regression.
 
-## Task 3 — backlog (found this session, none started)
+## Task 2 — backlog (found this session, none started)
 
 Ordered by value. None is blocking.
 
