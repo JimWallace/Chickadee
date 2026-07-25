@@ -70,6 +70,11 @@ import Testing
                     datasets: [SetDatasetTool.DatasetEntry(file: "cases.csv", sampleSize: 100)])
             ),
             (
+                SetMinimumRunnerVersionTool.name, SetMinimumRunnerVersionTool.outputSchema,
+                SetMinimumRunnerVersionTool.Output(
+                    assignmentPublicID: "abc123", minimumRunnerVersion: "0.5.0")
+            ),
+            (
                 AuthorScriptTool.name, AuthorScriptTool.outputSchema,
                 AuthorScriptTool.Output(
                     assignmentPublicID: "abc123", filename: "test_x.py", tier: "public",

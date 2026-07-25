@@ -14,6 +14,12 @@ struct VersionComparator {
         return .orderedSame
     }
 
+    /// Whether `raw` is a version string this comparator can parse.  Used to
+    /// reject a malformed `minimumRunnerVersion` at manifest-ingest time.
+    func canParse(_ raw: String) -> Bool {
+        parse(raw) != nil
+    }
+
     private func parse(_ raw: String) -> [Int]? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

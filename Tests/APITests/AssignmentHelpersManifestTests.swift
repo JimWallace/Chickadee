@@ -235,6 +235,42 @@ final class AssignmentHelpersManifestTests {
         #expect(props.testSuites.first(where: { $0.script == "01_public.py" })?.sectionID == "sec-1")
     }
 
+    // Regression: rebuilding the manifest to add or remove a script must preserve
+    // the optional minimumRunnerVersion gate. makeWorkerManifestJSON builds a
+    // fresh dict, so an un-threaded field would silently un-gate the assignment
+    // on the next script edit.
+    @Test func updateManifestScriptEditsPreserveMinimumRunnerVersion() throws {
+        let original = try makeWorkerManifestJSON(
+            testSuites: [
+                ConfiguredSuiteEntry(
+                    script: "01_public.py", tier: "public", order: 1,
+                    dependsOn: [], points: 1, displayName: nil)
+            ],
+            includeMakefile: false,
+            minimumRunnerVersion: "0.5.0"
+        )
+        // Sanity: the builder emitted the gate.
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(original.utf8))
+                .minimumRunnerVersion == "0.5.0")
+
+        let added = try #require(
+            updateManifestAddingScript(
+                manifestJSON: original,
+                entry: ConfiguredSuiteEntry(
+                    script: "02_public.py", tier: "public", order: 99,
+                    dependsOn: [], points: 1, displayName: nil)))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(added.utf8))
+                .minimumRunnerVersion == "0.5.0")
+
+        let removed = try #require(
+            updateManifestRemovingScript(manifestJSON: added, filename: "02_public.py"))
+        #expect(
+            try JSONDecoder().decode(TestProperties.self, from: Data(removed.utf8))
+                .minimumRunnerVersion == "0.5.0")
+    }
+
     @Test func detectRequirementSuggestionsIgnoresSolutionNotebookImports() throws {
         let zipPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("detect-requirements-\(UUID().uuidString).zip")

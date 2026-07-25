@@ -72,3 +72,26 @@ func setManifestTimeLimitSeconds(
     }
     return seconds
 }
+
+/// Sets (or clears) the test setup's `minimumRunnerVersion` gate, saving only
+/// when it actually changes.  A blank/nil `version` clears the gate (the key is
+/// removed, matching `TestProperties.encodeIfPresent` which omits a nil value).
+/// A gated setup is only handed to a native runner whose advertised version is
+/// `>=` this value — see docs/runner-capability-profiles.md.  Returns the
+/// effective value (nil when cleared).
+func setManifestMinimumRunnerVersion(
+    setup: APITestSetup, to version: String?, on db: any Database
+) async throws -> String? {
+    let normalized = version?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let effective = (normalized?.isEmpty == false) ? normalized : nil
+    let dict = (try? JSONSerialization.jsonObject(with: Data(setup.manifest.utf8))) as? [String: Any]
+    guard (dict?["minimumRunnerVersion"] as? String) != effective else { return effective }
+    try await mutateManifest(setup: setup, on: db) { dict in
+        if let effective {
+            dict["minimumRunnerVersion"] = effective
+        } else {
+            dict.removeValue(forKey: "minimumRunnerVersion")
+        }
+    }
+    return effective
+}

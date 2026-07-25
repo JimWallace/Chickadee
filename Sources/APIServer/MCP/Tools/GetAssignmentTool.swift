@@ -30,6 +30,10 @@ struct GetAssignmentTool: ContentTool {
         /// (in-browser Pyodide). Read from the test setup's manifest
         /// (`TestProperties.gradingMode`, default "worker").
         let gradingMode: String
+        /// Optional minimum native-runner version required to grade this
+        /// assignment (semver, e.g. "0.5.0"); null when ungated. A submission is
+        /// only handed to a runner at or above this version. Worker path only.
+        let minimumRunnerVersion: String?
         /// The course section (assignment group, e.g. "Labs") this assignment
         /// belongs to, or nil when ungrouped. Manage with set_assignment_course_section.
         let sectionID: String?
@@ -51,7 +55,8 @@ struct GetAssignmentTool: ContentTool {
         + "\"browser\" = graded in-browser via Pyodide), the course section (assignment group "
         + "like \"Labs\") it belongs to (sectionID/sectionName, null when ungrouped), and "
         + "secretRevealEnabled (whether students may spend their one secret-reveal token to see "
-        + "secret-tier test results; set via the assignment-update tool)."
+        + "secret-tier test results; set via the assignment-update tool), and minimumRunnerVersion "
+        + "(the optional minimum native-runner version required to grade it, null when ungated)."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -77,6 +82,7 @@ struct GetAssignmentTool: ContentTool {
             "validationStatus": MCPSchema.string,
             "deadlineOverrideActive": MCPSchema.boolean,
             "gradingMode": MCPSchema.string,
+            "minimumRunnerVersion": MCPSchema.string,
             "sectionID": MCPSchema.string,
             "sectionName": MCPSchema.string,
             "secretRevealEnabled": MCPSchema.boolean,
@@ -96,11 +102,12 @@ struct GetAssignmentTool: ContentTool {
             throw MCPToolError.invalidArguments(
                 tool: Self.name, detail: "The assignment's course could not be found.")
         }
-        // Grading mode lives in the test setup's manifest; default to "worker"
-        // (TestProperties' own default) when the setup or manifest is missing.
-        let gradingMode =
-            (try await APITestSetup.find(assignment.testSetupID, on: context.db))?
-            .decodedManifest()?.gradingMode.rawValue ?? "worker"
+        // Grading mode + the minimum-runner-version gate live in the test setup's
+        // manifest; default to "worker" (TestProperties' own default) when the
+        // setup or manifest is missing.
+        let manifest = (try await APITestSetup.find(assignment.testSetupID, on: context.db))?
+            .decodedManifest()
+        let gradingMode = manifest?.gradingMode.rawValue ?? "worker"
 
         // Resolve the course section (assignment group) the assignment is in.
         var sectionName: String?
@@ -121,6 +128,7 @@ struct GetAssignmentTool: ContentTool {
             validationStatus: assignment.validationStatus,
             deadlineOverrideActive: assignment.deadlineOverrideActive ?? false,
             gradingMode: gradingMode,
+            minimumRunnerVersion: manifest?.minimumRunnerVersion,
             sectionID: assignment.sectionID?.uuidString,
             sectionName: sectionName,
             secretRevealEnabled: assignment.secretRevealEnabled == true

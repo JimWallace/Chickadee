@@ -227,15 +227,83 @@ import VaporTesting
         }
     }
 
+    // MARK: - Minimum runner-version gate (manifest `minimumRunnerVersion`)
+
+    @Test func oldRunnerBelowMinimumVersionIsNotClaimed() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeSetup(id: "compat_minver_blocked", minimumRunnerVersion: "0.5.0")
+            _ = try await makeAssignment(setupID: setup.requireID(), title: "Needs New Runner")
+            let submission = try await makeSubmission(id: "compat_minver_sub_blocked", setupID: setup.requireID())
+
+            let response = try await requestJob(
+                workerID: "runner-old", profile: nil, runnerVersion: "0.4.0")
+            #expect(response.status == .noContent)
+
+            let reloaded = try await APISubmission.find(try submission.requireID(), on: app.db)
+            #expect(reloaded?.status == "pending")
+
+        }
+    }
+
+    @Test func runnerAtOrAboveMinimumVersionClaimsJob() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeSetup(id: "compat_minver_ok", minimumRunnerVersion: "0.5.0")
+            _ = try await makeAssignment(setupID: setup.requireID(), title: "Needs New Runner OK")
+            let submission = try await makeSubmission(id: "compat_minver_sub_ok", setupID: setup.requireID())
+
+            let response = try await requestJob(
+                workerID: "runner-new", profile: nil, runnerVersion: "0.5.0")
+            #expect(response.status == .ok)
+            #expect(try response.content.decode(Job.self).submissionID == submission.id)
+
+        }
+    }
+
+    @Test func ungatedAssignmentClaimsRegardlessOfRunnerVersion() async throws {
+        try await withApp(app) { _ in
+            // No `minimumRunnerVersion`: the gate short-circuits before parsing,
+            // so even a non-semver runner version claims (byte-for-byte-unchanged
+            // behaviour for existing assignments).
+            let setup = try await makeSetup(id: "compat_minver_none")
+            _ = try await makeAssignment(setupID: setup.requireID(), title: "Ungated")
+            let submission = try await makeSubmission(id: "compat_minver_sub_none", setupID: setup.requireID())
+
+            let response = try await requestJob(
+                workerID: "runner-weirdver", profile: nil, runnerVersion: "runner-tests/1.0")
+            #expect(response.status == .ok)
+            #expect(try response.content.decode(Job.self).submissionID == submission.id)
+
+        }
+    }
+
+    @Test func oldRunnerSkipsThenNewRunnerClaimsGatedJob() async throws {
+        try await withApp(app) { _ in
+            let setup = try await makeSetup(id: "compat_minver_seq", minimumRunnerVersion: "0.5.0")
+            _ = try await makeAssignment(setupID: setup.requireID(), title: "Sequential Gate")
+            let submission = try await makeSubmission(id: "compat_minver_sub_seq", setupID: setup.requireID())
+
+            let first = try await requestJob(
+                workerID: "runner-old-seq", profile: nil, runnerVersion: "0.4.999")
+            #expect(first.status == .noContent)
+
+            let second = try await requestJob(
+                workerID: "runner-new-seq", profile: nil, runnerVersion: "0.5.0")
+            #expect(second.status == .ok)
+            #expect(try second.content.decode(Job.self).submissionID == submission.id)
+
+        }
+    }
+
     private func requestJob(
         workerID: String,
-        profile: RunnerCapabilityProfile?
+        profile: RunnerCapabilityProfile?,
+        runnerVersion: String = "runner-tests/1.0"
     ) async throws -> TestingHTTPResponse {
         let path = "/api/v1/worker/request"
         let payload = WorkerActivityPayload(
             workerID: workerID,
             hostname: "\(workerID).local",
-            runnerVersion: "runner-tests/1.0",
+            runnerVersion: runnerVersion,
             maxConcurrentJobs: 1,
             activeJobs: 0,
             profile: profile
@@ -268,13 +336,17 @@ import VaporTesting
             })
     }
 
-    private func makeSetup(id: String) async throws -> APITestSetup {
+    private func makeSetup(id: String, minimumRunnerVersion: String? = nil) async throws -> APITestSetup {
         let course = APICourse(code: "COMP_\(id)", name: "Compatibility", enrollmentMode: .closed)
         try await course.save(on: app.db)
+        var fields =
+            #""schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10"#
+        if let minimumRunnerVersion {
+            fields += #","minimumRunnerVersion":"\#(minimumRunnerVersion)""#
+        }
         let setup = APITestSetup(
             id: id,
-            manifest:
-                #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#,
+            manifest: "{\(fields)}",
             zipPath: "/tmp/\(id).zip",
             courseID: try course.requireID()
         )

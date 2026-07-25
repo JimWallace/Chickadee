@@ -67,6 +67,9 @@ struct RunnerSanitizedProjectionTests {
             timeLimitSeconds: 30,
             makefile: MakefileConfig(target: "all"),
             starterNotebook: "assignment.ipynb",
+            // Non-nil so the strip is actually exercised: runnerSanitized() must
+            // drop this (server-side gate), keeping the key out of the pinned set.
+            minimumRunnerVersion: "0.5.0",
             patternFamilies: [
                 PatternFamily(
                     id: "fam", name: "Family", kind: .boundaryEquality,

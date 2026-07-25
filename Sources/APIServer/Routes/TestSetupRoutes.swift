@@ -75,6 +75,18 @@ struct TestSetupRoutes: RouteCollection {
             throw AppError.unprocessable(reason: "Unsupported schemaVersion \(manifest.schemaVersion); expected 1")
         }
 
+        // Reject a malformed minimum-runner-version gate at the authoring seam so
+        // a typo can never silently strand submissions at claim time.  A blank
+        // value means "no gate" (matching `RunnerVersionGate`), so only a
+        // non-blank, unparseable string is an error.
+        if let minimumRunnerVersion = manifest.minimumRunnerVersion,
+            !minimumRunnerVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            !RunnerVersionGate.isParseable(minimumRunnerVersion)
+        {
+            throw AppError.unprocessable(
+                reason: "Invalid minimumRunnerVersion \"\(minimumRunnerVersion)\"; expected a version like \"0.5.0\"")
+        }
+
         // Validate the dependency graph (reference integrity + cycle detection).
         try validateManifestDependencies(manifest)
 

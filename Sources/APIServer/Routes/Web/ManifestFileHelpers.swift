@@ -107,7 +107,9 @@ func updateManifestAddingScript(
         datasets: props.datasets,
         // Preserve the recorded language: rebuilding the manifest to add or
         // remove one script must never silently drop it back to "unrecorded".
-        language: props.language
+        language: props.language,
+        // Likewise preserve the minimum-runner-version gate across the rebuild.
+        minimumRunnerVersion: props.minimumRunnerVersion
     )
 }
 
@@ -159,7 +161,9 @@ func updateManifestRemovingScript(manifestJSON: String, filename: String) -> Str
         datasets: props.datasets,
         // Preserve the recorded language: rebuilding the manifest to add or
         // remove one script must never silently drop it back to "unrecorded".
-        language: props.language
+        language: props.language,
+        // Likewise preserve the minimum-runner-version gate across the rebuild.
+        minimumRunnerVersion: props.minimumRunnerVersion
     )
 }
 
@@ -178,7 +182,8 @@ func makeWorkerManifestJSON(
     disabledBuiltInAwardIDs: [String] = [],
     builtInAchievementsSeeded: Bool = false,
     datasets: [DatasetSpec] = [],
-    language: AssignmentLanguage? = nil
+    language: AssignmentLanguage? = nil,
+    minimumRunnerVersion: String? = nil
 ) throws -> String {
     // Topologically sort so the runner can process dependencies with a single
     // linear pass (parents always appear before children in the array).
@@ -201,6 +206,12 @@ func makeWorkerManifestJSON(
     // it — Python included — so the answer is stated, not re-inferred later.
     if let language {
         manifest["language"] = language.rawValue
+    }
+    // Optional minimum-runner-version gate.  Threaded through like `language`
+    // so a suite/script/family rebuild never silently un-gates an assignment;
+    // omitted (no gate) when nil/blank, matching `TestProperties.encodeIfPresent`.
+    if let minimumRunnerVersion, !minimumRunnerVersion.isEmpty {
+        manifest["minimumRunnerVersion"] = minimumRunnerVersion
     }
     try spliceEncodedArray(into: &manifest, key: "patternFamilies", values: patternFamilies)
     try spliceEncodedArray(into: &manifest, key: "notebookChecks", values: notebookChecks)

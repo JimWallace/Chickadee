@@ -83,6 +83,9 @@ struct GetSuiteTool: ContentTool {
         /// The assignment-wide default per-test execution time limit (seconds).
         /// Every item without its own `timeLimitSeconds` override uses this.
         let timeLimitSeconds: Int
+        /// Optional minimum native-runner version required to grade this
+        /// assignment (semver, e.g. "0.5.0"); null when ungated. Worker path only.
+        let minimumRunnerVersion: String?
     }
 
     static let name = "get_suite"
@@ -97,7 +100,8 @@ struct GetSuiteTool: ContentTool {
         + "`author_script` / `update_suite`; generated rows list the file(s) they produce in "
         + "`generatedFilenames` (read-only — edit the family/check instead). The response also "
         + "reports the assignment's default per-test execution time limit (`timeLimitSeconds` at the "
-        + "top level) and any per-script override (`timeLimitSeconds` on a script item). Read-only — "
+        + "top level), any per-script override (`timeLimitSeconds` on a script item), and the optional "
+        + "minimum native-runner version gate (`minimumRunnerVersion`, null when ungated). Read-only — "
         + "use this to inspect exactly what each test checks (e.g. to explain why a submission lost "
         + "points) before editing the suite."
     static let inputSchema: JSONValue = .object([
@@ -117,6 +121,12 @@ struct GetSuiteTool: ContentTool {
                 "description": .string(
                     "The assignment-wide default per-test execution time limit (seconds); every item "
                         + "without its own override uses this."),
+            ]),
+            "minimumRunnerVersion": .object([
+                "type": .string("string"),
+                "description": .string(
+                    "Optional minimum native-runner version (semver) required to grade this "
+                        + "assignment; null when ungated."),
             ]),
             "sections": .object([
                 "type": .string("array"),
@@ -250,7 +260,8 @@ struct GetSuiteTool: ContentTool {
         let defaultTimeLimit = manifest?.timeLimitSeconds ?? 10
         return Output(
             assignmentPublicID: assignment.publicID, sections: sections, items: items,
-            timeLimitSeconds: defaultTimeLimit)
+            timeLimitSeconds: defaultTimeLimit,
+            minimumRunnerVersion: manifest?.minimumRunnerVersion)
     }
 
     private static func item(

@@ -34,6 +34,7 @@ enum MCPToolCatalog {
             SetGradingModeTool().erased(),
             SetTimeLimitTool().erased(),
             SetDatasetTool().erased(),
+            SetMinimumRunnerVersionTool().erased(),
             UpdateSuiteTool().erased(),
             UpdateGlobalInputsTool().erased(),
             UpdateAchievementsTool().erased(),

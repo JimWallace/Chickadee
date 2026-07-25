@@ -204,6 +204,8 @@ enum MCPServerInstructions {
         update_suite, on a pattern family via create_pattern_family / update_pattern_family \
         (family-wide defaultTimeLimitSeconds and/or per-case timeLimitSeconds), and on a notebook \
         check via author_notebook_check — 0 clears an override), \
+        set_minimum_runner_version (the optional minimum native-runner version that may grade the \
+        assignment; a semver like "0.5.0", or null to clear — worker path only), \
         update_suite (script metadata). To add or change a GRADED test, prefer Chickadee's native \
         check types — update_pattern_family (edit a family's defaults/cases) / create_pattern_family \
         (add a new family) and author_notebook_check (create/replace a notebook check) — over a \
@@ -260,7 +262,8 @@ enum MCPServerInstructions {
         validation-only: it resolves the instructor's own reference-solution run and never exposes a \
         student submission, identity, or grade. \
         Metadata-only edits (update_assignment, set_grading_mode, set_time_limit, set_dataset, \
-        update_achievements, the section-organization tools) never trigger a regrade or a close. \
+        set_minimum_runner_version, update_achievements, the section-organization tools) never trigger \
+        a regrade or a close. \
         update_global_inputs and update_section_variables re-inline the shared inputs into the \
         affected scripts in place and likewise neither close nor regrade (matching the web Global \
         Inputs panel); re-run validate_assignment yourself after changing inputs that graded \

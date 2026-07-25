@@ -332,6 +332,22 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// next save stamps a value.
     public let language: AssignmentLanguage?
 
+    /// Optional minimum `chickadee-runner` version required to grade this
+    /// assignment on the native worker path.  When set, the server only hands a
+    /// submission for this setup to a runner whose advertised
+    /// `ChickadeeVersion.current` is `>=` this value; otherwise the job stays
+    /// `pending` until a new-enough runner polls.  Use it for a suite that
+    /// depends on behaviour only present in a newer runner build.
+    ///
+    /// A plain semver string (e.g. `"0.5.0"`), parsed by the server's
+    /// `VersionComparator`.  `nil` — the default, and every manifest written
+    /// before this field existed — means no gate, and the enclosing manifest is
+    /// then byte-for-byte unchanged.  Purely a server-side dispatch gate: the
+    /// runner never needs it, so `runnerSanitized()` strips it via the memberwise
+    /// default (like `datasets` / `graderOnlyFiles`).  Does not apply to browser
+    /// grading (no runner version there); it only bites the worker path.
+    public let minimumRunnerVersion: String?
+
     public init(
         schemaVersion: Int = 1,
         gradingMode: GradingMode = .worker,
@@ -341,6 +357,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         makefile: MakefileConfig? = nil,
         starterNotebook: String? = nil,
         language: AssignmentLanguage? = nil,
+        minimumRunnerVersion: String? = nil,
         patternFamilies: [PatternFamily] = [],
         notebookChecks: [NotebookCheck] = [],
         sections: [TestSuiteSection] = [],
@@ -361,6 +378,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         self.makefile = makefile
         self.starterNotebook = starterNotebook
         self.language = language
+        self.minimumRunnerVersion = minimumRunnerVersion
         // `testItems` wins when supplied; otherwise synthesize it from the
         // legacy `patternFamilies` / `notebookChecks` arguments (families
         // first, then checks) so every existing call site keeps working.
@@ -390,6 +408,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // Absent on every manifest written before the language became
         // first-class; nil falls back to sniffing the suite.
         language = try c.decodeIfPresent(AssignmentLanguage.self, forKey: .language)
+        minimumRunnerVersion = try c.decodeIfPresent(String.self, forKey: .minimumRunnerVersion)
         // `testItems` is the canonical unified list when present.  A legacy
         // manifest carries the separate `patternFamilies` / `notebookChecks`
         // arrays instead — migrate them on read.  (An explicitly-empty
@@ -431,6 +450,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         case makefile
         case starterNotebook
         case language
+        case minimumRunnerVersion
         case testItems
         case patternFamilies
         case notebookChecks
@@ -456,6 +476,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
         // encodeIfPresent, not encode: an assignment with no recorded language
         // must produce the exact bytes it always has.
         try c.encodeIfPresent(language, forKey: .language)
+        try c.encodeIfPresent(minimumRunnerVersion, forKey: .minimumRunnerVersion)
         try c.encode(testItems, forKey: .testItems)
         // Mirror the legacy arrays (derived from `testItems`, so they can
         // never drift) for cross-version readers that predate `testItems`.

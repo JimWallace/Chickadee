@@ -661,7 +661,9 @@ func applyPatternFamilies(  // swiftlint:disable:this function_body_length cyclo
         // which re-keys the runner's TestSetupCache and triggers one
         // revision-retest fan-out for that assignment — a bounded, one-time
         // cost accepted in exchange for the language never being re-inferred.
-        language: assignmentLanguage
+        language: assignmentLanguage,
+        // Preserve the minimum-runner-version gate across the family rebuild.
+        minimumRunnerVersion: props.minimumRunnerVersion
     )
 
     // Belt-and-suspenders: the post-expansion manifest is the one the runner
