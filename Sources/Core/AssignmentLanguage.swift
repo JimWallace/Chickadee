@@ -44,6 +44,46 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     }
 }
 
+extension AssignmentLanguage {
+
+    /// Resolve including the assignment's starter notebook, read straight from
+    /// `.ipynb` bytes.
+    ///
+    /// This is the only signal a *brand-new* notebook assignment has. Its suite
+    /// is still empty and nothing has recorded a language yet, so
+    /// `resolve(manifest:)` alone answers `.python` — which meant an
+    /// instructor's first R `=` expression was evaluated by `python3` and
+    /// rejected with a Python `SyntaxError`, before any `.R` script existed to
+    /// give the game away.
+    ///
+    /// Falls back to the manifest-only resolution when the notebook is absent
+    /// or unparseable, so nothing regresses for assignments without one.
+    /// `notebookData` is an autoclosure because only step 2 of the precedence
+    /// needs it: a recorded language or an `.R` script in the suite both
+    /// outrank the kernelspec, so callers on hot paths (the worker job payload,
+    /// every suite save) don't pay to read the notebook off disk to be told
+    /// something the manifest already knew.
+    public static func resolve(
+        manifest: TestProperties,
+        notebookData: @autoclosure () -> Data?
+    ) -> AssignmentLanguage {
+        let manifestOnly = resolve(manifest: manifest)
+        guard manifest.language == nil, manifestOnly == .python else { return manifestOnly }
+        guard let data = notebookData(),
+            let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            let metadata = notebook["metadata"] as? [String: Any]
+        else {
+            return manifestOnly
+        }
+        return resolve(
+            manifest: manifest,
+            notebookKernelName: (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
+            notebookLanguageInfoName: (metadata["language_info"] as? [String: Any])?["name"]
+                as? String
+        )
+    }
+}
+
 // MARK: - Per-language rendering / delivery strategy
 //
 // A closed 2-case enum owns its own language-specific behavior (cleaner than a

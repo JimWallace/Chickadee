@@ -122,7 +122,7 @@ struct PreviewPersonalizationTool: ContentTool {
         let supportDir = context.request.application.testSetupsDirectory + "shared/\(assignment.testSetupID)/"
         let resolution = await PersonalizationSubstitution.resolve(
             manifest: manifest, seedHex: seedHex, supportFilesDirectory: supportDir,
-            language: AssignmentLanguage.resolve(manifest: manifest))
+            language: AssignmentLanguage.resolve(for: setup, manifest: manifest))
 
         let placeholders = Self.placeholderAudit(
             manifest: manifest, setup: setup, resolution: resolution)
