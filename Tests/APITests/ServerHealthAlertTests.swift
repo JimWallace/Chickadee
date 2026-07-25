@@ -240,11 +240,115 @@ import Testing
         #expect(forgotten.anyKnown == false)
     }
 
+    // MARK: - decideRunnerVersionSkew
+
+    @Test func runnerVersionSkew_firesWhenRunnerBehindAndPastGrace() {
+        let evaluation = decideRunnerVersionSkew(
+            serverVersion: "0.4.641",
+            runnerVersions: ["0.4.641", "0.4.635"],
+            serverUptimeSeconds: 1000,
+            graceSeconds: 900
+        )
+        #expect(evaluation.isFiring)
+        #expect(evaluation.details["behind_count"] == "1")
+        #expect(evaluation.details["server_version"] == "0.4.641")
+        #expect(evaluation.details["oldest_runner_version"] == "0.4.635")
+        #expect(evaluation.details["behind_versions"] == "0.4.635")
+    }
+
+    @Test func runnerVersionSkew_okWhenAllRunnersCurrent() {
+        let evaluation = decideRunnerVersionSkew(
+            serverVersion: "0.4.641",
+            runnerVersions: ["0.4.641", "0.4.641"],
+            serverUptimeSeconds: 100_000,
+            graceSeconds: 900
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func runnerVersionSkew_okWithinDeployGrace() {
+        // The crux: a runner is a release behind, but the server only just booted
+        // (still inside its refresh window). This must NOT page — otherwise every
+        // blue/green deploy fires while step 8 catches the runner up.
+        let evaluation = decideRunnerVersionSkew(
+            serverVersion: "0.4.641",
+            runnerVersions: ["0.4.640"],
+            serverUptimeSeconds: 120,
+            graceSeconds: 900
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func runnerVersionSkew_okWhenNoRunnersKnown() {
+        // A runner-less (e.g. browser-graded only) deployment never pages.
+        let evaluation = decideRunnerVersionSkew(
+            serverVersion: "0.4.641",
+            runnerVersions: [],
+            serverUptimeSeconds: 100_000,
+            graceSeconds: 900
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func runnerVersionSkew_skipsUnparseableRunnerVersions() {
+        // A mock / third-party runner reporting a non-semver version is not
+        // "behind" — it just can't be compared, so it must never page.
+        let evaluation = decideRunnerVersionSkew(
+            serverVersion: "0.4.641",
+            runnerVersions: ["runner/1.0", "dev"],
+            serverUptimeSeconds: 100_000,
+            graceSeconds: 900
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func runnerVersionSkew_countsOnlyBehindRunnersWhenFleetMixed() {
+        let evaluation = decideRunnerVersionSkew(
+            serverVersion: "0.4.641",
+            runnerVersions: ["0.4.641", "0.4.638", "0.4.639"],
+            serverUptimeSeconds: 100_000,
+            graceSeconds: 900
+        )
+        #expect(evaluation.isFiring)
+        #expect(evaluation.details["behind_count"] == "2")
+        #expect(evaluation.details["oldest_runner_version"] == "0.4.638")
+        #expect(evaluation.details["behind_versions"] == "0.4.638,0.4.639")
+    }
+
+    @Test func runnerVersionSkew_okWhenRunnerAheadOfServer() {
+        // A runner ahead of the server (e.g. briefly mid-rollback) is not the
+        // "behind" case this rule targets, so it stays quiet.
+        let evaluation = decideRunnerVersionSkew(
+            serverVersion: "0.4.641",
+            runnerVersions: ["0.5.0"],
+            serverUptimeSeconds: 100_000,
+            graceSeconds: 900
+        )
+        #expect(evaluation.isFiring == false)
+    }
+
+    @Test func knownRunnerVersions_returnsOnlyRecentNonEmptyVersions() async {
+        let store = WorkerActivityStore()
+        let now = Date()
+        // Current runner, seen just now.
+        await store.markActive(workerID: "r1", hostname: "h1", runnerVersion: "0.4.641", at: now)
+        // Old runner, seen 2h ago — beyond the remember window, dropped.
+        await store.markActive(
+            workerID: "r2", hostname: "h2", runnerVersion: "0.4.635",
+            at: now.addingTimeInterval(-7200))
+        // A keep-alive-only touch that never carried a version — omitted.
+        await store.markActive(workerID: "r3", hostname: "h3", at: now)
+
+        let versions = await store.knownRunnerVersions(rememberSeconds: 3600, now: now)
+        #expect(versions == ["0.4.641"])
+    }
+
     // MARK: - Rule helpers
 
     @Test func healthRuleSeverity() {
         #expect(HealthRule.databaseUnreachable.severity == "critical")
         #expect(HealthRule.runnerOffline.severity == "warning")
+        #expect(HealthRule.runnerVersionSkew.severity == "warning")
         #expect(HealthRule.queueBackedUp.severity == "warning")
         #expect(HealthRule.errorRateSpike.severity == "warning")
         #expect(HealthRule.editorKernelUnrecoverable.severity == "warning")

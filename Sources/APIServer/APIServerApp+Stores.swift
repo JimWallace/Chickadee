@@ -186,6 +186,18 @@ actor WorkerActivityStore {
         }
         return (anyRecent, anyKnown)
     }
+
+    /// Versions advertised by runners still known this session — seen within
+    /// `rememberSeconds`. Feeds the runner-version-skew alert. Entries whose
+    /// `runnerVersion` is empty (a runner touched only by an HMAC keep-alive that
+    /// never carried a version) are omitted, so they can't masquerade as skew.
+    /// Non-mutating like `runnerPresence`: it does not prune, so evaluating the
+    /// alert never races the dashboard's pruning in `snapshotsSortedByRecent`.
+    func knownRunnerVersions(rememberSeconds: TimeInterval, now: Date = Date()) -> [String] {
+        entries.values
+            .filter { now.timeIntervalSince($0.lastSeen) <= rememberSeconds && !$0.runnerVersion.isEmpty }
+            .map(\.runnerVersion)
+    }
 }
 
 actor LocalRunnerAutoStartStore {

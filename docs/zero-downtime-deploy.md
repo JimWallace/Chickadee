@@ -198,7 +198,12 @@ mechanism without moving any student traffic:
    re-queued by the server's `StuckSubmissionReaperMonitor`. Best-effort: this
    runs only after the server swap is already verified healthy, so a runner hiccup
    is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
-   Disable with `CHICKADEE_REFRESH_RUNNER=0`.
+   Disable with `CHICKADEE_REFRESH_RUNNER=0`. Because this step is best-effort, a
+   silently-failed refresh would leave the runner grading on a stale build; the
+   `runnerVersionSkew` health alert is the backstop — it pages once a runner stays
+   behind the server past `ALERT_RUNNER_VERSION_SKEW_GRACE_SECONDS` (default 900s),
+   which is set generously so the *expected* transient skew during this very step
+   never fires.
 9. Writes `status.json` / appends `history.jsonl` for the Phase 3 MCP surface.
 
 ### Configuration (env / `/etc/chickadee-deployer.env`)

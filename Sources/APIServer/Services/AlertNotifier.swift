@@ -3,6 +3,7 @@ import Vapor
 
 enum HealthRule: String, CaseIterable, Codable, Sendable {
     case runnerOffline
+    case runnerVersionSkew
     case queueBackedUp
     case errorRateSpike
     case editorKernelUnrecoverable
@@ -12,6 +13,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     var humanReadable: String {
         switch self {
         case .runnerOffline: return "Runner offline"
+        case .runnerVersionSkew: return "Runner version skew"
         case .queueBackedUp: return "Submission queue backed up"
         case .errorRateSpike: return "System-level failure rate spike"
         case .editorKernelUnrecoverable: return "Editor kernel unrecoverable"
@@ -24,6 +26,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         switch self {
         case .databaseUnreachable: return "critical"
         case .runnerOffline: return "warning"
+        case .runnerVersionSkew: return "warning"
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
         case .editorKernelUnrecoverable: return "warning"
