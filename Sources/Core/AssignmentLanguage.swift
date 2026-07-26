@@ -82,6 +82,43 @@ extension AssignmentLanguage {
                 as? String
         )
     }
+
+    /// Re-derive the language from scratch, **ignoring any recorded
+    /// `manifest.language`**.
+    ///
+    /// `resolve` treats a recorded language as an authoritative answer (step 0),
+    /// which is what a stable render needs — but it also makes the recorded value
+    /// a one-way door: a Python assignment cloned and converted to R keeps
+    /// rendering `.py` forever, because the sticky `.python` outranks the new R
+    /// notebook. When the starter notebook is *replaced* the recorded value is a
+    /// stale memo, not a declaration, so re-derivation must skip it. Precedence
+    /// is otherwise identical to `resolve`: an `.R`/`.r` graded script wins, else
+    /// an R notebook kernel (`kernelspec.name` in `rKernelNames`, or
+    /// `language_info.name == "r"`), else `.python`.
+    public static func rederive(
+        manifest: TestProperties,
+        notebookData: @autoclosure () -> Data?
+    ) -> AssignmentLanguage {
+        let hasRScript = manifest.testSuites.contains {
+            URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "r"
+        }
+        if hasRScript { return .r }
+        guard let data = notebookData(),
+            let notebook = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            let metadata = notebook["metadata"] as? [String: Any]
+        else {
+            return .python
+        }
+        if let kernel = (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
+            rKernelNames.contains(kernel.lowercased())
+        {
+            return .r
+        }
+        if ((metadata["language_info"] as? [String: Any])?["name"] as? String)?.lowercased() == "r" {
+            return .r
+        }
+        return .python
+    }
 }
 
 // MARK: - Per-language rendering / delivery strategy
