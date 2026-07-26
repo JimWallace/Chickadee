@@ -348,10 +348,22 @@ import Testing
     @Test func healthRuleSeverity() {
         #expect(HealthRule.databaseUnreachable.severity == "critical")
         #expect(HealthRule.runnerOffline.severity == "warning")
-        #expect(HealthRule.runnerVersionSkew.severity == "warning")
+        // Advisory: a runner a release behind is low-stakes (the #1210 gate
+        // queues rather than mis-grades), so it's info, not warning.
+        #expect(HealthRule.runnerVersionSkew.severity == "info")
         #expect(HealthRule.queueBackedUp.severity == "warning")
         #expect(HealthRule.errorRateSpike.severity == "warning")
         #expect(HealthRule.editorKernelUnrecoverable.severity == "warning")
+    }
+
+    @Test func healthRulePaging() {
+        // Runner version skew is advisory — it surfaces on /admin/alerts and via
+        // get_health_alerts but never pages the operator webhook. Every other rule
+        // pages.
+        #expect(HealthRule.runnerVersionSkew.pagesOperator == false)
+        for rule in HealthRule.allCases where rule != .runnerVersionSkew {
+            #expect(rule.pagesOperator, "\(rule.rawValue) should page the operator")
+        }
     }
 
     // MARK: - decideEditorKernelUnrecoverable

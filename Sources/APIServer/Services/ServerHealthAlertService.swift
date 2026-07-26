@@ -497,6 +497,10 @@ struct AlertFiringRecord: Encodable, Sendable {
     let resolved: Bool
     let summary: String
     let firedAt: String
+    /// Whether this rule pages the operator webhook at all. Advisory (`info`)
+    /// rules are recorded here for the dashboard but never paged, so the view can
+    /// show "advisory" rather than mistaking a deliberate non-page for a failure.
+    let paged: Bool
     let delivered: Bool
     let deliveryError: String?
 }
@@ -575,6 +579,7 @@ actor ServerHealthAlertMonitor {
             resolved: false,
             summary: alert.summary,
             firedAt: alert.firedAt,
+            paged: true,
             delivered: false,
             deliveryError: nil
         )
@@ -585,6 +590,7 @@ actor ServerHealthAlertMonitor {
                 resolved: false,
                 summary: alert.summary,
                 firedAt: alert.firedAt,
+                paged: true,
                 delivered: true,
                 deliveryError: nil
             )
@@ -594,6 +600,7 @@ actor ServerHealthAlertMonitor {
                 resolved: false,
                 summary: alert.summary,
                 firedAt: alert.firedAt,
+                paged: true,
                 delivered: false,
                 deliveryError: String(describing: error)
             )
@@ -629,20 +636,26 @@ actor ServerHealthAlertMonitor {
                 firedAt: now,
                 application: application
             )
+            // Advisory (`info`-severity) rules are recorded and logged so they
+            // stay visible on `/admin/alerts` and via `get_health_alerts`, but
+            // they never page the operator webhook.
+            let pages = transition.rule.pagesOperator
             var delivered = false
             var deliveryError: String?
-            do {
-                try await activeNotifier.send(alert, on: application)
-                delivered = true
-            } catch {
-                deliveryError = String(describing: error)
-                application.logger.warning(
-                    "alert_delivery_failed",
-                    metadata: [
-                        "rule": .string(alert.rule),
-                        "resolved": .stringConvertible(alert.resolved),
-                        "error": .string(deliveryError ?? "unknown"),
-                    ])
+            if pages {
+                do {
+                    try await activeNotifier.send(alert, on: application)
+                    delivered = true
+                } catch {
+                    deliveryError = String(describing: error)
+                    application.logger.warning(
+                        "alert_delivery_failed",
+                        metadata: [
+                            "rule": .string(alert.rule),
+                            "resolved": .stringConvertible(alert.resolved),
+                            "error": .string(deliveryError ?? "unknown"),
+                        ])
+                }
             }
             application.logger.info(
                 "alert_emitted",
@@ -650,6 +663,7 @@ actor ServerHealthAlertMonitor {
                     "rule": .string(alert.rule),
                     "resolved": .stringConvertible(alert.resolved),
                     "summary": .string(alert.summary),
+                    "paged": .stringConvertible(pages),
                     "delivered": .stringConvertible(delivered),
                 ])
             appendFiring(
@@ -658,6 +672,7 @@ actor ServerHealthAlertMonitor {
                     resolved: alert.resolved,
                     summary: alert.summary,
                     firedAt: alert.firedAt,
+                    paged: pages,
                     delivered: delivered,
                     deliveryError: deliveryError
                 ))
