@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.646] - 2026-07-26
+
+### Fixed
+
+- **Replacing a starter notebook re-derives the assignment language.** The
+  recorded manifest language was a one-way door: a Python assignment cloned and
+  converted to R kept rendering `.py`, because the sticky `.python` outranked the
+  new R notebook. Replacing the starter notebook (web Save or the
+  `update_notebook` MCP tool) now re-derives the language from the new notebook
+  via `AssignmentLanguage.rederive` and records it when it changed — a no-op
+  (byte-stable) when the language is unchanged or was never recorded.
+
+
 ## [0.4.645] - 2026-07-25
 
 ### Fixed
