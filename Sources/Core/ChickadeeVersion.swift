@@ -1,3 +1,3 @@
 public enum ChickadeeVersion {
-    public static let current = "0.4.646"
+    public static let current = "0.4.647"
 }

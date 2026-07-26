@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.647] - 2026-07-26
+
+### Changed
+
+- **Docs.** Documented the notebook-replacement language re-derivation
+  (`AssignmentLanguage.rederive`) in `docs/r-support.md`, and refreshed the
+  R-support handoff: backlog items 1–4 are done, and the clone-and-convert
+  throwaway-`.R`-script workaround is obsolete.
+
+
 ## [0.4.646] - 2026-07-26
 
 ### Fixed
