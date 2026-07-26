@@ -222,6 +222,20 @@ manifests keep sniffing until their next save stamps a value. The two
 manifest-rebuild helpers (add-script / remove-script) pass the existing value
 through, so an unrelated edit can never silently drop it.
 
+Replacing the starter notebook is the one edit that **re-derives** the recorded
+language instead of carrying it through. `writeAssignmentNotebook` — the shared
+helper behind both the web Save and the `update_notebook` MCP tool — calls
+`AssignmentLanguage.rederive(manifest:notebookData:)`, which applies the order
+above **minus step 1 (the recorded language)** so the *new* notebook's kernel
+decides, and records the result only when it differs (via
+`manifestWithRederivedLanguage`). This closes the one-way door: a Python
+assignment converted to R — a new R notebook, no `.R` script yet — stops
+rendering `.py`, with no throwaway-`.R`-script workaround needed. It is a
+byte-stable no-op otherwise: an unchanged language, or a never-recorded (`nil`)
+one, rewrites nothing. Scope is the recorded memo — already-generated scripts
+re-render in the new language the next time the suite / families / checks are
+saved, exactly as before.
+
 Stale generated files are listed under the *previous* manifest's language and,
 when the assignment changes language, the new one too — so a flip cleans up the
 old-extension scripts without reporting deletions for files that never existed.
