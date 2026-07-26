@@ -120,11 +120,15 @@ Server Health Alerts
                 </td>
                 <td>#(firing.summary)</td>
                 <td>
-                    #if(firing.delivered):
-                        delivered
+                    #if(firing.paged):
+                        #if(firing.delivered):
+                            delivered
+                        #else:
+                            <span class="alerts-delivery-failed">failed</span>
+                            #if(firing.deliveryError):<br><code class="alerts-delivery-error">#(firing.deliveryError)</code>#endif
+                        #endif
                     #else:
-                        <span class="alerts-delivery-failed">failed</span>
-                        #if(firing.deliveryError):<br><code class="alerts-delivery-error">#(firing.deliveryError)</code>#endif
+                        advisory — not paged
                     #endif
                 </td>
             </tr>

@@ -26,13 +26,24 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         switch self {
         case .databaseUnreachable: return "critical"
         case .runnerOffline: return "warning"
-        case .runnerVersionSkew: return "warning"
+        // Advisory, not an outage: a runner a release behind is already protected
+        // by the #1210 minimum-runner-version gate (it queues rather than
+        // mis-grades). Surfaces on the dashboard but doesn't page — see
+        // `pagesOperator`.
+        case .runnerVersionSkew: return "info"
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
         case .editorKernelUnrecoverable: return "warning"
         case .brightspaceSyncFailing: return "warning"
         }
     }
+
+    /// Whether a firing of this rule pages the operator webhook. Informational
+    /// rules (`info` severity) still surface on `/admin/alerts` and via the
+    /// `get_health_alerts` admin tool, but they are advisory and do not page — so
+    /// a low-stakes signal like a runner being a release behind never reads as an
+    /// outage.
+    var pagesOperator: Bool { severity != "info" }
 }
 
 struct AlertMessage: Content, Sendable {
