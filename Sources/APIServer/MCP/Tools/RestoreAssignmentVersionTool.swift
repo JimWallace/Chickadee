@@ -145,9 +145,8 @@ struct RestoreAssignmentVersionTool: ContentTool {
         // files on disk beside the restored suite.
         Self.rederive(setup: setup, testSetupsDirectory: directory)
 
-        let closed = try await finalizeContentEdit(
+        let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
-        let requeued = try await Self.requeuedCount(setupID: setupID, on: context.mainDB)
 
         // Record explicitly so the row carries `restore:<n>` and
         // `restoredFromVersion` rather than the generic `mcp:<tool>` origin the
@@ -170,8 +169,8 @@ struct RestoreAssignmentVersionTool: ContentTool {
             newVersion: outcome.version ?? target.versionNumber,
             filesRestored: fileMap.count,
             notebookRestored: target.notebookHash != nil,
-            assignmentClosed: closed,
-            submissionsRequeued: requeued,
+            assignmentClosed: finalized.assignmentClosed,
+            submissionsRequeued: finalized.submissionsRequeued,
             alreadyCurrent: false,
             titleAtVersion: nil)
     }
@@ -235,15 +234,5 @@ struct RestoreAssignmentVersionTool: ContentTool {
                 sharedDirectory: testSetupsDirectory + "shared/\(setupID)/",
                 overwrite: true)
         }
-    }
-
-    /// How many of the setup's submissions are now queued to re-grade. Read
-    /// after `finalizeContentEdit` so the number reflects what the retest
-    /// fan-out actually did.
-    private static func requeuedCount(setupID: String, on db: any Database) async throws -> Int {
-        try await APISubmission.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$status == "pending")
-            .count()
     }
 }

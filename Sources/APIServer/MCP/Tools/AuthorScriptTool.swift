@@ -312,7 +312,7 @@ struct AuthorScriptTool: ContentTool {
         }
 
         // Close, re-grade, and re-validate (matching the web Save button).
-        let closed = try await finalizeContentEdit(
+        let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
@@ -322,7 +322,7 @@ struct AuthorScriptTool: ContentTool {
             isTest: resolved.isTest,
             created: !existedInZip,
             validationStatus: assignment.validationStatus,
-            assignmentClosed: closed)
+            assignmentClosed: finalized.assignmentClosed)
     }
 
     // MARK: - Body resolution (inline content or fetched sourceUrl)
