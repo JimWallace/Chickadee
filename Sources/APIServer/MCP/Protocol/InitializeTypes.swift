@@ -98,7 +98,15 @@ struct MCPServerInfo: Encodable, Sendable {
 /// covers the domain vocabulary, the recommended workflow, and the
 /// validation/scope/safety rules that aren't obvious from any single tool.
 enum MCPServerInstructions {
-    static let text = """
+    /// The complete server-level string served from `initialize`: the
+    /// operational guide plus the house authoring-voice guide.  Per-course
+    /// guidance, when the connecting account has any, is layered on top via
+    /// `text(withCourseGuidance:)` (see MCPCourseGuidance.swift).
+    static let text = operationalGuide + "\n\n" + authoringVoice
+
+    /// The operational half: domain vocabulary, the read-before-write
+    /// workflow, and the validation/scope/safety rules.
+    static let operationalGuide = """
         Chickadee is a course-content authoring and autograding platform. This server lets an \
         authorized agent author assignment content on an instructor's behalf: assignment metadata, \
         test suites, starter notebooks, and reference solutions. It never exposes student data, \
@@ -310,5 +318,45 @@ enum MCPServerInstructions {
         is the verbatim canonical JSON, useful to read the full authoring spec into context. \
         Authoring guides are exposed the same way under chickadee://docs/* — e.g. the per-student \
         solution-notebook recipe above.
+        """
+
+    /// The house authoring-voice guide, appended verbatim to the operational
+    /// guide (only whitespace/escaping adapted to the string literal).  It
+    /// shapes the register of prose authored through this server's tools and
+    /// changes no tool behaviour.  Authoring surface only — the admin
+    /// diagnostic surface (AdminMCPServerInstructions) deliberately does not
+    /// carry it.
+    static let authoringVoice = """
+        Authoring voice for Chickadee assignments
+
+        Assignments authored through this server are university course materials. Write
+        instructional prose in the register of a well-written textbook: clear, direct, and
+        addressed to capable students as adults. State what each task is and why it matters.
+        Do not narrate the student's experience of the task, and do not cheerlead.
+
+        Required:
+        - Use the imperative and the declarative. Write "Compute the standard deviation of
+          `systolic`." rather than "Now it's time to find the standard deviation!"
+        - Motivate with specifics. Name what a technique accomplishes in a health-data
+          context rather than reaching for adjectives like "powerful," "exciting," or
+          "useful."
+        - Keep the register professional but not cold. Warmth belongs in how difficulty is
+          acknowledged — that a concept is genuinely hard, that beginners commonly struggle
+          with a particular step — not in punctuation or filler. Clear and respectful is the
+          target, not stiff or joyless.
+
+        Prohibited in instructional text:
+        - Exclamation marks.
+        - Emoji.
+        - Second-person emotional narration: "Now it's time to…", "That's all there is to
+          it", "Your turn!", "Don't worry".
+        - Chatty parentheticals and winking qualifiers: "(reasonably) easy (with practice)".
+        - Vague enthusiasm as motivation: "incredibly powerful", "super useful".
+
+        Example.
+        Before: "A tradition in computing is to write 'Hello, World!' as your first program.
+        That's all there is to it!"
+        After: "By convention, the first program written in a new language prints a fixed
+        greeting. The example below does so in R."
         """
 }

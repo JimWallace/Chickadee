@@ -163,6 +163,7 @@ enum AuditAction: String, Sendable, CaseIterable {
     case mcpConsentGranted = "mcp.consent_granted"
     case mcpTokenIssued = "mcp.token_issued"
     case mcpRefreshReuseDetected = "mcp.refresh_reuse_detected"
+    case mcpCourseInstructionsUpdated = "mcp.course_instructions_updated"
     case adminMcpToolCalled = "admin_mcp.tool_called"
 
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
@@ -192,7 +193,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .brightspace
         case .mcpAccountCreated, .mcpAccountDeleted, .mcpTokenMinted, .mcpToolCalled,
             .mcpGrantRevoked, .mcpAccountEnrolled, .mcpAccountUnenrolled, .mcpClientRegistered,
-            .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected, .adminMcpToolCalled:
+            .mcpConsentGranted, .mcpTokenIssued, .mcpRefreshReuseDetected,
+            .mcpCourseInstructionsUpdated, .adminMcpToolCalled:
             return .mcp
         }
     }
@@ -256,6 +258,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .mcpConsentGranted: return "MCP access authorized"
         case .mcpTokenIssued: return "MCP token issued"
         case .mcpRefreshReuseDetected: return "MCP refresh-token reuse detected"
+        case .mcpCourseInstructionsUpdated: return "MCP course guidance updated"
         case .adminMcpToolCalled: return "Admin diagnostic tool called"
         }
     }

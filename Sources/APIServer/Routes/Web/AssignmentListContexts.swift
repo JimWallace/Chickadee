@@ -359,3 +359,32 @@ struct AssignmentStudentRow: Encodable {
     /// affordance is hidden entirely then).
     let secretRevealSpent: Bool
 }
+
+/// MCP tab (`GET /instructor/mcp`): the active course's authoring guidance for
+/// connected agents, editable by the course's instructors.
+struct InstructorMCPContext: Encodable {
+    let currentUser: CurrentUserContext?
+    let activeInstructorTab: String
+    let hasActiveCourse: Bool
+    let courseCode: String
+    /// The stored per-course guidance ("" when unset) — the textarea's value.
+    let guidanceText: String
+    /// The fixed house authoring-voice guide, rendered read-only for reference.
+    let houseVoiceGuide: String
+    let maxLength: Int
+    /// True when the viewer may save: a per-course instructor or an admin, and
+    /// the course is not archived. TAs pass the `/instructor` gate but see the
+    /// panel read-only, matching the Students tab (#417 Slice F).
+    let canEdit: Bool
+    /// Why the panel is read-only (nil when `canEdit`) — precomputed so the
+    /// template renders one flat string instead of branching (LeafKit 1.14.2
+    /// mis-parses compound conditions).
+    let readOnlyNote: String?
+    /// True when the MCP server is not mounted on this deployment (`MCP_MODE`
+    /// off/unresolvable) — the panel still saves, with a note that guidance
+    /// takes effect once MCP is enabled.
+    let mcpDisabled: Bool
+    /// Flash banners after the save POST redirect.
+    let flashSuccess: String?
+    let flashError: String?
+}

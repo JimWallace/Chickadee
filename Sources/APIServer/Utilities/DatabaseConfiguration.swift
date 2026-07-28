@@ -300,6 +300,9 @@ func registerMigrations(on app: Application) {
     // Same ordering constraint: brightspace_section_category_id must exist
     // before AddCourseArchivedAt (or any migration) queries the APICourse model.
     app.migrations.add(AddCourseBrightSpaceSectionCategoryID())
+    // Same ordering constraint: mcp_instructions must exist before any later
+    // migration queries the APICourse model.
+    app.migrations.add(AddCourseMCPInstructions())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())

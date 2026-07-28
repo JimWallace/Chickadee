@@ -7,6 +7,7 @@
     <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
     <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
     <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
+    <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>MCP</a>
 </nav>
 #if(currentUser.activeCourse):
 <h1>#(currentUser.activeCourse.code) — #(currentUser.activeCourse.name)</h1>
