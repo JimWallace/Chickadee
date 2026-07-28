@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.654] - 2026-07-28
+
+### Added
+
+- **Assignment versioning — lifecycle (slice 5).** Cloning an assignment,
+  copying a course, or creating one from scratch now seeds the new setup's
+  own version 1, so a fresh copy has a starting point to roll back to and
+  records where it came from. Cloning still carries only current content —
+  the copy lands in a new setup, so none of the source's history travels with
+  it. Deleting a course reclaims the blobs its version rows referenced, and
+  reclamation is deliberately conservative: it skips entirely if it cannot
+  read the full reference set, and ignores blobs written in the last hour so
+  it can never race a snapshot that has stored its bytes but not yet committed
+  its row.
+
+### Fixed
+
+- **Empty test-setup zips could not be snapshotted.** `unzip` exits non-zero
+  on a valid but empty archive, so version capture treated the empty setup a
+  from-scratch assignment starts with (or one whose last script was deleted)
+  as an unreadable zip and silently recorded no version. Genuinely corrupt
+  archives still fail loudly rather than being recorded as an empty suite.
+
+### Added
+
+- **Assignment versioning — read and restore over MCP (slices 3-4).** Three new
+  agent tools over the content-version history: `list_assignment_versions` (the
+  timeline — who edited, when, and what produced it), `get_assignment_version`
+  (one past version's manifest and file list, each file marked
+  `differsFromCurrent`, plus optionally one file's body — without touching the
+  live assignment), and `restore_assignment_version` (put a version's content
+  back). Restoring is append-only: it records a new version rather than
+  rewinding, so the restore is itself recorded and itself undoable. It restores
+  content only — title, due date, and visibility are left alone, so a recovery
+  can never reopen an assignment or move a deadline — and, like any content
+  edit, it closes the assignment, re-grades existing submissions against the
+  restored suite, and re-runs validation. Restore requires the instructor role;
+  the two reads require TA.
+
+
 ## [0.4.653] - 2026-07-28
 
 ### Added
