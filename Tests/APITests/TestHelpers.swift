@@ -333,6 +333,15 @@ func makeTestApp(
 
         try await configureTestDatabase(app)
 
+        // Assignment content-version capture. Registered here rather than
+        // inherited from `bootstrapAppMiddleware` (which the test app does not
+        // run) because versioning is part of what the instructor write routes
+        // DO, not an ambient production-only concern — a test app that skips it
+        // would let a capture regression pass CI unnoticed.
+        // `AssignmentVersionCaptureWiringTests` pins the production
+        // registration separately.
+        app.middleware.use(AssignmentVersionCaptureMiddleware())
+
         configureLeaf(app)
         try routes(app)
     }

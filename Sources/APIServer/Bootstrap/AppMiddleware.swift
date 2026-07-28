@@ -135,6 +135,11 @@ func bootstrapAppMiddleware(_ app: Application, appConfig: AppConfig) {
         )
     )
     app.middleware.use(UserFileNamespaceMiddleware())
+    // Snapshots assignment content after a successful instructor write. Must
+    // sit after the session authenticator so the version row can be attributed
+    // to the acting user. A no-op (one storage read) on every request that
+    // doesn't resolve a test setup for write.
+    app.middleware.use(AssignmentVersionCaptureMiddleware())
     // Scan-mode seatbelt: when SCAN_MODE=true is set in the environment, the
     // middleware 503s POSTs against destructive routes (submissions, test-setup
     // uploads, retests, user delete/role) so an in-progress vulnerability scan

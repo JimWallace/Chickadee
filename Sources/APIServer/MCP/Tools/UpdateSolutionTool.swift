@@ -90,6 +90,14 @@ struct UpdateSolutionTool: ContentTool {
         // so the validation submission is attributed to the acting account.
         let subject = try await context.requireEligibleSubject(tool: Self.name)
 
+        // Content versioning: this tool reaches its setup by id rather than
+        // through `authorizedAssignmentAndSetupForWrite`, so it registers for a
+        // snapshot by hand. Replacing the reference solution rewrites
+        // `solution.ipynb` inside the setup zip, which is versioned content.
+        if let setup = try await APITestSetup.find(assignment.testSetupID, on: context.db) {
+            await context.beginContentWrite(setup: setup)
+        }
+
         let data: Data
         do {
             data = try JSONEncoder().encode(input.notebook)

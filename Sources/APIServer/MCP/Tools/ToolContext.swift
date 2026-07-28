@@ -18,19 +18,24 @@ struct ToolContext {
     /// nil for Phase-1 service tokens.  Carried for audit attribution.
     let actingClientID: String?
     let actingClientName: String?
+    /// Setups this call resolved for write, collected so the dispatcher can
+    /// snapshot their content afterwards. See `MCPVersionCapture.swift`.
+    let versionCapture: MCPVersionCaptureScope
 
     init(
         request: Request,
         subject: String,
         grantedScopes: Set<ContentScope>,
         actingClientID: String? = nil,
-        actingClientName: String? = nil
+        actingClientName: String? = nil,
+        versionCapture: MCPVersionCaptureScope = MCPVersionCaptureScope()
     ) {
         self.request = request
         self.subject = subject
         self.grantedScopes = grantedScopes
         self.actingClientID = actingClientID
         self.actingClientName = actingClientName
+        self.versionCapture = versionCapture
     }
 
     /// The database the MCP tool surface runs on. When a dedicated
@@ -226,6 +231,11 @@ struct ToolContext {
     /// assignment's own course (archived block) before loading the setup. Every
     /// content-mutating suite/manifest/notebook tool resolves through this so an
     /// agent can't edit an archived course's content by id (#417 Slice D-MCP).
+    ///
+    /// Also the content-versioning seam: resolving a setup here seeds its
+    /// pre-edit baseline and registers it for a post-call snapshot, so a tool
+    /// gets version history without its author wiring anything
+    /// (`MCPVersionCapture.swift`).
     func authorizedAssignmentAndSetupForWrite(
         publicID: String, tool: String, atLeast minimum: CourseRole
     ) async throws
@@ -237,6 +247,7 @@ struct ToolContext {
             throw MCPToolError.invalidArguments(
                 tool: tool, detail: "The assignment's test setup could not be found.")
         }
+        await beginContentWrite(setup: setup)
         return (assignment, setup)
     }
 }

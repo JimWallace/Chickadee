@@ -184,6 +184,11 @@ struct MCPDispatcher: Sendable {
         let outcome: MCPToolOutcome
         do {
             let output = try await tool.invoke(call.arguments ?? .object([:]), context)
+            // Snapshot the content of any setup this call resolved for write,
+            // now that the edit has persisted. Only on success: a failed call
+            // changed nothing worth a version. Best-effort inside — history
+            // must never be the reason an instructor's edit fails.
+            await context.finishContentWrites(tool: call.name)
             outcome = .success
             response = .success(id: id, result: mcpToolSuccessResult(output))
         } catch let error as MCPToolError {
