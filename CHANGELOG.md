@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.651] - 2026-07-28
+
+### Changed
+
+- **One authoring-voice guide per course, inherited from the Chickadee
+  default.** The instructor MCP tab no longer shows a fixed house guide plus a
+  separate "additional guidance" box. It now shows a single editable guide,
+  seeded with Chickadee's default authoring voice: a course starts on the
+  default, and an instructor edits that text into the course's own. A
+  customized guide *replaces* the default for content authored in that course
+  (it is appended as a labelled block at `initialize`, where an inheriting
+  course adds nothing, since the default is already there), and
+  `chickadee://course/<code>/authoring-guidance` now resolves for every
+  authorable course, serving whichever guide is in force. Resetting, emptying
+  the box, or saving text that still matches the default verbatim returns the
+  course to inheriting, so later changes to the default keep flowing through.
+
+### Security
+
+- **RFC 9207 `iss` on OAuth authorization responses (#1218, SEP-2468).** Every
+  `/oauth/authorize` redirect — success and error, content and admin surface —
+  now carries the `iss` parameter with the resolved surface's issuer, and the
+  RFC 8414 authorization-server metadata advertises
+  `authorization_response_iss_parameter_supported: true`, so updated MCP
+  clients can validate the issuer and detect mix-up attacks. The value always
+  matches the `iss` claim of the token subsequently minted for that surface.
+
+### Added
+
+- **Authoring guidance exposed as live MCP resources.** The default
+  authoring-voice guide is now readable at `chickadee://docs/authoring-voice`
+  (served from the same constant the `initialize` instructions embed, so the
+  two can never drift), and every course an agent can author in serves the
+  guide actually in force for it at
+  `chickadee://course/<code>/authoring-guidance`, scoped by the same
+  authoring-authority resolver as the initialize embedding. Unlike the
+  initialize copy (frozen per connection), the resources serve the live text,
+  so guidance edits reach connected agents without a reconnect — and resources
+  are untouched by the MCP 2026-07-28 stateless revision, making this the
+  forward-stable delivery path (`docs/mcp-2026-07-28-revision.md`).
+
+
 ## [0.4.650] - 2026-07-28
 
 ### Added
