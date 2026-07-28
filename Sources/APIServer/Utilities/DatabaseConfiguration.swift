@@ -348,6 +348,9 @@ func registerMigrations(on app: Application) {
     // Per-user activity pings behind the admin dashboard's "active users over
     // time" chart. FK references `users`.
     app.migrations.add(CreateUserActivityEvents())
+    // Append-only assignment content-snapshot history. FK references `courses`
+    // and `users`; deliberately none on `test_setups` (see the migration).
+    app.migrations.add(CreateAssignmentVersions())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())

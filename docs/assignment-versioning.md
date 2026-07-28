@@ -91,11 +91,16 @@ state that actually existed, and the newest version always equals current
 content — which makes "restore to *N*" unambiguous and makes verification a
 straight equality check.
 
-On the first snapshot for a setup that has no rows yet, record the **pre-edit**
-state as `v1` (`origin: baseline`) before recording the edit as `v2`. Without
-this, the first agent edit on every assignment that predates the feature is
-precisely the one you cannot undo. It also avoids a migration that would have to
-walk and hash every existing setup on the disk at deploy time.
+The pre-edit state is captured by a separate `ensureBaseline` call made
+**before** the mutation: it records the current state as `v1` (`origin:
+baseline`) if and only if the setup has no history yet, and is a single indexed
+count once it does. Without it, the first agent edit on every assignment that
+predates the feature is precisely the one you cannot undo. It also avoids a
+migration that would have to walk and hash every existing setup on disk at
+deploy time.
+
+So a capture point does two calls — `ensureBaseline` before the edit, `record`
+after — and both are no-ops in the steady state.
 
 ### 3.2 Self-deduping
 
