@@ -65,7 +65,6 @@ struct MCPRoutes: RouteCollection {
     func handlePost(req: Request) async throws -> Response {
         try validateHost(req)
         try validateOrigin(req)
-        if let rejection = try protocolVersionRejection(req) { return rejection }
 
         let rpcRequest: JSONRPCRequest
         do {
@@ -74,6 +73,23 @@ struct MCPRoutes: RouteCollection {
             // Unparseable body: HTTP 400 carrying a JSON-RPC parse error with a
             // null id (the request id is unknowable).
             return try jsonResponse(.failure(id: .null, error: .parseError()), status: .badRequest)
+        }
+
+        // Era is decided per request (#1218): a body carrying modern `_meta`
+        // (or a header naming the modern revision) is served statelessly per
+        // 2026-07-28; anything else keeps legacy semantics unchanged.
+        let meta = MCPRequestMeta.extract(fromParams: rpcRequest.params)
+        let era = mcpEra(of: meta, request: req)
+        if era == .modern {
+            if !rpcRequest.isNotification,
+                let rejection = mcpModernTransportRejection(
+                    request: req, rpc: rpcRequest, meta: meta, era: era)
+            {
+                let failure = JSONRPCResponse.failure(id: rpcRequest.id ?? .null, error: rejection)
+                return try jsonResponse(failure, status: mcpResponseStatus(for: failure, era: era))
+            }
+        } else if let rejection = try protocolVersionRejection(req) {
+            return rejection
         }
 
         // The route is mounted behind MCPBearerAuthMiddleware, which
@@ -100,11 +116,13 @@ struct MCPRoutes: RouteCollection {
         // Request — so the watch runs on the request-independent `application.db`
         // and this stays a contained special case rather than threading a progress
         // sink through the dispatcher.
-        if let streaming = try await validationProgressStream(req: req, context: context, rpc: rpcRequest) {
+        if let streaming = try await validationProgressStream(
+            req: req, context: context, rpc: rpcRequest, era: era)
+        {
             return streaming
         }
 
-        guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context) else {
+        guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context, era: era) else {
             // A notification was accepted; the spec mandates 202 with no body.
             return Response(status: .accepted)
         }
@@ -115,6 +133,13 @@ struct MCPRoutes: RouteCollection {
         if let error = rpcResponse.error, error.code == JSONRPCError.insufficientScopeCode {
             return try jsonResponse(
                 rpcResponse, status: .forbidden, challenge: insufficientScopeChallenge(error))
+        }
+        // Modern protocol-defined failures are HTTP-visible (400 for a bad
+        // version/headers, 404 for an unimplemented method); legacy keeps its
+        // historical 200-with-an-error-body shape.
+        let status = mcpResponseStatus(for: rpcResponse, era: era)
+        guard status == .ok else {
+            return try jsonResponse(rpcResponse, status: status)
         }
         // Happy path (success or an in-result tool error, both HTTP 200): stream
         // it as SSE when the client asked for it, otherwise return plain JSON.
@@ -156,16 +181,17 @@ struct MCPRoutes: RouteCollection {
 
     /// Transport spec §Protocol Version Header: a request declaring an
     /// `MCP-Protocol-Version` this server does not speak is rejected with
-    /// HTTP 400, framed as a JSON-RPC invalid-request error with a null id
-    /// (the body is never read).  An absent header is accepted: every client
-    /// omits it on `initialize` (the version isn't negotiated yet), and
-    /// pre-2025-06-18 clients never send the header at all.
+    /// HTTP 400 and an `UnsupportedProtocolVersionError` listing the versions
+    /// it does support, so a client can retry with a mutually supported one
+    /// instead of failing.  An absent header is accepted: every client omits it
+    /// on `initialize` (the version isn't negotiated yet), and pre-2025-06-18
+    /// clients never send the header at all.
     private func protocolVersionRejection(_ req: Request) throws -> Response? {
-        guard let version = req.headers.first(name: "MCP-Protocol-Version"),
+        guard let version = req.headers.first(name: MCPHeader.protocolVersion),
             !MCPProtocol.supportedVersions.contains(version)
         else { return nil }
         return try jsonResponse(
-            .failure(id: .null, error: .invalidRequest("Unsupported MCP-Protocol-Version: \(version)")),
+            .failure(id: .null, error: .unsupportedProtocolVersion(requested: version)),
             status: .badRequest)
     }
 
@@ -251,7 +277,7 @@ struct MCPRoutes: RouteCollection {
     /// other case (including the authorization/error responses, so this path
     /// never has to reformat them).
     private func validationProgressStream(
-        req: Request, context: ToolContext, rpc: JSONRPCRequest
+        req: Request, context: ToolContext, rpc: JSONRPCRequest, era: MCPEra
     ) async throws -> Response? {
         guard clientAcceptsEventStream(req),
             let input = Self.validateAssignmentCall(rpc),
@@ -279,6 +305,9 @@ struct MCPRoutes: RouteCollection {
         let id = rpc.id ?? .null
         let publicID = assignment.publicID
         let timeout = ValidateAssignmentTool.clampTimeout(input.timeoutSeconds)
+        // The streaming path builds its own final response, so it applies the
+        // modern envelope itself rather than going through dispatch().
+        let serverInfo = dispatcher.serverInfo
 
         let response = Response(status: .ok, headers: Self.sseHeaders())
         response.body = .init(asyncStream: { writer in
@@ -303,7 +332,9 @@ struct MCPRoutes: RouteCollection {
                     validationStatus: outcome.validationStatus,
                     timedOut: outcome.timedOut)
                 let structured = (try? JSONValue(encoding: output)) ?? .object([:])
-                finalResponse = .success(id: id, result: mcpToolSuccessResult(structured))
+                finalResponse = mcpModernized(
+                    .success(id: id, result: mcpToolSuccessResult(structured)),
+                    era: era, serverInfo: serverInfo)
             } catch {
                 finalResponse = .failure(
                     id: id, error: .internalError("validate_assignment failed while watching validation."))

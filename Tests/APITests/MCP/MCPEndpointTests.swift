@@ -93,8 +93,10 @@ import VaporTesting
 
     @Test func unsupportedProtocolVersionHeaderReturns400() async throws {
         // §Protocol Version Header: an unsupported declared revision is
-        // rejected with 400 before the body is ever read. (An absent header
-        // is accepted — every other test in this suite covers that path.)
+        // rejected with 400 and an UnsupportedProtocolVersionError (-32022)
+        // listing what this server does speak, so the client can retry with a
+        // mutually supported version instead of failing. (An absent header is
+        // accepted — every other test in this suite covers that path.)
         try await withApp(try await makeApp()) { app in
             var headers = jsonHeaders
             headers.add(name: "MCP-Protocol-Version", value: "1999-01-01")
@@ -104,8 +106,9 @@ import VaporTesting
             ) { res async in
                 #expect(res.status == .badRequest)
                 let responseBody = String(buffer: res.body)
-                #expect(responseBody.contains("-32600"))
-                #expect(responseBody.contains("MCP-Protocol-Version"))
+                #expect(responseBody.contains("\(JSONRPCError.unsupportedProtocolVersionCode)"))
+                #expect(responseBody.contains("1999-01-01"))
+                #expect(responseBody.contains(MCPProtocol.modernVersion))
             }
         }
     }

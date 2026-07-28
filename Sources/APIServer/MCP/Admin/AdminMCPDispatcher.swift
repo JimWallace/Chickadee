@@ -23,7 +23,17 @@ struct AdminMCPDispatcher: Sendable {
         self.tools = tools
     }
 
-    func dispatch(_ request: JSONRPCRequest, context: AdminToolContext? = nil) async -> JSONRPCResponse? {
+    /// Routes one message and, for a modern-era request, stamps the modern
+    /// result envelope (`resultType` + server `_meta`) on the way out. `era`
+    /// defaults to legacy so non-transport callers keep the historical shape.
+    func dispatch(
+        _ request: JSONRPCRequest, context: AdminToolContext? = nil, era: MCPEra = .legacy
+    ) async -> JSONRPCResponse? {
+        guard let response = await route(request, context: context) else { return nil }
+        return mcpModernized(response, era: era, serverInfo: serverInfo)
+    }
+
+    private func route(_ request: JSONRPCRequest, context: AdminToolContext?) async -> JSONRPCResponse? {
         guard let id = request.id else { return nil }
 
         guard request.jsonrpc == "2.0" else {
@@ -36,6 +46,8 @@ struct AdminMCPDispatcher: Sendable {
         switch method {
         case .initialize:
             return initializeResponse(id: id, params: request.params, context: context)
+        case .serverDiscover:
+            return .success(id: id, result: mcpDiscoverResult(surface: surface))
         case .ping:
             return .success(id: id, result: .object([:]))
         case .initialized:
@@ -128,16 +140,22 @@ struct AdminMCPDispatcher: Sendable {
             on: context.request)
     }
 
+    /// What this surface advertises, shared by the legacy `initialize`
+    /// handshake and the modern `server/discover` method. Unlike the content
+    /// surface, nothing here is per-caller — the diagnostic instructions are
+    /// static — so it is a stored property rather than a lookup.
+    private var surface: MCPInitializeSurface {
+        MCPInitializeSurface(
+            capabilities: .toolsOnly,
+            serverInfo: serverInfo,
+            instructions: AdminMCPServerInstructions.text,
+            logLabel: "Admin MCP")
+    }
+
     private func initializeResponse(
         id: JSONRPCID, params: JSONValue?, context: AdminToolContext?
     ) -> JSONRPCResponse {
         mcpInitializeResponse(
-            id: id, params: params,
-            surface: MCPInitializeSurface(
-                capabilities: .toolsOnly,
-                serverInfo: serverInfo,
-                instructions: AdminMCPServerInstructions.text,
-                logLabel: "Admin MCP"),
-            logger: context?.logger)
+            id: id, params: params, surface: surface, logger: context?.logger)
     }
 }

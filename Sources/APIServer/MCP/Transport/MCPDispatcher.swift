@@ -20,7 +20,17 @@ struct MCPDispatcher: Sendable {
         self.tools = tools
     }
 
-    func dispatch(_ request: JSONRPCRequest, context: ToolContext? = nil) async -> JSONRPCResponse? {
+    /// Routes one message and, for a modern-era request, stamps the modern
+    /// result envelope (`resultType` + server `_meta`) on the way out. `era`
+    /// defaults to legacy so non-transport callers keep the historical shape.
+    func dispatch(
+        _ request: JSONRPCRequest, context: ToolContext? = nil, era: MCPEra = .legacy
+    ) async -> JSONRPCResponse? {
+        guard let response = await route(request, context: context) else { return nil }
+        return mcpModernized(response, era: era, serverInfo: serverInfo)
+    }
+
+    private func route(_ request: JSONRPCRequest, context: ToolContext?) async -> JSONRPCResponse? {
         // Notifications (no id) never receive a response, whatever they carry.
         guard let id = request.id else { return nil }
 
@@ -34,6 +44,8 @@ struct MCPDispatcher: Sendable {
         switch method {
         case .initialize:
             return await initializeResponse(id: id, params: request.params, context: context)
+        case .serverDiscover:
+            return .success(id: id, result: mcpDiscoverResult(surface: await surface(context: context)))
         case .ping:
             return .success(id: id, result: .object([:]))
         case .initialized:
@@ -255,27 +267,34 @@ struct MCPDispatcher: Sendable {
         _ = await recordToolCall(name: name, context: context, target: target, outcome: outcome)
     }
 
-    private func initializeResponse(
-        id: JSONRPCID, params: JSONValue?, context: ToolContext?
-    ) async -> JSONRPCResponse {
-        // Layer any per-course authoring guidance for the authenticated subject
-        // onto the house instructions. Best-effort: a lookup failure, a
-        // context-free dispatch, or an app with no database configured (the
-        // transport unit tests — where request.db would fatalError, hence the
-        // explicit hasDatabase check) degrades to the house text rather than
-        // failing the handshake.
+    /// What this server advertises to the caller, shared by the legacy
+    /// `initialize` handshake and the modern `server/discover` method so both
+    /// describe the same server — including the caller's own per-course
+    /// authoring guidance.
+    ///
+    /// Layering that guidance is best-effort: a lookup failure, a context-free
+    /// dispatch, or an app with no database configured (the transport unit
+    /// tests — where `request.db` would fatalError, hence the explicit
+    /// `hasDatabase` check) degrades to the house text rather than failing.
+    private func surface(context: ToolContext?) async -> MCPInitializeSurface {
         var instructions = MCPServerInstructions.text
         if let context, context.hasDatabase {
             let guidance = (try? await mcpCourseGuidance(forSubject: context.subject, db: context.db)) ?? []
             instructions = MCPServerInstructions.text(withCourseGuidance: guidance)
         }
-        return mcpInitializeResponse(
+        return MCPInitializeSurface(
+            capabilities: .v1,
+            serverInfo: serverInfo,
+            instructions: instructions,
+            logLabel: "MCP")
+    }
+
+    private func initializeResponse(
+        id: JSONRPCID, params: JSONValue?, context: ToolContext?
+    ) async -> JSONRPCResponse {
+        mcpInitializeResponse(
             id: id, params: params,
-            surface: MCPInitializeSurface(
-                capabilities: .v1,
-                serverInfo: serverInfo,
-                instructions: instructions,
-                logLabel: "MCP"),
+            surface: await surface(context: context),
             logger: context?.logger)
     }
 }

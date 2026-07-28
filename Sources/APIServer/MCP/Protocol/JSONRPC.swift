@@ -152,9 +152,52 @@ struct JSONRPCError: Error, Encodable, Equatable, Sendable {
         JSONRPCError(code: -32_603, message: message)
     }
 
+    // MARK: - MCP protocol-defined codes (2026-07-28)
+    //
+    // The spec reserves -32020…-32099 for itself and forbids emitting an
+    // undefined code from that sub-range, so these three are the only ones
+    // this server may use there.  Each maps to HTTP 400.
+    // https://modelcontextprotocol.io/specification/2026-07-28/basic#error-codes
+
+    static let headerMismatchCode = -32_020
+    static let missingRequiredClientCapabilityCode = -32_021
+    static let unsupportedProtocolVersionCode = -32_022
+
+    /// The mirrored HTTP headers disagree with the request body (or a required
+    /// one is missing/malformed).  Prevents a split-brain where an
+    /// intermediary routes on the header while the server acts on the body.
+    static func headerMismatch(_ detail: String) -> JSONRPCError {
+        JSONRPCError(code: headerMismatchCode, message: "Header mismatch: \(detail)")
+    }
+
+    /// The requested protocol revision is one this server does not implement.
+    /// MUST carry the supported list so the client can retry with a mutually
+    /// supported version instead of failing.
+    static func unsupportedProtocolVersion(requested: String) -> JSONRPCError {
+        JSONRPCError(
+            code: unsupportedProtocolVersionCode,
+            message: "Unsupported protocol version",
+            data: .object([
+                "supported": .array(MCPProtocol.advertisedVersions.map { .string($0) }),
+                "requested": .string(requested),
+            ]))
+    }
+
+    /// Processing the request needs a client capability the request did not
+    /// declare.  Unreachable today — this server implements no server-initiated
+    /// interaction — but defined so the code is never improvised later.
+    static func missingRequiredClientCapability(_ capabilities: [String]) -> JSONRPCError {
+        JSONRPCError(
+            code: missingRequiredClientCapabilityCode,
+            message: "Missing required client capability",
+            data: .object(["requiredCapabilities": .array(capabilities.map { .string($0) })]))
+    }
+
     // MCP authorization: the authenticated token lacks a scope the requested
-    // tool requires.  JSON-RPC reserves -32000…-32099 for server-defined errors;
-    // the transport maps this code to an HTTP 403 `insufficient_scope` response.
+    // tool requires.  Sits in the older -32000…-32019 sub-range, which the
+    // 2026-07-28 spec discourages for new codes but leaves valid (the reserved
+    // range starts at -32020); the load-bearing signal is the HTTP 403
+    // `insufficient_scope` response the transport maps it to, not the code.
     static let insufficientScopeCode = -32_001
 
     /// `requiredScopes` is the space-delimited scope string the tool demands; it
