@@ -33,7 +33,7 @@ struct MCPDispatcher: Sendable {
 
         switch method {
         case .initialize:
-            return initializeResponse(id: id, params: request.params, context: context)
+            return await initializeResponse(id: id, params: request.params, context: context)
         case .ping:
             return .success(id: id, result: .object([:]))
         case .initialized:
@@ -252,13 +252,24 @@ struct MCPDispatcher: Sendable {
 
     private func initializeResponse(
         id: JSONRPCID, params: JSONValue?, context: ToolContext?
-    ) -> JSONRPCResponse {
-        mcpInitializeResponse(
+    ) async -> JSONRPCResponse {
+        // Layer any per-course authoring guidance for the authenticated subject
+        // onto the house instructions. Best-effort: a lookup failure, a
+        // context-free dispatch, or an app with no database configured (the
+        // transport unit tests — where request.db would fatalError, hence the
+        // explicit hasDatabase check) degrades to the house text rather than
+        // failing the handshake.
+        var instructions = MCPServerInstructions.text
+        if let context, context.hasDatabase {
+            let guidance = (try? await mcpCourseGuidance(forSubject: context.subject, db: context.db)) ?? []
+            instructions = MCPServerInstructions.text(withCourseGuidance: guidance)
+        }
+        return mcpInitializeResponse(
             id: id, params: params,
             surface: MCPInitializeSurface(
                 capabilities: .v1,
                 serverInfo: serverInfo,
-                instructions: MCPServerInstructions.text,
+                instructions: instructions,
                 logLabel: "MCP"),
             logger: context?.logger)
     }

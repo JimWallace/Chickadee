@@ -63,6 +63,14 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_section_category_id")
     var brightspaceSectionCategoryID: String?
 
+    /// Per-course authoring guidance for MCP agents, set by the course's
+    /// instructors on the instructor MCP panel. Appended to the content MCP
+    /// server's `initialize` instructions for accounts with authoring authority
+    /// in this course, so a connected agent picks up the course's own tone and
+    /// style preferences. Nil = no course-specific guidance.
+    @OptionalField(key: "mcp_instructions")
+    var mcpInstructions: String?
+
     /// When this course was archived. Set by `toggleCourseArchive` when a
     /// course is archived (and cleared when un-archived). Archiving is
     /// Chickadee's "end of term" signal, so this is the anchor for the

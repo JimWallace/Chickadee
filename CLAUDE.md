@@ -175,6 +175,12 @@ source for discovery + DCR). Access tokens are short-lived ES256 JWTs minted by
 `MCPBearerAuthMiddleware`. An hourly reaper drops dead OAuth rows. The consent
 POST is deliberately cookie-independent (identity + CSRF ride the single-use
 consent token) so it survives Safari/ITP cross-site cookie blocking.
+The `initialize` instructions end with the house **authoring-voice guide**
+(`MCPServerInstructions.authoringVoice` — see "Voice and Register" below), and
+per-course guidance an instructor sets on the `/instructor` MCP tab
+(`courses.mcp_instructions`) is appended per authorable course at initialize
+(`MCPCourseGuidance.swift`). Advisory text only — it never alters tools,
+scopes, or the admin surface.
 
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —
@@ -482,6 +488,55 @@ a bundled wheel means a sha cascade (wheel → `all.json` digest →
 `pipliteUrls` sha); `verify-jupyterlite.sh` asserts that chain is consistent
 so a mismatch (which would make piplite reject the kernel) is a build
 failure, not a browser surprise.
+
+---
+
+## Voice and Register (assignment content)
+
+Instructional prose in assignment/course content — starter notebooks, hints,
+content items, generated-test messages — follows the house authoring-voice
+guide below, whether authored by hand, from a Claude Code session, or by an
+agent through the MCP tools. The guide is served verbatim to MCP agents in the
+`initialize` instructions (`MCPServerInstructions.authoringVoice` in
+`Sources/APIServer/MCP/Protocol/InitializeTypes.swift`); this section and that
+constant are deliberately identical — keep them in sync when editing either.
+Instructors can layer per-course guidance on top via the instructor MCP tab
+(`/instructor/mcp`); where the two conflict, the course's own guidance wins
+for that course.
+
+```text
+Authoring voice for Chickadee assignments
+
+Assignments authored through this server are university course materials. Write
+instructional prose in the register of a well-written textbook: clear, direct, and
+addressed to capable students as adults. State what each task is and why it matters.
+Do not narrate the student's experience of the task, and do not cheerlead.
+
+Required:
+- Use the imperative and the declarative. Write "Compute the standard deviation of
+  `systolic`." rather than "Now it's time to find the standard deviation!"
+- Motivate with specifics. Name what a technique accomplishes in a health-data
+  context rather than reaching for adjectives like "powerful," "exciting," or
+  "useful."
+- Keep the register professional but not cold. Warmth belongs in how difficulty is
+  acknowledged — that a concept is genuinely hard, that beginners commonly struggle
+  with a particular step — not in punctuation or filler. Clear and respectful is the
+  target, not stiff or joyless.
+
+Prohibited in instructional text:
+- Exclamation marks.
+- Emoji.
+- Second-person emotional narration: "Now it's time to…", "That's all there is to
+  it", "Your turn!", "Don't worry".
+- Chatty parentheticals and winking qualifiers: "(reasonably) easy (with practice)".
+- Vague enthusiasm as motivation: "incredibly powerful", "super useful".
+
+Example.
+Before: "A tradition in computing is to write 'Hello, World!' as your first program.
+That's all there is to it!"
+After: "By convention, the first program written in a new language prints a fixed
+greeting. The example below does so in R."
+```
 
 ---
 

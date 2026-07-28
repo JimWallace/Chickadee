@@ -84,8 +84,10 @@ func enrolledCourses(for userID: UUID, on db: Database) async throws -> [APICour
 
 /// Like `enrolledCourses`, but pairs each course with the caller's per-course
 /// role from the enrollment row (Phase 2 of docs/multi-course-roles.md). The
-/// web read path carries this into the nav; the role is web-only and never
-/// widens the visible set, and MCP keeps using the role-free `enrolledCourses`.
+/// role never widens the visible set. The web read path carries it into the
+/// nav; MCP's listing surface keeps using the role-free `enrolledCourses`,
+/// while the MCP initialize guidance (`mcpCourseGuidance`) reads the role
+/// variant to pick the courses the account can author in.
 func enrolledCoursesWithRoles(
     for userID: UUID, on db: Database
 ) async throws -> [(course: APICourse, role: CourseRole)] {

@@ -54,6 +54,9 @@ struct InstructorDashboardRoutes: RouteCollection {
         r.post("brightspace", "auto-map", use: brightspaceAutoMap)
         r.post("brightspace", "sync-now", use: brightspaceSyncNow)
         r.post("brightspace", "reconcile-now", use: brightspaceReconcileNow)
+        // MCP tab: the active course's authoring guidance for connected agents.
+        r.get("mcp", use: mcpPanelPage)
+        r.post("mcp", use: saveMCPGuidance)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)

@@ -42,6 +42,25 @@ struct ToolContext {
         request.application.usesDedicatedMCPDatabase ? request.db(.mcp) : request.db
     }
 
+    /// True when the database `db` would resolve to is actually configured.
+    /// The MCP transport can be mounted on an app with no database at all
+    /// (transport-level unit tests), where touching `request.db` is a Fluent
+    /// `fatalError`, not a thrown error — so optional DB-touching paths (the
+    /// per-course guidance layered onto `initialize`) must check this first
+    /// instead of relying on `try?`. Probed via `Databases.ids()` — the one
+    /// accessor that never resolves the default id, which is itself the
+    /// fatalError (`configuration(for: nil)` traps on a database-less app
+    /// too). A non-empty id set implies a usable default here: FluentKit makes
+    /// the first registered database the default unless explicitly opted out,
+    /// and both of this app's registration sites pass `isDefault: true`.
+    var hasDatabase: Bool {
+        let databases = request.application.databases
+        if request.application.usesDedicatedMCPDatabase {
+            return databases.ids().contains(.mcp)
+        }
+        return !databases.ids().isEmpty
+    }
+
     /// The privileged (owner) database pool — always the shared default pool,
     /// never the least-privilege `.mcp` pool. Use this for acting-user
     /// bookkeeping that is a *side effect* of an MCP call but is NOT
