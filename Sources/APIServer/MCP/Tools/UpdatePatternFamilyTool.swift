@@ -421,7 +421,7 @@ struct UpdatePatternFamilyTool: ContentTool {
         // clean MCP errors rather than opaque protocol failures.
         try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
         // Close, re-grade, and re-validate (matching the web Save button).
-        let closed = try await finalizeContentEdit(
+        let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
@@ -433,7 +433,7 @@ struct UpdatePatternFamilyTool: ContentTool {
             editedCaseKeys: editsByKey.keys.sorted(),
             addedCaseKeys: newCases.map(\.key),
             validationStatus: assignment.validationStatus,
-            assignmentClosed: closed)
+            assignmentClosed: finalized.assignmentClosed)
     }
 
     /// Indexes case edits by key, rejecting duplicates so the last-write-wins

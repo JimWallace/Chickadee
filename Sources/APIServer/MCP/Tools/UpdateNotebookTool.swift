@@ -100,14 +100,14 @@ struct UpdateNotebookTool: ContentTool {
         }
 
         // Starter-notebook edit: close + re-validate, no regrade of submissions.
-        let closed = try await finalizeContentEdit(
+        let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: false)
 
         return Output(
             assignmentPublicID: assignment.publicID,
             cellCount: notebookCellCount(input.notebook),
             validationStatus: assignment.validationStatus,
-            assignmentClosed: closed)
+            assignmentClosed: finalized.assignmentClosed)
     }
 
 }

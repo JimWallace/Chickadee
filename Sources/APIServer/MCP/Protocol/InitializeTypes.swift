@@ -276,6 +276,21 @@ enum MCPServerInstructions {
         affected scripts in place and likewise neither close nor regrade (matching the web Global \
         Inputs panel); re-run validate_assignment yourself after changing inputs that graded \
         scripts consume.
+        - Every content edit — yours or one made in the browser — records an immutable version of \
+        the assignment's manifest, test-setup files, and starter notebook. Versions are never \
+        deleted. list_assignment_versions is the timeline (who edited, when, and what produced it: \
+        `baseline` for the state before the first recorded edit, `mcp:<tool>`, `web:<route>`, \
+        `clone`, or `restore:<n>`), and get_assignment_version reads any past version — its manifest, \
+        its file list with each file marked differsFromCurrent, and optionally one file's body — \
+        WITHOUT touching the live assignment. When an edit turns out to be wrong, read the version \
+        that preceded it before changing anything; you do not have to reconstruct what a script used \
+        to say from memory. restore_assignment_version then puts that version's content back. \
+        Restoring is append-only — it records a NEW version rather than rewinding, so the restore is \
+        itself recorded and itself undoable — and it restores CONTENT ONLY: the title, due date, and \
+        visibility are left alone, so it can never reopen an assignment or move a deadline. Like any \
+        content edit it closes an open assignment, re-grades every existing submission against the \
+        restored suite (the response reports how many), and re-runs validation; it needs the \
+        instructor role, not just TA.
         - update_notebook replaces only the starter notebook; students keep their in-progress copies \
         and pick up the new notebook when their copy is next reset. Call get_notebook first and edit \
         the returned JSON.

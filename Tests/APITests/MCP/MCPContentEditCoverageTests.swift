@@ -35,6 +35,9 @@ import Testing
         "CreatePatternFamilyTool.swift",
         "DeleteSuiteItemTool.swift",
         "MoveSuiteItemTool.swift",  // placement-only: finalize with retest: false
+        // Puts back a recorded version of the manifest + setup files: the graded
+        // suite changes wholesale, so it closes and re-grades like any other edit.
+        "RestoreAssignmentVersionTool.swift",
         "UpdateNotebookTool.swift",
         "UpdatePatternFamilyTool.swift",
         "UpdateSuiteTool.swift",

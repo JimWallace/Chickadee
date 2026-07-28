@@ -110,7 +110,7 @@ struct DeleteSuiteItemTool: ContentTool {
 
         try await applySuiteEditMapped(setup: setup, body: payload, tool: Self.name, on: context.db)
         // Close, re-grade, and re-validate (matching the web Save button).
-        let closed = try await finalizeContentEdit(
+        let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
 
         return Output(
@@ -119,7 +119,7 @@ struct DeleteSuiteItemTool: ContentTool {
             removed: target.id,
             remainingItemCount: payload.items.count,
             validationStatus: assignment.validationStatus,
-            assignmentClosed: closed)
+            assignmentClosed: finalized.assignmentClosed)
     }
 
     private struct Target { let kind: String; let id: String }

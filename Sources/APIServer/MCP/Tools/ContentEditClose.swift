@@ -97,10 +97,11 @@ func applySuiteEditMapped(
 @discardableResult
 func finalizeContentEdit(
     assignment: APIAssignment, setup: APITestSetup, context: ToolContext, retest: Bool
-) async throws -> Bool {
+) async throws -> ContentEditFinalizeResult {
     let closed = try await closeOpenAssignmentForContentEdit(assignment, on: context.db)
+    var requeued = 0
     if retest {
-        await retestSubmissionsAfterContentEdit(setup: setup, context: context)
+        requeued = await retestSubmissionsAfterContentEdit(setup: setup, context: context)
     }
     // Pass the acting subject explicitly: an MCP request is bearer-authenticated
     // with no session `APIUser`, so the helper's `req.auth` fallback would throw
@@ -109,5 +110,20 @@ func finalizeContentEdit(
     let submitterUserID = try? await context.requireEligibleSubject(tool: "validate").id
     await scheduleValidationAfterSuiteEdit(
         req: context.request, assignment: assignment, submitterUserID: submitterUserID)
-    return closed
+    return ContentEditFinalizeResult(assignmentClosed: closed, submissionsRequeued: requeued)
+}
+
+/// What `finalizeContentEdit` did, so a tool can report both consequences.
+///
+/// The re-queue count comes from the retest fan-out's own return value rather
+/// than from a submissions query. Two reasons: the MCP tool surface may not
+/// name the student-data models at all (`MCPStudentDataWallTests` enforces it
+/// by source scan — including in comments, which is why none appear here), and
+/// the fan-out's number is the accurate one anyway. Counting pending rows would
+/// also sweep in work queued for unrelated reasons.
+struct ContentEditFinalizeResult: Sendable {
+    let assignmentClosed: Bool
+    /// Submissions re-queued to re-grade against the edited suite; 0 when the
+    /// edit was placement-only or the manifest did not change.
+    let submissionsRequeued: Int
 }

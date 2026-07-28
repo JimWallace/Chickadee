@@ -151,7 +151,7 @@ struct MoveSuiteItemTool: ContentTool {
             setup: resolved.setup, body: payload, tool: Self.name, on: context.db)
         // Placement-only edit: close + re-validate, but no regrade (move can't
         // change an outcome).
-        let closed = try await finalizeContentEdit(
+        let finalized = try await finalizeContentEdit(
             assignment: resolved.assignment, setup: resolved.setup, context: context, retest: false)
 
         return Output(
@@ -159,7 +159,7 @@ struct MoveSuiteItemTool: ContentTool {
             kind: target.kind, item: target.id,
             sectionID: destination ?? "",
             validationStatus: resolved.assignment.validationStatus,
-            assignmentClosed: closed)
+            assignmentClosed: finalized.assignmentClosed)
     }
 
     // MARK: - Target resolution

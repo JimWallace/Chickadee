@@ -105,6 +105,18 @@ enum AssignmentVersionSnapshotBuilder {
             manifest: setup.manifest, fileMap: fileMap, notebookHash: notebookHash)
     }
 
+    /// True when `zipPath` is a valid, empty archive rather than a corrupt one.
+    ///
+    /// Sized against the canonical 22-byte end-of-central-directory record
+    /// `writeEmptyZip` emits; the small slack allows a trailing comment without
+    /// admitting anything that could hold real entries.
+    private static func isEmptyArchive(zipPath: String) -> Bool {
+        guard listZipEntries(zipPath: zipPath).isEmpty else { return false }
+        let size =
+            (try? FileManager.default.attributesOfItem(atPath: zipPath))?[.size] as? Int ?? .max
+        return size <= 64
+    }
+
     /// Extracts the zip to a temp directory, stores every regular file as a
     /// blob, and returns the path → hash map.
     private static func captureZipEntries(
@@ -120,8 +132,20 @@ enum AssignmentVersionSnapshotBuilder {
         do {
             try await extractZipArchive(zipPath: zipPath, into: workDir)
         } catch {
-            throw AssignmentVersionSnapshotError.zipUnreadable(
-                path: zipPath, reason: "\(error)")
+            // `unzip` exits non-zero on a VALID but empty archive ("zipfile is
+            // empty"), and an empty setup is a legitimate state — a brand-new
+            // from-scratch assignment has one, and so does a suite whose last
+            // script was just deleted. Treating that as unreadable meant the
+            // first version of every from-scratch assignment silently failed to
+            // record. The size check is what keeps this from also swallowing a
+            // genuinely corrupt archive: `writeEmptyZip` emits exactly the
+            // 22-byte end-of-central-directory record, and no real archive
+            // fits in that.
+            guard isEmptyArchive(zipPath: zipPath) else {
+                throw AssignmentVersionSnapshotError.zipUnreadable(
+                    path: zipPath, reason: "\(error)")
+            }
+            return [:]
         }
 
         let rootPath = workDir.standardized.path
