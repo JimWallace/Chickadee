@@ -63,11 +63,13 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_section_category_id")
     var brightspaceSectionCategoryID: String?
 
-    /// Per-course authoring guidance for MCP agents, set by the course's
-    /// instructors on the instructor MCP panel. Appended to the content MCP
-    /// server's `initialize` instructions for accounts with authoring authority
-    /// in this course, so a connected agent picks up the course's own tone and
-    /// style preferences. Nil = no course-specific guidance.
+    /// This course's own authoring-voice guide for MCP agents, set by its
+    /// instructors on the instructor MCP panel. When present it REPLACES
+    /// Chickadee's default guide for content authored in this course (the
+    /// panel seeds the editor with the default, so a course's guide starts as
+    /// an edited copy of it). Nil = the course inherits the default, which is
+    /// also what the panel stores when the text is reset, emptied, or left
+    /// matching the default verbatim. Resolved via `courseAuthoringVoice`.
     @OptionalField(key: "mcp_instructions")
     var mcpInstructions: String?
 

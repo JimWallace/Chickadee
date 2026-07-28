@@ -175,12 +175,19 @@ source for discovery + DCR). Access tokens are short-lived ES256 JWTs minted by
 `MCPBearerAuthMiddleware`. An hourly reaper drops dead OAuth rows. The consent
 POST is deliberately cookie-independent (identity + CSRF ride the single-use
 consent token) so it survives Safari/ITP cross-site cookie blocking.
-The `initialize` instructions end with the house **authoring-voice guide**
-(`MCPServerInstructions.authoringVoice` — see "Voice and Register" below), and
-per-course guidance an instructor sets on the `/instructor` MCP tab
-(`courses.mcp_instructions`) is appended per authorable course at initialize
-(`MCPCourseGuidance.swift`). Advisory text only — it never alters tools,
-scopes, or the admin surface.
+The `initialize` instructions end with the default **authoring-voice guide**
+(`MCPServerInstructions.authoringVoice` — see "Voice and Register" below).
+Every course inherits that guide; a course's instructors can take it over on
+the `/instructor` MCP tab, which seeds one editable box with the default and
+stores the edited copy in `courses.mcp_instructions` (nil = still inheriting).
+A customized course's guide **replaces** the default for that course's content
+and is appended as a labelled block at initialize (`MCPCourseGuidance.swift`);
+an inheriting course adds nothing, since the default is already in the base
+text. Both are live MCP resources too (`chickadee://docs/authoring-voice`,
+`chickadee://course/<code>/authoring-guidance` — which serves whichever guide
+is in force) so agents can re-read them mid-session; the initialize copy is
+frozen per connection. Advisory text only — it never alters tools, scopes, or
+the admin surface.
 
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —
@@ -500,9 +507,9 @@ agent through the MCP tools. The guide is served verbatim to MCP agents in the
 `initialize` instructions (`MCPServerInstructions.authoringVoice` in
 `Sources/APIServer/MCP/Protocol/InitializeTypes.swift`); this section and that
 constant are deliberately identical — keep them in sync when editing either.
-Instructors can layer per-course guidance on top via the instructor MCP tab
-(`/instructor/mcp`); where the two conflict, the course's own guidance wins
-for that course.
+It is the **default**, not a floor: a course's instructors can take it over on
+the instructor MCP tab (`/instructor/mcp`), which seeds the editor with this
+text; the edited copy then replaces it for that course's content.
 
 ```text
 Authoring voice for Chickadee assignments

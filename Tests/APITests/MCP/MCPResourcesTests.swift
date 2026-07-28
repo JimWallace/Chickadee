@@ -200,6 +200,86 @@ import Vapor
         }
     }
 
+    // MARK: - Authoring-guidance resources
+
+    @Test func voiceGuideAndCourseGuidanceListAndRead() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "CS136", name: "Intro")
+            course.mcpInstructions = "  Refer to the textbook as CP4.  "
+            try await course.save(on: app.db)
+            let prof = try await makeTestUser(on: app, username: "prof")
+            try await APICourseEnrollment(
+                userID: try prof.requireID(), courseID: try course.requireID(), role: .instructor
+            ).save(on: app.db)
+
+            let listing = try await MCPResourceProvider().list(context: context(app, subject: "prof"))
+            let uris = Self.resourceURIs(listing)
+            #expect(uris.contains("chickadee://docs/authoring-voice"))
+            #expect(uris.contains(MCPResourceProvider.courseGuidanceURI(courseCode: "CS136")))
+
+            // The voice guide serves the exact constant initialize embeds.
+            let guide = try await MCPResourceProvider().read(
+                uri: "chickadee://docs/authoring-voice", context: context(app, subject: "prof"))
+            #expect(Self.firstContentText(guide) == MCPServerInstructions.authoringVoice)
+
+            // The course guidance serves the live (trimmed) stored text.
+            let guidance = try await MCPResourceProvider().read(
+                uri: MCPResourceProvider.courseGuidanceURI(courseCode: "CS136"),
+                context: context(app, subject: "prof"))
+            #expect(Self.firstContentText(guidance) == "Refer to the textbook as CP4.")
+        }
+    }
+
+    @Test func courseGuidanceScopedToAuthoringAuthority() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            // "tutor" is staff in STAFF01 (so MCP-eligible) but only a student
+            // in GUID01, the course carrying guidance — GUID01's guidance must
+            // neither list nor read for them.
+            let staffCourse = try await makeTestCourse(on: app, code: "STAFF01", name: "Staffed")
+            let guarded = try await makeTestCourse(on: app, code: "GUID01", name: "Guarded")
+            guarded.mcpInstructions = "Secret tone notes."
+            try await guarded.save(on: app.db)
+            let tutor = try await makeTestUser(on: app, username: "tutor")
+            try await APICourseEnrollment(
+                userID: try tutor.requireID(), courseID: try staffCourse.requireID(), role: .ta
+            ).save(on: app.db)
+            try await APICourseEnrollment(
+                userID: try tutor.requireID(), courseID: try guarded.requireID(), role: .student
+            ).save(on: app.db)
+
+            let listing = try await MCPResourceProvider().list(context: context(app, subject: "tutor"))
+            let uris = Self.resourceURIs(listing)
+            #expect(!uris.contains(MCPResourceProvider.courseGuidanceURI(courseCode: "GUID01")))
+            // The staffed course lists even though it has not customized its
+            // voice — it serves the inherited Chickadee default.
+            #expect(uris.contains(MCPResourceProvider.courseGuidanceURI(courseCode: "STAFF01")))
+            let inherited = try await MCPResourceProvider().read(
+                uri: MCPResourceProvider.courseGuidanceURI(courseCode: "STAFF01"),
+                context: context(app, subject: "tutor"))
+            #expect(Self.firstContentText(inherited) == MCPServerInstructions.authoringVoice)
+
+            await #expect(throws: MCPToolError.self) {
+                _ = try await MCPResourceProvider().read(
+                    uri: MCPResourceProvider.courseGuidanceURI(courseCode: "GUID01"),
+                    context: context(app, subject: "tutor"))
+            }
+        }
+    }
+
+    @Test func courseGuidanceURIRoundTrips() {
+        #expect(
+            MCPResourceProvider.courseGuidanceCode(
+                fromURI: MCPResourceProvider.courseGuidanceURI(courseCode: "CS136")) == "CS136")
+        #expect(
+            MCPResourceProvider.courseGuidanceCode(fromURI: "chickadee://course//authoring-guidance")
+                == nil)
+        #expect(
+            MCPResourceProvider.courseGuidanceCode(
+                fromURI: "chickadee://course/a/b/authoring-guidance") == nil)
+    }
+
     // MARK: - URI round-trip
 
     @Test func manifestURIRoundTrips() {

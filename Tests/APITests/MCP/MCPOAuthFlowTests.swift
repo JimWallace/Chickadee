@@ -141,6 +141,8 @@ import VaporTesting
             #expect(consentRes.status == .seeOther)
             let location = consentRes.headers.first(name: .location)
             #expect(queryValue("state", in: location) == "xyz")
+            // RFC 9207: every authorization response self-identifies its issuer.
+            #expect(queryValue("iss", in: location) == issuer)
             let code = try #require(queryValue("code", in: location))
 
             // Code → access + refresh.
@@ -284,6 +286,8 @@ import VaporTesting
                 app, cookie: cookie, scope: "content:read", decision: "deny")
             #expect(res.status == .seeOther)
             #expect(queryValue("error", in: res.headers.first(name: .location)) == "access_denied")
+            // RFC 9207 requires `iss` on error responses too.
+            #expect(queryValue("iss", in: res.headers.first(name: .location)) == issuer)
         }
     }
 

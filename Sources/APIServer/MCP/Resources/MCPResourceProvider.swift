@@ -48,6 +48,52 @@ struct MCPResourceProvider: Sendable {
                 + "full recipe the server instructions reference.")
     ]
 
+    /// An authoring guide served from an in-binary constant rather than a file
+    /// on disk, exposed read-only at the same `chickadee://docs/<slug>`
+    /// namespace. Keeps the source of truth in code — the authoring-voice
+    /// guide below is the very constant the `initialize` instructions embed —
+    /// so the resource can never drift from what initialize serves.
+    struct InlineDocResource: Sendable {
+        let slug: String
+        let name: String
+        let description: String
+        let text: String
+
+        var uri: String { "chickadee://docs/\(slug)" }
+    }
+
+    /// Constant-backed guides, always present regardless of the docs tree.
+    static let inlineDocResources: [InlineDocResource] = [
+        InlineDocResource(
+            slug: "authoring-voice",
+            name: "Guide — authoring voice for Chickadee assignments",
+            description: "Chickadee's default authoring-voice guide, identical to the block "
+                + "the initialize instructions end with: the register instructional prose is "
+                + "written in, the required and prohibited patterns, and a worked example. "
+                + "Every course starts on this guide; a course whose instructors have "
+                + "replaced it serves its own at chickadee://course/<code>/authoring-guidance.",
+            text: MCPServerInstructions.authoringVoice)
+    ]
+
+    /// `chickadee://course/<code>/authoring-guidance` — the per-course guidance
+    /// a course's instructors set on the instructor MCP panel. Unlike the
+    /// initialize embedding (frozen per connection), the resource re-reads the
+    /// live value, so an agent can pick up edits mid-session.
+    static func courseGuidanceURI(courseCode: String) -> String {
+        "chickadee://course/\(courseCode)/authoring-guidance"
+    }
+
+    /// Parses a course code out of a guidance resource URI, or nil if `uri` is
+    /// not a well-formed guidance URI.
+    static func courseGuidanceCode(fromURI uri: String) -> String? {
+        let prefix = "chickadee://course/"
+        let suffix = "/authoring-guidance"
+        guard uri.hasPrefix(prefix), uri.hasSuffix(suffix) else { return nil }
+        let inner = String(uri.dropFirst(prefix.count).dropLast(suffix.count))
+        guard !inner.isEmpty, !inner.contains("/") else { return nil }
+        return inner
+    }
+
     /// `chickadee://assignment/<publicID>/manifest`
     static func manifestURI(publicID: String) -> String {
         "chickadee://assignment/\(publicID)/manifest"
@@ -82,10 +128,33 @@ struct MCPResourceProvider: Sendable {
         let courseByID = Dictionary(
             courses.compactMap { course in course.id.map { ($0, course) } },
             uniquingKeysWith: { first, _ in first })
+        // Per-course authoring guidance, for the courses the subject can
+        // author in (same resolver the initialize embedding uses, so the two
+        // surfaces can't disagree about who sees which course's guidance).
+        let guidanceEntries: [JSONValue] = try await mcpCourseGuidance(
+            forSubject: context.subject, db: context.db
+        ).map { guidance in
+            let origin =
+                guidance.isCustomized
+                ? "The course's own guide, set by its instructors"
+                : "Chickadee's default guide, which this course has not customized"
+            return .object([
+                "uri": .string(Self.courseGuidanceURI(courseCode: guidance.courseCode)),
+                "name": .string("\(guidance.courseCode) — authoring voice"),
+                "description": .string(
+                    "The authoring voice in force for \(guidance.courseCode): the register, "
+                        + "vocabulary, and conventions to write its instructional prose in. "
+                        + "\(origin). Read this before authoring in the course — a customized "
+                        + "guide replaces the house guide in the initialize instructions, and "
+                        + "the initialize copy is frozen per connection while this resource "
+                        + "always serves the live text."),
+                "mimeType": .string("text/markdown"),
+            ])
+        }
         // The guides are not course-scoped: a subject with no enrolments yet
         // still sees them.
         guard !courseByID.isEmpty else {
-            return .object(["resources": .array(docEntries(context: context))])
+            return .object(["resources": .array(docEntries(context: context) + guidanceEntries)])
         }
 
         let assignments = try await APIAssignment.query(on: context.db)
@@ -105,14 +174,24 @@ struct MCPResourceProvider: Sendable {
                 "mimeType": .string("application/json"),
             ])
         }
-        return .object(["resources": .array(docEntries(context: context) + resources)])
+        return .object(
+            ["resources": .array(docEntries(context: context) + guidanceEntries + resources)])
     }
 
     // MARK: - Authoring-guide docs
 
-    /// Listing entries for the curated guides whose files exist on disk.
+    /// Listing entries for the constant-backed guides (always present) and the
+    /// curated file-backed guides whose files exist on disk.
     private func docEntries(context: ToolContext) -> [JSONValue] {
-        Self.docResources.compactMap { doc in
+        let inline: [JSONValue] = Self.inlineDocResources.map { doc in
+            .object([
+                "uri": .string(doc.uri),
+                "name": .string(doc.name),
+                "description": .string(doc.description),
+                "mimeType": .string("text/markdown"),
+            ])
+        }
+        let fileBacked: [JSONValue] = Self.docResources.compactMap { doc in
             guard FileManager.default.fileExists(atPath: Self.docPath(doc, context: context)) else {
                 return nil
             }
@@ -123,16 +202,21 @@ struct MCPResourceProvider: Sendable {
                 "mimeType": .string("text/markdown"),
             ])
         }
+        return inline + fileBacked
     }
 
     private static func docPath(_ doc: DocResource, context: ToolContext) -> String {
         context.request.application.directory.workingDirectory + doc.relativePath
     }
 
-    /// Reads a curated guide, or throws the same "unknown resource" error the
-    /// manifest path uses when the slug is unknown or the file is unreadable.
+    /// Reads a curated guide — constant-backed first, then file-backed — or
+    /// throws the same "unknown resource" error the manifest path uses when
+    /// the slug is unknown or the file is unreadable.
     private func readDoc(uri: String, context: ToolContext) async throws -> JSONValue {
         try await context.requireEligibleSubject(tool: "resources/read")
+        if let inline = Self.inlineDocResources.first(where: { $0.uri == uri }) {
+            return Self.textContents(uri: uri, text: inline.text)
+        }
         guard let doc = Self.docResources.first(where: { $0.uri == uri }),
             let data = FileManager.default.contents(atPath: Self.docPath(doc, context: context)),
             let text = String(data: data, encoding: .utf8)
@@ -140,7 +224,29 @@ struct MCPResourceProvider: Sendable {
             throw MCPToolError.invalidArguments(
                 tool: "resources/read", detail: "Unknown or inaccessible resource: \(uri)")
         }
-        return .object([
+        return Self.textContents(uri: uri, text: text)
+    }
+
+    /// Reads a course's authoring guidance. Resolved through the same
+    /// `mcpCourseGuidance` scoping the listing and the initialize embedding
+    /// use, so "not enrolled", "no authoring authority", "archived", and "no
+    /// guidance set" all collapse into the manifest path's anti-enumeration
+    /// "unknown resource" answer.
+    private func readCourseGuidance(
+        courseCode: String, uri: String, context: ToolContext
+    ) async throws -> JSONValue {
+        try await context.requireEligibleSubject(tool: "resources/read")
+        let guidance = try await mcpCourseGuidance(forSubject: context.subject, db: context.db)
+        guard let match = guidance.first(where: { $0.courseCode == courseCode }) else {
+            throw MCPToolError.invalidArguments(
+                tool: "resources/read", detail: "Unknown or inaccessible resource: \(uri)")
+        }
+        return Self.textContents(uri: uri, text: match.text)
+    }
+
+    /// The `resources/read` result envelope for a single markdown/text body.
+    private static func textContents(uri: String, text: String) -> JSONValue {
+        .object([
             "contents": .array([
                 .object([
                     "uri": .string(uri),
@@ -159,6 +265,9 @@ struct MCPResourceProvider: Sendable {
     func read(uri: String, context: ToolContext) async throws -> JSONValue {
         if uri.hasPrefix("chickadee://docs/") {
             return try await readDoc(uri: uri, context: context)
+        }
+        if let courseCode = Self.courseGuidanceCode(fromURI: uri) {
+            return try await readCourseGuidance(courseCode: courseCode, uri: uri, context: context)
         }
         guard let publicID = Self.manifestPublicID(fromURI: uri),
             let assignment = try await assignmentByPublicID(publicID, on: context.db)

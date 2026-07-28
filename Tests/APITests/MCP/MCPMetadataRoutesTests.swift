@@ -72,6 +72,9 @@ import VaporTesting
                 #expect((object?["registration_endpoint"] as? String)?.hasSuffix("/oauth/register") == true)
                 #expect((object?["code_challenge_methods_supported"] as? [String])?.contains("S256") == true)
                 #expect((object?["scopes_supported"] as? [String]) == ["content:read", "content:write"])
+                // RFC 9207 (SEP-2468): clients validate `iss` on authorization
+                // responses; the metadata must advertise that we emit it.
+                #expect((object?["authorization_response_iss_parameter_supported"] as? Bool) == true)
             }
         }
     }

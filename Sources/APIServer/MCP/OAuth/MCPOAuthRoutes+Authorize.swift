@@ -43,19 +43,27 @@ extension MCPOAuthRoutes {
             SecurityHeadersMiddleware.cspOrigin(of: query.redirectURI), on: req)
         SecurityHeadersMiddleware.setOpenerPolicy("same-origin-allow-popups", on: req)
 
+        // Which resource is being authorized (content authoring vs admin
+        // diagnostics) — picks the scope ceiling, role gate, audience, signing
+        // authority, and the RFC 9207 `iss` self-identification on every
+        // redirect below. Resolved before the first redirecting guard so error
+        // responses carry `iss` too, as the RFC requires.
+        let surface = resolveSurface(req: req, resource: query.resource, scope: query.scope)
         guard query.responseType == "code" else {
-            return redirect(query.redirectURI, error: "unsupported_response_type", state: query.state)
+            return redirect(
+                query.redirectURI, error: "unsupported_response_type", state: query.state,
+                issuer: surface.issuer)
         }
         guard !query.codeChallenge.isEmpty, query.codeChallengeMethod == "S256" else {
-            return redirect(query.redirectURI, error: "invalid_request", state: query.state)
+            return redirect(
+                query.redirectURI, error: "invalid_request", state: query.state,
+                issuer: surface.issuer)
         }
-        // Which resource is being authorized (content authoring vs admin
-        // diagnostics) — picks the scope ceiling, role gate, audience, and
-        // signing authority for the rest of the flow.
-        let surface = resolveSurface(req: req, resource: query.resource, scope: query.scope)
         let scopes = resolveScopes(query.scope, ceiling: surface.scopeCeiling)
         guard !scopes.isEmpty else {
-            return redirect(query.redirectURI, error: "invalid_scope", state: query.state)
+            return redirect(
+                query.redirectURI, error: "invalid_scope", state: query.state,
+                issuer: surface.issuer)
         }
 
         guard let user = req.auth.get(APIUser.self) else {
@@ -166,13 +174,15 @@ extension MCPOAuthRoutes {
             throw Abort(.badRequest, reason: "Invalid client or redirect_uri.")
         }
         let state = record.state
-        guard form.decision == "authorize" else {
-            return redirect(record.redirectURI, error: "access_denied", state: state)
-        }
         // The surface is fixed by the frozen consent record's scope (its
         // namespace identifies content vs admin), so the role re-check uses the
-        // right gate.
+        // right gate and every redirect self-identifies with the right RFC 9207
+        // `iss`.
         let surface = surfaceForScope(record.scope, req: req)
+        guard form.decision == "authorize" else {
+            return redirect(
+                record.redirectURI, error: "access_denied", state: state, issuer: surface.issuer)
+        }
         // Re-check the role from the bound user at submit time: a downgrade
         // between rendering the consent screen and submitting it must stop here.
         guard
@@ -183,7 +193,8 @@ extension MCPOAuthRoutes {
         }
         let scopes = resolveScopes(record.scope, ceiling: surface.scopeCeiling)
         guard !scopes.isEmpty, !record.codeChallenge.isEmpty, record.codeChallengeMethod == "S256" else {
-            return redirect(record.redirectURI, error: "invalid_request", state: state)
+            return redirect(
+                record.redirectURI, error: "invalid_request", state: state, issuer: surface.issuer)
         }
 
         let code = Self.randomToken()
@@ -214,7 +225,7 @@ extension MCPOAuthRoutes {
             actorOverride: user,
             on: req
         )
-        return redirect(record.redirectURI, code: code, state: state)
+        return redirect(record.redirectURI, code: code, state: state, issuer: surface.issuer)
     }
 
     // MARK: - Consent-flow helpers
@@ -255,14 +266,20 @@ extension MCPOAuthRoutes {
         }
     }
 
-    /// 303 redirect carrying `code` + `state` query items (empty ones dropped).
-    private func redirect(_ uri: String, code: String, state: String) -> Response {
-        redirect(uri, items: [("code", code), ("state", state)])
+    /// 303 redirect carrying `code` + `state` + `iss` query items (empty ones
+    /// dropped). `iss` is the RFC 9207 issuer-identification parameter
+    /// (SEP-2468 in the MCP 2026-07-28 revision): the authorization server
+    /// self-identifies on every authorization response so a client can detect
+    /// mix-up attacks. The value is the resolved surface's issuer — the same
+    /// identifier the minted access token's `iss` claim will carry.
+    private func redirect(_ uri: String, code: String, state: String, issuer: String) -> Response {
+        redirect(uri, items: [("code", code), ("state", state), ("iss", issuer)])
     }
 
-    /// 303 redirect carrying `error` + `state` query items.
-    private func redirect(_ uri: String, error: String, state: String) -> Response {
-        redirect(uri, items: [("error", error), ("state", state)])
+    /// 303 redirect carrying `error` + `state` + `iss` query items — RFC 9207
+    /// requires `iss` on error responses too.
+    private func redirect(_ uri: String, error: String, state: String, issuer: String) -> Response {
+        redirect(uri, items: [("error", error), ("state", state), ("iss", issuer)])
     }
 
     private func redirect(_ uri: String, items: [(String, String)]) -> Response {

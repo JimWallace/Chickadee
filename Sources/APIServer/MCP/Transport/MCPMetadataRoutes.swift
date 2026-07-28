@@ -56,6 +56,10 @@ struct MCPMetadataRoutes: RouteCollection {
             "grant_types_supported": .array([.string("authorization_code"), .string("refresh_token")]),
             "code_challenge_methods_supported": .array([.string("S256")]),
             "token_endpoint_auth_methods_supported": .array([.string("none")]),
+            // RFC 9207: the authorize endpoint appends `iss` to every
+            // authorization response (success and error), and this flag tells
+            // clients they may — and per SEP-2468 must — validate it.
+            "authorization_response_iss_parameter_supported": .bool(true),
         ])
         return try jsonResponse(metadata)
     }

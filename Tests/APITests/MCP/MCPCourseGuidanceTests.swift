@@ -35,15 +35,29 @@ import Vapor
         #expect(text.contains("not stiff or joyless"))
     }
 
-    @Test func courseGuidanceComposesLabelledBlocks() {
+    @Test func customizedCoursesComposeLabelledBlocks() {
         let composed = MCPServerInstructions.text(withCourseGuidance: [
-            MCPCourseGuidance(courseCode: "CS136", text: "Use metric units."),
-            MCPCourseGuidance(courseCode: "HLTH204", text: "Prefer health-data examples."),
+            MCPCourseGuidance(courseCode: "CS136", text: "Use metric units.", isCustomized: true),
+            MCPCourseGuidance(
+                courseCode: "HLTH204", text: "Prefer health-data examples.", isCustomized: true),
         ])
         #expect(composed.hasPrefix(MCPServerInstructions.text))
-        #expect(composed.contains("Course-specific authoring guidance"))
+        #expect(composed.contains("Course-specific authoring voice"))
         #expect(composed.contains("Course CS136:\nUse metric units."))
         #expect(composed.contains("Course HLTH204:\nPrefer health-data examples."))
+        // The course guide replaces the house guide for that course, rather
+        // than stacking on top of it.
+        #expect(composed.contains("in place of the house guide"))
+    }
+
+    @Test func inheritingCoursesAddNothingToTheInstructions() {
+        // A course still on the default is already covered by the house guide
+        // inside `text` — repeating it per course would only bloat initialize.
+        let composed = MCPServerInstructions.text(withCourseGuidance: [
+            MCPCourseGuidance(
+                courseCode: "CS136", text: MCPServerInstructions.authoringVoice, isCustomized: false)
+        ])
+        #expect(composed == MCPServerInstructions.text)
     }
 
     @Test func emptyGuidanceLeavesInstructionsByteIdentical() {
@@ -81,13 +95,37 @@ import Vapor
             let guidance = try await mcpCourseGuidance(forSubject: "guidance_user", db: app.db)
             #expect(
                 guidance == [
-                    MCPCourseGuidance(courseCode: "ACS101", text: "Address students in the plural."),
-                    MCPCourseGuidance(courseCode: "ZCHEM301", text: "Cite lab-safety rules."),
+                    MCPCourseGuidance(
+                        courseCode: "ACS101", text: "Address students in the plural.",
+                        isCustomized: true),
+                    MCPCourseGuidance(
+                        courseCode: "ZCHEM301", text: "Cite lab-safety rules.", isCustomized: true),
                 ])
         }
     }
 
-    @Test func studentRoleArchivedAndUnsetCoursesContributeNothing() async throws {
+    @Test func uncustomizedAuthorableCoursesResolveToTheDefault() async throws {
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let user = try await makeTestUser(on: app, username: "guidance_user")
+            let userID = try user.requireID()
+
+            // No text at all, and whitespace-only text, both mean "inheriting".
+            let unset = try await makeTestCourse(on: app, code: "UNSET1")
+            try await enroll(userID, in: unset, as: .instructor, on: app)
+            let blank = try await makeTestCourse(on: app, code: "BLANK1")
+            blank.mcpInstructions = "   \n  "
+            try await blank.save(on: app.db)
+            try await enroll(userID, in: blank, as: .instructor, on: app)
+
+            let guidance = try await mcpCourseGuidance(forSubject: "guidance_user", db: app.db)
+            #expect(guidance.count == 2)
+            #expect(guidance.allSatisfy { !$0.isCustomized })
+            #expect(guidance.allSatisfy { $0.text == MCPServerInstructions.authoringVoice })
+        }
+    }
+
+    @Test func coursesWithoutAuthoringAuthorityResolveToNothing() async throws {
         let app = try await makeTestApp()
         try await withApp(app) { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
@@ -105,16 +143,6 @@ import Vapor
             archived.mcpInstructions = "Stale guidance."
             try await archived.save(on: app.db)
             try await enroll(userID, in: archived, as: .instructor, on: app)
-
-            // Instructor course with only whitespace text — excluded.
-            let blank = try await makeTestCourse(on: app, code: "BLANK1")
-            blank.mcpInstructions = "   \n  "
-            try await blank.save(on: app.db)
-            try await enroll(userID, in: blank, as: .instructor, on: app)
-
-            // Instructor course with no text at all — excluded.
-            let unset = try await makeTestCourse(on: app, code: "UNSET1")
-            try await enroll(userID, in: unset, as: .instructor, on: app)
 
             let guidance = try await mcpCourseGuidance(forSubject: "guidance_user", db: app.db)
             #expect(guidance.isEmpty)
@@ -141,7 +169,11 @@ import Vapor
             try await unenrolled.save(on: app.db)
 
             let guidance = try await mcpCourseGuidance(forSubject: "guidance_admin", db: app.db)
-            #expect(guidance == [MCPCourseGuidance(courseCode: "ADM101", text: "Admin-visible guidance.")])
+            #expect(
+                guidance == [
+                    MCPCourseGuidance(
+                        courseCode: "ADM101", text: "Admin-visible guidance.", isCustomized: true)
+                ])
         }
     }
 
@@ -190,7 +222,7 @@ import Vapor
 
             let instructions = try await initializeInstructions(app, subject: "guidance_user")
             #expect(instructions.hasPrefix(MCPServerInstructions.text))
-            #expect(instructions.contains("Course-specific authoring guidance"))
+            #expect(instructions.contains("Course-specific authoring voice"))
             #expect(instructions.contains("Course CS136:\nRefer to the textbook as CP4."))
         }
     }
@@ -199,6 +231,20 @@ import Vapor
         let app = try await makeTestApp()
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "guidance_user")
+            let instructions = try await initializeInstructions(app, subject: "guidance_user")
+            #expect(instructions == MCPServerInstructions.text)
+        }
+    }
+
+    @Test func initializeIsUnchangedForACourseStillOnTheDefault() async throws {
+        // An authorable course that has not customized its voice must not add
+        // a redundant copy of the default to the handshake.
+        let app = try await makeTestApp()
+        try await withApp(app) { app in
+            let user = try await makeTestUser(on: app, username: "guidance_user")
+            let course = try await makeTestCourse(on: app, code: "CS136")
+            try await enroll(try user.requireID(), in: course, as: .instructor, on: app)
+
             let instructions = try await initializeInstructions(app, subject: "guidance_user")
             #expect(instructions == MCPServerInstructions.text)
         }
