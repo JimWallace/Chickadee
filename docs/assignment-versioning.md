@@ -1,6 +1,6 @@
 # Assignment versioning and recovery — design
 
-**Status:** planning (decisions locked, not yet implemented).
+**Status:** implemented (slices 1-4). Slice 5 — creation-path `v1` seeding, purge + blob GC, disk-usage reporting — is outstanding.
 
 Every persisted change to an assignment's *content* records an immutable
 snapshot. Snapshots are never deleted. A course-staff member — via MCP, in this
@@ -134,34 +134,39 @@ instructor's work — the exact failure this feature exists to prevent.
 
 ### 4.1 MCP
 
-A `finalizeMCPWrite` step that every `content:write` tool funnels through.
+Capture hangs off `ToolContext.authorizedAssignmentAndSetupForWrite` — the seam
+every content-mutating tool already goes through. Resolving a setup for write
+seeds its baseline and registers it; `MCPDispatcher` snapshots what was
+registered after a successful invoke. A new write tool that resolves its setup
+the normal way is therefore versioned without its author doing anything.
 
-This cannot piggyback on `finalizeContentEdit`: only eight tools call that one,
-and `update_solution`, `update_global_inputs`, `update_section_variables`,
-`set_dataset`, `set_time_limit`, `set_grading_mode` and the suite-section tools
-deliberately do not — yet all of them change content that belongs in a snapshot.
+This deliberately does NOT piggyback on `finalizeContentEdit`: only eight tools
+call that one, and `update_solution`, `update_global_inputs`,
+`update_section_variables`, `set_dataset`, `set_time_limit`, `set_grading_mode`
+and the suite-section tools do not — yet all of them change content that belongs
+in a snapshot.
 
-A sibling to `MCPContentEditCoverageTests` classifies every `content:write` tool
-as versioning or non-versioning by source scan, so a future write tool that
-skips history is a build failure with instructions, not a silent gap. Same
-discipline, same file shape.
+`update_solution` is the one tool that reaches its setup by id rather than
+through the seam, so it registers by hand. `MCPVersionCaptureCoverageTests`
+makes every `content:write` tool declare which of the two it is, or state that
+it owns no assignment content — same discipline and file shape as
+`MCPContentEditCoverageTests`.
 
 ### 4.2 Web
 
-The known manifest/zip write sites, all in `APIServer`:
+The same shape, one layer down: `loadAssignmentAndSetupForWrite` seeds the
+baseline and registers the setup, and `AssignmentVersionCaptureMiddleware`
+snapshots on a 2xx response. Every instructor write route shares that loader, so
+the fifteen handlers need no per-handler wiring.
 
-- `PatternFamilyApplication.applyPatternFamilies` — the shared manifest rebuild
-  plus zip repack; reached from the suite editor, the new-assignment publish
-  path, and `GlobalInputsService`
-- `ScriptCRUDHelpers` — raw script create/update/delete
-- `PublishedAssignmentRoutes+Datasets` — dataset marks
-- `NotebookScaffoldHelpers` and `AssignmentAuthoringService.writeAssignmentNotebook`
-  — starter-notebook saves, including the language re-derivation
-- `SuiteEditHelpers` — the suite payload apply
-- the solution-save path in `RunnerValidationHelpers`
+Two guards keep it honest. `makeTestApp` registers the middleware, so the tests
+exercise the real path rather than a production-only one — without that, the web
+capture path had no coverage at all and the first integration test recorded only
+baselines. A separate source scan pins the production registration and both
+write seams, because a dropped registration is otherwise completely silent.
 
-Because `record` dedupes, these can be hooked incrementally without a correctness
-cliff; a missed site shows up as a coarser history, not a wrong one.
+A failed request records no edit version (the middleware gates on a 2xx) but
+keeps its baseline, which is genuine pre-edit content.
 
 ### 4.3 Creation paths seed `v1`
 
@@ -185,12 +190,19 @@ skipped — they accumulate edits that are not yet anyone's content.
    with `repackZipFromDirectory`, write the notebook, write the manifest.
 3. Re-derive: `extractSupportFilesToSharedDirectory`,
    `SolutionNotebookExtractor.writeSolutionPy`.
-4. Invalidate any instructor notebook working copy (§7.3).
-5. Run `finalizeContentEdit` — close the assignment, manifest-gated regrade,
+4. Run `finalizeContentEdit` — close the assignment, manifest-gated regrade,
    re-kick validation. Restoring changes what is graded, so it takes the same
    path as any other content edit.
-6. Record a **new** version, `v_{max+1}`, with `restored_from_version: N`.
-7. Write an `AuditAction` entry — a restore is a real staff action.
+5. Record a **new** version, `v_{max+1}`, with `restored_from_version: N`.
+
+A bespoke `AuditAction` turned out to be redundant: the MCP dispatcher already
+writes a fail-closed `mcp.tool_called` row before any write tool runs, and the
+version row itself carries the actor, the timestamp, and `restore:N`. Two
+records of the same action would only be two things to keep in sync.
+
+Restoring the version that already matches live content is reported as
+`alreadyCurrent` and changes nothing — no duplicate version, and no re-grade of
+every submission for a no-op.
 
 History is linear and append-only. A restore never rewinds the counter, never
 branches, never deletes, and is itself undoable by restoring the version before
@@ -254,12 +266,23 @@ clone inherits no history for free — it just gets a `v1`. That is the intended
 semantic: a new term starts with the current assignment and a clean slate.
 `.chickadee` bundle export stays history-free; bundles are large enough already.
 
-### 7.3 Notebook working copies
+### 7.3 Notebook working copies are deliberately left alone
 
-`NotebookWorkingCopyStore` holds an instructor's in-progress JupyterLite edits.
-Restoring the starter notebook underneath an open working copy means their next
-save silently reverts the restore. A restore invalidates the working copy, the
-same way the existing instructor reset-notebook action does.
+The original plan here was for a restore to invalidate open working copies, on
+the theory that an instructor with the JupyterLite editor open would otherwise
+save over the restored starter notebook. That was wrong on inspection, in two
+ways.
+
+Working copies live at
+`jupyterlite/files/users/{userID}/{setupID}/assignment.ipynb` — **students' copies
+share that tree with staff's**. A blanket invalidation would delete in-progress
+student work, which is far worse than the stale-editor problem it was meant to
+solve. And neither `update_notebook` nor the web save invalidates working copies
+today; a restore that did would be the odd one out.
+
+So a restore behaves exactly like every other notebook write: it replaces the
+starter notebook, and everyone picks up the new one when their copy is next
+reset. That is already what the MCP instructions promise for `update_notebook`.
 
 ### 7.4 Retention and disk
 

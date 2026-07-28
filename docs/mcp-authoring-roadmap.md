@@ -47,6 +47,9 @@ The catalog:
 | `preview_personalization` | `content:read` | Resolve a seed's `name → value` map + a starter-notebook `{{placeholder}}` audit |
 | `validate_assignment` | `content:read` | Watch validation to completion; live SSE progress |
 | `get_validation_result` | `content:read` | Per-test outcomes of the reference solution's latest validation run (status + shortResult/longResult, all tiers); validation-only, never student data |
+| `list_assignment_versions` | `content:read` | The assignment's content-version history, newest first: who edited, when, and what produced it |
+| `get_assignment_version` | `content:read` | One past version's manifest + file list (each marked `differsFromCurrent`), and optionally one file's body; never touches the live assignment |
+| `restore_assignment_version` | `content:write` | Put an assignment's content back to a recorded version (content only, never metadata); append-only — records a new version, closes + re-grades |
 | `update_assignment` | `content:write` | Metadata: title, due date, visibility (closed/preview/open) |
 | `set_grading_mode` | `content:write` | Set an assignment's grading path (worker vs browser); no regrade/close |
 | `set_time_limit` | `content:write` | Set the assignment-wide (or per-test) execution time limit; no regrade/close |
