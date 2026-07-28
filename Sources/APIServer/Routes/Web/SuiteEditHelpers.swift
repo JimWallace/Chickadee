@@ -117,6 +117,11 @@ func loadAssignmentAndSetupForWrite(
     let caller = try req.auth.require(APIUser.self)
     try await requireCourseWriteAccess(
         caller: caller, courseID: assignment.courseID, atLeast: atLeast, db: req.db)
+    // Content-versioning seam: seeds the pre-edit baseline and registers the
+    // setup so `AssignmentVersionCaptureMiddleware` snapshots it if this
+    // request succeeds. Handlers that turn out not to change content cost
+    // nothing — the snapshot dedupes to no row.
+    await req.beginAssignmentContentEdit(setup: setup)
     return (assignment, setup)
 }
 
