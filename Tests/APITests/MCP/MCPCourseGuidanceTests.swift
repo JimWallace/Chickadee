@@ -203,4 +203,16 @@ import Vapor
             #expect(instructions == MCPServerInstructions.text)
         }
     }
+
+    @Test func initializeOnADatabaselessAppServesTheHouseText() async throws {
+        // The transport can be mounted on an app with no database at all
+        // (MCPEndpointTests' fixture). request.db is a Fluent fatalError there,
+        // so the guidance layer must skip the lookup entirely — regression
+        // guard for the ToolContext.hasDatabase check.
+        let app = try await Application.make(.testing)
+        try await withApp(app) { app in
+            let instructions = try await initializeInstructions(app, subject: "tester")
+            #expect(instructions == MCPServerInstructions.text)
+        }
+    }
 }

@@ -42,6 +42,17 @@ struct ToolContext {
         request.application.usesDedicatedMCPDatabase ? request.db(.mcp) : request.db
     }
 
+    /// True when the database `db` would resolve to is actually configured.
+    /// The MCP transport can be mounted on an app with no database at all
+    /// (transport-level unit tests), where touching `request.db` is a Fluent
+    /// `fatalError`, not a thrown error — so optional DB-touching paths (the
+    /// per-course guidance layered onto `initialize`) must check this first
+    /// instead of relying on `try?`.
+    var hasDatabase: Bool {
+        let id: DatabaseID? = request.application.usesDedicatedMCPDatabase ? .mcp : nil
+        return request.application.databases.configuration(for: id) != nil
+    }
+
     /// The privileged (owner) database pool — always the shared default pool,
     /// never the least-privilege `.mcp` pool. Use this for acting-user
     /// bookkeeping that is a *side effect* of an MCP call but is NOT

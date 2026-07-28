@@ -254,11 +254,13 @@ struct MCPDispatcher: Sendable {
         id: JSONRPCID, params: JSONValue?, context: ToolContext?
     ) async -> JSONRPCResponse {
         // Layer any per-course authoring guidance for the authenticated subject
-        // onto the house instructions. Best-effort: a lookup failure (or a
-        // context-free dispatch, as in unit tests) degrades to the house text
-        // rather than failing the handshake.
+        // onto the house instructions. Best-effort: a lookup failure, a
+        // context-free dispatch, or an app with no database configured (the
+        // transport unit tests — where request.db would fatalError, hence the
+        // explicit hasDatabase check) degrades to the house text rather than
+        // failing the handshake.
         var instructions = MCPServerInstructions.text
-        if let context {
+        if let context, context.hasDatabase {
             let guidance = (try? await mcpCourseGuidance(forSubject: context.subject, db: context.db)) ?? []
             instructions = MCPServerInstructions.text(withCourseGuidance: guidance)
         }
