@@ -121,6 +121,10 @@ struct CreateAssignmentTool: ContentTool {
             throw MCPToolError.executionFailed(tool: Self.name, detail: "\(error)")
         }
 
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentCreated, assignment: created.assignment,
+            metadata: ["title": created.assignment.title, "via": "mcp"], on: context.request)
+
         return Output(
             publicID: created.assignment.publicID,
             title: created.assignment.title,

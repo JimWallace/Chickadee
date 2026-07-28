@@ -351,6 +351,9 @@ func registerMigrations(on app: Application) {
     // Append-only assignment content-snapshot history. FK references `courses`
     // and `users`; deliberately none on `test_setups` (see the migration).
     app.migrations.add(CreateAssignmentVersions())
+    // First-class course scoping for audit events, backfilled from the
+    // metadata JSON (#421). Must follow CreateAuditLog.
+    app.migrations.add(AddAuditLogCourseID())
     // Index migrations run last: they reference tables created above
     // (runner_snapshots, job_execution_metrics) and only add indexes.
     app.migrations.add(CreateHotPathIndexes())

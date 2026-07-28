@@ -25,11 +25,13 @@ enum AuditLogger {
         metadata: [String: String]? = nil,
         actorOverride: APIUser? = nil,
         actorUsernameOverride: String? = nil,
+        courseID: UUID? = nil,
         on req: Request
     ) async {
         _ = await recordReturning(
             action: action, targetType: targetType, targetID: targetID, metadata: metadata,
-            actorOverride: actorOverride, actorUsernameOverride: actorUsernameOverride, on: req)
+            actorOverride: actorOverride, actorUsernameOverride: actorUsernameOverride,
+            courseID: courseID, on: req)
     }
 
     /// Like `record`, but returns the persisted entry — or nil when the write
@@ -43,6 +45,7 @@ enum AuditLogger {
         metadata: [String: String]? = nil,
         actorOverride: APIUser? = nil,
         actorUsernameOverride: String? = nil,
+        courseID: UUID? = nil,
         on req: Request
     ) async -> APIAuditLogEntry? {
         let actor = actorOverride ?? req.auth.get(APIUser.self)
@@ -56,7 +59,13 @@ enum AuditLogger {
             targetID: targetID,
             remoteAddr: clientIPAddress(from: req, trustForwardedFor: trust),
             userAgent: req.headers.first(name: "User-Agent"),
-            metadata: metadata.flatMap(encodeMetadata)
+            metadata: metadata.flatMap(encodeMetadata),
+            // Fall back to the metadata key every course-scoped call site has
+            // always set. That is what makes the existing enrollment/staff
+            // events show up in a course's activity view without touching any
+            // of their call sites — and it means a new site that sets only the
+            // metadata key still lands scoped rather than orphaned.
+            courseID: courseID ?? metadata.flatMap { $0["course_id"] }.flatMap(UUID.init(uuidString:))
         )
         do {
             try await entry.save(on: req.db)
@@ -95,5 +104,37 @@ enum AuditLogger {
     private static func decodeMetadata(_ json: String) -> [String: String]? {
         guard let data = json.data(using: .utf8) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
+    }
+}
+
+// MARK: - Assignment lifecycle
+
+extension AuditLogger {
+    /// Records an assignment lifecycle event (#421), course-scoped.
+    ///
+    /// Content edits are recorded far more richly by `assignment_versions`;
+    /// these are the events versioning deliberately does not cover — creation,
+    /// deletion, cloning, and the metadata (visibility, due date) a restore
+    /// never touches. Deletion in particular leaves no version row behind to
+    /// read, so the audit row is the only record that the assignment existed.
+    ///
+    /// Always sets `courseID` so the event reaches the course activity view;
+    /// forgetting it is the failure mode the column exists to prevent.
+    static func recordAssignmentLifecycle(
+        _ action: AuditAction,
+        assignment: APIAssignment,
+        metadata: [String: String] = [:],
+        on req: Request
+    ) async {
+        var merged = metadata
+        merged["assignment"] = assignment.publicID
+        merged["course_id"] = assignment.courseID.uuidString
+        await record(
+            action: action,
+            targetType: .assignment,
+            targetID: assignment.id?.uuidString,
+            metadata: merged,
+            courseID: assignment.courseID,
+            on: req)
     }
 }

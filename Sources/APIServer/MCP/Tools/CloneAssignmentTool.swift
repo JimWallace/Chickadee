@@ -144,6 +144,13 @@ struct CloneAssignmentTool: ContentTool {
             }
         }
 
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentCloned, assignment: cloned.assignment,
+            metadata: [
+                "source_assignment": source.publicID, "title": cloned.assignment.title,
+                "via": "mcp",
+            ], on: context.request)
+
         let courseCode =
             try await APICourse.find(targetCourseID, on: context.db)?.code ?? ""
         return Output(
