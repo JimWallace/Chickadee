@@ -47,10 +47,18 @@ struct ToolContext {
     /// (transport-level unit tests), where touching `request.db` is a Fluent
     /// `fatalError`, not a thrown error — so optional DB-touching paths (the
     /// per-course guidance layered onto `initialize`) must check this first
-    /// instead of relying on `try?`.
+    /// instead of relying on `try?`. Probed via `Databases.ids()` — the one
+    /// accessor that never resolves the default id, which is itself the
+    /// fatalError (`configuration(for: nil)` traps on a database-less app
+    /// too). A non-empty id set implies a usable default here: FluentKit makes
+    /// the first registered database the default unless explicitly opted out,
+    /// and both of this app's registration sites pass `isDefault: true`.
     var hasDatabase: Bool {
-        let id: DatabaseID? = request.application.usesDedicatedMCPDatabase ? .mcp : nil
-        return request.application.databases.configuration(for: id) != nil
+        let databases = request.application.databases
+        if request.application.usesDedicatedMCPDatabase {
+            return databases.ids().contains(.mcp)
+        }
+        return !databases.ids().isEmpty
     }
 
     /// The privileged (owner) database pool — always the shared default pool,
