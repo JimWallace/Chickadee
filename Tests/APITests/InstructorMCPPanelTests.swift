@@ -80,7 +80,9 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("Only this course's instructors can edit its guidance."))
+                    // Leaf escapes the apostrophe in "course's", so match an
+                    // apostrophe-free slice of the read-only note.
+                    #expect(html.contains("instructors can edit its guidance"))
                     #expect(!html.contains("Save guidance"))
                 })
         }
