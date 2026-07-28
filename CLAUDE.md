@@ -179,8 +179,11 @@ The `initialize` instructions end with the house **authoring-voice guide**
 (`MCPServerInstructions.authoringVoice` — see "Voice and Register" below), and
 per-course guidance an instructor sets on the `/instructor` MCP tab
 (`courses.mcp_instructions`) is appended per authorable course at initialize
-(`MCPCourseGuidance.swift`). Advisory text only — it never alters tools,
-scopes, or the admin surface.
+(`MCPCourseGuidance.swift`). Both are also live MCP resources
+(`chickadee://docs/authoring-voice`, `chickadee://course/<code>/authoring-guidance`)
+so agents can re-read them mid-session — the initialize copy is frozen per
+connection. Advisory text only — it never alters tools, scopes, or the admin
+surface.
 
 **Pattern-generated test families (v0.4.75+).** Instructors can define a
 `PatternFamily` (Core/) — one function, shared defaults, a table of cases —

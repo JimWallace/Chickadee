@@ -1,9 +1,13 @@
 # MCP 2026-07-28 specification revision — impact & adoption plan
 
-**Status:** planning. Tracked for adoption in
-[#1218](https://github.com/jimwallace/chickadee/issues/1218), scheduled for the
-week the spec finalizes (2026-07-28). No production change is required to keep
-working; see [Backward compatibility](#backward-compatibility).
+**Status:** in progress. The spec published as final on 2026-07-28 (the dated
+revision is live at `modelcontextprotocol.io/specification/2026-07-28`), and
+the "do first" slice — RFC 9207 `iss` — has landed, together with the
+guidance-delivery groundwork below. The version-adoption slice waits on the
+connector SDK; tracked in
+[#1218](https://github.com/jimwallace/chickadee/issues/1218). No production
+change is required to keep working; see
+[Backward compatibility](#backward-compatibility).
 
 ## TL;DR
 
@@ -122,6 +126,12 @@ requires and SEP-2468 makes clients validate.
 This stands alone from the rest of the revision work; a strict updated client
 could begin requiring it independently of the stateless changes.
 
+**Shipped** (week of 2026-07-28): both halves — `iss` appended to every
+authorize redirect, success and error alike, carrying the resolved surface's
+issuer (so it always matches the minted token's `iss` claim, content or admin),
+plus the `authorization_response_iss_parameter_supported: true` advertisement —
+with assertions in the OAuth flow and metadata tests.
+
 ## Optional / forward-looking
 
 Do these at our own pace, once the spec is final and SDKs ship — none is a
@@ -148,12 +158,35 @@ correctness blocker:
    shift), and that the SDK the Claude connector uses has shipped 2026-07-28
    support.
 2. Land the RFC 9207 `iss` hardening (can go earlier — it does not depend on the
-   revision).
+   revision). **Done** — see "The one gap worth closing now" above.
 3. Add `"2026-07-28"` to the supported-version set + `_meta`-carried version +
    `server/discover`, keeping `initialize` as the fallback.
 4. Verify the roots/sampling/logging deprecations are a no-op for us.
 5. Evaluate the Tasks extension for `validate_assignment` and JSON Schema
    2020-12 for the tool catalog as separate follow-ups.
+
+## Authoring-guidance delivery across the transition
+
+The house authoring-voice guide and the per-course instructor guidance
+(`courses.mcp_instructions`, edited on the instructor MCP tab) reach agents
+through one composition point — `MCPServerInstructions.text(withCourseGuidance:)`
+— so the delivery surface can move without the content forking:
+
+- **2025-11-25 clients (today):** embedded in `initialize.instructions`,
+  frozen per connection.
+- **Now, spec-stable:** also exposed as live MCP resources —
+  `chickadee://docs/authoring-voice` (the constant the instructions embed) and
+  `chickadee://course/<code>/authoring-guidance` (scoped by the same
+  `mcpCourseGuidance` resolver as the initialize embedding). Resources are
+  untouched by the stateless revision, re-readable mid-session, and
+  course-addressable, so guidance edits reach agents without a reconnect.
+- **When `server/discover` is adopted here:** serve the same composed text from
+  the discover handler (on-demand, so the reconnect caveat disappears
+  entirely). Confirm where the final schema carries server instructions when
+  doing that slice.
+- **Watch:** the official "Skills over MCP" extension (structured instructions
+  discovered and consumed through MCP) is the natural long-term convergence
+  point for this kind of guidance; evaluate once the connector supports it.
 
 ## References
 

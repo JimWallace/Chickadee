@@ -317,7 +317,11 @@ enum MCPServerInstructions {
         chickadee://assignment/<publicID>/manifest). get_suite is the structured view; the resource \
         is the verbatim canonical JSON, useful to read the full authoring spec into context. \
         Authoring guides are exposed the same way under chickadee://docs/* — e.g. the per-student \
-        solution-notebook recipe above.
+        solution-notebook recipe above. The house authoring-voice guide (the block these \
+        instructions end with) is chickadee://docs/authoring-voice, and a course whose instructors \
+        set per-course authoring guidance exposes it at chickadee://course/<code>/authoring-guidance. \
+        Re-read that resource before authoring in a course: the copy embedded in these instructions \
+        is frozen when the connection initializes, while the resource always serves the live text.
         """
 
     /// The house authoring-voice guide, appended verbatim to the operational
