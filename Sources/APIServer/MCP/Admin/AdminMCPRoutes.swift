@@ -27,13 +27,28 @@ struct AdminMCPRoutes: RouteCollection {
     func handlePost(req: Request) async throws -> Response {
         try validateHost(req)
         try validateOrigin(req)
-        if let rejection = try protocolVersionRejection(req) { return rejection }
 
         let rpcRequest: JSONRPCRequest
         do {
             rpcRequest = try decodeRequest(req)
         } catch {
             return try jsonResponse(.failure(id: .null, error: .parseError()), status: .badRequest)
+        }
+
+        // Dual-era, exactly as the content transport (#1218): modern `_meta`
+        // selects the 2026-07-28 semantics, anything else stays legacy.
+        let meta = MCPRequestMeta.extract(fromParams: rpcRequest.params)
+        let era = mcpEra(of: meta, request: req)
+        if era == .modern {
+            if !rpcRequest.isNotification,
+                let rejection = mcpModernTransportRejection(
+                    request: req, rpc: rpcRequest, meta: meta, era: era)
+            {
+                let failure = JSONRPCResponse.failure(id: rpcRequest.id ?? .null, error: rejection)
+                return try jsonResponse(failure, status: mcpResponseStatus(for: failure, era: era))
+            }
+        } else if let rejection = try protocolVersionRejection(req) {
+            return rejection
         }
 
         guard let principal = req.adminMcpPrincipal else {
@@ -49,12 +64,16 @@ struct AdminMCPRoutes: RouteCollection {
             actingClientName: principal.actingClientName
         )
 
-        guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context) else {
+        guard let rpcResponse = await dispatcher.dispatch(rpcRequest, context: context, era: era) else {
             return Response(status: .accepted)
         }
         if let error = rpcResponse.error, error.code == JSONRPCError.insufficientScopeCode {
             return try jsonResponse(
                 rpcResponse, status: .forbidden, challenge: insufficientScopeChallenge(error))
+        }
+        let status = mcpResponseStatus(for: rpcResponse, era: era)
+        guard status == .ok else {
+            return try jsonResponse(rpcResponse, status: status)
         }
         if clientAcceptsEventStream(req) {
             return try eventStreamResponse(rpcResponse)
@@ -85,11 +104,11 @@ struct AdminMCPRoutes: RouteCollection {
     }
 
     private func protocolVersionRejection(_ req: Request) throws -> Response? {
-        guard let version = req.headers.first(name: "MCP-Protocol-Version"),
+        guard let version = req.headers.first(name: MCPHeader.protocolVersion),
             !MCPProtocol.supportedVersions.contains(version)
         else { return nil }
         return try jsonResponse(
-            .failure(id: .null, error: .invalidRequest("Unsupported MCP-Protocol-Version: \(version)")),
+            .failure(id: .null, error: .unsupportedProtocolVersion(requested: version)),
             status: .badRequest)
     }
 

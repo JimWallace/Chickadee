@@ -163,7 +163,15 @@ separately.
 **MCP server (`Sources/APIServer/MCP/`).** Chickadee is its own MCP server *and*
 its own OAuth 2.1 authorization server, so an agent (e.g. the Claude connector)
 can manage course content on an instructor's behalf. Gated by `MCP_MODE`
-(`off` / `read_only` / `read_write`). The browser OAuth flow is Authorization
+(`off` / `read_only` / `read_write`). The server is **dual-era** (#1218): the
+era is resolved *per request* — a body whose `_meta` carries
+`io.modelcontextprotocol/protocolVersion` gets the modern 2026-07-28 semantics
+(mandatory `server/discover`, `resultType` + server `_meta` on every result,
+mirrored `MCP-Protocol-Version`/`Mcp-Method`/`Mcp-Name` header validation,
+HTTP-visible protocol errors), anything else keeps the legacy `initialize`
+behaviour unchanged. `initialize` negotiates only among the legacy revisions,
+so a handshake client is never handed a protocol it cannot speak. See
+`Transport/MCPModernTransport.swift` and `docs/mcp-2026-07-28-revision.md`. The browser OAuth flow is Authorization
 Code + PKCE (S256); codes, consent tokens, and refresh tokens are stored only as
 SHA-256 hashes and are strictly single-use — consumption is an **atomic
 conditional `UPDATE … WHERE consumed = false RETURNING`** so concurrent

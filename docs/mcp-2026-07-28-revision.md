@@ -1,13 +1,22 @@
 # MCP 2026-07-28 specification revision — impact & adoption plan
 
-**Status:** in progress. The spec published as final on 2026-07-28 (the dated
-revision is live at `modelcontextprotocol.io/specification/2026-07-28`), and
-the "do first" slice — RFC 9207 `iss` — has landed, together with the
-guidance-delivery groundwork below. The version-adoption slice waits on the
-connector SDK; tracked in
-[#1218](https://github.com/jimwallace/chickadee/issues/1218). No production
-change is required to keep working; see
-[Backward compatibility](#backward-compatibility).
+**Status:** adopted. The spec published as final on 2026-07-28, and Chickadee
+now serves it: the server is **dual-era**, answering the modern per-request
+revision (`2026-07-28`) and the legacy handshake revisions (`2025-11-25` /
+`2025-06-18`) on the same endpoint. RFC 9207 `iss` shipped alongside. What
+remains is the optional tier (routing headers beyond the required ones, JSON
+Schema 2020-12 tool schemas, the Tasks extension, Skills over MCP), tracked in
+[#1218](https://github.com/jimwallace/chickadee/issues/1218).
+
+> **Corrections to the RC-era analysis below.** This document was first written
+> against the release candidate. Three things moved in the final text and are
+> reflected in the implementation: `server/discover` is **mandatory** for
+> servers (it was listed here as optional); every modern result **MUST** carry
+> a `resultType` discriminator; and the revision defines three protocol error
+> codes (`-32020` HeaderMismatch, `-32021` MissingRequiredClientCapability,
+> `-32022` UnsupportedProtocolVersion) in a newly reserved `-32020`…`-32099`
+> range. The compatibility framing also needs a caveat — see
+> [Backward compatibility](#backward-compatibility).
 
 ## TL;DR
 
@@ -68,6 +77,45 @@ logging are deprecated but keep functioning for at least a year.
 **Tool schemas.** Expand to full JSON Schema 2020-12 with composition
 (`oneOf`/`anyOf`/`allOf`) and conditionals. Explicitly a "free upgrade at your
 own pace" — nothing forces richer schemas.
+
+## What Chickadee implements (dual-era)
+
+The transport resolves the era **per request** — the spec's own rule, and the
+reason one endpoint can serve both:
+
+| Signal | Era | Behaviour |
+|---|---|---|
+| `_meta` carries `io.modelcontextprotocol/protocolVersion` (or the `MCP-Protocol-Version` header names `2026-07-28`) | modern | Stateless per-request semantics; `resultType` + server `_meta` on every result; mirrored-header validation; HTTP-visible protocol errors |
+| Anything else (including `initialize`) | legacy | Byte-for-byte the pre-existing 2025-11-25 behaviour |
+
+Modern specifics, all in `Transport/MCPModernTransport.swift` and
+`Protocol/MCPRequestMeta.swift`:
+
+- **Per-request `_meta`.** `protocolVersion` and `clientCapabilities` are
+  required (a request missing either is `-32602` + HTTP 400); `clientInfo` and
+  `logLevel` are optional. Results carry
+  `_meta['io.modelcontextprotocol/serverInfo']`.
+- **`server/discover`** returns `supportedVersions` (newest first),
+  `capabilities`, and `instructions` — the same surface description
+  `initialize` gives a legacy client, including the caller's per-course
+  authoring guidance. Deliberately no `ttlMs`/`cacheScope`: an instructor can
+  change that guidance at any time.
+- **Mirrored headers.** `MCP-Protocol-Version`, `Mcp-Method`, and — for
+  `tools/call` / `resources/read` / `prompts/get` — `Mcp-Name` must be present
+  and agree with the body, with the `=?base64?…?=` sentinel decoded first.
+  Disagreement is `-32020` + HTTP 400, which closes the split-brain where an
+  intermediary routes on the header while the server acts on the body.
+- **Status codes.** Unsupported version / header mismatch / malformed `_meta`
+  → 400; unimplemented method → 404 (how a modern client tells "no such
+  method" from "not a modern server"); scope denial stays 403. Legacy keeps
+  its historical 200-with-an-error-body shape.
+- **Never negotiates up.** `initialize` selects only among the legacy
+  revisions, so a legacy client that names `2026-07-28` is answered
+  `2025-11-25` rather than handed a protocol it cannot speak.
+
+Both MCP servers implement this — the content authoring surface (`/mcp`) and
+the admin diagnostic surface (`/admin-mcp`) — since `server/discover` is
+mandatory for *servers*, not for one designated surface.
 
 ## Backward compatibility
 

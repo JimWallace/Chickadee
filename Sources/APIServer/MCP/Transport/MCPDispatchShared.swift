@@ -110,16 +110,70 @@ func mcpToolErrorResult(_ error: MCPToolError) -> JSONValue {
     ])
 }
 
-// MARK: - initialize
+// MARK: - Modern (2026-07-28) result envelope
 
-/// What one MCP surface advertises from `initialize`: its capability set,
-/// identity, and agent-facing instructions, plus the label its log lines
-/// carry ("MCP" / "Admin MCP").
+/// Stamps the modern per-result fields onto a successful response: the
+/// mandatory `resultType` discriminator and the server's self-identification
+/// in `_meta`.  Legacy responses pass through untouched — legacy clients treat
+/// an absent `resultType` as `"complete"`, and adding server `_meta` to a
+/// revision that never defined it would be noise.
+///
+/// Applied once at the dispatcher's exit rather than inside every handler, so
+/// no result-building code has to know which era it is serving.  Error
+/// responses are left alone: they carry `error`, not `result`.
+/// https://modelcontextprotocol.io/specification/2026-07-28/basic#requests
+func mcpModernized(
+    _ response: JSONRPCResponse, era: MCPEra, serverInfo: MCPServerInfo
+) -> JSONRPCResponse {
+    guard era == .modern, response.error == nil,
+        case .object(var fields)? = response.result
+    else { return response }
+    // "Result responses MUST include a `resultType` field." Every result this
+    // server produces is terminal — it never asks the client for input — so
+    // the discriminator is always `complete`.
+    fields["resultType"] = .string("complete")
+    var meta: [String: JSONValue] = [:]
+    if case .object(let existing)? = fields["_meta"] { meta = existing }
+    if meta[MCPMetaKey.serverInfo] == nil {
+        var info: [String: JSONValue] = [
+            "name": .string(serverInfo.name),
+            "version": .string(serverInfo.version),
+        ]
+        if let title = serverInfo.title { info["title"] = .string(title) }
+        meta[MCPMetaKey.serverInfo] = .object(info)
+    }
+    fields["_meta"] = .object(meta)
+    return .success(id: response.id, result: .object(fields))
+}
+
+// MARK: - initialize / server/discover
+
+/// What one MCP surface advertises about itself: its capability set, identity,
+/// and agent-facing instructions, plus the label its log lines carry
+/// ("MCP" / "Admin MCP").  Shared by the legacy `initialize` handshake and the
+/// modern `server/discover` method, so the two can never describe the server
+/// differently.
 struct MCPInitializeSurface {
     let capabilities: MCPServerCapabilities
     let serverInfo: MCPServerInfo
     let instructions: String
     let logLabel: String
+}
+
+/// Builds the modern `server/discover` result: the versions this server
+/// speaks, its capabilities, and its instructions.  `serverInfo` is added by
+/// `mcpModernized` (it belongs in the result's `_meta`, not the body).
+///
+/// Deliberately carries no `ttlMs` / `cacheScope`: the instructions embed
+/// per-course authoring guidance an instructor can change at any time, and a
+/// client caching a stale discover result would keep serving the old guide.
+/// https://modelcontextprotocol.io/specification/2026-07-28/server/discover
+func mcpDiscoverResult(surface: MCPInitializeSurface) -> JSONValue {
+    .object([
+        "supportedVersions": .array(MCPProtocol.advertisedVersions.map { .string($0) }),
+        "capabilities": (try? JSONValue(encoding: surface.capabilities)) ?? .object([:]),
+        "instructions": .string(surface.instructions),
+    ])
 }
 
 /// Builds the `initialize` response: version negotiation per the lifecycle
@@ -133,9 +187,13 @@ func mcpInitializeResponse(
     logger: Logger?
 ) -> JSONRPCResponse {
     let client = try? (params ?? .object([:])).decoded(as: MCPInitializeParams.self)
+    // Negotiate only among the LEGACY revisions: `initialize` is the legacy
+    // handshake, so a client reaching it cannot speak the modern per-request
+    // protocol even if it names that version. Answering with the modern
+    // revision here would hand a legacy client a protocol it cannot use.
     let negotiated =
         client?.protocolVersion.flatMap { requested in
-            MCPProtocol.supportedVersions.contains(requested) ? requested : nil
+            MCPProtocol.legacyVersions.contains(requested) ? requested : nil
         } ?? MCPProtocol.version
     if let logger {
         let name = client?.clientInfo?.name ?? "unknown"
