@@ -54,6 +54,17 @@ final class APIAuditLogEntry: Model, Content, @unchecked Sendable {
     @OptionalField(key: "metadata")
     var metadata: String?
 
+    /// The course this event belongs to, when it has one.
+    ///
+    /// Course scoping used to live only inside the `metadata` JSON, which is
+    /// unindexable and silently absent wherever a call site forgot the key.
+    /// This is the indexed, first-class form the per-course activity view
+    /// (#421) filters on; `CreateAuditLog` backfills it from the existing
+    /// metadata. Nil for deployment-wide events (logins, runner secret
+    /// rotation, user deletion).
+    @OptionalField(key: "course_id")
+    var courseID: UUID?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -68,7 +79,8 @@ final class APIAuditLogEntry: Model, Content, @unchecked Sendable {
         targetID: String? = nil,
         remoteAddr: String? = nil,
         userAgent: String? = nil,
-        metadata: String? = nil
+        metadata: String? = nil,
+        courseID: UUID? = nil
     ) {
         self.id = id
         self.actorUserID = actorUserID
@@ -79,6 +91,7 @@ final class APIAuditLogEntry: Model, Content, @unchecked Sendable {
         self.remoteAddr = remoteAddr
         self.userAgent = userAgent
         self.metadata = metadata
+        self.courseID = courseID
     }
 }
 
@@ -116,6 +129,17 @@ enum AuditAction: String, Sendable, CaseIterable {
     case enrollmentBulkAdded = "enrollment.bulk_added"
     case enrollmentRemoved = "enrollment.removed"
     case enrollmentRoleChanged = "enrollment.role_changed"
+
+    // Assignment lifecycle (#421). Content edits are recorded separately and in
+    // far more detail by `assignment_versions`; these are the metadata and
+    // existence changes versioning deliberately does NOT cover — a restore
+    // never touches them, and a deleted assignment leaves no version row to
+    // read.
+    case assignmentCreated = "assignment.created"
+    case assignmentCloned = "assignment.cloned"
+    case assignmentDeleted = "assignment.deleted"
+    case assignmentVisibilityChanged = "assignment.visibility_changed"
+    case assignmentDueDateChanged = "assignment.due_date_changed"
 
     // Submissions
     case submissionsPurged = "submission.retention_purged"
@@ -179,6 +203,9 @@ enum AuditAction: String, Sendable, CaseIterable {
             return .courses
         case .enrollmentBulkAdded, .enrollmentRemoved, .enrollmentRoleChanged:
             return .enrollment
+        case .assignmentCreated, .assignmentCloned, .assignmentDeleted,
+            .assignmentVisibilityChanged, .assignmentDueDateChanged:
+            return .assignments
         case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent:
             return .submissions
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
@@ -224,6 +251,11 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .enrollmentBulkAdded: return "Bulk enrollment"
         case .enrollmentRemoved: return "Unenrolled"
         case .enrollmentRoleChanged: return "Per-course role changed"
+        case .assignmentCreated: return "Assignment created"
+        case .assignmentCloned: return "Assignment cloned"
+        case .assignmentDeleted: return "Assignment deleted"
+        case .assignmentVisibilityChanged: return "Assignment visibility changed"
+        case .assignmentDueDateChanged: return "Assignment due date changed"
         case .submissionsPurged: return "Submissions purged"
         case .submissionRetestAll: return "Retest all submissions"
         case .submissionRetestForStudent: return "Retest student submissions"
@@ -271,6 +303,7 @@ enum AuditCategory: String, Sendable, CaseIterable {
     case users = "Users & roles"
     case courses = "Courses"
     case enrollment = "Enrollment"
+    case assignments = "Assignments"
     case submissions = "Submissions"
     case grading = "Grading"
     case runner = "Runner"

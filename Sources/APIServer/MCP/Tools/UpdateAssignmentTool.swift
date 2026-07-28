@@ -154,6 +154,8 @@ struct UpdateAssignmentTool: ContentTool {
         // Title / due date / open state are lifecycle — instructor-level (#417).
         let assignment = try await context.authorizedAssignmentForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .instructor)
+        let previousDueAt = assignment.dueAt
+        let previousVisibility = assignment.visibility
         do {
             // Title/date metadata first. The legacy `isOpen` is applied here only
             // when `visibility` was not given (visibility is the richer form and
@@ -172,7 +174,27 @@ struct UpdateAssignmentTool: ContentTool {
                 detail: "The assignment cannot be opened until its runner validation has passed.")
         }
 
+        // Lifecycle audit (#421): metadata changes are the events content
+        // versioning deliberately does not record, and an agent moving a
+        // deadline or reopening an assignment is exactly what a lead instructor
+        // wants to see in the course activity view.
         let formatter = ISO8601DateFormatter()
+        if previousDueAt != assignment.dueAt {
+            await AuditLogger.recordAssignmentLifecycle(
+                .assignmentDueDateChanged, assignment: assignment,
+                metadata: [
+                    "previous": previousDueAt.map(formatter.string(from:)) ?? "none",
+                    "current": assignment.dueAt.map(formatter.string(from:)) ?? "none",
+                    "via": "mcp",
+                ], on: context.request)
+        }
+        if previousVisibility != assignment.visibility {
+            await AuditLogger.recordAssignmentLifecycle(
+                .assignmentVisibilityChanged, assignment: assignment,
+                metadata: ["visibility": assignment.visibility.rawValue, "via": "mcp"],
+                on: context.request)
+        }
+
         return Output(
             publicID: assignment.publicID,
             title: assignment.title,

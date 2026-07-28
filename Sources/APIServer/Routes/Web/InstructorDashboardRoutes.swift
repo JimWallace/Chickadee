@@ -37,6 +37,7 @@ struct InstructorDashboardRoutes: RouteCollection {
         // JSON sparkline series for the dashboard diagnostic cards.
         r.get("metrics", "cards", use: metricsCards)
         // Students roster tab + its self-updating poll endpoint.
+        r.get("activity", use: activityPage)
         r.get("students", use: studentsPage)
         r.get("students-data", use: studentsData)
         // Reconcile the roster against the LEARN classlist (flags dropped students).
@@ -364,6 +365,9 @@ struct InstructorDashboardRoutes: RouteCollection {
                 reason: "Assignment cannot be opened until runner validation passes."
             )
         }
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentVisibilityChanged, assignment: assignment,
+            metadata: ["visibility": visibility.rawValue], on: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -373,6 +377,9 @@ struct InstructorDashboardRoutes: RouteCollection {
     func closeAssignment(req: Request) async throws -> Response {
         let assignment = try await loadAssignmentForWrite(req, atLeast: .instructor)
         try await AssignmentAuthoringService.setOpenState(assignment, open: false, on: req.db)
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentVisibilityChanged, assignment: assignment,
+            metadata: ["visibility": AssignmentVisibility.closed.rawValue], on: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -401,6 +408,10 @@ struct InstructorDashboardRoutes: RouteCollection {
             targetCourseID: source.courseID,
             setupsDirectory: req.application.testSetupsDirectory,
             on: req.db)
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentCloned, assignment: cloned.assignment,
+            metadata: ["source_assignment": source.publicID, "title": cloned.assignment.title],
+            on: req)
         let notice = "Cloned from \(source.title). Set a due date and re-validate, then open."
         return req.redirect(to: "/instructor/\(cloned.assignment.publicID)/edit?notice=\(urlEncode(notice))")
     }
@@ -506,6 +517,15 @@ struct InstructorDashboardRoutes: RouteCollection {
             try await setup.delete(on: req.db)
         }
 
+        // Recorded BEFORE the row goes: after the delete there is no assignment
+        // to attribute the event to, and no version row survives either — this
+        // is the only trace that the assignment ever existed.
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentDeleted, assignment: assignment,
+            metadata: [
+                "title": assignment.title,
+                "submissions_deleted": String(submissionIDs.count),
+            ], on: req)
         try await assignment.delete(on: req.db)
         return req.redirect(to: "/instructor")
     }

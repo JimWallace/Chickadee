@@ -89,6 +89,7 @@ extension PublishedAssignmentRoutes {
             assignmentTestSetupID: assignment.testSetupID
         )
 
+        let previousDueAt = assignment.dueAt
         assignment.title = title
         assignment.dueAt = due
         assignment.startsAt = starts
@@ -103,6 +104,18 @@ extension PublishedAssignmentRoutes {
         // Editing returns the assignment to closed (re-validation gates the
         // re-open / re-preview), matching the close-on-save contract.
         assignment.visibility = .closed
+
+        // Only when it actually moved: the Save button posts the whole form on
+        // every content edit, so auditing unconditionally would bury the real
+        // deadline changes under one row per save.
+        if previousDueAt != due {
+            await AuditLogger.recordAssignmentLifecycle(
+                .assignmentDueDateChanged, assignment: assignment,
+                metadata: [
+                    "previous": previousDueAt.map(ISO8601DateFormatter().string(from:)) ?? "none",
+                    "current": due.map(ISO8601DateFormatter().string(from:)) ?? "none",
+                ], on: req)
+        }
 
         return try await enqueueValidationForEditedAssignment(
             req: req,

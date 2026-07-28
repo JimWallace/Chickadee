@@ -589,6 +589,9 @@ extension DraftAssignmentRoutes {
             )
             try await requirement.save(on: req.db)
         }
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentCreated, assignment: assignment,
+            metadata: ["title": assignment.title, "source": "new_assignment"], on: req)
         return assignment
     }
 
@@ -748,6 +751,9 @@ extension DraftAssignmentRoutes {
                 courseID: courseID, sectionID: nil, db: req.db),
             courseID: courseID
         )
+        await AuditLogger.recordAssignmentLifecycle(
+            .assignmentCreated, assignment: assignment,
+            metadata: ["title": assignment.title, "source": "quick_publish"], on: req)
         // Open the editor to finalize the draft (notebook, solution, suite);
         // saving there validates automatically. (Validation is always tied to
         // a save — there is no separate validate step.)

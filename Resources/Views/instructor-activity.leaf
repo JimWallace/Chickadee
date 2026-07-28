@@ -1,0 +1,119 @@
+#extend("base"):
+#export("title"):
+Activity
+#endexport
+#export("content"):
+<nav class="instructor-tabs" aria-label="Instructor sections">
+    <a class="instructor-tab" href="/instructor"#if(activeInstructorTab == "overview"): aria-current="page"#endif>Overview</a>
+    <a class="instructor-tab" href="/instructor/activity"#if(activeInstructorTab == "activity"): aria-current="page"#endif>Activity</a>
+    <a class="instructor-tab" href="/instructor/students"#if(activeInstructorTab == "students"): aria-current="page"#endif>Students</a>
+    <a class="instructor-tab" href="/instructor/brightspace"#if(activeInstructorTab == "brightspace"): aria-current="page"#endif>LEARN</a>
+    <a class="instructor-tab" href="/instructor/mcp"#if(activeInstructorTab == "mcp"): aria-current="page"#endif>MCP</a>
+</nav>
+
+#if(!hasActiveCourse):
+<section class="section-block">
+    <p class="empty">Select a course to see its activity.</p>
+</section>
+#else:
+
+<section class="section-block">
+    <div class="section-header">
+        <h2>Recent activity</h2>
+    </div>
+    <p class="activity-intro">
+        Content edits and course events for this course, newest first. Every
+        content edit is a recoverable version of the assignment it names.
+    </p>
+
+    <form class="activity-filter" method="get" action="/instructor/activity">
+        <label class="activity-filter-label" for="activity-actor">Filter by person</label>
+        <input class="filter-input" id="activity-actor" type="text" name="actor"
+               value="#(filterActor)" placeholder="username" autocomplete="off">
+        <button type="submit" class="btn">Filter</button>
+        #if(filtered):
+        <a href="/instructor/activity" class="btn">Clear</a>
+        #endif
+    </form>
+
+    #if(hasRows):
+    <div class="table-scroll">
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th scope="col" class="activity-col-when">When</th>
+                    <th scope="col" class="activity-col-who">Who</th>
+                    <th scope="col">What</th>
+                    <th scope="col" class="activity-col-where">Where</th>
+                    <th scope="col">Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                #for(row in rows):
+                <tr>
+                    <td>#(row.timestamp)</td>
+                    <td>#(row.actor)</td>
+                    <td>
+                        <span class="activity-category">#(row.category)</span>
+                        <span class="activity-summary">#(row.summary)</span>
+                    </td>
+                    <td>
+                        #if(row.link):
+                        <a href="#(row.link)">#(row.target)</a>
+                        #else:
+                        #(row.target)
+                        #endif
+                    </td>
+                    <td class="activity-detail">#(row.detail)</td>
+                </tr>
+                #endfor
+            </tbody>
+        </table>
+    </div>
+    #else:
+    <p class="empty">
+        #if(filtered):
+        No activity matches that person.
+        #else:
+        No recorded activity for this course yet.
+        #endif
+    </p>
+    #endif
+</section>
+
+#endif
+#endexport
+#endextend
+<style>
+.activity-intro {
+    color: var(--muted);
+    font-size: var(--text-sm);
+    margin-bottom: 1rem;
+}
+.activity-filter {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.activity-filter-label {
+    font-size: var(--text-sm);
+    color: var(--muted);
+}
+.activity-col-when { width: 11rem; }
+.activity-col-who { width: 9rem; }
+.activity-col-where { width: 14rem; }
+.activity-category {
+    display: inline-block;
+    font-size: var(--text-xs);
+    color: var(--muted);
+    margin-right: .5rem;
+}
+.activity-summary { font-size: var(--text-base); }
+.activity-detail {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    word-break: break-word;
+}
+</style>
