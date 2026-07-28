@@ -1,49 +1,57 @@
 // APIServer/MCP/Transport/MCPCourseGuidance.swift
 //
-// Per-course authoring guidance layered onto the content MCP server's
-// `initialize` instructions.  Instructors write the text on the instructor MCP
-// panel (courses.mcp_instructions); at initialize the dispatcher resolves the
-// connecting account's authorable courses and appends each course's guidance
-// under a labelled block, so an agent picks up the course's own tone and style
-// preferences alongside the house authoring-voice guide.  Advisory by design —
-// it shapes authored prose and changes no tool behaviour or scope.
+// Per-course authoring voice for the content MCP server.  Every course starts
+// out on Chickadee's house authoring-voice guide; a course's instructors can
+// take that text over on the instructor MCP panel and edit it into their own
+// (`courses.mcp_instructions`, nil while the course is still inheriting).  At
+// initialize the dispatcher resolves the connecting account's authorable
+// courses and appends a labelled block for each course that has customized its
+// voice — the house guide already carries the default, so an inheriting course
+// adds nothing.  Advisory by design: it shapes authored prose and changes no
+// tool behaviour or scope.
 
 import Core
 import Fluent
 import Foundation
 
-/// One course's authoring guidance, as appended to the initialize instructions.
+/// One course's effective authoring voice.
 struct MCPCourseGuidance: Equatable, Sendable {
     let courseCode: String
+    /// The voice guide in force for this course: the instructors' own text when
+    /// they have customized it, otherwise Chickadee's default.
     let text: String
+    /// False when `text` is the inherited default rather than course-authored.
+    let isCustomized: Bool
 }
 
 extension MCPServerInstructions {
     /// The complete instructions string for a connection whose account can
-    /// author in courses carrying custom guidance.  With no guidance this is
-    /// exactly `text`, so accounts without any per-course text see the same
-    /// bytes as before.
+    /// author in courses that have customized their voice.  Only customized
+    /// courses contribute — an inheriting course is already covered by the
+    /// house guide inside `text` — so a connection with no customizations gets
+    /// exactly `text`, byte for byte.
     static func text(withCourseGuidance guidance: [MCPCourseGuidance]) -> String {
-        guard !guidance.isEmpty else { return text }
+        let customized = guidance.filter(\.isCustomized)
+        guard !customized.isEmpty else { return text }
         let header = """
-            Course-specific authoring guidance
+            Course-specific authoring voice
 
-            The instructors of the courses below have set additional guidance for content \
-            authored in their course. It applies only when authoring in that course and \
-            supplements the house authoring-voice guide above; where the two conflict, the \
-            course's own guidance takes precedence for that course's content.
+            The courses below have replaced the authoring-voice guide above with their own. \
+            When authoring content for one of these courses, follow that course's guide in \
+            place of the house guide; the house guide still governs every other course.
             """
-        let blocks = guidance.map { "Course \($0.courseCode):\n\($0.text)" }
+        let blocks = customized.map { "Course \($0.courseCode):\n\($0.text)" }
         return ([text, header] + blocks).joined(separator: "\n\n")
     }
 }
 
-/// Resolves the per-course guidance blocks for the token subject: the
-/// non-archived courses the account is enrolled in with authoring authority
-/// (per-course role of TA or higher; admins qualify through any enrollment,
-/// matching `evaluateCourseWrite`'s bypass) whose `mcp_instructions` is
-/// non-empty, in course-code order.  An unknown subject resolves to no
-/// guidance rather than an error — initialize must succeed regardless.
+/// Resolves the effective authoring voice of every course the token subject can
+/// author in: the non-archived enrolled courses where the account holds a
+/// per-course role of TA or higher (admins qualify through any enrollment,
+/// matching `evaluateCourseWrite`'s bypass), in course-code order.  A course
+/// that has not customized its voice comes back carrying the house default with
+/// `isCustomized == false`.  An unknown subject resolves to nothing rather than
+/// an error — initialize must succeed regardless.
 func mcpCourseGuidance(forSubject subject: String, db: any Database) async throws -> [MCPCourseGuidance] {
     guard
         let user = try await APIUser.query(on: db)
@@ -53,10 +61,24 @@ func mcpCourseGuidance(forSubject subject: String, db: any Database) async throw
     else { return [] }
     return try await enrolledCoursesWithRoles(for: userID, on: db)
         .filter { user.isAdmin || $0.role >= .ta }
-        .compactMap { enrolled in
-            let text = (enrolled.course.mcpInstructions ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return nil }
-            return MCPCourseGuidance(courseCode: enrolled.course.code, text: text)
+        .map { enrolled in
+            MCPCourseGuidance(
+                courseCode: enrolled.course.code,
+                text: courseAuthoringVoice(enrolled.course),
+                isCustomized: courseHasCustomAuthoringVoice(enrolled.course))
         }
+}
+
+/// The voice guide in force for `course`: its own text when customized, else
+/// Chickadee's default.  The single resolver behind the MCP surfaces and the
+/// instructor panel, so the text an instructor edits is the text agents get.
+func courseAuthoringVoice(_ course: APICourse) -> String {
+    let custom = (course.mcpInstructions ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return custom.isEmpty ? MCPServerInstructions.authoringVoice : custom
+}
+
+/// True when `course` carries its own voice guide rather than inheriting the
+/// default.
+func courseHasCustomAuthoringVoice(_ course: APICourse) -> Bool {
+    !(course.mcpInstructions ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 }

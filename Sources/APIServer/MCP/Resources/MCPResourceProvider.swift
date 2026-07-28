@@ -67,9 +67,11 @@ struct MCPResourceProvider: Sendable {
         InlineDocResource(
             slug: "authoring-voice",
             name: "Guide — authoring voice for Chickadee assignments",
-            description: "The house authoring-voice guide, identical to the block the "
-                + "initialize instructions end with: the register instructional prose is "
-                + "written in, the required and prohibited patterns, and a worked example.",
+            description: "Chickadee's default authoring-voice guide, identical to the block "
+                + "the initialize instructions end with: the register instructional prose is "
+                + "written in, the required and prohibited patterns, and a worked example. "
+                + "Every course starts on this guide; a course whose instructors have "
+                + "replaced it serves its own at chickadee://course/<code>/authoring-guidance.",
             text: MCPServerInstructions.authoringVoice)
     ]
 
@@ -132,14 +134,20 @@ struct MCPResourceProvider: Sendable {
         let guidanceEntries: [JSONValue] = try await mcpCourseGuidance(
             forSubject: context.subject, db: context.db
         ).map { guidance in
-            .object([
+            let origin =
+                guidance.isCustomized
+                ? "The course's own guide, set by its instructors"
+                : "Chickadee's default guide, which this course has not customized"
+            return .object([
                 "uri": .string(Self.courseGuidanceURI(courseCode: guidance.courseCode)),
-                "name": .string("\(guidance.courseCode) — course authoring guidance"),
+                "name": .string("\(guidance.courseCode) — authoring voice"),
                 "description": .string(
-                    "Instructor-set authoring guidance for \(guidance.courseCode) (tone, "
-                        + "vocabulary, conventions). Also embedded in the initialize "
-                        + "instructions, but the initialize copy is frozen per connection — "
-                        + "re-read this resource before authoring in the course."),
+                    "The authoring voice in force for \(guidance.courseCode): the register, "
+                        + "vocabulary, and conventions to write its instructional prose in. "
+                        + "\(origin). Read this before authoring in the course — a customized "
+                        + "guide replaces the house guide in the initialize instructions, and "
+                        + "the initialize copy is frozen per connection while this resource "
+                        + "always serves the live text."),
                 "mimeType": .string("text/markdown"),
             ])
         }

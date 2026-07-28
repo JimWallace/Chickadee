@@ -360,17 +360,25 @@ struct AssignmentStudentRow: Encodable {
     let secretRevealSpent: Bool
 }
 
-/// MCP tab (`GET /instructor/mcp`): the active course's authoring guidance for
+/// MCP tab (`GET /instructor/mcp`): the active course's authoring voice for
 /// connected agents, editable by the course's instructors.
 struct InstructorMCPContext: Encodable {
     let currentUser: CurrentUserContext?
     let activeInstructorTab: String
     let hasActiveCourse: Bool
     let courseCode: String
-    /// The stored per-course guidance ("" when unset) — the textarea's value.
+    /// The course's effective voice guide — its own text when customized, else
+    /// Chickadee's default — as the textarea's value. The default is seeded
+    /// into the box so the instructor edits a real starting point rather than
+    /// composing an addendum against an invisible baseline.
     let guidanceText: String
-    /// The fixed house authoring-voice guide, rendered read-only for reference.
-    let houseVoiceGuide: String
+    /// True when `guidanceText` is course-authored rather than the default.
+    let isCustomized: Bool
+    /// `canEdit && isCustomized` — folded so the template gates the Reset
+    /// button on one flag (LeafKit 1.14.2 mis-parses `&&`).
+    let showResetButton: Bool
+    /// One-line statement of where the current text comes from.
+    let sourceNote: String
     let maxLength: Int
     /// True when the viewer may save: a per-course instructor or an admin, and
     /// the course is not archived. TAs pass the `/instructor` gate but see the

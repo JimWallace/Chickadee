@@ -252,8 +252,13 @@ import Vapor
             let listing = try await MCPResourceProvider().list(context: context(app, subject: "tutor"))
             let uris = Self.resourceURIs(listing)
             #expect(!uris.contains(MCPResourceProvider.courseGuidanceURI(courseCode: "GUID01")))
-            // A course with no guidance set lists nothing either.
-            #expect(!uris.contains(MCPResourceProvider.courseGuidanceURI(courseCode: "STAFF01")))
+            // The staffed course lists even though it has not customized its
+            // voice — it serves the inherited Chickadee default.
+            #expect(uris.contains(MCPResourceProvider.courseGuidanceURI(courseCode: "STAFF01")))
+            let inherited = try await MCPResourceProvider().read(
+                uri: MCPResourceProvider.courseGuidanceURI(courseCode: "STAFF01"),
+                context: context(app, subject: "tutor"))
+            #expect(Self.firstContentText(inherited) == MCPServerInstructions.authoringVoice)
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await MCPResourceProvider().read(

@@ -1,8 +1,9 @@
 // Tests/APITests/InstructorMCPPanelTests.swift
 //
-// The instructor MCP tab (per-course authoring guidance for connected agents):
-// staff-only visibility, TA read-only rendering, the instructor save/clear
-// round-trip (with the length guard), and the TA save refusal.
+// The instructor MCP tab (the course's authoring voice for connected agents):
+// staff-only visibility, the default seeded into the editor, TA read-only
+// rendering, the instructor save / reset round-trip (with the length guard and
+// the unedited-default shortcut), and the TA save refusal.
 
 import Core
 import Fluent
@@ -53,7 +54,7 @@ import VaporTesting
         }
     }
 
-    @Test func instructorSeesEditablePanelWithHouseGuide() async throws {
+    @Test func instructorSeesEditorSeededWithTheDefault() async throws {
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(
@@ -62,11 +63,14 @@ import VaporTesting
                 afterResponse: { res in
                     #expect(res.status == .ok)
                     let html = res.body.string
-                    #expect(html.contains("Agent authoring guidance"))
-                    #expect(html.contains("Save guidance"))
-                    // The fixed house guide is shown for reference.
-                    #expect(html.contains("House authoring-voice guide"))
+                    #expect(html.contains("Authoring voice"))
+                    #expect(html.contains(">Save<"))
+                    // An uncustomized course starts on the Chickadee default,
+                    // seeded into the one editable box.
                     #expect(html.contains("Authoring voice for Chickadee assignments"))
+                    #expect(html.contains("uses the Chickadee default"))
+                    // Nothing to reset while the course is still inheriting.
+                    #expect(!html.contains("Reset to Chickadee default"))
                 })
         }
     }
@@ -82,15 +86,78 @@ import VaporTesting
                     let html = res.body.string
                     // Leaf escapes the apostrophe in "course's", so match an
                     // apostrophe-free slice of the read-only note.
-                    #expect(html.contains("instructors can edit its guidance"))
-                    #expect(!html.contains("Save guidance"))
+                    #expect(html.contains("instructors can edit its authoring voice"))
+                    // No save/reset controls at all for a TA; the box renders
+                    // with the disabled attribute.
+                    #expect(!html.contains(">Save<"))
+                    #expect(!html.contains("Reset to Chickadee default"))
+                    #expect(html.contains(" disabled>"))
                 })
         }
     }
 
     // MARK: - Save round-trip
 
-    @Test func instructorSavesAndClearsGuidance() async throws {
+    @Test func instructorCustomizesThenResetsTheVoice() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(
+                for: "/instructor/mcp", cookie: cookie, on: app)
+            // An edited copy of the default: the realistic shape of the edit,
+            // and it exercises the CRLF normalization browsers submit with.
+            let edited = MCPServerInstructions.authoringVoice + "\n\nUse metric units throughout."
+            let asBrowserSubmits = edited.replacingOccurrences(of: "\n", with: "\r\n")
+
+            try await app.asyncTest(
+                .POST, "/instructor/mcp",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(
+                        ["instructions": asBrowserSubmits, "_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/instructor/mcp?saved=1")
+                })
+            var course = try await activeCourse(on: app)
+            // Stored with \n line endings, and now the course's own voice.
+            #expect(course.mcpInstructions == edited)
+            #expect(courseHasCustomAuthoringVoice(course))
+
+            // The saved text renders back into the box, now offering a reset.
+            try await app.asyncTest(
+                .GET, "/instructor/mcp",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: sessionCookie) },
+                afterResponse: { res in
+                    let html = res.body.string
+                    #expect(html.contains("Use metric units throughout."))
+                    #expect(html.contains("uses its own authoring voice"))
+                    #expect(html.contains("Reset to Chickadee default"))
+                })
+
+            // Reset drops back to inheriting the default.
+            try await app.asyncTest(
+                .POST, "/instructor/mcp",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(
+                        ["instructions": asBrowserSubmits, "action": "reset", "_csrf": csrf],
+                        as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/instructor/mcp?saved=reset")
+                })
+            course = try await activeCourse(on: app)
+            #expect(course.mcpInstructions == nil)
+            #expect(courseAuthoringVoice(course) == MCPServerInstructions.authoringVoice)
+        }
+    }
+
+    @Test func savingTheUneditedDefaultKeepsTheCourseInheriting() async throws {
+        // Opening the panel and pressing Save without editing must not freeze a
+        // verbatim copy of the default onto the course — it stays on the
+        // default so later changes to the house guide still flow through.
         try await withAssignmentRoutesApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(
@@ -101,25 +168,29 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     try req.content.encode(
-                        ["instructions": "  Use metric units throughout.  ", "_csrf": csrf],
-                        as: .urlEncodedForm)
+                        [
+                            "instructions": MCPServerInstructions.authoringVoice
+                                .replacingOccurrences(of: "\n", with: "\r\n"),
+                            "_csrf": csrf,
+                        ], as: .urlEncodedForm)
                 },
                 afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/instructor/mcp?saved=1")
+                    #expect(res.headers.first(name: .location) == "/instructor/mcp?saved=reset")
                 })
-            var course = try await activeCourse(on: app)
-            #expect(course.mcpInstructions == "Use metric units throughout.")
+            let course = try await activeCourse(on: app)
+            #expect(course.mcpInstructions == nil)
+        }
+    }
 
-            // The saved text renders back into the panel's textarea.
-            try await app.asyncTest(
-                .GET, "/instructor/mcp",
-                beforeRequest: { req in req.headers.add(name: .cookie, value: sessionCookie) },
-                afterResponse: { res in
-                    #expect(res.body.string.contains("Use metric units throughout."))
-                })
+    @Test func emptyingTheBoxRestoresTheDefault() async throws {
+        try await withAssignmentRoutesApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let course = try await activeCourse(on: app)
+            course.mcpInstructions = "Terse and technical."
+            try await course.save(on: app.db)
+            let (csrf, sessionCookie) = try await csrfFields(
+                for: "/instructor/mcp", cookie: cookie, on: app)
 
-            // A blank submit clears the guidance back to nil.
             try await app.asyncTest(
                 .POST, "/instructor/mcp",
                 beforeRequest: { req in
@@ -127,11 +198,10 @@ import VaporTesting
                     try req.content.encode(["instructions": "   ", "_csrf": csrf], as: .urlEncodedForm)
                 },
                 afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/instructor/mcp?saved=1")
+                    #expect(res.headers.first(name: .location) == "/instructor/mcp?saved=reset")
                 })
-            course = try await activeCourse(on: app)
-            #expect(course.mcpInstructions == nil)
+            let reloaded = try await activeCourse(on: app)
+            #expect(reloaded.mcpInstructions == nil)
         }
     }
 

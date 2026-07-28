@@ -10,12 +10,13 @@
 
 ### Added
 
-- **Authoring guidance exposed as live MCP resources.** The house
+- **Authoring guidance exposed as live MCP resources.** The default
   authoring-voice guide is now readable at `chickadee://docs/authoring-voice`
   (served from the same constant the `initialize` instructions embed, so the
-  two can never drift), and a course whose instructors set per-course guidance
-  exposes it at `chickadee://course/<code>/authoring-guidance`, scoped by the
-  same authoring-authority resolver as the initialize embedding. Unlike the
+  two can never drift), and every course an agent can author in serves the
+  guide actually in force for it at
+  `chickadee://course/<code>/authoring-guidance`, scoped by the same
+  authoring-authority resolver as the initialize embedding. Unlike the
   initialize copy (frozen per connection), the resources serve the live text,
   so guidance edits reach connected agents without a reconnect — and resources
   are untouched by the MCP 2026-07-28 stateless revision, making this the

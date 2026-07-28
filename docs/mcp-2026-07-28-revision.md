@@ -167,10 +167,12 @@ correctness blocker:
 
 ## Authoring-guidance delivery across the transition
 
-The house authoring-voice guide and the per-course instructor guidance
-(`courses.mcp_instructions`, edited on the instructor MCP tab) reach agents
-through one composition point — `MCPServerInstructions.text(withCourseGuidance:)`
-— so the delivery surface can move without the content forking:
+The default authoring-voice guide and each course's own guide
+(`courses.mcp_instructions` — the instructor MCP tab seeds one editable box
+with the default, and a course that edits it replaces the default for its own
+content) reach agents through one composition point —
+`MCPServerInstructions.text(withCourseGuidance:)` — so the delivery surface can
+move without the content forking:
 
 - **2025-11-25 clients (today):** embedded in `initialize.instructions`,
   frozen per connection.
