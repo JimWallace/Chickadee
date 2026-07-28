@@ -1,6 +1,6 @@
 # Assignment versioning and recovery — design
 
-**Status:** implemented (slices 1-4). Slice 5 — creation-path `v1` seeding, purge + blob GC, disk-usage reporting — is outstanding.
+**Status:** implemented (slices 1-5). The admin disk-usage breakdown is deliberately deferred as a UI change — see §7.4.
 
 Every persisted change to an assignment's *content* records an immutable
 snapshot. Snapshots are never deleted. A course-staff member — via MCP, in this
@@ -262,9 +262,14 @@ change; that is out of scope here but the shape should not foreclose it.
 ### 7.2 Clone copies content, not history
 
 `cloneAssignment` and `copyCourse` copy live files into a **new** setup ID, so a
-clone inherits no history for free — it just gets a `v1`. That is the intended
-semantic: a new term starts with the current assignment and a clean slate.
-`.chickadee` bundle export stays history-free; bundles are large enough already.
+clone inherits no history for free. Each creation path then seeds a single `v1`
+(`origin: clone` / `create`), which is both the intended new-term semantic —
+current content, clean slate — and a starting point to roll back to before
+anyone edits the copy.
+
+Bundle import is not seeded explicitly; the lazy baseline covers it on first
+edit. `.chickadee` bundle *export* stays history-free; bundles are large enough
+already.
 
 ### 7.3 Notebook working copies are deliberately left alone
 
@@ -287,12 +292,25 @@ reset. That is already what the MCP instructions promise for `update_notebook`.
 ### 7.4 Retention and disk
 
 Versions are never deleted by an instructor or an agent. They die with the
-course: the `SubmissionRetentionService` purge and course delete drop the
-version rows, then a sweep removes blobs with no remaining referencing row.
-Instructor content is not FIPPA-sensitive the way submissions are, but a purged
-course must not leave bytes on disk.
+course: `course_id` cascades, so deleting a course takes its version rows, and
+`AssignmentVersionStore.reclaimOrphanedBlobs` then removes blobs no surviving
+row references. Instructor content is not FIPPA-sensitive the way submissions
+are, but a purged course must not leave bytes on disk.
 
-`testsetups/versions/` joins the admin disk-usage breakdown in `DiskUsage.swift`.
+Reclamation is deliberately conservative in two ways. It builds its reference
+set from a **complete** scan of every version row and skips collection entirely
+if that scan fails, because deleting on partial information would destroy live
+history. And it ignores blobs modified within a one-hour grace window: a
+snapshot writes its blobs *before* the row that references them, so a collection
+running in that gap would otherwise delete bytes an about-to-commit row points
+at.
+
+**Deferred: the admin disk-usage panel.** `testsetups/versions/` is inside the
+directory the "Test setups" card already walks, so version blobs are counted —
+just not broken out. Splitting them into their own figure is a UI change, and
+this cut is deliberately MCP-only. `testSetupSizesByID` attributes only
+top-level files and the `shared/`+`notebooks/` subtrees, so blobs are correctly
+*not* charged to any single assignment (they are shared by construction).
 
 ### 7.5 Concurrency
 

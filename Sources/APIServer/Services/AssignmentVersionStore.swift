@@ -185,6 +185,30 @@ enum AssignmentVersionStore {
         }
     }
 
+    /// Seeds a freshly created setup's first version.
+    ///
+    /// Creation paths (clone, copy-course, from-scratch create) call this so a
+    /// brand-new assignment has a starting point to roll back to before anyone
+    /// edits it, and so its provenance is recorded (`clone` / `create`) rather
+    /// than showing up later as an anonymous `baseline`.
+    ///
+    /// Best-effort: an assignment must not fail to be created because its first
+    /// history row could not be written. The lazy baseline in `ensureBaseline`
+    /// is the backstop for any creation path that does not call this.
+    @discardableResult
+    static func seedInitialVersion(
+        setup: APITestSetup,
+        origin: String,
+        testSetupsDirectory: String,
+        on db: any Database
+    ) async -> AssignmentVersionOutcome? {
+        try? await record(
+            setup: setup,
+            request: AssignmentVersionRequest(origin: origin),
+            testSetupsDirectory: testSetupsDirectory,
+            on: db)
+    }
+
     // MARK: - Queries
 
     /// The newest version for a setup, or nil when it has no history.
@@ -245,5 +269,56 @@ enum AssignmentVersionStore {
             }
         }
         throw lastError ?? Abort(.internalServerError, reason: "Could not assign a version number")
+    }
+}
+
+// MARK: - Reclamation
+
+extension AssignmentVersionStore {
+    /// Every blob hash referenced by any surviving version row.
+    ///
+    /// Deliberately unfiltered and un-paged: garbage collection compares
+    /// against this set, so a partial answer would mark live blobs as garbage.
+    /// It throws rather than returning what it managed to read, and the caller
+    /// skips collection on failure.
+    static func referencedBlobHashes(on db: any Database) async throws -> Set<String> {
+        var referenced: Set<String> = []
+        for row in try await APIAssignmentVersion.query(on: db).all() {
+            referenced.formUnion(row.decodedFileMap().values)
+            if let notebookHash = row.notebookHash { referenced.insert(notebookHash) }
+        }
+        return referenced
+    }
+
+    /// Reclaims blobs left behind when version rows went away with their
+    /// course.
+    ///
+    /// Best-effort and safe-by-default: any failure reading the reference set
+    /// skips collection entirely, because deleting on incomplete information
+    /// would destroy live history. Called after a course delete or purge —
+    /// the only moments version rows disappear.
+    @discardableResult
+    static func reclaimOrphanedBlobs(
+        testSetupsDirectory: String, logger: Logger, on db: any Database
+    ) async -> AssignmentVersionBlobStore.GarbageCollectionResult? {
+        do {
+            let referenced = try await referencedBlobHashes(on: db)
+            let blobs = AssignmentVersionBlobStore(testSetupsDirectory: testSetupsDirectory)
+            let result = blobs.collectGarbage(referenced: referenced)
+            if result.blobsDeleted > 0 {
+                logger.info(
+                    "reclaimed orphaned assignment-version blobs",
+                    metadata: [
+                        "blobs": .string("\(result.blobsDeleted)"),
+                        "bytes": .string("\(result.bytesFreed)"),
+                    ])
+            }
+            return result
+        } catch {
+            logger.warning(
+                "skipped assignment-version blob reclamation",
+                metadata: ["error": .string("\(error)")])
+            return nil
+        }
     }
 }

@@ -162,3 +162,65 @@ struct AssignmentVersionBlobStore: Sendable {
         try FileManager.default.copyItem(at: URL(fileURLWithPath: path), to: destination)
     }
 }
+
+// MARK: - Reclamation
+
+extension AssignmentVersionBlobStore {
+    struct GarbageCollectionResult: Sendable, Equatable {
+        let blobsDeleted: Int
+        let bytesFreed: Int
+    }
+
+    /// Deletes blobs no surviving version row references.
+    ///
+    /// Version rows cascade away with their course, so a deleted or purged
+    /// course leaves its blobs behind with nothing pointing at them. This is
+    /// the only thing that ever removes a blob — ordinary versioning never
+    /// deletes.
+    ///
+    /// `referenced` MUST come from a complete, successful scan of every version
+    /// row. A partial set would mark live blobs as garbage, so callers abort
+    /// rather than pass what they managed to read.
+    ///
+    /// `graceSeconds` protects the write race: a snapshot stores its blobs
+    /// *before* the row that references them, so a collection running in that
+    /// window would delete bytes a committed row is about to point at. Blobs
+    /// modified within the grace period are left alone; the next run picks up
+    /// any that really are garbage.
+    func collectGarbage(
+        referenced: Set<String>, graceSeconds: TimeInterval = 3600, now: Date = Date()
+    ) -> GarbageCollectionResult {
+        let fileManager = FileManager.default
+        guard let shards = try? fileManager.contentsOfDirectory(atPath: rootDirectory) else {
+            return GarbageCollectionResult(blobsDeleted: 0, bytesFreed: 0)
+        }
+
+        var deleted = 0
+        var freed = 0
+        for shard in shards {
+            let shardPath = rootDirectory + shard
+            guard let names = try? fileManager.contentsOfDirectory(atPath: shardPath) else {
+                continue
+            }
+            for name in names where !referenced.contains(name) {
+                let path = shardPath + "/" + name
+                guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
+                    continue
+                }
+                // Anything that isn't a well-formed blob name (a stray temp
+                // file from an interrupted write, say) is still reclaimable,
+                // but only once it is safely outside the grace window.
+                if let modified = attributes[.modificationDate] as? Date,
+                    now.timeIntervalSince(modified) < graceSeconds
+                {
+                    continue
+                }
+                let size = attributes[.size] as? Int ?? 0
+                guard (try? fileManager.removeItem(atPath: path)) != nil else { continue }
+                deleted += 1
+                freed += size
+            }
+        }
+        return GarbageCollectionResult(blobsDeleted: deleted, bytesFreed: freed)
+    }
+}

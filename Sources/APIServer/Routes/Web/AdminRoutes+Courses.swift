@@ -221,6 +221,19 @@ extension AdminRoutes {
             return newCourseID
         }
 
+        // Seed each copied setup's v1, outside the transaction: snapshotting
+        // reads the zip off disk, which has no business inside a DB
+        // transaction, and a failure here must not roll back the copy. The
+        // copies land in NEW setup ids, so the new term inherits none of the
+        // source's history — only its current content, which is the point.
+        for setup in try await APITestSetup.query(on: req.db)
+            .filter(\.$courseID == newCourseID).all()
+        {
+            await AssignmentVersionStore.seedInitialVersion(
+                setup: setup, origin: AssignmentVersionOrigin.clone,
+                testSetupsDirectory: setupsDir, on: req.db)
+        }
+
         req.logger.info("Admin copied course \(source.code) → \(newCode) (new ID: \(newCourseID))")
         return req.redirect(to: "/admin/courses/\(newCourseID.uuidString)")
     }
@@ -296,6 +309,13 @@ extension AdminRoutes {
             try await course.delete(on: db)
             return submissions.count
         }
+
+        // The course's version rows cascaded away with it, so their blobs now
+        // have nothing pointing at them. This is the only moment version
+        // history is ever removed, and therefore the only moment blobs become
+        // reclaimable.
+        await AssignmentVersionStore.reclaimOrphanedBlobs(
+            testSetupsDirectory: setupsDir, logger: req.logger, on: req.db)
 
         req.logger.info("Admin permanently deleted course \(course.code) (\(idString))")
         await AuditLogger.record(

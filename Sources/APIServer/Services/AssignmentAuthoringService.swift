@@ -169,6 +169,13 @@ enum AssignmentAuthoringService {
                 validationStatus: nil,
                 validationSubmissionID: nil,
                 courseID: targetCourseID)
+            // Seed the clone's own v1. It inherits no history — the copy lands
+            // in a NEW setup id, which is exactly the "only the most recent
+            // version travels" semantic a new term wants — so this is what
+            // gives the fresh assignment a starting point to roll back to.
+            await AssignmentVersionStore.seedInitialVersion(
+                setup: newSetup, origin: AssignmentVersionOrigin.clone,
+                testSetupsDirectory: setupsDirectory, on: db)
             return AuthoredAssignment(assignment: assignment, setup: newSetup)
         } catch {
             // Roll back the copied files so a failed clone leaves no orphans.
@@ -222,6 +229,9 @@ enum AssignmentAuthoringService {
                 validationStatus: nil,
                 validationSubmissionID: nil,
                 courseID: courseID)
+            await AssignmentVersionStore.seedInitialVersion(
+                setup: setup, origin: AssignmentVersionOrigin.create,
+                testSetupsDirectory: setupsDirectory, on: db)
             return AuthoredAssignment(assignment: assignment, setup: setup)
         } catch {
             // Roll back the files written so a failed create leaves no orphans.

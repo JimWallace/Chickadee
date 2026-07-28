@@ -337,6 +337,43 @@ import VaporTesting
         }
     }
 
+    /// A valid but EMPTY setup zip is a legitimate state — a from-scratch
+    /// assignment starts with one, and so does a suite whose last script was
+    /// deleted. `unzip` exits non-zero on such an archive, which used to make
+    /// the snapshot throw, so the first version of every from-scratch
+    /// assignment silently failed to record.
+    @Test func anEmptyButValidZipSnapshotsAsAnEmptyFileMap() async throws {
+        try await withApp(app) { app in
+            let fx = try await fixture(app)
+            // The canonical empty archive: a bare end-of-central-directory
+            // record, which is what the server writes for an empty setup.
+            try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
+                .write(to: URL(fileURLWithPath: fx.setup.zipPath))
+
+            #expect(try await record(app, fx.setup) == .recorded(version: 1))
+            let setupID = try #require(fx.setup.id)
+            let version = try #require(
+                try await AssignmentVersionStore.newestVersion(setupID: setupID, on: app.db))
+            #expect(version.decodedFileMap().isEmpty)
+            #expect(version.manifest == fx.setup.manifest)
+        }
+    }
+
+    /// A genuinely corrupt archive must still fail loudly: recording it as an
+    /// empty file map would read back as "this assignment had no tests", which
+    /// a restore would then faithfully reproduce.
+    @Test func aCorruptZipStillFailsRatherThanSnapshottingEmpty() async throws {
+        try await withApp(app) { app in
+            let fx = try await fixture(app)
+            try Data(repeating: 0x41, count: 4096)
+                .write(to: URL(fileURLWithPath: fx.setup.zipPath))
+
+            await #expect(throws: AssignmentVersionSnapshotError.self) {
+                _ = try await record(app, fx.setup)
+            }
+        }
+    }
+
     @Test func nestedZipEntriesKeepTheirRelativePaths() async throws {
         try await withApp(app) { app in
             let fx = try await fixture(
