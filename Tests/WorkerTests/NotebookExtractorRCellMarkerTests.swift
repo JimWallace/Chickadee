@@ -96,12 +96,12 @@ import Testing
     }
 
     /// The marker is an ordinary R comment, so the flattened file still runs.
-    @Test func markersAreInertRComments() throws {
+    @Test func markersAreInertRComments() async throws {
         let extracted = try extract(cells: ["total <- 1 + 1"])
         for line in extracted.split(separator: "\n") where line.hasPrefix("# ---- chickadee") {
             #expect(line.hasPrefix("#"))
         }
-        guard hasRscript() else { return }
+        guard await rscriptIsAvailable() else { return }
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("ck-rcells-run-\(UUID().uuidString)")
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -109,13 +109,14 @@ import Testing
         let script = dir.appendingPathComponent("flattened.R")
         try (extracted + "\nstopifnot(total == 2)\n").write(
             to: script, atomically: true, encoding: .utf8)
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", script.path]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        try proc.run()
-        proc.waitUntilExit()
+        let proc = try await runProcessRobustly {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            proc.arguments = ["Rscript", script.path]
+            proc.standardOutput = makeCloexecPipe()
+            proc.standardError = makeCloexecPipe()
+            return proc
+        }
         #expect(proc.terminationStatus == 0, "flattened R with cell markers must still run")
     }
 
@@ -139,18 +140,4 @@ import Testing
         #expect(!extracted.contains("chickadee:cell"))
     }
 
-    private func hasRscript() -> Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", "--version"]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
 }

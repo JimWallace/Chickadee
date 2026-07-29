@@ -191,7 +191,11 @@ private func installPipeCapture(for pipe: Pipe, buffer: CapturedPipeBuffer) {
 /// process exits (issue #1139's cross-test stall). The intended child still
 /// receives its ends: `dup2`/spawn file actions clear the flag on the
 /// duplicate they install.
-private func setCloseOnExec(_ pipe: Pipe) {
+///
+/// Internal (not private): every worker-side subprocess pipe should go
+/// through this — a single non-CLOEXEC pipe elsewhere re-opens the
+/// EOF-starvation window for everyone (issue #1233).
+func setCloseOnExec(_ pipe: Pipe) {
     for handle in [pipe.fileHandleForReading, pipe.fileHandleForWriting] {
         let descriptor = handle.fileDescriptor
         let flags = fcntl(descriptor, F_GETFD)

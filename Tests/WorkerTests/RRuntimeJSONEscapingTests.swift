@@ -26,24 +26,13 @@ import Testing
 
 @Suite(.serialized, .timeLimit(.minutes(2))) struct RRuntimeJSONEscapingTests {
 
-    private static var hasRscript: Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", "--version"]
-        proc.standardOutput = Pipe()
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
-
     /// Runs `passed(<message>)` under the composed runtime and returns the
     /// decoded last stdout line — i.e. exactly what the result interpreter sees.
-    private func emit(_ rMessageLiteral: String) throws -> [String: Any]? {
+    /// Launched through `runProcessRobustly` (throttle + bounded exit wait)
+    /// with CLOEXEC pipes and a bounded drain — a raw `Process` with
+    /// `readDataToEndOfFile()` here pinned a cooperative-pool thread and fed
+    /// the #1233 whole-process wedge.
+    private func emit(_ rMessageLiteral: String) async throws -> [String: Any]? {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("ck-rjson-\(UUID().uuidString)")
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -55,16 +44,17 @@ import Testing
         let scriptURL = dir.appendingPathComponent("probe.R")
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["Rscript", scriptURL.path]
-        proc.currentDirectoryURL = dir
-        let out = Pipe()
-        proc.standardOutput = out
-        proc.standardError = Pipe()
-        try proc.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        proc.waitUntilExit()
+        let proc = try await runProcessRobustly {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            proc.arguments = ["Rscript", scriptURL.path]
+            proc.currentDirectoryURL = dir
+            proc.standardOutput = makeCloexecPipe()
+            proc.standardError = makeCloexecPipe()
+            return proc
+        }
+        let out = try #require(proc.standardOutput as? Pipe)
+        let data = readToEOFBounded(out)
 
         guard
             let text = String(data: data, encoding: .utf8),
@@ -75,27 +65,27 @@ import Testing
 
     /// The regression that surfaced it: a regex in the message. Before the fix
     /// this printed invalid JSON and the student saw the raw blob.
-    @Test func backslashesSurviveAsValidJSON() throws {
-        guard Self.hasRscript else { return }
-        let decoded = try #require(try emit(#""Found 1 cell(s) containing `is\\.numeric|summary\\s*\\(`""#))
+    @Test func backslashesSurviveAsValidJSON() async throws {
+        guard await rscriptIsAvailable() else { return }
+        let decoded = try #require(try await emit(#""Found 1 cell(s) containing `is\\.numeric|summary\\s*\\(`""#))
         #expect(
             decoded["shortResult"] as? String
                 == #"Found 1 cell(s) containing `is\.numeric|summary\s*\(`"#)
     }
 
     /// A quote used to emit `\\"`, which closes the JSON string early.
-    @Test func embeddedQuotesDoNotTerminateTheString() throws {
-        guard Self.hasRscript else { return }
-        let decoded = try #require(try emit(#""expected \"underweight\" here""#))
+    @Test func embeddedQuotesDoNotTerminateTheString() async throws {
+        guard await rscriptIsAvailable() else { return }
+        let decoded = try #require(try await emit(#""expected \"underweight\" here""#))
         #expect(decoded["shortResult"] as? String == #"expected "underweight" here"#)
     }
 
     /// A newline used to emit `\\n` — valid JSON, but the student saw a literal
     /// backslash-n instead of a line break. Most R failure messages are
     /// multi-line, so this was visible on nearly every failure.
-    @Test func newlinesTabsAndCarriageReturnsDecodeToRealControlCharacters() throws {
-        guard Self.hasRscript else { return }
-        let decoded = try #require(try emit(#""line one\n  indented\ttabbed\r""#))
+    @Test func newlinesTabsAndCarriageReturnsDecodeToRealControlCharacters() async throws {
+        guard await rscriptIsAvailable() else { return }
+        let decoded = try #require(try await emit(#""line one\n  indented\ttabbed\r""#))
         let result = try #require(decoded["shortResult"] as? String)
         #expect(result.contains("\n"))
         #expect(result.contains("\t"))
@@ -106,9 +96,9 @@ import Testing
 
     /// Everything at once, since the passes run in sequence and an ordering
     /// mistake (escaping quotes before backslashes) only shows when combined.
-    @Test func allEscapesCompose() throws {
-        guard Self.hasRscript else { return }
-        let decoded = try #require(try emit(#""a\\b \"q\" \n\t end""#))
+    @Test func allEscapesCompose() async throws {
+        guard await rscriptIsAvailable() else { return }
+        let decoded = try #require(try await emit(#""a\\b \"q\" \n\t end""#))
         #expect(decoded["shortResult"] as? String == "a\\b \"q\" \n\t end")
         #expect(decoded["status"] as? String == "pass")
     }

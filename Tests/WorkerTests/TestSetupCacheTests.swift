@@ -260,6 +260,150 @@ private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
             "C must be present"
         )
     }
+
+    // MARK: - Cancellation responsiveness (issue #1233)
+
+    // Before #1233, `acquire` awaited the shared population via `Task.value`,
+    // which is not cancellation-responsive: a cancelled acquirer rode out the
+    // whole download, and `daemon.run()` ignored cancellation on the
+    // artifact-download path. These tests pin the fixed semantics. Without
+    // the fix they do not merely fail — they deadlock until the suite
+    // `.timeLimit`, because the gate below is only opened *after* the
+    // cancelled acquirer is required to have thrown.
+
+    @Test func cancelledAcquirerDetachesWhileOthersContinue() async throws {
+        let (cache, _) = makeCache()
+        let populateStarted = TestGate()
+        let populateRelease = TestGate()
+        let populateCount = Counter()
+
+        // First acquirer starts the (gated) population and sees it through.
+        let survivor = Task {
+            try await cache.acquire(testSetupID: "setup-cancel-join") {
+                populateCount.increment()
+                await populateStarted.open()
+                await populateRelease.wait()
+                return try makeTestStagingDir()
+            }
+        }
+        await populateStarted.wait()
+
+        // Second acquirer joins the in-flight population, then is cancelled.
+        // (If cancellation lands before its waiter registration, the
+        // early-cancel path throws instead — both paths are the fix.)
+        let cancelled = Task {
+            try await cache.acquire(testSetupID: "setup-cancel-join") {
+                Issue.record("populate must not run twice for one key")
+                return try makeTestStagingDir()
+            }
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        cancelled.cancel()
+
+        // The cancelled acquirer must throw promptly — the population gate is
+        // still closed, so completing here proves it did not wait for the
+        // download to finish.
+        do {
+            let result = try await cancelled.value
+            try? FileManager.default.removeItem(at: result.directory)
+            Issue.record("cancelled acquire must throw, got a directory")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        // The surviving acquirer still completes once the population is
+        // released — one cancelled waiter must not kill the shared work.
+        await populateRelease.open()
+        let result = try await survivor.value
+        defer { try? FileManager.default.removeItem(at: result.directory) }
+        #expect(populateCount.value == 1)
+        #expect(result.didHit == false)
+    }
+
+    @Test func lastWaiterCancellationCancelsThePopulation() async throws {
+        let (cache, root) = makeCache()
+        let populateStarted = TestGate()
+        let populateSawCancellation = Counter()
+
+        let acquirer = Task {
+            try await cache.acquire(testSetupID: "setup-cancel-last") {
+                await populateStarted.open()
+                do {
+                    // Stands in for the artifact download; cancellation of
+                    // the population task must interrupt it.
+                    try await Task.sleep(for: .seconds(600))
+                } catch {
+                    populateSawCancellation.increment()
+                    throw error
+                }
+                return try makeTestStagingDir()
+            }
+        }
+        await populateStarted.wait()
+
+        acquirer.cancel()
+        do {
+            let result = try await acquirer.value
+            try? FileManager.default.removeItem(at: result.directory)
+            Issue.record("cancelled acquire must throw, got a directory")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        // The population task itself must have been cancelled (its sleep
+        // interrupted) — nobody was left wanting the download.
+        let sawCancellation = await pollUntil { populateSawCancellation.value == 1 }
+        #expect(sawCancellation, "population must be cancelled once its last waiter detaches")
+
+        // And the failed population must leave no partial entry behind.
+        let cleaned = await pollUntil {
+            !FileManager.default.fileExists(atPath: root.appendingPathComponent("setup-cancel-last").path)
+                && !FileManager.default.fileExists(
+                    atPath: root.appendingPathComponent("setup-cancel-last.tmp").path)
+        }
+        #expect(cleaned, "cancelled population must clean up like any failed population")
+
+        // The key must be acquirable again afterwards.
+        let retry = try await cache.acquire(testSetupID: "setup-cancel-last") {
+            try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: retry.directory) }
+        #expect(retry.didHit == false)
+    }
+
+    private func pollUntil(
+        timeoutSeconds: TimeInterval = 10,
+        _ condition: @Sendable () async -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if await condition() { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return await condition()
+    }
+}
+
+// MARK: - Async gate
+
+/// A one-shot async gate: `wait()` suspends until `open()` is called (and
+/// returns immediately afterwards). Deliberately not cancellation-responsive
+/// — the cancellation tests above rely on a gated populate closure staying
+/// parked while a *different* waiter is cancelled.
+private actor TestGate {
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        opened = true
+        for waiter in waiters { waiter.resume() }
+        waiters.removeAll()
+    }
+
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
 }
 
 // MARK: - Thread-safe counter

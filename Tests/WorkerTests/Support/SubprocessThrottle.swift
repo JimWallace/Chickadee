@@ -27,8 +27,15 @@ import Foundation
 /// Runs `body` while holding one of a small, fixed number of subprocess-launch
 /// permits.  Wrap the *launch* of any real `Process` (or any `ScriptRunner.run`
 /// that forks one) so concurrent forks stay bounded across every suite.
+///
+/// Tracked by `WedgeWatchdog` (issue #1233): a slot-holder that stops making
+/// progress — or a waiter that can never be granted a permit because the
+/// cooperative pool is pinned — is exactly the in-flight work the watchdog
+/// exists to catch.
 func withSubprocessSlot<R: Sendable>(_ body: @Sendable () async throws -> R) async rethrows -> R {
-    try await SubprocessThrottle.shared.run(body)
+    try await WedgeWatchdog.track {
+        try await SubprocessThrottle.shared.run(body)
+    }
 }
 
 private actor SubprocessThrottle {

@@ -1,0 +1,177 @@
+// Tests/WorkerTests/Support/WedgeWatchdog.swift
+//
+// Process-level wedge watchdog for the WorkerTests target (issue #1233).
+//
+// Twice in one afternoon `worker-tests` rode to the CI job-level 20-minute
+// kill with ~250 tests started, ~55 completed, and the process otherwise
+// silent for 18 minutes: every cooperative-pool thread was pinned in a
+// blocking syscall, so no task — including Swift Testing's `.timeLimit`
+// enforcement and the `awaitCancelledDaemon` bound, both of which need a
+// pool thread to run — could make progress. The only artifact was the
+// *absence* of output.
+//
+// This watchdog runs on a dedicated OS thread (`Thread.detachNewThread`), so
+// pool saturation cannot starve it. Test helpers that can participate in a
+// wedge (subprocess launches, daemon shutdowns, poll loops) report activity;
+// if helpers are in flight and NO activity has been reported for
+// `stallLimitSeconds`, the watchdog dumps every thread's kernel-visible
+// state (`/proc/self/task/*/{comm,wchan,stat}` — `wchan` names the syscall
+// wait each pinned thread is parked in), flushes stdout so buffered
+// structured-log lines aren't lost, and aborts. A wedge then fails in
+// minutes with a thread table pointing at the pinned syscalls, instead of
+// burning 20 minutes and reporting nothing.
+//
+// The stall limit (default 300 s) exceeds every legitimate quiet stretch by
+// a wide margin: per-suite `.timeLimit` is 3 minutes, the longest bounded
+// helper wait is 30 s, and healthy runs report activity every few hundred
+// milliseconds (every `waitUntil` poll tick and every subprocess-slot
+// transition counts). Override with CHICKADEE_WORKERTESTS_STALL_SECONDS
+// (0 disables the abort entirely).
+
+import Foundation
+import Synchronization
+
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+enum WedgeWatchdog {
+    private struct State {
+        var monitorStarted = false
+        var activeHelpers = 0
+        var lastActivity = Date()
+        var firing = false
+    }
+
+    private static let state = Mutex(State())
+
+    static let stallLimitSeconds: TimeInterval = {
+        guard
+            let raw = ProcessInfo.processInfo.environment["CHICKADEE_WORKERTESTS_STALL_SECONDS"],
+            let parsed = TimeInterval(raw)
+        else { return 300 }
+        return parsed
+    }()
+
+    /// Report liveness. Call from helper poll loops and entry/exit points —
+    /// any call resets the stall clock.
+    static func noteActivity() {
+        state.withLock { current in
+            current.lastActivity = Date()
+            startMonitorIfNeeded(&current)
+        }
+    }
+
+    /// Wrap a helper that can participate in a wedge: while at least one
+    /// tracked call is in flight the watchdog is armed, and a tracked call
+    /// that stops producing activity is what the stall clock measures.
+    static func track<R>(_ body: () async throws -> R) async rethrows -> R {
+        state.withLock { current in
+            current.activeHelpers += 1
+            current.lastActivity = Date()
+            startMonitorIfNeeded(&current)
+        }
+        defer {
+            state.withLock { current in
+                current.activeHelpers -= 1
+                current.lastActivity = Date()
+            }
+        }
+        return try await body()
+    }
+
+    private static func startMonitorIfNeeded(_ current: inout State) {
+        guard !current.monitorStarted, stallLimitSeconds > 0 else { return }
+        current.monitorStarted = true
+        Thread.detachNewThread {
+            monitorLoop()
+        }
+    }
+
+    private static func monitorLoop() {
+        while true {
+            Thread.sleep(forTimeInterval: 15)
+            let stalledSeconds: TimeInterval? = state.withLock { current in
+                guard current.activeHelpers > 0, !current.firing else { return nil }
+                let elapsed = Date().timeIntervalSince(current.lastActivity)
+                guard elapsed >= stallLimitSeconds else { return nil }
+                current.firing = true
+                return elapsed
+            }
+            if let stalledSeconds {
+                abortWedgedProcess(stalledSeconds: stalledSeconds)
+            }
+        }
+    }
+
+    private static func abortWedgedProcess(stalledSeconds: TimeInterval) {
+        dumpThreadStates(
+            reason: "no test-helper activity for \(Int(stalledSeconds))s with helpers in flight — "
+                + "cooperative pool presumed wedged; aborting so CI gets evidence instead of the "
+                + "20-minute job kill (issue #1233)")
+        // Buffered structured-log lines are evidence too — the #1233 wedges
+        // each surfaced their last log line only at kill time. Flushing can
+        // itself block if stdout is the contended resource; the dump above
+        // already reached stderr via raw write(2), and the job-level timeout
+        // remains the outer backstop.
+        fflush(nil)
+        abort()
+    }
+
+    /// Writes every thread's kernel-visible state to stderr with raw
+    /// `write(2)` calls — stdio locks are avoided deliberately, since a
+    /// wedged thread may be holding them.
+    static func dumpThreadStates(reason: String) {
+        var report = "\n==== WedgeWatchdog thread dump (issue #1233) ====\n"
+        report += "reason: \(reason)\n"
+        let taskDir = "/proc/self/task"
+        if let tids = try? FileManager.default.contentsOfDirectory(atPath: taskDir).sorted(
+            by: { (Int($0) ?? 0) < (Int($1) ?? 0) })
+        {
+            report += "thread table (state D/S = blocked; wchan = kernel wait it is parked in):\n"
+            for tid in tids {
+                let comm = readProcFile("\(taskDir)/\(tid)/comm") ?? "?"
+                let wchan = readProcFile("\(taskDir)/\(tid)/wchan") ?? "?"
+                let stat = readProcFile("\(taskDir)/\(tid)/stat") ?? ""
+                report += "  tid \(tid) state=\(threadStateCharacter(fromStat: stat)) "
+                report += "wchan=\(wchan) comm=\(comm)\n"
+            }
+        } else {
+            report += "(/proc/self/task unavailable on this platform — no per-thread table)\n"
+        }
+        report += "==== end thread dump ====\n"
+        writeToStandardError(report)
+    }
+
+    private static func readProcFile(_ path: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: path),
+            let text = String(data: data, encoding: .utf8)
+        else { return nil }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Field 3 of `/proc/.../stat`, located after the parenthesised comm —
+    /// the comm itself may contain spaces or parens, so scan from the last
+    /// closing paren.
+    private static func threadStateCharacter(fromStat stat: String) -> String {
+        guard let closingParen = stat.lastIndex(of: ")") else { return "?" }
+        let tail = stat[stat.index(after: closingParen)...]
+            .trimmingCharacters(in: .whitespaces)
+        return tail.first.map(String.init) ?? "?"
+    }
+
+    private static func writeToStandardError(_ text: String) {
+        let bytes = Array(text.utf8)
+        var offset = 0
+        while offset < bytes.count {
+            let written = bytes[offset...].withUnsafeBytes { buffer -> Int in
+                guard let base = buffer.baseAddress else { return -1 }
+                return write(2, base, buffer.count)
+            }
+            if written <= 0 { return }
+            offset += written
+        }
+    }
+}

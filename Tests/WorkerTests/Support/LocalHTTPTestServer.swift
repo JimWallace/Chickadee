@@ -23,6 +23,8 @@
 
 import Foundation
 
+@testable import chickadee_runner
+
 #if canImport(Glibc)
 import Glibc
 #elseif canImport(Darwin)
@@ -45,6 +47,13 @@ final class LocalHTTPTestServer: @unchecked Sendable {
     private init(pythonProgram: String, extraArguments: [String], currentDirectory: URL? = nil) throws {
         let process = Process()
         let stdout = Pipe()
+        // CLOEXEC: the server child still receives its write end (spawn file
+        // actions clear the flag on the descriptor they install), but no
+        // *other* concurrently spawned process inherits a duplicate. Without
+        // this, a leaked duplicate in a long-lived process means the read
+        // loop below never sees EOF if the interpreter dies before printing
+        // — an unbounded stall on a cooperative-pool thread (issue #1233).
+        setCloseOnExec(stdout)
         process.standardOutput = stdout
         process.standardError = FileHandle.nullDevice
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -58,7 +67,10 @@ final class LocalHTTPTestServer: @unchecked Sendable {
                 from: stdout.fileHandleForReading,
                 deadline: Date().addingTimeInterval(10))
         else {
-            process.terminate()
+            // SIGKILL, not terminate(): a child wedged before its first
+            // print may equally ignore SIGTERM, and the caller is about to
+            // abandon it.
+            kill(process.processIdentifier, SIGKILL)
             throw IssueRecorded("python3 is unavailable or never reported a port for the local test HTTP server")
         }
 
@@ -67,25 +79,45 @@ final class LocalHTTPTestServer: @unchecked Sendable {
         self.port = port
     }
 
-    /// Reads the child's first stdout line and parses it as a port.  Loops over
-    /// `availableData` until a newline is buffered so a chunk that arrives
-    /// before the newline isn't misread as a failure; an empty chunk is EOF
-    /// (the interpreter exited without printing — e.g. python3 missing).
+    /// Reads the child's first stdout line and parses it as a port.
+    /// Accumulates until a newline so a chunk that arrives before the
+    /// newline isn't misread as a failure; a zero-byte read is EOF (the
+    /// interpreter exited without printing — e.g. python3 missing).
+    ///
+    /// Poll-based rather than `availableData`: a blocking `availableData`
+    /// only re-checks the deadline *between* chunks, so a child that never
+    /// prints — or a leaked write-end duplicate that keeps EOF from ever
+    /// arriving after the child dies — parked the calling cooperative-pool
+    /// thread indefinitely (one of the #1233 wedge ingredients). `poll(2)`
+    /// with a 100 ms tick keeps the deadline real.
     private static func readPort(from handle: FileHandle, deadline: Date) -> Int? {
+        let descriptor = handle.fileDescriptor
         var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
         while Date() < deadline {
-            let chunk = handle.availableData
-            if chunk.isEmpty { return nil }
-            buffer.append(chunk)
-            guard let newline = buffer.firstIndex(of: 0x0A) else { continue }
-            let lineData = buffer[buffer.startIndex..<newline]
-            guard let line = String(data: lineData, encoding: .utf8) else { return nil }
-            return Int(line.trimmingCharacters(in: .whitespaces))
+            var pollDescriptor = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let readyCount = poll(&pollDescriptor, 1, 100)
+            if readyCount == -1 {
+                if errno == EINTR { continue }
+                return nil
+            }
+            if readyCount == 0 { continue }  // quiet tick; deadline re-checked at loop top
+            let bytesRead = read(descriptor, &chunk, chunk.count)
+            if bytesRead > 0 {
+                buffer.append(contentsOf: chunk[0..<bytesRead])
+                guard let newline = buffer.firstIndex(of: 0x0A) else { continue }
+                let lineData = buffer[buffer.startIndex..<newline]
+                guard let line = String(data: lineData, encoding: .utf8) else { return nil }
+                return Int(line.trimmingCharacters(in: .whitespaces))
+            }
+            if bytesRead == -1 && errno == EINTR { continue }
+            return nil  // 0 = EOF (child exited without printing); -1 = unrecoverable.
         }
         return nil
     }
 
     func stop() {
+        WedgeWatchdog.noteActivity()
         if process.isRunning {
             // SIGKILL, not SIGTERM. The server can be parked in a blocking
             // socket syscall while the daemon's HTTP connection is still open,
