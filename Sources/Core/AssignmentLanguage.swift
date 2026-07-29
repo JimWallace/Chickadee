@@ -13,8 +13,14 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
     case r
 
     /// Kernelspec `name` values (and `language_info.name`) that mark an R
-    /// notebook. Single source of truth for the detection currently duplicated
-    /// in the worker's `submissionIsRNotebook` and `extractNotebooksToCode`.
+    /// notebook. The single source of truth for the sniff: every Swift consumer
+    /// reads it through `isRNotebookMetadata(_:)` rather than re-listing the
+    /// aliases, so teaching Chickadee a new R kernel is one edit here.
+    ///
+    /// The browser runner cannot import Swift, so `Public/browser-runner.js`
+    /// keeps its own copy in `R_KERNEL_NAMES`; the two are pinned together by
+    /// `Tests/BrowserRunnerJSTests/r-kernel-names-drift.test.mjs`, which fails
+    /// if this set and that array ever diverge.
     public static let rKernelNames: Set<String> = ["ir", "r", "webr", "xr"]
 
     /// Resolve the language from the manifest and (optionally) the notebook
@@ -45,6 +51,31 @@ public enum AssignmentLanguage: String, Codable, Sendable, CaseIterable {
 }
 
 extension AssignmentLanguage {
+
+    /// True when a notebook's `metadata` marks it as R: `kernelspec.name` is in
+    /// `rKernelNames`, or `language_info.name` is `"r"`.
+    ///
+    /// The one implementation of that two-step sniff. `rederive`, the worker's
+    /// submission routing (`submissionIsRNotebook`) and its notebook→source
+    /// extraction (`extractNotebooksToCode`) all call through here, so the
+    /// alias list lives in exactly one place.
+    public static func isRNotebookMetadata(_ metadata: [String: Any]) -> Bool {
+        if let kernel = (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
+            rKernelNames.contains(kernel.lowercased())
+        {
+            return true
+        }
+        return ((metadata["language_info"] as? [String: Any])?["name"] as? String)?
+            .lowercased() == "r"
+    }
+
+    /// `isRNotebookMetadata(_:)` for a parsed notebook object. A notebook with
+    /// no `metadata` has nothing to sniff and is not R — matching what every
+    /// caller already did on a missing/unparseable metadata dictionary.
+    public static func isRNotebook(_ notebook: [String: Any]) -> Bool {
+        guard let metadata = notebook["metadata"] as? [String: Any] else { return false }
+        return isRNotebookMetadata(metadata)
+    }
 
     /// Resolve including the assignment's starter notebook, read straight from
     /// `.ipynb` bytes.
@@ -109,15 +140,7 @@ extension AssignmentLanguage {
         else {
             return .python
         }
-        if let kernel = (metadata["kernelspec"] as? [String: Any])?["name"] as? String,
-            rKernelNames.contains(kernel.lowercased())
-        {
-            return .r
-        }
-        if ((metadata["language_info"] as? [String: Any])?["name"] as? String)?.lowercased() == "r" {
-            return .r
-        }
-        return .python
+        return isRNotebookMetadata(metadata) ? .r : .python
     }
 }
 

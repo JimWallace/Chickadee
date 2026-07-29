@@ -30,6 +30,13 @@
     const statusEl = document.getElementById('browser-runner-status');
     if (statusEl) statusEl.hidden = false;
 
+    // Kernelspec names that mark an R notebook. This is a hand-copy of
+    // AssignmentLanguage.rKernelNames (Sources/Core/AssignmentLanguage.swift) —
+    // the browser cannot import Swift, so the two are pinned together by
+    // Tests/BrowserRunnerJSTests/r-kernel-names-drift.test.mjs, which fails the
+    // build if either side gains or loses an alias. Keep it sorted.
+    const R_KERNEL_NAMES = ['ir', 'r', 'webr', 'xr'];
+
     // -------------------------------------------------------------------------
     // Public API — called by notebook.js on Submit
     // -------------------------------------------------------------------------
@@ -810,12 +817,15 @@
         let notebook;
         try { notebook = JSON.parse(notebookText); } catch (_) { return; }
 
-        // Detect kernel language the same way RunnerDaemon.swift does.
+        // Detect kernel language exactly as AssignmentLanguage.isRNotebookMetadata
+        // does natively. This file cannot import Swift, so R_KERNEL_NAMES is a
+        // hand-copy of AssignmentLanguage.rKernelNames pinned to it by
+        // Tests/BrowserRunnerJSTests/r-kernel-names-drift.test.mjs.
         const meta   = notebook.metadata || {};
         const ks     = meta.kernelspec || {};
         const ksName = (ks.name || '').toLowerCase();
         const liName = ((meta.language_info || {}).name || '').toLowerCase();
-        const isR    = ksName === 'ir' || ksName === 'r' || ksName === 'webr' || ksName === 'xr' || liName === 'r';
+        const isR    = R_KERNEL_NAMES.includes(ksName) || liName === 'r';
         const stem   = filename.replace(/\.ipynb$/i, '');
 
         if (isR) {

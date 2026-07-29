@@ -79,7 +79,9 @@ func detectRequirementSuggestions(
                 let name = (kernelspec["name"] as? String ?? "").lowercased()
                 let language = (kernelspec["language"] as? String ?? "").lowercased()
                 if name == "python" || language == "python" { addLanguage("python") }
-                if ["ir", "r", "webr", "xr"].contains(name) || language == "r" { addLanguage("r") }
+                if AssignmentLanguage.rKernelNames.contains(name) || language == "r" {
+                    addLanguage("r")
+                }
             }
             if let languageInfo = metadata["language_info"] as? [String: Any],
                 let language = languageInfo["name"] as? String
