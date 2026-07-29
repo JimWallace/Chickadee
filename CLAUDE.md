@@ -250,8 +250,15 @@ attempted as JSON:
 ```
 If the last line is not valid JSON, it is used as the plain-text `shortResult`.
 If stdout is empty, `shortResult` is synthesized from the exit code
-("passed" / "failed" / "error"). `score` is reserved for partial credit
-(not yet used).
+("passed" / "failed" / "error").
+
+`score` carries partial credit: a `Double` clamped to `0...1` giving the
+fraction of the test's points the submission earned, so the test contributes
+`points × score` to the collection's `earnedPoints`. It is orthogonal to the
+exit code — the exit code drives the pass/fail badge, `score` drives the credit
+— so a script may report a partial `score` on either. A script that emits no
+`score` grades exactly as before: full credit on a pass, none otherwise. A test
+skipped because a `dependsOn` prerequisite failed scores 0.
 
 **stderr:** Captured verbatim as `longResult` (nil if empty).
 
