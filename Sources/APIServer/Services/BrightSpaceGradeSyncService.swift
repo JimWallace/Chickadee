@@ -96,6 +96,44 @@ func recordSweepFailure(
         "BrightSpace grade sync \(retryable ? "transient" : "terminal") failure for row(s) \(ids): \(error)")
 }
 
+/// Flags a freshly-built (not yet saved) result row for BrightSpace grade sync
+/// when its assignment is actually wired to a LEARN grade item — the gate every
+/// result-ingest path shares.
+///
+/// Mutates `result` in memory only; the caller persists it (both call sites save
+/// the row immediately afterwards, so the flags ride along on the same INSERT).
+///
+/// This lives here, called from BOTH ingest paths, because it used to be inline
+/// in the worker path only: browser-graded results were never flagged, so
+/// notebook assignments never auto-pushed a grade to LEARN at all. Their grades
+/// only appeared when an instructor hit "Push all" (or a retest routed the
+/// submission through a worker), which looks exactly like "sync is broken for
+/// this assignment" — the sweep had nothing to find.
+///
+/// Gates on app-level config (not a live global client) so per-instructor-only
+/// deployments still flag results for the per-course sync to pick up.
+func flagResultForBrightSpaceSync(
+    _ result: APIResult,
+    testSetupID: String,
+    application: Application,
+    on db: Database
+) async throws {
+    guard application.brightSpaceAppCredentials != nil else { return }
+    guard
+        let assignment = try await APIAssignment.query(on: db)
+            .filter(\.$testSetupID == testSetupID)
+            .first(),
+        let gradeObjectID = assignment.brightspaceGradeObjectID,
+        !gradeObjectID.isEmpty,
+        let course = try await APICourse.find(assignment.courseID, on: db),
+        let orgUnitID = course.brightspaceOrgUnitID,
+        !orgUnitID.isEmpty
+    else { return }
+
+    result.brightspaceSyncPending = true
+    result.brightspacePendingSince = Date()
+}
+
 /// Re-queues rows for an immediate push: pending flag set, `pendingSince`
 /// back-dated past any debounce cutoff, recorded error cleared. The ONE place
 /// the `Date.distantPast` "retry immediately" sentinel is written (#1117) —

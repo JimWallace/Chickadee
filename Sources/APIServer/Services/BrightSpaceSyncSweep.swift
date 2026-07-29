@@ -309,7 +309,7 @@ extension GradeSyncSweep {
         let bsUserID = try await resolveBSUserID(for: target.user, orgUnitID: orgUnitID, client: client)
         guard let bsUserID else {
             try await recordTerminalSkip(
-                "Student has no BrightSpace account (orgDefinedId not found)", points: pushPoints)
+                "Student is not on the LEARN classlist for org unit \(orgUnitID)", points: pushPoints)
             return true
         }
 
@@ -323,6 +323,8 @@ extension GradeSyncSweep {
                 on: application
             )
         } catch {
+            await invalidateCachedUserIDOnNotFound(
+                error, user: target.user, describing: "user \(userID) on '\(assignment.title)'")
             // Enrich with item context here (the sweep's catch lacks it), then
             // rethrow so the existing per-group error handling still runs.
             let maxDesc = gradeObject?.maxPoints.map { "\($0)" } ?? "unset"
@@ -349,21 +351,52 @@ extension GradeSyncSweep {
         return true
     }
 
+    /// Drops a student's cached D2L user id after a 404 grade push.
+    ///
+    /// A 404 from the values endpoint is about the *user*, not the item: the
+    /// grade object is fetched successfully immediately before the push, so the
+    /// org unit and the item both exist. The usual cause is a cached
+    /// `brightspaceUserID` for a student who isn't (or is no longer) in this org
+    /// unit — most often one resolved through the LMS-global OrgDefinedId
+    /// lookup. Clearing it makes the next attempt re-resolve against the
+    /// classlist; without this the same unusable id is replayed on every future
+    /// push, for every assignment, and the failure never heals.
+    ///
+    /// Deliberately narrow: any other status says nothing about the identity,
+    /// so the cached id survives it.
+    private func invalidateCachedUserIDOnNotFound(
+        _ error: Error, user: APIUser?, describing context: String
+    ) async {
+        guard let syncError = error as? BrightSpaceSyncError,
+            case .gradePushFailed(let status, _) = syncError,
+            status == 404,
+            let user,
+            user.brightspaceUserID != nil
+        else { return }
+        user.brightspaceUserID = nil
+        try? await user.save(on: db)
+        application.logger.warning(
+            "BrightSpace grade push 404 for \(context) — cleared the cached D2L user id so the next attempt re-resolves"
+        )
+    }
+
     /// Resolves the student's D2L user ID via the course classlist (cached per
-    /// sweep), falling back to the org-level OrgDefinedId lookup. A classlist read
-    /// failure degrades to the fallback rather than aborting the push.
+    /// sweep). A classlist read failure yields a nil index, which
+    /// `resolvedBrightSpaceUserID` treats as "authority unavailable" — distinct
+    /// from a successful read in which the student simply doesn't appear.
     func resolveBSUserID(
         for user: APIUser?,
         orgUnitID: String,
         client: any BrightSpaceGrading
     ) async throws -> String? {
-        var identityIndex = BrightSpaceIdentityIndex(classlist: [])
+        var identityIndex: BrightSpaceIdentityIndex?
         do {
             identityIndex = try await classlistCache.identityIndex(
                 orgUnitID: orgUnitID, client: client, application: application)
         } catch {
             application.logger.warning(
                 "BrightSpace classlist resolve failed for org unit \(orgUnitID): \(error)")
+            identityIndex = nil
         }
         return try await resolvedBrightSpaceUserID(
             for: user, identityIndex: identityIndex, db: db, client: client, application: application)
@@ -372,16 +405,27 @@ extension GradeSyncSweep {
 
 /// Returns the cached D2L user ID for `user`, resolving it on first sync. Takes
 /// the already batch-loaded `APIUser?` (nil when the sweep found no such user)
-/// and the course's pre-built classlist identity map.
+/// and the course's classlist identity map — nil when the classlist read failed.
 ///
 /// Resolution matches the classlist by **username first, student number
 /// second** — the username is the identity Chickadee always has (SSO or local)
 /// and equals the LEARN username at UW, so grade sync works without a
-/// student-number claim. Falls back to the org-level `users/?orgDefinedId=`
-/// lookup only when the classlist match misses but a student number is on file.
+/// student-number claim.
+///
+/// A *populated* classlist is the authority on who can receive a grade in this
+/// org unit. When it was read successfully, has members, and the student isn't
+/// among them, resolution stops there rather than falling through to the
+/// org-level `users/?orgDefinedId=` lookup: that lookup is LMS-GLOBAL and
+/// happily returns the account of a student who is not enrolled in this course,
+/// whose grade push D2L then rejects with a bare HTTP 404 that names no cause.
+/// Returning nil instead surfaces it as the roster problem it is.
+///
+/// An index that is nil (read failed) or empty (e.g. a Valence key without
+/// classlist permission) is NOT an authoritative "not here" — the global
+/// fallback still runs there, so a classlist outage can't strand every push.
 private func resolvedBrightSpaceUserID(
     for user: APIUser?,
-    identityIndex: BrightSpaceIdentityIndex,
+    identityIndex: BrightSpaceIdentityIndex?,
     db: Database,
     client: any BrightSpaceGrading,
     application: Application
@@ -392,9 +436,15 @@ private func resolvedBrightSpaceUserID(
         return cached
     }
 
-    var bsUserID = identityIndex.d2lUserID(username: user.username, studentID: user.studentID)
-    // Fallback: the legacy org-level OrgDefinedId lookup (needs a student number).
-    if bsUserID == nil, let orgDefinedId = user.studentID, !orgDefinedId.isEmpty {
+    var bsUserID = identityIndex?.d2lUserID(username: user.username, studentID: user.studentID)
+
+    if bsUserID == nil {
+        // Only a populated classlist can answer "this student isn't in the
+        // course"; anything else means we have no roster to trust.
+        let classlistIsAuthoritative = (identityIndex.map { !$0.isEmpty }) ?? false
+        if classlistIsAuthoritative { return nil }
+
+        guard let orgDefinedId = user.studentID, !orgDefinedId.isEmpty else { return nil }
         bsUserID = try await client.lookupUserID(orgDefinedId: orgDefinedId, on: application)
     }
 

@@ -144,24 +144,11 @@ struct ResultRoutes: RouteCollection {
             submissionID: collection.submissionID
         )
 
-        // Mark for BrightSpace sync if the assignment is configured for it. Gate
-        // on app-level config (not a live global client) so per-instructor-only
-        // deployments still flag results for the per-course sync to pick up.
-        if req.application.brightSpaceAppCredentials != nil {
-            if let assignment = try await APIAssignment.query(on: db)
-                .filter(\.$testSetupID == collection.testSetupID)
-                .first(),
-                let gradeObjectID = assignment.brightspaceGradeObjectID,
-                !gradeObjectID.isEmpty,
-                let course = try await APICourse.find(assignment.courseID, on: db),
-                let orgUnitID = course.brightspaceOrgUnitID,
-                !orgUnitID.isEmpty
-            {
-                let now = Date()
-                result.brightspaceSyncPending = true
-                result.brightspacePendingSince = now
-            }
-        }
+        // Mark for BrightSpace sync if the assignment is configured for it.
+        // Shared with the browser-result path so the two ingest routes can't
+        // drift apart on which grades reach LEARN.
+        try await flagResultForBrightSpaceSync(
+            result, testSetupID: collection.testSetupID, application: req.application, on: db)
 
         // Row + blob side-table row persist together; the caller's
         // transaction (persist + submission status flip) encloses both.

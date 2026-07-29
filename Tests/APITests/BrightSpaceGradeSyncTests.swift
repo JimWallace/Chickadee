@@ -401,7 +401,95 @@ private actor FakeBrightSpaceGrading: BrightSpaceGrading {
             #expect(pushes.isEmpty)
             let result = try #require(try await APIResult.query(on: app.db).first())
             #expect(result.brightspaceSyncPending == false)
-            #expect(result.brightspaceSyncError?.contains("no BrightSpace account") == true)
+            #expect(result.brightspaceSyncError?.contains("not on the LEARN classlist") == true)
+        }
+    }
+
+    /// A populated classlist is authoritative: a student who isn't on it is not
+    /// in this org unit, so the LMS-GLOBAL `users/?orgDefinedId=` lookup must not
+    /// be used to manufacture a push target. It would return the student's
+    /// account anyway, D2L would reject the grade with a bare HTTP 404, and the
+    /// unusable id would be cached — making every later push for that student,
+    /// on every assignment, fail identically forever.
+    @Test func studentAbsentFromPopulatedClasslistIsSkippedNotPushed() async throws {
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(studentID: "stu-001")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 8, total: 10),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            // The classlist has members, but not this student. The global lookup
+            // table *would* resolve them — proving we deliberately didn't ask.
+            let fake = FakeBrightSpaceGrading(
+                userIDsByOrgDefinedId: ["stu-001": "d2l-not-in-course"],
+                classlist: [
+                    BrightSpaceClasslistEntry(
+                        orgDefinedID: "stu-999", username: "someone.else", userID: "d2l-111")
+                ])
+
+            let processed = try await sweep(client: fake)
+
+            #expect(processed == 1)  // a skip is a normal terminal outcome
+            let pushes = await fake.pushes
+            #expect(pushes.isEmpty, "must not push a grade for a student who isn't in the org unit")
+            let lookupCount = await fake.lookupCount
+            #expect(lookupCount == 0, "the LMS-global lookup must not run behind a populated classlist")
+
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncPending == false)
+            #expect(result.brightspaceSyncError?.contains("not on the LEARN classlist") == true)
+            let user = try await APIUser.find(scenario.userID, on: app.db)
+            #expect(user?.brightspaceUserID == nil, "an unusable id must never be cached")
+        }
+    }
+
+    /// A D2L 404 on the push is about the *user*, not the item — the grade
+    /// object was fetched successfully moments earlier. Drop the cached D2L id
+    /// so the next attempt re-resolves against the classlist; otherwise the
+    /// stale id is replayed on every future push and the failure never heals.
+    @Test func gradePush404ClearsCachedUserID() async throws {
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-stale")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 8, total: 10),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading(
+                pushError: BrightSpaceSyncError.gradePushFailed(status: 404, body: "Not Found"))
+
+            _ = try await sweep(client: fake)
+
+            let user = try await APIUser.find(scenario.userID, on: app.db)
+            #expect(
+                user?.brightspaceUserID == nil,
+                "a 404 must invalidate the cached D2L user id so resolution retries")
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncError?.contains("404") == true)
+        }
+    }
+
+    /// The counterpart guard: a non-404 rejection says nothing about the
+    /// identity, so the cached id must survive it.
+    @Test func gradePush500LeavesCachedUserIDIntact() async throws {
+        try await withApp(app) { _ in
+            let scenario = try await makeConfiguredScenario(brightspaceUserID: "d2l-good")
+            try await makePendingResult(
+                submissionID: scenario.submissionID,
+                json: pointsJSON(earned: 8, total: 10),
+                pendingSince: Date().addingTimeInterval(-3600)
+            )
+            let fake = FakeBrightSpaceGrading(
+                pushError: BrightSpaceSyncError.gradePushFailed(status: 500, body: "boom"))
+
+            _ = try await sweep(client: fake)
+
+            let user = try await APIUser.find(scenario.userID, on: app.db)
+            #expect(user?.brightspaceUserID == "d2l-good")
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            // 5xx is transient: the row stays pending so the next sweep retries.
+            #expect(result.brightspaceSyncPending == true)
         }
     }
 
