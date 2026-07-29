@@ -42,7 +42,7 @@ import Vapor
     @Test func firstSaveOfAnRNotebookAssignmentRecordsR() async throws {
         try await withPatternFamilyFixture { fixture in
             let manifest = try pfDecodeManifest(fixture.setup.manifest)
-            #expect(AssignmentLanguage.resolve(manifest: manifest) == .python)
+            #expect(AssignmentLanguage.resolve(manifest: manifest, notebookData: nil) == .python)
 
             try await attachNotebook(fixture, kernel: "xr")
             #expect(AssignmentLanguage.resolve(for: fixture.setup, manifest: manifest) == .r)

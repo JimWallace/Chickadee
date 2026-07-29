@@ -132,7 +132,10 @@ func existenceGuard(
         family, sectionVariables: sectionVariables, globalVariables: globalVariables)
     let tier = family.defaults.tier
     let label = "\(family.functionName) is defined"
-    if language == .r {
+    // Exhaustive so a future language cannot silently receive Python bytes
+    // (docs/language-handling-review.md §4).
+    switch language {
+    case .r:
         return GeneratedScript(
             filename: generatedScriptFilename(
                 familyID: family.id, caseKey: patternExistenceGuardCaseKey, tier: tier,
@@ -145,6 +148,8 @@ func existenceGuard(
             familyID: family.id,
             timeLimitSeconds: normalizedGeneratedTimeLimit(family.defaults.timeLimitSeconds)
         )
+    case .python:
+        break
     }
     let nameLiteral = "\"" + escapeForPythonStringLiteral(family.functionName) + "\""
     // Mirrors the `getattr(..., _MISSING)` sentinel that `variableEquality`

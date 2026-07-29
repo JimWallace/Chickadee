@@ -120,51 +120,47 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguag
         // scripts Chickadee *generates* (pattern cases, notebook checks) where the
         // filename feeds `spec_hash`. Extraction output is a different concern and
         // must not be coupled to it.
-        let ext = language == .r ? "R" : "py"
+        let ext: String
+        switch language {
+        case .python: ext = "py"
+        case .r: ext = "R"
+        }
         let stem = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 
-        var output = "# Generated from \(item.lastPathComponent)\n\n"
-        let extractor = NotebookExtractor()
-        for (index, cell) in cells.enumerated() {
-            guard cell["cell_type"] as? String == "code" else { continue }
-            var src = NotebookCellSources.cellSource(cell)
-            while src.last?.isWhitespace == true { src.removeLast() }
-            guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-
-            if language == .python {
+        let output: String
+        switch language {
+        case .r:
+            // Flattening concatenates cells, which loses the boundaries a
+            // source-level check (`.cellContains`) needs.  Python keeps them
+            // because `wrapCellForResilientLoad` labels each cell; R gets the
+            // same information from inert marker comments, which
+            // `chickadee_student_cells()` splits on.  The assembly lives in
+            // RunnerCore (`extractR`) — the same implementation the browser
+            // runner calls via wasm, so the two extractors cannot drift.
+            let inputCells = cells.map { cell in
+                NotebookCell(
+                    cellType: (cell["cell_type"] as? String) ?? "",
+                    source: NotebookCellSources.cellSource(cell)
+                )
+            }
+            output = extractR(cells: inputCells, filename: item.lastPathComponent).source
+        case .python:
+            var assembled = "# Generated from \(item.lastPathComponent)\n\n"
+            let extractor = NotebookExtractor()
+            for (index, cell) in cells.enumerated() {
+                guard cell["cell_type"] as? String == "code" else { continue }
+                var src = NotebookCellSources.cellSource(cell)
+                while src.last?.isWhitespace == true { src.removeLast() }
+                guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 let cellSource = extractor.sanitizeCellForModule(src)
                 guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                output += extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
-            } else {
-                // Flattening concatenates cells, which loses the boundaries a
-                // source-level check (`.cellContains`) needs.  Python keeps them
-                // because `wrapCellForResilientLoad` labels each cell; R gets
-                // the same information from an inert comment, which
-                // `chickadee_student_cells()` splits on.
-                output += rCellBoundaryMarker(cellNumber: index + 1) + "\n"
-                output += src + "\n\n"
+                assembled +=
+                    extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"
             }
+            output = assembled
         }
 
         try output.write(to: outURL, atomically: true, encoding: .utf8)
     }
 }
-
-// MARK: - R cell boundaries
-
-/// Comment line the R extraction writes ahead of each code cell, so the
-/// flattened `.R` file keeps the cell granularity a source-level notebook check
-/// needs. It is an ordinary R comment, so it is inert when the submission runs.
-///
-/// The grading side splits on this in `chickadee_student_cells()`
-/// (`testRuntimeRStudentFile`, mirrored in `Tools/runner-support/test_runtime.R`).
-/// `NotebookExtractorRCellMarkerTests` pins the two against each other.
-func rCellBoundaryMarker(cellNumber: Int) -> String {
-    "# ---- chickadee:cell \(cellNumber) ----"
-}
-
-/// Regex the runtime uses to recognize a marker line. Kept here so the writer
-/// and the reader are defined together; the runtime spells it out literally
-/// because `Tools/runner-support/test_runtime.R` is a byte-for-byte mirror.
-let rCellBoundaryMarkerPattern = "^# ---- chickadee:cell [0-9]+ ----$"

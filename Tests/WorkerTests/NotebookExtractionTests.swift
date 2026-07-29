@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import RunnerCore
@@ -148,5 +149,91 @@ import Testing
         let sanitized = sanitizeCellForModule(cell.source)
         let moduleLevel = sanitized.components(separatedBy: "if __name__").first ?? sanitized
         #expect(moduleLevel.contains("def tax(price):"))
+    }
+}
+
+// Direct tests for RunnerCore's R extraction (hoisted from the worker's inline
+// loop in PR #1235 so the browser runner shares it via wasm). The byte format
+// is load-bearing twice over: the worker's extracted `.R` must not change
+// across the hoist (regrades compare against history), and the runtime's
+// `chickadee_student_cells()` splits on the marker lines.
+@Suite struct RNotebookExtractionTests {
+
+    private func code(_ src: String) -> NotebookCell { NotebookCell(cellType: "code", source: src) }
+
+    @Test func byteFormatIsHeaderThenMarkedCells() {
+        let result = extractR(
+            cells: [code("a <- 1\n"), code("b <- 2")], filename: "lab.ipynb")
+        #expect(result.codeCellCount == 2)
+        #expect(
+            result.source == """
+                # Generated from lab.ipynb
+
+                # ---- chickadee:cell 1 ----
+                a <- 1
+
+                # ---- chickadee:cell 2 ----
+                b <- 2
+
+
+                """)
+    }
+
+    @Test func markerNumbersFollowNotebookPositionNotCodeCellIndex() {
+        let result = extractR(
+            cells: [
+                code("a <- 1"),
+                NotebookCell(cellType: "markdown", source: "## Notes"),
+                code("b <- 2"),
+            ],
+            filename: "lab.ipynb")
+        #expect(result.codeCellCount == 2)
+        #expect(result.source.contains(rCellBoundaryMarker(cellNumber: 1)))
+        #expect(result.source.contains(rCellBoundaryMarker(cellNumber: 3)))
+        #expect(!result.source.contains(rCellBoundaryMarker(cellNumber: 2)))
+    }
+
+    @Test func trailingWhitespaceTrimmedButLeadingPreserved() {
+        let result = extractR(cells: [code("  x <- 1  \n\n")], filename: "t.ipynb")
+        #expect(result.source.contains("\n  x <- 1\n"))
+        #expect(!result.source.contains("x <- 1  "))
+    }
+
+    @Test func whitespaceOnlyAndNonCodeCellsAreSkipped() {
+        let result = extractR(
+            cells: [
+                code("   \n\t\n"),
+                NotebookCell(cellType: "markdown", source: "prose"),
+                code("y <- 2"),
+            ],
+            filename: "t.ipynb")
+        #expect(result.codeCellCount == 1)
+        #expect(!result.source.contains(rCellBoundaryMarker(cellNumber: 1)))
+        #expect(result.source.contains(rCellBoundaryMarker(cellNumber: 3)))
+    }
+
+    /// A notebook with no code cells still produces the header — matching the
+    /// worker's pre-hoist behaviour, which wrote the file unconditionally.
+    @Test func noCodeCellsProducesHeaderOnly() {
+        let result = extractR(
+            cells: [NotebookCell(cellType: "markdown", source: "## Only prose")],
+            filename: "empty.ipynb")
+        #expect(result.codeCellCount == 0)
+        #expect(result.source == "# Generated from empty.ipynb\n\n")
+    }
+
+    /// Every emitted marker matches the pattern the grading runtime splits on.
+    @Test func emittedMarkersMatchTheRuntimePattern() throws {
+        let result = extractR(
+            cells: [code("a <- 1"), code("b <- 2"), code("c <- 3")], filename: "t.ipynb")
+        let regex = try NSRegularExpression(pattern: rCellBoundaryMarkerPattern, options: [])
+        let markerLines = result.source.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { $0.hasPrefix("# ---- chickadee") }
+        #expect(markerLines.count == 3)
+        for line in markerLines {
+            let text = String(line)
+            let range = NSRange(text.startIndex..., in: text)
+            #expect(regex.firstMatch(in: text, options: [], range: range) != nil)
+        }
     }
 }

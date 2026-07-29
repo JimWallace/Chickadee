@@ -143,12 +143,10 @@ enum TestScriptVariablePrepender {
         manifest: TestProperties,
         explicitSectionID: String? = nil
     ) -> String {
-        let language: AssignmentLanguage
-        switch (filename as NSString).pathExtension.lowercased() {
-        case "py": language = .python
-        case "r": language = .r
-        default: return content
-        }
+        guard
+            let language = AssignmentLanguage(
+                scriptExtension: (filename as NSString).pathExtension)
+        else { return content }
         let sectionID: String?
         if let explicitSectionID {
             sectionID = explicitSectionID

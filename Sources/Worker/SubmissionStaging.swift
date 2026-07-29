@@ -117,11 +117,15 @@ func legacyPreferredStudentModuleFilename(
     let ext = URL(fileURLWithPath: submittedName).pathExtension.lowercased()
     // A source file is already the module; the extension the student used wins
     // over the assignment's language (an `.R` upload is an R module either way).
-    if ext == "py" || ext == "r" {
+    if AssignmentLanguage(scriptExtension: ext) != nil {
         return submittedName
     }
     if ext == "ipynb" {
-        let sourceExtension = language == .r ? "R" : "py"
+        let sourceExtension: String
+        switch language {
+        case .python: sourceExtension = "py"
+        case .r: sourceExtension = "R"
+        }
         return (submittedName as NSString).deletingPathExtension + "." + sourceExtension
     }
     return nil
@@ -182,14 +186,15 @@ func submissionIsRNotebook(submissionDirectory: URL, submissionFilename: String?
 /// stored before the submit-time kernel fix when it is re-tested.
 func manifestTargetsRSubmission(_ manifest: TestProperties) -> Bool {
     let hasRSuite = manifest.testSuites.contains {
-        URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "r"
+        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension) == .r
     }
     guard hasRSuite else { return false }
     let hasPythonSuite = manifest.testSuites.contains {
-        URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py"
+        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
+            == .python
     }
     let hasRequiredPython = manifest.requiredFiles.contains {
-        URL(fileURLWithPath: $0).pathExtension.lowercased() == "py"
+        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0).pathExtension) == .python
     }
     return !hasPythonSuite && !hasRequiredPython
 }
@@ -200,7 +205,7 @@ func shouldNormalizePythonSubmission(
     submissionDirectory: URL
 ) -> Bool {
     let requiredPythonFiles = manifest.requiredFiles.filter {
-        URL(fileURLWithPath: $0).pathExtension.lowercased() == "py"
+        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0).pathExtension) == .python
     }
     if !requiredPythonFiles.isEmpty { return true }
 
@@ -215,7 +220,8 @@ func shouldNormalizePythonSubmission(
     }
 
     let hasPythonSuite = manifest.testSuites.contains {
-        URL(fileURLWithPath: $0.script).pathExtension.lowercased() == "py"
+        AssignmentLanguage(scriptExtension: URL(fileURLWithPath: $0.script).pathExtension)
+            == .python
     }
 
     // A mixed suite that also ships R: an R-kernel notebook is still not a

@@ -23,10 +23,13 @@ Once resolved, the answer is **recorded** on the manifest
 see "How the language is resolved and remembered" below.
 
 `AssignmentLanguage.resolve(manifest:notebookKernelName:notebookLanguageInfoName:)`
-is the single resolver. Server-side callers should not reach for it directly:
-use `AssignmentLanguage.resolve(for: setup, manifest:)`
-(`Sources/APIServer/Utilities/AssignmentLanguageResolution.swift`), which reads
-the kernelspec out of `setup.notebookPath` for them.
+is the single resolver, and since the docs/language-handling-review.md §3
+hardening it is internal to Core — server-side callers *cannot* reach for it
+directly, which retires the silently-dangerous `resolve(manifest:)` spelling
+that skipped the notebook sniff. Use `AssignmentLanguage.resolve(for: setup,
+manifest:)` (`Sources/APIServer/Utilities/AssignmentLanguageResolution.swift`),
+which reads the kernelspec out of `setup.notebookPath`, or the Core
+`resolve(manifest:notebookData:)` overload when you hold notebook bytes.
 
 That distinction is not cosmetic. A **brand-new** R notebook assignment has an
 empty suite and no recorded language, so the manifest alone answers `.python`.
@@ -326,9 +329,13 @@ So the R extraction writes an inert marker comment ahead of each cell:
 # ---- chickadee:cell 3 ----
 ```
 
-`rCellBoundaryMarker(cellNumber:)` (`NotebookExtractor.swift`) writes it and
-`chickadee_student_cells()` (the grading runtime) splits on it, with base R and
-no dependency. The two spellings are separate — `Tools/runner-support/test_runtime.R`
+`rCellBoundaryMarker(cellNumber:)` writes it and `chickadee_student_cells()`
+(the grading runtime) splits on it, with base R and no dependency. The writer —
+the whole flattening, in fact — lives in RunnerCore
+(`extractR`, `Sources/RunnerCore/NotebookExtraction.swift`), hoisted out of the
+worker per docs/language-handling-review.md §1 so the browser runner calls the
+same implementation through the wasm bridge (`runnerExtractR`) instead of its
+former verbatim stub. The two spellings are separate — `Tools/runner-support/test_runtime.R`
 is a byte-for-byte mirror and cannot interpolate a Swift constant — so
 `NotebookExtractorRCellMarkerTests` pins them against each other; a change to
 either alone fails there rather than silently collapsing every notebook to one

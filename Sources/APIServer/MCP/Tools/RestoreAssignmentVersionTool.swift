@@ -143,7 +143,7 @@ struct RestoreAssignmentVersionTool: ContentTool {
         // directory the runner and personalization read, and the generated
         // solution.py. Skipping this would leave the previous version's support
         // files on disk beside the restored suite.
-        Self.rederive(setup: setup, testSetupsDirectory: directory)
+        Self.rederiveZipDerivedContent(setup: setup, testSetupsDirectory: directory)
 
         let finalized = try await finalizeContentEdit(
             assignment: assignment, setup: setup, context: context, retest: true)
@@ -217,8 +217,10 @@ struct RestoreAssignmentVersionTool: ContentTool {
         setup.manifest = target.manifest
     }
 
-    /// Re-runs the derivations that hang off the zip's contents.
-    private static func rederive(setup: APITestSetup, testSetupsDirectory: String) {
+    /// Re-runs the derivations that hang off the zip's contents. (Named to
+    /// stay clear of `AssignmentLanguage.rederive`, which re-derives the
+    /// assignment *language* — an unrelated operation.)
+    private static func rederiveZipDerivedContent(setup: APITestSetup, testSetupsDirectory: String) {
         let setupID = setup.id ?? ""
         let props = setup.decodedManifest()
         let scripts = Set((props?.testSuites ?? []).map(\.script))
