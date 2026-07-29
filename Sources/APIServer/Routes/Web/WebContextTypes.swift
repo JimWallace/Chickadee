@@ -6,12 +6,6 @@
 import Core
 import Foundation
 
-// MARK: - Shared base context
-
-struct BaseContext: Encodable {
-    let currentUser: CurrentUserContext?
-}
-
 // MARK: - Index page context types
 
 struct TestSetupRow: Encodable {

@@ -37,17 +37,4 @@ public enum NotebookCellSources {
         if let arr = cell["source"] as? [String] { return arr.joined() }
         return ""
     }
-
-    /// Returns the trimmed `source` of every `code` cell whose source
-    /// is non-empty.  Skips markdown, raw, and empty cells.  Suitable
-    /// for the simple "concat code cells" path; callers that need the
-    /// cell index for "# --- cell N ---" comments should iterate
-    /// `cells(from:)` directly.
-    public static func codeCellSources(_ cells: [[String: Any]]) -> [String] {
-        cells.compactMap { cell -> String? in
-            guard cell["cell_type"] as? String == "code" else { return nil }
-            let trimmed = cellSource(cell).trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
-    }
 }

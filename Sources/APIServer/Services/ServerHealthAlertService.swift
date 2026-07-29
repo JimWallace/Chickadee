@@ -549,11 +549,6 @@ actor ServerHealthAlertMonitor {
         ruleStates
     }
 
-    func resetForTesting() {
-        ruleStates = [:]
-        recentFirings = []
-    }
-
     private func notifier(for application: Application) -> any AlertNotifier {
         guard let url = effectiveWebhookURL(), !url.isEmpty else {
             return NoopNotifier()

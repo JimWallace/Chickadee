@@ -18,11 +18,6 @@
 //                           can see the real definitions. Structural-property
 //                           NotebookChecks read this.
 
-public enum NotebookLanguage: String, Sendable, Equatable {
-    case python
-    case r
-}
-
 /// One notebook cell, with its raw (untrimmed) joined source. `cellType` is the
 /// notebook's `cell_type` ("code", "markdown", …). Non-code cells are kept in
 /// the list so cell numbering matches the original notebook positions.

@@ -2,8 +2,8 @@
 //
 // Validation-submission lifecycle: enqueue from a saved solution
 // notebook, schedule after a suite edit (debounced + runner availability
-// pre-check), wait for the worker to complete, and the bulk re-test
-// helper that re-queues every student submission for a setup.  Plus the
+// pre-check), and the bulk re-test helper that re-queues every student
+// submission for a setup.  Plus the
 // runner-availability probes that gate validation so we don't sit in
 // queue forever when no compatible runner exists.  Extracted from
 // AssignmentHelpers.swift (issue #442) — no behaviour changes.
@@ -12,12 +12,6 @@ import Core
 import Fluent
 import Foundation
 import Vapor
-
-enum RunnerValidationOutcome {
-    case passed(summary: String)
-    case failed(summary: String)
-    case timedOut
-}
 
 func enqueueRunnerValidationSubmission(
     req: Request,
@@ -467,48 +461,6 @@ func flipSubmissionToPending(
     submission.retestedByUserID = userID
     try await submission.save(on: db)
     return true
-}
-
-func waitForRunnerValidation(
-    req: Request,
-    submissionID: String,
-    timeoutSeconds: TimeInterval = 20
-) async throws -> RunnerValidationOutcome {
-    let started = Date()
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-
-    while Date().timeIntervalSince(started) < timeoutSeconds {
-        guard let submission = try await APISubmission.find(submissionID, on: req.db),
-            submission.kind == APISubmission.Kind.validation
-        else {
-            throw WebAssignmentError.notFound(resource: "Validation submission")
-        }
-
-        if submission.statusValue == .complete || submission.statusValue == .failed {
-            guard
-                let result = try await APIResult.query(on: req.db)
-                    .filter(\.$submissionID == submissionID)
-                    .sort(\.$receivedAt, .descending)
-                    .first(),
-                let collectionJSON = try await result.loadCollectionJSON(on: req.db)
-            else {
-                return .failed(summary: "no result payload")
-            }
-
-            let collection = try decoder.decode(
-                TestOutcomeCollection.self, from: Data(collectionJSON.utf8))
-            let summary = "\(collection.passCount)/\(collection.totalTests) passed"
-            let passed =
-                collection.buildStatus == .passed && collection.failCount == 0 && collection.errorCount == 0
-                && collection.timeoutCount == 0
-            return passed ? .passed(summary: summary) : .failed(summary: summary)
-        }
-
-        try await Task.sleep(nanoseconds: 1_000_000_000)
-    }
-
-    return .timedOut
 }
 
 func ensureValidationRunnerAvailability(req: Request) async {

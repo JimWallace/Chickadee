@@ -151,12 +151,6 @@ extension APIUser {
     /// outside the known vocabulary (defensive — should not happen).
     var roleValue: UserRole? { UserRole(rawValue: role) }
 
-    /// Sets the role from the typed enum.  Prefer this over assigning a
-    /// raw string to `role`.
-    func setRole(_ newRole: UserRole) {
-        role = newRole.rawValue
-    }
-
     var isAdmin: Bool { roleValue == .admin }
 
     /// True for MCP service accounts (admin-provisioned, non-loginable agents).
