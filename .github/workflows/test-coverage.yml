@@ -26,7 +26,10 @@ jobs:
     # step would otherwise burn.
     timeout-minutes: 180
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-ci = the mirrored toolchain + baked-in test packages (see
+      # mirror-images.yml / .github/docker/ci-image). Toolchain-identical to
+      # the plain mirror, so nothing about the clean-build canary changes.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -57,6 +60,13 @@ jobs:
           # *all* targets in one process, so it must match — without it the
           # python3-dependent tests trap (broken pipe / leaked test Application →
           # ServeCommand deinit assertion → SIGILL) and take down the whole run.
+          # All five are baked into the swift-ci image; the apt-get path is the
+          # stale-image fallback (see mirror-images.yml).
+          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v curl >/dev/null \
+            && command -v file >/dev/null && command -v python3 >/dev/null; then
+            echo "test dependencies already baked into the image; skipping apt-get"
+            exit 0
+          fi
           for i in 1 2 3; do
             apt-get update -qq && apt-get install -y --no-install-recommends zip unzip curl file python3 && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
