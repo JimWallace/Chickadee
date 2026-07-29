@@ -36,6 +36,12 @@ struct BrightSpaceIdentityIndex: Sendable {
         self.identities = all
     }
 
+    /// True when the classlist yielded no matchable identity at all. Callers use
+    /// this to tell "this org unit's roster says the student isn't here" from
+    /// "we have no usable roster" — an empty read (a key without classlist
+    /// permission, say) must not be mistaken for an authoritative answer.
+    var isEmpty: Bool { identities.isEmpty }
+
     /// The shared identity normalization: trim + lowercase.
     static func normalize(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

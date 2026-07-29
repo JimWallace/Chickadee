@@ -137,6 +137,13 @@ struct BrowserResultRoutes: RouteCollection {
             submissionID: subID,
             source: "browser"
         )
+        // Mark for BrightSpace sync exactly as the worker path does. Without
+        // this a browser-graded assignment never auto-pushed a grade to LEARN:
+        // the 60-second sweep only ever sees rows flagged here, so notebook
+        // labs silently reached LEARN only via an instructor's manual "Push
+        // all" or a retest that routed through a worker.
+        try await flagResultForBrightSpaceSync(
+            browserResult, testSetupID: body.testSetupID, application: req.application, on: req.db)
         // Same transient-SQLite-lock guard as the submission insert above: this
         // second write can also lose a race with a concurrent commit (session
         // write / background monitor) and surface as a 500 otherwise.

@@ -669,6 +669,148 @@ import VaporTesting
         }
     }
 
+    /// Regression: a browser-graded result must be flagged for BrightSpace grade
+    /// sync exactly as a worker-reported one is. Only the worker path used to do
+    /// this, so notebook assignments never auto-pushed a grade to LEARN at all —
+    /// the 60-second sweep only ever sees rows flagged at ingest, and grades
+    /// reached LEARN only when an instructor hit "Push all" by hand.
+    @Test func browserResultIsFlaggedForBrightSpaceGradeSync() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            let assignment = try await insertAssignment(testSetupID: setupID, isOpen: true)
+
+            // Wire the course + assignment to LEARN, and give the deployment the
+            // app-level credentials the ingest gate checks.
+            let setup = try #require(try await APITestSetup.find(setupID, on: app.db))
+            let course = try #require(try await APICourse.find(setup.courseID, on: app.db))
+            course.brightspaceOrgUnitID = "ou-browser"
+            try await course.save(on: app.db)
+            assignment.brightspaceGradeObjectID = "go-browser"
+            try await assignment.save(on: app.db)
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.example.edu", appID: "app", appKey: "key", debounceSecs: 90)
+            defer { app.brightSpaceAppCredentials = nil }
+
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = minimalNotebook()
+
+            let collection = """
+                {
+                  "submissionID": "",
+                  "testSetupID": "\(setupID)",
+                  "attemptNumber": 1,
+                  "buildStatus": "passed",
+                  "compilerOutput": null,
+                  "outcomes": [
+                    {
+                      "testName": "test_public",
+                      "testClass": null,
+                      "tier": "public",
+                      "status": "pass",
+                      "shortResult": "passed",
+                      "longResult": null,
+                      "executionTimeMs": 5,
+                      "memoryUsageBytes": null,
+                      "attemptNumber": 1,
+                      "isFirstPassSuccess": true
+                    }
+                  ],
+                  "totalTests": 1,
+                  "passCount": 1,
+                  "failCount": 0,
+                  "errorCount": 0,
+                  "timeoutCount": 0,
+                  "executionTimeMs": 5,
+                  "runnerVersion": "browser-wasm-runner/1.0",
+                  "timestamp": "2026-01-01T00:00:00Z"
+                }
+                """
+
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/browser-result",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.body = .init(
+                        buffer: multipartBody(
+                            boundary: "bs-sync-boundary",
+                            fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                            file: ("notebook", "notebook.ipynb", nb)
+                        ))
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": "bs-sync-boundary"])
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "browser-result should accept, body: \(res.body.string)")
+                })
+
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.source == "browser")
+            #expect(
+                result.brightspaceSyncPending == true,
+                "a browser-graded result on a LEARN-wired assignment must be queued for grade sync")
+            #expect(result.brightspacePendingSince != nil)
+        }
+    }
+
+    /// The same ingest gate must stay closed when the assignment has no LEARN
+    /// grade item — flagging every browser result would give the sweep a
+    /// permanent backlog of rows it can only ever no-op on.
+    @Test func browserResultIsNotFlaggedWhenAssignmentHasNoGradeItem() async throws {
+        try await withApp(app) { _ in
+            let setupID = try await insertSetup(manifest: simpleManifest())
+            _ = try await insertAssignment(testSetupID: setupID, isOpen: true)
+            app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
+                baseURL: "https://learn.example.edu", appID: "app", appKey: "key", debounceSecs: 90)
+            defer { app.brightSpaceAppCredentials = nil }
+
+            let cookie = try await loginAsStudent()
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let nb = minimalNotebook()
+
+            let collection = """
+                {
+                  "submissionID": "",
+                  "testSetupID": "\(setupID)",
+                  "attemptNumber": 1,
+                  "buildStatus": "passed",
+                  "compilerOutput": null,
+                  "outcomes": [],
+                  "totalTests": 0,
+                  "passCount": 0,
+                  "failCount": 0,
+                  "errorCount": 0,
+                  "timeoutCount": 0,
+                  "executionTimeMs": 1,
+                  "runnerVersion": "browser-wasm-runner/1.0",
+                  "timestamp": "2026-01-01T00:00:00Z"
+                }
+                """
+
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/browser-result",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.body = .init(
+                        buffer: multipartBody(
+                            boundary: "bs-nosync-boundary",
+                            fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
+                            file: ("notebook", "notebook.ipynb", nb)
+                        ))
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data",
+                        parameters: ["boundary": "bs-nosync-boundary"])
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "browser-result should accept, body: \(res.body.string)")
+                })
+
+            let result = try #require(try await APIResult.query(on: app.db).first())
+            #expect(result.brightspaceSyncPending != true)
+        }
+    }
+
     @Test func runnerSubmitRejectsBrowserGradedAssignments() async throws {
         try await withApp(app) { _ in
             let setupID = try await insertSetup(manifest: simpleManifest())
