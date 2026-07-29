@@ -85,6 +85,35 @@ function writeFilesToPyFS(py, workDir, files) {
     });
 }
 
+// Preload the Pyodide packages every bundled .py file imports.
+//
+// loadPackagesFromImports only scans the one source string it is handed, and
+// does NOT follow imports into local modules.  A test script that imports a
+// bundled helper which in turn imports numpy would therefore run with numpy
+// unloaded and die on ModuleNotFoundError — green on the native validation run
+// (where numpy is installed system-wide) and broken for every student.
+// Scanning the whole setup up front closes that gap.
+//
+// Per-file rather than one concatenated blob, so a single unparseable file (a
+// student's half-finished submission) cannot suppress every other file's
+// imports.  Non-fatal throughout: a name Pyodide doesn't ship must never block
+// the run.  Mirrors browser-runner.js's preloadPackagesForFiles.
+async function preloadPackagesForFiles(py, files) {
+    var names = Object.keys(files || {});
+    for (var i = 0; i < names.length; i++) {
+        if (!/\.py$/.test(names[i])) continue;
+        var value = files[names[i]];
+        var text = null;
+        if (typeof value === 'string') {
+            text = value;
+        } else if (value) {
+            try { text = new TextDecoder().decode(new Uint8Array(value)); } catch (e) { text = null; }
+        }
+        if (!text) continue;
+        try { await py.loadPackagesFromImports(text); } catch (e) { /* non-fatal */ }
+    }
+}
+
 self.onmessage = async function (e) {
     var msg = e.data || {};
     var id = msg.id;
@@ -102,6 +131,10 @@ self.onmessage = async function (e) {
             _workDir = '/chickadee_work_' + Date.now();
             try { py.FS.mkdir(_workDir); } catch (err) { /* fresh worker; ignore */ }
             writeFilesToPyFS(py, _workDir, msg.files || {});
+            // Load the packages the setup's .py files import (numpy, pandas, …)
+            // BEFORE any script runs, including imports reached only through a
+            // bundled helper module.
+            await preloadPackagesForFiles(py, msg.files || {});
             if (msg.seed !== null && msg.seed !== undefined) {
                 await py.runPythonAsync(assignmentSeedPython(msg.seed));
             }

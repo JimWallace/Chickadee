@@ -439,6 +439,10 @@
                     throw new Error('Failed to create work directory: ' + toMessage(e));
                 }
                 writeFilesToPyFS(py, this.workDir, this.files);
+                // Load the packages the setup's .py files import (numpy, pandas,
+                // …) BEFORE any script runs, including imports reached only
+                // through a bundled helper module.
+                await preloadPackagesForFiles(py, this.files);
                 // Add working directory to Python's path and set up builtins.
                 // We cannot rely on sitecustomize.py being auto-imported in
                 // Pyodide (the interpreter is already running, and
@@ -771,6 +775,28 @@
         if (typeof value === 'string') return value;
         try { return new TextDecoder().decode(value instanceof Uint8Array ? value : new Uint8Array(value)); }
         catch (_) { return ''; }
+    }
+
+    // Preload the Pyodide packages every bundled .py file imports.
+    //
+    // loadPackagesFromImports only scans the one source string it is handed, and
+    // does NOT follow imports into local modules.  A test script that imports a
+    // bundled helper which in turn imports numpy would therefore run with numpy
+    // unloaded and die on ModuleNotFoundError — green on the native validation
+    // run (where numpy is installed system-wide) and broken for every student.
+    // Scanning the whole setup up front closes that gap.
+    //
+    // Per-file rather than one concatenated blob, so a single unparseable file
+    // (a student's half-finished submission) cannot suppress every other file's
+    // imports.  Non-fatal throughout: a name Pyodide doesn't ship must never
+    // block the run.
+    async function preloadPackagesForFiles(py, files) {
+        for (const [relPath, value] of Object.entries(files || {})) {
+            if (!relPath.endsWith('.py')) continue;
+            const text = fileAsText(value);
+            if (!text) continue;
+            try { await py.loadPackagesFromImports(text); } catch (_) { /* non-fatal */ }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1700,6 +1726,7 @@ for _module_name in _tr.student_module_names_in_load_order():
             removeRecursive,
             writeFilesToPyFS,
             fileAsText,
+            preloadPackagesForFiles,
             makeExecutor,
             MainThreadExecutor,
             GradingWorkerExecutor,

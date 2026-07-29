@@ -1623,3 +1623,58 @@ test('groupBySection sends a stale/unknown sectionID to the Ungrouped block', as
     ],
   );
 });
+
+// Regression: Pyodide's loadPackagesFromImports only scans the source string it
+// is handed and does not follow imports into local modules. A test script that
+// imports a bundled helper which itself imports numpy therefore ran with numpy
+// unloaded — green on the native validation run (numpy installed system-wide),
+// ModuleNotFoundError for every student in the browser.
+test('preloadPackagesForFiles scans bundled helpers, not just the test script', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { preloadPackagesForFiles } = harness.hooks;
+
+  // The shape that broke Lab 9: the test script names only the helper; the
+  // third-party import lives one level down, inside the helper.
+  const files = {
+    'publictest_summarize.py': 'import lab9_helpers as H\nH.build_cohort(1)\n',
+    'lab9_helpers.py': 'import numpy as np\nimport pandas as pd\n',
+    'nhanes_bp.csv': 'age,high_bp\n40,1\n',
+  };
+
+  await preloadPackagesForFiles(harness.py, files);
+
+  const scanned = harness.py.state.loadPackageCalls;
+  assert.ok(
+    scanned.some(src => src.includes('import numpy')),
+    'helper source carrying the numpy import must be handed to loadPackagesFromImports',
+  );
+  // Non-Python bundle entries are not source and must not be scanned.
+  assert.ok(
+    !scanned.some(src => src.includes('age,high_bp')),
+    'CSV data files must not be scanned as Python source',
+  );
+});
+
+test('preloadPackagesForFiles isolates each file so one bad source cannot suppress the rest', async () => {
+  const harness = await loadRunnerHarness({ manifest: { gradingMode: 'browser', testSuites: [] } });
+  const { preloadPackagesForFiles } = harness.hooks;
+
+  // Pyodide parses the source to find imports, so an unparseable file throws.
+  // Scanning per-file (not one concatenated blob) keeps a student's
+  // half-finished submission from blocking the helper's packages.
+  const seen = [];
+  const py = {
+    async loadPackagesFromImports(src) {
+      seen.push(src);
+      if (src.includes('def broken(')) throw new SyntaxError('invalid syntax');
+    },
+  };
+
+  await preloadPackagesForFiles(py, {
+    'student_module.py': 'def broken(\n',
+    'lab9_helpers.py': 'import numpy as np\n',
+  });
+
+  assert.equal(seen.length, 2, 'a throwing file must not abort the scan');
+  assert.ok(seen.some(src => src.includes('import numpy')));
+});
