@@ -167,7 +167,10 @@ jobs:
     needs: build
     timeout-minutes: 20
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-ci = the mirrored toolchain + baked-in test packages (see
+      # mirror-images.yml / .github/docker/ci-image); same `swift --version`,
+      # so the `.build` cache key matches the build job's.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -188,10 +191,16 @@ jobs:
           key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
+        # zip/unzip/python3 are baked into the swift-ci image, so this
+        # normally just verifies and exits.  The apt-get path remains as the
+        # fallback for a stale image (e.g. a toolchain bump before the
+        # swift-ci rebuild — see mirror-images.yml), degrading to the old
+        # per-job install instead of failing the job.
         run: |
-          # python3: the noble base image (unlike jammy) does not bundle it, and
-          # APITests run generated pattern-family cases that shell out to
-          # `#!/usr/bin/env python3`.  worker-tests installs it explicitly too.
+          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null; then
+            echo "test dependencies already baked into the image; skipping apt-get"
+            exit 0
+          fi
           for i in 1 2 3; do
             apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
@@ -222,7 +231,8 @@ jobs:
     needs: build
     timeout-minutes: 25
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-ci: see the api-tests job note.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -266,10 +276,16 @@ jobs:
           key: ${{ runner.os }}-build-v4-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.resolved', 'Package.swift', 'Sources/**', 'Tests/**') }}
 
       - name: Install system test dependencies
+        # zip/unzip/python3 are baked into the swift-ci image, so this
+        # normally just verifies and exits.  The apt-get path remains as the
+        # fallback for a stale image (e.g. a toolchain bump before the
+        # swift-ci rebuild — see mirror-images.yml), degrading to the old
+        # per-job install instead of failing the job.
         run: |
-          # python3: the noble base image (unlike jammy) does not bundle it, and
-          # APITests run generated pattern-family cases that shell out to
-          # `#!/usr/bin/env python3`.  worker-tests installs it explicitly too.
+          if command -v zip >/dev/null && command -v unzip >/dev/null && command -v python3 >/dev/null; then
+            echo "test dependencies already baked into the image; skipping apt-get"
+            exit 0
+          fi
           for i in 1 2 3; do
             apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 && break
             echo "apt-get failed (attempt $i), retrying in 15s..."
@@ -322,7 +338,8 @@ jobs:
     # the test process; --parallel would just have the runner schedule
     # them across multiple xctest binaries that don't share the lock.
     container:
-      image: ghcr.io/jimwallace/chickadee/swift:6.3-noble
+      # swift-ci: see the api-tests job note.
+      image: ghcr.io/jimwallace/chickadee/swift-ci:6.3-noble
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -346,8 +363,15 @@ jobs:
         # `file` backs SubmissionNormalizer's MIME detection; `python3` runs the
         # real local HTTP servers (LocalHTTPTestServer) and notebook probes in
         # WorkerDaemonTests / NotebookExtractorTests, which otherwise fail (not
-        # skip) when the interpreter is absent.
-        run: apt-get update -qq && apt-get install -y --no-install-recommends file python3
+        # skip) when the interpreter is absent.  Both are baked into the
+        # swift-ci image; the apt-get path is the stale-image fallback (see
+        # the api-tests job note).
+        run: |
+          if command -v file >/dev/null && command -v python3 >/dev/null; then
+            echo "test dependencies already baked into the image; skipping apt-get"
+            exit 0
+          fi
+          apt-get update -qq && apt-get install -y --no-install-recommends file python3
 
       - name: Run WorkerTests
         # `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH=4` caps Swift
