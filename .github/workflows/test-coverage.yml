@@ -74,8 +74,18 @@ jobs:
         # test process.  This job is the worst case: it runs *all* targets in
         # one process (no --filter split) with code coverage, so it's the most
         # pool-pressured run we have — strictly more so than any single
-        # --filter'd swift-tests.yml job.  So it gets a *tighter* cap than the
-        # per-PR jobs (2 vs. 4) to halve the concurrent-pool count.
+        # --filter'd swift-tests.yml job.
+        #
+        # Width history: capped at 2 (tighter than the per-PR jobs' 4) while
+        # this shared process was ALSO losing cooperative-pool threads to
+        # WorkerTests' blocking subprocess waits — DB-pool pressure and
+        # scheduler starvation compounded.  With #1233 fixed (bounded,
+        # CLOEXEC'd subprocess waits, plus the WedgeWatchdog turning any
+        # residual stall into a fast, evidenced abort), the cap is back to 4,
+        # matching the per-PR jobs.  Measured on a 2-CPU pin, width 2 doubled
+        # the WorkerTests slice alone (6.5 s vs 3.3 s).  The retry+::warning
+        # telemetry below is the guardrail: if pool-pressure warnings recur,
+        # drop back toward 2 (or raise the AsyncKit pool timeout).
         #
         # Second layer: the test step is retried once.  A lone transient
         # pool-pressure flake should not redden the canary or auto-file a
@@ -84,7 +94,7 @@ jobs:
         # preserved).  A flaky first attempt is surfaced as a ::warning:: so
         # the flakiness stays visible instead of being silently swallowed.
         env:
-          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "2"
+          SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH: "4"
         run: |
           run_tests() { swift test --enable-code-coverage; }
           if run_tests; then
