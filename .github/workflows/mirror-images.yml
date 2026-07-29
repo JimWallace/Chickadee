@@ -9,25 +9,35 @@ name: Mirror CI images
 # three-week window audited for #890).  GHCR pulls from Actions runners
 # are same-infrastructure and not rate-limited.
 #
+# Also builds the derived CI test image, swift-ci:6.3-noble — the mirrored
+# toolchain plus the system packages the test jobs need (file, python3,
+# zip, unzip, curl; see .github/docker/ci-image/Dockerfile) — so those jobs
+# don't apt-get at job start.  Built right after the mirror step so the
+# toolchain inside always matches the freshly mirrored base.
+#
 # Runs weekly (Docker Hub tags like swift:6.3-noble are re-pushed with
 # fixes) and on demand.  `docker buildx imagetools create` copies the
-# full multi-arch manifest registry-to-registry without a local pull.
+# full multi-arch manifest registry-to-registry without a local pull; the
+# derived image is a plain single-arch (amd64 — all Actions runners) build.
 #
-# When the toolchain pin changes (e.g. swift:6.4), add the new tag here
-# FIRST, run this workflow, and only then point swift-tests.yml /
-# test-coverage.yml / docker-build.yml at the new mirrored tag.
+# When the toolchain pin changes (e.g. swift:6.4), add the new tag here and
+# in ci-image/Dockerfile's BASE_IMAGE default FIRST, run this workflow, and
+# only then point swift-tests.yml / test-coverage.yml / docker-build.yml at
+# the new mirrored tags.
 
 on:
   schedule:
     - cron: "0 5 * * 1"
   workflow_dispatch:
-  # Also run when this file changes in a PR: it both validates the edit and
-  # solves the bootstrap problem (workflow_dispatch only works once the file
-  # exists on the default branch, but the test workflows can't switch to the
-  # mirrored images until a first run has published them).
+  # Also run when this file (or the derived image's Dockerfile) changes in a
+  # PR: it both validates the edit and solves the bootstrap problem
+  # (workflow_dispatch only works once the file exists on the default
+  # branch, but the test workflows can't switch to the mirrored/derived
+  # images until a first run has published them).
   pull_request:
     paths:
       - ".github/workflows/mirror-images.yml"
+      - ".github/docker/ci-image/**"
 
 permissions:
   contents: read
@@ -43,6 +53,8 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -70,3 +82,27 @@ jobs:
           }
           mirror docker.io/library/swift:6.3-noble swift:6.3-noble
           mirror docker.io/library/postgres:16 postgres:16
+
+      - name: Build and push the derived CI test image
+        # After the mirror step on purpose: the derived image builds FROM the
+        # GHCR mirror just refreshed above, never from Docker Hub.
+        run: |
+          set -euo pipefail
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          base="ghcr.io/${owner}/chickadee/swift:6.3-noble"
+          dst="ghcr.io/${owner}/chickadee/swift-ci:6.3-noble"
+          echo "Building ${dst} from ${base}"
+          for attempt in 1 2 3 4 5; do
+            if docker buildx build \
+              --platform linux/amd64 \
+              --build-arg BASE_IMAGE="${base}" \
+              --tag "${dst}" \
+              --push \
+              .github/docker/ci-image; then
+              exit 0
+            fi
+            echo "attempt ${attempt} failed; retrying in $((attempt * 15))s"
+            sleep $((attempt * 15))
+          done
+          echo "Failed to build/push ${dst} after 5 attempts" >&2
+          exit 1
