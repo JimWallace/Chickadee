@@ -255,18 +255,58 @@ chromium failure is treated as real, first time.
      apply), so this failed the non-required probe — signal, not a
      blocker.
 
-4. **Residual WorkerDaemonTests wedge (2026-07-02 evening).** With the
-   fork bug fixed, worker-tests wedged once more via a different path:
-   `workerDaemonContinuesToNextJobAfterProcessingFailure` failed its
-   10 s wait, then the bare `try await task.value` after `task.cancel()`
-   suspended forever (`Task.value` is not cancellation-responsive) — the
-   `.timeLimit` trait *attributed* the failure but cannot interrupt a
-   non-cancellable wait, so the job still rode to the 20-minute kill.
-   All 12 cancel-then-await sites now go through a bounded
-   `awaitCancelledDaemon` helper (30 s deadline). The underlying
-   question — *what* in `daemon.run()` ignored cancellation under load —
-   is the remaining daemon-side item; suspects are the artifact-download
-   path and any wait not routed through cancellable primitives.
+4. **Residual WorkerDaemonTests wedge — ROOT-CAUSED (issue #1233,
+   2026-07-29).** With the fork bug fixed, worker-tests wedged once more
+   (2026-07-02: `workerDaemonContinuesToNextJobAfterProcessingFailure`
+   failed its 10 s wait, then the bare `try await task.value` after
+   `task.cancel()` suspended forever — `Task.value` is not
+   cancellation-responsive). All cancel-then-await sites were bounded via
+   `awaitCancelledDaemon` (30 s), yet on PR #1230 the 20-minute wedge
+   recurred **twice on one SHA** with the containment in place: 254 tests
+   started, 55 completed, ~18 minutes of total process silence
+   (issue #1233).
+
+   **Mechanism (whole-process, not per-test).** The observed "last log
+   lines" were victims: one was a pure-mock runner mid-`Task.sleep`, the
+   other a test frozen at its first suspension after `job_accepted` —
+   i.e. the *scheduler* stopped, not those tests. The cooperative pool
+   (~one thread per core, never grows) was fully pinned by blocking
+   subprocess waits running on pool threads: `MimeTypeDetector` spawned
+   `/usr/bin/file` per submission file per job with a blocking
+   `readDataToEndOfFile()` (unthrottled — production code, so outside
+   `SubprocessThrottle`), `runProcessRobustly` blocked in
+   `waitUntilExit()`, `LocalHTTPTestServer.readPort` blocked in
+   `availableData` (its deadline was only re-checked *between* chunks),
+   and several test files carried raw read-to-EOF/`waitUntilExit` calls.
+   Each is nominally bounded by its child — but the #1139 CLOEXEC fix
+   covered only ScriptRunner's pipes, so these pipes' write ends leaked
+   into every concurrently spawned process; a long-lived inheritor (a
+   test HTTP server) postpones EOF indefinitely. Once pinned threads ≥
+   pool width, test `defer`s can never run, servers are never killed,
+   the leaked write ends never close — a transient overload becomes a
+   **permanent, self-sustaining wedge**. `.timeLimit` and
+   `awaitCancelledDaemon` need a pool thread to fire, which is why
+   neither could help. Load-dependence, local cleanliness, and
+   pass-on-retry all follow.
+
+   **Fixes (same PR as this note).** (a) CLOEXEC + deadline-bounded
+   drains on every worker/test subprocess pipe (`setCloseOnExec` now
+   internal; `boundedReadToEOF` shared); (b) `runProcessRobustly` awaits
+   exit via termination handler + SIGKILL escalation instead of pinning
+   a pool thread; (c) `readPort` is poll-based so its deadline is real;
+   (d) the daemon-side answer to "what ignores cancellation":
+   `TestSetupCache.acquire` awaited unstructured `Task.value`s — it now
+   uses cancellation-responsive continuations, and the shared populate
+   task is itself cancelled when its last waiter detaches, so a
+   cancelled daemon stops in-flight artifact downloads (regression
+   tests deadlock against the old code); (e) `awaitCancelledDaemon`
+   records a loud Issue + thread dump when it abandons a daemon;
+   (f) a **WedgeWatchdog** on a dedicated OS thread (immune to pool
+   saturation) aborts with a full `/proc/self/task` thread table
+   (state + `wchan` per thread) after 5 minutes of helper-in-flight
+   silence — a future wedge fails in ~6 minutes *with evidence* instead
+   of burning 20 silent ones. `CHICKADEE_WORKERTESTS_STALL_SECONDS`
+   overrides (0 disables).
 2. **Watch the tolerated-webkit warning rate.** The `::warning`
    annotations from the probe and the smoke retries are the flake-rate
    telemetry now; if they show up more than occasionally, the ambient rate

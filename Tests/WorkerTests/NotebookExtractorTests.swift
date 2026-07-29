@@ -456,13 +456,13 @@ import Testing
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             proc.arguments = ["python3", "-c", probe]
-            proc.standardOutput = Pipe()
-            proc.standardError = Pipe()
+            proc.standardOutput = makeCloexecPipe()
+            proc.standardError = makeCloexecPipe()
             return proc
         }
 
         let outPipe = try #require(proc.standardOutput as? Pipe)
-        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let outData = readToEOFBounded(outPipe)
         let out = (String(bytes: outData, encoding: .utf8) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let defined = try #require(try? JSONDecoder().decode([String: Bool].self, from: Data(out.utf8)))

@@ -309,29 +309,41 @@ import Testing
     /// observed 2026-07-02 in `workerDaemonContinuesToNextJobAfterProcessingFailure`
     /// (the `.timeLimit` trait attributed it but cannot interrupt it; see
     /// docs/ci-flakiness.md). On timeout the daemon task is left orphaned —
-    /// acceptable in a test process — and the caller should fail the test.
+    /// acceptable in a test process — and the leak is made LOUD (#1233): an
+    /// Issue.record naming the abandoned daemon plus a thread-state dump to
+    /// stderr, so an ignored cancellation produces evidence instead of a
+    /// silent still-running task.
     private func awaitCancelledDaemon(
         _ task: Task<Void, Error>,
         timeoutSeconds: TimeInterval = 30
     ) async -> Bool {
-        task.cancel()
-        let flag = DaemonShutdownFlag()
-        Task {
-            var unexpected: String?
-            do {
-                try await task.value
-            } catch is CancellationError {
-                // Expected on cooperative shutdown.
-            } catch {
-                unexpected = String(describing: error)
+        await WedgeWatchdog.track {
+            task.cancel()
+            let flag = DaemonShutdownFlag()
+            Task {
+                var unexpected: String?
+                do {
+                    try await task.value
+                } catch is CancellationError {
+                    // Expected on cooperative shutdown.
+                } catch {
+                    unexpected = String(describing: error)
+                }
+                await flag.markDone(unexpectedError: unexpected)
             }
-            await flag.markDone(unexpectedError: unexpected)
+            let done = await waitUntil(timeoutSeconds: timeoutSeconds) { await flag.isDone() }
+            if done, let unexpectedError = await flag.failure() {
+                Issue.record("daemon.run() threw a non-cancellation error on shutdown: \(unexpectedError)")
+            }
+            if !done {
+                let leakDescription =
+                    "daemon.run() ignored cancellation for \(Int(timeoutSeconds))s and was abandoned "
+                    + "still running; thread states dumped to stderr (issue #1233)"
+                WedgeWatchdog.dumpThreadStates(reason: leakDescription)
+                Issue.record("\(leakDescription)")
+            }
+            return done
         }
-        let done = await waitUntil(timeoutSeconds: timeoutSeconds) { await flag.isDone() }
-        if done, let unexpectedError = await flag.failure() {
-            Issue.record("daemon.run() threw a non-cancellation error on shutdown: \(unexpectedError)")
-        }
-        return done
     }
 
     private func waitUntil(
@@ -341,6 +353,10 @@ import Testing
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
+            // Every poll tick is watchdog liveness: while any test can still
+            // run this loop, the scheduler is alive and the wedge watchdog
+            // must not fire (issue #1233).
+            WedgeWatchdog.noteActivity()
             if await condition() {
                 return true
             }

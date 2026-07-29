@@ -99,6 +99,12 @@ struct RunnerProfileDetector {
         let process = Process()
         let output = Pipe()
         let error = Pipe()
+        // CLOEXEC + bounded drain: a non-CLOEXEC write end inherited by a
+        // concurrently spawned process postpones EOF until *that* process
+        // exits, turning `readDataToEndOfFile()` into an unbounded stall on
+        // a cooperative-pool thread (issue #1233; same mechanism as #1139).
+        setCloseOnExec(output)
+        setCloseOnExec(error)
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [command] + arguments
         process.standardOutput = output
@@ -119,18 +125,36 @@ struct RunnerProfileDetector {
         let exited = await waitWithTimeout(process: process, command: command, arguments: arguments)
         guard exited, process.terminationStatus == 0 else { return nil }
 
-        let stdout = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: error.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        // The child has exited, so with CLOEXEC pipes EOF is already in the
+        // buffer; the deadline only bounds descriptors leaked outside our
+        // control.
+        let drainDeadline = Date().addingTimeInterval(Self.probeTimeoutSeconds)
+        let stdout =
+            String(
+                data: boundedReadToEOF(
+                    fromDescriptor: output.fileHandleForReading.fileDescriptor,
+                    deadline: drainDeadline),
+                encoding: .utf8) ?? ""
+        let stderr =
+            String(
+                data: boundedReadToEOF(
+                    fromDescriptor: error.fileHandleForReading.fileDescriptor,
+                    deadline: drainDeadline),
+                encoding: .utf8) ?? ""
         let combined = (stdout + "\n" + stderr).trimmingCharacters(in: .whitespacesAndNewlines)
         return combined.isEmpty ? nil : combined
     }
 
     private func runStatus(command: String, arguments: [String]) async -> Int32? {
         let process = Process()
+        let output = Pipe()
+        let error = Pipe()
+        setCloseOnExec(output)
+        setCloseOnExec(error)
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [command] + arguments
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.standardOutput = output
+        process.standardError = error
         do {
             try process.run()
         } catch {

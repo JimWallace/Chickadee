@@ -25,8 +25,20 @@ actor TestSetupCache {
     /// LRU order — index 0 is least-recently-used, last is most-recently-used.
     private var lruKeys: [String] = []
 
-    /// In-progress population tasks, keyed by testSetupID.
-    private var inProgress: [String: Task<URL, Error>] = [:]
+    /// One in-flight population: the unstructured task doing the download +
+    /// commit, plus the continuation of every acquirer awaiting it. The task
+    /// reports through `finishPopulation(testSetupID:result:)`, never via
+    /// `task.value` — awaiting `Task.value` is not cancellation-responsive,
+    /// and doing so from a job slot was the wait that made `daemon.run()`
+    /// ignore cancellation on the artifact-download path (issue #1233,
+    /// docs/ci-flakiness.md "what in daemon.run() ignores cancellation").
+    private struct InFlightPopulation {
+        var task: Task<Void, Never>
+        var waiters: [UUID: CheckedContinuation<URL, Error>] = [:]
+    }
+
+    /// In-progress populations, keyed by testSetupID.
+    private var inProgress: [String: InFlightPopulation] = [:]
 
     init(
         cacheRoot: URL = TestSetupCache.defaultCacheRoot,
@@ -132,42 +144,95 @@ actor TestSetupCache {
             return AcquireResult(directory: preparedDir, didHit: true)
         }
 
-        // ── Already populating — await in-flight task ─────────────────────
-        if let task = inProgress[testSetupID] {
-            writeStructuredRunnerLog(
-                event: "test_setup_cache_await_in_progress",
-                fields: [
-                    "test_setup_id": testSetupID
-                ])
-            let populated = try await task.value
-            // Another caller may have already registered this key in lruKeys;
-            // touchLRU is idempotent and safe to call from any code path.
-            touchLRU(key: testSetupID)
-            // Awaiting an in-flight populate is a miss from the caller's
-            // perspective — work was still being done on their behalf.
-            return AcquireResult(directory: populated, didHit: false)
+        // ── Miss or in-flight — join the (possibly new) population ──────────
+        // Joining an in-flight populate is a miss from the caller's
+        // perspective — work was still being done on their behalf.
+        let populated = try await awaitPopulation(testSetupID: testSetupID, populate: populate)
+        return AcquireResult(directory: populated, didHit: false)
+    }
+
+    /// Awaits the population of `testSetupID`, starting it if none is in
+    /// flight, and responds to the caller's task cancellation: a cancelled
+    /// acquirer detaches promptly (throwing `CancellationError`) instead of
+    /// riding out the download, and the population task itself is cancelled
+    /// once its last waiter detaches — so a cancelled daemon stops its
+    /// in-flight artifact downloads instead of ignoring cancellation
+    /// (issue #1233).
+    private func awaitPopulation(
+        testSetupID: String,
+        populate: @escaping @Sendable () async throws -> URL
+    ) async throws -> URL {
+        let waiterID = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                // Runs synchronously on the actor: the miss-check, task
+                // start, and waiter registration form one isolation slice, so
+                // `finishPopulation` cannot interleave between them.
+                if Task.isCancelled {
+                    // Cancellation delivered before registration: onCancel
+                    // already ran against an unregistered waiter, so honour
+                    // it here — nobody else will resume this continuation.
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                if var population = inProgress[testSetupID] {
+                    writeStructuredRunnerLog(
+                        event: "test_setup_cache_await_in_progress",
+                        fields: [
+                            "test_setup_id": testSetupID
+                        ])
+                    population.waiters[waiterID] = continuation
+                    inProgress[testSetupID] = population
+                } else {
+                    writeStructuredRunnerLog(
+                        event: "test_setup_cache_miss",
+                        fields: [
+                            "test_setup_id": testSetupID
+                        ])
+                    var population = InFlightPopulation(
+                        task: makePopulationTask(testSetupID: testSetupID, populate: populate))
+                    population.waiters[waiterID] = continuation
+                    inProgress[testSetupID] = population
+                }
+            }
+        } onCancel: {
+            Task { await self.detachWaiter(testSetupID: testSetupID, waiterID: waiterID) }
         }
+    }
 
-        // ── Cache miss — start population ────────────────────────────────────
-        writeStructuredRunnerLog(
-            event: "test_setup_cache_miss",
-            fields: [
-                "test_setup_id": testSetupID
-            ])
-
+    /// The unstructured population worker. Unstructured on purpose — it is
+    /// shared by every concurrent acquirer of the key and must not be tied to
+    /// any single caller's lifetime; it always reports through
+    /// `finishPopulation`, which resumes whichever waiters remain.
+    private func makePopulationTask(
+        testSetupID: String,
+        populate: @escaping @Sendable () async throws -> URL
+    ) -> Task<Void, Never> {
         let cacheRoot = self.cacheRoot  // capture value type, not actor ref
-        let populateTask = Task<URL, Error> {
-            let stagingDir = try await populate()
-            return try Self.commit(stagingDir: stagingDir, testSetupID: testSetupID, cacheRoot: cacheRoot)
+        // `Task {}` inherits this actor's isolation, so `finishPopulation` is
+        // a synchronous same-actor call here — no interleaving between the
+        // result being ready and the waiters being resumed.
+        return Task {
+            let result: Result<URL, Error>
+            do {
+                let stagingDir = try await populate()
+                result = .success(
+                    try Self.commit(stagingDir: stagingDir, testSetupID: testSetupID, cacheRoot: cacheRoot))
+            } catch {
+                result = .failure(error)
+            }
+            self.finishPopulation(testSetupID: testSetupID, result: result)
         }
-        inProgress[testSetupID] = populateTask
+    }
 
-        do {
-            let populated = try await populateTask.value
-            inProgress.removeValue(forKey: testSetupID)
-            // evictIfNeededForNew checks whether the key is already in lruKeys
-            // (possible if a concurrent awaiter registered it first) so that we
-            // never evict unnecessarily or double-register.
+    /// Terminal bookkeeping for a population: exactly once per key, whether
+    /// it succeeded, failed, or was cancelled after its last waiter left.
+    private func finishPopulation(testSetupID: String, result: Result<URL, Error>) {
+        guard let population = inProgress.removeValue(forKey: testSetupID) else { return }
+        switch result {
+        case .success(let preparedDir):
+            // evictIfNeededForNew checks whether the key is already in
+            // lruKeys so that we never evict unnecessarily or double-register.
             evictIfNeededForNew(key: testSetupID)
             touchLRU(key: testSetupID)
             writeStructuredRunnerLog(
@@ -175,9 +240,10 @@ actor TestSetupCache {
                 fields: [
                     "test_setup_id": testSetupID
                 ])
-            return AcquireResult(directory: populated, didHit: false)
-        } catch {
-            inProgress.removeValue(forKey: testSetupID)
+            for waiter in population.waiters.values {
+                waiter.resume(returning: preparedDir)
+            }
+        case .failure(let error):
             cleanupPartialEntry(testSetupID: testSetupID)
             writeStructuredRunnerLog(
                 event: "test_setup_cache_populate_failed",
@@ -185,7 +251,26 @@ actor TestSetupCache {
                     "test_setup_id": testSetupID,
                     "error_message_summary": String(describing: error),
                 ])
-            throw error
+            for waiter in population.waiters.values {
+                waiter.resume(throwing: error)
+            }
+        }
+    }
+
+    /// Removes a cancelled acquirer's continuation (resuming it with
+    /// `CancellationError`) and, when it was the population's last waiter,
+    /// cancels the population task itself: nobody wants the download any
+    /// more, and a cancelled daemon must not keep transferring artifacts.
+    /// A no-op when the population already finished — the waiter was then
+    /// resumed with the real result before cancellation could land.
+    private func detachWaiter(testSetupID: String, waiterID: UUID) {
+        guard var population = inProgress[testSetupID],
+            let continuation = population.waiters.removeValue(forKey: waiterID)
+        else { return }
+        inProgress[testSetupID] = population
+        continuation.resume(throwing: CancellationError())
+        if population.waiters.isEmpty {
+            population.task.cancel()
         }
     }
 
