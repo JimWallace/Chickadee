@@ -9,6 +9,20 @@ the review found that the brief did not anticipate.
 was checked against source, not against the brief or `CLAUDE.md`; file:line
 references are to that commit.
 
+> **Outcome (2026-07-29).** The maintainer reviewed these verdicts and asked
+> for the concrete items to land, including pulling the "on trigger" items
+> forward. Implemented in the same PR as this document (#1235): the §1 hoist
+> (`RunnerCore.extractR` + wasm bridge export + the browser stub deleted, with
+> a fallback branch until the re-vendored artifact ships), the §2 generated
+> fenced block (`scripts/generate-js-constants.sh` + CI check, replacing
+> `r-kernel-names-drift.test.mjs` — action 7 pulled forward), the §3 surface
+> shrink (kernel-name overload now internal to Core; the colliding `rederive`
+> helper renamed), and the §4 consolidation (`AssignmentLanguage.scriptExtensions`
+> / `init?(scriptExtension:)` routing the duplicated sniff sites; the
+> boolean-shaped language tests converted to exhaustive switches). Actions 5–6
+> (process rules, periphery pilot) remain open. Mechanism references in the
+> body below describe the pre-PR state the review examined.
+
 **Verdict in one paragraph.** The subsystem is in better shape than the brief
 fears. The `AssignmentLanguage` enum-owns-its-strategy design is right and
 should stay; the three resolution entry points are a real domain rule wearing a

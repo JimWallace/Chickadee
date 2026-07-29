@@ -1,5 +1,6 @@
 // RunnerCore notebook extraction — the single source of truth for turning a
-// Jupyter notebook's code cells into runnable Python.
+// Jupyter notebook's code cells into runnable source (Python via
+// `extractPython`, R via `extractR`).
 //
 // RunnerCore is deliberately dependency-free (Swift stdlib only — no Foundation,
 // no Process, no filesystem) so it can compile to `wasm32` and run inside the
@@ -80,6 +81,62 @@ public func extractPython(cells: [NotebookCell], filename: String) -> ExtractedN
         codeCellCount: codeCellCount
     )
 }
+
+// MARK: - R extraction (shared by both runners)
+
+/// One R notebook flattened to a `.R` module. Unlike `ExtractedNotebook` there
+/// is no separate introspectable view: R cells are emitted verbatim (no
+/// exec-wrap), so the one output serves both execution and source-level checks.
+public struct ExtractedRNotebook: Sendable, Equatable {
+    /// Header + a boundary marker per kept cell + the cell's source. Markers
+    /// are inert R comments; the grading runtime's `chickadee_student_cells()`
+    /// splits on them to recover cell granularity.
+    public let source: String
+    public let codeCellCount: Int
+
+    public init(source: String, codeCellCount: Int) {
+        self.source = source
+        self.codeCellCount = codeCellCount
+    }
+}
+
+/// Extract R from a notebook's cells: each non-empty code cell is emitted
+/// verbatim (trailing whitespace trimmed) behind a `rCellBoundaryMarker` line.
+/// Marker numbers use the 1-based position of the cell in the original
+/// notebook — a markdown cell between two code cells shows as a gap rather
+/// than silently renumbering. Byte-identical to the extraction the native
+/// worker performed inline before the hoist (PR #1235), including the
+/// header-only output for a notebook with no code cells.
+public func extractR(cells: [NotebookCell], filename: String) -> ExtractedRNotebook {
+    var output = "# Generated from \(filename)\n\n"
+    var codeCellCount = 0
+    for (index, cell) in cells.enumerated() {
+        guard cell.cellType == "code" else { continue }
+        var src = cell.source
+        while src.last?.isWhitespace == true { src.removeLast() }
+        guard !src.isEmpty else { continue }
+        codeCellCount += 1
+        output += rCellBoundaryMarker(cellNumber: index + 1) + "\n"
+        output += src + "\n\n"
+    }
+    return ExtractedRNotebook(source: output, codeCellCount: codeCellCount)
+}
+
+/// Comment line the R extraction writes ahead of each code cell, so the
+/// flattened `.R` file keeps the cell granularity a source-level notebook check
+/// needs. It is an ordinary R comment, so it is inert when the submission runs.
+///
+/// The grading side splits on this in `chickadee_student_cells()`
+/// (`testRuntimeRStudentFile`, mirrored in `Tools/runner-support/test_runtime.R`).
+/// `NotebookExtractorRCellMarkerTests` pins the two against each other.
+public func rCellBoundaryMarker(cellNumber: Int) -> String {
+    "# ---- chickadee:cell \(cellNumber) ----"
+}
+
+/// Regex the runtime uses to recognize a marker line. Kept beside the writer
+/// so the two are defined together; the runtime spells it out literally
+/// because `Tools/runner-support/test_runtime.R` is a byte-for-byte mirror.
+public let rCellBoundaryMarkerPattern = "^# ---- chickadee:cell [0-9]+ ----$"
 
 // MARK: - Per-cell transforms (shared by both runners)
 

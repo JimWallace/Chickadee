@@ -40,10 +40,11 @@ Swift targets share a clean dependency boundary:
   grading core. Compiled two ways: natively (linked into the worker) and to
   **WebAssembly** (the in-browser runner). It owns suite execution
   (`executeSuites`), output interpretation (`interpretScriptOutput`), script
-  classification, and the `TestOutcome` / `TestTier` / `TestStatus` types — so
-  the native and browser graders run one implementation and cannot drift. Pinned
-  by the shared `Tests/Fixtures/output-contract.json` contract, asserted against
-  both the native build and the *real vendored wasm* in CI.
+  classification, notebook extraction (`extractPython` / `extractR`), and the
+  `TestOutcome` / `TestTier` / `TestStatus` types — so the native and browser
+  graders run one implementation and cannot drift. Pinned by the shared
+  `Tests/Fixtures/output-contract.json` contract, asserted against both the
+  native build and the *real vendored wasm* in CI.
 - **`Core`** — Shared models and types. No Vapor dependency; `@_exported import
   RunnerCore` re-exports the grading types. Every other target depends on this.
 

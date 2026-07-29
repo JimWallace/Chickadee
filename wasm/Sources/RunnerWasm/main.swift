@@ -7,8 +7,8 @@ import RunnerCore
 // `JSPromise.async { … }` body or `await promise.value` executes.
 JavaScriptEventLoop.installGlobalExecutor()
 
-// Embedded-Swift bridge over the pure RunnerCore extractor. Registers a single
-// JS-callable global, marshalling cells in / result out via JavaScriptKit JS
+// Embedded-Swift bridge over the pure RunnerCore extractors. Registers
+// JS-callable globals, marshalling cells in / results out via JavaScriptKit JS
 // values — no Foundation, no BridgeJS (both incompatible with Embedded Swift).
 //
 // Exposed to JS as `globalThis.runnerExtractPython(cells, filename)`:
@@ -17,11 +17,11 @@ JavaScriptEventLoop.installGlobalExecutor()
 //   returns  — { executableModule, introspectableSource, codeCellCount }
 //
 // Built for wasm only via scripts/build-runner-wasm.sh (Embedded Swift SDK).
-let runnerExtractPython = JSClosure { args in
-    guard let cellsArray = args.first?.object else { return .undefined }
-    let filename = args.count > 1 ? (args[1].string ?? "") : ""
-    let count = Int(cellsArray.length.number ?? 0)
 
+/// Marshal a JS array of `{ cell_type, source }` objects into `[NotebookCell]`
+/// (shared by the Python and R extraction bridges).
+private func parseNotebookCells(_ cellsArray: JSObject) -> [NotebookCell] {
+    let count = Int(cellsArray.length.number ?? 0)
     var cells: [NotebookCell] = []
     var index = 0
     while index < count {
@@ -33,8 +33,13 @@ let runnerExtractPython = JSClosure { args in
         }
         index += 1
     }
+    return cells
+}
 
-    let extracted = extractPython(cells: cells, filename: filename)
+let runnerExtractPython = JSClosure { args in
+    guard let cellsArray = args.first?.object else { return .undefined }
+    let filename = args.count > 1 ? (args[1].string ?? "") : ""
+    let extracted = extractPython(cells: parseNotebookCells(cellsArray), filename: filename)
 
     guard let objectConstructor = JSObject.global.Object.function else { return .undefined }
     let result = objectConstructor.new()
@@ -45,6 +50,29 @@ let runnerExtractPython = JSClosure { args in
 }
 
 JSObject.global.runnerExtractPython = .object(runnerExtractPython)
+
+// Exposed to JS as `globalThis.runnerExtractR(cells, filename)`:
+//   cells    — array of { cell_type: string, source: string }  (same shape)
+//   filename — string
+//   returns  — { source, codeCellCount }
+//
+// The extraction itself is RunnerCore.extractR — the marker-emitting
+// implementation the native worker uses — so browser-extracted `.R` files are
+// byte-identical to the worker's and `chickadee_student_cells()` can split
+// them the same way.
+let runnerExtractR = JSClosure { args in
+    guard let cellsArray = args.first?.object else { return .undefined }
+    let filename = args.count > 1 ? (args[1].string ?? "") : ""
+    let extracted = extractR(cells: parseNotebookCells(cellsArray), filename: filename)
+
+    guard let objectConstructor = JSObject.global.Object.function else { return .undefined }
+    let result = objectConstructor.new()
+    result.source = .string(extracted.source)
+    result.codeCellCount = .number(Double(extracted.codeCellCount))
+    return .object(result)
+}
+
+JSObject.global.runnerExtractR = .object(runnerExtractR)
 
 // Exposed to JS as `globalThis.runnerClassifyScript(name, source)` → the
 // interpreter raw value ("python", "sh", "bash", "ruby", …, "unknown"). The

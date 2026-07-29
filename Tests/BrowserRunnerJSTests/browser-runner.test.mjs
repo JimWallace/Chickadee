@@ -591,6 +591,13 @@ async function loadRunnerHarness(options = {}) {
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
 
+  // Optional seam for the shared R extractor (RunnerCore.extractR via wasm).
+  // Absent by default so the pre-re-vendor fallback branch stays exercised; a
+  // test presets it to prove extraction prefers the wasm path when available.
+  if (options.runnerExtractR) {
+    context.runnerExtractR = options.runnerExtractR;
+  }
+
   // Web-Worker executor seam.  By default the harness exposes NO Worker and no
   // factory override, so the runner falls back to the main-thread Pyodide path
   // (the rest of the suite exercises that).  When a test opts in via
@@ -1339,7 +1346,8 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
     'submission.source.py',
   );
 
-  // R notebooks stay on the JS path (RunnerCore is Python-only) — no sidecar.
+  // R without the wasm extractR export (a vendored artifact predating the
+  // hoist): the fallback emits verbatim cells, no markers, no sidecar.
   await extractNotebook(
     harness.py,
     '/course',
@@ -1353,6 +1361,54 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
   assert.equal(
     harness.py.FS.readFile('/course/lab.R', { encoding: 'utf8' }),
     '# Generated from lab.ipynb\n\nx <- 2\n\n',
+  );
+  assert.equal(
+    harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
+    'lab.R',
+  );
+});
+
+test('R notebooks extract through the shared RunnerCore wasm when the export is present', async () => {
+  // Preset the runnerExtractR global (as the re-vendored wasm bridge does) and
+  // assert extraction prefers it over the verbatim fallback — the browser then
+  // produces the same marker-bearing .R the native worker writes.
+  let received = null;
+  const harness = await loadRunnerHarness({
+    runnerExtractR: (cells, filename) => {
+      received = { cells, filename };
+      return {
+        source: `# Generated from ${filename}\n\n# ---- chickadee:cell 1 ----\nx <- 2\n\n`,
+        codeCellCount: 1,
+      };
+    },
+  });
+  const { extractNotebook } = harness.hooks;
+
+  harness.py.FS.mkdir('/course');
+  await extractNotebook(
+    harness.py,
+    '/course',
+    'lab.ipynb',
+    JSON.stringify({
+      nbformat: 4,
+      metadata: { kernelspec: { name: 'ir' } },
+      cells: [
+        { cell_type: 'markdown', source: ['notes'], metadata: {} },
+        { cell_type: 'code', source: ['x <- 2\n'], metadata: {} },
+      ],
+    }),
+  );
+
+  // Cells passed through with type preserved (marker numbering needs the
+  // markdown cell's position), and the wasm result written verbatim.
+  assert.equal(received.filename, 'lab.ipynb');
+  assert.deepEqual(plain(received.cells), [
+    { cell_type: 'markdown', source: 'notes' },
+    { cell_type: 'code', source: 'x <- 2\n' },
+  ]);
+  assert.equal(
+    harness.py.FS.readFile('/course/lab.R', { encoding: 'utf8' }),
+    '# Generated from lab.ipynb\n\n# ---- chickadee:cell 1 ----\nx <- 2\n\n',
   );
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),

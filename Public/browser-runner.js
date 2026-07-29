@@ -30,12 +30,14 @@
     const statusEl = document.getElementById('browser-runner-status');
     if (statusEl) statusEl.hidden = false;
 
-    // Kernelspec names that mark an R notebook. This is a hand-copy of
-    // AssignmentLanguage.rKernelNames (Sources/Core/AssignmentLanguage.swift) —
-    // the browser cannot import Swift, so the two are pinned together by
-    // Tests/BrowserRunnerJSTests/r-kernel-names-drift.test.mjs, which fails the
-    // build if either side gains or loses an alias. Keep it sorted.
+    // Kernelspec names that mark an R notebook. The browser cannot import
+    // Swift, so this is a GENERATED copy of AssignmentLanguage.rKernelNames
+    // (Sources/Core/AssignmentLanguage.swift), written by
+    // scripts/generate-js-constants.sh — edit the Swift set and re-run that
+    // script, never this line. CI (format-lint) fails if the two drift.
+    // CHICKADEE_GENERATED:R_KERNEL_NAMES:BEGIN
     const R_KERNEL_NAMES = ['ir', 'r', 'webr', 'xr'];
+    // CHICKADEE_GENERATED:R_KERNEL_NAMES:END
 
     // -------------------------------------------------------------------------
     // Public API — called by notebook.js on Submit
@@ -836,17 +838,18 @@
     // Notebook extraction into a plain file map { <relativePath>: <string> }.
     // Mirrors extractNotebook but writes to a JS object instead of py.FS, so the
     // grading worker (which holds its own Pyodide FS) and the main-thread
-    // fallback both consume the same extraction result. Python extraction goes
-    // through the shared RunnerCore wasm (already loaded as `core`); only R stays
-    // on the JS path (RunnerCore is Python-only, matching the native worker).
+    // fallback both consume the same extraction result. BOTH languages extract
+    // through the shared RunnerCore wasm (already loaded as `core`): Python via
+    // extractPython, R via extractR — the same marker-emitting implementation
+    // the native worker runs, so the two extractors cannot drift.
     function extractNotebookToMap(files, core, filename, notebookText) {
         let notebook;
         try { notebook = JSON.parse(notebookText); } catch (_) { return; }
 
         // Detect kernel language exactly as AssignmentLanguage.isRNotebookMetadata
         // does natively. This file cannot import Swift, so R_KERNEL_NAMES is a
-        // hand-copy of AssignmentLanguage.rKernelNames pinned to it by
-        // Tests/BrowserRunnerJSTests/r-kernel-names-drift.test.mjs.
+        // generated copy of AssignmentLanguage.rKernelNames (see the fenced
+        // block above).
         const meta   = notebook.metadata || {};
         const ks     = meta.kernelspec || {};
         const ksName = (ks.name || '').toLowerCase();
@@ -854,25 +857,38 @@
         const isR    = R_KERNEL_NAMES.includes(ksName) || liName === 'r';
         const stem   = filename.replace(/\.ipynb$/i, '');
 
+        const cells = (notebook.cells || []).map(cell => ({
+            cell_type: cell.cell_type,
+            source: Array.isArray(cell.source) ? cell.source.join('') : (cell.source || ''),
+        }));
+
         if (isR) {
-            let code = `# Generated from ${filename}\n\n`;
-            for (const cell of (notebook.cells || [])) {
-                if (cell.cell_type !== 'code') continue;
-                const src = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
-                const block = extractRCell(src);
-                if (block) code += block + '\n\n';
+            if (core.extractR) {
+                // Shared RunnerCore implementation: header + an inert
+                // `# ---- chickadee:cell N ----` marker per cell, which the R
+                // grading runtime's chickadee_student_cells() splits on —
+                // byte-identical to the native worker's extraction.
+                files[`${stem}.R`] = core.extractR(cells, filename).source;
+            } else {
+                // Back-compat with a vendored wasm artifact predating
+                // runnerExtractR (the runner-wasm-vendor workflow re-vendors on
+                // merge, one-release lag): the pre-hoist behaviour — verbatim
+                // cells, no markers. Delete this branch once the re-vendored
+                // artifact ships.
+                let code = `# Generated from ${filename}\n\n`;
+                for (const cell of cells) {
+                    if (cell.cell_type !== 'code') continue;
+                    const trimmed = cell.source.replace(/\s+$/, '');
+                    if (trimmed.trim()) code += trimmed + '\n\n';
+                }
+                files[`${stem}.R`] = code;
             }
-            files[`${stem}.R`] = code;
             files['.chickadee_student_module'] = `${stem}.R`;
             return;
         }
 
         // Python: extract via the shared RunnerCore wasm — the SAME code the
         // native worker runs (Sources/RunnerCore), instead of a JS reimplementation.
-        const cells = (notebook.cells || []).map(cell => ({
-            cell_type: cell.cell_type,
-            source: Array.isArray(cell.source) ? cell.source.join('') : (cell.source || ''),
-        }));
         const result = core.extractPython(cells, filename);
 
         files[`${stem}.py`] = result.executableModule;
@@ -902,10 +918,10 @@
     // RunnerCore wasm (lazy singleton)
     //
     // Loads the vendored, embedded-Swift RunnerCore bridge and returns its
-    // exported functions — `extractPython(cells, filename)` and
-    // `classifyScript(name, source)`, the SAME Swift code the native worker
-    // runs. A test harness can preset the `globalThis.runner*` globals to skip
-    // loading the wasm.
+    // exported functions — `extractPython(cells, filename)`, `extractR(cells,
+    // filename)` and `classifyScript(name, source)`, the SAME Swift code the
+    // native worker runs. A test harness can preset the `globalThis.runner*`
+    // globals to skip loading the wasm.
     // -------------------------------------------------------------------------
 
     let _runnerCore = null;
@@ -925,6 +941,13 @@
         _runnerCore = {
             extractPython: globalThis.runnerExtractPython,
             classifyScript: globalThis.runnerClassifyScript,
+            // Optional (not in ready()): absent from a vendored artifact built
+            // before the R-extraction hoist. Callers fall back to the pre-hoist
+            // verbatim extraction until the runner-wasm-vendor workflow ships
+            // the rebuilt artifact; drop the null tolerance with that fallback.
+            extractR: typeof globalThis.runnerExtractR === 'function'
+                ? globalThis.runnerExtractR
+                : null,
         };
         return _runnerCore;
     }
@@ -939,15 +962,10 @@
         return 'unsupported';  // ruby / perl / node / php / unknown
     }
 
-    // R cells are emitted verbatim — the browser R path (WebR) is not yet active.
-    function extractRCell(src) {
-        const trimmed = src.replace(/\s+$/, '');
-        return trimmed.trim() ? trimmed : '';
-    }
-
-    // Python per-cell extraction (magic stripping, def/usage split,
-    // exec(compile()) wrapping) now lives in RunnerCore (Swift, compiled to
-    // wasm) and is shared with the native worker — see extractNotebook above.
+    // Per-cell extraction (Python: magic stripping, def/usage split,
+    // exec(compile()) wrapping; R: cell-boundary markers) lives in RunnerCore
+    // (Swift, compiled to wasm) and is shared with the native worker — see
+    // extractNotebookToMap above.
 
     // -------------------------------------------------------------------------
     // Python script execution

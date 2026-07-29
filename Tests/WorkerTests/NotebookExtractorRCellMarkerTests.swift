@@ -7,6 +7,7 @@
 // interpolate the Swift constant — which is exactly why they need a test.
 
 import Foundation
+import RunnerCore
 import Testing
 
 @testable import chickadee_runner
