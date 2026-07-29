@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.662] - 2026-07-29
+
+### Changed
+
+- **Test jobs run on the `swift-ci` image; per-job apt-get installs drop to
+  a no-op guard.** `api-tests`, `api-tests-postgres`, `worker-tests`, and
+  the nightly coverage run now use the derived CI image with `file`,
+  `python3`, `zip`, `unzip`, and `curl` baked in — removing 20–40 s of
+  apt-get (and its mirror-flake retry loops) from every run of each job.
+  The install steps remain as stale-image fallbacks: if the image ever lags
+  a toolchain bump, the job degrades to the old apt-get path instead of
+  failing.
+
+### Added
+
+- **Derived CI test image `swift-ci:6.3-noble`.** `mirror-images.yml` now
+  builds and publishes a CI image layering the test jobs' system packages
+  (`file`, `python3`, `zip`, `unzip`, `curl`) onto the mirrored Swift
+  toolchain, immediately after each mirror refresh. Groundwork for dropping
+  the 20–40 s per-job apt-get steps (adopted by the test workflows in a
+  follow-up); toolchain identity is unchanged so `.build` cache keys keep
+  matching.
+
+### Changed
+
+- **Nightly coverage run parallelism restored to width 4 (from 2).** The
+  tighter cap dated from when the all-targets nightly process was losing
+  cooperative-pool threads to WorkerTests' blocking subprocess waits on top
+  of DB-pool pressure; with the #1233 wedge class fixed and the WedgeWatchdog
+  converting any residual stall into a fast evidenced abort, the nightly runs
+  at the same width as the per-PR jobs (measured 2× on the WorkerTests slice
+  alone). The nightly's retry-once + `::warning` telemetry is the guardrail
+  for re-tightening if pool-pressure flakes recur.
+
+
 ## [0.4.661] - 2026-07-29
 
 ### Fixed
