@@ -140,9 +140,9 @@ func stagedSubmissionDestination(
 /// legacy `webr`, or xeus-r `xr`), which must be extracted to `.R` by
 /// `extractNotebooksToCode` rather than run through the Python normalizer.
 ///
-/// Mirrors the kernel-language detection in `extractNotebooksToCode`
-/// (NotebookExtractor.swift): kernelspec name in {ir, r, webr, xr}, or
-/// `language_info.name == "r"`. Resolves the named submission when it is an
+/// Detection is `AssignmentLanguage.isRNotebookMetadata` — the same call
+/// `extractNotebooksToCode` makes, so routing and extraction cannot disagree
+/// about what an R notebook is. Resolves the named submission when it is an
 /// `.ipynb`, otherwise the first `.ipynb` staged in `submissionDirectory`
 /// (zip submissions). Any read/parse failure returns false so the caller keeps
 /// its existing (Python) behaviour.
@@ -168,18 +168,7 @@ func submissionIsRNotebook(submissionDirectory: URL, submissionFilename: String?
         return false
     }
 
-    if let kernelSpec = meta["kernelspec"] as? [String: Any],
-        let name = (kernelSpec["name"] as? String)?.lowercased(),
-        name == "ir" || name == "r" || name == "webr" || name == "xr"
-    {
-        return true
-    }
-    if let languageInfo = meta["language_info"] as? [String: Any],
-        (languageInfo["name"] as? String)?.lowercased() == "r"
-    {
-        return true
-    }
-    return false
+    return AssignmentLanguage.isRNotebookMetadata(meta)
 }
 
 /// True when the manifest's graded suite is **pure R** — at least one `.R` test

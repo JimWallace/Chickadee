@@ -34,10 +34,6 @@ actor BrightSpaceClientRegistry {
     func invalidate(_ key: String) {
         clients.removeValue(forKey: key)
     }
-
-    func invalidateAll() {
-        clients.removeAll()
-    }
 }
 
 /// The effective grade-sync config + cache key for a course: its designated

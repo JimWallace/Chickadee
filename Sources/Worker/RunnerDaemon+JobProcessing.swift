@@ -538,7 +538,7 @@ extension WorkerDaemon {
                 let targetsR = manifestTargetsRSubmission(manifest)
                 try extractNotebooksToCode(
                     in: testSetupDir,
-                    forcedLanguage: targetsR ? "r" : nil)
+                    forcedLanguage: targetsR ? .r : nil)
                 return (
                     [],
                     legacyPreferredStudentModuleFilename(

@@ -150,7 +150,7 @@ import Testing
         // The recovery mechanism end-to-end: a Python-kernel notebook, forced to
         // R by the pure-R manifest, is extracted to `solution.R` (not `.py`).
         try stage(Self.pythonNotebook)
-        try extractNotebooksToCode(in: tmpDir, forcedLanguage: "r")
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: .r)
         #expect(FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("solution.R").path))
         #expect(
             !FileManager.default.fileExists(atPath: tmpDir.appendingPathComponent("solution.py").path))
@@ -160,7 +160,7 @@ import Testing
         // R extraction must not run the Python cell-sanitizer: the R source is
         // copied through unchanged so `source()` sees the student's code.
         try stage(Self.pythonNotebook)
-        try extractNotebooksToCode(in: tmpDir, forcedLanguage: "r")
+        try extractNotebooksToCode(in: tmpDir, forcedLanguage: .r)
         let produced = try String(
             contentsOf: tmpDir.appendingPathComponent("solution.R"), encoding: .utf8)
         #expect(produced.contains("x = 1"))

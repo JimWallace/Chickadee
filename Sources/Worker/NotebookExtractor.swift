@@ -87,12 +87,12 @@ struct NotebookExtractor {
 ///
 /// Module-level (not private) so WorkerTests can exercise it directly.
 ///
-/// - Parameter forcedLanguage: when non-nil (`"r"` / `"python"`), every notebook
-///   is extracted to that language regardless of its own kernelspec. The worker
-///   passes `"r"` for a pure-R suite (`manifestTargetsRSubmission`) so a
-///   submission whose kernelspec was rewritten by the in-browser editor still
-///   extracts to `.R`. Nil keeps the per-notebook kernelspec detection.
-func extractNotebooksToCode(in directory: URL, forcedLanguage: String? = nil) throws {
+/// - Parameter forcedLanguage: when non-nil, every notebook is extracted to
+///   that language regardless of its own kernelspec. The worker passes `.r` for
+///   a pure-R suite (`manifestTargetsRSubmission`) so a submission whose
+///   kernelspec was rewritten by the in-browser editor still extracts to `.R`.
+///   Nil keeps the per-notebook kernelspec detection.
+func extractNotebooksToCode(in directory: URL, forcedLanguage: AssignmentLanguage? = nil) throws {
     let items =
         (try? FileManager.default.contentsOfDirectory(
             at: directory,
@@ -111,27 +111,16 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: String? = nil) th
             let cells = notebook["cells"] as? [[String: Any]]
         else { continue }
 
-        // Detect kernel language: ir/r/webr/xr → R, everything else → Python.
-        // A caller-forced language wins over the notebook's own kernelspec.
-        let language: String =
-            forcedLanguage
-            ?? {
-                if let meta = notebook["metadata"] as? [String: Any] {
-                    if let ks = meta["kernelspec"] as? [String: Any],
-                        let name = (ks["name"] as? String)?.lowercased()
-                    {
-                        if name == "ir" || name == "r" || name == "webr" || name == "xr" { return "r" }
-                    }
-                    if let li = meta["language_info"] as? [String: Any],
-                        (li["name"] as? String)?.lowercased() == "r"
-                    {
-                        return "r"
-                    }
-                }
-                return "python"
-            }()
+        // A caller-forced language wins over the notebook's own kernelspec;
+        // otherwise sniff it with the shared detector.
+        let language =
+            forcedLanguage ?? (AssignmentLanguage.isRNotebook(notebook) ? .r : .python)
 
-        let ext = language == "r" ? "R" : "py"
+        // Deliberately not `generatedScriptExtension`: that property is scoped to
+        // scripts Chickadee *generates* (pattern cases, notebook checks) where the
+        // filename feeds `spec_hash`. Extraction output is a different concern and
+        // must not be coupled to it.
+        let ext = language == .r ? "R" : "py"
         let stem = item.deletingPathExtension().lastPathComponent
         let outURL = directory.appendingPathComponent("\(stem).\(ext)")
 
@@ -143,7 +132,7 @@ func extractNotebooksToCode(in directory: URL, forcedLanguage: String? = nil) th
             while src.last?.isWhitespace == true { src.removeLast() }
             guard !src.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
 
-            if language == "python" {
+            if language == .python {
                 let cellSource = extractor.sanitizeCellForModule(src)
                 guard !cellSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 output += extractor.wrapCellForResilientLoad(cellSource, label: "cell \(index + 1)") + "\n\n"

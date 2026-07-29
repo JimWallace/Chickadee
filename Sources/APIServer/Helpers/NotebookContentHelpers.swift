@@ -131,7 +131,7 @@ func normalizeNotebookForJupyterLite(_ data: Data) -> Data {
     var kernelSpec = existingKernelSpec ?? [:]
     var languageInfo = metadata["language_info"] as? [String: Any] ?? [:]
 
-    if let name = existingName, name == "ir" || name == "r" || name == "webr" || name == "xr" {
+    if let name = existingName, AssignmentLanguage.rKernelNames.contains(name) {
         // R notebook (IRkernel / legacy webr / xeus-r) → normalize to the vendored xeus-r kernel.
         kernelSpec["name"] = jupyterLiteRKernelName
         kernelSpec["display_name"] = jupyterLiteRKernelDisplayName
