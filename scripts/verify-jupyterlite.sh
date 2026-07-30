@@ -162,5 +162,27 @@ for rel in ("notebooks/index.html", "repl/index.html"):
             "but the tag was not re-patched; run scripts/patch-jupyterlite-diagnostics.py."
         )
 
+# The vendored xeus extension must not fetch the parselmouth conda->pip mapping
+# from raw.githubusercontent.com at module load (scripts/patch-xeus-extension.py
+# stubs it; build-jupyterlite.sh applies it). The CSP (connect-src 'self')
+# blocks the request by policy — student IPs must not reach third-party hosts —
+# so an un-patched chunk can never fetch it anyway; it just emits a
+# csp_violation + unhandledrejection diagnostics pair on every editor boot.
+# Skipped when the extension isn't vendored: check-xeus-vendored.sh owns
+# presence.
+xeus_static = build_dir / "extensions" / "@jupyterlite" / "xeus-extension" / "static"
+if xeus_static.is_dir():
+    unpatched = [
+        p.name
+        for p in sorted(xeus_static.glob("*.js"))
+        if "raw.githubusercontent.com/prefix-dev/parselmouth" in p.read_text()
+    ]
+    if unpatched:
+        fail(
+            "xeus-extension chunks still fetch the parselmouth mapping from "
+            f"raw.githubusercontent.com: {unpatched} — run "
+            "scripts/patch-xeus-extension.py (build-jupyterlite.sh does this)."
+        )
+
 print("JupyterLite verification passed.")
 PY

@@ -79,8 +79,9 @@ jobs:
       - name: Verify the committed JupyterLite bundle is coherent
         if: steps.detect.outputs.relevant == 'true'
         # pyodideUrl same-origin, the nb_mypy kernel-wheel sha cascade, the
-        # waitAsync blob worker, and the diagnostics collector tag — the internal
-        # invariants a rebuild used to guarantee, asserted on the committed bytes.
+        # waitAsync blob worker, the diagnostics collector tag, and the xeus
+        # parselmouth-fetch stub — the internal invariants a rebuild used to
+        # guarantee, asserted on the committed bytes.
         run: scripts/verify-jupyterlite.sh Public/jupyterlite
 
       - name: Verify Pyodide parity (vended == kernel)
