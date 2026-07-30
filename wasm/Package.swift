@@ -19,7 +19,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(name: "Chickadee", path: ".."),
-        .package(url: "https://github.com/swiftwasm/JavaScriptKit.git", from: "0.53.0"),
+        .package(url: "https://github.com/swiftwasm/JavaScriptKit.git", from: "0.56.1"),
     ],
     targets: [
         .executableTarget(
