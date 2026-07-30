@@ -58,6 +58,12 @@ struct InstructorDashboardRoutes: RouteCollection {
         // MCP tab: the active course's authoring guidance for connected agents.
         r.get("mcp", use: mcpPanelPage)
         r.post("mcp", use: saveMCPGuidance)
+        // Slip days tab (#1228): course policy, roster ledger, adjustments,
+        // refunds.
+        r.get("slip-days", use: slipDaysPage)
+        r.post("slip-days", "settings", use: saveSlipDaySettings)
+        r.post("slip-days", "adjust", use: adjustSlipDayBudget)
+        r.post("slip-days", "refund", use: refundSlipDaySpendAction)
         r.get("grades.csv", use: exportGradesCSV)
         r.get(":assignmentID", "submissions", use: assignmentSubmissionsPage)
         r.get(":assignmentID", "students", ":studentID", "history", use: studentSubmissionHistoryPage)

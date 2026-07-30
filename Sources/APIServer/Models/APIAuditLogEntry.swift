@@ -157,6 +157,12 @@ enum AuditAction: String, Sendable, CaseIterable {
     case secretRevealRegranted = "secret_reveal.regranted"
     case secretRevealToggled = "secret_reveal.toggle_changed"
 
+    // Slip days (#1228)
+    case slipDaySpent = "slip_day.spent"
+    case slipDayRefunded = "slip_day.refunded"
+    case slipDaySettingsChanged = "slip_day.settings_changed"
+    case slipDayAdjustmentChanged = "slip_day.adjustment_changed"
+
     // Runner / worker
     case runnerSecretRotated = "runner.secret_rotated"
     case runnerAutostartChanged = "runner.autostart_changed"
@@ -209,8 +215,13 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .submissionsPurged, .submissionRetestAll, .submissionRetestForStudent:
             return .submissions
         case .extensionGranted, .extensionRevoked, .gradeOverrideSet, .gradeOverrideCleared,
-            .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled:
+            .secretRevealSpent, .secretRevealRegranted, .secretRevealToggled,
+            .slipDaySpent, .slipDayRefunded, .slipDayAdjustmentChanged:
             return .grading
+        // Course-wide slip-day policy is course configuration, not a grading
+        // action on one student.
+        case .slipDaySettingsChanged:
+            return .courses
         case .runnerSecretRotated, .runnerAutostartChanged:
             return .runner
         case .brightspaceAdminAuthorized, .brightspaceAdminCleared, .brightspaceAccountConnected,
@@ -266,6 +277,10 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .secretRevealSpent: return "Reveal token spent"
         case .secretRevealRegranted: return "Reveal token re-granted"
         case .secretRevealToggled: return "Reveal token setting changed"
+        case .slipDaySpent: return "Slip day spent"
+        case .slipDayRefunded: return "Slip day refunded"
+        case .slipDaySettingsChanged: return "Slip day settings changed"
+        case .slipDayAdjustmentChanged: return "Slip day budget adjusted"
         case .runnerSecretRotated: return "Runner secret rotated"
         case .runnerAutostartChanged: return "Runner autostart changed"
         case .brightspaceAdminAuthorized: return "LEARN deployment key authorized"

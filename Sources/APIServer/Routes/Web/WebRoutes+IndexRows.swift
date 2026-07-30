@@ -23,6 +23,27 @@ struct DashboardGradeData {
     var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
 }
 
+/// The viewer's slip-day state for the active course (#1228), loaded once per
+/// dashboard request.  `.disabled` (the default) renders nothing: policy off,
+/// staff viewer, or no active course.
+struct DashboardSlipDayData {
+    let policy: SlipDayPolicy
+    /// Remaining balance (can go negative after a staff claw-back; display
+    /// sites clamp at 0).
+    let balance: Int
+    /// Budget + per-student adjustment — the "of N" in "1 of N remaining".
+    let totalBudget: Int
+    /// Unrefunded spends per test setup, for the per-row offer state.
+    let spendCountBySetupID: [String: Int]
+
+    static let disabled = DashboardSlipDayData(
+        policy: SlipDayPolicy.resolve(enabled: false, daysPerStudent: nil, extensionHours: nil),
+        balance: 0,
+        totalBudget: 0,
+        spendCountBySetupID: [:]
+    )
+}
+
 /// Everything `buildTestSetupRow` reads besides the setup itself — computed
 /// once per request, shared across every row (mirrors
 /// `StudentAssignmentRowContext` on the per-student page).
@@ -35,6 +56,7 @@ struct IndexRowContext {
     let isActiveCourseStaff: Bool
     let activeCourseCode: String?
     let hasNotebookBySetupID: [String: Bool]
+    let slipDay: DashboardSlipDayData
 }
 
 extension WebRoutes {
@@ -323,6 +345,28 @@ extension WebRoutes {
         // signal. Scoped to the genuine published-then-closed case; preview /
         // unpublished are untouched, and staff never carry extensions.
         let displayStatus = (hasActiveExtension && status == "closed") ? "extended" : status
+        // Slip-day action (#1228): offered only to students, after the
+        // deadline, inside the claim window, with balance, and never on top
+        // of a staff-granted extension (an extension row the slip-day ledger
+        // did not produce) or a staff-only preview.
+        let slipDaySpentCount = context.slipDay.spendCountBySetupID[setupID] ?? 0
+        let slipOffer: SlipDayOffer? = {
+            guard let assignment, assignment.visibility != .preview,
+                !context.isActiveCourseStaff
+            else { return nil }
+            return slipDayOffer(
+                policy: context.slipDay.policy,
+                dueAt: assignment.dueAt,
+                balance: context.slipDay.balance,
+                spentOnAssignment: slipDaySpentCount,
+                hasForeignExtension: extensionDueAt != nil && slipDaySpentCount == 0)
+        }()
+        let slipDayActionLabel = slipOffer.map { offer in
+            let deadlineText = context.fmt.string(from: offer.newDeadline)
+            return offer.isStacked
+                ? "Use another slip day — extends your deadline to \(deadlineText)"
+                : "Use a slip day — extends your deadline to \(deadlineText)"
+        }
         let badgeSplit = AchievementBadge.dashboardSplit(context.gradeData.latestBadgesBySetupID[setupID] ?? [])
         return TestSetupRow(
             id: setupID,
@@ -352,7 +396,10 @@ extension WebRoutes {
             extraBadgeCount: badgeSplit.extraCount,
             extraBadgesTooltip: badgeSplit.extraTooltip,
             hasActiveExtension: hasActiveExtension,
-            effectiveDueAtText: effectiveDueAt.map { context.fmt.string(from: $0) }
+            effectiveDueAtText: effectiveDueAt.map { context.fmt.string(from: $0) },
+            slipDayAvailable: slipOffer != nil,
+            slipDayURL: "/testsetups/\(setupID)/slip-day",
+            slipDayActionLabel: slipDayActionLabel ?? ""
         )
     }
 }

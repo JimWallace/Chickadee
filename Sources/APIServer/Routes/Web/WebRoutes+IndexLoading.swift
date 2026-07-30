@@ -38,6 +38,49 @@ extension WebRoutes {
         return dueAtBySetupID
     }
 
+    /// The viewer's slip-day state for the active course (#1228): policy,
+    /// balance, and unrefunded spend counts keyed by setup.  `.disabled` for
+    /// staff (they never spend), an archived course, or a course whose policy
+    /// is off — the dashboard then renders no slip-day surface at all.
+    static func loadSlipDayDashboardData(
+        user: APIUser,
+        activeCourseUUID: UUID,
+        isActiveCourseStaff: Bool,
+        allAssignments: [APIAssignment],
+        db: any Database
+    ) async throws -> DashboardSlipDayData {
+        guard !isActiveCourseStaff, let userID = user.id else { return .disabled }
+        guard let course = try await APICourse.find(activeCourseUUID, on: db) else {
+            return .disabled
+        }
+        let policy = course.slipDayPolicy
+        guard policy.enabled, !course.isArchived else { return .disabled }
+
+        let enrollment = try await APICourseEnrollment.query(on: db)
+            .filter(\.$userID == userID)
+            .filter(\.$course.$id == activeCourseUUID)
+            .first()
+        let adjustment = enrollment?.slipDaysAdjustment ?? 0
+        let countsByAssignment = try await SlipDayStore.unrefundedCountByAssignment(
+            userID: userID, courseID: activeCourseUUID, on: db)
+
+        var spendCountBySetupID: [String: Int] = [:]
+        for assignment in allAssignments {
+            guard let assignmentID = assignment.id,
+                let count = countsByAssignment[assignmentID]
+            else { continue }
+            spendCountBySetupID[assignment.testSetupID] = count
+        }
+        let used = countsByAssignment.values.reduce(0, +)
+        let totalBudget = policy.daysPerStudent + adjustment
+        return DashboardSlipDayData(
+            policy: policy,
+            balance: totalBudget - used,
+            totalBudget: totalBudget,
+            spendCountBySetupID: spendCountBySetupID
+        )
+    }
+
     /// Setup IDs of assignments the current student has previously engaged
     /// with.  Engagement = a durable participation row, or a student
     /// submission (the latter also bridges students who submitted before the

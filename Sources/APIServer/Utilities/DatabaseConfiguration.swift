@@ -303,6 +303,10 @@ func registerMigrations(on app: Application) {
     // Same ordering constraint: mcp_instructions must exist before any later
     // migration queries the APICourse model.
     app.migrations.add(AddCourseMCPInstructions())
+    // Same ordering constraint: the three slip-day policy columns (#1228)
+    // must exist before AddCourseArchivedAt (or any migration) queries the
+    // APICourse model.
+    app.migrations.add(AddCourseSlipDaySettings())
     app.migrations.add(CreateCourseEnrollments())
     app.migrations.add(CreateTestSetups())
     app.migrations.add(CreateSubmissions())
@@ -395,6 +399,10 @@ func registerMigrations(on app: Application) {
     // Same ordering constraint: brightspace_section must exist before
     // AddCourseEnrollmentRole queries the full APICourseEnrollment model.
     app.migrations.add(AddEnrollmentBrightSpaceSection())
+    // Same ordering constraint: slip_days_adjustment (#1228) must exist
+    // before AddCourseEnrollmentRole's backfill full-queries the
+    // APICourseEnrollment model.
+    app.migrations.add(AddEnrollmentSlipDaysAdjustment())
 
     // Per-course role on each enrollment (Phase 1 of
     // docs/multi-course-roles.md). Behaviour-preserving: backfills role from
@@ -461,4 +469,9 @@ func registerMigrations(on app: Application) {
     // Hosted file attachments on content items (served via the gated
     // /content-files route). Additive column on the table created above.
     app.migrations.add(AddContentItemAttachments())
+
+    // Slip-day ledger (#1228): one row per spent slip day, refunds stamped
+    // in place. New table; FKs reference `users`, `courses`, `assignments`,
+    // all created above, so no additional ordering constraint.
+    app.migrations.add(CreateSlipDaySpends())
 }

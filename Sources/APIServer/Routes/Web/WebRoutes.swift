@@ -26,6 +26,9 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
         routes.post("testsetups", ":testSetupID", "reset-notebook", use: resetOwnNotebook)
         routes.post("testsetups", ":testSetupID", "reveal-secret", use: spendSecretRevealToken)
+        // Slip days (#1228): explicit confirmation page + the spend POST.
+        routes.get("testsetups", ":testSetupID", "slip-day", use: slipDayConfirmPage)
+        routes.post("testsetups", ":testSetupID", "slip-day", use: spendSlipDay)
         // Self-service "clear cached editor data" page for a wedged kernel
         // (Clear-Site-Data: cache + storage; see WebRoutes+EditorReset.swift).
         routes.get("reset-editor", use: editorResetPage)
@@ -76,7 +79,9 @@ struct WebRoutes: RouteCollection {
         guard let activeCourseUUID = courseState.activeCourseUUID else {
             return try await req.view.render(
                 "index",
-                IndexContext(displayGroups: [], hasAny: false, currentUser: userContext)
+                IndexContext(
+                    displayGroups: [], hasAny: false, currentUser: userContext,
+                    slipDaySummary: nil)
             ).encodeResponse(for: req)
         }
 
@@ -125,6 +130,14 @@ struct WebRoutes: RouteCollection {
         async let contentItemsFetch = Self.loadCourseContentItems(
             activeCourseUUID: courseState.activeCourseUUID,
             includeUnpublished: isActiveCourseStaff, db: req.db)
+        // The viewer's slip-day balance + per-assignment spends (#1228).
+        // `.disabled` for staff or a course with the policy off.
+        async let slipDayFetch = Self.loadSlipDayDashboardData(
+            user: user,
+            activeCourseUUID: activeCourseUUID,
+            isActiveCourseStaff: isActiveCourseStaff,
+            allAssignments: allAssignments,
+            db: req.db)
 
         let extensionDueAtBySetupID = try await extensionsFetch
         let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
@@ -162,6 +175,8 @@ struct WebRoutes: RouteCollection {
         let setupKeyByID = Self.buildSetupKeyMap(
             setups: sortedSetups, assignmentBySetup: assignmentBySetup)
 
+        let slipDayData = try await slipDayFetch
+
         let rowContext = IndexRowContext(
             fmt: fmt,
             assignmentBySetup: assignmentBySetup,
@@ -170,7 +185,8 @@ struct WebRoutes: RouteCollection {
             previouslyOpenedSetupIDs: previouslyOpenedSetupIDs,
             isActiveCourseStaff: isActiveCourseStaff,
             activeCourseCode: courseState.active?.code,
-            hasNotebookBySetupID: hasNotebookBySetupID
+            hasNotebookBySetupID: hasNotebookBySetupID,
+            slipDay: slipDayData
         )
         let rows = sortedSetups.map { Self.buildTestSetupRow(setup: $0, context: rowContext) }
 
@@ -183,12 +199,22 @@ struct WebRoutes: RouteCollection {
             rows: rows, setupKeyByID: setupKeyByID, contentItems: contentItems,
             allAssignments: allAssignments, allSections: allSections)
 
+        // "Slip days: 1 of 2 remaining." under the course heading — shown only
+        // when the course has the policy on and the viewer is a student
+        // (#1228).  Precomputed here; LeafKit conditionals stay a plain
+        // nil-check.
+        let slipDaySummary: String? =
+            slipDayData.policy.enabled
+            ? "Slip days: \(max(slipDayData.balance, 0)) of \(slipDayData.totalBudget) remaining."
+            : nil
+
         return try await req.view.render(
             "index",
             IndexContext(
                 displayGroups: displayGroups,
                 hasAny: !displayGroups.isEmpty,
-                currentUser: userContext
+                currentUser: userContext,
+                slipDaySummary: slipDaySummary
             )
         ).encodeResponse(for: req)
     }

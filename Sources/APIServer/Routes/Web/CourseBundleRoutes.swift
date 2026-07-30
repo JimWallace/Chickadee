@@ -337,7 +337,10 @@ struct CourseBundleRoutes: RouteCollection {
             chickadeeVersion: ChickadeeVersion.current,
             course: BundledCourse(
                 code: course.code, name: course.name,
-                enrollmentMode: course.enrollmentMode),
+                enrollmentMode: course.enrollmentMode,
+                slipDaysEnabled: course.slipDaysEnabled,
+                slipDaysPerStudent: course.slipDaysPerStudent,
+                slipDayExtensionHours: course.slipDayExtensionHours),
             users: bundledUsers,
             enrolledUserBundleIDs: enrolledBundleIDs,
             sections: bundledSections,
