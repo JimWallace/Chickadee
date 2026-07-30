@@ -572,14 +572,29 @@ async function loadRunnerHarness(options = {}) {
     fetch: fetchImpl,
     getCsrfToken: () => options.csrfToken ?? 'csrf-test-token',
     document,
-    // Test seam: preset the RunnerCore extractor so the runner never loads the
-    // real wasm bundle. The actual extraction logic is covered by the Swift
-    // RunnerCore tests; here a stub returns deterministic output.
+    // Test seam: preset the RunnerCore extractors so the runner never loads
+    // the real wasm bundle. The actual extraction logic is covered by the
+    // Swift RunnerCore tests; here stubs return deterministic output.
     runnerExtractPython: options.runnerExtractor ?? ((cells, filename) => ({
       executableModule: `# Generated from ${filename}\n# (stub executable module)\n`,
       introspectableSource: `# Generated from ${filename}\n# (stub introspectable source)\n`,
       codeCellCount: (cells || []).filter(c => c.cell_type === 'code').length,
     })),
+    // Faithful double of RunnerCore.extractR (real logic covered by the Swift
+    // RNotebookExtractionTests): header + a position-numbered marker per kept
+    // cell, trailing whitespace trimmed.
+    runnerExtractR: options.runnerExtractR ?? ((cells, filename) => {
+      let source = `# Generated from ${filename}\n\n`;
+      let codeCellCount = 0;
+      (cells || []).forEach((cell, index) => {
+        if (cell.cell_type !== 'code') return;
+        const trimmed = cell.source.replace(/\s+$/, '');
+        if (!trimmed.trim()) return;
+        codeCellCount += 1;
+        source += `# ---- chickadee:cell ${index + 1} ----\n${trimmed}\n\n`;
+      });
+      return { source, codeCellCount };
+    }),
     // Test seam for the shared classifier (real logic is RunnerCore/Swift,
     // covered by ScriptClassificationTests). This stub mirrors it, returning the
     // interpreter raw value so dispatch wiring can be exercised.
@@ -590,13 +605,6 @@ async function loadRunnerHarness(options = {}) {
     runnerExecuteSuites: options.runnerExecuteSuites ?? executeSuitesStub,
     __CHICKADEE_BROWSER_RUNNER_TEST_HOOKS__: testHooks,
   };
-
-  // Optional seam for the shared R extractor (RunnerCore.extractR via wasm).
-  // Absent by default so the pre-re-vendor fallback branch stays exercised; a
-  // test presets it to prove extraction prefers the wasm path when available.
-  if (options.runnerExtractR) {
-    context.runnerExtractR = options.runnerExtractR;
-  }
 
   // Web-Worker executor seam.  By default the harness exposes NO Worker and no
   // factory override, so the runner falls back to the main-thread Pyodide path
@@ -1346,8 +1354,8 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
     'submission.source.py',
   );
 
-  // R without the wasm extractR export (a vendored artifact predating the
-  // hoist): the fallback emits verbatim cells, no markers, no sidecar.
+  // R extracts through the shared extractR seam (marker-bearing, matching the
+  // native worker); no introspectable sidecar for R.
   await extractNotebook(
     harness.py,
     '/course',
@@ -1360,7 +1368,7 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
   );
   assert.equal(
     harness.py.FS.readFile('/course/lab.R', { encoding: 'utf8' }),
-    '# Generated from lab.ipynb\n\nx <- 2\n\n',
+    '# Generated from lab.ipynb\n\n# ---- chickadee:cell 1 ----\nx <- 2\n\n',
   );
   assert.equal(
     harness.py.FS.readFile('/course/.chickadee_student_module', { encoding: 'utf8' }),
@@ -1368,10 +1376,11 @@ test('extractNotebook delegates Python to RunnerCore (module + introspectable si
   );
 });
 
-test('R notebooks extract through the shared RunnerCore wasm when the export is present', async () => {
-  // Preset the runnerExtractR global (as the re-vendored wasm bridge does) and
-  // assert extraction prefers it over the verbatim fallback — the browser then
-  // produces the same marker-bearing .R the native worker writes.
+test('R notebook extraction feeds the extractR seam cells + filename and writes its result verbatim', async () => {
+  // Override the harness's faithful double with a capturing stub: proves the
+  // browser glue hands the projected cells straight to the shared extractor
+  // (RunnerCore.extractR via wasm in production) and writes whatever it
+  // returns, transforming nothing itself.
   let received = null;
   const harness = await loadRunnerHarness({
     runnerExtractR: (cells, filename) => {
