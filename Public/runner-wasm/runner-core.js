@@ -888,7 +888,7 @@ var UnsafeEventLoopYield = class extends Error {
 };
 
 // .build/plugins/PackageToJS/outputs/Package/instantiate.js
-var MODULE_PATH = "RunnerWasm.7c5fce63ac87.wasm";
+var MODULE_PATH = "RunnerWasm.25780f3531b0.wasm";
 async function createInstantiator(options, swift) {
   return {
     /**
@@ -934,7 +934,8 @@ async function createInstantiator(options, swift) {
         swift_js_push_i64: unexpectedBjsCall,
         swift_js_pop_i64: unexpectedBjsCall,
         swift_js_closure_unregister: unexpectedBjsCall,
-        swift_js_push_typed_array: unexpectedBjsCall
+        swift_js_push_typed_array: unexpectedBjsCall,
+        swift_js_make_promise: unexpectedBjsCall
       };
     },
     /** @param {WebAssembly.Instance} instance */
@@ -2342,7 +2343,7 @@ async function initBrowser(_options) {
   const options = _options || {};
   let module = options.module;
   if (!module) {
-    module = fetch(new URL("RunnerWasm.7c5fce63ac87.wasm", import.meta.url));
+    module = fetch(new URL("RunnerWasm.25780f3531b0.wasm", import.meta.url));
   }
   const instantiateOptions = await defaultBrowserSetup({
     module
