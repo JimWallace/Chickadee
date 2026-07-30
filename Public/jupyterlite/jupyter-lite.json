@@ -18,7 +18,7 @@
       },
       {
         "extension": "./extension",
-        "load": "static/remoteEntry.d7c4e2e310eb29cb.js",
+        "load": "static/remoteEntry.d7c4e2e310eb29cb.js?ck1",
         "name": "@jupyterlite/xeus-extension",
         "style": "./style"
       },
