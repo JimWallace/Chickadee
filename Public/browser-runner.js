@@ -863,26 +863,11 @@
         }));
 
         if (isR) {
-            if (core.extractR) {
-                // Shared RunnerCore implementation: header + an inert
-                // `# ---- chickadee:cell N ----` marker per cell, which the R
-                // grading runtime's chickadee_student_cells() splits on —
-                // byte-identical to the native worker's extraction.
-                files[`${stem}.R`] = core.extractR(cells, filename).source;
-            } else {
-                // Back-compat with a vendored wasm artifact predating
-                // runnerExtractR (the runner-wasm-vendor workflow re-vendors on
-                // merge, one-release lag): the pre-hoist behaviour — verbatim
-                // cells, no markers. Delete this branch once the re-vendored
-                // artifact ships.
-                let code = `# Generated from ${filename}\n\n`;
-                for (const cell of cells) {
-                    if (cell.cell_type !== 'code') continue;
-                    const trimmed = cell.source.replace(/\s+$/, '');
-                    if (trimmed.trim()) code += trimmed + '\n\n';
-                }
-                files[`${stem}.R`] = code;
-            }
+            // Shared RunnerCore implementation: header + an inert
+            // `# ---- chickadee:cell N ----` marker per cell, which the R
+            // grading runtime's chickadee_student_cells() splits on —
+            // byte-identical to the native worker's extraction.
+            files[`${stem}.R`] = core.extractR(cells, filename).source;
             files['.chickadee_student_module'] = `${stem}.R`;
             return;
         }
@@ -930,6 +915,7 @@
         if (_runnerCore) return _runnerCore;
         const ready = () =>
             typeof globalThis.runnerExtractPython === 'function'
+            && typeof globalThis.runnerExtractR === 'function'
             && typeof globalThis.runnerClassifyScript === 'function';
         if (!ready()) {
             const mod = await import('/runner-wasm/runner-core.js');
@@ -940,14 +926,8 @@
         }
         _runnerCore = {
             extractPython: globalThis.runnerExtractPython,
+            extractR: globalThis.runnerExtractR,
             classifyScript: globalThis.runnerClassifyScript,
-            // Optional (not in ready()): absent from a vendored artifact built
-            // before the R-extraction hoist. Callers fall back to the pre-hoist
-            // verbatim extraction until the runner-wasm-vendor workflow ships
-            // the rebuilt artifact; drop the null tolerance with that fallback.
-            extractR: typeof globalThis.runnerExtractR === 'function'
-                ? globalThis.runnerExtractR
-                : null,
         };
         return _runnerCore;
     }

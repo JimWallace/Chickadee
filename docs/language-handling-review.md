@@ -13,7 +13,8 @@ references are to that commit.
 > for the concrete items to land, including pulling the "on trigger" items
 > forward. Implemented in the same PR as this document (#1235): the §1 hoist
 > (`RunnerCore.extractR` + wasm bridge export + the browser stub deleted, with
-> a fallback branch until the re-vendored artifact ships), the §2 generated
+> a fallback branch that was removed in the follow-up PR once the re-vendored
+> artifact landed on main), the §2 generated
 > fenced block (`scripts/generate-js-constants.sh` + CI check, replacing
 > `r-kernel-names-drift.test.mjs` — action 7 pulled forward), the §3 surface
 > shrink (kernel-name overload now internal to Core; the colliding `rederive`
