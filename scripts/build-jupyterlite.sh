@@ -99,5 +99,12 @@ python3 "$ROOT_DIR/scripts/patch-pyodide-waitasync-worker.py" "$OUTPUT_DIR"
 # this re-adds the <script> tag every build. Idempotent.
 python3 "$ROOT_DIR/scripts/patch-jupyterlite-diagnostics.py" "$OUTPUT_DIR"
 
+# Stub the xeus extension's module-load fetch of the parselmouth conda->pip
+# mapping (raw.githubusercontent.com). Our CSP (connect-src 'self') blocks it by
+# policy, so it can never succeed — un-patched it only emits a csp_violation +
+# unhandledrejection diagnostics pair on every editor boot. Idempotent; fails if
+# the upstream fetch shape drifts.
+python3 "$ROOT_DIR/scripts/patch-xeus-extension.py" "$OUTPUT_DIR"
+
 "$ROOT_DIR/scripts/verify-jupyterlite.sh" "$OUTPUT_DIR"
 echo "JupyterLite rebuilt at $OUTPUT_DIR"

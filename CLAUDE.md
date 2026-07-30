@@ -513,6 +513,15 @@ a bundled wheel means a sha cascade (wheel → `all.json` digest →
 so a mismatch (which would make piplite reject the kernel) is a build
 failure, not a browser surprise.
 
+**Xeus extension parselmouth stub.** The vendored `@jupyterlite/xeus-extension`
+(the xeus-r kernel's UI wiring) upstream fetches a conda→PyPI name mapping from
+`raw.githubusercontent.com` at module load — on every editor boot, for every
+kernel, though only xeus's unused runtime pip-install path consults it.
+`scripts/patch-xeus-extension.py` (run from `build-jupyterlite.sh`, asserted by
+`verify-jupyterlite.sh`) stubs it to a resolved empty mapping: the CSP blocks
+the request by policy anyway, and un-patched it emitted a `csp_violation` +
+`unhandledrejection` diagnostics pair on every boot.
+
 ---
 
 ## Voice and Register (assignment content)
