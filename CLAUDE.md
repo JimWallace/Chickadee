@@ -520,7 +520,12 @@ kernel, though only xeus's unused runtime pip-install path consults it.
 `scripts/patch-xeus-extension.py` (run from `build-jupyterlite.sh`, asserted by
 `verify-jupyterlite.sh`) stubs it to a resolved empty mapping: the CSP blocks
 the request by policy anyway, and un-patched it emitted a `csp_violation` +
-`unhandledrejection` diagnostics pair on every boot.
+`unhandledrejection` diagnostics pair on every boot. The same patch
+cache-busts the extension's chunk and remoteEntry URLs (`?v=ck1<hash>` in the
+loader template, `?ck1` on the federated `load` in the built
+`jupyter-lite.json`): the stub changed bytes in place under immutable-cached
+hashed names, and only a URL change reaches browsers that loaded the editor
+pre-stub.
 
 ---
 

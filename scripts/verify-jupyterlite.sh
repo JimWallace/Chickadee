@@ -184,5 +184,44 @@ if xeus_static.is_dir():
             "scripts/patch-xeus-extension.py (build-jupyterlite.sh does this)."
         )
 
+    # The same patch's cache-buster chain must be intact (its stage 2). The
+    # extension's hashed chunks are served immutable for a year; the stub
+    # changed bytes in place under unchanged names, so clients that loaded the
+    # editor pre-stub hold the fetch-bearing chunks immutably and only a URL
+    # change reaches them. Assert (a) no loader file still mints bare
+    # `.js?v=<hash>` chunk URLs, and (b) the federated `load` for the xeus
+    # extension carries the buster and names a file that exists — so a rebuild
+    # that drops the buster, or a remoteEntry rename that outruns the config,
+    # fails here instead of stranding stale caches (or 404ing the extension).
+    bare_template = [
+        p.name
+        for p in sorted(xeus_static.glob("*.js"))
+        if '".js?v="' in p.read_text()
+    ]
+    if bare_template:
+        fail(
+            f"xeus-extension loader files still mint un-busted chunk URLs: {bare_template} "
+            "— run scripts/patch-xeus-extension.py (build-jupyterlite.sh does this)."
+        )
+    xeus_entry = next(
+        (
+            e
+            for e in federated
+            if isinstance(e, dict) and e.get("name") == "@jupyterlite/xeus-extension"
+        ),
+        None,
+    )
+    if xeus_entry is None:
+        fail("xeus extension is vendored but missing from federated_extensions")
+    xeus_load = xeus_entry.get("load", "")
+    if "?ck" not in xeus_load:
+        fail(
+            f"xeus federated load {xeus_load!r} lacks the ?ck cache buster — run "
+            "scripts/patch-xeus-extension.py (build-jupyterlite.sh does this)."
+        )
+    load_file = build_dir / "extensions" / "@jupyterlite" / "xeus-extension" / xeus_load.split("?", 1)[0]
+    if not load_file.is_file():
+        fail(f"xeus federated load points at a missing file: {load_file}")
+
 print("JupyterLite verification passed.")
 PY
