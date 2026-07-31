@@ -1,6 +1,16 @@
 # MCP Data-Flow & Egress Inventory
 
-Audit scope: `Sources/APIServer/MCP/`. Snapshot at `VERSION` 0.4.435.
+Audit scope: `Sources/APIServer/MCP/`. Base snapshot at `VERSION` 0.4.435;
+**refreshed 2026-07 at `VERSION` 0.4.667**. The per-tool flows below remain
+accurate for the base catalog; the tools added since, the second (admin
+diagnostic) surface's read paths, and the upstream-writer sweep of the
+diagnostic stores are covered by `mcp-student-data-audit-2026-07.md` (§2.2 for
+the admin source→fields table, §3 for the free-text findings and their
+remediations) and the `tool-inventory.md` addenda. One flow-relevant note
+from that refresh: `SupportFileURLFetcher` (instructor-supplied support-file
+URLs) is an MCP-tree outbound HTTP call added since the base snapshot —
+SSRF-guarded (blocked-address classifier), redirects disallowed, and it
+fetches instructor content only.
 
 ## The off-boundary path is not where the brief assumes
 

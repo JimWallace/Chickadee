@@ -49,8 +49,11 @@ func reapStuckAssignedSubmissions(
         .update()
 
     for submission in stuck {
+        // Submission id in metadata only — message text reaches the admin
+        // query_logs buffer unredacted (compliance audit F-1).
         logger.warning(
-            "Reaped stuck submission \(submission.id ?? "<nil>") (was assigned to \(submission.workerID ?? "unknown")); returned to pending queue"
+            "Reaped stuck submission (was assigned to \(submission.workerID ?? "unknown")); returned to pending queue",
+            metadata: ["submission_id": .string(submission.id ?? "<nil>")]
         )
     }
     return stuck.count

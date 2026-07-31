@@ -9,9 +9,9 @@
 // returned DTO is hand-built and deliberately OMITS user_id. It keeps the
 // failure kind, source, failed checks, error message/stack (JupyterLite/Pyodide
 // infrastructure text only — capture is restricted to the editor-load path,
-// never student-code execution), the user agent, the test-setup id (instructor
-// content, not student data), and the timestamp. No student identifier is ever
-// included.
+// never student-code execution), the coarse browser/OS label (never the raw
+// User-Agent — audit F-4), the test-setup id (instructor content, not student
+// data), and the timestamp. No student identifier is ever included.
 
 import Core
 import Fluent
@@ -32,14 +32,19 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         let count: Int
     }
 
-    /// A single browser-error report, redacted: no user_id.
+    /// A single browser-error report, redacted: no user_id, and the coarse
+    /// browser/OS label rather than the raw User-Agent — a full UA string is
+    /// device-fingerprint-adjacent, and the label is what diagnosis needs
+    /// (compliance audit F-4).
     struct Sample: Encodable, Sendable {
         let kind: String
         let source: String?
         let failedChecks: String?
         let message: String?
         let stack: String?
-        let userAgent: String?
+        /// Coarse "Browser/OS" label (e.g. "Safari/iOS") derived from the
+        /// report's User-Agent; the raw UA is never returned.
+        let browser: String
         let appVersion: String?
         let testSetupID: String?
         let createdAt: Date
@@ -101,7 +106,8 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
         + "localized per device class, and by page-build version (byAppVersion: the ChickadeeVersion the "
         + "client was running; an exec_hang/recover_failed concentrated on an OLD version is a stale-tab / "
         + "cached-bundle symptom, vs. one on the current build meaning the deployed fix is incomplete), over "
-        + "a window, plus recent samples with the error message and stack. Also "
+        + "a window, plus recent samples with the error message and stack (samples carry the coarse "
+        + "browser/OS label, never the raw User-Agent). Also "
         + "returns submitFunnel: the submit_phase breadcrumb counts in phase order "
         + "(grading_start → runtime_loaded → setup_unpacked → suite_started → suite_done → "
         + "result_posting → result_posted) — the drop-off between consecutive phases shows where "
@@ -200,7 +206,7 @@ struct GetBrowserDiagnosticsTool: DiagnosticTool {
                 failedChecks: row.failedChecks,
                 message: row.message,
                 stack: row.stack,
-                userAgent: row.userAgent,
+                browser: Self.browserLabel(forUserAgent: row.userAgent),
                 appVersion: row.appVersion,
                 testSetupID: row.testSetupID,
                 createdAt: row.createdAt ?? Date())

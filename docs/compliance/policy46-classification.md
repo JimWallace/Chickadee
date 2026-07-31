@@ -47,3 +47,21 @@ These are provisional engineering assessments, not an official ruling.
   given course, the read tools that return it (`get_solution`,
   `get_validation_result`, `preview_personalization`) are the controlled set to
   gate or disable via `MCP_MODE=read_only` plus selective tool exposure.
+
+## Addendum (2026-07): admin diagnostic surface data types
+
+The read-only admin diagnostic surface (`/admin-mcp`, 19 tools — see
+`tool-inventory.md` addendum and `mcp-student-data-audit-2026-07.md`) adds
+these outbound data types. Consent for this surface requires the admin role.
+
+| # | Data type | Source / tool | Provisional class | Rationale |
+|---|-----------|---------------|-------------------|-----------|
+| 12 | **Operational aggregates** (queue depth, job/status counts, latency percentiles, utilization series, distinct-user counts, storage bytes) | metrics/queue/storage/series tools | **Confidential** | Deployment-operational numbers; no identity, no content. Small-cell inference is the recorded residual (audit F-5). |
+| 13 | **Runner fleet & deploy state** (runner ids/hostnames/capabilities, deploy versions/events) | `list_runners`, `get_runner_detail`, deploy tools | **Confidential** | Infrastructure topology and CD state; operationally sensitive, no personal information. |
+| 14 | **Warning+ log events & browser-error reports** (level, label, message, redacted metadata; error message/stack, coarse browser label) | `query_logs`, `get_browser_diagnostics` | **Confidential** | Infrastructure free text. Student identifiers are excluded by capture-side redaction plus the write-side hygiene convention (audit F-1, pinned by `LogMessageHygieneTests`); browser samples carry the coarse browser/OS label, never the raw User-Agent (F-4). |
+| 15 | **Audit-log aggregate counts** (totals by action/category) | `query_audit_log` | **Confidential** | Counts only, by construction — no row, actor, IP, or metadata is ever loaded. |
+| 16 | **Grade-sync health** (status counts; error samples: sanitized detail, assignment, org unit) | `get_brightspace_sync_status`, `get_health_alerts` | **Confidential** | Student username, grade (points), and user id columns are omitted; the `detail` string is sanitized at write to exclude the pushed grade, orgDefinedId, and untruncated D2L bodies (audit F-2). |
+| 17 | **MCP grant metadata** (agent name, scopes, owner username, timestamps) | `list_connected_agents` | **Confidential** | The owner is the authorizing staff/admin account (consent-gated — never a student); employee-identity metadata for audit/attribution, no token material. |
+
+No admin-surface data type carries student personal information; row 17 is the
+only personal information at all (the authorizing staff member's username).

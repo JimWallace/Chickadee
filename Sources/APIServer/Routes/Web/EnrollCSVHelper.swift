@@ -303,7 +303,11 @@ func resolvePendingPreEnrollments(
                 do {
                     try await saveSeededEnrollment(for: user, courseID: courseID, on: db)
                 } catch {
-                    logger.warning("Pre-enrollment resolve: failed to enroll \(username) in \(courseID): \(error)")
+                    // Username in metadata only — message text reaches the
+                    // admin query_logs buffer unredacted (compliance audit F-1).
+                    logger.warning(
+                        "Pre-enrollment resolve: enroll failed in course \(courseID): \(error)",
+                        metadata: ["username": .string(username)])
                     continue
                 }
             }
@@ -311,12 +315,15 @@ func resolvePendingPreEnrollments(
                 try await row.delete(on: db)
             } catch {
                 logger.warning(
-                    "Pre-enrollment resolve: failed to delete pending row for \(username) in \(courseID): \(error)")
+                    "Pre-enrollment resolve: failed to delete pending row in course \(courseID): \(error)",
+                    metadata: ["username": .string(username)])
             }
         }
     } catch {
         // Swallow — the user is already authenticated; missing roster
         // membership is a UX bug, not an auth blocker.
-        logger.warning("Pre-enrollment resolve query failed for \(username): \(error)")
+        logger.warning(
+            "Pre-enrollment resolve query failed: \(error)",
+            metadata: ["username": .string(username)])
     }
 }

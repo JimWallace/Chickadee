@@ -81,8 +81,11 @@ func failStalePendingDataExports(
         .update()
 
     for export in stale {
+        // User id in metadata only — message text reaches the admin
+        // query_logs buffer unredacted (compliance audit F-1).
         logger.warning(
-            "data_export reaper: failed stale pending export \(export.id?.uuidString ?? "<nil>") for user \(export.userID.uuidString); user can now request a fresh export"
+            "data_export reaper: failed stale pending export \(export.id?.uuidString ?? "<nil>"); user can now request a fresh export",
+            metadata: ["user_id": .string(export.userID.uuidString)]
         )
     }
     return stale.count

@@ -8,7 +8,10 @@
 // PII boundary: request_metrics carries no user_id, but a concrete path can
 // embed a submission/test-setup id (e.g. /submissions/sub_ab12). This tool
 // NORMALISES those id-like path segments to ":id" before aggregating, so it
-// reports per-route shapes and never a row-level identifier.
+// reports per-route shapes and never a row-level identifier. The pathPrefix
+// input is matched against the normalized routes too — a raw-path match would
+// let a caller probe whether a specific concrete id occurred in the window
+// (compliance audit F-3).
 
 import Core
 import Fluent
@@ -53,7 +56,9 @@ struct GetRequestMetricsTool: DiagnosticTool {
         + "P95 (with request count, error count, and max duration). Optional windowHours (default 24, "
         + "max 720), pathPrefix filter, and limit. Captured for /api/*, /submissions/*, /testsetups/* "
         + "(all paths under verbose timing). Read-only; id-like path segments are normalized to \":id\" "
-        + "so only per-route shapes are reported — never a row-level identifier."
+        + "so only per-route shapes are reported — never a row-level identifier. The pathPrefix filter "
+        + "is matched against the normalized route (a concrete id in the prefix collapses to :id), so "
+        + "it cannot probe for a specific submission or setup."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -80,16 +85,18 @@ struct GetRequestMetricsTool: DiagnosticTool {
         let limit = min(max(input.limit ?? 15, 1), 100)
         let since = Date().addingTimeInterval(Double(-windowHours) * 3600)
 
-        var query = APIRequestMetric.query(on: context.db).filter(\.$finishedAt >= since)
-        let prefix = input.pathPrefix.flatMap { $0.isEmpty ? nil : $0 }
-        if let prefix {
-            // Narrow at the DB with a substring match, then refine to a true
-            // prefix in Swift (Fluent has no portable prefix operator).
-            query = query.filter(\.$path ~~ prefix)
-        }
-        var rows = try await query.all()
-        if let prefix {
-            rows = rows.filter { $0.path.hasPrefix(prefix) }
+        var rows = try await APIRequestMetric.query(on: context.db)
+            .filter(\.$finishedAt >= since)
+            .all()
+        // The prefix is normalized and matched against NORMALIZED routes, so a
+        // concrete submission/setup id in the prefix collapses to ":id" and
+        // cannot act as an existence probe for that id (compliance audit F-3).
+        // The former DB-side substring narrowing matched raw paths and is
+        // dropped for the same reason; the no-prefix path always loaded the
+        // full window anyway, so worst-case cost is unchanged.
+        if let rawPrefix = input.pathPrefix, !rawPrefix.isEmpty {
+            let prefix = Self.normalizePath(rawPrefix)
+            rows = rows.filter { Self.normalizePath($0.path).hasPrefix(prefix) }
         }
 
         var statusClasses: [String: Int] = [:]

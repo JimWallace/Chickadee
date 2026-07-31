@@ -324,14 +324,13 @@ extension GradeSyncSweep {
             )
         } catch {
             await invalidateCachedUserIDOnNotFound(
-                error, user: target.user, describing: "user \(userID) on '\(assignment.title)'")
+                error, user: target.user, describing: "'\(assignment.title)'")
             // Enrich with item context here (the sweep's catch lacks it), then
             // rethrow so the existing per-group error handling still runs.
             let maxDesc = gradeObject?.maxPoints.map { "\($0)" } ?? "unset"
-            await appendSyncLog(
-                .error, points: pushPoints,
-                detail: "Pushed \(pushPoints) pts to '\(gradeObject?.name ?? gradeObjectID)' "
-                    + "(max \(maxDesc)); D2L rejected it: \(error.localizedDescription)")
+            let detail = brightspacePushRejectionDetail(
+                itemName: gradeObject?.name ?? gradeObjectID, maxPoints: maxDesc, error: error)
+            await appendSyncLog(.error, points: pushPoints, detail: detail)
             throw error
         }
 
@@ -375,8 +374,11 @@ extension GradeSyncSweep {
         else { return }
         user.brightspaceUserID = nil
         try? await user.save(on: db)
+        // User id in metadata only — message text reaches the admin query_logs
+        // buffer unredacted (compliance audit F-1).
         application.logger.warning(
-            "BrightSpace grade push 404 for \(context) — cleared the cached D2L user id so the next attempt re-resolves"
+            "BrightSpace grade push 404 for \(context) — cleared the cached D2L user id so the next attempt re-resolves",
+            metadata: ["user_id": .string(user.id?.uuidString ?? "<nil>")]
         )
     }
 
@@ -691,4 +693,16 @@ extension Application {
 
 struct BrightSpaceSyncConfigKey: StorageKey {
     typealias Value = BrightSpaceSyncConfig
+}
+
+/// The sync-log `detail` string for a rejected grade push. Deliberately takes
+/// no points value: the pushed grade is a student's mark, and this string is
+/// surfaced verbatim by the admin diagnostic MCP surface
+/// (`get_brightspace_sync_status` error samples and the `get_health_alerts`
+/// brightspace rule's `last_error`) — the grade lives only in the `points`
+/// column, which those tools deliberately omit (compliance audit F-2). The
+/// error text is safe to embed because `BrightSpaceSyncError.description`
+/// omits the orgDefinedId and truncates D2L bodies.
+func brightspacePushRejectionDetail(itemName: String, maxPoints: String, error: Error) -> String {
+    "Grade push to '\(itemName)' (max \(maxPoints)) rejected: \(error.localizedDescription)"
 }

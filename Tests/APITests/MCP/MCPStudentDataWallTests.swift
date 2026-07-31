@@ -21,6 +21,22 @@ import Testing
         return url.appendingPathComponent("Sources/APIServer/MCP/Tools")
     }
 
+    /// The content surface's non-tool directories, in scope for the same wall:
+    /// the transport/dispatch layer and the resource provider run with the
+    /// same MCP database context as the tools (audit F-6). The Admin/ and
+    /// OAuth/ trees are deliberately NOT scanned — the admin diagnostic tools
+    /// legitimately read diagnostic tables behind their own allowlisted DTOs,
+    /// and the OAuth layer resolves the human account by design.
+    private static var additionalContentDirectories: [URL] {
+        var url = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 { url.deleteLastPathComponent() }
+        let mcp = url.appendingPathComponent("Sources/APIServer/MCP")
+        return [
+            mcp.appendingPathComponent("Transport"),
+            mcp.appendingPathComponent("Resources"),
+        ]
+    }
+
     /// Student-data models the MCP tool surface must never reference directly.
     /// After the boundary refactor, `APISubmission` / `APIResult` appear only in
     /// `MCPStudentDataBoundary.swift`; every other model here is never named by
@@ -53,6 +69,60 @@ import Testing
                     Route validation-run access through MCPStudentDataBoundary; never query \
                     student submissions, results, or roster/PII from a tool handler.
                     """)
+            }
+        }
+    }
+
+    /// The wall also covers the content surface's transport + resource layers
+    /// (audit F-6): a dispatcher or resource handler must not name a
+    /// student-data model any more than a tool may.
+    @Test func transportAndResourceLayersReferenceNoStudentModels() throws {
+        for dir in Self.additionalContentDirectories {
+            for file in try swiftFiles(in: dir) {
+                let source = try String(contentsOf: file, encoding: .utf8)
+                for model in Self.forbiddenModels {
+                    #expect(
+                        !source.contains(model),
+                        """
+                        MCP content-surface file \(file.lastPathComponent) references \
+                        student-data model \(model). The transport/resource layers sit inside \
+                        the student-data wall; route any legitimate need through a tool + \
+                        MCPStudentDataBoundary instead.
+                        """)
+                }
+            }
+        }
+    }
+
+    /// Identity models (`APIUser`, `APICourseEnrollment`) are not in
+    /// `forbiddenModels` because the authorization layer must query them — but
+    /// ONLY the authorization layer. A tool that named them could list roster
+    /// or enrollment data the DB role cannot block (users/course_enrollments
+    /// are SELECT-granted for authz — audit F-6). Everything outside this
+    /// allowlist must resolve identity through `ToolContext`.
+    private static let identityModels = ["APIUser", "APICourseEnrollment"]
+    private static let identityAllowlist: Set<String> = [
+        "ToolContext.swift",  // requireEligibleSubject / authorizeCourseAccess
+        "MCPCourseGuidance.swift",  // resolves the acting subject's own courses at initialize
+    ]
+
+    @Test func identityModelsConfinedToTheAuthorizationLayer() throws {
+        let directories = [Self.toolsDirectory] + Self.additionalContentDirectories
+        for dir in directories {
+            for file in try swiftFiles(in: dir)
+            where !Self.identityAllowlist.contains(file.lastPathComponent) {
+                let source = try String(contentsOf: file, encoding: .utf8)
+                for model in Self.identityModels {
+                    #expect(
+                        !source.contains(model),
+                        """
+                        MCP content-surface file \(file.lastPathComponent) references identity \
+                        model \(model). Roster/enrollment data must stay unreachable from the \
+                        tool surface — resolve the acting subject through ToolContext \
+                        (requireEligibleSubject / authorizeCourseAccess) instead of querying \
+                        identity models directly.
+                        """)
+                }
             }
         }
     }

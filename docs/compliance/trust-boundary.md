@@ -16,12 +16,23 @@ So the controls that matter for this submission are:
 
 1. **The inbound gate** — who may connect (`MCPBearerAuthMiddleware`) and what
    they may do (per-tool scope + per-course enrolment check).
-2. **The bounded tool surface** — 36 special-purpose tools, no general escape
-   hatch (`tool-inventory.md`).
+2. **The bounded tool surface** — special-purpose typed tools, no general
+   escape hatch: 51 content tools as of the 2026-07 refresh
+   (`tool-inventory.md`, base tables + addendum).
 3. **The student-data wall** — tools read the authoring store and the
    instructor's own validation runs, never student submissions/grades/roster.
 4. **What each tool returns** — because the return value is exactly what the
    agent can forward to its model (`data-flow-inventory.md`).
+
+**Second resource (2026-07): the admin diagnostic surface.** A separate,
+read-only MCP endpoint at `POST /admin-mcp` (19 tools,
+`AdminMCPToolCatalog.live`) with its own RFC 8707 audience, its own scope
+vocabulary (`diagnostics:read` — no write case exists), and a consent gate of
+`isAdmin` re-checked per call. A content token cannot authenticate there and
+vice versa — the audiences are disjoint, so a scope bug in one surface cannot
+leak into the other. Its returned data is operational aggregates and
+allowlisted infrastructure fields only; the per-tool posture and the upstream
+writer hygiene are audited in `mcp-student-data-audit-2026-07.md` §2.2–§3.
 
 There is **no** Chickadee→model-API egress edge to allowlist; the model API is
 reached by the agent. Chickadee's own outbound edges (OIDC/DUO, BrightSpace/D2L,

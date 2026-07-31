@@ -14,8 +14,8 @@
 //
 // This only ever touches the instructor's solution/validation submission — never
 // a student submission, and never the starter notebook (use update_notebook for
-// that). The MCP bearer context has no `Request.auth` APIUser, so the resolved
-// subject is threaded to the enqueue helper as the submission's author.
+// that). The MCP bearer context carries no session-authenticated user, so the
+// resolved subject is threaded to the enqueue helper as the submission's author.
 
 import Core
 import Fluent
@@ -86,8 +86,8 @@ struct UpdateSolutionTool: ContentTool {
 
         let assignment = try await context.authorizedAssignmentForWrite(
             publicID: input.assignmentPublicID, tool: Self.name, atLeast: .ta)
-        // The bearer context has no `Request.auth` APIUser; resolve the subject
-        // so the validation submission is attributed to the acting account.
+        // The bearer context has no session-authenticated user; resolve the
+        // subject so the validation submission is attributed to the acting account.
         let subject = try await context.requireEligibleSubject(tool: Self.name)
 
         // Content versioning: this tool reaches its setup by id rather than
