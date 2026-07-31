@@ -99,11 +99,6 @@ struct AppConfig: Sendable {
         logger.info(
             "workers: sharedSecret=\(redactPresence(workers.sharedSecret)), publicBaseURL=\(workers.publicBaseURL ?? "(derived from request)")"
         )
-        if workers.usedLegacyAlias {
-            logger.warning(
-                "WORKER_SHARED_SECRET is set but RUNNER_SHARED_SECRET is not — the legacy name is deprecated, switch to RUNNER_SHARED_SECRET."
-            )
-        }
         if scanMode.enabled {
             logger.warning("SCAN_MODE=true — destructive POST endpoints are returning 503.")
         }

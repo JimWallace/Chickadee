@@ -25,6 +25,7 @@ function normalizeCode(src) {
 
 async function loadEmbeds() {
   const runnerSource = await fs.readFile(path.resolve('Public/browser-runner.js'), 'utf8');
+  const sharedSource = await fs.readFile(path.resolve('Public/grading-shared.js'), 'utf8');
   const testHooks = {};
   const statusEl = { hidden: true, textContent: '', className: '' };
   const document = {
@@ -38,7 +39,10 @@ async function loadEmbeds() {
   };
   context.window = { document };
   context.globalThis = context;
-  vm.runInNewContext(runnerSource, context, { filename: 'browser-runner.js' });
+  // grading-shared.js first (defines ChickadeeGradingShared), same as the page.
+  const vmContext = vm.createContext(context);
+  vm.runInContext(sharedSource, vmContext, { filename: 'grading-shared.js' });
+  vm.runInContext(runnerSource, vmContext, { filename: 'browser-runner.js' });
   return testHooks.exports;
 }
 

@@ -112,12 +112,11 @@ import Testing
 
     // MARK: - Resolution from the starter notebook
 
-    private func notebook(kernel: String?, languageInfo: String?) -> Data {
+    private func notebook(kernel: String?, languageInfo: String?) throws -> Data {
         var metadata: [String: Any] = [:]
         if let kernel { metadata["kernelspec"] = ["name": kernel] }
         if let languageInfo { metadata["language_info"] = ["name": languageInfo] }
-        // swiftlint:disable:next force_try
-        return try! JSONSerialization.data(withJSONObject: ["cells": [], "metadata": metadata])
+        return try JSONSerialization.data(withJSONObject: ["cells": [], "metadata": metadata])
     }
 
     /// The bug this closes: a brand-new R notebook assignment has an empty
@@ -125,18 +124,18 @@ import Testing
     /// which sent the instructor's first R `=` expression to `python3` and
     /// rejected it with a Python SyntaxError. The kernelspec is the only signal
     /// available at that point.
-    @Test func emptySuiteResolvesFromTheNotebookKernel() {
+    @Test func emptySuiteResolvesFromTheNotebookKernel() throws {
         let manifest = TestProperties(testSuites: [])
         #expect(AssignmentLanguage.resolve(manifest: manifest) == .python)
         #expect(
             AssignmentLanguage.resolve(
-                manifest: manifest, notebookData: notebook(kernel: "xr", languageInfo: nil)) == .r)
+                manifest: manifest, notebookData: try notebook(kernel: "xr", languageInfo: nil)) == .r)
         #expect(
             AssignmentLanguage.resolve(
-                manifest: manifest, notebookData: notebook(kernel: nil, languageInfo: "R")) == .r)
+                manifest: manifest, notebookData: try notebook(kernel: nil, languageInfo: "R")) == .r)
         #expect(
             AssignmentLanguage.resolve(
-                manifest: manifest, notebookData: notebook(kernel: "python3", languageInfo: nil))
+                manifest: manifest, notebookData: try notebook(kernel: "python3", languageInfo: nil))
                 == .python)
     }
 
@@ -155,11 +154,11 @@ import Testing
     }
 
     /// A recorded language still wins over the notebook.
-    @Test func recordedLanguageBeatsTheNotebookKernel() {
+    @Test func recordedLanguageBeatsTheNotebookKernel() throws {
         let manifest = TestProperties(testSuites: [], language: .python)
         #expect(
             AssignmentLanguage.resolve(
-                manifest: manifest, notebookData: notebook(kernel: "xr", languageInfo: nil))
+                manifest: manifest, notebookData: try notebook(kernel: "xr", languageInfo: nil))
                 == .python)
     }
 

@@ -11,12 +11,13 @@
 import js from '@eslint/js';
 
 // Globals the classic scripts share by assignment onto window (defined in
-// app.js / chickadee-ui.js, consumed everywhere).  Keep this list short —
-// new cross-file API should hang off ChickadeeUI rather than adding names.
+// chickadee-ui.js / grading-shared.js, consumed everywhere).  Keep this list
+// short — new cross-file API should hang off ChickadeeUI rather than adding
+// names.
 const chickadeeGlobals = {
   ChickadeeUI: 'readonly',
   ChickadeeInputsCore: 'readonly',
-  getCsrfToken: 'readonly',
+  ChickadeeGradingShared: 'readonly',
 };
 
 const browserGlobals = {
@@ -87,9 +88,9 @@ export default [
       // best-effort work (diagnostics, cache cleanup); empty non-catch
       // blocks still fail.
       'no-empty': ['error', { allowEmptyCatch: true }],
-      // The definition files themselves (app.js defines getCsrfToken) would
-      // otherwise collide with the config-declared shared globals.  Same-
-      // scope var/var redeclarations are still caught.
+      // The definition files themselves (chickadee-ui.js defines ChickadeeUI)
+      // would otherwise collide with the config-declared shared globals.
+      // Same-scope var/var redeclarations are still caught.
       'no-redeclare': ['error', { builtinGlobals: false }],
     },
   },

@@ -106,7 +106,7 @@ func mergeDirectoryContents(from sourceDirectory: URL, into destinationDirectory
 /// Naming the Python file on an R job produced a hint pointing at a file that
 /// never exists, so `chickadee_student_file()` had nothing to prefer and fell
 /// back to scanning. Defaults to `.python`, so the Python path is unchanged.
-func legacyPreferredStudentModuleFilename(
+func preferredStudentModuleFilename(
     submissionFilename: String?,
     language: AssignmentLanguage = .python
 ) -> String? {

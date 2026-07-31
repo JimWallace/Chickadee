@@ -35,10 +35,6 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) throws {
     app.lifecycle.use(PeriodicSweepLifecycleHandler { $0.staleDataExportReaperMonitor })
     app.lifecycle.use(ServerHealthAlertLifecycleHandler())
 
-    // One-time best-effort cleanup of pre-v0.4 notebook working-copy
-    // artifacts (used to run on every notebook page view).
-    app.lifecycle.use(LegacyNotebookCleanupLifecycleHandler())
-
     // MCP OAuth table cleanup (only when the MCP endpoint is mounted — grants
     // and codes exist in read_only mode too).
     if appConfig.mcp.mode.isMounted {

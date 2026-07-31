@@ -53,9 +53,9 @@
                  block above the Variables table.  Now merged INTO the
                  Variables table as locked rows at the top, so the
                  instructor sees one unified list of $names available
-                 across all cases.  Section name shown next to the table
-                 title; the legacy hidden span is kept so existing JS
-                 that writes to it doesn't break. -->
+                 across all cases.  The section name renders in the
+                 label-note span inside the subhead (written by
+                 renderReadOnlySectionVars in pattern-family-editor.js). -->
             <div>
                 <div class="family-subhead">
                     <strong class="subhead-label">Variables (shared across all cases) <span id="family-section-name-label" class="label-note"></span></strong>

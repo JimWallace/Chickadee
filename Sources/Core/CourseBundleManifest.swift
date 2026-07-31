@@ -227,10 +227,11 @@ public struct BundledAssignment: Codable, Sendable {
     /// Optional automatic open date. Absent in bundles exported before this
     /// field existed (decodes as nil).
     public let startsAt: Date?
-    /// Legacy open/closed flag. Retained for round-trip compatibility with
-    /// bundles read by older instances; `visibility` is the source of truth on
-    /// import when present.
-    public let isOpen: Bool
+    /// Legacy pre-`visibility` open/closed flag, read on import from bundles
+    /// exported by pre-0.5 instances (`bundledAssignmentVisibility` falls back
+    /// to it).  No longer written on export — the key is omitted when nil —
+    /// so the read fallback outlives the write side.
+    public let isOpen: Bool?
     /// Three-state visibility. Absent in bundles exported before this field
     /// existed (decodes as nil); resolve via `bundledAssignmentVisibility`.
     public let visibility: AssignmentVisibility?
@@ -242,7 +243,7 @@ public struct BundledAssignment: Codable, Sendable {
     public let sectionBundleID: String?
 
     public init(
-        bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool,
+        bundleID: String, title: String, dueAt: Date?, startsAt: Date? = nil, isOpen: Bool? = nil,
         visibility: AssignmentVisibility? = nil,
         sortOrder: Int?, testSetupBundleID: String,
         sectionBundleID: String? = nil
@@ -261,9 +262,10 @@ public struct BundledAssignment: Codable, Sendable {
 
 /// Resolves the effective `AssignmentVisibility` for an imported assignment,
 /// falling back to the legacy `isOpen` boolean for bundles exported before the
-/// `visibility` field existed.
+/// `visibility` field existed.  A bundle with neither field (not producible by
+/// any real exporter) resolves closed — the safe default.
 public func bundledAssignmentVisibility(_ assignment: BundledAssignment) -> AssignmentVisibility {
-    assignment.visibility ?? AssignmentVisibility(legacyIsOpen: assignment.isOpen)
+    assignment.visibility ?? AssignmentVisibility(legacyIsOpen: assignment.isOpen ?? false)
 }
 
 public struct BundledTestSetup: Codable, Sendable {

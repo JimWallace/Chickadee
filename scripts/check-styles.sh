@@ -11,7 +11,8 @@ set -euo pipefail
 #     page-local <style> block with role-named classes.
 #   * No inline style="" in templates EXCEPT a JS-toggled `display:none` initial
 #     state or a CSS custom-property assignment (e.g. style="--filter-width:220px").
-#   * No new native alert() in templates — use the inline .form-error pattern.
+#   * No new native alert() in templates or first-party Public/*.js — use the
+#     inline .form-error pattern.
 #   * Every var(--x) resolves, and no var(--x, #hex) colour fallbacks (see
 #     scripts/check-css-vars.sh).
 #   * Colours route through the palette (hex only in --token declarations),
@@ -62,11 +63,11 @@ if [ -n "$inline_violations" ]; then
   echo
 fi
 
-# ── 3. No new native alert() ────────────────────────────────────────────────
+# ── 3. No new native alert() in templates ───────────────────────────────────
 # Baseline = pre-existing alert()s (rare support-file error paths in the
-# assignment editors + one mention in a base.leaf comment).  This may only go
-# DOWN; new alert()s must use the inline .form-error banner instead.
-ALERT_BASELINE=5
+# assignment editors).  This may only go DOWN; new alert()s must use the
+# inline .form-error banner instead.
+ALERT_BASELINE=4
 alert_count="$(grep -rho 'alert(' "${views[@]}" | wc -l | tr -d ' ')"
 if [ "$alert_count" -gt "$ALERT_BASELINE" ]; then
   status=1
@@ -76,6 +77,25 @@ if [ "$alert_count" -gt "$ALERT_BASELINE" ]; then
   echo
 elif [ "$alert_count" -lt "$ALERT_BASELINE" ]; then
   echo "note: alert() count dropped to ${alert_count}; lower ALERT_BASELINE in scripts/check-styles.sh."
+fi
+
+# ── 3a. No new native alert() in first-party JS ─────────────────────────────
+# Same rule, same direction, for Public/*.js.  The template ratchet alone was
+# leaky: the inline-script ratchet (3b) pushes page JS out into Public/*.js,
+# which the template glob never sees — so an alert() could be laundered out of
+# scope by the very move 3b encourages.  Top-level Public/*.js only; the
+# vendored/generated trees (Public/pyodide, Public/jupyterlite, Public/vendor,
+# Public/runner-wasm) are not ours to lint.
+JS_ALERT_BASELINE=7
+js_alert_count="$(grep -ho 'alert(' Public/*.js | wc -l | tr -d ' ')"
+if [ "$js_alert_count" -gt "$JS_ALERT_BASELINE" ]; then
+  status=1
+  echo "ERROR: new native alert() in first-party JS (found ${js_alert_count}, baseline ${JS_ALERT_BASELINE})."
+  echo "       Surface errors with the inline .form-error pattern instead."
+  grep -n 'alert(' Public/*.js | sed 's/^/  /'
+  echo
+elif [ "$js_alert_count" -lt "$JS_ALERT_BASELINE" ]; then
+  echo "note: JS alert() count dropped to ${js_alert_count}; lower JS_ALERT_BASELINE in scripts/check-styles.sh."
 fi
 
 # ── 3b. Inline <script> line-count ratchet (#1135) ───────────────────────────

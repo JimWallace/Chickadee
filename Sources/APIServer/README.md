@@ -12,7 +12,7 @@ Run server mode with:
 chickadee-server serve --port 8080 --worker-secret your-secret
 ```
 
-`--worker-secret` sets the runner shared secret persisted by the server. The local auto-launched runner receives this as `RUNNER_SHARED_SECRET` (with legacy `WORKER_SHARED_SECRET` also set for compatibility).
+`--worker-secret` sets the runner shared secret persisted by the server. The local auto-launched runner receives this as `RUNNER_SHARED_SECRET`.
 
 ---
 

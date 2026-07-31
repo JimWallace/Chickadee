@@ -14,7 +14,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized) final class WorkerNonceReplayGuardTests {
+@Suite(.serialized, .timeLimit(.minutes(3))) final class WorkerNonceReplayGuardTests {
 
     let app: Application
 

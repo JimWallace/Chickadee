@@ -14,7 +14,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized) final class ScriptEditRoutesTests {
+@Suite(.serialized, .timeLimit(.minutes(3))) final class ScriptEditRoutesTests {
 
     let app: Application
 

@@ -227,6 +227,19 @@ struct CourseBundleManifestTests {
         #expect(bundledAssignmentVisibility(decoded) == .preview)
     }
 
+    @Test func exportOmitsLegacyIsOpenKey() throws {
+        // 0.5+ exports carry only `visibility`; the legacy `isOpen` key is
+        // no longer written (the read-side fallback stays for old bundles).
+        let assignment = BundledAssignment(
+            bundleID: "a_1", title: "New Lab", dueAt: nil,
+            visibility: .open, sortOrder: 0, testSetupBundleID: "ts_1")
+        let data = try encoder.encode(assignment)
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(!json.contains("isOpen"))
+        let decoded = try decoder.decode(BundledAssignment.self, from: data)
+        #expect(bundledAssignmentVisibility(decoded) == .open)
+    }
+
     @Test func legacyBundleWithoutVisibilityFallsBackToIsOpen() throws {
         // A bundle exported before the `visibility` field existed has no key;
         // resolution falls back to the legacy `isOpen` boolean.

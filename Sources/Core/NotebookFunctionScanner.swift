@@ -37,34 +37,31 @@ public struct NotebookFunctionInfo: Codable, Sendable {
     /// True when a later `def <name>` in the notebook redefines this function.
     /// Python has no real overloading — the last definition wins at runtime —
     /// so a family targeting a shadowed version will fail (wrong signature).
-    /// Decoded with `decodeIfPresent ?? false` so older clients that don't
-    /// send the field still roundtrip.
+    /// A required decode key since the v0.6.0-cleanup removal of its
+    /// `decodeIfPresent ?? false` fallback.
     public let isShadowed: Bool
 
     public var paramCount: Int { paramNames.count }
 
+    /// `paramTypes` and `paramHasDefault` must be aligned with `paramNames`
+    /// (one entry per parameter).  The pre-0.5 length-realignment shim for
+    /// callers that omitted them is gone — every constructor passes the full
+    /// arrays.  (The `init(from:)` decode path keeps its absent-array
+    /// tolerance: that is a wire contract, pinned by its own tests.)
     public init(
         name: String,
         paramNames: [String],
-        paramTypes: [String?] = [],
-        paramHasDefault: [Bool] = [],
-        returnType: String? = nil,
+        paramTypes: [String?],
+        paramHasDefault: [Bool],
+        returnType: String?,
         hasTypeHints: Bool,
         hasDocstring: Bool,
         isShadowed: Bool = false
     ) {
         self.name = name
         self.paramNames = paramNames
-        // Keep paramTypes aligned with paramNames even when the caller omitted it
-        // (back-compat: older callers constructed this struct without types).
-        self.paramTypes =
-            paramTypes.count == paramNames.count
-            ? paramTypes
-            : Array(repeating: nil, count: paramNames.count)
-        self.paramHasDefault =
-            paramHasDefault.count == paramNames.count
-            ? paramHasDefault
-            : Array(repeating: false, count: paramNames.count)
+        self.paramTypes = paramTypes
+        self.paramHasDefault = paramHasDefault
         self.returnType = returnType
         self.hasTypeHints = hasTypeHints
         self.hasDocstring = hasDocstring

@@ -17,13 +17,6 @@ extension AdminRoutes {
         try await makeWorkerRows(req: req)
     }
 
-    // MARK: - GET /admin/workers (compat alias)
-
-    @Sendable
-    func workers(req: Request) async throws -> [AdminWorkerRow] {
-        try await makeWorkerRows(req: req)
-    }
-
     // MARK: - GET /admin/runners/:runnerID
 
     @Sendable

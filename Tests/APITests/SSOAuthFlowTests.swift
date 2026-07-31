@@ -15,7 +15,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite struct SSOAuthFlowTests {
+@Suite(.timeLimit(.minutes(2))) struct SSOAuthFlowTests {
 
     private actor MockTokenEndpoint {
         enum Mode {

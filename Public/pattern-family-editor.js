@@ -6,17 +6,15 @@
 // pages render from a single copy instead of two copies that drift on
 // every polish release.
 //
-// The modal HTML still lives in the Leaf template (both pages include the
-// same block of markup — extracting that hit a LeafKit cycle-detection
-// false-positive); this file owns every event listener, fetch, and piece
+// The form HTML lives in Resources/Views/_family-editor-body.leaf (included
+// by both pages); this file owns every event listener, fetch, and piece
 // of state that hangs off those DOM IDs.  DOM IDs are stable:
-//   family-editor-overlay, family-editor-title, family-editor-close,
-//   family-editor-status, family-id, family-name, family-kind,
-//   family-function, family-params, family-function-select,
+//   family-editor-body, family-editor-status, family-id, family-name,
+//   family-kind, family-function, family-params, family-function-select,
 //   family-function-hint, family-function-label,
 //   family-default-hint, family-default-tolerance, family-tolerance-label,
 //   family-cases-header, family-cases-body, family-cases-empty,
-//   add-case-btn, add-family-btn, family-save-btn, family-cancel-btn.
+//   add-case-btn, family-section-name-label.
 //
 // The host page wires the module via:
 //
@@ -35,8 +33,8 @@
 // The module registers a body renderer on `window.ChickadeeTestRenderers
 // .family` for the unified Test Editor modal (test-editor-modal.js); saves
 // flow through `window.chickadeeSaveFamiliesViaSuite` (the single PUT /suite
-// write path).  It also returns `{ open(indexOrNegOne), close(), getFamilies() }`
-// for back-compat, but the shell is the live entry point.
+// write path).  The shell (or the inline accordion editor) is the only entry
+// point; the returned `{ getFamilies() }` exists for console debugging.
 
 (function (global) {
     'use strict';
@@ -165,13 +163,10 @@
             label.textContent = sectionName ? '— section: ' + sectionName : '';
         }
 
-        // v0.4.238: the family form is now a body renderer of the unified Test
-        // Editor modal — its markup lives in `#family-editor-body` and the shell
-        // owns the chrome (title / save / close), so `overlay` / `titleEl` /
-        // `saveBtn` are absent and every use of them is null-guarded below.
+        // v0.4.238: the family form is a body renderer of the unified Test
+        // Editor modal — its markup lives in `#family-editor-body` and the
+        // shell owns the chrome (title / save / close).
         var bodyEl           = document.getElementById('family-editor-body');
-        var overlay          = document.getElementById('family-editor-overlay');
-        var titleEl          = document.getElementById('family-editor-title');
         var idInput          = document.getElementById('family-id');
         var nameInput        = document.getElementById('family-name');
         var kindInput        = document.getElementById('family-kind');
@@ -187,15 +182,11 @@
         var casesBody        = document.getElementById('family-cases-body');
         var casesEmpty       = document.getElementById('family-cases-empty');
         var addCaseBtn       = document.getElementById('add-case-btn');
-        var saveBtn          = document.getElementById('family-save-btn');
-        var cancelBtn        = document.getElementById('family-cancel-btn');
-        var closeBtn         = document.getElementById('family-editor-close');
         var statusEl         = document.getElementById('family-editor-status');
 
-        if (!overlay && !bodyEl) {
-            // No family form rendered on this page (neither the legacy overlay
-            // nor the renderer body) — still return the API so the host doesn't
-            // crash at init time, but all methods no-op.
+        if (!bodyEl) {
+            // No family form rendered on this page — still return the API so
+            // the host doesn't crash at init time, but all methods no-op.
             return noopAPI();
         }
 
@@ -1249,7 +1240,6 @@
                 currentSectionVariables = ctx.vars;
                 currentSectionName = ctx.sectionName;
                 renderReadOnlySectionVars(ctx);
-                if (titleEl) titleEl.textContent = 'Edit Pattern Family';
                 idInput.value = family.id || '';
                 nameInput.value = family.name || '';
                 kindInput.value = family.kind || 'boundary_equality';
@@ -1268,7 +1258,6 @@
                 (family.cases || []).forEach(function (c) { addCaseRow(c, family.paramNames || []); });
                 if (!(family.cases || []).length) addCaseRow(null, family.paramNames || []);
             } else {
-                if (titleEl) titleEl.textContent = 'New Pattern Family';
                 idInput.value = '';
                 nameInput.value = '';
                 kindInput.value = presetKind || 'boundary_equality';
@@ -1311,7 +1300,6 @@
             // next user-driven change diffs against the right baseline.
             lastSelectedKind = kindInput.value;
 
-            if (overlay) overlay.style.display = 'flex';
             updateCasesEmptyMessage();
 
             // Kick off (or reuse) the scan and populate the function dropdown.
@@ -1324,8 +1312,6 @@
 
             setTimeout(function () { nameInput.focus(); }, 0);
         }
-
-        function closeEditor() { if (overlay) overlay.style.display = 'none'; }
 
         function readFamilyFromEditor() {
             // Pull Variables-table edits first; readCasesFromTable checks
@@ -1388,35 +1374,22 @@
         /// save hook isn't present (a page without the suite table).
         function persistFamilies(next) {
             statusEl.textContent = 'Saving…';
-            if (saveBtn) saveBtn.disabled = true;
             if (typeof window.chickadeeSaveFamiliesViaSuite !== 'function') {
-                if (saveBtn) saveBtn.disabled = false;
                 return Promise.reject(new Error('suite table not ready'));
             }
             return window.chickadeeSaveFamiliesViaSuite(next)
                 .then(function (applied) {
                     familiesState = applied;
-                    if (saveBtn) saveBtn.disabled = false;
                     statusEl.textContent = '';
                     return applied;
                 })
                 .catch(function (err) {
-                    if (saveBtn) saveBtn.disabled = false;
                     statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
                     throw err;
                 });
         }
 
         // ── Event wiring ───────────────────────────────────────────────────
-
-        if (closeBtn)     closeBtn.addEventListener('click', closeEditor);
-        if (cancelBtn)    cancelBtn.addEventListener('click', closeEditor);
-        if (overlay) {
-            overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditor(); });
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && overlay.style.display !== 'none') closeEditor();
-            });
-        }
 
         if (fnSelect) fnSelect.addEventListener('change', function () {
             applyFunctionSelection(fnSelect.value, /*preserveCases=*/true);
@@ -2009,16 +1982,13 @@
                     var idx = familiesState.findIndex(function (f) { return f.id === fid; });
                     if (idx >= 0) {
                         // Edit inline (accordion row) when the suite table is on
-                        // the page; fall back to the modal shell, then the legacy
-                        // overlay.
+                        // the page; fall back to the modal shell.
                         if (typeof window.chickadeeExpandInlineEditor === 'function') {
                             window.chickadeeExpandInlineEditor(
                                 { mechanism: 'family', editing: { item: familiesState[idx] }, afterRowID: 'family:' + fid });
                         } else if (window.__chickadeeTestEditorModal) {
                             window.__chickadeeTestEditorModal.open(
                                 { editing: { mechanism: 'family', id: fid, item: familiesState[idx] } });
-                        } else {
-                            openEditor(idx);
                         }
                     }
                 } else if (delBtn) {
@@ -2039,8 +2009,7 @@
         }
 
         // Read the family spec from the form, throwing a clean message on any
-        // validation failure.  Shared by the legacy Save button and the Test
-        // Editor shell's `readSpec` hook.
+        // validation failure.  The Test Editor shell's `readSpec` hook.
         function readFamilySpec() {
             var family = readFamilyFromEditor();   // may throw (cases / vars)
             if (!family.functionName) throw new Error('Pick a function from the dropdown first.');
@@ -2062,19 +2031,6 @@
                 next.push(family);
             }
             return persistFamilies(next);
-        }
-
-        // Legacy standalone Save button (only present if the old overlay
-        // markup is on the page; the shell drives Save otherwise).
-        if (saveBtn) {
-            saveBtn.addEventListener('click', function () {
-                var family;
-                try { family = readFamilySpec(); }
-                catch (e) { statusEl.textContent = e.message || String(e); return; }
-                persistFamilySpec(family)
-                    .then(function () { closeEditor(); })
-                    .catch(function (err) { statusEl.textContent = err.message || String(err); });
-            });
         }
 
         // Body renderer for the unified Test Editor modal.  The shell owns the
@@ -2106,16 +2062,12 @@
         }
 
         return {
-            open: openEditor,
-            close: closeEditor,
             getFamilies: function () { return familiesState.slice(); }
         };
     }
 
     function noopAPI() {
         return {
-            open: function () {},
-            close: function () {},
             getFamilies: function () { return []; }
         };
     }

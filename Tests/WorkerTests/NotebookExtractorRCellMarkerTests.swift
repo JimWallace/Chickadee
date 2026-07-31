@@ -14,7 +14,7 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct NotebookExtractorRCellMarkerTests {
 
-    private func rNotebook(cells: [String]) -> Data {
+    private func rNotebook(cells: [String]) throws -> Data {
         let cellObjects = cells.map { source in
             ["cell_type": "code", "source": source, "metadata": [:] as [String: Any]] as [String: Any]
         }
@@ -24,8 +24,7 @@ import Testing
             "nbformat_minor": 5,
             "metadata": ["kernelspec": ["name": "xr", "language": "R"]],
         ]
-        // swiftlint:disable:next force_try
-        return try! JSONSerialization.data(withJSONObject: notebook)
+        return try JSONSerialization.data(withJSONObject: notebook)
     }
 
     private func extract(cells: [String]) throws -> String {

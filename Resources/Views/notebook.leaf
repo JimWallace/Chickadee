@@ -153,6 +153,7 @@ Notebook
 <div id="nb-results" class="nb-results" hidden></div>
 <div id="browser-runner-status" class="nb-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script src="/notebook-preflight.js?v=#appVersion()"></script>
+<script src="/grading-shared.js?v=#appVersion()"></script>
 <script src="/notebook.js?v=#appVersion()"></script>
 <script src="/browser-runner.js?v=#appVersion()" data-setup-id="#(testSetupID)" data-grading-mode="#(gradingMode)"></script>
 #endexport

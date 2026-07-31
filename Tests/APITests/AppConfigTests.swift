@@ -65,7 +65,6 @@ import Vapor
             #expect(cfg.oidc.callbackPath == "/custom/callback")
             #expect(cfg.oidc.usernameClaim == "winaccountname")
             #expect(cfg.workers.sharedSecret == "primary-secret")
-            #expect(cfg.workers.usedLegacyAlias == false)
             #expect(cfg.workers.publicBaseURL == "https://callback.example")
             #expect(cfg.lockout.perMinute == 20)
             #expect(cfg.lockout.lockoutThreshold == 8)
@@ -74,16 +73,15 @@ import Vapor
         }
     }
 
-    /// Legacy `WORKER_SHARED_SECRET` wins only when `RUNNER_SHARED_SECRET` is
-    /// unset, and the loader flags this so `logSummary` can warn.
-    @Test func legacyWorkerSecretAliasIsHonouredButFlagged() async throws {
+    /// The pre-0.5 legacy alias `WORKER_SHARED_SECRET` is retired: only
+    /// `RUNNER_SHARED_SECRET` is read, and a stray legacy value is ignored.
+    @Test func retiredLegacyWorkerSecretAliasIsIgnored() async throws {
         try await withTestEnvironment([
             "WORKER_SHARED_SECRET": "legacy-value",
             "RUNNER_SHARED_SECRET": nil,
         ]) {
             let workers = WorkerConfig.fromEnvironment()
-            #expect(workers.sharedSecret == "legacy-value")
-            #expect(workers.usedLegacyAlias == true)
+            #expect(workers.sharedSecret == nil)
         }
 
         try await withTestEnvironment([
@@ -92,7 +90,6 @@ import Vapor
         ]) {
             let workers = WorkerConfig.fromEnvironment()
             #expect(workers.sharedSecret == "primary")
-            #expect(workers.usedLegacyAlias == false)
         }
     }
 
@@ -167,7 +164,6 @@ import Vapor
             lockout: .default,
             workers: WorkerConfig(
                 sharedSecret: "rsec-12345",
-                usedLegacyAlias: false,
                 publicBaseURL: nil
             ),
             brightspace: nil,

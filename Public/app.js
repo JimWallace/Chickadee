@@ -1,11 +1,7 @@
-// Returns the CSRF token from the <meta name="csrf-token"> tag in <head>.
-// Used by JS fetch calls to satisfy the CSRF middleware on POST endpoints.
-// Kept as a global for back-compat; delegates to the shared implementation
-// in Public/chickadee-ui.js.
-/* exported getCsrfToken */
-function getCsrfToken() {
-    return ChickadeeUI.getCsrfToken();
-}
+// CSRF tokens: use ChickadeeUI.getCsrfToken() (Public/chickadee-ui.js,
+// loaded from base.leaf's <head>, so it is available everywhere).  The old
+// bare-global alias that lived here was retired in the 0.5 cleanup once the
+// last callers moved to the namespaced form.
 
 // Drag-drop zone on the submission form
 const dropZone   = document.getElementById('drop-zone');

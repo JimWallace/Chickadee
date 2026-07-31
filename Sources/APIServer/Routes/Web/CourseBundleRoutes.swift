@@ -293,7 +293,6 @@ struct CourseBundleRoutes: RouteCollection {
                 title: a.title,
                 dueAt: a.dueAt,
                 startsAt: a.startsAt,
-                isOpen: a.isOpen,
                 visibility: a.visibility,
                 sortOrder: a.sortOrder,
                 testSetupBundleID: setupBid,
