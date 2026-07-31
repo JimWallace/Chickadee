@@ -99,7 +99,12 @@ struct AuthRoutes: RouteCollection {
                 on: req.db
             )
             if locked {
-                req.logger.warning("Login locked for user '\(usernameKey)' (too many failures)")
+                // Username goes in metadata, not the message: the admin MCP
+                // query_logs ring buffer redacts PII metadata keys at capture
+                // but stores message text verbatim (compliance audit F-1).
+                req.logger.warning(
+                    "Login locked after too many failures",
+                    metadata: ["username": .string(usernameKey)])
                 await AuditLogger.record(
                     action: .loginLocked,
                     targetType: .auth,

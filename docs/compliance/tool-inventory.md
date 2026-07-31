@@ -1,14 +1,19 @@
 # MCP Tool-Surface Inventory
 
-Audit scope: the Model Context Protocol (MCP) server under
-`Sources/APIServer/MCP/`. Snapshot taken at `VERSION` **0.4.435**.
+Audit scope: the Model Context Protocol (MCP) surfaces under
+`Sources/APIServer/MCP/`. Base snapshot taken at `VERSION` **0.4.435**;
+**refreshed 2026-07 at `VERSION` 0.4.667** (see the addendum section at the
+end and `mcp-student-data-audit-2026-07.md` for the full re-audit).
 
 This is a complete, one-row-per-tool inventory of the MCP capability surface,
 walked from the live registry (`MCPToolCatalog.live`,
-`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift:16-59`) down to
-each tool's handler. The catalog registers **39 tools** (the prose digest in
-`CLAUDE.md` says "thirty-four"; the registry is the source of truth — count it
-from `MCPServerRegistration.swift:18-57`).
+`Sources/APIServer/MCP/Transport/MCPServerRegistration.swift`) down to each
+tool's handler. As of the 2026-07 refresh the content catalog registers
+**51 tools** (the table below plus the six-tool addendum), and a second,
+admin-only diagnostic surface (`AdminMCPToolCatalog.live`) registers
+**19 read-only tools** — inventoried in the addendum. The registries are the
+source of truth; a census re-count is required whenever either changes
+(remediation P2-3).
 
 ## How to read this table
 
@@ -126,3 +131,59 @@ Python/shell that later runs in the grading sandbox. This is identical to the
 existing instructor capability and is mitigated by (a) course-scoped authz,
 (b) the `ScriptRunner` sandbox at execution time, and (c) the audit trail. It
 is *not* a new in-process execution surface.
+
+---
+
+## Addendum (2026-07, v0.4.667): tools added since the base snapshot
+
+Six content tools joined `MCPToolCatalog.live` after v0.4.435. Same
+conventions as the tables above; every one routes through the standard
+authorization chokepoints (pinned registry-wide by
+`MCPAuthorizationCoverageTests`).
+
+| Tool | Handler (`file`) | Resource arg | Authz | Reads / touches | Output |
+|------|------------------|--------------|-------|-----------------|--------|
+| `list_assignment_versions` | `AssignmentVersionTools.swift` | `assignmentPublicID` | course-enrol | `APIAssignmentVersion` (content snapshots) | version list (id, timestamp, actor label) |
+| `get_assignment_version` | `AssignmentVersionTools.swift` | `assignmentPublicID`, version id | course-enrol | `APIAssignmentVersion` | one snapshot's content (suite/notebook state) |
+| `restore_assignment_version` | `RestoreAssignmentVersionTool.swift` | `assignmentPublicID`, version id | course-enrol write (TA+) | `APIAssignmentVersion`, `APITestSetup` | restored content; closes + revalidates via `finalizeContentEdit` |
+| `set_dataset` | `SetDatasetTool.swift` | `assignmentPublicID`, filename | course-enrol write (TA+) | `APITestSetup` manifest (`TestProperties.datasets`) | dataset specs after edit (file, sampleSize) |
+| `set_time_limit` | `SetTimeLimitTool.swift` | `assignmentPublicID` | course-enrol write (TA+) | `APITestSetup` manifest (`timeLimitSeconds`) | updated limit |
+| `set_minimum_runner_version` | `SetMinimumRunnerVersionTool.swift` | `assignmentPublicID` | course-enrol write (TA+) | `APIAssignmentRequirement` | updated requirement |
+
+All six return instructor-authored content or configuration only; none touches
+a student-data model (enforced by `MCPStudentDataWallTests`, whose scan now
+also covers `Transport/` + `Resources/` and confines identity models to the
+authorization layer — 2026-07 audit F-6).
+
+## Addendum (2026-07): the admin diagnostic surface (19 tools)
+
+A second, **read-only** MCP surface at `POST /admin-mcp`
+(`AdminMCPToolCatalog.live`, design record `docs/admin-mcp.md`), mounted with
+the content surface but separated by OAuth audience and scope
+(`diagnostics:read` only — the scope enum has no write case). Consent requires
+`isAdmin` and every DB-touching tool re-checks the subject per call
+(`AdminToolContext.requireAdminSubject`). Every tool's returned DTO was
+verified field-by-field in `mcp-student-data-audit-2026-07.md` §2.2 (which
+carries the full source→fields→posture table); per-tool PII tests seed student
+rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
+
+| Tool | Source | PII posture |
+|------|--------|-------------|
+| `get_deployment_info` | static config (DB-free) | clean |
+| `get_deploy_status` / `get_deploy_history` | deployer status/history files | clean |
+| `get_metrics_snapshot` / `get_metrics_card_series` / `get_metrics_timeseries` | dashboard aggregate builders | aggregates only |
+| `get_active_users_series` | `ActivityChartService` | distinct counts per bucket only |
+| `get_instructor_card_series` | `instructorCardSeries` (one course) | per-bucket counts only; PII-tested |
+| `get_queue_state` | submissions table | counts/ages only |
+| `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |
+| `get_storage_usage` | storage scan | per-assignment byte/count aggregates |
+| `get_request_metrics` | `request_metrics` | routes normalized to `:id`; prefix filter matches normalized routes (audit F-3) |
+| `get_health_alerts` | live rule evaluation | counts/thresholds; BrightSpace `last_error` writer-sanitized (audit F-2) |
+| `get_browser_diagnostics` | `client_diagnostics` | `user_id` omitted; samples carry the coarse browser/OS label, never the raw User-Agent (audit F-4); PII-tested |
+| `list_connected_agents` | OAuth grants | owner is the authorizing staff/admin (consent-gated), never a student; no token material |
+| `get_brightspace_sync_status` | `brightspace_sync_log` | `username`/`points`/`user_id` columns omitted; `detail` sanitized at write (audit F-2); PII-tested |
+| `query_audit_log` | `audit_log` | counts by action/category only — no row, actor, IP, or metadata ever loaded |
+| `query_logs` | in-process warning+ ring buffer | PII metadata keys dropped at capture; message hygiene pinned by `LogMessageHygieneTests` (audit F-1) |
+
+Admin tool calls are themselves audited (`admin_mcp.tool_called`, with
+outcome).

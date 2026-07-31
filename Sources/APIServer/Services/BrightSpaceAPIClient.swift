@@ -72,20 +72,32 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
     case groupCategoriesFetchFailed(orgUnitID: String, status: Int)
     case groupsFetchFailed(orgUnitID: String, categoryID: String, status: Int)
 
+    /// D2L response bodies are embedded in descriptions only up to this many
+    /// characters. The body is D2L-controlled text that can echo user-specific
+    /// detail, and descriptions flow into logs, sync-log detail rows, and the
+    /// admin diagnostic MCP surface (compliance audit F-2) — the truncated
+    /// prefix keeps the error class diagnosable without the full payload.
+    static let describedBodyLimit = 120
+
     var description: String {
         switch self {
         case .notConfigured:
             return "BrightSpace sync is not configured (missing env vars)"
-        case .userLookupFailed(let id, let s):
-            return "BrightSpace user lookup for '\(id)' failed (HTTP \(s))"
-        case .userNotFound(let id):
-            return "BrightSpace user not found for orgDefinedId '\(id)'"
+        case .userLookupFailed(_, let s):
+            // The orgDefinedId (an institutional student identifier) is
+            // deliberately NOT described: descriptions reach the query_logs
+            // buffer and the sync-log detail surfaced over the admin MCP
+            // (compliance audit F-2). The associated value still carries it
+            // for programmatic use.
+            return "BrightSpace user lookup failed (HTTP \(s))"
+        case .userNotFound:
+            return "BrightSpace user not found in the org unit classlist"
         case .gradePushFailed(let s, let b):
-            return "BrightSpace grade push failed (HTTP \(s)): \(b)"
+            return "BrightSpace grade push failed (HTTP \(s))\(Self.describedBody(b))"
         case .missingPoints:
             return "No grade points available to push"
         case .whoamiFailed(let s, let b):
-            return "BrightSpace whoami failed (HTTP \(s))\(b.isEmpty ? "" : ": \(b)")"
+            return "BrightSpace whoami failed (HTTP \(s))\(Self.describedBody(b))"
         case .orgUnitLookupFailed(let id, let s):
             return "BrightSpace org unit lookup for '\(id)' failed (HTTP \(s))"
         case .gradeObjectsFetchFailed(let id, let s):
@@ -99,9 +111,16 @@ enum BrightSpaceSyncError: Error, CustomStringConvertible, LocalizedError {
         }
     }
 
+    /// ": <body prefix>" for a described D2L body, empty when the body is —
+    /// truncated to `describedBodyLimit` (audit F-2).
+    private static func describedBody(_ body: String) -> String {
+        guard !body.isEmpty else { return "" }
+        return ": \(body.prefix(describedBodyLimit))"
+    }
+
     // Surface `description` through `localizedDescription` so the UI's
     // "Connection failed: \(error.localizedDescription)" shows the HTTP status
-    // and D2L's error body, not Swift's generic "(… error N.)".
+    // and the truncated D2L error body, not Swift's generic "(… error N.)".
     var errorDescription: String? { description }
 }
 

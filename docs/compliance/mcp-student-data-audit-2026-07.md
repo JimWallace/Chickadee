@@ -36,32 +36,37 @@ assert their identifiers never appear in serialized tool output. No MCP tool
 returns a student identity, submission, grade row, or enrollment record, and no
 non-MCP route accepts an MCP bearer token.
 
-**The residual risk is free text.** Every finding in this audit is a case of a
-student-linked value riding inside a *prose string* that the structured
-defenses cannot see: log messages interpolating usernames/IPs/submission IDs
-into the `query_logs` ring buffer, and the BrightSpace sync-error `detail`
-embedding the pushed grade value and raw D2L response text. These are narrow,
-concretely fixable, and two of the three are latent (BrightSpace sync is not
-yet enabled in production). None is reachable by a student or instructor
-token — every affected tool is behind the admin-only surface.
+**The residual risk was free text.** Every material finding in this audit is a
+case of a student-linked value riding inside a *prose string* that the
+structured defenses cannot see: log messages interpolating
+usernames/IPs/submission IDs into the `query_logs` ring buffer, and the
+BrightSpace sync-error `detail` embedding the pushed grade value and raw D2L
+response text (latent — sync is not yet enabled in production). None was
+reachable by a student or instructor token — every affected tool is behind the
+admin-only surface — and all of them are narrow and have been **fixed on this
+branch**, each with a source-scan or unit test pinning the fix.
 
-**Recommendation:** fix F-1 and F-2 (small, mechanical changes listed with each
-finding) before submitting to the privacy team; the remaining findings are
-hardening and documentation. With F-1/F-2 closed, the claim "no student data is
-reachable through either MCP surface, directly or by inference" is accurate and
-demonstrable from the repository.
+**Remediation status (updated in this same PR):** F-1, F-2, F-3, F-4, F-6,
+and F-8 have been **remediated** on this branch — the fixes landed alongside
+this document, each with a pinning test (details in each finding's
+"Remediated" note). The remaining open items are F-5 (an explicitly accepted
+residual for the Steward to acknowledge), F-7 (a recorded design decision to
+state plainly in the submission), and F-9 (operator attestation of the
+production environment). With those framed as such, the claim "no student data
+is reachable through either MCP surface, directly or by inference" is accurate
+and demonstrable from the repository.
 
-| ID | Surface | Finding | Severity | Status today |
-|----|---------|---------|----------|--------------|
-| F-1 | Admin (`query_logs`) | Warning+ log **messages** can carry student usernames, institutional IDs, submission IDs, and client IPs; metadata redaction does not apply to message text | **Medium** | Live |
-| F-2 | Admin (`get_brightspace_sync_status`, `get_health_alerts`) | Sync-error `detail` free text embeds the pushed **grade value** and raw D2L response body | **Medium** | Latent (BrightSpace sync not enabled in prod) |
-| F-3 | Admin (`get_request_metrics`) | `pathPrefix` filters **raw** paths before ID normalization → existence oracle for concrete submission/setup IDs | Low | Live |
-| F-4 | Admin (`get_browser_diagnostics`) | Samples return the full raw User-Agent; `message`/`stack` are client-supplied and only client-side-constrained | Low | Live |
-| F-5 | Both | Small-cell aggregate inference (per-bucket distinct counts, count deltas across windows) | Low / accepted | Live |
-| F-6 | Content | Wall guard test scans `MCP/Tools/` only and does not forbid `APIUser` / enrollment models (authz uses them legitimately) | Info / hardening | — |
-| F-7 | Admin | Admin surface runs on the owner DB pool (by recorded design decision); guarantee is code-level DTOs + tests, not DB-enforced | Info / recorded | — |
-| F-8 | Both | Compliance-record drift: `tool-inventory.md` says 36 content tools (now **51**); the 19 admin tools appear in no compliance doc; `CLAUDE.md` says 40 | Info / docs | — |
-| F-9 | Deployment | Repo cannot prove prod env: `MCP_DATABASE_USER` (DB wall), `MCP_ALLOWED_HOSTS/ORIGINS`, `AUDIT_LOG_RETENTION_DAYS` need operator confirmation | Verify | — |
+| ID | Surface | Finding | Severity | Status |
+|----|---------|---------|----------|--------|
+| F-1 | Admin (`query_logs`) | Warning+ log **messages** could carry student usernames, institutional IDs, submission IDs, and client IPs; metadata redaction does not apply to message text | **Medium** | **Remediated** (this PR): identifiers moved to redacted metadata at every found site; `piiKeys` extended; `LogMessageHygieneTests` pins the convention |
+| F-2 | Admin (`get_brightspace_sync_status`, `get_health_alerts`) | Sync-error `detail` free text embedded the pushed **grade value** and raw D2L response body | **Medium** (latent — sync not enabled in prod) | **Remediated** (this PR): detail built without points; orgDefinedId removed from error descriptions; D2L bodies truncated; `BrightSpaceDetailSanitizationTests` |
+| F-3 | Admin (`get_request_metrics`) | `pathPrefix` filtered **raw** paths before ID normalization → existence oracle for concrete submission/setup IDs | Low | **Remediated** (this PR): prefix normalized and matched against normalized routes; probe test added |
+| F-4 | Admin (`get_browser_diagnostics`) | Samples returned the full raw User-Agent; `message`/`stack` are client-supplied and only client-side-constrained | Low | **Remediated** (this PR) for the UA: samples carry the coarse browser/OS label. The client-supplied free-text caveat remains a recorded residual (server caps sizes; capture paths are infrastructure-only by client construction) |
+| F-5 | Both | Small-cell aggregate inference (per-bucket distinct counts, count deltas across windows) | Low / accepted | Open — recorded residual for the Steward |
+| F-6 | Content | Wall guard test scanned `MCP/Tools/` only and did not forbid `APIUser` / enrollment models (authz uses them legitimately) | Info / hardening | **Remediated** (this PR): scan extended to `Transport/` + `Resources/`; identity models confined to an explicit authz allowlist |
+| F-7 | Admin | Admin surface runs on the owner DB pool (by recorded design decision); guarantee is code-level DTOs + tests, not DB-enforced | Info / recorded | Open — state plainly in the submission; DB-view hardening path recorded in `docs/admin-mcp.md` §4.1 |
+| F-8 | Both | Compliance-record drift: `tool-inventory.md` predated 6 content tools and the entire admin surface; `CLAUDE.md` said 40 | Info / docs | **Remediated** (this PR): inventory/data-flow/Policy-46/trust-boundary addenda; `CLAUDE.md` corrected to 51 |
+| F-9 | Deployment | Repo cannot prove prod env: `MCP_DATABASE_USER` (DB wall), `MCP_ALLOWED_HOSTS/ORIGINS`, `AUDIT_LOG_RETENTION_DAYS` need operator confirmation | Verify | Open — operator attestation checklist in §3 F-9 and `uw-ai-approval-readiness.md` §4 |
 
 ---
 
@@ -261,10 +266,21 @@ student-linked values into the message:
 | `Services/BrightSpaceSyncSweep.swift:378` | `BrightSpace grade push 404 for user <UUID> …` — internal user UUID |
 | `Middleware/LoginRateLimitMiddleware.swift:94`, `MCP/Transport/MCPOAuthRateLimitMiddleware.swift:31` | `… rate limit exceeded for IP <ip>` — client IPs |
 | `Routes/ResultRoutes.swift:56`, `Routes/BrowserResultRoutes.swift:65`, `Services/StuckSubmissionReaperService.swift:52` | `… submission=<submissionID>` — pseudonymous submission IDs |
+| `Services/DataExportRecoveryService.swift:84`, `MCP/Tools/SupportFileURLFetcher.swift:134` | (found by the F-1 guard scan while remediating) a user UUID in the data-export reaper warning; a resolved address in the SSRF-block warning |
 
 The tool's self-description ("student identifiers are dropped at capture")
 overclaims relative to message text; the design record (`docs/admin-mcp.md`
 §8) flagged exactly this residual.
+
+**Remediated (this PR).** All sites above now log the identifier as structured
+metadata under a key in `RingBufferLogHandler.piiKeys` (extended with `ip`,
+`remote_ip`, `org_defined_id`, `user`, `row_ids`), so the ring buffer drops it
+at capture while console/ops logging keeps full fidelity. The write-side
+convention is pinned by `LogMessageHygieneTests`, a source scan over every
+warning+ logger call in `Sources/APIServer` that fails the build when a known
+identifier variable is interpolated into message text — which is also how the
+two additional sites in the table were found. The `query_logs` description now
+states exactly what is enforced.
 
 **Remediation (mechanical):**
 1. At each site above, move the identifier out of the message and into
@@ -310,13 +326,18 @@ the leak is in the `detail` string, which the test's seeded rows left benign.
 **Status:** latent — BrightSpace sync awaits production credentials
 (`docs/brightspace-setup.md`), so no real student grade has crossed yet.
 
-**Remediation:** build `detail` without the points value ("Grade push to
-'<item>' rejected: HTTP <status>" + an error *class*); truncate/classify the
-D2L body rather than embedding it; keep `orgDefinedId` out of
-`BrightSpaceSyncError.description` (carry it in a non-described field for the
-web UI if needed). Strengthen the PII test to seed a `detail` containing a
-sentinel points value and orgDefinedId and assert absence. Close this before
-BrightSpace sync is enabled in production.
+**Remediated (this PR), ahead of BrightSpace enablement.** The rejection
+detail is now built by `brightspacePushRejectionDetail` (in
+`BrightSpaceSyncSweep.swift`), which takes no points parameter — the grade
+value structurally cannot enter the string; `BrightSpaceSyncError.description`
+no longer describes the `orgDefinedId` (the associated value remains for
+programmatic use) and truncates D2L bodies to
+`BrightSpaceSyncError.describedBodyLimit`. Writer-side guarantees are pinned
+by `BrightSpaceDetailSanitizationTests` (sentinel orgDefinedId absent, body
+truncation, empty-body shape, and the detail builder's no-grade property).
+Both surfacing tools (`get_brightspace_sync_status` samples,
+`get_health_alerts` `last_error`) inherit the fix because it lands at the
+single write site.
 
 ### F-3 (Low) — `get_request_metrics` `pathPrefix` is an existence oracle for concrete IDs
 
@@ -331,18 +352,21 @@ guessing is impractical; the oracle matters when an ID is already known from
 elsewhere, which is exactly the linkage scenario the normalization exists to
 prevent.
 
-**Remediation:** apply `normalizePath` *before* the prefix comparison (filter
-on normalized routes), or reject prefixes containing id-shaped segments using
-the existing `isIdentifierSegment`.
+**Remediated (this PR).** The prefix is now normalized and matched against
+normalized routes (the DB-side raw-path substring narrowing was removed with
+it); a probe carrying one concrete id matches every id of that route shape, so
+`total` no longer confirms a specific identifier. Pinned by
+`getRequestMetricsPathPrefixCannotProbeConcreteIDs` in `AdminMCPToolsTests`.
 
 ### F-4 (Low) — `get_browser_diagnostics` raw User-Agent in samples; client-supplied free text
 
-- Each returned sample includes the **full raw UA string** (up to 512 chars).
+- Each returned sample included the **full raw UA string** (up to 512 chars).
   The tool already computes a coarse, deliberately PII-safe `byBrowser` label
-  ("Safari/iOS") for exactly this reason; the raw UA in samples reintroduces a
-  device-fingerprint-adjacent value that, combined with small cohorts, weakens
-  the aggregate posture. **Remediation:** return `browserLabel(forUserAgent:)`
-  in samples too (keep raw UA out), or truncate to product tokens.
+  ("Safari/iOS") for exactly this reason; the raw UA in samples reintroduced a
+  device-fingerprint-adjacent value that, combined with small cohorts, weakened
+  the aggregate posture. **Remediated (this PR):** samples now carry
+  `browser` — the coarse `browserLabel(forUserAgent:)` — and never the raw UA;
+  pinned by `getBrowserDiagnosticsSamplesCarryCoarseBrowserLabelNotRawUA`.
 - `message`/`stack` are stored verbatim (1 KB / 4 KB caps) from an
   authenticated client POST (`ClientDiagnosticsRoutes`). The
   "infrastructure text only, never student code" property is real but
@@ -379,10 +403,13 @@ today: no tool file touches `APIUser` outside `ToolContext`/`UpdateSolutionTool`
 (outside the scan) touch only courses/assignments and the acting subject. But
 a future tool that queried `APIUser` or listed enrollments would not trip the
 wall test, and the DB role cannot catch it (`users`/`course_enrollments` are
-SELECT-granted for authz). **Remediation:** extend the scan to `Transport/` +
-`Resources/`, and forbid `APIUser`/`APICourseEnrollment`/`userIsEnrolled`
-outside an explicit allowlist (`ToolContext.swift`, `UpdateSolutionTool.swift`,
-`MCPCourseGuidance.swift`).
+SELECT-granted for authz). **Remediated (this PR):** the wall scan now also
+covers `Transport/` + `Resources/`
+(`transportAndResourceLayersReferenceNoStudentModels`), and a new guard
+confines `APIUser`/`APICourseEnrollment` to an explicit authorization
+allowlist — `ToolContext.swift` and `MCPCourseGuidance.swift`
+(`identityModelsConfinedToTheAuthorizationLayer`); stray comment mentions
+elsewhere were reworded so the allowlist stays minimal.
 
 ### F-7 (Info / recorded decision) — admin surface has no DB-level wall
 
@@ -402,10 +429,14 @@ hardening later, the design of record is PII-free SQL views granted to the
 content tools (v0.4.435); the catalog is now **51**, and the **19 admin tools
 appear in no compliance document** — `docs/admin-mcp.md` §9 itself requires
 the compliance record be updated before the admin surface is enabled in
-production. `CLAUDE.md`'s prose says 40. This document provides the current
-census (§2); the companion inventories should be refreshed or superseded
-before submission, and the P2-3 checklist item ("re-run the census when a tool
-is added") extended to cover `AdminMCPToolCatalog.live`.
+production. `CLAUDE.md`'s prose said 40. **Remediated (this PR):**
+`tool-inventory.md` carries 2026-07 addenda (the six content tools added since
+the base snapshot, and the full 19-tool admin-surface inventory);
+`policy46-classification.md` gained the admin-surface data types (rows 12–17);
+`trust-boundary.md` describes the second audience; `data-flow-inventory.md`
+points at this document for the refreshed flows; `CLAUDE.md` is corrected to
+51. The P2-3 census rule now explicitly covers `AdminMCPToolCatalog.live`
+(stated in the inventory header).
 
 ### F-9 (Verify at deployment) — properties the repo cannot prove
 
@@ -495,26 +526,29 @@ DTOs, redacted ring buffer, per-tool PII + role-refusal tests, and
 
 ---
 
-## 7. Recommended order of work before submission
+## 7. Order of work before submission (status)
 
-1. **F-1** — move identifiers to metadata at the six named call sites, extend
-   `piiKeys`, add the guard test, fix the `query_logs` description. (Small,
-   self-contained; closes the only live Medium.)
-2. **F-2** — sanitize the BrightSpace `detail` writer + error descriptions,
-   strengthen the PII test. (Must land before BrightSpace sync is enabled;
-   cheap now, awkward after.)
-3. **F-3 / F-4** — normalize-before-filter; sample-level `browserLabel`
-   instead of raw UA. (Each is a few lines.)
-4. **F-6** — widen the wall test's scan + forbid identity models outside the
-   authz allowlist. (Keeps the architectural guarantee ahead of future tools.)
-5. **F-8** — refresh/supersede the compliance inventories with the current
-   70-tool census; state F-7's application-layer posture explicitly.
-6. **F-9** — operator attestation of the production env properties.
+1. **F-1** — ✅ done (this PR): identifiers to redacted metadata at every
+   found site, `piiKeys` extended, `LogMessageHygieneTests` guard,
+   `query_logs` description corrected.
+2. **F-2** — ✅ done (this PR), ahead of BrightSpace enablement: sanitized
+   detail writer + error descriptions, `BrightSpaceDetailSanitizationTests`.
+3. **F-3 / F-4** — ✅ done (this PR): normalized-prefix matching; coarse
+   browser label in samples; both pinned by tests.
+4. **F-6** — ✅ done (this PR): wall scan widened; identity models confined
+   to the authz allowlist.
+5. **F-8** — ✅ done (this PR): compliance inventories refreshed with the
+   70-tool census (addenda); F-7's application-layer posture stated here and
+   in the inventory addendum.
+6. **F-9** — remaining: operator attestation of the production env properties
+   (checklist in §3 F-9 / `uw-ai-approval-readiness.md` §4), plus the F-5
+   accepted-residual acknowledgement from the Steward.
 
-With 1–2 done and 5–6 written up, the submission can truthfully state: *no MCP
-tool returns student identity, submissions, results, grades, enrollment, or
-seeds; the two student-data tables the content surface can reach are
+With the above landed, the submission can truthfully state: *no MCP tool
+returns student identity, submissions, results, grades, enrollment, or seeds;
+the two student-data tables the content surface can reach are
 validation-filtered in code, by test, and (when configured) by database RLS;
 the admin surface exposes aggregates and allowlisted infrastructure fields
 pinned by tests that seed student data and assert its absence; and the known
-free-text importers have been closed.*
+free-text importers have been closed, with source-scan guards keeping them
+closed.*

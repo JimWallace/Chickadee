@@ -131,8 +131,12 @@ enum SupportFileURLFetcher {
         }
         guard !addresses.isEmpty else { throw SupportFileFetchError.dnsFailed(host: host) }
         for ip in addresses where BlockedIPClassifier.isBlocked(ip) {
+            // The resolved address is instructor-URL infrastructure, not a
+            // client IP, but it still goes in metadata: the admin query_logs
+            // buffer redacts the "ip" key while console logging keeps it.
             request.logger.warning(
-                "mcp.support_file_fetch.blocked host=\(host) ip=\(ip)")
+                "mcp.support_file_fetch.blocked host=\(host)",
+                metadata: ["ip": .string("\(ip)")])
             throw SupportFileFetchError.blockedAddress(host: host, ip: ip)
         }
 

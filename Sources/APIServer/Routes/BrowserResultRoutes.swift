@@ -62,8 +62,11 @@ struct BrowserResultRoutes: RouteCollection {
             // grader produced it.
             let (bounded, didTruncate) = decoded.truncatingOversizedOutput()
             if didTruncate {
+                // Submission id in metadata only — message text reaches the
+                // admin query_logs buffer unredacted (compliance audit F-1).
                 req.logger.warning(
-                    "result_collection_truncated submission=\(bounded.submissionID) source=browser"
+                    "result_collection_truncated source=browser",
+                    metadata: ["submission_id": .string(bounded.submissionID)]
                 )
             }
             collection = bounded

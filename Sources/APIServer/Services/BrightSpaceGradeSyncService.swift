@@ -91,9 +91,12 @@ func recordSweepFailure(
         row.brightspaceSyncError = error.localizedDescription
         try? await row.save(on: db)
     }
+    // Row ids are result/override rows keyed to a student — metadata only, so
+    // the admin query_logs buffer drops them at capture (compliance audit F-1).
     let ids = rows.map(\.brightspaceSyncRowID).joined(separator: ", ")
     logger.warning(
-        "BrightSpace grade sync \(retryable ? "transient" : "terminal") failure for row(s) \(ids): \(error)")
+        "BrightSpace grade sync \(retryable ? "transient" : "terminal") failure for \(rows.count) row(s): \(error)",
+        metadata: ["row_ids": .string(ids)])
 }
 
 /// Flags a freshly-built (not yet saved) result row for BrightSpace grade sync

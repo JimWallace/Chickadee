@@ -51,10 +51,14 @@ struct RingBufferLogHandler: LogHandler {
     }
 
     /// Metadata keys dropped before storage — anything that could identify a
-    /// student.  Matched case-insensitively.
+    /// student.  Matched case-insensitively.  The write-side convention
+    /// (enforced by `LogMessageHygieneTests`) is that identifiers go into
+    /// metadata under one of these keys, never into message text, so dropping
+    /// the key redacts the buffer while console logging keeps full fidelity.
     static let piiKeys: Set<String> = [
         "user_id", "userid", "submission_id", "submissionid", "username", "email",
         "actor_username", "student_id", "studentid", "name",
+        "ip", "remote_ip", "org_defined_id", "user", "row_ids",
     ]
 
     static func redact(_ metadata: Logger.Metadata) -> [String: String] {

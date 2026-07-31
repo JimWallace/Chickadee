@@ -46,9 +46,10 @@ struct QueryLogsTool: DiagnosticTool {
     static let description =
         "Recent server log events (warning and above) from an in-process ring buffer, for "
         + "diagnosis. Filter by minLevel, a message substring (contains), and sinceMinutes. "
-        + "Returns most-recent-first entries with level, label, message, and PII-redacted "
-        + "metadata. Read-only; the buffer is per-process and resets on restart, and student "
-        + "identifiers are dropped at capture."
+        + "Returns most-recent-first entries with level, label, message, and metadata with PII "
+        + "keys dropped at capture. Read-only; the buffer is per-process and resets on restart. "
+        + "Messages are infrastructure text — the write-side convention (identifiers go in "
+        + "redacted metadata, never message prose) is pinned by a source-scan guard test."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([

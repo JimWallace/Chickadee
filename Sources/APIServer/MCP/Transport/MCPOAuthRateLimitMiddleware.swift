@@ -28,7 +28,8 @@ struct MCPOAuthRateLimitMiddleware: AsyncMiddleware {
             on: request.db
         )
         guard allowed else {
-            request.logger.warning("MCP OAuth rate limit exceeded for IP \(ip)")
+            request.logger.warning(
+                "MCP OAuth rate limit exceeded", metadata: ["ip": .string(ip)])
             let response = Response(status: .tooManyRequests)
             response.headers.replaceOrAdd(name: "Retry-After", value: "60")
             response.headers.replaceOrAdd(name: .cacheControl, value: "no-store")

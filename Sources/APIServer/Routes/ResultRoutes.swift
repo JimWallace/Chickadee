@@ -53,8 +53,11 @@ struct ResultRoutes: RouteCollection {
         // unbounded blob out of the results table either way.
         let (collection, didTruncate) = report.collection.truncatingOversizedOutput()
         if didTruncate {
+            // Submission id in metadata only — message text reaches the admin
+            // query_logs buffer unredacted (compliance audit F-1).
             req.logger.warning(
-                "result_collection_truncated submission=\(collection.submissionID) — runner sent an over-budget collection"
+                "result_collection_truncated — runner sent an over-budget collection",
+                metadata: ["submission_id": .string(collection.submissionID)]
             )
         }
 

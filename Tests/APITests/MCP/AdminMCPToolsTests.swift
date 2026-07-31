@@ -272,6 +272,32 @@ import VaporTesting
         }
     }
 
+    @Test func getBrowserDiagnosticsSamplesCarryCoarseBrowserLabelNotRawUA() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "bd-admin3", role: "admin")
+            let student = try await makeTestUser(on: app, username: "bd-student3", role: "student")
+            let rawUA =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                + "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            try await APIClientDiagnostic(
+                userID: try student.requireID(), testSetupID: nil, kind: "editor_error",
+                failedChecks: nil, userAgent: rawUA, message: "boom", stack: nil,
+                source: "onerror"
+            ).save(on: app.db)
+
+            let output = try await GetBrowserDiagnosticsTool().execute(
+                .init(), context(subject: "bd-admin3"))
+            let sample = try #require(output.recentSamples.first)
+            #expect(sample.browser == "Chrome/Windows")
+
+            // F-4 guarantee: the raw (fingerprint-adjacent) User-Agent string
+            // never appears in the serialized output — only the coarse label.
+            let json = try #require(String(bytes: JSONEncoder().encode(output), encoding: .utf8))
+            #expect(!json.contains(rawUA))
+            #expect(!json.contains("AppleWebKit"))
+        }
+    }
+
     @Test func getBrowserDiagnosticsRejectsNonAdmin() async throws {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "bd-prof", role: "instructor")
@@ -624,6 +650,30 @@ import VaporTesting
             let json = try #require(String(bytes: JSONEncoder().encode(output), encoding: .utf8))
             #expect(!json.contains("sub_abc12345"))
             #expect(!json.contains("sub_def67890"))
+        }
+    }
+
+    @Test func getRequestMetricsPathPrefixCannotProbeConcreteIDs() async throws {
+        try await withApp(app) { app in
+            _ = try await makeTestUser(on: app, username: "rm-admin2", role: "admin")
+            let now = Date()
+            try await APIRequestMetric(
+                method: "GET", path: "/api/v1/submissions/sub_secret999", requestKind: nil,
+                statusCode: 200, startedAt: now, finishedAt: now, durationMs: 40,
+                submissionID: nil, workerID: nil
+            ).save(on: app.db)
+
+            // F-3 guarantee: a prefix carrying a DIFFERENT concrete id matches
+            // anyway, because both the prefix and the stored path normalize to
+            // "/api/v1/submissions/:id" — so total>0 no longer confirms that a
+            // specific submission id occurred in the window.
+            let probe = try await GetRequestMetricsTool().execute(
+                .init(windowHours: nil, pathPrefix: "/api/v1/submissions/sub_zzzzzz99", limit: nil),
+                context(subject: "rm-admin2"))
+            #expect(probe.total == 1)
+
+            let json = try #require(String(bytes: JSONEncoder().encode(probe), encoding: .utf8))
+            #expect(!json.contains("sub_secret999"))
         }
     }
 

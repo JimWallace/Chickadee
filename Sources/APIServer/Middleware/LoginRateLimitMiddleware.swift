@@ -91,7 +91,10 @@ struct LoginRateLimitMiddleware: AsyncMiddleware {
             on: request.db
         )
         if !allowed {
-            request.logger.warning("Login rate limit exceeded for IP \(ip)")
+            // IP in metadata only — an IP is personal information, and message
+            // text reaches the admin query_logs buffer unredacted (audit F-1).
+            request.logger.warning(
+                "Login rate limit exceeded", metadata: ["ip": .string(ip)])
             return try Self.tooManyRequestsResponse()
         }
         await LoginAttemptService.purgeStaleIfDue(
