@@ -55,7 +55,8 @@ extension InstructorDashboardRoutes {
             settingsReadOnlyNote = "Only this course's instructors can change slip-day policy."
         }
 
-        let policy = course?.slipDayPolicy
+        let policy =
+            course?.slipDayPolicy
             ?? SlipDayPolicy.resolve(enabled: nil, daysPerStudent: nil, extensionHours: nil)
         var students: [SlipDayStudentRow] = []
         if let course, let courseUUID = course.id {

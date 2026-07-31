@@ -77,12 +77,7 @@ struct WebRoutes: RouteCollection {
         // list. An admin with no enrollment administers courses from /admin; the
         // home dashboard is never an all-courses view, for any role.
         guard let activeCourseUUID = courseState.activeCourseUUID else {
-            return try await req.view.render(
-                "index",
-                IndexContext(
-                    displayGroups: [], hasAny: false, currentUser: userContext,
-                    slipDaySummary: nil)
-            ).encodeResponse(for: req)
+            return try await Self.renderEmptyDashboard(req: req, userContext: userContext)
         }
 
         let fmt = waterlooDateTimeFormatter()
@@ -133,11 +128,9 @@ struct WebRoutes: RouteCollection {
         // The viewer's slip-day balance + per-assignment spends (#1228).
         // `.disabled` for staff or a course with the policy off.
         async let slipDayFetch = Self.loadSlipDayDashboardData(
-            user: user,
-            activeCourseUUID: activeCourseUUID,
+            user: user, activeCourseUUID: activeCourseUUID,
             isActiveCourseStaff: isActiveCourseStaff,
-            allAssignments: allAssignments,
-            db: req.db)
+            allAssignments: allAssignments, db: req.db)
 
         let extensionDueAtBySetupID = try await extensionsFetch
         let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
@@ -199,23 +192,28 @@ struct WebRoutes: RouteCollection {
             rows: rows, setupKeyByID: setupKeyByID, contentItems: contentItems,
             allAssignments: allAssignments, allSections: allSections)
 
-        // "Slip days: 1 of 2 remaining." under the course heading — shown only
-        // when the course has the policy on and the viewer is a student
-        // (#1228).  Precomputed here; LeafKit conditionals stay a plain
-        // nil-check.
-        let slipDaySummary: String? =
-            slipDayData.policy.enabled
-            ? "Slip days: \(max(slipDayData.balance, 0)) of \(slipDayData.totalBudget) remaining."
-            : nil
-
         return try await req.view.render(
             "index",
             IndexContext(
                 displayGroups: displayGroups,
                 hasAny: !displayGroups.isEmpty,
                 currentUser: userContext,
-                slipDaySummary: slipDaySummary
+                slipDaySummary: slipDayData.summaryLine
             )
+        ).encodeResponse(for: req)
+    }
+
+    /// The "not enrolled in any courses" dashboard — the home page is
+    /// course-scoped for every role, so with no active enrollment there is
+    /// nothing to list.
+    private static func renderEmptyDashboard(
+        req: Request, userContext: CurrentUserContext?
+    ) async throws -> Response {
+        try await req.view.render(
+            "index",
+            IndexContext(
+                displayGroups: [], hasAny: false, currentUser: userContext,
+                slipDaySummary: nil)
         ).encodeResponse(for: req)
     }
 
