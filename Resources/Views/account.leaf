@@ -90,7 +90,11 @@ My Account
         #for(course in enrolledCourses):
             <tr>
                 <td><strong>#(course.code)</strong></td>
-                <td>#(course.name)</td>
+                <td>#(course.name)
+                    #if(course.slipDaysText):
+                    <div class="text-muted">Slip days: #(course.slipDaysText)</div>
+                    #endif
+                </td>
                 <td>
                     #if(course.enrollmentMode == "open"):
                     <form method="post" action="/account/unenroll/#(course.id)" class="inline-form">

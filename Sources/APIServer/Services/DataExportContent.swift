@@ -98,9 +98,18 @@ struct DataExportGradingAdjustments: Codable, Sendable {
         let assignmentTitle: String?
         let spentAt: Date?
     }
+    struct SlipDaySpend: Codable, Sendable {
+        let assignmentTitle: String?
+        let spentAt: Date?
+        /// The per-student deadline this spend produced.
+        let extendedDueAt: Date
+        /// Set when course staff returned the day to the budget.
+        let refundedAt: Date?
+    }
     let deadlineExtensions: [Extension]
     let gradeOverrides: [GradeOverride]
     let secretRevealTokensSpent: [SecretRevealSpend]
+    let slipDaysSpent: [SlipDaySpend]
 }
 
 /// Everything gathered from the database for one export, in Sendable form,
@@ -335,6 +344,7 @@ private let metadataSubjectActions: [String] = [
     AuditAction.extensionGranted, .extensionRevoked,
     .gradeOverrideSet, .gradeOverrideCleared,
     .secretRevealRegranted, .submissionRetestForStudent,
+    .slipDayRefunded, .slipDayAdjustmentChanged,
 ].map(\.rawValue)
 
 private func gatherAuditEntries(
@@ -415,9 +425,16 @@ private func gatherGradingAdjustments(
     let unlocks = try await APISecretRevealUnlock.query(on: db)
         .filter(\.$userID == userID)
         .all()
+    let slipDaySpends = try await APISlipDaySpend.query(on: db)
+        .filter(\.$userID == userID)
+        .sort(\.$spentAt, .ascending)
+        .all()
 
     // Resolve assignment titles for everything referenced above.
-    let assignmentIDs = Array(Set(extensions.map(\.assignmentID) + unlocks.map(\.assignmentID)))
+    let assignmentIDs = Array(
+        Set(
+            extensions.map(\.assignmentID) + unlocks.map(\.assignmentID)
+                + slipDaySpends.map(\.assignmentID)))
     let assignmentsByID: [UUID: APIAssignment] =
         assignmentIDs.isEmpty
         ? [:]
@@ -447,6 +464,12 @@ private func gatherGradingAdjustments(
         },
         secretRevealTokensSpent: unlocks.map {
             .init(assignmentTitle: assignmentsByID[$0.assignmentID]?.title, spentAt: $0.spentAt)
+        },
+        slipDaysSpent: slipDaySpends.map {
+            .init(
+                assignmentTitle: assignmentsByID[$0.assignmentID]?.title,
+                spentAt: $0.spentAt, extendedDueAt: $0.extensionDueAt,
+                refundedAt: $0.refundedAt)
         }
     )
 }
@@ -493,8 +516,9 @@ func dataExportReadme(username: String, generatedAt: Date) -> String {
           matching what you see on the site. Aggregate counts and grades
           always cover every test.
         - `grading-adjustments.json` — per-student grading records: deadline
-          extensions, grade overrides, and secret-test reveal tokens you have
-          spent.
+          extensions, grade overrides, secret-test reveal tokens you have
+          spent, and slip days you have spent (with the deadline each one
+          produced and any staff refund).
         - `audit-log.json` — activity records involving your account.
           Entries marked `actor` are actions you performed (with the IP
           address and browser they came from); entries marked `subject` are

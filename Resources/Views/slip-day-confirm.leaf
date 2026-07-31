@@ -1,0 +1,33 @@
+#extend("base"):
+#export("title"):
+Use a slip day
+#endexport
+#export("content"):
+<style>
+.slip-day-confirm-card { max-width: 42rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-muted); }
+.slip-day-confirm-title { margin: 0 0 .5rem; }
+.slip-day-confirm-deadline { font-size: var(--text-lg); }
+.slip-day-confirm-actions { display: flex; gap: .5rem; align-items: center; margin-top: 1rem; }
+</style>
+<h1>Use a slip day</h1>
+<div class="slip-day-confirm-card">
+    <h2 class="slip-day-confirm-title">#(assignmentTitle)</h2>
+    #if(isStacked):
+    <p>You currently hold a slip-day extension until <strong>#(heldDeadlineText)</strong> on this assignment.</p>
+    <p class="slip-day-confirm-deadline">Spending another slip day extends your personal deadline to <strong>#(newDeadlineText)</strong> (America/Toronto).</p>
+    #else:
+    <p>The deadline for this assignment passed on <strong>#(heldDeadlineText)</strong>.</p>
+    <p class="slip-day-confirm-deadline">Spending a slip day extends your personal deadline to <strong>#(newDeadlineText)</strong> (America/Toronto).</p>
+    #endif
+    <p>This uses <strong>1 of your #(balance) remaining</strong> slip days for #(courseCode) (#(remainingAfter) of #(totalBudget) will remain). Each slip day adds #(extensionHours) hours, counted from the original deadline.</p>
+    <p>A spent slip day cannot be returned by you. Course staff can refund one in exceptional cases.</p>
+    <div class="slip-day-confirm-actions">
+        <form method="post" action="/testsetups/#(testSetupID)/slip-day" class="inline-form">
+            #csrfFormField()
+            <button class="btn btn-primary" type="submit">#(confirmLabel)</button>
+        </form>
+        <a class="btn" href="/">Cancel</a>
+    </div>
+</div>
+#endexport
+#endextend

@@ -37,15 +37,39 @@ struct AccountRoutes: RouteCollection {
             .all()
         let enrolledIDs = Set(enrollments.compactMap { $0.$course.id })
 
+        // Slip-day balances per enrolled course (#1228): one query for every
+        // unrefunded spend, grouped by course in memory.
+        let unrefundedSpends = try await APISlipDaySpend.query(on: req.db)
+            .filter(\.$userID == userID)
+            .filter(\.$refundedAt == nil)
+            .all()
+        var spendCountByCourseID: [UUID: Int] = [:]
+        for spend in unrefundedSpends {
+            spendCountByCourseID[spend.courseID, default: 0] += 1
+        }
+
         let enrolledRows =
             enrollments
             .compactMap { e -> AccountCourseRow? in
                 guard let id = e.course.id else { return nil }
+                // "N of M remaining" only where it means something: the
+                // course has slip days on and this enrollment is a student
+                // (staff never hold a balance).
+                let policy = e.course.slipDayPolicy
+                let slipDaysText: String?
+                if policy.enabled, e.role == .student {
+                    let total = policy.daysPerStudent + (e.slipDaysAdjustment ?? 0)
+                    let used = spendCountByCourseID[id] ?? 0
+                    slipDaysText = "\(max(total - used, 0)) of \(total) remaining"
+                } else {
+                    slipDaysText = nil
+                }
                 return AccountCourseRow(
                     id: id.uuidString,
                     code: e.course.code,
                     name: e.course.name,
-                    enrollmentMode: e.course.enrollmentMode.rawValue
+                    enrollmentMode: e.course.enrollmentMode.rawValue,
+                    slipDaysText: slipDaysText
                 )
             }
             .sorted { $0.code < $1.code }
@@ -58,7 +82,8 @@ struct AccountRoutes: RouteCollection {
                 else { return nil }
                 return AccountCourseRow(
                     id: id.uuidString, code: c.code, name: c.name,
-                    enrollmentMode: c.enrollmentMode.rawValue)
+                    enrollmentMode: c.enrollmentMode.rawValue,
+                    slipDaysText: nil)
             }
 
         // Personal-data export state (#557) for the "Your data" section.
@@ -179,4 +204,7 @@ private struct AccountCourseRow: Encodable {
     let code: String
     let name: String
     let enrollmentMode: String
+    /// "1 of 2 remaining" — the slip-day balance for a student enrollment in
+    /// a course with the policy on; nil hides the line (#1228).
+    let slipDaysText: String?
 }

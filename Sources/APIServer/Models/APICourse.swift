@@ -81,6 +81,18 @@ final class APICourse: Model, Content, @unchecked Sendable {
     @OptionalField(key: "archived_at")
     var archivedAt: Date?
 
+    /// Slip-day policy columns (#1228). All three nullable so pre-existing
+    /// courses read as "never configured"; resolve through the typed
+    /// `slipDayPolicy` accessor, never these raw columns.
+    @OptionalField(key: "slip_days_enabled")
+    var slipDaysEnabled: Bool?
+
+    @OptionalField(key: "slip_days_per_student")
+    var slipDaysPerStudent: Int?
+
+    @OptionalField(key: "slip_day_extension_hours")
+    var slipDayExtensionHours: Int?
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 
@@ -102,5 +114,19 @@ final class APICourse: Model, Content, @unchecked Sendable {
         self.enrollmentModeRaw = enrollmentMode.rawValue
         self.brightspaceOrgUnitID = brightspaceOrgUnitID
         self.brightspaceOrgUnitName = brightspaceOrgUnitName
+    }
+}
+
+// MARK: - Slip-day policy
+
+extension APICourse {
+    /// The course's effective slip-day policy: nil columns resolve to
+    /// disabled with the 2 × 24 h defaults (`SlipDayPolicy.resolve`).
+    var slipDayPolicy: SlipDayPolicy {
+        SlipDayPolicy.resolve(
+            enabled: slipDaysEnabled,
+            daysPerStudent: slipDaysPerStudent,
+            extensionHours: slipDayExtensionHours
+        )
     }
 }

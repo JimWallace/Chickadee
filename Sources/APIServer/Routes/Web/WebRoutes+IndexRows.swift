@@ -23,6 +23,37 @@ struct DashboardGradeData {
     var latestBadgesBySetupID: [String: [AchievementBadge]] = [:]
 }
 
+/// The viewer's slip-day state for the active course (#1228), loaded once per
+/// dashboard request.  `.disabled` (the default) renders nothing: policy off,
+/// staff viewer, or no active course.
+struct DashboardSlipDayData {
+    let policy: SlipDayPolicy
+    /// Remaining balance (can go negative after a staff claw-back; display
+    /// sites clamp at 0).
+    let balance: Int
+    /// Budget + per-student adjustment — the "of N" in "1 of N remaining".
+    let totalBudget: Int
+    /// Unrefunded spends per test setup, for the per-row offer state.
+    let spendCountBySetupID: [String: Int]
+
+    static let disabled = DashboardSlipDayData(
+        policy: SlipDayPolicy.resolve(enabled: false, daysPerStudent: nil, extensionHours: nil),
+        balance: 0,
+        totalBudget: 0,
+        spendCountBySetupID: [:]
+    )
+
+    /// "Slip days: 1 of 2 remaining." under the course heading; nil hides
+    /// the line (policy off / staff / no course).  The balance clamps at 0
+    /// for display — a negative value (staff claw-back beyond the unspent
+    /// remainder) reads as an implementation detail, not a debt.
+    var summaryLine: String? {
+        policy.enabled
+            ? "Slip days: \(max(balance, 0)) of \(totalBudget) remaining."
+            : nil
+    }
+}
+
 /// Everything `buildTestSetupRow` reads besides the setup itself — computed
 /// once per request, shared across every row (mirrors
 /// `StudentAssignmentRowContext` on the per-student page).
@@ -35,6 +66,7 @@ struct IndexRowContext {
     let isActiveCourseStaff: Bool
     let activeCourseCode: String?
     let hasNotebookBySetupID: [String: Bool]
+    let slipDay: DashboardSlipDayData
 }
 
 extension WebRoutes {
@@ -323,6 +355,9 @@ extension WebRoutes {
         // signal. Scoped to the genuine published-then-closed case; preview /
         // unpublished are untouched, and staff never carry extensions.
         let displayStatus = (hasActiveExtension && status == "closed") ? "extended" : status
+        let slipDayLabel = slipDayActionLabel(
+            assignment: assignment, extensionDueAt: extensionDueAt,
+            setupID: setupID, context: context)
         let badgeSplit = AchievementBadge.dashboardSplit(context.gradeData.latestBadgesBySetupID[setupID] ?? [])
         return TestSetupRow(
             id: setupID,
@@ -352,7 +387,38 @@ extension WebRoutes {
             extraBadgeCount: badgeSplit.extraCount,
             extraBadgesTooltip: badgeSplit.extraTooltip,
             hasActiveExtension: hasActiveExtension,
-            effectiveDueAtText: effectiveDueAt.map { context.fmt.string(from: $0) }
+            effectiveDueAtText: effectiveDueAt.map { context.fmt.string(from: $0) },
+            slipDayAvailable: slipDayLabel != nil,
+            slipDayURL: "/testsetups/\(setupID)/slip-day",
+            slipDayActionLabel: slipDayLabel ?? ""
         )
+    }
+
+    /// The slip-day action's tooltip/aria text for one row (#1228), nil when
+    /// the action is hidden.  Offered only to students, after the deadline,
+    /// inside the claim window, with balance, and never on top of a
+    /// staff-granted extension (an extension row the slip-day ledger did not
+    /// produce) or a staff-only preview.
+    private static func slipDayActionLabel(
+        assignment: APIAssignment?,
+        extensionDueAt: Date?,
+        setupID: String,
+        context: IndexRowContext
+    ) -> String? {
+        guard let assignment, assignment.visibility != .preview,
+            !context.isActiveCourseStaff
+        else { return nil }
+        let spentCount = context.slipDay.spendCountBySetupID[setupID] ?? 0
+        let offer = slipDayOffer(
+            policy: context.slipDay.policy,
+            dueAt: assignment.dueAt,
+            balance: context.slipDay.balance,
+            spentOnAssignment: spentCount,
+            hasForeignExtension: extensionDueAt != nil && spentCount == 0)
+        guard let offer else { return nil }
+        let deadlineText = context.fmt.string(from: offer.newDeadline)
+        return offer.isStacked
+            ? "Use another slip day — extends your deadline to \(deadlineText)"
+            : "Use a slip day — extends your deadline to \(deadlineText)"
     }
 }

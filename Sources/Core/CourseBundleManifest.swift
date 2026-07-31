@@ -82,14 +82,28 @@ public struct BundledCourse: Codable, Sendable {
     public let name: String
     /// Enrollment mode; nil defaults to `.open` at resolution time.
     public let enrollmentMode: CourseEnrollmentMode?
+    /// Slip-day policy (#1228), so a course carries it across terms.  All
+    /// three nil in bundles written before the feature existed — resolved
+    /// through `bundledCourseSlipDayPolicy` (disabled with defaults).  The
+    /// ledger and per-student adjustments are deliberately NOT bundled:
+    /// they are per-term student data, and the budget resets at rollover.
+    public let slipDaysEnabled: Bool?
+    public let slipDaysPerStudent: Int?
+    public let slipDayExtensionHours: Int?
 
     public init(
         code: String, name: String,
-        enrollmentMode: CourseEnrollmentMode? = nil
+        enrollmentMode: CourseEnrollmentMode? = nil,
+        slipDaysEnabled: Bool? = nil,
+        slipDaysPerStudent: Int? = nil,
+        slipDayExtensionHours: Int? = nil
     ) {
         self.code = code
         self.name = name
         self.enrollmentMode = enrollmentMode
+        self.slipDaysEnabled = slipDaysEnabled
+        self.slipDaysPerStudent = slipDaysPerStudent
+        self.slipDayExtensionHours = slipDayExtensionHours
     }
 }
 
@@ -97,6 +111,16 @@ public struct BundledCourse: Codable, Sendable {
 /// Defaults to `.open` when the bundle omitted the field.
 public func bundledCourseEnrollmentMode(_ course: BundledCourse) -> CourseEnrollmentMode {
     course.enrollmentMode ?? .open
+}
+
+/// Resolves the effective slip-day policy for an imported bundle.  Bundles
+/// written before slip days existed resolve to disabled with the defaults.
+public func bundledCourseSlipDayPolicy(_ course: BundledCourse) -> SlipDayPolicy {
+    SlipDayPolicy.resolve(
+        enabled: course.slipDaysEnabled,
+        daysPerStudent: course.slipDaysPerStudent,
+        extensionHours: course.slipDayExtensionHours
+    )
 }
 
 public struct BundledUser: Codable, Sendable {

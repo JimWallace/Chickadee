@@ -133,6 +133,32 @@ struct CourseBundleManifestTests {
         #expect(bundledCourseEnrollmentMode(course) == .open)
     }
 
+    // MARK: - Slip-day policy (#1228)
+
+    @Test func slipDayFieldsRoundTrip() throws {
+        let course = BundledCourse(
+            code: "CS101", name: "Intro CS", enrollmentMode: .open,
+            slipDaysEnabled: true, slipDaysPerStudent: 3, slipDayExtensionHours: 48
+        )
+        let decoded = try decoder.decode(BundledCourse.self, from: try encoder.encode(course))
+        let policy = bundledCourseSlipDayPolicy(decoded)
+        #expect(policy.enabled)
+        #expect(policy.daysPerStudent == 3)
+        #expect(policy.extensionHours == 48)
+    }
+
+    @Test func legacyBundleWithoutSlipDayFieldsResolvesDisabled() throws {
+        // A bundle exported before slip days existed has no keys; resolution
+        // falls back to disabled with the defaults.
+        let json = #"{ "code": "CS101", "name": "Intro CS" }"#
+        let decoded = try decoder.decode(BundledCourse.self, from: Data(json.utf8))
+        #expect(decoded.slipDaysEnabled == nil)
+        let policy = bundledCourseSlipDayPolicy(decoded)
+        #expect(policy.enabled == false)
+        #expect(policy.daysPerStudent == SlipDayPolicy.defaultDaysPerStudent)
+        #expect(policy.extensionHours == SlipDayPolicy.defaultExtensionHours)
+    }
+
     // MARK: - CourseEnrollmentMode raw values
 
     @Test(

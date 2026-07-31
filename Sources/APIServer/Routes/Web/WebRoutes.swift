@@ -26,6 +26,9 @@ struct WebRoutes: RouteCollection {
         routes.get("testsetups", ":testSetupID", "notebook", "source", use: notebookSource)
         routes.post("testsetups", ":testSetupID", "reset-notebook", use: resetOwnNotebook)
         routes.post("testsetups", ":testSetupID", "reveal-secret", use: spendSecretRevealToken)
+        // Slip days (#1228): explicit confirmation page + the spend POST.
+        routes.get("testsetups", ":testSetupID", "slip-day", use: slipDayConfirmPage)
+        routes.post("testsetups", ":testSetupID", "slip-day", use: spendSlipDay)
         // Self-service "clear cached editor data" page for a wedged kernel
         // (Clear-Site-Data: cache + storage; see WebRoutes+EditorReset.swift).
         routes.get("reset-editor", use: editorResetPage)
@@ -74,10 +77,7 @@ struct WebRoutes: RouteCollection {
         // list. An admin with no enrollment administers courses from /admin; the
         // home dashboard is never an all-courses view, for any role.
         guard let activeCourseUUID = courseState.activeCourseUUID else {
-            return try await req.view.render(
-                "index",
-                IndexContext(displayGroups: [], hasAny: false, currentUser: userContext)
-            ).encodeResponse(for: req)
+            return try await Self.renderEmptyDashboard(req: req, userContext: userContext)
         }
 
         let fmt = waterlooDateTimeFormatter()
@@ -125,6 +125,12 @@ struct WebRoutes: RouteCollection {
         async let contentItemsFetch = Self.loadCourseContentItems(
             activeCourseUUID: courseState.activeCourseUUID,
             includeUnpublished: isActiveCourseStaff, db: req.db)
+        // The viewer's slip-day balance + per-assignment spends (#1228).
+        // `.disabled` for staff or a course with the policy off.
+        async let slipDayFetch = Self.loadSlipDayDashboardData(
+            user: user, activeCourseUUID: activeCourseUUID,
+            isActiveCourseStaff: isActiveCourseStaff,
+            allAssignments: allAssignments, db: req.db)
 
         let extensionDueAtBySetupID = try await extensionsFetch
         let previouslyOpenedSetupIDs = try await previouslyOpenedFetch
@@ -162,6 +168,8 @@ struct WebRoutes: RouteCollection {
         let setupKeyByID = Self.buildSetupKeyMap(
             setups: sortedSetups, assignmentBySetup: assignmentBySetup)
 
+        let slipDayData = try await slipDayFetch
+
         let rowContext = IndexRowContext(
             fmt: fmt,
             assignmentBySetup: assignmentBySetup,
@@ -170,7 +178,8 @@ struct WebRoutes: RouteCollection {
             previouslyOpenedSetupIDs: previouslyOpenedSetupIDs,
             isActiveCourseStaff: isActiveCourseStaff,
             activeCourseCode: courseState.active?.code,
-            hasNotebookBySetupID: hasNotebookBySetupID
+            hasNotebookBySetupID: hasNotebookBySetupID,
+            slipDay: slipDayData
         )
         let rows = sortedSetups.map { Self.buildTestSetupRow(setup: $0, context: rowContext) }
 
@@ -188,8 +197,23 @@ struct WebRoutes: RouteCollection {
             IndexContext(
                 displayGroups: displayGroups,
                 hasAny: !displayGroups.isEmpty,
-                currentUser: userContext
+                currentUser: userContext,
+                slipDaySummary: slipDayData.summaryLine
             )
+        ).encodeResponse(for: req)
+    }
+
+    /// The "not enrolled in any courses" dashboard — the home page is
+    /// course-scoped for every role, so with no active enrollment there is
+    /// nothing to list.
+    private static func renderEmptyDashboard(
+        req: Request, userContext: CurrentUserContext?
+    ) async throws -> Response {
+        try await req.view.render(
+            "index",
+            IndexContext(
+                displayGroups: [], hasAny: false, currentUser: userContext,
+                slipDaySummary: nil)
         ).encodeResponse(for: req)
     }
 

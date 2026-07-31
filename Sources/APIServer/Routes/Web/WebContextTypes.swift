@@ -63,6 +63,15 @@ struct TestSetupRow: Encodable {
     /// `dueAt` or the extension's `extendedDueAt`, whichever is later).
     /// nil when there's no deadline and no extension.
     let effectiveDueAtText: String?
+    /// True when the slip-day action is offered on this row (#1228): the
+    /// deadline passed inside the claim window, the viewer is a student with
+    /// balance, and no staff extension stands in the way.
+    let slipDayAvailable: Bool
+    let slipDayURL: String
+    /// Tooltip/aria text for the calendar action, naming the exact deadline
+    /// the spend would produce ("Use a slip day — extends your deadline to
+    /// …"); empty when the action is hidden.
+    let slipDayActionLabel: String
 }
 
 struct LatestSubmissionItem: Encodable {
@@ -167,6 +176,10 @@ struct IndexContext: Encodable {
     let displayGroups: [IndexDisplayGroup]  // sections (named) then the ungrouped bucket
     let hasAny: Bool  // true if any group has visible items
     let currentUser: CurrentUserContext?
+    /// "Slip days: 1 of 2 remaining." under the course heading; nil hides the
+    /// line (policy off, staff viewer, or no active course).  Precomputed as
+    /// one string so the template stays a plain nil-check (#1228).
+    let slipDaySummary: String?
 }
 
 // MARK: - Submit page

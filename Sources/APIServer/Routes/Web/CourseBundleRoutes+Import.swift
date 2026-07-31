@@ -215,6 +215,12 @@ extension CourseBundleRoutes {
             let newCourse = APICourse(
                 code: manifest.course.code, name: manifest.course.name,
                 enrollmentMode: importedMode)
+            // Slip-day policy travels with the course (#1228); the ledger and
+            // per-student adjustments deliberately do not (per-term data).
+            let slipDayPolicy = bundledCourseSlipDayPolicy(manifest.course)
+            newCourse.slipDaysEnabled = slipDayPolicy.enabled
+            newCourse.slipDaysPerStudent = slipDayPolicy.daysPerStudent
+            newCourse.slipDayExtensionHours = slipDayPolicy.extensionHours
             try await newCourse.save(on: db)
             guard let newCourseID = newCourse.id else {
                 throw AppError.internalFailure(reason: "Created course missing id after save")

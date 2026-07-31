@@ -68,6 +68,12 @@ final class APICourseEnrollment: Model, Content, @unchecked Sendable {
     @OptionalField(key: "brightspace_section")
     var brightspaceSection: String?
 
+    /// Per-student slip-day budget adjustment (#1228): staff hand this
+    /// student extra days (positive) or claw them back (negative) without
+    /// touching the course-wide policy. Nil reads as 0.
+    @OptionalField(key: "slip_days_adjustment")
+    var slipDaysAdjustment: Int?
+
     init() {}
 
     init(id: UUID? = nil, userID: UUID, courseID: UUID, role: CourseRole = .student) {
