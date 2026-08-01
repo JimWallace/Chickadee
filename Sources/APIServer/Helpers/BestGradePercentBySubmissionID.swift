@@ -134,10 +134,10 @@ func allResultsBySubmissionID(
 /// anyway. Chunked like `allResultsBySubmissionID`.
 ///
 /// Legacy fallback: rows whose four grade columns are all nil (written
-/// mid-deploy before `AddResultGradeColumns` backfilled, where the backfill
-/// couldn't parse the blob) get their blob fetched from the side table —
-/// normally zero rows — and are summarized via the blob-parsing helpers so
-/// the projected and full paths can never disagree.
+/// mid-deploy before the historical grade-columns backfill ran, or whose
+/// blob that backfill couldn't parse) get their blob fetched from the side
+/// table — normally zero rows — and are summarized via the blob-parsing
+/// helpers so the projected and full paths can never disagree.
 func gradeSummariesBySubmissionID(
     for submissionIDs: some Collection<String>,
     on db: Database

@@ -27,6 +27,11 @@ struct CreateSubmissionDiagnostics: ChickadeeMigration {
             .field("turnaround_ms", .int)
             .field("final_status", .string)
             .field("runner_id", .string)
+            // Folded from AddSubmissionDiagnosticsRunnerVersion: the version
+            // the runner advertised when it claimed the job, so a historical
+            // failure can be attributed to version skew during a rolling
+            // upgrade. Nullable — rows without it simply report no version.
+            .field("runner_version", .string)
             .field("timed_out", .bool)
             .field("exit_code", .int)
             .field("termination_reason", .string)

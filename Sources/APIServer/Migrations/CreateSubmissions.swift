@@ -29,6 +29,10 @@ struct CreateSubmissions: ChickadeeMigration {
             .field("retested_at", .datetime)
             // Folded from AddSubmissionRetestedByUserID.
             .field("retested_by_user_id", .uuid)
+            // Folded from AddSubmissionMaterialization: cached once-at-enqueue
+            // personalization for validation submissions, so worker poll +
+            // download stay eval-free.
+            .field("materialization_json", .string)
             .create()
     }
 

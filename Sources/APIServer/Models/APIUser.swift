@@ -68,11 +68,12 @@ final class APIUser: Model, Content, @unchecked Sendable {
     /// Opaque 8-character token used in instructor-facing per-student
     /// URL paths (e.g. `/:courseCode/students/:urlToken/submissions`)
     /// so usernames stop leaking into request logs and Referer headers
-    /// (#556).  Declared optional only because Fluent + SQLite can't
-    /// add a NOT NULL column post-hoc; in practice every row carries a
-    /// token — fresh users get one from `init` below, and the
-    /// `AddUrlTokenToUsers` migration backfills pre-existing rows.
-    /// Uniqueness is enforced by `idx_users_url_token`.
+    /// (#556).  Declared optional because the column originally shipped
+    /// as a nullable post-hoc ALTER (Fluent + SQLite can't add NOT NULL
+    /// to an existing table); in practice every row carries a token —
+    /// fresh users get one from `init` below, and the historical
+    /// url-token migration backfilled pre-existing rows.  Uniqueness is
+    /// enforced by `idx_users_url_token`.
     @OptionalField(key: "url_token")
     var urlToken: String?
 
@@ -134,9 +135,8 @@ final class APIUser: Model, Content, @unchecked Sendable {
     /// Generates a fresh 8-character lowercase alphanumeric URL token.
     /// 36^8 ≈ 2.8 × 10^12 combinations leaves a comfortable margin even
     /// at institution-scale enrollment.  Uniqueness is enforced at the
-    /// DB layer via `idx_users_url_token`; callers that need a
-    /// guaranteed-unused token (e.g. the `AddUrlTokenToUsers` migration)
-    /// retry on collision.
+    /// DB layer via `idx_users_url_token`; a caller that needs a
+    /// guaranteed-unused token retries on collision.
     static func generateURLToken(length: Int = 8) -> String {
         let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
         var rng = SystemRandomNumberGenerator()
@@ -179,11 +179,11 @@ extension APIUser {
 
 extension APIUser {
     /// Non-optional accessor for `urlToken`.  The column is technically
-    /// nullable so the `AddUrlTokenToUsers` migration could add it as a
-    /// post-hoc field on SQLite (which can't add NOT NULL to an existing
-    /// column), but every row is expected to carry a token — fresh users
-    /// get one from `init` and the migration backfills the rest.  Throw
-    /// rather than silently emit a broken URL if the invariant breaks.
+    /// nullable (it originally shipped as a post-hoc ALTER on SQLite,
+    /// which can't add NOT NULL to an existing table), but every row is
+    /// expected to carry a token — fresh users get one from `init` and
+    /// the historical migration backfilled the rest.  Throw rather than
+    /// silently emit a broken URL if the invariant breaks.
     func requireURLToken() throws -> String {
         guard let token = urlToken, !token.isEmpty else {
             throw Abort(

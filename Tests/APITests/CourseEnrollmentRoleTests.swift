@@ -1,8 +1,11 @@
 // Tests/APITests/CourseEnrollmentRoleTests.swift
 //
 // Per-course roles (docs/multi-course-roles.md):
-//   Phase 1 — the `course_enrollments.role` column, its typed accessor, and the
-//     behaviour-preserving backfill from each enrolled user's global role.
+//   Phase 1 — the `course_enrollments.role` column and its typed accessor.
+//     (The historical behaviour-preserving backfill from each user's global
+//     role was folded away with its migration in the second consolidation
+//     round — the column is part of CreateCourseEnrollments now, and the
+//     backfill only ever did work on pre-#417 databases.)
 //   Phase 2 — the read path: `enrolledCoursesWithRoles` and the nav predicate
 //     `isStaffInActiveCourse`.
 //   Phase 3 — the auth chokepoint: `CourseRole` ordering and
@@ -54,68 +57,6 @@ import Vapor
         let enrollment = APICourseEnrollment(userID: UUID(), courseID: UUID(), role: .instructor)
         #expect(enrollment.role == .instructor)
         #expect(enrollment.roleRaw == "instructor")
-    }
-
-    // MARK: - Backfill (DB)
-
-    /// The backfill seeds each still-unset enrollment role from the enrolled
-    /// user's *global* role: a global instructor (or admin, which implies
-    /// instructor) becomes a per-course instructor; everyone else a student.
-    /// This is what makes applying the migration behaviour-preserving.
-    @Test func backfillSeedsRoleFromGlobalRole() async throws {
-        let app = try await Application.make(.testing)
-        try await withApp(app) { app in
-            try await configureTestDatabase(app)
-
-            let course = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
-            try await course.save(on: app.db)
-            let courseID = try course.requireID()
-
-            // One user per global role.
-            let instructor = makeUser(role: .instructor)
-            let admin = makeUser(role: .admin)
-            let student = makeUser(role: .student)
-            for user in [instructor, admin, student] { try await user.save(on: app.db) }
-
-            // Enrollments with a NULL role, simulating pre-migration rows.
-            for user in [instructor, admin, student] {
-                let enrollment = APICourseEnrollment(userID: try user.requireID(), courseID: courseID)
-                enrollment.roleRaw = nil
-                try await enrollment.save(on: app.db)
-            }
-
-            try await AddCourseEnrollmentRole().backfillRoles(on: app.db)
-
-            #expect(try await courseRole(of: instructor, on: app.db) == .instructor)
-            #expect(try await courseRole(of: admin, on: app.db) == .instructor, "admin implies instructor")
-            #expect(try await courseRole(of: student, on: app.db) == .student)
-        }
-    }
-
-    /// The backfill only touches NULL roles — an enrollment already carrying a
-    /// role is left alone, so re-running it is safe.
-    @Test func backfillLeavesExistingRolesUntouched() async throws {
-        let app = try await Application.make(.testing)
-        try await withApp(app) { app in
-            try await configureTestDatabase(app)
-
-            let course = APICourse(code: "CS101", name: "Intro", enrollmentMode: .closed)
-            try await course.save(on: app.db)
-            let courseID = try course.requireID()
-
-            // A *student* global role, but the enrollment is explicitly an
-            // instructor (the shape a future TA / co-instructor takes).
-            let user = makeUser(role: .student)
-            try await user.save(on: app.db)
-            let enrollment = APICourseEnrollment(
-                userID: try user.requireID(), courseID: courseID, role: .instructor)
-            try await enrollment.save(on: app.db)
-
-            try await AddCourseEnrollmentRole().backfillRoles(on: app.db)
-
-            let reloaded = try #require(try await APICourseEnrollment.find(enrollment.id, on: app.db))
-            #expect(reloaded.role == .instructor, "a non-null role must not be overwritten by the global role")
-        }
     }
 
     // MARK: - Read path (Phase 2)

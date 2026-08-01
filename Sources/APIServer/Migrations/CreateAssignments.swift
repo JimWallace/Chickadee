@@ -9,10 +9,19 @@
 //   - AddCourseSections                        — `section_id` FK to course_sections
 //   - AddAssignmentDeadlineOverrideActive      — `deadline_override_active`
 //   - AddBrightSpaceSyncFields                 — `brightspace_grade_object_id`
+//   - AddAssignmentStartsAt                    — `starts_at` (second round)
+//   - AddAssignmentSecretRevealEnabled         — `secret_reveal_enabled` (second round)
+//   - AddAssignmentBrightSpaceSyncExcluded     — `brightspace_sync_excluded` (second round)
+//   - ChangeAssignmentIsOpenToVisibility       — dropped the original `is_open`
+//     bool and added `visibility TEXT NOT NULL DEFAULT 'closed'` (second
+//     round; this file now declares `visibility` directly and never creates
+//     `is_open`, so a fresh deploy reaches the same end state without the
+//     create-then-drop)
 //
-// The historical Add* migrations remain registered and become no-ops on
-// fresh deploys; existing prod has them already marked applied so the
-// body changes are invisible to production.
+// Existing prod has the historical migrations already marked applied so the
+// body changes are invisible to production; the folded Add*/Change* structs
+// were deleted outright (Fluent ignores `_fluent_migrations` rows whose
+// names are no longer registered).
 
 import Fluent
 import SQLKit
@@ -30,7 +39,13 @@ struct CreateAssignments: ChickadeeMigration {
             )
             .field("title", .string, .required)
             .field("due_at", .datetime)
-            .field("is_open", .bool, .required)
+            // Folded from ChangeAssignmentIsOpenToVisibility, which replaced
+            // the original `is_open` bool with this three-state string
+            // (AssignmentVisibility: "closed" | "preview" | "open").  Same
+            // constraint and default as the ALTER it shipped as
+            // (TEXT NOT NULL DEFAULT 'closed'); the default is harmless —
+            // Fluent always writes the column.
+            .field("visibility", .string, .required, .custom("DEFAULT 'closed'"))
             .field("validation_status", .string)
             .field(
                 "validation_submission_id",
@@ -59,6 +74,15 @@ struct CreateAssignments: ChickadeeMigration {
             .field("deadline_override_active", .bool)
             // Folded from AddBrightSpaceSyncFields.
             .field("brightspace_grade_object_id", .string)
+            // Folded from AddAssignmentStartsAt: automatic open date.
+            // nil = open as soon as published.
+            .field("starts_at", .datetime)
+            // Folded from AddAssignmentSecretRevealEnabled: per-assignment
+            // secret-reveal-token toggle. nil/false = off.
+            .field("secret_reveal_enabled", .bool)
+            // Folded from AddAssignmentBrightSpaceSyncExcluded: explicit
+            // "do not sync grades to LEARN" flag, distinct from unmapped.
+            .field("brightspace_sync_excluded", .bool)
             .field("created_at", .datetime)
             .unique(on: "public_id")
             .unique(on: "test_setup_id")

@@ -81,7 +81,8 @@ import VaporTesting
             try await seedSubmission(id: "sub_gs2")
             // Simulate the legacy shape: columns never populated, blob in
             // the side table (exactly what the #1173 backfill produces for a
-            // pre-grade-columns row the AddResultGradeColumns backfill missed).
+            // pre-grade-columns row the historical grade-columns backfill
+            // missed).
             let result = APIResult(
                 id: "res_gs2", submissionID: "sub_gs2", source: "worker")
             try await result.save(on: app.db)
