@@ -337,6 +337,11 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateMCPConsentRequests())
     // Per-student grade overrides. FKs reference `users` and `test_setups`.
     app.migrations.add(CreateGradeOverrides())
+    // Explicit LEARN grade-clear queue rows. FKs reference `users` and
+    // `test_setups`. (Nearly lost in the second consolidation: the two folded
+    // registrations around it were deleted and took this line with them —
+    // caught by GradeOverridesTests before it shipped.)
+    app.migrations.add(CreateBrightSpaceGradeClears())
     // Per-user activity pings behind the admin dashboard's "active users over
     // time" chart. FK references `users`.
     app.migrations.add(CreateUserActivityEvents())
