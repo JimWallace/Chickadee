@@ -9,6 +9,21 @@ first course offering) are archived in [CHANGELOG-0.4.md](CHANGELOG-0.4.md).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-01
+
+### Changed
+
+- **Chickadee 0.5.0.** Marks the conclusion of the first full course offering
+  run on Chickadee and the close of the 0.4 series. The system this milestone
+  snapshots: Python and R assignments; browser (Pyodide/wasm) and native
+  worker grading sharing one RunnerCore implementation; per-student
+  personalization, pattern families, and notebook checks; achievements and
+  slip days; per-course roles; BrightSpace grade sync; the MCP authoring and
+  admin-diagnostics surfaces; OIDC SSO; and zero-downtime auto-deploys. The
+  0.1.0 – 0.4.669 release history is archived in CHANGELOG-0.4.md;
+  development now shifts to next year's feature work.
+
+
 ## [0.4.670] - 2026-08-01
 
 ### Changed
